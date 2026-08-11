@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ListChecks, Loader2, RefreshCw, Settings2 } from 'lucide-react';
+import { ArrowLeft, Layers3, ListChecks, Loader2, RefreshCw, Settings2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { BrandMarginEditor } from '../../../components/products/photo-intake/BrandMarginEditor';
@@ -22,6 +22,7 @@ import type {
 
 type ViewMode = 'queue' | 'margins';
 const GROUPABLE_STATUSES = new Set(['waiting_price_confirmation', 'review_required', 'ready_to_finalize']);
+const QUEUE_GROUPABLE_STATUSES = new Set(['waiting_price_confirmation', 'review_required']);
 const normalizeGroupValue = (value?: string | null) => String(value || '').replace(/\s+/g, '').toUpperCase();
 
 function hasSamePriceGroup(left: SmartphonePhotoIntake, right: SmartphonePhotoIntake): boolean {
@@ -31,6 +32,18 @@ function hasSamePriceGroup(left: SmartphonePhotoIntake, right: SmartphonePhotoIn
     && normalizeGroupValue(left.detected_ram) === normalizeGroupValue(right.detected_ram)
     && normalizeGroupValue(left.detected_storage) === normalizeGroupValue(right.detected_storage)
     && GROUPABLE_STATUSES.has(right.status);
+}
+
+function getQueueGroupKey(item: SmartphonePhotoIntake): string {
+  if (!item.matched_model_id || !item.matched_color_id || !QUEUE_GROUPABLE_STATUSES.has(item.status)) {
+    return `item:${item.id}`;
+  }
+  return [
+    item.matched_model_id,
+    normalizeGroupValue(item.detected_ram),
+    normalizeGroupValue(item.detected_storage),
+    item.matched_color_id,
+  ].join('|');
 }
 
 export function SmartphonePhotoIntakePage() {
@@ -44,6 +57,7 @@ export function SmartphonePhotoIntakePage() {
   const [margins, setMargins] = useState<SmartphoneBrandPriceMargin[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [groupQueue, setGroupQueue] = useState(true);
 
   const upsertItem = useCallback((item: SmartphonePhotoIntake, select = true) => {
     setItems(current => {
@@ -97,6 +111,43 @@ export function SmartphonePhotoIntakePage() {
     () => items.find(item => item.id === selectedId) || null,
     [items, selectedId],
   );
+
+  const groupedQueue = useMemo(() => {
+    if (!groupQueue) {
+      return {
+        items,
+        groupSizeById: Object.fromEntries(items.map(item => [item.id, 1])),
+      };
+    }
+
+    const representatives: SmartphonePhotoIntake[] = [];
+    const representativeByKey = new Map<string, SmartphonePhotoIntake>();
+    const groupSizeById: Record<string, number> = {};
+
+    for (const item of items) {
+      const key = getQueueGroupKey(item);
+      const representative = representativeByKey.get(key);
+      if (representative) {
+        groupSizeById[representative.id] = (groupSizeById[representative.id] || 1) + 1;
+        continue;
+      }
+      representativeByKey.set(key, item);
+      representatives.push(item);
+      groupSizeById[item.id] = 1;
+    }
+
+    return { items: representatives, groupSizeById };
+  }, [groupQueue, items]);
+
+  const toggleQueueGrouping = () => {
+    const next = !groupQueue;
+    if (next && selected) {
+      const selectedKey = getQueueGroupKey(selected);
+      const representative = items.find(item => getQueueGroupKey(item) === selectedKey);
+      if (representative) setSelectedId(representative.id);
+    }
+    setGroupQueue(next);
+  };
 
   const selectedMargin = useMemo(() => {
     if (!selected) return null;
@@ -219,12 +270,35 @@ export function SmartphonePhotoIntakePage() {
           <PhotoCapturePanel onProcessed={upsertItem} />
           <div className="grid items-start gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
             <aside className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-24">
-              <div className="mb-3 flex items-center justify-between px-1">
+              <div className="mb-2 flex items-center justify-between px-1">
                 <h2 className="font-bold text-slate-800">Fila de conferência</h2>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{items.length}</span>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
+                  {groupQueue ? `${groupedQueue.items.length} grupos · ${items.length} aparelhos` : `${items.length} aparelhos`}
+                </span>
               </div>
+              <button
+                type="button"
+                onClick={toggleQueueGrouping}
+                aria-pressed={groupQueue}
+                className={`mb-3 flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-colors ${groupQueue
+                  ? 'border-blue-200 bg-blue-50 text-blue-800'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                <span className="inline-flex items-center gap-2 text-sm font-bold">
+                  <Layers3 size={17} /> Agrupar iguais
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${groupQueue ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  {groupQueue ? 'Ativado' : 'Desativado'}
+                </span>
+              </button>
               <div className="max-h-[70vh] overflow-y-auto pr-1">
-                <PhotoIntakeQueue items={items} selectedId={selectedId} loading={loading} onSelect={item => setSelectedId(item.id)} />
+                <PhotoIntakeQueue
+                  items={groupedQueue.items}
+                  groupSizeById={groupedQueue.groupSizeById}
+                  selectedId={selectedId}
+                  loading={loading}
+                  onSelect={item => setSelectedId(item.id)}
+                />
               </div>
             </aside>
 

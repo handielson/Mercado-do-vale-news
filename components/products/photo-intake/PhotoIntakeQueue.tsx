@@ -5,6 +5,7 @@ import { SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS } from '../../../types/smartphone
 
 interface PhotoIntakeQueueProps {
   items: SmartphonePhotoIntake[];
+  groupSizeById?: Record<string, number>;
   selectedId?: string | null;
   loading?: boolean;
   onSelect: (item: SmartphonePhotoIntake) => void;
@@ -28,7 +29,7 @@ function StatusIcon({ status }: { status: SmartphonePhotoIntake['status'] }) {
   return <Clock3 size={14} />;
 }
 
-export function PhotoIntakeQueue({ items, selectedId, loading, onSelect }: PhotoIntakeQueueProps) {
+export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loading, onSelect }: PhotoIntakeQueueProps) {
   if (loading && items.length === 0) {
     return <div className="flex justify-center py-12 text-slate-400"><Loader2 className="animate-spin" /></div>;
   }
@@ -49,6 +50,7 @@ export function PhotoIntakeQueue({ items, selectedId, loading, onSelect }: Photo
         const title = [item.detected_brand, item.detected_model].filter(Boolean).join(' ') || 'Aguardando leitura';
         const details = [item.detected_ram, item.detected_storage, item.detected_color].filter(Boolean).join(' · ');
         const selected = selectedId === item.id;
+        const groupSize = groupSizeById[item.id] || 1;
         return (
           <button
             key={item.id}
@@ -60,7 +62,14 @@ export function PhotoIntakeQueue({ items, selectedId, loading, onSelect }: Photo
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-slate-800">{title}</p>
+                <div className="flex min-w-0 items-center gap-2">
+                  <p className="truncate text-sm font-bold text-slate-800">{title}</p>
+                  {groupSize > 1 && (
+                    <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">
+                      {groupSize} aparelhos
+                    </span>
+                  )}
+                </div>
                 <p className="mt-0.5 truncate text-xs text-slate-500">{details || 'Dados ainda não confirmados'}</p>
               </div>
               <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${STATUS_STYLE[item.status] || STATUS_STYLE.uploaded}`}>
