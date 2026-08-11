@@ -24,6 +24,14 @@ const productItems: QuickAccessItem[] = [
     iconClassName: 'bg-green-100 group-hover:bg-green-200',
   },
   {
+    label: 'Smartphones por Foto',
+    description: 'Ler etiqueta e pré-cadastrar',
+    path: '/admin/products/photo-intake',
+    icon: '📷',
+    cardClassName: 'bg-white border-slate-200 hover:border-cyan-400',
+    iconClassName: 'bg-cyan-100 group-hover:bg-cyan-200',
+  },
+  {
     label: 'Modelos',
     description: 'Modelos e fotos por cor',
     path: '/admin/settings/models',
@@ -149,7 +157,7 @@ export const AdminQuickAccessGrid: React.FC<AdminQuickAccessGridProps> = ({ onNa
         <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
           <span>📦</span> Produtos & Catálogo
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           {productItems.map((item) => (
             <QuickAccessCard key={item.label} item={item} onNavigate={onNavigate} />
           ))}
