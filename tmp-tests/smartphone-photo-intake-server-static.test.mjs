@@ -12,6 +12,8 @@ assert.match(source, /validatePhotoExtraction\(\{[\s\S]*body\.detected_imei_1 \?
 assert.match(source, /scoreCatalogModel[\s\S]*fullLabel[\s\S]*getBrandFamily/, 'modelo deve considerar submarcas sem aceitar homônimo de outra marca');
 assert.match(source, /translateColorToPtBr[\s\S]*matched_color_id/, 'cor lida deve ser traduzida e vinculada à tabela de cores');
 assert.match(source, /repairPendingPhotoIntakes\(\)/, 'itens que já estavam na fila devem ser corrigidos automaticamente');
+assert.match(source, /resolvePhotoIntakeCompanyId[\s\S]*slug='mercado-do-vale'/, 'uploads sem company_id devem usar a empresa real do catálogo, nunca o valor literal default');
+assert.match(source, /SET company_id=\?, detected_color=\?/, 'pendências antigas devem receber a empresa real antes do casamento de modelo e cor');
 assert.match(source, /if \(!intake\.matched_color_id\)[\s\S]*Selecione ou cadastre a cor/, 'finalização deve exigir cor estruturada');
 assert.match(source, /color_id: intake\.matched_color_id/, 'produto final deve guardar o identificador da cor');
 assert.match(source, /SELECT id FROM units WHERE imei_1 IN[\s\S]*already_registered/, 'edições manuais devem repetir a checagem de duplicidade');

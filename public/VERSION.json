@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.231-smartphone-foto-modelo-cor",
+  "version": "v1.2.232-smartphone-foto-modelo-cor",
   "date": "2026-08-11",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260811-230017-smartphone-foto-modelo-cor",
+  "release_vps": "/var/www/mdv-site/releases/20260811-200807-smartphone-foto-modelo-cor",
   "branch": "main",
   "summary": "Preenche o modelo identificado no cadastro por foto, traduz e vincula a cor ao cadastro do sistema antes de liberar o smartphone."
 }

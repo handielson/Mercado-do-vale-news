@@ -175,12 +175,22 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     return parseIntakeRow(rows[0]);
   }
 
+  async function resolvePhotoIntakeCompanyId(companyId) {
+    const requested = String(companyId || '').trim();
+    if (requested && requested !== 'default') return requested;
+    const [preferred] = await pool.query("SELECT id FROM companies WHERE slug='mercado-do-vale' LIMIT 1").catch(() => [[]]);
+    if (preferred?.[0]?.id) return preferred[0].id;
+    const [fallback] = await pool.query('SELECT id FROM companies ORDER BY created_at ASC LIMIT 1').catch(() => [[]]);
+    return fallback?.[0]?.id || null;
+  }
+
   async function resolveCatalogColor(value, companyId) {
+    const resolvedCompanyId = await resolvePhotoIntakeCompanyId(companyId);
     const translated = translateColorToPtBr(value);
     if (!translated) return { id: null, name: '', original: String(value || '').trim() };
     const [colors] = await pool.query(
       `SELECT id,name FROM colors WHERE active=1 AND (? IS NULL OR company_id=? OR company_id IS NULL)`,
-      [companyId || null, companyId || null]
+      [resolvedCompanyId, resolvedCompanyId]
     );
     const translatedKey = slugify(translated);
     const originalKey = slugify(value);
@@ -191,11 +201,12 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
   }
 
   async function matchCatalog(extraction, companyId) {
+    const resolvedCompanyId = await resolvePhotoIntakeCompanyId(companyId);
     const [models] = await pool.query(
       `SELECT m.id, m.name, m.category_id, b.id AS brand_id, b.name AS brand_name
          FROM models m LEFT JOIN brands b ON b.id = m.brand_id
         WHERE m.active = 1 AND (? IS NULL OR m.company_id = ? OR m.company_id IS NULL)`,
-      [companyId || null, companyId || null]
+      [resolvedCompanyId, resolvedCompanyId]
     );
     const model = models
       .map((candidate) => ({ candidate, score: scoreCatalogModel(candidate, extraction) }))
@@ -226,25 +237,26 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     );
     for (const row of rows) {
       const intake = parseIntakeRow(row);
-      const color = await resolveCatalogColor(intake.detected_color, intake.company_id);
+      const companyId = await resolvePhotoIntakeCompanyId(intake.company_id);
+      const color = await resolveCatalogColor(intake.detected_color, companyId);
       const catalog = await matchCatalog({
         brand: intake.detected_brand,
         model: intake.detected_model,
         color: color.name,
         ram: intake.detected_ram,
         storage: intake.detected_storage,
-      }, intake.company_id);
+      }, companyId);
       const status = resolvePhotoIntakeStatus({
         validationErrors: intake.validation_errors || [],
         matchedModelId: catalog.model?.id || intake.matched_model_id,
         pricesConfirmed: Boolean(intake.prices_confirmed),
       });
       await pool.query(
-        `UPDATE smartphone_photo_intakes SET detected_color=?, matched_color_id=?, matched_brand_id=?, matched_model_id=?,
+        `UPDATE smartphone_photo_intakes SET company_id=?, detected_color=?, matched_color_id=?, matched_brand_id=?, matched_model_id=?,
          matched_product_id=COALESCE(matched_product_id,?), price_cost=COALESCE(price_cost,?),
          price_retail=COALESCE(price_retail,?), price_reseller=COALESCE(price_reseller,?),
          price_wholesale=COALESCE(price_wholesale,?), status=? WHERE id=?`,
-        [color.name || intake.detected_color || null, color.id, catalog.model?.brand_id || intake.matched_brand_id || null,
+        [companyId || intake.company_id, color.name || intake.detected_color || null, color.id, catalog.model?.brand_id || intake.matched_brand_id || null,
           catalog.model?.id || intake.matched_model_id || null, catalog.product?.id || null,
           catalog.product?.price_cost ?? null, catalog.product?.price_retail ?? null,
           catalog.product?.price_reseller ?? null, catalog.product?.price_wholesale ?? null, status, intake.id]
@@ -351,7 +363,8 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     const buffer = await data.toBuffer();
     if (buffer.length > 20 * 1024 * 1024) return reply.code(413).send({ error: 'Foto maior que 20 MB' });
     const id = crypto.randomUUID();
-    const companyId = String(data.fields?.company_id?.value || '').trim() || 'default';
+    const companyId = await resolvePhotoIntakeCompanyId(data.fields?.company_id?.value);
+    if (!companyId) return reply.code(409).send({ error: 'Empresa padrão não encontrada para o pré-cadastro' });
     const batchId = String(data.fields?.batch_id?.value || '').trim() || null;
     const hash = crypto.createHash('sha256').update(buffer).digest('hex');
     const relativePath = path.join('smartphone-intakes', companyId || 'default', `${id}${getImageExtension(mime)}`).replace(/\\/g, '/');
@@ -485,7 +498,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
 
   fastify.get('/smartphone-brand-margins', { preHandler: requireSyncKey }, async (request) => {
     await ensureSchema();
-    const companyId = request.query?.company_id || null;
+    const companyId = await resolvePhotoIntakeCompanyId(request.query?.company_id);
     const [rows] = await pool.query(
       `SELECT m.*, b.name AS brand_name FROM smartphone_brand_price_margins m JOIN brands b ON b.id=m.brand_id
        WHERE (? IS NULL OR m.company_id=? OR m.company_id IS NULL) ORDER BY b.name`, [companyId, companyId]
@@ -493,10 +506,11 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     return rows;
   });
 
-  fastify.put('/smartphone-brand-margins/:brandId', { preHandler: requireSyncKey }, async (request) => {
+  fastify.put('/smartphone-brand-margins/:brandId', { preHandler: requireSyncKey }, async (request, reply) => {
     await ensureSchema();
     const body = request.body || {};
-    const companyId = body.company_id || 'default';
+    const companyId = await resolvePhotoIntakeCompanyId(body.company_id);
+    if (!companyId) return reply.code(409).send({ error: 'Empresa padrão não encontrada para a margem' });
     const prices = calculateBrandPrices(0, body);
     await pool.query(
       `INSERT INTO smartphone_brand_price_margins (id,company_id,brand_id,retail_margin_cents,reseller_margin_cents,wholesale_margin_cents,active)
