@@ -48,6 +48,40 @@ function normalizeMemory(value) {
   return `${match[1]}${match[2].startsWith('T') ? 'TB' : 'GB'}`;
 }
 
+const COLOR_TRANSLATIONS_PT_BR = Object.freeze({
+  black: 'Preto',
+  'midnight black': 'Preto',
+  'matte black': 'Preto Fosco',
+  white: 'Branco',
+  purple: 'Roxo',
+  violet: 'Violeta',
+  lavender: 'Lavanda',
+  blue: 'Azul',
+  green: 'Verde',
+  yellow: 'Amarelo',
+  orange: 'Laranja',
+  red: 'Vermelho',
+  pink: 'Rosa',
+  silver: 'Prata',
+  gray: 'Cinza',
+  grey: 'Cinza',
+  graphite: 'Grafite',
+  gold: 'Dourado',
+  golden: 'Dourado',
+  titanium: 'Titânio',
+  champagne: 'Champagne',
+  coral: 'Coral',
+  bronze: 'Bronze',
+  copper: 'Cobre',
+  beige: 'Bege',
+});
+
+function translateColorToPtBr(value) {
+  const original = String(value || '').trim();
+  if (!original) return '';
+  return COLOR_TRANSLATIONS_PT_BR[normalizeText(original)] || original;
+}
+
 function isValidLuhn(value) {
   const digits = normalizeIdentifier(value);
   if (!digits) return false;
@@ -86,7 +120,7 @@ function normalizePhotoExtraction(raw = {}) {
   return {
     brand: String(raw.brand || raw.marca || '').trim(),
     model: String(raw.model || raw.modelo || '').trim(),
-    color: String(raw.color || raw.cor || '').trim(),
+    color: translateColorToPtBr(raw.color || raw.cor),
     ram: normalizeMemory(raw.ram),
     storage: normalizeMemory(raw.storage || raw.armazenamento),
     serial: normalizeSerial(raw.serial || raw.sn),
@@ -207,5 +241,6 @@ module.exports = {
   normalizeMemory,
   normalizePhotoExtraction,
   resolvePhotoIntakeStatus,
+  translateColorToPtBr,
   validatePhotoExtraction,
 };

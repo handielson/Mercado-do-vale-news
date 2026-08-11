@@ -3,6 +3,7 @@ import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Save, Sparkles } from '
 import { Link } from 'react-router-dom';
 import { CurrencyInput } from '../../ui/CurrencyInput';
 import { ProtectedIntakePhoto } from './ProtectedIntakePhoto';
+import type { Color } from '../../../types/color';
 import type { Model } from '../../../types/model';
 import type {
   SmartphoneBrandPriceMargin,
@@ -14,18 +15,19 @@ import { SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS } from '../../../types/smartphone
 interface PhotoIntakeReviewCardProps {
   intake: SmartphonePhotoIntake;
   models: Model[];
+  colors: Color[];
   margin?: SmartphoneBrandPriceMargin | null;
   busy?: boolean;
   onUpdate: (input: SmartphonePhotoIntakeUpdate) => Promise<void>;
   onAttachModel: (modelId: string) => Promise<void>;
   onRetry: () => Promise<void>;
+  onRefreshColors: () => Promise<void>;
   onFinalize: (sku?: string) => Promise<void>;
 }
 
 const TEXT_FIELDS: Array<{ key: keyof SmartphonePhotoIntakeUpdate; label: string; mono?: boolean }> = [
   { key: 'detected_brand', label: 'Marca' },
   { key: 'detected_model', label: 'Modelo' },
-  { key: 'detected_color', label: 'Cor' },
   { key: 'detected_ram', label: 'RAM' },
   { key: 'detected_storage', label: 'Armazenamento' },
   { key: 'detected_serial', label: 'Número de série', mono: true },
@@ -48,6 +50,7 @@ function buildDraft(intake: SmartphonePhotoIntake): SmartphonePhotoIntakeUpdate 
     detected_product_code: intake.detected_product_code || '',
     matched_brand_id: intake.matched_brand_id || null,
     matched_model_id: intake.matched_model_id || null,
+    matched_color_id: intake.matched_color_id || null,
     price_cost: intake.price_cost || 0,
     price_retail: intake.price_retail || 0,
     price_reseller: intake.price_reseller || 0,
@@ -59,11 +62,13 @@ function buildDraft(intake: SmartphonePhotoIntake): SmartphonePhotoIntakeUpdate 
 export function PhotoIntakeReviewCard({
   intake,
   models,
+  colors,
   margin,
   busy,
   onUpdate,
   onAttachModel,
   onRetry,
+  onRefreshColors,
   onFinalize,
 }: PhotoIntakeReviewCardProps) {
   const [draft, setDraft] = useState<SmartphonePhotoIntakeUpdate>(() => buildDraft(intake));
@@ -102,7 +107,7 @@ export function PhotoIntakeReviewCard({
     ...(intake.validation_errors || []),
     ...(intake.validation_warnings || []),
   ];
-  const canFinalize = intake.status === 'ready_to_finalize';
+  const canFinalize = intake.status === 'ready_to_finalize' && Boolean(intake.matched_color_id);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -170,6 +175,37 @@ export function PhotoIntakeReviewCard({
                   />
                 </label>
               ))}
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">Cor do sistema</span>
+                <select
+                  value={String(draft.matched_color_id || '')}
+                  onChange={event => {
+                    const selectedColor = colors.find(color => color.id === event.target.value);
+                    setDraft(current => ({
+                      ...current,
+                      matched_color_id: selectedColor?.id || null,
+                      detected_color: selectedColor?.name || current.detected_color || '',
+                    }));
+                  }}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="">
+                    {draft.detected_color ? `Mapear cor identificada: ${draft.detected_color}` : 'Selecione uma cor'}
+                  </option>
+                  {colors.map(color => <option key={color.id} value={color.id}>{color.name}</option>)}
+                </select>
+                {!draft.matched_color_id && draft.detected_color && (
+                  <p className="mt-1 text-xs font-semibold text-amber-700">A cor foi lida, mas ainda precisa ser vinculada a uma cor cadastrada.</p>
+                )}
+                <div className="mt-1.5 flex flex-wrap gap-3 text-xs font-bold">
+                  <a href="/admin/settings/colors" target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">
+                    Cadastrar nova cor <ExternalLink className="inline" size={12} />
+                  </a>
+                  <button type="button" onClick={() => void onRefreshColors()} className="text-slate-600 hover:underline">
+                    Atualizar cores <RefreshCw className="inline" size={12} />
+                  </button>
+                </div>
+              </label>
             </div>
           </div>
 

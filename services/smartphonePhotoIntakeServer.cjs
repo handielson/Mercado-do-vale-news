@@ -7,6 +7,7 @@ const {
   PHOTO_INTAKE_STATUS,
   calculateBrandPrices,
   resolvePhotoIntakeStatus,
+  translateColorToPtBr,
   validatePhotoExtraction,
 } = require('./smartphonePhotoIntakeCore.cjs');
 
@@ -24,6 +25,37 @@ function slugify(value) {
   return String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function getBrandFamily(value) {
+  const brand = slugify(value);
+  if (['xiaomi', 'redmi', 'poco'].includes(brand)) return 'xiaomi';
+  return brand;
+}
+
+function scoreCatalogModel(model, extraction) {
+  const wantedBrand = slugify(extraction.brand);
+  const wantedModel = slugify(extraction.model);
+  const modelName = slugify(model.name);
+  const catalogBrand = slugify(model.brand_name);
+  if (!wantedModel || !modelName) return Number.POSITIVE_INFINITY;
+  const fullLabel = wantedBrand && !wantedModel.startsWith(`${wantedBrand}-`)
+    ? `${wantedBrand}-${wantedModel}`
+    : wantedModel;
+  const nameWithoutDetectedBrand = wantedBrand && modelName.startsWith(`${wantedBrand}-`)
+    ? modelName.slice(wantedBrand.length + 1)
+    : modelName;
+  const brandCompatible = !wantedBrand
+    || catalogBrand === wantedBrand
+    || getBrandFamily(catalogBrand) === getBrandFamily(wantedBrand)
+    || modelName === fullLabel
+    || modelName.startsWith(`${wantedBrand}-`);
+  if (!brandCompatible) return Number.POSITIVE_INFINITY;
+  if (fullLabel && modelName === fullLabel) return 0;
+  if (catalogBrand === wantedBrand && modelName === wantedModel) return 1;
+  if (nameWithoutDetectedBrand === wantedModel) return 2;
+  if (modelName === wantedModel) return 3;
+  return Number.POSITIVE_INFINITY;
 }
 
 function extractResponseText(payload) {
@@ -114,6 +146,11 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         INDEX idx_smartphone_photo_intake_imei_1 (detected_imei_1),
         INDEX idx_smartphone_photo_intake_serial (detected_serial)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      const [intakeColumns] = await pool.query('SHOW COLUMNS FROM smartphone_photo_intakes');
+      const intakeColumnNames = new Set(intakeColumns.map((column) => column.Field));
+      if (!intakeColumnNames.has('matched_color_id')) {
+        await pool.query('ALTER TABLE smartphone_photo_intakes ADD COLUMN matched_color_id CHAR(36) NULL AFTER matched_model_id');
+      }
       await pool.query(`CREATE TABLE IF NOT EXISTS ai_usage_events (
         id CHAR(36) PRIMARY KEY, company_id CHAR(36) NULL, feature VARCHAR(80) NOT NULL,
         reference_id CHAR(36) NULL, provider VARCHAR(40) NOT NULL DEFAULT 'openai', model VARCHAR(80) NOT NULL,
@@ -128,6 +165,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       const names = new Set(unitColumns.map((column) => column.Field));
       if (!names.has('intake_photo_path')) await pool.query('ALTER TABLE units ADD COLUMN intake_photo_path VARCHAR(1000) NULL');
       if (!names.has('intake_id')) await pool.query('ALTER TABLE units ADD COLUMN intake_id CHAR(36) NULL');
+      await repairPendingPhotoIntakes();
     })().catch((error) => { schemaPromise = null; throw error; });
     return schemaPromise;
   };
@@ -137,6 +175,21 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     return parseIntakeRow(rows[0]);
   }
 
+  async function resolveCatalogColor(value, companyId) {
+    const translated = translateColorToPtBr(value);
+    if (!translated) return { id: null, name: '', original: String(value || '').trim() };
+    const [colors] = await pool.query(
+      `SELECT id,name FROM colors WHERE active=1 AND (? IS NULL OR company_id=? OR company_id IS NULL)`,
+      [companyId || null, companyId || null]
+    );
+    const translatedKey = slugify(translated);
+    const originalKey = slugify(value);
+    const color = colors.find((candidate) => slugify(candidate.name) === translatedKey)
+      || colors.find((candidate) => slugify(candidate.name) === originalKey)
+      || null;
+    return { id: color?.id || null, name: color?.name || translated, original: String(value || '').trim() };
+  }
+
   async function matchCatalog(extraction, companyId) {
     const [models] = await pool.query(
       `SELECT m.id, m.name, m.category_id, b.id AS brand_id, b.name AS brand_name
@@ -144,15 +197,10 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         WHERE m.active = 1 AND (? IS NULL OR m.company_id = ? OR m.company_id IS NULL)`,
       [companyId || null, companyId || null]
     );
-    const wantedBrand = slugify(extraction.brand);
-    const wantedModel = slugify(extraction.model);
-    const candidates = models.filter((model) => {
-      const brand = slugify(model.brand_name);
-      const name = slugify(model.name);
-      return (!wantedBrand || brand === wantedBrand || brand.includes(wantedBrand) || wantedBrand.includes(brand))
-        && (name === wantedModel || name.includes(wantedModel) || wantedModel.includes(name));
-    });
-    const model = candidates.sort((a, b) => Math.abs(String(a.name).length - extraction.model.length) - Math.abs(String(b.name).length - extraction.model.length))[0] || null;
+    const model = models
+      .map((candidate) => ({ candidate, score: scoreCatalogModel(candidate, extraction) }))
+      .filter(({ score }) => Number.isFinite(score))
+      .sort((left, right) => left.score - right.score || String(left.candidate.name).length - String(right.candidate.name).length)[0]?.candidate || null;
     let product = null;
     if (model) {
       const [products] = await pool.query(
@@ -168,6 +216,40 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       }) || null;
     }
     return { model, product };
+  }
+
+  async function repairPendingPhotoIntakes() {
+    const [rows] = await pool.query(
+      `SELECT * FROM smartphone_photo_intakes
+        WHERE status IN ('waiting_model_registration','waiting_price_confirmation','review_required')
+        ORDER BY created_at DESC LIMIT 500`
+    );
+    for (const row of rows) {
+      const intake = parseIntakeRow(row);
+      const color = await resolveCatalogColor(intake.detected_color, intake.company_id);
+      const catalog = await matchCatalog({
+        brand: intake.detected_brand,
+        model: intake.detected_model,
+        color: color.name,
+        ram: intake.detected_ram,
+        storage: intake.detected_storage,
+      }, intake.company_id);
+      const status = resolvePhotoIntakeStatus({
+        validationErrors: intake.validation_errors || [],
+        matchedModelId: catalog.model?.id || intake.matched_model_id,
+        pricesConfirmed: Boolean(intake.prices_confirmed),
+      });
+      await pool.query(
+        `UPDATE smartphone_photo_intakes SET detected_color=?, matched_color_id=?, matched_brand_id=?, matched_model_id=?,
+         matched_product_id=COALESCE(matched_product_id,?), price_cost=COALESCE(price_cost,?),
+         price_retail=COALESCE(price_retail,?), price_reseller=COALESCE(price_reseller,?),
+         price_wholesale=COALESCE(price_wholesale,?), status=? WHERE id=?`,
+        [color.name || intake.detected_color || null, color.id, catalog.model?.brand_id || intake.matched_brand_id || null,
+          catalog.model?.id || intake.matched_model_id || null, catalog.product?.id || null,
+          catalog.product?.price_cost ?? null, catalog.product?.price_retail ?? null,
+          catalog.product?.price_reseller ?? null, catalog.product?.price_wholesale ?? null, status, intake.id]
+      );
+    }
   }
 
   async function getOpenAiKey() {
@@ -201,7 +283,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model,
-        instructions: 'Leia somente a etiqueta visível da caixa do smartphone. Não pesquise e não complete por memória. Copie cada identificador dígito por dígito. Use null quando não estiver legível.',
+        instructions: 'Leia somente a etiqueta visível da caixa do smartphone. Não pesquise e não complete por memória. Copie cada identificador dígito por dígito. Responda a cor em português do Brasil quando houver tradução direta. Use null quando não estiver legível.',
         input: [{ role: 'user', content: [
           { type: 'input_text', text: 'Extraia marca, modelo, cor, RAM, armazenamento, serial, IMEI 1, IMEI 2, EAN/GTIN e código do produto desta etiqueta.' },
           { type: 'input_image', image_url: `data:${mime};base64,${imageBuffer.toString('base64')}`, detail: 'original' },
@@ -217,6 +299,8 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     if (!response.ok || !text) throw new Error(payload?.error?.message || `OpenAI ${response.status}`);
     const parsed = JSON.parse(text);
     const validation = validatePhotoExtraction(parsed);
+    const color = await resolveCatalogColor(validation.value.color, intake.company_id);
+    validation.value.color = color.name;
     const catalog = await matchCatalog(validation.value, intake.company_id);
     const duplicateValues = [validation.value.imei1, validation.value.imei2, validation.value.serial].filter(Boolean);
     if (duplicateValues.length > 0) {
@@ -235,15 +319,16 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     await pool.query(
       `UPDATE smartphone_photo_intakes SET status=?, ai_model=?, detected_brand=?, detected_model=?, detected_color=?,
        detected_ram=?, detected_storage=?, detected_serial=?, detected_imei_1=?, detected_imei_2=?, detected_ean=?,
-       detected_product_code=?, matched_brand_id=?, matched_model_id=?, matched_product_id=?,
+       detected_product_code=?, matched_brand_id=?, matched_model_id=?, matched_color_id=?, matched_product_id=?,
        price_cost=?, price_retail=?, price_reseller=?, price_wholesale=?, extracted_data=?, validation_errors=?,
        validation_warnings=?, ai_input_tokens=?, ai_output_tokens=?, ai_cost_usd=?, ai_input_rate_usd_per_1m=?,
        ai_output_rate_usd_per_1m=?, retry_count=retry_count+1, error_message=NULL WHERE id=?`,
       [status, model, validation.value.brand, validation.value.model, validation.value.color, validation.value.ram,
         validation.value.storage, validation.value.serial, validation.value.imei1, validation.value.imei2,
         validation.value.ean, validation.value.product_code, catalog.model?.brand_id || null, catalog.model?.id || null,
-        catalog.product?.id || null, catalog.product?.price_cost ?? null, catalog.product?.price_retail ?? null,
-        catalog.product?.price_reseller ?? null, catalog.product?.price_wholesale ?? null, JSON.stringify(validation.value),
+        color.id, catalog.product?.id || null, catalog.product?.price_cost ?? null, catalog.product?.price_retail ?? null,
+        catalog.product?.price_reseller ?? null, catalog.product?.price_wholesale ?? null,
+        JSON.stringify({ ...validation.value, color_original: color.original }),
         JSON.stringify(validation.errors), JSON.stringify(validation.warnings), inputTokens, outputTokens, cost,
         inputRate, outputRate, intake.id]
     );
@@ -334,13 +419,23 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     await ensureSchema();
     const intake = await loadIntake(request.params.id);
     if (!intake) return reply.code(404).send({ error: 'Pré-cadastro não encontrado' });
-    const body = request.body || {};
-    const allowed = ['matched_brand_id', 'matched_model_id', 'matched_product_id', 'detected_brand', 'detected_model',
-      'detected_color', 'detected_ram', 'detected_storage', 'detected_serial', 'detected_imei_1', 'detected_imei_2',
-      'detected_ean', 'detected_product_code', 'price_cost', 'price_retail', 'price_reseller', 'price_wholesale', 'prices_confirmed', 'reviewed_by'];
-    const sets = []; const values = [];
-    for (const field of allowed) if (field in body) { sets.push(`${field}=?`); values.push(body[field] ?? null); }
-    if (!sets.length) return reply.code(400).send({ error: 'Nenhum campo permitido' });
+    const body = { ...(request.body || {}) };
+    if ('matched_model_id' in body && body.matched_model_id) {
+      const [modelRows] = await pool.query('SELECT id,brand_id,name FROM models WHERE id=? AND active=1 LIMIT 1', [body.matched_model_id]);
+      if (!modelRows[0]) return reply.code(409).send({ error: 'O modelo selecionado não está mais disponível' });
+      body.matched_brand_id = modelRows[0].brand_id || null;
+      body.detected_model = modelRows[0].name || body.detected_model || intake.detected_model;
+      if (body.matched_model_id !== intake.matched_model_id) body.matched_product_id = null;
+    }
+    if ('matched_color_id' in body && body.matched_color_id) {
+      const [colorRows] = await pool.query('SELECT id,name FROM colors WHERE id=? AND active=1 LIMIT 1', [body.matched_color_id]);
+      if (!colorRows[0]) return reply.code(409).send({ error: 'A cor selecionada não está mais disponível' });
+      body.detected_color = colorRows[0].name;
+    } else if ('detected_color' in body) {
+      const color = await resolveCatalogColor(body.detected_color, intake.company_id);
+      body.detected_color = color.name;
+      body.matched_color_id = color.id;
+    }
     const validation = validatePhotoExtraction({
       brand: body.detected_brand ?? intake.detected_brand,
       model: body.detected_model ?? intake.detected_model,
@@ -353,6 +448,23 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       ean: body.detected_ean ?? intake.detected_ean,
       product_code: body.detected_product_code ?? intake.detected_product_code,
     });
+    const catalog = await matchCatalog(validation.value, intake.company_id);
+    if (catalog.model && (!body.matched_model_id || body.matched_model_id === catalog.model.id)) {
+      body.matched_brand_id = catalog.model.brand_id || body.matched_brand_id || intake.matched_brand_id || null;
+      body.matched_model_id = catalog.model.id;
+      body.matched_product_id = catalog.product?.id || body.matched_product_id || intake.matched_product_id || null;
+      if (catalog.product) {
+        for (const field of ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale']) {
+          if (!(field in body) && intake[field] == null) body[field] = catalog.product[field] ?? null;
+        }
+      }
+    }
+    const allowed = ['matched_brand_id', 'matched_model_id', 'matched_product_id', 'detected_brand', 'detected_model',
+      'matched_color_id', 'detected_color', 'detected_ram', 'detected_storage', 'detected_serial', 'detected_imei_1', 'detected_imei_2',
+      'detected_ean', 'detected_product_code', 'price_cost', 'price_retail', 'price_reseller', 'price_wholesale', 'prices_confirmed', 'reviewed_by'];
+    const sets = []; const values = [];
+    for (const field of allowed) if (field in body) { sets.push(`${field}=?`); values.push(body[field] ?? null); }
+    if (!sets.length) return reply.code(400).send({ error: 'Nenhum campo permitido' });
     const identifiers = [validation.value.imei1, validation.value.imei2, validation.value.serial].filter(Boolean);
     if (identifiers.length > 0) {
       const placeholders = identifiers.map(() => '?').join(',');
@@ -430,6 +542,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         return { intake: toPublicIntake(intake), product_id: intake.matched_product_id, unit_id: intake.unit_id, idempotent: true };
       }
       if (!intake.matched_model_id) { await connection.rollback(); return reply.code(409).send({ error: 'Cadastre ou vincule o modelo primeiro' }); }
+      if (!intake.matched_color_id) { await connection.rollback(); return reply.code(409).send({ error: 'Selecione ou cadastre a cor antes de salvar' }); }
       if (!intake.prices_confirmed) { await connection.rollback(); return reply.code(409).send({ error: 'Confirme os preços antes de salvar' }); }
       const requiredPrices = ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale'];
       if (requiredPrices.some((field) => intake[field] == null || !Number.isFinite(Number(intake[field])) || Number(intake[field]) < 0)) {
@@ -474,17 +587,18 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
           const specs = {
             ...template,
             color: intake.detected_color || undefined,
+            color_id: intake.matched_color_id || undefined,
             ram: intake.detected_ram || undefined,
             storage: intake.detected_storage || undefined,
           };
           let images = [];
           if (intake.detected_color) {
             const [imageRows] = await connection.query(
-              `SELECT mci.images,mci.image_url FROM model_color_images mci JOIN colors c ON c.id=mci.color_id
-               WHERE mci.model_id=? AND LOWER(TRIM(c.name))=LOWER(TRIM(?))
+              `SELECT mci.images,mci.image_url FROM model_color_images mci
+               WHERE mci.model_id=? AND mci.color_id=?
                AND (mci.company_id=? OR mci.company_id IS NULL)
                ORDER BY (mci.company_id=?) DESC, mci.updated_at DESC LIMIT 1`,
-              [model.id, intake.detected_color, intake.company_id || null, intake.company_id || null]
+              [model.id, intake.matched_color_id, intake.company_id || null, intake.company_id || null]
             );
             const savedImages = safeJson(imageRows?.[0]?.images, []);
             images = Array.isArray(savedImages) ? savedImages : [];
@@ -534,4 +648,4 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
   return { ensureSchema };
 }
 
-module.exports = { registerSmartphonePhotoIntakeRoutes };
+module.exports = { registerSmartphonePhotoIntakeRoutes, scoreCatalogModel };

@@ -7,9 +7,11 @@ import { PhotoCapturePanel } from '../../../components/products/photo-intake/Pho
 import { PhotoIntakeQueue } from '../../../components/products/photo-intake/PhotoIntakeQueue';
 import { PhotoIntakeReviewCard } from '../../../components/products/photo-intake/PhotoIntakeReviewCard';
 import { brandService } from '../../../services/brands';
+import { colorService } from '../../../services/colors';
 import { modelService } from '../../../services/models';
 import { smartphonePhotoIntakeService } from '../../../services/smartphonePhotoIntakeService';
 import type { Brand } from '../../../types/brand';
+import type { Color } from '../../../types/color';
 import type { Model } from '../../../types/model';
 import type {
   SmartphoneBrandPriceMargin,
@@ -25,6 +27,7 @@ export function SmartphonePhotoIntakePage() {
   const [items, setItems] = useState<SmartphonePhotoIntake[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [colors, setColors] = useState<Color[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [margins, setMargins] = useState<SmartphoneBrandPriceMargin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,14 +50,22 @@ export function SmartphonePhotoIntakePage() {
   }, []);
 
   const loadReferences = useCallback(async () => {
-    const [brandRows, modelRows, marginRows] = await Promise.all([
+    const [brandRows, modelRows, colorRows, marginRows] = await Promise.all([
       brandService.listActive(),
       modelService.listActive(),
+      colorService.listActive(),
       smartphonePhotoIntakeService.listMargins(),
     ]);
     setBrands(brandRows);
     setModels(modelRows);
+    setColors(colorRows);
     setMargins(marginRows);
+  }, []);
+
+  const refreshColors = useCallback(async () => {
+    const rows = await colorService.refreshActive();
+    setColors(rows);
+    toast.success('Lista de cores atualizada.');
   }, []);
 
   const loadAll = useCallback(async () => {
@@ -186,6 +197,7 @@ export function SmartphonePhotoIntakePage() {
                 <PhotoIntakeReviewCard
                   intake={selected}
                   models={models}
+                  colors={colors}
                   margin={selectedMargin}
                   busy={busy}
                   onUpdate={updateSelected}
@@ -197,6 +209,7 @@ export function SmartphonePhotoIntakePage() {
                     () => smartphonePhotoIntakeService.retry(selected.id),
                     'Foto analisada novamente.',
                   )}
+                  onRefreshColors={refreshColors}
                   onFinalize={sku => runMutation(
                     () => smartphonePhotoIntakeService.finalize(selected.id, { sku }),
                     'Aparelho salvo e disponibilizado para venda.',

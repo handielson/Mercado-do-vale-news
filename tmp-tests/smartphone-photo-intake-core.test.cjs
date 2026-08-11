@@ -8,8 +8,10 @@ const {
   isValidGtin,
   isValidImei,
   resolvePhotoIntakeStatus,
+  translateColorToPtBr,
   validatePhotoExtraction,
 } = require('../services/smartphonePhotoIntakeCore.cjs');
+const { scoreCatalogModel } = require('../services/smartphonePhotoIntakeServer.cjs');
 
 assert.equal(isValidImei('861260086190905'), true);
 assert.equal(isValidImei('861260086190906'), false);
@@ -22,6 +24,22 @@ const extraction = validatePhotoExtraction({
 assert.equal(extraction.valid, true);
 assert.equal(extraction.value.ram, '8GB');
 assert.equal(extraction.value.storage, '256GB');
+assert.equal(extraction.value.color, 'Preto');
+assert.equal(translateColorToPtBr('Purple'), 'Roxo');
+assert.equal(translateColorToPtBr('Verde'), 'Verde');
+
+assert.equal(scoreCatalogModel(
+  { name: 'Poco C85', brand_name: 'Xiaomi' },
+  { brand: 'POCO', model: 'C85' },
+), 0, 'POCO C85 precisa casar com o modelo Xiaomi que inclui a submarca no nome');
+assert.equal(Number.isFinite(scoreCatalogModel(
+  { name: 'C85', brand_name: 'Realme' },
+  { brand: 'POCO', model: 'C85' },
+)), false, 'modelo homônimo de outra marca não pode ser associado');
+assert.equal(Number.isFinite(scoreCatalogModel(
+  { name: 'Poco C85 Pró', brand_name: 'Xiaomi' },
+  { brand: 'POCO', model: 'C85' },
+)), false, 'a versão Pró não pode ser escolhida para o C85 comum');
 
 assert.deepEqual(calculateBrandPrices(87000, {
   retail_margin_cents: 20000,

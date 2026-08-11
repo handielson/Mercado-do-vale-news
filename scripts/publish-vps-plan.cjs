@@ -17,6 +17,7 @@ const API_PATTERNS = [
   /(?:^|\/)(?:webhook|cron|server|api)[^/]*\.(?:js|cjs|ts)$/,
   /^services\/autoresponder\/engine\//,
   /^services\/marketingCampaignApi\.cjs$/,
+  /^services\/.*Server\.(?:js|cjs|ts)$/i,
   /^tools\/install-autoresponder/,
 ];
 
@@ -293,6 +294,9 @@ function runSelfTest() {
 
   const marketingApi = classifyFiles(['pages/admin/settings/marketing/MarketingCampaignMetricsPanel.tsx', 'services/marketingCampaignApi.cjs']);
   assert(marketingApi.target === 'both', 'marketing campaign API module must deploy site and API');
+
+  const serviceServer = classifyFiles(['pages/admin/products/SmartphonePhotoIntakePage.tsx', 'services/smartphonePhotoIntakeServer.cjs']);
+  assert(serviceServer.target === 'both', 'server modules inside services must deploy site and API');
 
   const serverChecks = existingChecks(['vps_server.js']);
   assert(

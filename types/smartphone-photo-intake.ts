@@ -46,6 +46,7 @@ export interface SmartphonePhotoIntake {
   detected_product_code?: string | null;
   matched_brand_id?: string | null;
   matched_model_id?: string | null;
+  matched_color_id?: string | null;
   matched_product_id?: string | null;
   price_cost?: number | null;
   price_retail?: number | null;
@@ -92,6 +93,7 @@ export interface SmartphonePhotoIntakeUpdate {
   detected_product_code?: string | null;
   matched_brand_id?: string | null;
   matched_model_id?: string | null;
+  matched_color_id?: string | null;
   price_cost?: number | null;
   price_retail?: number | null;
   price_reseller?: number | null;

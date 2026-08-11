@@ -7,6 +7,7 @@ assert.match(source, /vpsClient/, 'colors service must use the VPS client');
 assert.match(source, /\/table-data\/colors\?limit=\$\{pageSize\}&offset=\$\{offset\}/, 'colors list must page through VPS table-data');
 assert.match(source, /\/table-data\/colors['"]/, 'colors create must post through VPS table-data');
 assert.match(source, /\/table-data\/colors\/\$\{encodeURIComponent\(id\)\}\?pk=id/, 'colors update/delete must use the explicit id primary key through VPS');
+assert.match(source, /async function refreshActive[\s\S]*clearListCache\(\)[\s\S]*return listActive\(\)/, 'color mapping must be able to refresh after a new color is created');
 assert.doesNotMatch(source, /from ['"]\.\/supabase['"]|supabase\.from\('colors'\)|\.from\('colors'\)/, 'colors service must not use Supabase for colors');
 
 console.log('colors service VPS static checks passed');

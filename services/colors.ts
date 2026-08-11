@@ -286,6 +286,11 @@ async function listActive(): Promise<Color[]> {
     return (await list()).filter(color => color.active);
 }
 
+async function refreshActive(): Promise<Color[]> {
+    clearListCache();
+    return listActive();
+}
+
 /**
  * Get color hex code (from entity or COLOR_MAP)
  */
@@ -307,5 +312,6 @@ export const colorService = {
     update,
     delete: deleteColor,
     listActive,
+    refreshActive,
     getColorHex
 };

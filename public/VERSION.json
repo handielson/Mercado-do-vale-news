@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.230-n8n-lista-sem-resposta",
+  "version": "v1.2.231-smartphone-foto-modelo-cor",
   "date": "2026-08-11",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260811-222659-n8n-lista-sem-resposta",
+  "release_vps": "/var/www/mdv-site/releases/20260811-230017-smartphone-foto-modelo-cor",
   "branch": "main",
-  "summary": "Corrige solicitações de nova lista que encerravam o n8n sem resposta e torna o cadastro de smartphones por foto visível no Admin."
+  "summary": "Preenche o modelo identificado no cadastro por foto, traduz e vincula a cor ao cadastro do sistema antes de liberar o smartphone."
 }
