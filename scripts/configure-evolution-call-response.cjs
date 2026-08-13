@@ -8,11 +8,7 @@ const APPLY = process.argv.includes('--apply');
 const CALL_RESPONSE_MESSAGE = [
   'Olá! 😊',
   '',
-  'Vi que você tentou nos ligar.',
-  '',
-  'Nosso atendimento pelo WhatsApp funciona no computador, então não conseguimos atender chamadas por aqui.',
-  '',
-  'Pode enviar sua dúvida por mensagem ou áudio? Assim conseguimos atender você com segurança e registrar as informações certinho. 💬🎧',
+  'Não atendemos ligações: o WhatsApp funciona no computador. Envie mensagem ou áudio. 💬🎧',
 ].join('\n');
 
 function shellQuote(value) {
@@ -29,7 +25,7 @@ function runRemote(conn, command) {
       stream.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
       stream.on('close', (code) => {
         if (code === 0) resolve(stdout);
-        else reject(new Error(stderr || stdout || `Remote command failed with code ${code}`));
+        else reject(new Error([stderr.trim(), stdout.trim()].filter(Boolean).join('\n') || `Remote command failed with code ${code}`));
       });
     });
   });
@@ -44,7 +40,7 @@ function evolutionCurlCommand(method, pathname, payload = null) {
     'set -eu',
     `api_key=$(docker inspect ${shellQuote(EVOLUTION_CONTAINER)} --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^AUTHENTICATION_API_KEY=//p' | head -n 1)`,
     'test -n "$api_key"',
-    `curl -fsS --request ${shellQuote(method)} --header "apikey: $api_key"${payloadCommand} ${shellQuote(url)}`,
+    `curl --fail-with-body -sS --request ${shellQuote(method)} --header "apikey: $api_key"${payloadCommand} ${shellQuote(url)}`,
   ].join('; ');
 }
 
@@ -89,10 +85,12 @@ async function main() {
       before: {
         rejectCall: current.rejectCall === true,
         messageConfigured: Boolean(String(current.msgCall || '').trim()),
+        messageLength: Array.from(String(current.msgCall || '')).length,
       },
       after: {
         rejectCall: verified.rejectCall === true,
         messageConfigured: Boolean(String(verified.msgCall || '').trim()),
+        messageLength: Array.from(String(verified.msgCall || '')).length,
         matchesExpectedMessage: matches,
       },
     }, null, 2));
@@ -103,9 +101,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
+}
 
 module.exports = { CALL_RESPONSE_MESSAGE };
