@@ -9,6 +9,7 @@ const reviewCard = fs.readFileSync(new URL('../components/products/photo-intake/
 const queue = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeQueue.tsx', import.meta.url), 'utf8');
 const marginEditor = fs.readFileSync(new URL('../components/products/photo-intake/BrandMarginEditor.tsx', import.meta.url), 'utf8');
 const intakeService = fs.readFileSync(new URL('../services/smartphonePhotoIntakeService.ts', import.meta.url), 'utf8');
+const protectedPhoto = fs.readFileSync(new URL('../components/products/photo-intake/ProtectedIntakePhoto.tsx', import.meta.url), 'utf8');
 
 assert.match(productList, /photo-intake[\s\S]*Smartphones por Foto/, 'Produtos deve exibir acesso ao cadastro por foto');
 assert.match(quickAccess, /Smartphones por Foto[\s\S]*\/admin\/products\/photo-intake/, 'Dashboard deve exibir acesso rápido');
@@ -20,6 +21,7 @@ assert.match(intakePage, /hasSamePriceGroup[\s\S]*matched_model_id[\s\S]*matched
 assert.match(reviewCard, /Aplicar aos \{matchingGroupCount\} aparelhos iguais[\s\S]*IMEIs e seriais permanecem individuais/, 'conferência deve oferecer aplicação dos preços ao grupo sem unir identificadores');
 assert.match(intakeService, /confirm-group-prices/, 'frontend deve usar a confirmação transacional do grupo');
 
+assert.match(protectedPhoto, /onClick=\{\(\) => setZoomed\(true\)\}[\s\S]*Abrir foto da etiqueta em tamanho ampliado[\s\S]*ImageZoomModal[\s\S]*imageUrl=\{objectUrl\}/, 'foto protegida deve abrir em visualizacao ampliada sem expor uma URL publica');
 assert.match(intakePage, /Agrupar iguais[\s\S]*groupedQueue\.items[\s\S]*groupSizeById/, 'fila deve oferecer agrupamento visual explicito');
 assert.match(intakePage, /function sortPhotoIntakeQueue[\s\S]*left\.status === 'completed'[\s\S]*right\.status === 'completed'[\s\S]*created_at/, 'itens concluidos devem ficar abaixo dos aparelhos ainda pendentes, preservando a ordem por data');
 assert.match(intakePage, /sortPhotoIntakeQueue\(\[item, \.\.\.without\]\)[\s\S]*sortPhotoIntakeQueue\(rows\)/, 'a prioridade dos pendentes deve valer ao atualizar e ao carregar a fila');

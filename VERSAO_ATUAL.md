@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.238-smartphone-fila-quebra-linha
-date: 2026-08-12
+version: v1.2.239-smartphone-foto-ampliada
+date: 2026-08-13
 status: ready
-release_vps: /var/www/mdv-site/releases/20260813-025255-smartphone-fila-quebra-linha
+release_vps: /var/www/mdv-site/releases/20260813-032011-smartphone-foto-ampliada
 branch: main
-summary: Prioriza pendências na fila de smartphones por foto e converte a quebra interna do bot antes do envio.
+summary: Permite abrir e ampliar a foto protegida durante a conferência de smartphones.
 ```
