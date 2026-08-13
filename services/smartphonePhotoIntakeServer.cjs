@@ -566,7 +566,14 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
   fastify.put('/smartphone-brand-margins/:brandId', { preHandler: requireSyncKey }, async (request, reply) => {
     await ensureSchema();
     const body = request.body || {};
-    const companyId = await resolvePhotoIntakeCompanyId(body.company_id);
+    let companyId = await resolvePhotoIntakeCompanyId(body.company_id);
+    if (!companyId) {
+      const [brandRows] = await pool.query(
+        'SELECT company_id FROM brands WHERE id=? AND company_id IS NOT NULL LIMIT 1',
+        [request.params.brandId]
+      ).catch(() => [[]]);
+      companyId = brandRows?.[0]?.company_id || null;
+    }
     if (!companyId) return reply.code(409).send({ error: 'Empresa padrão não encontrada para a margem' });
     const prices = calculateBrandPrices(0, body);
     await pool.query(

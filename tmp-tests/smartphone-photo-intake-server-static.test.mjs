@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('../services/smartphonePhotoIntakeServer.cjs', import.meta.url), 'utf8');
+const frontendService = fs.readFileSync(new URL('../services/smartphonePhotoIntakeService.ts', import.meta.url), 'utf8');
 
 assert.match(source, /const DEFAULT_MODEL = 'gpt-5\.6-luna'/, 'deve usar o modelo de leitura definido');
 assert.match(source, /detail: 'original'/, 'deve enviar a etiqueta na resolução original');
@@ -21,5 +22,8 @@ assert.match(source, /beginTransaction\(\)[\s\S]*FOR UPDATE[\s\S]*commit\(\)/, '
 assert.match(source, /confirm-group-prices[\s\S]*matched_model_id=\?[\s\S]*matched_color_id=\?[\s\S]*detected_ram[\s\S]*detected_storage[\s\S]*FOR UPDATE/, 'confirmação em grupo deve usar a combinação exata e bloquear as linhas');
 assert.match(source, /updated_count: groupRows\.length/, 'confirmação em grupo deve informar quantos aparelhos foram atualizados');
 assert.doesNotMatch(source, /budget|spending[_A-Za-z]*limit|monthly[_A-Za-z]*limit/i, 'a leitura não deve ser bloqueada por limite financeiro');
+
+assert.match(frontendService, /getCompanyId\(\)[\s\S]*company_id: companyId/, 'frontend deve informar a empresa ao salvar margens');
+assert.match(source, /SELECT company_id FROM brands WHERE id=\?[\s\S]*brandRows\?\.\[0\]\?\.company_id/, 'API deve usar a empresa da marca quando companies nao tiver a empresa padrao');
 
 console.log('smartphone photo intake server static test passed');

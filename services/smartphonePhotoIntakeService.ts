@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from './authSession';
+import { getCompanyId } from './companyContext';
 import { vpsClient } from './vpsClient';
 import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 import type {
@@ -114,9 +115,10 @@ async function saveMargin(
   brandId: string,
   input: Pick<SmartphoneBrandPriceMargin, 'retail_margin_cents' | 'reseller_margin_cents' | 'wholesale_margin_cents' | 'active'>,
 ): Promise<SmartphoneBrandPriceMargin> {
+  const companyId = await getCompanyId();
   return vpsClient.put<SmartphoneBrandPriceMargin>(
     `/smartphone-brand-margins/${encodeURIComponent(brandId)}`,
-    input,
+    { ...input, company_id: companyId },
   );
 }
 
