@@ -19,6 +19,7 @@ const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_P
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
 const smartphonePhotoIntakeServiceFiles = [
+  'services/physicalRamCore.cjs',
   'services/smartphonePhotoIntakeCore.cjs',
   'services/smartphonePhotoIntakeServer.cjs',
 ];

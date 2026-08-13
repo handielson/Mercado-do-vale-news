@@ -1,5 +1,7 @@
 'use strict';
 
+const { normalizePhysicalRamValue } = require('./physicalRamCore.cjs');
+
 const PHOTO_INTAKE_STATUS = Object.freeze({
   UPLOADED: 'uploaded',
   ANALYZING: 'analyzing',
@@ -58,7 +60,7 @@ function buildSmartphoneVariantSkuBase({ modelName, ram, storage, color } = {}) 
       return `${letters ? letters[0] : ''}${digits}`;
     })
     .join('');
-  const ramCode = normalizeMemory(ram).replace(/\D/g, '');
+  const ramCode = normalizePhysicalRamValue(ram).replace(/\D/g, '');
   const storageCode = normalizeMemory(storage).replace(/\D/g, '');
   const colorCode = normalizeText(color)
     .split(' ')
@@ -144,7 +146,7 @@ function normalizePhotoExtraction(raw = {}) {
     brand: String(raw.brand || raw.marca || '').trim(),
     model: String(raw.model || raw.modelo || '').trim(),
     color: translateColorToPtBr(raw.color || raw.cor),
-    ram: normalizeMemory(raw.ram),
+    ram: normalizePhysicalRamValue(raw.ram),
     storage: normalizeMemory(raw.storage || raw.armazenamento),
     serial: normalizeSerial(raw.serial || raw.sn),
     imei1: normalizeIdentifier(raw.imei1 || raw.imei_1),
@@ -231,7 +233,7 @@ function findConflictingNfcConfigurations(products) {
 
 function filterSmartphonesByFeatures(products, filters = {}) {
   const wantedBrand = normalizeText(filters.brand);
-  const wantedRam = normalizeMemory(filters.ram);
+  const wantedRam = normalizePhysicalRamValue(filters.ram);
   const wantedStorage = normalizeMemory(filters.storage);
   const nfcRequired = filters.nfc === true;
   const minPrice = Number(filters.min_price_cents || 0);
@@ -241,7 +243,7 @@ function filterSmartphonesByFeatures(products, filters = {}) {
     if (String(product?.status || 'active') !== 'active') return false;
     if (Number(product?.stock_quantity || 0) <= 0) return false;
     if (wantedBrand && !normalizeText(product?.brand || product?.brand_name).includes(wantedBrand)) return false;
-    if (wantedRam && normalizeMemory(getProductSpec(product, ['ram', 'memoria_ram', 'memory_ram'])) !== wantedRam) return false;
+    if (wantedRam && normalizePhysicalRamValue(getProductSpec(product, ['ram_fisica', 'memoria_ram_fisica', 'ram', 'memoria_ram', 'memory_ram'])) !== wantedRam) return false;
     if (wantedStorage && normalizeMemory(getProductSpec(product, ['storage', 'armazenamento', 'memoria', 'capacity'])) !== wantedStorage) return false;
     if (nfcRequired && conflictingNfcConfigurations.has(getSmartphoneConfigurationKey(product))) return false;
     if (nfcRequired && !isAffirmativeFeature(getProductSpec(product, ['nfc', 'NFC']))) return false;

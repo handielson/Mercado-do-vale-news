@@ -345,7 +345,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model,
-        instructions: 'Leia somente a etiqueta visível da caixa do smartphone. Não pesquise e não complete por memória. Copie cada identificador dígito por dígito. Responda a cor em português do Brasil quando houver tradução direta. Use null quando não estiver legível.',
+        instructions: 'Leia somente a etiqueta visível da caixa do smartphone. Não pesquise e não complete por memória. No campo RAM, informe somente a memória física; não some nem inclua expansão ou RAM virtual. Copie cada identificador dígito por dígito. Responda a cor em português do Brasil quando houver tradução direta. Use null quando não estiver legível.',
         input: [{ role: 'user', content: [
           { type: 'input_text', text: 'Extraia marca, modelo, cor, RAM, armazenamento, serial, IMEI 1, IMEI 2, EAN/GTIN e código do produto desta etiqueta.' },
           { type: 'input_image', image_url: `data:${mime};base64,${imageBuffer.toString('base64')}`, detail: 'original' },

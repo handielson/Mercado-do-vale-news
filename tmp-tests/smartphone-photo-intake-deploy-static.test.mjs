@@ -4,6 +4,7 @@ import fs from 'node:fs';
 const source = fs.readFileSync(new URL('../deploy-vps-server-only.cjs', import.meta.url), 'utf8');
 
 for (const relativePath of [
+  'services/physicalRamCore.cjs',
   'services/smartphonePhotoIntakeCore.cjs',
   'services/smartphonePhotoIntakeServer.cjs',
 ]) {

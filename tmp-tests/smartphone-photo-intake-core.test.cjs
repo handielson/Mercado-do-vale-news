@@ -30,6 +30,7 @@ assert.equal(translateColorToPtBr('Purple'), 'Roxo');
 assert.equal(translateColorToPtBr('Verde'), 'Verde');
 assert.equal(buildSmartphoneVariantSkuBase({ modelName: 'Poco C85', ram: '6GB', storage: '128GB', color: 'Roxo' }), 'PC856128R');
 assert.equal(buildSmartphoneVariantSkuBase({ modelName: 'Redmi Note 14', ram: '8GB', storage: '256GB', color: 'Azul Escuro' }), 'RN148256AE');
+assert.equal(validatePhotoExtraction({ ...extraction.value, ram: '24GB (8+16)' }).value.ram, '8GB');
 
 assert.equal(scoreCatalogModel(
   { name: 'Poco C85', brand_name: 'Xiaomi' },

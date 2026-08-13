@@ -9,6 +9,7 @@ const { spawn } = require('child_process');
 const ffmpegStaticPath = require('ffmpeg-static');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
 const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
+const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
 const crypto = require('crypto');
 const sharp = require('sharp');
 const { PDFDocument } = require('pdf-lib');
@@ -24031,7 +24032,7 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
   const products = rows.map(r => ({
     ...r,
     images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    specs:            normalizeProductSpecsRam(r.specs),
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
@@ -24191,7 +24192,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
   const result = rows.map(r => ({
     ...r,
     images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    specs:            normalizeProductSpecsRam(r.specs),
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
@@ -24231,7 +24232,7 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
   return rows.map(r => ({
     ...r,
     images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    specs:            normalizeProductSpecsRam(r.specs),
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
@@ -24250,7 +24251,7 @@ fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 m
   return {
     ...r,
     images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    specs:            normalizeProductSpecsRam(r.specs),
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
@@ -24335,7 +24336,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
         return {
           ...variant,
           images:           typeof variant.images === 'string'           ? JSON.parse(variant.images)           : (variant.images ?? []),
-          specs:            typeof variant.specs === 'string'            ? JSON.parse(variant.specs)            : variant.specs,
+          specs:            normalizeProductSpecsRam(variant.specs),
           alternative_eans: typeof variant.alternative_eans === 'string' ? JSON.parse(variant.alternative_eans) : variant.alternative_eans,
           custom_fields:    typeof variant.custom_fields === 'string'    ? JSON.parse(variant.custom_fields)    : variant.custom_fields,
           kits:             typeof variant.kits === 'string'             ? JSON.parse(variant.kits)             : variant.kits,
@@ -24355,7 +24356,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   return {
     ...r,
     images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    specs:            normalizeProductSpecsRam(r.specs),
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
@@ -24374,7 +24375,7 @@ fastify.get('/products/by-ean/:ean', async (req, reply) => {
   return rows.map(r => ({
     ...r,
     images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    specs:            normalizeProductSpecsRam(r.specs),
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
   }));
@@ -26068,7 +26069,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.price_promo ?? null, p.promo_start || null, p.promo_end || null,
           p.stock_quantity ?? null, p.status ?? null,
           p.category_id || null, p.brand || null, p.model_id || null,
-          jsonStr(p.images), jsonStr(p.specs), jsonStr(p.custom_fields),
+          jsonStr(p.images), jsonStr(normalizeProductSpecsRam(p.specs)), jsonStr(p.custom_fields),
           jsonStr(p.dimensions), p.weight_kg || null,
           p.ncm || null, p.cest || null, p.origin || null,
           p.bling_id || null, p.bling_parent_id || null, p.parent_id || null, optionalBool(p.is_parent) ?? 0,
@@ -26233,7 +26234,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.price_promo || null, p.promo_start || null, p.promo_end || null,
       p.stock_quantity || 0, p.status || 'active',
       p.category_id || null, p.brand || null, p.model_id || null,
-      jsonStr(p.images), jsonStr(p.specs), jsonStr(p.custom_fields),
+      jsonStr(p.images), jsonStr(normalizeProductSpecsRam(p.specs)), jsonStr(p.custom_fields),
       jsonStr(p.dimensions), p.weight_kg || null,
       p.ncm || null, p.cest || null, p.origin || null,
       p.bling_id || null, p.bling_parent_id || null, p.parent_id || null, optionalBool(p.is_parent),
@@ -26869,7 +26870,7 @@ fastify.get('/offers', async (req, reply) => {
   return rows.map(r => ({
     ...r,
     images: typeof r.images === 'string' ? JSON.parse(r.images || '[]') : (r.images ?? []),
-    specs: typeof r.specs === 'string' ? JSON.parse(r.specs || '{}') : r.specs,
+    specs: normalizeProductSpecsRam(r.specs),
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans || '[]') : r.alternative_eans,
     custom_fields: typeof r.custom_fields === 'string' ? JSON.parse(r.custom_fields || '{}') : r.custom_fields,
     kits: typeof r.kits === 'string' ? JSON.parse(r.kits || '[]') : r.kits,
