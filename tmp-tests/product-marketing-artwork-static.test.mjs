@@ -41,6 +41,11 @@ assert.match(resolver, /battery_mah/);
 assert.match(resolver, /identity\.includes\('poco'\)/);
 assert.match(resolver, /identity\.includes\('redmi'\)/);
 assert.match(resolver, /normalizeBrazilianWhatsapp/);
+assert.match(resolver, /const INTERNAL_UUID_PATTERN = \/\^\[0-9a-f\]/, 'a arte deve reconhecer e bloquear UUID interno');
+assert.match(resolver, /for \(const alias of \['version', 'versão', 'versao'\]\)/, 'a versão semântica deve ter prioridade sobre o alias legado');
+assert.match(resolver, /value && !INTERNAL_UUID_PATTERN\.test\(value\)/, 'UUID não pode ser exibido como versão');
+assert.doesNotMatch(resolver, /const sku = clean\(product\.sku\)/, 'SKU também é identificador e não deve aparecer como versão');
+assert.doesNotMatch(resolver, /readSpec\(product, \['versao', 'version', 'versão'\]\)/, 'o alias legado com UUID não deve continuar tendo prioridade');
 
 assert.match(carousel, /imageUrl:\s*usableImages\[0\]\s*\?\?\s*null/);
 assert.match(carousel, /slideNumber:\s*1/);

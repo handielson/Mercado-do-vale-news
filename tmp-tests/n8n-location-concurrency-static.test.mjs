@@ -11,6 +11,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 assert.match(patch, /consultar_localizacao_loja/, 'workflow must restore explicit store-location action');
 assert.match(patch, /Loja - Buscar Dados Empresa/, 'location action must use the existing deterministic company-data specialist');
 assert.match(patch, /deterministicStoreLocationV129 \|\|/, 'store-location request must override a wrong AI classification');
+assert.match(patch, /classifiedStoreLocationV244/, 'resolver must preserve the already classified store-location intent');
 assert.match(patch, /Controle Bot - Verificar mensagem atual/, 'workflow must check for a newer inbound before output logging/sending');
 assert.match(patch, /const suffix = shouldInviteName/, 'optional name invitation must come after the main answer');
 assert.match(patch, /Contato - Preparar'\)\.first\(\)\.json/, 'contact saved response must use an upstream node that always executed');

@@ -130,7 +130,16 @@ const allowedActions = new Set(`,
       'const decision = deterministicStoreLocationV129 || (parsed && allowedActions.has(String(parsed.acao || \'\')) ? parsed : (legacy || fallbackDecision()));',
     );
   }
+  if (!code.includes('classifiedStoreLocationV244')) {
+    const detectorStart = code.indexOf('const deterministicStoreLocationV129 = ');
+    const detectorDecision = detectorStart >= 0 ? code.indexOf('\n  ? {', detectorStart) : -1;
+    if (detectorStart < 0 || detectorDecision < 0) throw new Error('Store location detector block not found');
+    const expressionStart = detectorStart + 'const deterministicStoreLocationV129 = '.length;
+    const expression = code.slice(expressionStart, detectorDecision).trim();
+    code = `${code.slice(0, detectorStart)}// store-location-classifier-bridge-v244\nconst classifiedStoreLocationV244 = String($json.intencao || '').trim() === 'localizacao_loja';\nconst deterministicStoreLocationV129 = classifiedStoreLocationV244 || (${expression})${code.slice(detectorDecision)}`;
+  }
   if (!code.includes('deterministicStoreLocationV129 ||')) throw new Error('Could not prioritize deterministic store location action');
+  if (!code.includes('classifiedStoreLocationV244')) throw new Error('Could not preserve classified store location intent');
   new Function('$json', code);
   resolver.parameters.jsCode = code;
 }

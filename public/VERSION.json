@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.243-ram-fisica-smartphones",
+  "version": "v1.2.244-atendimento-ligacoes-localizacao",
   "date": "2026-08-13",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260813-133401-ram-fisica-smartphones",
+  "release_vps": "/var/www/mdv-site/releases/20260813-140626-v1244-atendimento-ligacoes-localizacao",
   "branch": "main",
-  "summary": "Exibe, filtra e salva somente a memória RAM física dos smartphones."
+  "summary": "Corrige a identificação comercial da arte, a localização da loja e a orientação automática para chamadas."
 }

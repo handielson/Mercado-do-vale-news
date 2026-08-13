@@ -43,6 +43,17 @@ function readSpec(product: CatalogProduct, aliases: string[]): string {
   return '';
 }
 
+const INTERNAL_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function resolveCommercialVersion(product: CatalogProduct): string {
+  const specs = product.specs || {};
+  for (const alias of ['version', 'versão', 'versao']) {
+    const value = clean(specs[alias]);
+    if (value && !INTERNAL_UUID_PATTERN.test(value)) return value;
+  }
+  return '';
+}
+
 function withUnit(value: string, unit: string): string {
   if (!value) return '';
   return new RegExp(unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(value) ? value : `${value} ${unit}`;
@@ -83,7 +94,7 @@ export function buildProductMarketingArtworkData(product: CatalogProduct, paymen
   const retailPrice = resolveCurrentMarketingPrice(product);
   const price = calculatePixPrice(retailPrice, pixDiscountPercentage);
   const plan = calculateInstallmentFromFees(retailPrice, paymentFees, 12);
-  const version = readSpec(product, ['versao', 'version', 'versão']);
+  const version = resolveCommercialVersion(product);
   const network = readSpec(product, ['network', 'rede', 'tecnologia', 'technology']);
   const technology = /5g/i.test(`${network} ${product.name}`) ? '5G' : /4g/i.test(`${network} ${product.name}`) ? '4G' : network;
   const rearCameraRaw = readSpec(product, ['cam_principal_mpx', 'camera_principal_mpx', 'camera_traseira_mpx', 'rear_camera', 'camera']);
