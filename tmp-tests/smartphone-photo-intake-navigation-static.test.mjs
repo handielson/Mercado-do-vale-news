@@ -21,6 +21,8 @@ assert.match(reviewCard, /Aplicar aos \{matchingGroupCount\} aparelhos iguais[\s
 assert.match(intakeService, /confirm-group-prices/, 'frontend deve usar a confirmação transacional do grupo');
 
 assert.match(intakePage, /Agrupar iguais[\s\S]*groupedQueue\.items[\s\S]*groupSizeById/, 'fila deve oferecer agrupamento visual explicito');
+assert.match(intakePage, /function sortPhotoIntakeQueue[\s\S]*left\.status === 'completed'[\s\S]*right\.status === 'completed'[\s\S]*created_at/, 'itens concluidos devem ficar abaixo dos aparelhos ainda pendentes, preservando a ordem por data');
+assert.match(intakePage, /sortPhotoIntakeQueue\(\[item, \.\.\.without\]\)[\s\S]*sortPhotoIntakeQueue\(rows\)/, 'a prioridade dos pendentes deve valer ao atualizar e ao carregar a fila');
 assert.match(intakePage, /getQueueGroupKey[\s\S]*matched_model_id[\s\S]*detected_ram[\s\S]*detected_storage[\s\S]*matched_color_id/, 'fila deve agrupar por modelo, RAM, armazenamento e cor');
 assert.match(queue, /groupSize > 1[\s\S]*\{groupSize\} aparelhos/, 'fila deve mostrar a quantidade de aparelhos do grupo');
 assert.doesNotMatch(queue, /truncate text-sm font-bold|mt-0\.5 truncate text-xs/, 'fila nao deve truncar modelo, memoria ou cor');

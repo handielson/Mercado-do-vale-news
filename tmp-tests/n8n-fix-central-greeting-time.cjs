@@ -1,4 +1,6 @@
 const { Client } = require('ssh2');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const dotenv = require('dotenv');
 for (const root of [path.join(__dirname, '..'), path.join(__dirname, '..', '..', '..', 'mercado-do-vale')]) {
@@ -101,7 +103,11 @@ const currentGreeting = currentGreetingHour >= 5 && currentGreetingHour < 12
   : (currentGreetingHour >= 12 && currentGreetingHour < 18 ? 'Boa tarde' : 'Boa noite');
 const normalizeGreetingPeriod = (value) => String(value || '')
   .replace(/\\[\\[SAUDACAO\\]\\]/gi, currentGreeting)
+  .replace(/\\[\\[BR\\]\\]/gi, '\\n')
   .replace(/^(\\s*(?:(?:😊|👋|🙂|😀|😃|🤗)\\s*)?)(?:bom dia|boa tarde|boa noite)(?=$|[\\s,!\\.\\:;?\\-])/i, (_, prefix) => prefix + currentGreeting);`;
+
+const greetingPlaceholderNormalizer = ".replace(/\\[\\[SAUDACAO\\]\\]/gi, currentGreeting)";
+const internalLineBreakNormalizer = ".replace(/\\[\\[BR\\]\\]/gi, '\\n')";
 
 const oldToItem = "const toItem = (message, index, all) => ({ json: { message: message.text || message.caption || message, caption: message.caption || message.text || message, messageType: message.type === 'image' ? 'image' : 'text', mediaUrl: message.mediaUrl || '', mimetype: message.mimetype || (message.type === 'image' ? 'image/jpeg' : ''), fileName: message.fileName || 'produto.jpg', delayMs: Number(message.delayMs || 0), messageIndex: index + 1, totalMessages: all.length, remoteJid, instancia, inboundWaMessageId } });";
 const newToItem = `const normalizeOutboundPayload = (rawMessage) => {
@@ -139,6 +145,13 @@ function patchSplitNode(node) {
     const marker = "const text = $json.output || $json.text || $json.response || '';";
     if (!code.includes(marker)) throw new Error('Split text marker not found');
     code = code.replace(marker, `${marker}\n${splitGreetingHelpers}`);
+  }
+  if (!code.includes(internalLineBreakNormalizer)) {
+    if (!code.includes(greetingPlaceholderNormalizer)) throw new Error('Greeting normalizer marker not found');
+    code = code.replace(
+      greetingPlaceholderNormalizer,
+      `${greetingPlaceholderNormalizer}\n  ${internalLineBreakNormalizer}`,
+    );
   }
   if (code.includes(oldToItem)) code = code.replace(oldToItem, newToItem);
   if (!code.includes('const normalizeOutboundPayload =')) throw new Error('Split outbound normalizer missing');
@@ -183,6 +196,7 @@ function summarize(nodes) {
     aiUsesGreetingPlaceholder: agentPrompt.includes('[[SAUDACAO]]'),
     centralNormalizer: splitCode.includes('const normalizeGreetingPeriod ='),
     centralNormalizerUsesRecife: splitCode.includes("const GREETING_TIME_ZONE = 'America/Recife';"),
+    internalLineBreakNormalizer: splitCode.includes(internalLineBreakNormalizer),
     productIgnoresCustomerPeriod: !productCode.includes("text.includes('bom dia')"),
     postListIgnoresCustomerPeriod: !postListCode.includes("normalized.includes('bom dia')"),
   };
@@ -208,6 +222,14 @@ async function main() {
     const summary = summarize(nodes);
     if (!APPLY) return console.log(JSON.stringify({ apply: false, ...summary }, null, 2));
 
+    const backupPath = path.join(os.tmpdir(), `n8n-workflow-${WORKFLOW_ID}-${Date.now()}.json`);
+    fs.writeFileSync(backupPath, JSON.stringify({
+      workflowId: WORKFLOW_ID,
+      activeVersionId: entity.activeVersionId,
+      nodes: JSON.parse(Buffer.from(entity.nodesHex, 'hex').toString('utf8')),
+      connections,
+    }, null, 2), { flag: 'wx' });
+
     await runRemote(conn, 'docker service scale n8n_n8n-runner=0 >/dev/null'); await waitService(conn, 'n8n_n8n-runner', 0);
     await runRemote(conn, 'docker service scale n8n_n8n=0 >/dev/null'); await waitService(conn, 'n8n_n8n', 0); servicesStopped = true;
     const sql = `\\set ON_ERROR_STOP on
@@ -222,6 +244,7 @@ COPY (SELECT json_build_object('entityHistoryEqual', we.nodes::jsonb=wh.nodes::j
       apply: true,
       ...result,
       ...summary,
+      backupPath,
       n8nReplicas: services.n8n_n8n,
       runnerReplicas: services['n8n_n8n-runner'],
       evolutionReplicas: services['n8n_evolution-api'],

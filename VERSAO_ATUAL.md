@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.237-smartphone-nome-imagem-cor
+version: v1.2.238-smartphone-fila-quebra-linha
 date: 2026-08-12
 status: ready
-release_vps: /var/www/mdv-site/releases/20260813-022628-smartphone-nome-imagem-cor
+release_vps: /var/www/mdv-site/releases/20260813-025255-smartphone-fila-quebra-linha
 branch: main
-summary: Usa o nome canônico do modelo e impede imagens de outra cor no cadastro de smartphones por foto.
+summary: Prioriza pendências na fila de smartphones por foto e converte a quebra interna do bot antes do envio.
 ```

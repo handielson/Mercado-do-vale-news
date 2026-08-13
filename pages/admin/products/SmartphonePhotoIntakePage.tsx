@@ -25,6 +25,14 @@ const GROUPABLE_STATUSES = new Set(['waiting_price_confirmation', 'review_requir
 const QUEUE_GROUPABLE_STATUSES = new Set(['waiting_price_confirmation', 'review_required']);
 const normalizeGroupValue = (value?: string | null) => String(value || '').replace(/\s+/g, '').toUpperCase();
 
+function sortPhotoIntakeQueue(items: SmartphonePhotoIntake[]): SmartphonePhotoIntake[] {
+  return [...items].sort((left, right) => {
+    const completedPriority = Number(left.status === 'completed') - Number(right.status === 'completed');
+    if (completedPriority !== 0) return completedPriority;
+    return new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime();
+  });
+}
+
 function hasSamePriceGroup(left: SmartphonePhotoIntake, right: SmartphonePhotoIntake): boolean {
   return Boolean(left.matched_model_id && left.matched_color_id)
     && left.matched_model_id === right.matched_model_id
@@ -62,17 +70,16 @@ export function SmartphonePhotoIntakePage() {
   const upsertItem = useCallback((item: SmartphonePhotoIntake, select = true) => {
     setItems(current => {
       const without = current.filter(candidate => candidate.id !== item.id);
-      return [item, ...without].sort((left, right) =>
-        new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime());
+      return sortPhotoIntakeQueue([item, ...without]);
     });
     if (select) setSelectedId(item.id);
   }, []);
 
   const loadQueue = useCallback(async () => {
     const rows = await smartphonePhotoIntakeService.list();
-    setItems(rows.sort((left, right) =>
-      new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime()));
-    setSelectedId(current => current || rows[0]?.id || null);
+    const sortedRows = sortPhotoIntakeQueue(rows);
+    setItems(sortedRows);
+    setSelectedId(current => current || sortedRows[0]?.id || null);
   }, []);
 
   const loadReferences = useCallback(async () => {

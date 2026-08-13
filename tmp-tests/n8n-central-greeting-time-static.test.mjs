@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { patchWorkflow, summarize } = require('./n8n-fix-central-greeting-time.cjs');
+const patchScript = fs.readFileSync(new URL('./n8n-fix-central-greeting-time.cjs', import.meta.url), 'utf8');
+assert.match(patchScript, /fs\.writeFileSync\(backupPath[\s\S]*flag: 'wx'[\s\S]*docker service scale n8n_n8n-runner=0/, 'aplicacao deve salvar backup exclusivo antes de parar e alterar o workflow');
 
 const oldProductGreeting = `const greetingLine = (() => {
   if (base.saudacaoDetectada !== true) return '';
@@ -45,6 +48,7 @@ const remoteJid = '558799999999@s.whatsapp.net';
 const instancia = 'botmercadodovale';
 const inboundWaMessageId = 'test';
 ${oldToItem}
+if (Array.isArray($json.messages)) return $json.messages.map(toItem);
 const parts = String(text).replace(/\\[\\[MSG\\]\\]/g, '|||').split('|||').filter(Boolean);
 return parts.map(toItem);` },
   },
@@ -60,6 +64,7 @@ assert.equal(summary.aiTimeRangesRemoved, true);
 assert.equal(summary.aiUsesGreetingPlaceholder, true);
 assert.equal(summary.centralNormalizer, true);
 assert.equal(summary.centralNormalizerUsesRecife, true);
+assert.equal(summary.internalLineBreakNormalizer, true);
 assert.equal(summary.productIgnoresCustomerPeriod, true);
 assert.equal(summary.postListIgnoresCustomerPeriod, true);
 
@@ -69,10 +74,19 @@ function executeAt(output, iso) {
   return vm.runInNewContext(`(function(){${splitCode}})()`, { $json: { output }, Date: FixedDate, Intl });
 }
 
+function executeInput(json, iso) {
+  class FixedDate extends Date { constructor(...args) { super(...(args.length ? args : [iso])); } static now() { return new Date(iso).getTime(); } }
+  return vm.runInNewContext(`(function(){${splitCode}})()`, { $json: json, Date: FixedDate, Intl });
+}
+
 assert.equal(executeAt('Boa tarde, Luluzinha![[MSG]]Tudo bem?', '2026-07-22T11:48:00.000Z')[0].json.message, 'Bom dia, Luluzinha!');
 assert.equal(executeAt('[[SAUDACAO]], Ana!', '2026-07-22T15:00:00.000Z')[0].json.message, 'Boa tarde, Ana!');
 assert.equal(executeAt('👋 Bom dia, Carlos!', '2026-07-22T22:00:00.000Z')[0].json.message, '👋 Boa noite, Carlos!');
 assert.equal(executeAt('Boa noite!', '2026-07-22T07:59:00.000Z')[0].json.message, 'Boa noite!');
 assert.equal(executeAt('Fique a vontade para escolher.', '2026-07-22T11:48:00.000Z')[0].json.message, 'Fique a vontade para escolher.');
+assert.equal(
+  executeInput({ messages: [{ text: 'Gostou de alguma dessas cores? 😊[[BR]]Posso separar para você?' }] }, '2026-07-22T15:00:00.000Z')[0].json.message,
+  'Gostou de alguma dessas cores? 😊\nPosso separar para você?',
+);
 
 console.log('n8n central greeting time static checks passed');
