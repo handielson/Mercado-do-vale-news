@@ -29,8 +29,10 @@ function extractIntake(response: IntakeResponse): SmartphonePhotoIntake {
 }
 
 async function upload(file: File, batchId?: string): Promise<SmartphonePhotoIntake> {
+  const companyId = await getCompanyId();
   const formData = new FormData();
   formData.append('file', file, file.name);
+  formData.append('company_id', companyId);
   if (batchId) formData.append('batch_id', batchId);
   return extractIntake(await vpsClient.upload<IntakeResponse>('/smartphone-photo-intakes', formData));
 }

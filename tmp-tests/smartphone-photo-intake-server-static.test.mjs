@@ -24,6 +24,7 @@ assert.match(source, /updated_count: groupRows\.length/, 'confirmação em grupo
 assert.doesNotMatch(source, /budget|spending[_A-Za-z]*limit|monthly[_A-Za-z]*limit/i, 'a leitura não deve ser bloqueada por limite financeiro');
 
 assert.match(frontendService, /getCompanyId\(\)[\s\S]*company_id: companyId/, 'frontend deve informar a empresa ao salvar margens');
+assert.match(frontendService, /async function upload[\s\S]*getCompanyId\(\)[\s\S]*formData\.append\('company_id', companyId\)/, 'upload da foto deve informar a empresa pela fonte central');
 assert.match(source, /SELECT company_id FROM brands WHERE id=\?[\s\S]*brandRows\?\.\[0\]\?\.company_id/, 'API deve usar a empresa da marca quando companies nao tiver a empresa padrao');
 assert.match(source, /const name = String\(model\.name \|\| ''\)\.trim\(\)/, 'produto criado por foto deve usar apenas o nome canonico do modelo');
 assert.doesNotMatch(source, /const name = String\(request\.body\?\.name \|\| \[model\.name/, 'nome do produto nao deve incorporar RAM, armazenamento ou cor');
