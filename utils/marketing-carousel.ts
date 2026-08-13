@@ -18,14 +18,6 @@ export const getMarketingExportSlides = (
     const usableImages = images
         .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 
-    if (usableImages.length > 1) {
-        return usableImages.map((imageUrl, index) => ({
-            imageUrl,
-            slideNumber: index + 1,
-            totalSlides: usableImages.length,
-        }));
-    }
-
     return [{
         imageUrl: usableImages[0] ?? null,
         slideNumber: 1,

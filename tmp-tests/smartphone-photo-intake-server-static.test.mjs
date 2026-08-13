@@ -3,6 +3,7 @@ import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('../services/smartphonePhotoIntakeServer.cjs', import.meta.url), 'utf8');
 const frontendService = fs.readFileSync(new URL('../services/smartphonePhotoIntakeService.ts', import.meta.url), 'utf8');
+const capturePanel = fs.readFileSync(new URL('../components/products/photo-intake/PhotoCapturePanel.tsx', import.meta.url), 'utf8');
 
 assert.match(source, /const DEFAULT_MODEL = 'gpt-5\.6-luna'/, 'deve usar o modelo de leitura definido');
 assert.match(source, /detail: 'original'/, 'deve enviar a etiqueta na resolução original');
@@ -30,5 +31,9 @@ assert.match(source, /const name = String\(model\.name \|\| ''\)\.trim\(\)/, 'pr
 assert.doesNotMatch(source, /const name = String\(request\.body\?\.name \|\| \[model\.name/, 'nome do produto nao deve incorporar RAM, armazenamento ou cor');
 assert.match(source, /findExactIntakeProduct\(connection, intake\)/, 'deve vincular automaticamente uma configuracao identica');
 assert.match(source, /reserveAvailableSku\(connection, request\.body\?\.sku, intake, model\)/, 'deve gerar outro SKU quando o informado ja estiver ocupado');
+assert.match(capturePanel, /function isDuplicateQueuePhotoError[\s\S]*\[VPS\\\]\\s\*409[\s\S]*Esta foto já está na fila/, 'frontend deve reconhecer especificamente a duplicidade informada pela API');
+assert.match(capturePanel, /smartphonePhotoIntakeService\.upload\(file, batchId\)[\s\S]*catch \(error\)[\s\S]*duplicateCount \+= 1[\s\S]*continue;/, 'uma foto duplicada não deve interromper o restante do lote');
+assert.match(capturePanel, /uploadFailureCount \+= 1[\s\S]*continue;/, 'uma falha individual de upload não deve cancelar as próximas fotos');
+assert.match(capturePanel, /foto\(s\) repetida\(s\)[\s\S]*As demais continuaram normalmente/, 'o resumo deve informar as fotos repetidas ignoradas');
 
 console.log('smartphone photo intake server static test passed');

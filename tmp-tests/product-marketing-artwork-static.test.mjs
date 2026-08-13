@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 const page = await readFile(new URL('../pages/admin/settings/MarketingPage.tsx', import.meta.url), 'utf8');
 const card = await readFile(new URL('../pages/admin/settings/marketing/ProductMarketingCard.tsx', import.meta.url), 'utf8');
 const resolver = await readFile(new URL('../pages/admin/settings/marketing/productMarketingArtwork.ts', import.meta.url), 'utf8');
+const carousel = await readFile(new URL('../utils/marketing-carousel.ts', import.meta.url), 'utf8');
 
 assert.match(page, /<ProductMarketingCard/);
 assert.match(page, /useState<MarketingAssetFormat>\('status'\)/);
@@ -40,5 +41,10 @@ assert.match(resolver, /battery_mah/);
 assert.match(resolver, /identity\.includes\('poco'\)/);
 assert.match(resolver, /identity\.includes\('redmi'\)/);
 assert.match(resolver, /normalizeBrazilianWhatsapp/);
+
+assert.match(carousel, /imageUrl:\s*usableImages\[0\]\s*\?\?\s*null/);
+assert.match(carousel, /slideNumber:\s*1/);
+assert.match(carousel, /totalSlides:\s*1/);
+assert.doesNotMatch(carousel, /usableImages\.map\(/);
 
 console.log('product-marketing-artwork-static.test.mjs: ok');

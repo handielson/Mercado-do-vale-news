@@ -7,6 +7,12 @@ import type { SmartphonePhotoIntake } from '../../../types/smartphone-photo-inta
 interface PhotoCapturePanelProps {
   onProcessed: (intake: SmartphonePhotoIntake) => void;
 }
+
+function isDuplicateQueuePhotoError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /\[VPS\]\s*409\b/.test(message) && message.includes('Esta foto já está na fila');
+}
+
 export function PhotoCapturePanel({ onProcessed }: PhotoCapturePanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [processing, setProcessing] = useState(false);
@@ -19,10 +25,23 @@ export function PhotoCapturePanel({ onProcessed }: PhotoCapturePanelProps) {
     setProcessing(true);
     const batchId = crypto.randomUUID();
     let completed = 0;
+    let duplicateCount = 0;
+    let uploadFailureCount = 0;
     try {
       for (const [index, file] of selected.entries()) {
         setProgress(`Enviando foto ${index + 1} de ${selected.length}...`);
-        const created = await smartphonePhotoIntakeService.upload(file, batchId);
+        let created: SmartphonePhotoIntake;
+        try {
+          created = await smartphonePhotoIntakeService.upload(file, batchId);
+        } catch (error) {
+          if (isDuplicateQueuePhotoError(error)) {
+            duplicateCount += 1;
+          } else {
+            uploadFailureCount += 1;
+            console.error('[PhotoCapturePanel] upload failed:', error);
+          }
+          continue;
+        }
         onProcessed(created);
 
         setProgress(`Lendo foto ${index + 1} de ${selected.length} com a IA...`);
@@ -36,6 +55,12 @@ export function PhotoCapturePanel({ onProcessed }: PhotoCapturePanelProps) {
         }
       }
       if (completed > 0) toast.success(`${completed} foto(s) analisada(s) e adicionada(s) à fila.`);
+      if (duplicateCount > 0) {
+        toast.info(`${duplicateCount} foto(s) repetida(s) já estava(m) na fila e foi(ram) ignorada(s). As demais continuaram normalmente.`);
+      }
+      if (uploadFailureCount > 0) {
+        toast.error(`${uploadFailureCount} foto(s) não pôde(ram) ser enviada(s). As demais continuaram normalmente.`);
+      }
     } catch (error: any) {
       toast.error(error?.message || 'Não foi possível enviar as fotos.');
     } finally {
