@@ -64,9 +64,7 @@ export async function getModelImageWithCache(modelId: string, colorName?: string
                     const row = await modelColorImagesService.get(modelId, colorData.id);
                     if (row?.images?.length) imageUrl = row.images[0];
                 }
-            }
-
-            if (!imageUrl) {
+            } else {
                 const fallbackKey = `mercado-do-vale::${modelId}::none`;
                 if (memoryCache[fallbackKey] !== undefined) {
                     imageUrl = memoryCache[fallbackKey];

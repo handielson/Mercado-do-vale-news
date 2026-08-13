@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync('components/products/ProductCard.tsx', 'utf8');
+const modelImageCacheSource = readFileSync('services/modelImageCache.ts', 'utf8');
 
 assert.match(
   source,
@@ -32,6 +33,18 @@ assert.match(
   source,
   /findSiblingImagesForProduct\(\s*siblingProducts,\s*product\s*\)/,
   'ProductCard must choose sibling images through the product-aware helper so color-compatible variants are preferred',
+);
+
+assert.match(
+  source,
+  /const siblingColor = normalizeComparableText\(sibling\?\.specs\?\.color\);\s*if \(productColor && siblingColor !== productColor\) return null;/,
+  'ProductCard must never use an image from a sibling product with a different color',
+);
+
+assert.match(
+  modelImageCacheSource,
+  /if \(colorName\) \{[\s\S]*modelColorImagesService\.get\(modelId, colorData\.id\)[\s\S]*\} else \{[\s\S]*modelColorImagesService\.getByModel\(modelId\)/,
+  'model image cache must only use a generic model image when no product color was requested',
 );
 
 console.log('admin product compact image fallback OK');

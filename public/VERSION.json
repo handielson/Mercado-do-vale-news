@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.236-smartphone-margem-empresa",
+  "version": "v1.2.237-smartphone-nome-imagem-cor",
   "date": "2026-08-12",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260813-015532-smartphone-margem-empresa",
+  "release_vps": "/var/www/mdv-site/releases/20260813-022628-smartphone-nome-imagem-cor",
   "branch": "main",
-  "summary": "Corrige o vínculo da empresa ao salvar margens de smartphones por marca."
+  "summary": "Usa o nome canônico do modelo e impede imagens de outra cor no cadastro de smartphones por foto."
 }

@@ -186,6 +186,8 @@ const findSiblingImagesForProduct = (siblings: unknown, product: Product): strin
             if (images.length === 0) return null;
 
             const siblingColor = normalizeComparableText(sibling?.specs?.color);
+            if (productColor && siblingColor !== productColor) return null;
+
             const siblingSlug = normalizeComparableText(sibling?.slug || sibling?.specs?.slug);
             const siblingName = normalizeComparableText(sibling?.name);
             let score = 0;

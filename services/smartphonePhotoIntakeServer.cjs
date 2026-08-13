@@ -682,8 +682,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
             images = Array.isArray(savedImages) ? savedImages : [];
             if (imageRows?.[0]?.image_url && !images.includes(imageRows[0].image_url)) images.push(imageRows[0].image_url);
           }
-          const name = String(request.body?.name || [model.name, intake.detected_ram, intake.detected_storage,
-            intake.detected_color ? `Cor:${intake.detected_color}` : ''].filter(Boolean).join(', ')).trim();
+          const name = String(model.name || '').trim();
           await connection.query(
             `INSERT INTO products (id,name,slug,sku,ean,alternative_eans,price_retail,price_wholesale,price_cost,
              price_reseller,stock_quantity,status,category_id,brand,model_id,images,specs,track_inventory,warranty_type,company_id)
