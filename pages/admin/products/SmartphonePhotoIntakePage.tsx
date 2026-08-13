@@ -268,7 +268,7 @@ export function SmartphonePhotoIntakePage() {
       ) : (
         <div className="space-y-5">
           <PhotoCapturePanel onProcessed={upsertItem} />
-          <div className="grid items-start gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="grid items-start gap-5 lg:grid-cols-[390px_minmax(0,1fr)]">
             <aside className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-24">
               <div className="mb-2 flex items-center justify-between px-1">
                 <h2 className="font-bold text-slate-800">Fila de conferência</h2>

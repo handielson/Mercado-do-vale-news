@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.234-smartphone-fila-agrupada
-date: 2026-08-11
+version: v1.2.235-smartphone-fila-pesquisa
+date: 2026-08-12
 status: ready
-release_vps: /var/www/mdv-site/releases/20260811-232633-smartphone-fila-agrupada
+release_vps: /var/www/mdv-site/releases/20260813-013540-smartphone-fila-pesquisa
 branch: main
-summary: Agrupa visualmente smartphones iguais na fila por modelo, RAM, armazenamento e cor.
+summary: Exibe todos os dados dos grupos na fila e adiciona pesquisa inteligente nas margens por marca.
 ```

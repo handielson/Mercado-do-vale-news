@@ -60,24 +60,22 @@ export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loadin
               ? 'border-blue-400 bg-blue-50 shadow-sm'
               : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50'}`}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-2">
-                  <p className="truncate text-sm font-bold text-slate-800">{title}</p>
-                  {groupSize > 1 && (
-                    <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">
-                      {groupSize} aparelhos
-                    </span>
-                  )}
-                </div>
-                <p className="mt-0.5 truncate text-xs text-slate-500">{details || 'Dados ainda não confirmados'}</p>
-              </div>
-              <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${STATUS_STYLE[item.status] || STATUS_STYLE.uploaded}`}>
+            <div>
+              <p className="break-words text-sm font-bold leading-5 text-slate-800">{title}</p>
+              <p className="mt-1 break-words text-xs leading-5 text-slate-600">{details || 'Dados ainda não confirmados'}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {groupSize > 1 && (
+                  <span className="inline-flex items-center rounded-full bg-blue-600 px-2 py-1 text-[10px] font-black text-white">
+                    {groupSize} aparelhos
+                  </span>
+                )}
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${STATUS_STYLE[item.status] || STATUS_STYLE.uploaded}`}>
                 <StatusIcon status={item.status} />
                 {SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS[item.status] || item.status}
-              </span>
+                </span>
+              </div>
             </div>
-            <p className="mt-2 text-[11px] text-slate-400">
+            <p className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-slate-400">
               {new Date(item.created_at).toLocaleString('pt-BR')}
             </p>
           </button>

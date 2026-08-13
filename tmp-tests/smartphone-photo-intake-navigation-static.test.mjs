@@ -7,6 +7,7 @@ const routes = fs.readFileSync(new URL('../routes/index.tsx', import.meta.url), 
 const intakePage = fs.readFileSync(new URL('../pages/admin/products/SmartphonePhotoIntakePage.tsx', import.meta.url), 'utf8');
 const reviewCard = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeReviewCard.tsx', import.meta.url), 'utf8');
 const queue = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeQueue.tsx', import.meta.url), 'utf8');
+const marginEditor = fs.readFileSync(new URL('../components/products/photo-intake/BrandMarginEditor.tsx', import.meta.url), 'utf8');
 const intakeService = fs.readFileSync(new URL('../services/smartphonePhotoIntakeService.ts', import.meta.url), 'utf8');
 
 assert.match(productList, /photo-intake[\s\S]*Smartphones por Foto/, 'Produtos deve exibir acesso ao cadastro por foto');
@@ -22,5 +23,10 @@ assert.match(intakeService, /confirm-group-prices/, 'frontend deve usar a confir
 assert.match(intakePage, /Agrupar iguais[\s\S]*groupedQueue\.items[\s\S]*groupSizeById/, 'fila deve oferecer agrupamento visual explicito');
 assert.match(intakePage, /getQueueGroupKey[\s\S]*matched_model_id[\s\S]*detected_ram[\s\S]*detected_storage[\s\S]*matched_color_id/, 'fila deve agrupar por modelo, RAM, armazenamento e cor');
 assert.match(queue, /groupSize > 1[\s\S]*\{groupSize\} aparelhos/, 'fila deve mostrar a quantidade de aparelhos do grupo');
+assert.doesNotMatch(queue, /truncate text-sm font-bold|mt-0\.5 truncate text-xs/, 'fila nao deve truncar modelo, memoria ou cor');
+assert.match(queue, /break-words text-sm[\s\S]*break-words text-xs/, 'fila deve permitir quebra de linha para mostrar todos os dados');
+assert.match(marginEditor, /type="search"[\s\S]*onChange=\{event => setSearch\(event\.target\.value\)\}/, 'margens devem filtrar automaticamente enquanto o usuario digita');
+assert.match(marginEditor, /normalize\('NFD'\)[\s\S]*filteredBrands/, 'pesquisa deve ignorar acentos e caixa');
+assert.match(marginEditor, /ACTIVE_FILTERS[\s\S]*INACTIVE_FILTERS[\s\S]*CONFIGURED_FILTERS[\s\S]*PENDING_FILTERS/, 'pesquisa inteligente deve reconhecer estados das margens');
 
 console.log('smartphone photo intake navigation static test passed');
