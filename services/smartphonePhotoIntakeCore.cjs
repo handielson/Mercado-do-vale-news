@@ -48,6 +48,29 @@ function normalizeMemory(value) {
   return `${match[1]}${match[2].startsWith('T') ? 'TB' : 'GB'}`;
 }
 
+function buildSmartphoneVariantSkuBase({ modelName, ram, storage, color } = {}) {
+  const modelCode = normalizeText(modelName)
+    .split(' ')
+    .filter(Boolean)
+    .map((token) => {
+      const letters = token.replace(/\d/g, '');
+      const digits = token.replace(/\D/g, '');
+      return `${letters ? letters[0] : ''}${digits}`;
+    })
+    .join('');
+  const ramCode = normalizeMemory(ram).replace(/\D/g, '');
+  const storageCode = normalizeMemory(storage).replace(/\D/g, '');
+  const colorCode = normalizeText(color)
+    .split(' ')
+    .filter(Boolean)
+    .map((token) => token[0])
+    .join('');
+  return `${modelCode || 'smartphone'}${ramCode}${storageCode}${colorCode}`
+    .replace(/[^a-z0-9]/gi, '')
+    .toUpperCase()
+    .slice(0, 48);
+}
+
 const COLOR_TRANSLATIONS_PT_BR = Object.freeze({
   black: 'Preto',
   'midnight black': 'Preto',
@@ -232,6 +255,7 @@ function filterSmartphonesByFeatures(products, filters = {}) {
 module.exports = {
   PHOTO_INTAKE_STATUS,
   PHOTO_INTAKE_STATUS_LABEL,
+  buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
   filterSmartphonesByFeatures,
   findConflictingNfcConfigurations,

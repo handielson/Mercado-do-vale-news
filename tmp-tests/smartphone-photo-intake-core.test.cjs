@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const {
   PHOTO_INTAKE_STATUS,
+  buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
   filterSmartphonesByFeatures,
   isValidGtin,
@@ -27,6 +28,8 @@ assert.equal(extraction.value.storage, '256GB');
 assert.equal(extraction.value.color, 'Preto');
 assert.equal(translateColorToPtBr('Purple'), 'Roxo');
 assert.equal(translateColorToPtBr('Verde'), 'Verde');
+assert.equal(buildSmartphoneVariantSkuBase({ modelName: 'Poco C85', ram: '6GB', storage: '128GB', color: 'Roxo' }), 'PC856128R');
+assert.equal(buildSmartphoneVariantSkuBase({ modelName: 'Redmi Note 14', ram: '8GB', storage: '256GB', color: 'Azul Escuro' }), 'RN148256AE');
 
 assert.equal(scoreCatalogModel(
   { name: 'Poco C85', brand_name: 'Xiaomi' },

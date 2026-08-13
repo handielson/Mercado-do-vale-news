@@ -78,13 +78,13 @@ export function PhotoIntakeReviewCard({
 }: PhotoIntakeReviewCardProps) {
   const [draft, setDraft] = useState<SmartphonePhotoIntakeUpdate>(() => buildDraft(intake));
   const [selectedModelId, setSelectedModelId] = useState(intake.matched_model_id || '');
-  const [sku, setSku] = useState(intake.detected_product_code || '');
+  const [sku, setSku] = useState('');
   const [applyPricesToGroup, setApplyPricesToGroup] = useState(true);
 
   useEffect(() => {
     setDraft(buildDraft(intake));
     setSelectedModelId(intake.matched_model_id || '');
-    setSku(intake.detected_product_code || '');
+    setSku('');
   }, [intake]);
 
   const sortedModels = useMemo(
@@ -295,11 +295,11 @@ export function PhotoIntakeReviewCard({
 
           {!intake.matched_product_id && (
             <label className="block rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <span className="mb-1 block text-xs font-bold text-slate-700">SKU da nova variação</span>
+              <span className="mb-1 block text-xs font-bold text-slate-700">SKU da nova variação (opcional)</span>
               <input
                 value={sku}
                 onChange={event => setSku(event.target.value)}
-                placeholder="Informe o SKU antes de finalizar"
+                placeholder="Deixe em branco para gerar automaticamente"
                 className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
             </label>
@@ -307,7 +307,7 @@ export function PhotoIntakeReviewCard({
           <button
             type="button"
             onClick={() => void onFinalize(sku.trim() || undefined)}
-            disabled={busy || !canFinalize || (!intake.matched_product_id && !sku.trim())}
+            disabled={busy || !canFinalize}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {busy ? <Loader2 size={17} className="animate-spin" /> : <Sparkles size={17} />}

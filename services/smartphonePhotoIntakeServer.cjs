@@ -5,7 +5,9 @@ const path = require('path');
 const crypto = require('crypto');
 const {
   PHOTO_INTAKE_STATUS,
+  buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
+  normalizeMemory,
   resolvePhotoIntakeStatus,
   translateColorToPtBr,
   validatePhotoExtraction,
@@ -77,6 +79,54 @@ function parseIntakeRow(row) {
     validation_warnings: safeJson(row.validation_warnings, []),
     prices_confirmed: Number(row.prices_confirmed || 0) === 1,
   };
+}
+
+function productMatchesIntakeConfiguration(product, intake) {
+  const specs = safeJson(product?.specs, {});
+  const wantedRam = normalizeMemory(intake?.detected_ram);
+  const wantedStorage = normalizeMemory(intake?.detected_storage);
+  const productRam = normalizeMemory(specs.ram || specs.memoria_ram || specs.memory_ram);
+  const productStorage = normalizeMemory(specs.storage || specs.armazenamento || specs.memoria || specs.capacity);
+  const wantedColorId = String(intake?.matched_color_id || '').trim();
+  const productColorId = String(specs.color_id || '').trim();
+  const colorMatches = wantedColorId && productColorId
+    ? wantedColorId === productColorId
+    : slugify(specs.color || specs.cor || specs.colour) === slugify(intake?.detected_color);
+  return Boolean(wantedRam && wantedStorage && intake?.detected_color)
+    && productRam === wantedRam
+    && productStorage === wantedStorage
+    && colorMatches;
+}
+
+async function findExactIntakeProduct(connection, intake) {
+  const [products] = await connection.query(
+    `SELECT id,sku,specs FROM products
+      WHERE model_id=? AND (? IS NULL OR company_id=? OR company_id IS NULL)
+      ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'out_of_stock' THEN 1 WHEN 'inactive' THEN 2 ELSE 3 END,
+        updated_at DESC FOR UPDATE`,
+    [intake.matched_model_id, intake.company_id || null, intake.company_id || null]
+  );
+  return products.find((product) => productMatchesIntakeConfiguration(product, intake)) || null;
+}
+
+async function reserveAvailableSku(connection, requestedSku, intake, model) {
+  const preferred = String(requestedSku || '').trim();
+  if (preferred) {
+    const [requestedRows] = await connection.query('SELECT id FROM products WHERE sku=? LIMIT 1 FOR UPDATE', [preferred]);
+    if (!requestedRows[0]) return preferred;
+  }
+  const base = buildSmartphoneVariantSkuBase({
+    modelName: model.name,
+    ram: intake.detected_ram,
+    storage: intake.detected_storage,
+    color: intake.detected_color,
+  });
+  for (let suffix = 1; suffix <= 999; suffix += 1) {
+    const candidate = suffix === 1 ? base : `${base}${suffix}`;
+    const [rows] = await connection.query('SELECT id FROM products WHERE sku=? LIMIT 1 FOR UPDATE', [candidate]);
+    if (!rows[0]) return candidate;
+  }
+  throw new Error('Não foi possível gerar um SKU único para esta variação');
 }
 
 function toPublicIntake(row) {
@@ -654,7 +704,11 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         }
       }
       if (!productId) {
-        const sku = String(request.body?.sku || '').trim();
+        const exactProduct = await findExactIntakeProduct(connection, intake);
+        if (exactProduct) productId = exactProduct.id;
+      }
+      if (!productId) {
+        const sku = await reserveAvailableSku(connection, request.body?.sku, intake, model);
         if (!sku) { await connection.rollback(); return reply.code(409).send({ error: 'Informe o SKU para criar esta variação' }); }
         const [skuRows] = await connection.query('SELECT id FROM products WHERE sku=? LIMIT 1 FOR UPDATE', [sku]);
         if (skuRows[0]) {

@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.239-smartphone-foto-ampliada",
+  "version": "v1.2.240-smartphone-foto-sku-auto",
   "date": "2026-08-13",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260813-032011-smartphone-foto-ampliada",
+  "release_vps": "/var/www/mdv-site/releases/20260813-122609-smartphone-foto-sku-auto",
   "branch": "main",
-  "summary": "Permite abrir e ampliar a foto protegida durante a conferência de smartphones."
+  "summary": "Corrige colisões de SKU e vincula automaticamente variações no cadastro de smartphones por foto."
 }

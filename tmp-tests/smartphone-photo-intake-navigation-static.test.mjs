@@ -6,6 +6,9 @@ const quickAccess = fs.readFileSync(new URL('../components/admin/dashboard/Admin
 const routes = fs.readFileSync(new URL('../routes/index.tsx', import.meta.url), 'utf8');
 const intakePage = fs.readFileSync(new URL('../pages/admin/products/SmartphonePhotoIntakePage.tsx', import.meta.url), 'utf8');
 const reviewCard = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeReviewCard.tsx', import.meta.url), 'utf8');
+assert.match(reviewCard, /SKU da nova variação \(opcional\)/, 'SKU manual deve ser opcional');
+assert.match(reviewCard, /Deixe em branco para gerar automaticamente/, 'deve explicar a geração automática');
+assert.doesNotMatch(reviewCard, /setSku\(intake\.detected_product_code/, 'codigo do fabricante nao pode virar SKU comercial');
 const queue = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeQueue.tsx', import.meta.url), 'utf8');
 const marginEditor = fs.readFileSync(new URL('../components/products/photo-intake/BrandMarginEditor.tsx', import.meta.url), 'utf8');
 const intakeService = fs.readFileSync(new URL('../services/smartphonePhotoIntakeService.ts', import.meta.url), 'utf8');
