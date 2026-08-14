@@ -226,6 +226,28 @@ export function SmartphonePhotoIntakePage() {
     }
   };
 
+  const finalizeSelected = async (sku?: string) => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      const updated = await smartphonePhotoIntakeService.finalize(selected.id, { sku });
+      const nextItems = sortPhotoIntakeQueue([
+        updated,
+        ...items.filter(item => item.id !== updated.id),
+      ]);
+      setItems(nextItems);
+      const nextPending = nextItems.find(
+        item => item.id !== updated.id && item.status !== 'completed',
+      );
+      setSelectedId(nextPending?.id || updated.id);
+      toast.success('Aparelho salvo e disponibilizado para venda.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível disponibilizar o aparelho para venda.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-[1500px] p-4 sm:p-6">
       <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -329,10 +351,7 @@ export function SmartphonePhotoIntakePage() {
                     'Foto analisada novamente.',
                   )}
                   onRefreshColors={refreshColors}
-                  onFinalize={sku => runMutation(
-                    () => smartphonePhotoIntakeService.finalize(selected.id, { sku }),
-                    'Aparelho salvo e disponibilizado para venda.',
-                  )}
+                  onFinalize={finalizeSelected}
                 />
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center text-sm text-slate-500">

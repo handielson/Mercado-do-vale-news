@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.249-produto-ja-cadastrado",
+  "version": "v1.2.250-avancar-proximo-aparelho",
   "date": "2026-08-14",
   "status": "ready",
-  "release_vps": "20260814-195346-produto-ja-cadastrado",
+  "release_vps": "20260814-200335-avancar-proximo-aparelho",
   "branch": "main",
-  "summary": "Identifica produto já cadastrado e evita duplicidade do próprio pré-cadastro."
+  "summary": "Após salvar um aparelho, avança ao próximo pendente e mantém concluídos no fim da fila."
 }
