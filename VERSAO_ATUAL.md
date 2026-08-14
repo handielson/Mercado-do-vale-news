@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.246-catalogo-sequencial-modelo
+version: v1.2.247-mapeamento-cor-persistente
 date: 2026-08-14
 status: ready
-release_vps: /var/www/mdv-site/releases/20260814-165335-v1246-catalogo-sequencial-modelo
+release_vps: pendente
 branch: main
-summary: Remove marcas sem estoque, interpreta modelo e memória separadamente e envia a lista em sequência determinística.
+summary: Persiste mapeamentos de cor do cadastro por foto e salva correções antes da confirmação de preços.
 ```

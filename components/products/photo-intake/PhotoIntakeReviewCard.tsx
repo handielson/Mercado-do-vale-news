@@ -106,6 +106,10 @@ export function PhotoIntakeReviewCard({
   };
 
   const confirmPrices = async () => {
+    // Persistir as correções feitas no formulário antes de confirmar preços.
+    // Sem isso, uma cor/modelo recém-mapeado permanecia apenas no estado local
+    // e o endpoint de confirmação do grupo não conseguia localizar o aparelho.
+    await onUpdate({ ...draft, prices_confirmed: false });
     await onConfirmPrices({
       price_cost: Number(draft.price_cost || 0),
       price_retail: Number(draft.price_retail || 0),

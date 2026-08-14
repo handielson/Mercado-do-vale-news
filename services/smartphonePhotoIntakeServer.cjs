@@ -196,6 +196,13 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         INDEX idx_smartphone_photo_intake_imei_1 (detected_imei_1),
         INDEX idx_smartphone_photo_intake_serial (detected_serial)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS smartphone_photo_color_mappings (
+        id CHAR(36) PRIMARY KEY, company_id CHAR(36) NULL, source_color_key VARCHAR(160) NOT NULL,
+        source_color VARCHAR(160) NOT NULL, color_id CHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY idx_photo_color_mapping_scope (company_id, source_color_key),
+        INDEX idx_photo_color_mapping_color (color_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
       const [intakeColumns] = await pool.query('SHOW COLUMNS FROM smartphone_photo_intakes');
       const intakeColumnNames = new Set(intakeColumns.map((column) => column.Field));
       if (!intakeColumnNames.has('matched_color_id')) {
@@ -238,12 +245,23 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     const resolvedCompanyId = await resolvePhotoIntakeCompanyId(companyId);
     const translated = translateColorToPtBr(value);
     if (!translated) return { id: null, name: '', original: String(value || '').trim() };
+    const sourceKey = slugify(value);
+    if (sourceKey) {
+      const [mappings] = await pool.query(
+        `SELECT c.id,c.name FROM smartphone_photo_color_mappings map
+         JOIN colors c ON c.id=map.color_id AND c.active=1
+         WHERE map.source_color_key=? AND (map.company_id <=> ? OR map.company_id IS NULL)
+         ORDER BY map.company_id IS NULL ASC LIMIT 1`,
+        [sourceKey, resolvedCompanyId],
+      );
+      if (mappings[0]) return { id: mappings[0].id, name: mappings[0].name, original: String(value || '').trim() };
+    }
     const [colors] = await pool.query(
       `SELECT id,name FROM colors WHERE active=1 AND (? IS NULL OR company_id=? OR company_id IS NULL)`,
       [resolvedCompanyId, resolvedCompanyId]
     );
     const translatedKey = slugify(translated);
-    const originalKey = slugify(value);
+    const originalKey = sourceKey;
     const color = colors.find((candidate) => slugify(candidate.name) === translatedKey)
       || colors.find((candidate) => slugify(candidate.name) === originalKey)
       || null;
@@ -493,6 +511,17 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     if ('matched_color_id' in body && body.matched_color_id) {
       const [colorRows] = await pool.query('SELECT id,name FROM colors WHERE id=? AND active=1 LIMIT 1', [body.matched_color_id]);
       if (!colorRows[0]) return reply.code(409).send({ error: 'A cor selecionada não está mais disponível' });
+      const extractedColor = safeJson(intake.extracted_data, {})?.color || safeJson(intake.extracted_data, {})?.cor || intake.detected_color;
+      const aliases = [...new Set([extractedColor, intake.detected_color].map(value => String(value || '').trim()).filter(Boolean))];
+      for (const alias of aliases) {
+        const sourceKey = slugify(alias);
+        if (!sourceKey || sourceKey === slugify(colorRows[0].name)) continue;
+        await pool.query(
+          `INSERT INTO smartphone_photo_color_mappings (id,company_id,source_color_key,source_color,color_id)
+           VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE source_color=VALUES(source_color),color_id=VALUES(color_id)`,
+          [crypto.randomUUID(), intake.company_id || null, sourceKey, alias, colorRows[0].id],
+        );
+      }
       body.detected_color = colorRows[0].name;
     } else if ('detected_color' in body) {
       const color = await resolveCatalogColor(body.detected_color, intake.company_id);

@@ -13,6 +13,9 @@ assert.match(source, /fastify\.get\('\/smartphone-photo-intakes\/:id\/photo'[\s\
 assert.match(source, /validatePhotoExtraction\(\{[\s\S]*body\.detected_imei_1 \?\? intake\.detected_imei_1/, 'edições manuais devem recalcular a validação');
 assert.match(source, /scoreCatalogModel[\s\S]*fullLabel[\s\S]*getBrandFamily/, 'modelo deve considerar submarcas sem aceitar homônimo de outra marca');
 assert.match(source, /translateColorToPtBr[\s\S]*matched_color_id/, 'cor lida deve ser traduzida e vinculada à tabela de cores');
+assert.match(source, /smartphone_photo_color_mappings[\s\S]*source_color_key/, 'mapeamentos de cor devem ser persistidos para reutilização');
+assert.match(source, /SELECT c\.id,c\.name FROM smartphone_photo_color_mappings/, 'leitura futura deve consultar os mapeamentos persistidos');
+assert.match(source, /INSERT INTO smartphone_photo_color_mappings[\s\S]*ON DUPLICATE KEY UPDATE/, 'uma cor mapeada manualmente deve atualizar a regra existente');
 assert.match(source, /repairPendingPhotoIntakes\(\)/, 'itens que já estavam na fila devem ser corrigidos automaticamente');
 assert.match(source, /resolvePhotoIntakeCompanyId[\s\S]*slug='mercado-do-vale'/, 'uploads sem company_id devem usar a empresa real do catálogo, nunca o valor literal default');
 assert.match(source, /SET company_id=\?, detected_color=\?/, 'pendências antigas devem receber a empresa real antes do casamento de modelo e cor');
