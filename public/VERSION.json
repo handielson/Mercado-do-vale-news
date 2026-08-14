@@ -2,7 +2,7 @@
   "version": "v1.2.248-ignorar-proprio-intake-imei",
   "date": "2026-08-14",
   "status": "ready",
-  "release_vps": "pendente",
+  "release_vps": "20260814-194500-v1248-ignorar-proprio-intake-imei",
   "branch": "main",
   "summary": "Ignora o próprio pré-cadastro na validação de IMEI duplicado."
 }
