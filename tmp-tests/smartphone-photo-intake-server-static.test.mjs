@@ -21,7 +21,7 @@ assert.match(source, /resolvePhotoIntakeCompanyId[\s\S]*slug='mercado-do-vale'/,
 assert.match(source, /SET company_id=\?, detected_color=\?/, 'pendências antigas devem receber a empresa real antes do casamento de modelo e cor');
 assert.match(source, /if \(!intake\.matched_color_id\)[\s\S]*Selecione ou cadastre a cor/, 'finalização deve exigir cor estruturada');
 assert.match(source, /color_id: intake\.matched_color_id/, 'produto final deve guardar o identificador da cor');
-assert.match(source, /SELECT id FROM units WHERE imei_1 IN[\s\S]*already_registered/, 'edições manuais devem repetir a checagem de duplicidade');
+assert.match(source, /SELECT id FROM units WHERE \(imei_1 IN[\s\S]*intake_id IS NULL OR intake_id <> \?[\s\S]*already_registered/, 'edições manuais devem checar duplicidade sem acusar o próprio pré-cadastro');
 assert.match(source, /beginTransaction\(\)[\s\S]*FOR UPDATE[\s\S]*commit\(\)/, 'finalização deve ser transacional e bloquear a pendência');
 assert.match(source, /confirm-group-prices[\s\S]*matched_model_id=\?[\s\S]*matched_color_id=\?[\s\S]*detected_ram[\s\S]*detected_storage[\s\S]*FOR UPDATE/, 'confirmação em grupo deve usar a combinação exata e bloquear as linhas');
 assert.match(source, /updated_count: groupRows\.length/, 'confirmação em grupo deve informar quantos aparelhos foram atualizados');

@@ -561,8 +561,9 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     if (identifiers.length > 0) {
       const placeholders = identifiers.map(() => '?').join(',');
       const [duplicates] = await pool.query(
-        `SELECT id FROM units WHERE imei_1 IN (${placeholders}) OR imei_2 IN (${placeholders}) OR serial IN (${placeholders}) LIMIT 1`,
-        [...identifiers, ...identifiers, ...identifiers]
+        `SELECT id FROM units WHERE (imei_1 IN (${placeholders}) OR imei_2 IN (${placeholders}) OR serial IN (${placeholders}))
+         AND (intake_id IS NULL OR intake_id <> ?) LIMIT 1`,
+        [...identifiers, ...identifiers, ...identifiers, intake.id]
       );
       if (duplicates.length > 0) validation.errors.push({ field: 'identifiers', code: 'already_registered', message: 'IMEI ou serial já cadastrado' });
     }
@@ -711,8 +712,9 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       if (identifiers.length) {
         const placeholders = identifiers.map(() => '?').join(',');
         const [duplicates] = await connection.query(
-          `SELECT id FROM units WHERE imei_1 IN (${placeholders}) OR imei_2 IN (${placeholders}) OR serial IN (${placeholders}) FOR UPDATE`,
-          [...identifiers, ...identifiers, ...identifiers]
+          `SELECT id FROM units WHERE (imei_1 IN (${placeholders}) OR imei_2 IN (${placeholders}) OR serial IN (${placeholders}))
+           AND (intake_id IS NULL OR intake_id <> ?) FOR UPDATE`,
+          [...identifiers, ...identifiers, ...identifiers, intake.id]
         );
         if (duplicates.length) { await connection.rollback(); return reply.code(409).send({ error: 'IMEI ou serial já cadastrado' }); }
       }
