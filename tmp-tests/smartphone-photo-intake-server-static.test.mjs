@@ -4,6 +4,8 @@ import fs from 'node:fs';
 const source = fs.readFileSync(new URL('../services/smartphonePhotoIntakeServer.cjs', import.meta.url), 'utf8');
 const frontendService = fs.readFileSync(new URL('../services/smartphonePhotoIntakeService.ts', import.meta.url), 'utf8');
 const capturePanel = fs.readFileSync(new URL('../components/products/photo-intake/PhotoCapturePanel.tsx', import.meta.url), 'utf8');
+const reviewCard = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeReviewCard.tsx', import.meta.url), 'utf8');
+const queue = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeQueue.tsx', import.meta.url), 'utf8');
 
 assert.match(source, /const DEFAULT_MODEL = 'gpt-5\.6-luna'/, 'deve usar o modelo de leitura definido');
 assert.match(source, /detail: 'original'/, 'deve enviar a etiqueta na resolução original');
@@ -22,6 +24,7 @@ assert.match(source, /SET company_id=\?, detected_color=\?/, 'pendências antiga
 assert.match(source, /if \(!intake\.matched_color_id\)[\s\S]*Selecione ou cadastre a cor/, 'finalização deve exigir cor estruturada');
 assert.match(source, /color_id: intake\.matched_color_id/, 'produto final deve guardar o identificador da cor');
 assert.match(source, /SELECT id FROM units WHERE \(imei_1 IN[\s\S]*intake_id IS NULL OR intake_id <> \?[\s\S]*already_registered/, 'edições manuais devem checar duplicidade sem acusar o próprio pré-cadastro');
+assert.match(source, /const duplicateValues = \[validation\.value\.imei1[\s\S]*intake_id IS NULL OR intake_id <> \?[\s\S]*duplicateValues, intake\.id/, 'nova leitura deve ignorar unidades do próprio pré-cadastro');
 assert.match(source, /beginTransaction\(\)[\s\S]*FOR UPDATE[\s\S]*commit\(\)/, 'finalização deve ser transacional e bloquear a pendência');
 assert.match(source, /confirm-group-prices[\s\S]*matched_model_id=\?[\s\S]*matched_color_id=\?[\s\S]*detected_ram[\s\S]*detected_storage[\s\S]*FOR UPDATE/, 'confirmação em grupo deve usar a combinação exata e bloquear as linhas');
 assert.match(source, /updated_count: groupRows\.length/, 'confirmação em grupo deve informar quantos aparelhos foram atualizados');
@@ -33,6 +36,8 @@ assert.match(source, /SELECT company_id FROM brands WHERE id=\?[\s\S]*brandRows\
 assert.match(source, /const name = String\(model\.name \|\| ''\)\.trim\(\)/, 'produto criado por foto deve usar apenas o nome canonico do modelo');
 assert.doesNotMatch(source, /const name = String\(request\.body\?\.name \|\| \[model\.name/, 'nome do produto nao deve incorporar RAM, armazenamento ou cor');
 assert.match(source, /findExactIntakeProduct\(connection, intake\)/, 'deve vincular automaticamente uma configuracao identica');
+assert.match(reviewCard, /Produto já cadastrado\.[\s\S]*não será criado outro produto/, 'a conferência deve informar quando a variação já existe');
+assert.match(queue, /Produto já cadastrado/, 'a fila deve identificar variações já cadastradas');
 assert.match(source, /reserveAvailableSku\(connection, request\.body\?\.sku, intake, model\)/, 'deve gerar outro SKU quando o informado ja estiver ocupado');
 assert.match(source, /No campo RAM, informe somente a memória física; não some nem inclua expansão ou RAM virtual/, 'IA deve extrair apenas a RAM física da etiqueta');
 assert.match(capturePanel, /function isDuplicateQueuePhotoError[\s\S]*\[VPS\\\]\\s\*409[\s\S]*Esta foto já está na fila/, 'frontend deve reconhecer especificamente a duplicidade informada pela API');

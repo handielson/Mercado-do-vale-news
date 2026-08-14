@@ -386,8 +386,9 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     if (duplicateValues.length > 0) {
       const placeholders = duplicateValues.map(() => '?').join(',');
       const [duplicates] = await pool.query(
-        `SELECT id FROM units WHERE imei_1 IN (${placeholders}) OR imei_2 IN (${placeholders}) OR serial IN (${placeholders}) LIMIT 1`,
-        [...duplicateValues, ...duplicateValues, ...duplicateValues]
+        `SELECT id FROM units WHERE (imei_1 IN (${placeholders}) OR imei_2 IN (${placeholders}) OR serial IN (${placeholders}))
+         AND (intake_id IS NULL OR intake_id <> ?) LIMIT 1`,
+        [...duplicateValues, ...duplicateValues, ...duplicateValues, intake.id]
       );
       if (duplicates.length > 0) validation.errors.push({ field: 'identifiers', code: 'already_registered', message: 'IMEI ou serial já cadastrado' });
     }

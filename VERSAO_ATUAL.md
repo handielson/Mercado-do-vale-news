@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.248-ignorar-proprio-intake-imei
+version: v1.2.249-produto-ja-cadastrado
 date: 2026-08-14
 status: ready
-release_vps: 20260814-194500-v1248-ignorar-proprio-intake-imei
+release_vps: pendente
 branch: main
-summary: Ignora o próprio pré-cadastro na validação de IMEI duplicado.
+summary: Identifica produto já cadastrado e evita duplicidade do próprio pré-cadastro.
 ```

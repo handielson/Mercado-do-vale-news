@@ -239,6 +239,11 @@ export function PhotoIntakeReviewCard({
                 Cadastrar modelo <ExternalLink size={13} />
               </Link>
             </div>
+            {intake.matched_product_id && (
+              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                <strong>Produto já cadastrado.</strong> Esta leitura será vinculada à variação existente; não será criado outro produto.
+              </div>
+            )}
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <select
                 value={selectedModelId}

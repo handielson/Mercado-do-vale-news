@@ -69,6 +69,11 @@ export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loadin
                     {groupSize} aparelhos
                   </span>
                 )}
+                {item.matched_product_id && (
+                  <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">
+                    Produto já cadastrado
+                  </span>
+                )}
                 <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${STATUS_STYLE[item.status] || STATUS_STYLE.uploaded}`}>
                 <StatusIcon status={item.status} />
                 {SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS[item.status] || item.status}
