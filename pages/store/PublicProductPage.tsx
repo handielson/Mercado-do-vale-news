@@ -107,7 +107,31 @@ export const PublicProductPage: React.FC = () => {
             if (!color?.id) return [];
 
             const colorImages = await modelColorImagesService.get(String(modelId), String(color.id));
-            return Array.isArray(colorImages?.images) ? colorImages.images.filter(Boolean) : [];
+            const configuredImages = Array.isArray(colorImages?.images) ? colorImages.images.filter(Boolean) : [];
+            if (configuredImages.length > 0) return configuredImages;
+
+            // Alguns SKUs ainda não têm uma galeria própria nem uma associação em
+            // model_color_images. O painel administrativo já usa uma variação irmã
+            // de mesma cor como último recurso; a vitrine deve seguir a mesma regra.
+            const normalizedColor = colorName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+            const siblings = await vpsApiService.getProducts({
+                model_id: String(modelId),
+                status: 'active',
+                limit: 200,
+                noCache: true,
+            });
+            const sameColorSibling = (siblings || []).find((sibling: any) => {
+                if (String(sibling?.id || '') === String(productLike?.id || '')) return false;
+                const siblingColor = String(sibling?.specs?.color || sibling?.specs?.cor || '')
+                    .trim()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .toLowerCase();
+                return siblingColor === normalizedColor && Array.isArray(sibling?.images) && sibling.images.some(Boolean);
+            });
+            return Array.isArray(sameColorSibling?.images)
+                ? sameColorSibling.images.filter(Boolean)
+                : [];
         } catch (error) {
             console.warn('[PublicProductPage] Falha ao carregar imagens por cor do modelo', error);
             return [];

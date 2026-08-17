@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.251-envio-whatsapp-sequencial
+version: v1.2.252-imagem-publica-variante
 date: 2026-08-17
 status: ready
-release_vps: pendente
+release_vps: 20260817-181114-imagem-publica-variante
 branch: main
-summary: Envia catálogos do WhatsApp estritamente na ordem em que foram montados.
+summary: Exibe a galeria da mesma cor quando o SKU público não possui foto própria.
 ```
