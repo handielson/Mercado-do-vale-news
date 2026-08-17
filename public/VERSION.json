@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.252-imagem-publica-variante",
+  "version": "v1.2.253-filtro-aparelhos-disponiveis",
   "date": "2026-08-17",
   "status": "ready",
-  "release_vps": "20260817-181114-imagem-publica-variante",
+  "release_vps": "20260817-182539-filtro-aparelhos-disponiveis",
   "branch": "main",
-  "summary": "Exibe a galeria da mesma cor quando o SKU público não possui foto própria."
+  "summary": "Oculta aparelhos já disponíveis e deixa clara a pendência de concluir a venda."
 }

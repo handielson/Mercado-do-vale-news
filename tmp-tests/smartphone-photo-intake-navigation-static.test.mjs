@@ -27,12 +27,14 @@ assert.match(reviewCard, /const confirmPrices = async \(\) => \{[\s\S]*await onU
 
 assert.match(protectedPhoto, /onClick=\{\(\) => setZoomed\(true\)\}[\s\S]*Abrir foto da etiqueta em tamanho ampliado[\s\S]*ImageZoomModal[\s\S]*imageUrl=\{objectUrl\}/, 'foto protegida deve abrir em visualizacao ampliada sem expor uma URL publica');
 assert.match(intakePage, /Agrupar iguais[\s\S]*groupedQueue\.items[\s\S]*groupSizeById/, 'fila deve oferecer agrupamento visual explicito');
+assert.match(intakePage, /hideCompleted[\s\S]*item\.status !== 'completed'[\s\S]*Ocultar já disponíveis/, 'fila deve permitir ocultar somente os aparelhos já disponíveis para venda');
 assert.match(intakePage, /function sortPhotoIntakeQueue[\s\S]*left\.status === 'completed'[\s\S]*right\.status === 'completed'[\s\S]*created_at/, 'itens concluidos devem ficar abaixo dos aparelhos ainda pendentes, preservando a ordem por data');
 assert.match(intakePage, /sortPhotoIntakeQueue\(\[item, \.\.\.without\]\)[\s\S]*sortPhotoIntakeQueue\(rows\)/, 'a prioridade dos pendentes deve valer ao atualizar e ao carregar a fila');
 assert.match(intakePage, /const finalizeSelected = async \(sku\?: string\)[\s\S]*status !== 'completed'[\s\S]*setSelectedId\(nextPending\?\.id \|\| updated\.id\)/, 'ao salvar deve avançar para o próximo aparelho pendente');
 assert.match(intakePage, /sortPhotoIntakeQueue\(\[[\s\S]*updated,[\s\S]*items\.filter\(item => item\.id !== updated\.id\)/, 'aparelhos salvos devem permanecer no final da fila');
 assert.match(intakePage, /getQueueGroupKey[\s\S]*matched_model_id[\s\S]*detected_ram[\s\S]*detected_storage[\s\S]*matched_color_id/, 'fila deve agrupar por modelo, RAM, armazenamento e cor');
 assert.match(queue, /groupSize > 1[\s\S]*\{groupSize\} aparelhos/, 'fila deve mostrar a quantidade de aparelhos do grupo');
+assert.match(queue, /Produto encontrado/, 'fila deve distinguir produto encontrado de aparelho concluído');
 assert.doesNotMatch(queue, /truncate text-sm font-bold|mt-0\.5 truncate text-xs/, 'fila nao deve truncar modelo, memoria ou cor');
 assert.match(queue, /break-words text-sm[\s\S]*break-words text-xs/, 'fila deve permitir quebra de linha para mostrar todos os dados');
 assert.match(marginEditor, /type="search"[\s\S]*onChange=\{event => setSearch\(event\.target\.value\)\}/, 'margens devem filtrar automaticamente enquanto o usuario digita');

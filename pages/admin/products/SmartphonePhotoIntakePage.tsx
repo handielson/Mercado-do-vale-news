@@ -66,6 +66,7 @@ export function SmartphonePhotoIntakePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [groupQueue, setGroupQueue] = useState(true);
+  const [hideCompleted, setHideCompleted] = useState(false);
 
   const upsertItem = useCallback((item: SmartphonePhotoIntake, select = true) => {
     setItems(current => {
@@ -119,11 +120,22 @@ export function SmartphonePhotoIntakePage() {
     [items, selectedId],
   );
 
+  const visibleItems = useMemo(
+    () => hideCompleted ? items.filter(item => item.status !== 'completed') : items,
+    [hideCompleted, items],
+  );
+
+  useEffect(() => {
+    if (hideCompleted && selected?.status === 'completed') {
+      setSelectedId(visibleItems[0]?.id || null);
+    }
+  }, [hideCompleted, selected, visibleItems]);
+
   const groupedQueue = useMemo(() => {
     if (!groupQueue) {
       return {
-        items,
-        groupSizeById: Object.fromEntries(items.map(item => [item.id, 1])),
+        items: visibleItems,
+        groupSizeById: Object.fromEntries(visibleItems.map(item => [item.id, 1])),
       };
     }
 
@@ -131,7 +143,7 @@ export function SmartphonePhotoIntakePage() {
     const representativeByKey = new Map<string, SmartphonePhotoIntake>();
     const groupSizeById: Record<string, number> = {};
 
-    for (const item of items) {
+    for (const item of visibleItems) {
       const key = getQueueGroupKey(item);
       const representative = representativeByKey.get(key);
       if (representative) {
@@ -144,13 +156,13 @@ export function SmartphonePhotoIntakePage() {
     }
 
     return { items: representatives, groupSizeById };
-  }, [groupQueue, items]);
+  }, [groupQueue, visibleItems]);
 
   const toggleQueueGrouping = () => {
     const next = !groupQueue;
     if (next && selected) {
       const selectedKey = getQueueGroupKey(selected);
-      const representative = items.find(item => getQueueGroupKey(item) === selectedKey);
+      const representative = visibleItems.find(item => getQueueGroupKey(item) === selectedKey);
       if (representative) setSelectedId(representative.id);
     }
     setGroupQueue(next);
@@ -302,14 +314,14 @@ export function SmartphonePhotoIntakePage() {
               <div className="mb-2 flex items-center justify-between px-1">
                 <h2 className="font-bold text-slate-800">Fila de conferência</h2>
                 <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
-                  {groupQueue ? `${groupedQueue.items.length} grupos · ${items.length} aparelhos` : `${items.length} aparelhos`}
+                  {groupQueue ? `${groupedQueue.items.length} grupos · ${visibleItems.length} aparelhos` : `${visibleItems.length} aparelhos`}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={toggleQueueGrouping}
                 aria-pressed={groupQueue}
-                className={`mb-3 flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-colors ${groupQueue
+                className={`mb-2 flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-colors ${groupQueue
                   ? 'border-blue-200 bg-blue-50 text-blue-800'
                   : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
               >
@@ -318,6 +330,19 @@ export function SmartphonePhotoIntakePage() {
                 </span>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${groupQueue ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
                   {groupQueue ? 'Ativado' : 'Desativado'}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setHideCompleted(current => !current)}
+                aria-pressed={hideCompleted}
+                className={`mb-3 flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-colors ${hideCompleted
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                <span className="text-sm font-bold">Ocultar já disponíveis</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${hideCompleted ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  {hideCompleted ? 'Ativado' : 'Desativado'}
                 </span>
               </button>
               <div className="max-h-[70vh] overflow-y-auto pr-1">

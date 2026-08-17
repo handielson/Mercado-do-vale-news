@@ -36,8 +36,8 @@ assert.match(source, /SELECT company_id FROM brands WHERE id=\?[\s\S]*brandRows\
 assert.match(source, /const name = String\(model\.name \|\| ''\)\.trim\(\)/, 'produto criado por foto deve usar apenas o nome canonico do modelo');
 assert.doesNotMatch(source, /const name = String\(request\.body\?\.name \|\| \[model\.name/, 'nome do produto nao deve incorporar RAM, armazenamento ou cor');
 assert.match(source, /findExactIntakeProduct\(connection, intake\)/, 'deve vincular automaticamente uma configuracao identica');
-assert.match(reviewCard, /Produto já cadastrado\.[\s\S]*não será criado outro produto/, 'a conferência deve informar quando a variação já existe');
-assert.match(queue, /Produto já cadastrado/, 'a fila deve identificar variações já cadastradas');
+assert.match(reviewCard, /Produto encontrado\.[\s\S]*O produto já existe[\s\S]*Falta concluir este aparelho[\s\S]*não será criado outro produto/, 'a conferência deve explicar que o produto existe, mas o aparelho ainda precisa ser concluído');
+assert.match(queue, /Produto encontrado/, 'a fila deve identificar variações já cadastradas com texto simples');
 assert.match(source, /reserveAvailableSku\(connection, request\.body\?\.sku, intake, model\)/, 'deve gerar outro SKU quando o informado ja estiver ocupado');
 assert.match(source, /No campo RAM, informe somente a memória física; não some nem inclua expansão ou RAM virtual/, 'IA deve extrair apenas a RAM física da etiqueta');
 assert.match(capturePanel, /function isDuplicateQueuePhotoError[\s\S]*\[VPS\\\]\\s\*409[\s\S]*Esta foto já está na fila/, 'frontend deve reconhecer especificamente a duplicidade informada pela API');

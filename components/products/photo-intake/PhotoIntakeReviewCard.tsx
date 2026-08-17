@@ -241,7 +241,7 @@ export function PhotoIntakeReviewCard({
             </div>
             {intake.matched_product_id && (
               <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                <strong>Produto já cadastrado.</strong> Esta leitura será vinculada à variação existente; não será criado outro produto.
+                <strong>Produto encontrado.</strong> O produto já existe. Falta concluir este aparelho para disponibilizá-lo à venda; não será criado outro produto.
               </div>
             )}
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
