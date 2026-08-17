@@ -36027,6 +36027,11 @@ async function runMigrations() {
   await addColumnIfMissing('orders', 'shipping_origin_cep', 'VARCHAR(16) NULL');
   await addColumnIfMissing('orders', 'shipping_origin_label', 'VARCHAR(255) NULL');
   await addColumnIfMissing('order_items', 'combo_selections', 'JSON NULL');
+  await addColumnIfMissing('payment_integrations', 'company_id', 'CHAR(36) NULL');
+  await pool.query(
+    "UPDATE payment_integrations SET company_id = ? WHERE company_id IS NULL OR TRIM(company_id) = ''",
+    [await getDefaultCompanyIdForCatalog()],
+  );
   await addColumnIfMissing('sales', 'subtotal', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('sales', 'discount_total', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('sales', 'cost_total', 'INT NOT NULL DEFAULT 0');

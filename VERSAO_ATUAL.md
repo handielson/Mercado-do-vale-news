@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.255-corrige-itens-combo
+version: v1.2.256-corrige-checkout-cartao
 date: 2026-08-17
 status: ready
 release_vps: api-mdv-api-20260817
 branch: main
-summary: Cria o campo de seleções de combo necessário para salvar itens de pedidos online.
+summary: Vincula a integração Mercado Pago à empresa para exibir o pagamento por cartão no checkout.
 ```
