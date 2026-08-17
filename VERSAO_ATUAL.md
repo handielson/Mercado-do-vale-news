@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.253-filtro-aparelhos-disponiveis
+version: v1.2.254-corrige-schema-pedidos
 date: 2026-08-17
 status: ready
-release_vps: 20260817-182539-filtro-aparelhos-disponiveis
+release_vps: api-mdv-api-20260817
 branch: main
-summary: Oculta aparelhos já disponíveis e deixa clara a pendência de concluir a venda.
+summary: Cria os campos de origem do frete necessários para salvar pedidos online.
 ```

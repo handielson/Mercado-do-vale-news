@@ -36024,6 +36024,8 @@ async function runMigrations() {
   await addColumnIfMissing('products', 'view_count', "INT DEFAULT 0");
   await addColumnIfMissing('products', 'marketing_background_url', 'TEXT NULL');
   await addColumnIfMissing('products', 'marketing_video_url', 'TEXT NULL');
+  await addColumnIfMissing('orders', 'shipping_origin_cep', 'VARCHAR(16) NULL');
+  await addColumnIfMissing('orders', 'shipping_origin_label', 'VARCHAR(255) NULL');
   await addColumnIfMissing('sales', 'subtotal', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('sales', 'discount_total', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('sales', 'cost_total', 'INT NOT NULL DEFAULT 0');
