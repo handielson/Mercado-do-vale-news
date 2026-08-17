@@ -68,4 +68,15 @@ assert.match(
   'PublicProductPage model_id sibling branch must reuse the catalog group key before showing PDP variants'
 );
 
+assert.match(
+  pageSource,
+  /resolveProductVideoUrl\(product, safeVideoSiblings\)/,
+  'PDP must resolve a missing video from a safely grouped sibling variation'
+);
+assert.match(
+  pageSource,
+  /siblings\.filter\(sibling => generateGroupKey\(sibling\) === currentGroupKey\)/,
+  'PDP must not inherit a video from an unrelated product model'
+);
+
 console.log('catalog-pdp-sibling-grouping.test.mjs: ok');

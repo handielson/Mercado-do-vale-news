@@ -103,6 +103,29 @@ assert.equal(
   'https://cdn.example.com/azul.jpg',
 );
 
+const colorWithoutOwnArtwork = {
+  ...variantProducts[0],
+  id: 'x8-white-no-art',
+  name: 'Poco X8 Pro 5G, 512GB, Branco',
+  sku: 'PX85G8512B',
+  marketing_background_url: '',
+  specs: { ram: '8GB', storage: '512GB', color: 'Branco' },
+};
+const selectedWithSharedArtwork = selectStatusProducts(
+  [...variantProducts, colorWithoutOwnArtwork],
+  { dailyLimit: 10 },
+);
+assert.deepEqual(
+  selectedWithSharedArtwork.find((product) => product.status_variation.storage === '512GB')?.status_variation.colors,
+  ['Azul', 'Branco', 'Preto', 'Verde'],
+  'uma cor em estoque deve permanecer no grupo mesmo sem arte propria',
+);
+assert.equal(
+  selectedWithSharedArtwork.filter((product) => product.status_variation.storage === '512GB').length,
+  1,
+  'nomes diferentes do mesmo model_id e memoria nao podem criar grupos duplicados',
+);
+
 const selectedVariants = selectStatusProducts(variantProducts, { dailyLimit: 10 });
 assert.equal(selectedVariants.length, 2);
 

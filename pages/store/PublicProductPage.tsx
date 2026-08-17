@@ -30,7 +30,7 @@ import { vpsApiService } from '@/services/vpsApiService';
 import { modelService } from '@/services/models';
 import { modelColorImagesService } from '@/services/model-color-images';
 import { colorService } from '@/services/colors';
-import { buildProductVideoPlaylist, isMp4VideoUrl } from '@/utils/product-video-playlist';
+import { buildProductVideoPlaylist, isMp4VideoUrl, resolveProductVideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
 import { getPublicProductDisambiguatedRouteTarget, getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
 import { customFieldsService } from '@/services/custom-fields';
@@ -77,7 +77,7 @@ export const PublicProductPage: React.FC = () => {
         'Conteúdo da embalagem',
     ]);
 
-    // Resolved video URL: prioridade video_url → HEAD check automático por SKU
+    // Resolved video URL: produto → variação irmã segura → HEAD automático por SKU
     const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(null);
     const [videoLoadError, setVideoLoadError] = useState(false);
     const [videoPlaylistIndex, setVideoPlaylistIndex] = useState(0);
@@ -218,9 +218,16 @@ export const PublicProductPage: React.FC = () => {
 
         const resolveVideoUrl = async () => {
             setVideoLoadError(false);
-            // 1. Se o produto tem video_url explícita, usa a URL salva
-            if (product?.video_url) {
-                setEffectiveVideoUrl(product.video_url);
+            const currentGroupKey = product ? generateGroupKey(product) : null;
+            const safeVideoSiblings = currentGroupKey
+                ? siblings.filter(sibling => generateGroupKey(sibling) === currentGroupKey)
+                : [];
+
+            // 1. Usa a mídia própria; se faltar, herda somente de uma variação
+            // validada como pertencente ao mesmo modelo. Prioriza RAM/storage iguais.
+            const configuredVideoUrl = resolveProductVideoUrl(product, safeVideoSiblings);
+            if (configuredVideoUrl) {
+                setEffectiveVideoUrl(configuredVideoUrl);
                 return;
             }
 
@@ -245,7 +252,7 @@ export const PublicProductPage: React.FC = () => {
         else setEffectiveVideoUrl(null);
 
         return () => { cancelled = true; };
-    }, [product?.video_url, product?.sku]);
+    }, [product, siblings]);
 
     useEffect(() => {
         setVideoPlaylistIndex(0);

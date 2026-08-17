@@ -27906,15 +27906,21 @@ function parseWhatsAppStatusProductIds(value, fallbackProductId = null) {
 }
 
 function isWhatsAppStatusProductEligible(product) {
+  return isWhatsAppStatusProductInStock(product)
+    && Boolean(getWhatsAppStatusProductImage(product));
+}
+
+function isWhatsAppStatusProductInStock(product) {
   if (!product?.id) return false;
   if (Number(product.stock_quantity ?? 0) <= 0 && product.track_inventory !== 0 && product.track_inventory !== false) return false;
-  return Boolean(getWhatsAppStatusProductImage(product));
+  return true;
 }
 
 function rotateWhatsAppStatusProducts(products, lastProductId) {
-  const eligible = products.filter(isWhatsAppStatusProductEligible);
-  if (!eligible.length) return [];
-  const grouped = groupWhatsAppStatusProductsByVariation(eligible);
+  const inStock = products.filter(isWhatsAppStatusProductInStock);
+  if (!inStock.length) return [];
+  const grouped = groupWhatsAppStatusProductsByVariation(inStock)
+    .filter(isWhatsAppStatusProductEligible);
   const startIndex = Math.max(0, grouped.findIndex((product) => product.id === lastProductId) + 1);
   return [...grouped.slice(startIndex), ...grouped.slice(0, startIndex)];
 }
@@ -28004,9 +28010,10 @@ function groupWhatsAppStatusProductsByVariation(products) {
       color: explicit.color,
     };
     const groupName = getWhatsAppStatusGroupName(product, variation);
+    const modelKey = product?.model_id || normalizeWhatsAppStatusText(groupName);
     const key = [
-      product?.model_id || normalizeWhatsAppStatusText(groupName),
-      normalizeWhatsAppStatusText(groupName),
+      modelKey,
+      product?.model_id ? '' : normalizeWhatsAppStatusText(groupName),
       normalizeWhatsAppStatusText(variation.ram),
       normalizeWhatsAppStatusText(variation.storage),
     ].join('|');
@@ -28169,8 +28176,12 @@ async function appendWhatsAppStatusTrace({ runId, logId = null, campaignId, prod
 }
 
 function buildWhatsAppStatusVideoCandidates(product) {
-  const marketingVideo = String(product?.marketing_video_url || '').trim();
-  return /^https?:\/\//i.test(marketingVideo) ? [marketingVideo] : [];
+  const products = [product, ...(Array.isArray(product?.status_group_products) ? product.status_group_products : [])];
+  const candidates = [
+    ...products.map((item) => String(item?.marketing_video_url || '').trim()),
+    ...products.map((item) => String(item?.video_url || '').trim()),
+  ].filter((value) => /^https?:\/\//i.test(value));
+  return Array.from(new Set(candidates));
 }
 
 function normalizeWhatsAppStatusRepeatDays(value) {

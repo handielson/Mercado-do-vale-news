@@ -4,7 +4,7 @@ import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Lay
 import { toast } from 'sonner';
 import { toBlob, toPng } from 'html-to-image';
 import { catalogService } from '../../../services/catalogService';
-import type { CatalogProduct, ProductGroup } from '../../../types/catalog';
+import type { CatalogProduct, ProductGroup, ProductVariant } from '../../../types/catalog';
 import { groupProductsByVariants } from '../../../services/productGrouping';
 import { colorService } from '../../../services/colors';
 import { modelColorImagesService } from '../../../services/model-color-images';
@@ -163,6 +163,13 @@ const readMarketingPrimaryVariants = (): Record<string, string> => {
 const getGroupProducts = (group: ProductGroup): CatalogProduct[] =>
     group.variants.flatMap((variant) => variant.products);
 
+type MarketingVariantOption = {
+    key: string;
+    group: ProductGroup;
+    variant: ProductVariant;
+    representativeProduct: CatalogProduct;
+};
+
 const chooseMarketingPrimaryProduct = (group: ProductGroup): CatalogProduct => {
     const products = getGroupProducts(group);
     const savedId = readMarketingPrimaryVariants()[group.groupKey];
@@ -174,6 +181,46 @@ const chooseMarketingPrimaryProduct = (group: ProductGroup): CatalogProduct => {
         const stockScore = (product: CatalogProduct) => product.track_inventory ? Number(product.stock_quantity || 0) : 1;
         return (mediaScore(b) + stockScore(b)) - (mediaScore(a) + stockScore(a));
     })[0] || group.representativeProduct;
+};
+
+const chooseMarketingVariantProduct = (group: ProductGroup, variant: ProductVariant): CatalogProduct => {
+    const savedId = readMarketingPrimaryVariants()[group.groupKey];
+    const saved = variant.products.find((product) => product.id === savedId);
+    if (saved) return saved;
+
+    return [...variant.products].sort((a, b) => {
+        const artworkScore = (product: CatalogProduct) => product.marketing_background_url ? 20000 : 0;
+        const mediaScore = (product: CatalogProduct) => getRenderableProductImages(product).length > 0 ? 10000 : 0;
+        const stockScore = (product: CatalogProduct) => product.track_inventory ? Number(product.stock_quantity || 0) : 1;
+        return (artworkScore(b) + mediaScore(b) + stockScore(b)) - (artworkScore(a) + mediaScore(a) + stockScore(a));
+    })[0] || group.representativeProduct;
+};
+
+const buildMarketingVariantOptions = (groups: ProductGroup[]): MarketingVariantOption[] =>
+    groups.flatMap((group) => group.variants.map((variant) => ({
+        key: `${group.groupKey}:${variant.ram}:${variant.storage}`,
+        group,
+        variant,
+        representativeProduct: chooseMarketingVariantProduct(group, variant),
+    })));
+
+const loadAllMarketingProducts = async ({ search, categoryId }: { search?: string; categoryId?: string }) => {
+    const pageSize = 200;
+    const productsById = new Map<string, CatalogProduct>();
+
+    for (let page = 1; page <= 20; page += 1) {
+        const result = await catalogService.getProducts({
+            search: search || undefined,
+            categories: categoryId ? [categoryId] : undefined,
+            inStockOnly: true,
+        }, page, pageSize);
+        result.products.forEach((product) => {
+            if (product.id) productsById.set(product.id, product);
+        });
+        if (!result.hasMore || productsById.size >= result.total) break;
+    }
+
+    return Array.from(productsById.values());
 };
 
 const saveMarketingPrimaryProduct = (groupKey: string, productId: string) => {
@@ -530,6 +577,18 @@ export default function MarketingPage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('');
     const [categories, setCategories] = useState<{ id: string, name: string }[]>([]);
     const [groupedResults, setGroupedResults] = useState<ProductGroup[]>([]);
+    const marketingVariantOptions = useMemo(
+        () => buildMarketingVariantOptions(groupedResults),
+        [groupedResults],
+    );
+    const readyMarketingVariantCount = useMemo(
+        () => marketingVariantOptions.filter(({ variant }) => variant.products.some((product) => Boolean(product.marketing_background_url))).length,
+        [marketingVariantOptions],
+    );
+    const videoMarketingVariantCount = useMemo(
+        () => marketingVariantOptions.filter(({ variant }) => variant.products.some((product) => Boolean(product.marketing_video_url || product.video_url))).length,
+        [marketingVariantOptions],
+    );
     const selectedProductGroup = useMemo(() => groupedResults.find((group) =>
         getGroupProducts(group).some((product) => product.id === selectedProduct?.id)
     ) || null, [groupedResults, selectedProduct?.id]);
@@ -673,14 +732,13 @@ export default function MarketingPage() {
         const timer = setTimeout(async () => {
             setIsSearching(true);
             try {
-                // Get full products to get the injected images from catalogService
-                const res = await catalogService.getProducts({
+                const products = await loadAllMarketingProducts({
                     search: searchQuery || undefined,
-                    categories: selectedCategory ? [selectedCategory] : undefined
-                }, 1, 30);
+                    categoryId: selectedCategory || undefined,
+                });
 
-                // Agrupar produtos pelas variantes para não repetir cores do mesmo modelo
-                const preparedProducts = await prepareMarketingProducts(res.products);
+                // Agrupa cores, mas preserva cada combinacao de RAM/armazenamento.
+                const preparedProducts = await prepareMarketingProducts(products);
                 if (requestId !== searchRequestRef.current) return;
 
                 const grouped = groupProductsByVariants(preparedProducts).map((group) => ({
@@ -744,8 +802,8 @@ export default function MarketingPage() {
     const activeManualPicks = activeEditorialCategoryId ? manualPicksMap[activeEditorialCategoryId] ?? [] : [];
     const candidatePool = useMemo(() => {
         const map = new Map<string, CatalogProduct>();
-        groupedResults.forEach((group) => {
-            const product = group?.representativeProduct as CatalogProduct | undefined;
+        marketingVariantOptions.forEach((option) => {
+            const product = option.representativeProduct;
             if (product?.id) map.set(product.id, product);
         });
 
@@ -754,7 +812,7 @@ export default function MarketingPage() {
         }
 
         return Array.from(map.values());
-    }, [groupedResults, selectedProduct]);
+    }, [marketingVariantOptions, selectedProduct]);
     const cooldownProductIds = useMemo(() => {
         const now = Date.now();
         const limit = activeCategoryProfile.cooldownDays * 86_400_000;
@@ -1130,8 +1188,8 @@ export default function MarketingPage() {
         if (!canvasRef.current || bulkSelectedIds.size === 0) return;
         const currentStickerExportMode = stickerExportMode ?? 'png';
 
-        const productsToGenerate = groupedResults
-            .map(g => g.representativeProduct)
+        const productsToGenerate = marketingVariantOptions
+            .map((option) => option.representativeProduct)
             .filter(p => bulkSelectedIds.has(p.id));
 
         if (productsToGenerate.length === 0) return;
@@ -1893,33 +1951,38 @@ export default function MarketingPage() {
                                             </div>
 
                                             {/* Botao de Lote e Lista de Selecionaveis */}
-                                            {groupedResults.length > 0 && (
+                                            {marketingVariantOptions.length > 0 && (
                                                 <>
                                                     <div className="flex justify-between items-end px-1 mt-2">
-                                                        <span className="text-xs font-semibold text-slate-500">{groupedResults.length} modelos listados</span>
+                                                        <div className="text-xs font-semibold text-slate-500">
+                                                            <span>{marketingVariantOptions.length} versões listadas</span>
+                                                            <span className="ml-2 text-emerald-700">{readyMarketingVariantCount} com arte</span>
+                                                            <span className="ml-2 text-blue-700">{videoMarketingVariantCount} com vídeo</span>
+                                                        </div>
                                                         <button
                                                             onClick={() => {
-                                                                if (bulkSelectedIds.size === groupedResults.length) {
+                                                                if (bulkSelectedIds.size === marketingVariantOptions.length) {
                                                                     setBulkSelectedIds(new Set());
                                                                 } else {
-                                                                    setBulkSelectedIds(new Set(groupedResults.map(g => g.representativeProduct.id)));
+                                                                    setBulkSelectedIds(new Set(marketingVariantOptions.map((option) => option.representativeProduct.id)));
                                                                 }
                                                             }}
                                                             className="text-[11px] font-bold text-purple-600 hover:text-purple-700 hover:underline"
                                                         >
-                                                            {bulkSelectedIds.size === groupedResults.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                                                            {bulkSelectedIds.size === marketingVariantOptions.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
                                                         </button>
                                                     </div>
 
                                                     <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-[220px] overflow-y-auto bg-white shadow-inner">
-                                                        {groupedResults.map(group => {
-                                                            const p = group.representativeProduct;
+                                                        {marketingVariantOptions.map(({ key, group, variant, representativeProduct: p }) => {
                                                             const groupPreviewImage = getRenderableProductImages(p)[0] ?? null;
                                                             const isSelectedPreview = selectedProduct?.id === p.id;
                                                             const isChecked = bulkSelectedIds.has(p.id);
+                                                            const hasArtwork = variant.products.some((product) => Boolean(product.marketing_background_url));
+                                                            const hasVideo = variant.products.some((product) => Boolean(product.marketing_video_url || product.video_url));
                                                             return (
                                                                 <div
-                                                                    key={group.groupKey}
+                                                                    key={key}
                                                                     className={`w-full flex items-center gap-3 p-2 transition-colors ${isSelectedPreview ? 'bg-purple-50' : 'hover:bg-slate-50'}`}
                                                                 >
                                                                     <input
@@ -1946,14 +2009,16 @@ export default function MarketingPage() {
                                                                         <div className="flex-1 min-w-0">
                                                                             <p className={`text-xs font-bold truncate flex items-center gap-2 ${isSelectedPreview ? 'text-purple-700' : 'text-slate-800'}`}>
                                                                                 <span className="truncate">{group.model}</span>
-                                                                                {p.specs?.ram && p.specs?.storage && (
+                                                                                {variant.ram && variant.storage && (
                                                                                     <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded whitespace-nowrap">
-                                                                                        {p.specs.ram}/{p.specs.storage}
+                                                                                        {variant.ram}/{variant.storage}
                                                                                     </span>
                                                                                 )}
                                                                             </p>
-                                                                            <p className="text-[10px] text-slate-500">
-                                                                                {group.variants.length > 1 ? `A partir de R$ ${formatCurrency(group.globalPriceRange?.min || 0)}` : `R$ ${formatCurrency(p.price_retail || 0)}`}
+                                                                            <p className="text-[10px] text-slate-500 flex flex-wrap gap-x-2">
+                                                                                <span>{variant.priceRange.min !== variant.priceRange.max ? `A partir de R$ ${formatCurrency(variant.priceRange.min || 0)}` : `R$ ${formatCurrency(p.price_retail || 0)}`}</span>
+                                                                                <span className={hasArtwork ? 'text-emerald-700' : 'text-amber-700'}>{hasArtwork ? 'Arte pronta' : 'Sem arte'}</span>
+                                                                                <span className={hasVideo ? 'text-blue-700' : 'text-slate-400'}>{hasVideo ? 'Vídeo cadastrado' : 'Sem vídeo'}</span>
                                                                             </p>
                                                                         </div>
                                                                     </div>

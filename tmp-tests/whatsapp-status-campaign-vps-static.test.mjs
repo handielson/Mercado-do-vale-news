@@ -5,6 +5,7 @@ const server = fs.readFileSync('vps_server.js', 'utf8');
 const serverCjs = fs.readFileSync('vps_server.cjs', 'utf8');
 const service = fs.readFileSync('services/whatsappStatusCampaignService.ts', 'utf8');
 const panel = fs.readFileSync('pages/admin/settings/marketing/WhatsAppStatusCampaignPanel.tsx', 'utf8');
+const marketingStudio = fs.readFileSync('pages/admin/settings/MarketingPage.tsx', 'utf8');
 const deployServerOnly = fs.readFileSync('deploy-vps-server-only.cjs', 'utf8');
 
 for (const source of [server, serverCjs]) {
@@ -42,6 +43,9 @@ for (const source of [server, serverCjs]) {
   assert.doesNotMatch(source, /function getWhatsAppStatusProductImage[\s\S]{0,500}product\?\.image_url/);
   assert.match(source, /WHERE id IN \(\$\{placeholders\}\)/);
   assert.match(source, /groupWhatsAppStatusProductsByVariation/);
+  assert.match(source, /isWhatsAppStatusProductInStock/);
+  assert.match(source, /groupWhatsAppStatusProductsByVariation\(inStock\)[\s\S]{0,120}filter\(isWhatsAppStatusProductEligible\)/);
+  assert.match(source, /product\?\.model_id \? '' : normalizeWhatsAppStatusText\(groupName\)/);
   assert.match(source, /Cores disponiveis/);
   assert.match(source, /specs, custom_fields/);
   assert.match(source, /image_url, video_url, marketing_background_url, marketing_video_url, price_retail/);
@@ -66,8 +70,9 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /sendWahaStatusMedia/);
   assert.match(source, /resolveWhatsAppStatusVideoUrl/);
   assert.match(source, /buildWhatsAppStatusVideoCandidates/);
-  assert.match(source, /product\?\.marketing_video_url/);
-  assert.doesNotMatch(source, /function buildWhatsAppStatusVideoCandidates[\s\S]{0,600}product\?\.video_url/);
+  assert.match(source, /function buildWhatsAppStatusVideoCandidates[\s\S]{0,700}item\?\.marketing_video_url/);
+  assert.match(source, /function buildWhatsAppStatusVideoCandidates[\s\S]{0,700}item\?\.video_url/);
+  assert.match(source, /product\?\.status_group_products/);
   assert.match(source, /convert: true/);
   assert.match(source, /\{ type: 'image', url: image \}/);
   assert.match(source, /\.\.\.\(video \? \[\{ type: 'video', url: video \}\] : \[\]\)/);
@@ -175,6 +180,17 @@ assert.match(panel, /max=\{30\}/);
 assert.match(panel, /function ScheduleDiagram/);
 assert.match(panel, /scheduleSlotTime/);
 assert.match(panel, /repeat_product_id/);
+
+assert.match(marketingStudio, /loadAllMarketingProducts/);
+assert.match(marketingStudio, /for \(let page = 1; page <= 20; page \+= 1\)/);
+assert.match(marketingStudio, /pageSize = 200/);
+assert.match(marketingStudio, /buildMarketingVariantOptions/);
+assert.match(marketingStudio, /group\.variants\.map/);
+assert.match(marketingStudio, /marketingVariantOptions\.map/);
+assert.match(marketingStudio, /versões listadas/);
+assert.match(marketingStudio, /Arte pronta/);
+assert.match(marketingStudio, /Vídeo cadastrado/);
+assert.doesNotMatch(marketingStudio, /\}, 1, 30\)/);
 
 assert.match(deployServerOnly, /WAHA_STATUS_SERVER_URL/);
 assert.match(deployServerOnly, /WAHA_STATUS_TIMEOUT_MS/);

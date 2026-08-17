@@ -18,3 +18,48 @@ export function buildProductVideoPlaylist(productVideoUrl: string | null | undef
 
     return [firstUrl, INSTITUTIONAL_VIDEO_URL];
 }
+
+type ProductVideoSource = {
+    video_url?: string | null;
+    marketing_video_url?: string | null;
+    specs?: {
+        ram?: string | null;
+        storage?: string | null;
+    } | null;
+};
+
+function normalizeVariantSpec(value: string | null | undefined): string {
+    return String(value || '').trim().toLowerCase();
+}
+
+/**
+ * Resolve o vídeo do PDP sem deixar uma cor/versão sem mídia quando o vídeo foi
+ * cadastrado em outro SKU do mesmo modelo. A página é responsável por entregar
+ * apenas irmãos já validados pela chave segura de agrupamento.
+ */
+export function resolveProductVideoUrl(
+    product: ProductVideoSource | null | undefined,
+    siblings: ProductVideoSource[] = [],
+): string | null {
+    if (!product) return null;
+
+    const ownVideo = product.video_url?.trim() || product.marketing_video_url?.trim();
+    if (ownVideo) return ownVideo;
+
+    const productRam = normalizeVariantSpec(product.specs?.ram);
+    const productStorage = normalizeVariantSpec(product.specs?.storage);
+    const orderedSiblings = [...siblings].sort((left, right) => {
+        const leftMatches = normalizeVariantSpec(left.specs?.ram) === productRam
+            && normalizeVariantSpec(left.specs?.storage) === productStorage;
+        const rightMatches = normalizeVariantSpec(right.specs?.ram) === productRam
+            && normalizeVariantSpec(right.specs?.storage) === productStorage;
+        return Number(rightMatches) - Number(leftMatches);
+    });
+
+    for (const sibling of orderedSiblings) {
+        const siblingVideo = sibling.video_url?.trim() || sibling.marketing_video_url?.trim();
+        if (siblingVideo) return siblingVideo;
+    }
+
+    return null;
+}

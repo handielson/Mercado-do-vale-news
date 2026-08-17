@@ -150,9 +150,10 @@ export function groupStatusProductsByVariation(products) {
       color: explicit.color,
     };
     const groupName = getStatusProductGroupName(product, variation);
+    const modelKey = product?.model_id || normalizeStatusText(groupName);
     const key = [
-      product?.model_id || normalizeStatusText(groupName),
-      normalizeStatusText(groupName),
+      modelKey,
+      product?.model_id ? '' : normalizeStatusText(groupName),
       normalizeStatusText(variation.ram),
       normalizeStatusText(variation.storage),
     ].join('|');
@@ -196,14 +197,13 @@ export function groupStatusProductsByVariation(products) {
 }
 
 export function selectStatusProducts(products, { dailyLimit = MAX_STATUS_PRODUCTS_PER_RUN, lastProductId = '' } = {}) {
-  const eligible = (Array.isArray(products) ? products : [])
+  const inStock = (Array.isArray(products) ? products : [])
     .filter((product) => product?.id)
-    .filter(hasUsableImage)
     .filter(hasStock);
 
-  if (!eligible.length) return [];
+  if (!inStock.length) return [];
 
-  const grouped = groupStatusProductsByVariation(eligible);
+  const grouped = groupStatusProductsByVariation(inStock).filter(hasUsableImage);
   const startIndex = Math.max(0, grouped.findIndex((product) => product.id === lastProductId) + 1);
   const rotated = [...grouped.slice(startIndex), ...grouped.slice(0, startIndex)];
   return rotated.slice(0, clampDailyProductLimit(dailyLimit));
