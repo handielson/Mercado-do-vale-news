@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.257-checkout-pagamento-seguro",
+  "version": "v1.2.258-checkout-cartao-api",
   "date": "2026-08-17",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260817-193637-checkout-pagamento-seguro",
+  "release_vps": "/var/www/mdv-site/releases/20260817-194803-checkout-cartao-api",
   "branch": "main",
-  "summary": "Carrega as formas Mercado Pago por rota pública segura e impede cartão manual sem cobrança."
+  "summary": "Processa o cartão Mercado Pago na API e elimina atualização administrativa pelo navegador."
 }

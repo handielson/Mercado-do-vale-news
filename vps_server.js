@@ -1810,6 +1810,7 @@ function isVpsProxyCustomerOrderWritePath(proxyPath, method = 'GET') {
   if (normalizedMethod === 'POST' && pathname === '/table-data/order_items/bulk') return true;
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/priority-reservations') return true;
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/order-reservations/release') return true;
+  if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/card$/u.test(pathname)) return true;
   return normalizedMethod === 'DELETE' && /^\/table-data\/orders\/[^/]+$/u.test(pathname);
 }
 
@@ -1848,6 +1849,11 @@ async function assertVpsProxyCustomerOrderWriteAllowed(request, auth, proxyPath,
 
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/order-reservations/release') {
     return assertVpsProxyOrdersBelongToCustomer([body.order_id], auth.customerId);
+  }
+
+  if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/card$/u.test(pathname)) {
+    const orderId = pathname.split('/')[2] || '';
+    return assertVpsProxyOrdersBelongToCustomer([decodeURIComponent(orderId)], auth.customerId);
   }
 
   if (normalizedMethod === 'DELETE') {
@@ -25634,6 +25640,93 @@ fastify.post('/stock-locations/order-reservations/consume', { preHandler: requir
 fastify.post('/stock-locations/order-reservations/release', { preHandler: requireSyncKey }, async (req) => {
   const input = req.body || {};
   return processOrderReservation(input.order_id, 'release', String(input.reason || '').trim() || 'Liberacao de reserva', input.notes || null);
+});
+
+// O navegador envia somente o token descartável do Brick. A credencial do
+// Mercado Pago e a atualização do pedido ficam exclusivamente no servidor.
+fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  const orderId = String(req.params?.orderId || '').trim();
+  const input = req.body || {};
+  const access = req.customerAccess || {};
+  const cardToken = String(input.token || '').trim();
+
+  if (!orderId || !cardToken) return reply.code(400).send({ error: 'Pedido e token do cartão são obrigatórios.' });
+
+  const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
+  const order = orders?.[0] || null;
+  if (!order) return reply.code(404).send({ error: 'Pedido não encontrado.' });
+  if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) {
+    return reply.code(403).send({ error: 'Forbidden for this order' });
+  }
+  if (!['pending', 'awaiting_payment'].includes(String(order.status || ''))) {
+    return reply.code(409).send({ error: 'O pedido não está disponível para pagamento.' });
+  }
+
+  const [integrations] = await pool.query(
+    "SELECT access_token FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 LIMIT 1"
+  );
+  const accessToken = integrations?.[0]?.access_token;
+  if (!accessToken) return reply.code(400).send({ error: 'Mercado Pago não configurado.' });
+
+  const installments = Math.max(1, Math.min(12, Number.parseInt(input.installments, 10) || 1));
+  const paymentPayload = {
+    token: cardToken,
+    transaction_amount: Number((Math.max(0, Number(order.total) || 0) / 100).toFixed(2)),
+    installments,
+    payment_method_id: String(input.payment_method_id || '').trim(),
+    issuer_id: input.issuer_id ? Number(input.issuer_id) : undefined,
+    description: `Pedido Mercado do Vale - ${String(order.id).slice(0, 8)}`,
+    statement_descriptor: 'MERCADO DO VALE',
+    external_reference: order.id,
+    notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook',
+    payer: {
+      email: String(input.payer?.email || order.customer_email || 'cliente@mercadodovale.com.br'),
+      identification: input.payer?.identification || undefined,
+    },
+  };
+
+  const paymentResponse = await fetch('https://api.mercadopago.com/v1/payments', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': `${order.id}-${cardToken.slice(-24)}`,
+    },
+    body: JSON.stringify(paymentPayload),
+    signal: AbortSignal.timeout(15000),
+  });
+  const payment = await paymentResponse.json().catch(() => ({}));
+  if (!paymentResponse.ok) {
+    const detail = payment?.cause?.[0]?.description || payment?.message || 'Não foi possível processar o cartão.';
+    return reply.code(502).send({ error: `Pagamento recusado: ${detail}` });
+  }
+
+  const status = String(payment.status || 'pending').toLowerCase();
+  const isApproved = status === 'approved';
+  const isRejected = status === 'rejected';
+  const nextStatus = isApproved ? 'paid' : isRejected ? 'payment_failed' : 'awaiting_payment';
+  const paymentStatus = isApproved ? 'paid' : isRejected ? 'failed' : 'pending';
+  await pool.query(
+    `UPDATE orders
+     SET gateway_payment_id = ?, payment_gateway = 'mercado_pago', payment_method = 'credit_card',
+         status = ?, payment_status = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [String(payment.id || ''), nextStatus, paymentStatus, order.id],
+  );
+
+  if (isApproved) {
+    await processOrderReservation(order.id, 'consume', 'Pagamento Mercado Pago aprovado', 'Cartão aprovado pelo checkout seguro.');
+  } else if (isRejected) {
+    await processOrderReservation(order.id, 'release', 'Pagamento Mercado Pago recusado', 'Reserva liberada após recusa do cartão.');
+  }
+
+  return {
+    id: String(payment.id || ''),
+    status,
+    status_detail: String(payment.status_detail || ''),
+    order_status: nextStatus,
+    payment_status: paymentStatus,
+  };
 });
 
 async function restoreStockFromMovements(referenceType, restoreReferenceType, referenceId, reason, notes) {

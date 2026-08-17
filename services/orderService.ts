@@ -604,40 +604,28 @@ export async function createOrder(input: OrderInput): Promise<Order> {
         }
     } else if (orderData.payment_gateway === 'mercado_pago' && orderData.payment_method === 'credit_card') {
         try {
-            const credentials = await paymentIntegrationService.getIntegrationByGateway('mercado_pago');
-            if (!credentials || !credentials.is_active || !credentials.access_token) {
-                throw new Error("Credenciais do Mercado Pago não configuradas no painel.");
-            }
-
             // Verifica se veio um token do Brick (checkout transparente)
 
             if (cardFormData?.token) {
-                // ── Checkout Transparente (Brick) ──
-                const mpResponse = await mercadoPagoProvider.createCardPayment(input, cardFormData, credentials.access_token);
-
-                await patchOrder(order.id, {
-                    gateway_payment_id: String(mpResponse.id),
-                    status: mpResponse.status === 'approved' ? 'paid' : 'awaiting_payment',
-                    payment_status: mpResponse.status === 'approved' ? 'paid' : 'pending',
-                } as Partial<Order>);
+                // ── Checkout Transparente: token no browser, cobrança no servidor ──
+                const mpResponse = await vpsClient.post<{
+                    id: string;
+                    status: string;
+                    status_detail: string;
+                    order_status: OrderStatus;
+                    payment_status: OrderPaymentStatus;
+                }>(`/orders/${encodeURIComponent(order.id)}/payments/mercado-pago/card`, {
+                    token: cardFormData.token,
+                    installments: cardFormData.installments,
+                    payment_method_id: cardFormData.paymentMethodId,
+                    issuer_id: cardFormData.issuerId,
+                    payer: cardFormData.payer,
+                });
 
                 (order as any).gateway_payment_status = mpResponse.status;
-                (order as any).status = mpResponse.status === 'approved' ? 'paid' : 'awaiting_payment';
-
-                if (mpResponse.status === 'approved') {
-                    confirmPendingCoins(order.id).catch(console.error);
-                    await finalizeOrderStockByPriority(input.items, order.id);
-                    syncOrderItemsStockToBling(
-                        input.items,
-                        `Pedido online #${formatReferenceNumber(order.id)} — Mercado do Vale`
-                    ).catch(e => console.error('[orderService] Falha ao sincronizar estoque Bling (card approved):', e));
-                    // Auto-reserva de unidades serializadas (cartão aprovado na hora)
-                    autoReserveOrderItems(input.items, order.id).catch(e =>
-                        console.error('[orderService] Falha na reserva serializada (card approved):', e)
-                    );
-                }
+                (order as any).status = mpResponse.order_status;
+                (order as any).payment_status = mpResponse.payment_status;
                 if (mpResponse.status === 'rejected') {
-                    await patchOrder(order.id, { status: 'payment_failed', payment_status: 'failed' } as Partial<Order>);
                     const MP_REJECTION_MESSAGES: Record<string, string> = {
                         cc_rejected_insufficient_amount: 'Saldo insuficiente no cartão. Tente outro cartão.',
                         cc_rejected_bad_filled_security_code: 'CVV incorreto. Verifique o código de segurança.',
@@ -659,6 +647,10 @@ export async function createOrder(input: OrderInput): Promise<Order> {
                 }
             } else {
                 // ── Fallback: Checkout PRO (redirect) ──
+                const credentials = await paymentIntegrationService.getIntegrationByGateway('mercado_pago');
+                if (!credentials || !credentials.is_active || !credentials.access_token) {
+                    throw new Error("Credenciais do Mercado Pago não configuradas no painel.");
+                }
                 const mpResponse = await mercadoPagoProvider.createPreference(input, credentials.access_token, order.id);
                 const initPoint = credentials.environment === 'production'
                     ? mpResponse.init_point
@@ -672,6 +664,11 @@ export async function createOrder(input: OrderInput): Promise<Order> {
             }
         } catch (mpError: any) {
             console.error("Falha no pagamento MP:", mpError);
+            // O checkout transparente é tratado integralmente pela API: ela
+            // atualiza o pedido e libera a reserva quando o cartão é recusado.
+            if (cardFormData?.token) {
+                throw new Error(mpError.message || "Erro de integração com o Mercado Pago.");
+            }
             await patchOrder(order.id, { status: 'payment_failed', payment_status: 'failed' } as Partial<Order>);
             await releaseOrderReservedStock(order.id);
             throw new Error(mpError.message || "Erro de integração com o Mercado Pago.");
