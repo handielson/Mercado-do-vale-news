@@ -30,7 +30,7 @@ import { vpsApiService } from '@/services/vpsApiService';
 import { modelService } from '@/services/models';
 import { modelColorImagesService } from '@/services/model-color-images';
 import { colorService } from '@/services/colors';
-import { buildProductVideoPlaylist, isMp4VideoUrl, orderProductVideoSiblings, resolveProductVideoUrl } from '@/utils/product-video-playlist';
+import { buildProductVideoPlaylist, isMp4VideoUrl, isSafeProductVideoSibling, orderProductVideoSiblings, resolveProductVideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
 import { getPublicProductDisambiguatedRouteTarget, getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
 import { customFieldsService } from '@/services/custom-fields';
@@ -52,6 +52,7 @@ export const PublicProductPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState<string>('');
     const [siblings, setSiblings] = useState<CatalogProduct[]>([]);
+    const [videoSiblings, setVideoSiblings] = useState<CatalogProduct[]>([]);
     const [relatedProducts, setRelatedProducts] = useState<CatalogProduct[]>([]);
     const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
     const [crossSellProducts, setCrossSellProducts] = useState<CatalogProduct[]>([]);
@@ -220,7 +221,10 @@ export const PublicProductPage: React.FC = () => {
             setVideoLoadError(false);
             const currentGroupKey = product ? generateGroupKey(product) : null;
             const safeVideoSiblings = currentGroupKey
-                ? siblings.filter(sibling => generateGroupKey(sibling) === currentGroupKey)
+                ? videoSiblings.filter(sibling =>
+                    generateGroupKey(sibling) === currentGroupKey
+                    || (product ? isSafeProductVideoSibling(product, sibling) : false)
+                )
                 : [];
 
             // 1. Usa a mídia própria; se faltar, herda somente de uma variação
@@ -268,7 +272,7 @@ export const PublicProductPage: React.FC = () => {
         else setEffectiveVideoUrl(null);
 
         return () => { cancelled = true; };
-    }, [product, siblings]);
+    }, [product, videoSiblings]);
 
     useEffect(() => {
         setVideoPlaylistIndex(0);
@@ -526,7 +530,12 @@ export const PublicProductPage: React.FC = () => {
                     const currentGroupKey = generateGroupKey(data as unknown as CatalogProduct);
                     const sibs = await vpsApiService.getProducts({ model_id: data.model_id, status: 'active', limit: 50 });
                     if (sibs) {
-                        const cleanSibs = sibs.map(s => normalizeProduct(s)).filter(s =>
+                        const normalizedSibs = sibs.map(s => normalizeProduct(s));
+                        setVideoSiblings(normalizedSibs.filter(s =>
+                            String(s.model_id) === String(data.model_id) &&
+                            isSafeProductVideoSibling(data as CatalogProduct, s as CatalogProduct)
+                        ) as unknown as CatalogProduct[]);
+                        const cleanSibs = normalizedSibs.filter(s =>
                             (!s.offer_type || s.offer_visibility !== 'hidden') &&
                             String(s.model_id) === String(data.model_id) &&
                             generateGroupKey(s as unknown as CatalogProduct) === currentGroupKey
@@ -534,6 +543,7 @@ export const PublicProductPage: React.FC = () => {
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
                     }
                 } else if (data.parent_id && String(data.parent_id) !== '0' && String(data.parent_id) !== 'null') {
+                    setVideoSiblings([]);
                     const sibs = await vpsApiService.getProducts({ parent_id: data.parent_id, status: 'active', limit: 50 });
                     if (sibs) {
                         const cleanSibs = sibs.map(s => normalizeProduct(s)).filter(s =>
@@ -543,6 +553,7 @@ export const PublicProductPage: React.FC = () => {
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
                     }
                 } else {
+                    setVideoSiblings([]);
                     // Fallback para agrupar por nome (para produtos sem model_id ou parent_id)
                     const myGroupKey = generateGroupKey(data as unknown as CatalogProduct);
                     const searchStr = myGroupKey.replace(/^unknown_/, '').replace(/[-_]/g, ' ');

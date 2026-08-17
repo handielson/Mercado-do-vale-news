@@ -75,8 +75,8 @@ assert.match(
 );
 assert.match(
   pageSource,
-  /siblings\.filter\(sibling => generateGroupKey\(sibling\) === currentGroupKey\)/,
-  'PDP must not inherit a video from an unrelated product model'
+  /isSafeProductVideoSibling\(product, sibling\)/,
+  'PDP must use a dedicated safe model-name check before inheriting video from legacy siblings'
 );
 assert.match(
   pageSource,
@@ -88,5 +88,7 @@ assert.match(
   /if \(verified\?\.exists && verified\.url\)/,
   'PDP must skip stale sibling video registrations'
 );
+assert.match(pageSource, /const \[videoSiblings, setVideoSiblings\]/);
+assert.match(pageSource, /setVideoSiblings\(normalizedSibs\.filter/);
 
 console.log('catalog-pdp-sibling-grouping.test.mjs: ok');

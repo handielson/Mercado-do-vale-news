@@ -33,6 +33,30 @@ function normalizeVariantSpec(value: string | null | undefined): string {
     return String(value || '').trim().toLowerCase();
 }
 
+function normalizeVideoModelName(value: string | null | undefined): string {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+export function isSafeProductVideoSibling(
+    product: ProductVideoSource & { model_id?: string | null; name?: string | null },
+    sibling: ProductVideoSource & { model_id?: string | null; name?: string | null },
+): boolean {
+    const modelId = String(product.model_id || '').trim();
+    if (!modelId || modelId === '0' || modelId !== String(sibling.model_id || '').trim()) return false;
+
+    const productName = normalizeVideoModelName(product.name);
+    const siblingName = normalizeVideoModelName(sibling.name);
+    if (productName.length < 4 || siblingName.length < 4) return false;
+    return productName === siblingName
+        || siblingName.startsWith(`${productName} `)
+        || productName.startsWith(`${siblingName} `);
+}
+
 export function orderProductVideoSiblings(
     product: ProductVideoSource,
     siblings: ProductVideoSource[] = [],

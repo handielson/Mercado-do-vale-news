@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.262-pdp-video-validado
+version: v1.2.263-pdp-video-modelo-legado
 date: 2026-08-17
 status: ready
-release_vps: /var/www/mdv-site/releases/20260817-205432-pdp-video-validado
+release_vps: /var/www/mdv-site/releases/20260817-205801-pdp-video-modelo-legado
 branch: main
-summary: Ignora vídeos quebrados de variações irmãs e exibe no produto somente um vídeo confirmado no CDN.
+summary: Localiza vídeo válido em cadastros legados do mesmo modelo sem expor uma variação incorreta na vitrine.
 ```

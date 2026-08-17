@@ -5,6 +5,9 @@ const source = await readFile(new URL('../utils/product-video-playlist.ts', impo
 
 assert.match(source, /product\.video_url\?\.trim\(\) \|\| product\.marketing_video_url\?\.trim\(\)/);
 assert.match(source, /export function orderProductVideoSiblings/);
+assert.match(source, /export function isSafeProductVideoSibling/);
+assert.match(source, /modelId !== String\(sibling\.model_id/);
+assert.match(source, /siblingName\.startsWith\(`\$\{productName\} `\)/);
 assert.match(source, /normalizeVariantSpec\(left\.specs\?\.ram\) === productRam/);
 assert.match(source, /normalizeVariantSpec\(left\.specs\?\.storage\) === productStorage/);
 assert.match(source, /sibling\.video_url\?\.trim\(\) \|\| sibling\.marketing_video_url\?\.trim\(\)/);
