@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.261-smartphones-videos-status-pdp
+version: v1.2.262-pdp-video-validado
 date: 2026-08-17
 status: ready
-release_vps: /var/www/mdv-site/releases/20260817-204759-videos-versoes-smartphones
+release_vps: /var/www/mdv-site/releases/20260817-205432-pdp-video-validado
 branch: main
-summary: Completa as versões de smartphones, reaproveita vídeos válidos no Status e exibe vídeo entre variações do mesmo modelo no produto.
+summary: Ignora vídeos quebrados de variações irmãs e exibe no produto somente um vídeo confirmado no CDN.
 ```

@@ -19,7 +19,8 @@ export function buildProductVideoPlaylist(productVideoUrl: string | null | undef
     return [firstUrl, INSTITUTIONAL_VIDEO_URL];
 }
 
-type ProductVideoSource = {
+export type ProductVideoSource = {
+    sku?: string | null;
     video_url?: string | null;
     marketing_video_url?: string | null;
     specs?: {
@@ -30,6 +31,21 @@ type ProductVideoSource = {
 
 function normalizeVariantSpec(value: string | null | undefined): string {
     return String(value || '').trim().toLowerCase();
+}
+
+export function orderProductVideoSiblings(
+    product: ProductVideoSource,
+    siblings: ProductVideoSource[] = [],
+): ProductVideoSource[] {
+    const productRam = normalizeVariantSpec(product.specs?.ram);
+    const productStorage = normalizeVariantSpec(product.specs?.storage);
+    return [...siblings].sort((left, right) => {
+        const leftMatches = normalizeVariantSpec(left.specs?.ram) === productRam
+            && normalizeVariantSpec(left.specs?.storage) === productStorage;
+        const rightMatches = normalizeVariantSpec(right.specs?.ram) === productRam
+            && normalizeVariantSpec(right.specs?.storage) === productStorage;
+        return Number(rightMatches) - Number(leftMatches);
+    });
 }
 
 /**
@@ -46,17 +62,7 @@ export function resolveProductVideoUrl(
     const ownVideo = product.video_url?.trim() || product.marketing_video_url?.trim();
     if (ownVideo) return ownVideo;
 
-    const productRam = normalizeVariantSpec(product.specs?.ram);
-    const productStorage = normalizeVariantSpec(product.specs?.storage);
-    const orderedSiblings = [...siblings].sort((left, right) => {
-        const leftMatches = normalizeVariantSpec(left.specs?.ram) === productRam
-            && normalizeVariantSpec(left.specs?.storage) === productStorage;
-        const rightMatches = normalizeVariantSpec(right.specs?.ram) === productRam
-            && normalizeVariantSpec(right.specs?.storage) === productStorage;
-        return Number(rightMatches) - Number(leftMatches);
-    });
-
-    for (const sibling of orderedSiblings) {
+    for (const sibling of orderProductVideoSiblings(product, siblings)) {
         const siblingVideo = sibling.video_url?.trim() || sibling.marketing_video_url?.trim();
         if (siblingVideo) return siblingVideo;
     }

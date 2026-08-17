@@ -70,13 +70,23 @@ assert.match(
 
 assert.match(
   pageSource,
-  /resolveProductVideoUrl\(product, safeVideoSiblings\)/,
-  'PDP must resolve a missing video from a safely grouped sibling variation'
+  /orderProductVideoSiblings\(product, safeVideoSiblings\)/,
+  'PDP must inspect safely grouped sibling variations for a missing video'
 );
 assert.match(
   pageSource,
   /siblings\.filter\(sibling => generateGroupKey\(sibling\) === currentGroupKey\)/,
   'PDP must not inherit a video from an unrelated product model'
+);
+assert.match(
+  pageSource,
+  /checkVideoBySku\(sibling\.sku\.trim\(\)\)/,
+  'PDP must verify a sibling video exists before showing it'
+);
+assert.match(
+  pageSource,
+  /if \(verified\?\.exists && verified\.url\)/,
+  'PDP must skip stale sibling video registrations'
 );
 
 console.log('catalog-pdp-sibling-grouping.test.mjs: ok');

@@ -30,7 +30,7 @@ import { vpsApiService } from '@/services/vpsApiService';
 import { modelService } from '@/services/models';
 import { modelColorImagesService } from '@/services/model-color-images';
 import { colorService } from '@/services/colors';
-import { buildProductVideoPlaylist, isMp4VideoUrl, resolveProductVideoUrl } from '@/utils/product-video-playlist';
+import { buildProductVideoPlaylist, isMp4VideoUrl, orderProductVideoSiblings, resolveProductVideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
 import { getPublicProductDisambiguatedRouteTarget, getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
 import { customFieldsService } from '@/services/custom-fields';
@@ -225,10 +225,26 @@ export const PublicProductPage: React.FC = () => {
 
             // 1. Usa a mídia própria; se faltar, herda somente de uma variação
             // validada como pertencente ao mesmo modelo. Prioriza RAM/storage iguais.
-            const configuredVideoUrl = resolveProductVideoUrl(product, safeVideoSiblings);
-            if (configuredVideoUrl) {
-                setEffectiveVideoUrl(configuredVideoUrl);
+            const ownVideoUrl = resolveProductVideoUrl(product);
+            if (ownVideoUrl) {
+                setEffectiveVideoUrl(ownVideoUrl);
                 return;
+            }
+
+            // Vídeo herdado precisa existir de fato: alguns SKUs antigos possuem
+            // URL salva apontando para um arquivo removido. O proxy valida no CDN/NAS.
+            for (const sibling of product ? orderProductVideoSiblings(product, safeVideoSiblings) : []) {
+                if (!sibling.video_url?.trim() || !sibling.sku?.trim()) continue;
+                try {
+                    const verified = await vpsApiService.checkVideoBySku(sibling.sku.trim());
+                    if (cancelled) return;
+                    if (verified?.exists && verified.url) {
+                        setEffectiveVideoUrl(verified.url);
+                        return;
+                    }
+                } catch {
+                    // Tenta a próxima variação do mesmo modelo.
+                }
             }
 
             // 2. Se não há SKU, sem vídeo
