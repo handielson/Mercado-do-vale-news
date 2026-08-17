@@ -1760,6 +1760,7 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
     pathname === '/check-video' ||
     pathname === '/field-presets' ||
     pathname === '/payment-fees' ||
+    pathname === '/public/payment-integrations' ||
     pathname === '/public/company-settings' ||
     pathname === '/public/check-video' ||
     pathname === '/rams' ||
@@ -26985,6 +26986,26 @@ fastify.get('/public/company-settings', { config: { rateLimit: { max: 240, timeW
   const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
   reply.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
   return sanitizePublicCompanySettings(rows[0] || null);
+});
+
+// Dados estritamente públicos para o checkout. Nunca exponha access_token,
+// client_secret ou qualquer outra credencial de integração nesta rota.
+fastify.get('/public/payment-integrations', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const companyId = await getDefaultCompanyIdForCatalog();
+  const [rows] = await pool.query(
+    `SELECT gateway_name, is_active, public_key, environment
+     FROM payment_integrations
+     WHERE company_id = ? AND is_active = 1
+     ORDER BY gateway_name ASC`,
+    [companyId],
+  );
+  reply.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
+  return rows.map((row) => ({
+    gateway_name: row.gateway_name,
+    is_active: Boolean(row.is_active),
+    public_key: row.public_key || null,
+    environment: row.environment === 'production' ? 'production' : 'sandbox',
+  }));
 });
 
 // ─── Company Settings (PATCH) ─────────────────────────────────────────────

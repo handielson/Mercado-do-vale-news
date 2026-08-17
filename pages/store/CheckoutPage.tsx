@@ -7,7 +7,7 @@ import { useCart } from '@/contexts/CartContext';
 import { shippingService } from '@/services/shippingService';
 import { createOrder } from '@/services/orderService';
 import { paymentIntegrationService } from '@/services/paymentIntegrationService';
-import type { PaymentIntegration } from '@/types/paymentIntegration';
+import type { PublicCheckoutPaymentIntegration } from '@/services/paymentIntegrationService';
 import { formatCurrency, calculateCartVolume } from '@/utils/saleCalculations';
 import type { ShippingOption } from '@/types/shipping';
 import type { OrderDeliveryType, OrderPaymentMethod, OrderShippingAddress, PaymentGateway } from '@/types/order';
@@ -88,13 +88,29 @@ export default function CheckoutPage() {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [paymentRejected, setPaymentRejected] = useState<string | null>(null); // mensagem de rejeição
-    const [activeGateways, setActiveGateways] = useState<PaymentIntegration[]>([]);
+    const [activeGateways, setActiveGateways] = useState<PublicCheckoutPaymentIntegration[]>([]);
+    const [gatewayLoadState, setGatewayLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
     const isRedirectingToGateway = useRef(false);
 
     useEffect(() => {
-        paymentIntegrationService.getIntegrations()
-            .then(data => setActiveGateways(data.filter(g => g.is_active)))
-            .catch(console.error);
+        paymentIntegrationService.getPublicCheckoutIntegrations()
+            .then((data) => {
+                setActiveGateways(data);
+                setGatewayLoadState('ready');
+                setForm((prev) => {
+                    const isSelectedGatewayAvailable = data.some((gateway) =>
+                        prev.selected_payment === `${gateway.gateway_name}_pix`
+                        || (gateway.gateway_name === 'mercado_pago' && prev.selected_payment === 'mercado_pago_pro')
+                    );
+                    return isSelectedGatewayAvailable || data.length === 0
+                        ? prev
+                        : { ...prev, selected_payment: `${data[0].gateway_name}_pix` };
+                });
+            })
+            .catch((loadError) => {
+                console.error('Falha ao carregar pagamentos online:', loadError);
+                setGatewayLoadState('error');
+            });
     }, []);
 
     // Pré-preenche form com dados do cliente logado
@@ -187,6 +203,10 @@ export default function CheckoutPage() {
         }
         if (form.delivery_type === 'delivery' && !selectedShipping) {
             setError('Selecione uma opção de entrega.');
+            return;
+        }
+        if (gatewayLoadState !== 'ready') {
+            setError('Os meios de pagamento ainda não foram carregados. Atualize a página e tente novamente.');
             return;
         }
 
@@ -455,33 +475,21 @@ export default function CheckoutPage() {
                                 );
                             })}
 
-                            {/* Fallback de métodos offline se não tiver gateway online, ou adicionar Pagar na Entrega sempre */}
-                            {activeGateways.length === 0 && [
-                                { value: 'pix', label: '🔵 PIX (Transferência Manual)', desc: 'Chave fornecida ao final' },
-                                { value: 'credit_card', label: '💳 Cartão de Crédito', desc: 'Até 12x (Máquina)' },
-                                { value: 'debit_card', label: '💳 Cartão de Débito', desc: 'À vista' },
-                            ].map(opt => (
-                                <label
-                                    key={opt.value}
-                                    className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${form.selected_payment === opt.value
-                                        ? 'border-blue-600 bg-blue-50'
-                                        : 'border-gray-200 hover:border-blue-300'
-                                        }`}
-                                >
-                                    <input
-                                        type="radio"
-                                        name="payment"
-                                        value={opt.value}
-                                        checked={form.selected_payment === opt.value}
-                                        onChange={() => setForm(prev => ({ ...prev, selected_payment: opt.value }))}
-                                        className="accent-blue-600"
-                                    />
-                                    <div>
-                                        <p className="font-semibold text-sm text-gray-800">{opt.label}</p>
-                                        <p className="text-xs text-gray-500">{opt.desc}</p>
-                                    </div>
-                                </label>
-                            ))}
+                            {gatewayLoadState === 'loading' && (
+                                <div className="flex items-center gap-2 p-3 text-sm text-gray-500">
+                                    <Loader2 className="w-4 h-4 animate-spin" /> Carregando meios de pagamento seguros...
+                                </div>
+                            )}
+                            {gatewayLoadState === 'error' && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                                    Não foi possível carregar os meios de pagamento. Atualize a página antes de confirmar o pedido.
+                                </div>
+                            )}
+                            {gatewayLoadState === 'ready' && activeGateways.length === 0 && (
+                                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm text-yellow-800">
+                                    Nenhum meio de pagamento online está disponível no momento. Não confirme o pedido sem uma forma de pagamento exibida.
+                                </div>
+                            )}
                         </div>
                     </section>
 
@@ -522,7 +530,7 @@ export default function CheckoutPage() {
 
                     <button
                         type="submit"
-                        disabled={submitting}
+                        disabled={submitting || gatewayLoadState !== 'ready' || activeGateways.length === 0}
                         className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors shadow-lg disabled:opacity-60"
                     >
                         {submitting ? (

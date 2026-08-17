@@ -6,6 +6,11 @@ interface TableDataResponse {
     rows?: PaymentIntegration[];
 }
 
+export type PublicCheckoutPaymentIntegration = Pick<
+    PaymentIntegration,
+    'gateway_name' | 'is_active' | 'public_key' | 'environment'
+>;
+
 async function loadPaymentIntegrations(companyId: string): Promise<PaymentIntegration[]> {
     const allRows: PaymentIntegration[] = [];
     const pageSize = 200;
@@ -25,6 +30,13 @@ async function loadPaymentIntegrations(companyId: string): Promise<PaymentIntegr
 }
 
 export const paymentIntegrationService = {
+    async getPublicCheckoutIntegrations(): Promise<PublicCheckoutPaymentIntegration[]> {
+        const integrations = await vpsClient.get<PublicCheckoutPaymentIntegration[]>('/public/payment-integrations');
+        return (Array.isArray(integrations) ? integrations : [])
+            .filter(integration => integration.is_active)
+            .sort((a, b) => String(a.gateway_name).localeCompare(String(b.gateway_name)));
+    },
+
     async getIntegrations(): Promise<PaymentIntegration[]> {
         const companyId = await getCompanyId();
         return loadPaymentIntegrations(companyId);
