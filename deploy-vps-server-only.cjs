@@ -216,7 +216,7 @@ async function ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath = null)
     const currentMetaEncryptionKey = readEnvValue(current, 'META_TOKEN_ENCRYPTION_KEY');
     const entries = {
       WAHA_STATUS_SERVER_URL: wahaStatusServerUrl,
-      WAHA_STATUS_TIMEOUT_MS: process.env.WAHA_STATUS_TIMEOUT_MS || '300000',
+      WAHA_STATUS_TIMEOUT_MS: process.env.WAHA_STATUS_TIMEOUT_MS || '90000',
       WAHA_STATUS_MEDIA_INTERVAL_MS: process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || '3000',
       WHATSAPP_STATUS_STALE_SENDING_SECONDS: process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || '120',
       META_GRAPH_API_VERSION: process.env.META_GRAPH_API_VERSION || readEnvValue(current, 'META_GRAPH_API_VERSION') || 'v25.0',

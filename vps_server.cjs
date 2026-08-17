@@ -28364,7 +28364,9 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
   const image = getWhatsAppStatusProductImage(product);
   const video = await resolveWhatsAppStatusVideoUrl(product);
   const caption = buildWhatsAppStatusCaption(product);
-  const timeoutMs = Math.max(10000, Number(process.env.WAHA_STATUS_TIMEOUT_MS || 300000));
+  // Status normalmente é aceito pelo WAHA em segundos. Não manter a campanha
+  // em "sending" por cinco minutos quando o WAHA deixa a requisição pendurada.
+  const timeoutMs = Math.max(10000, Number(process.env.WAHA_STATUS_TIMEOUT_MS || 90000));
   const mediaIntervalMs = Math.max(0, Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 3000));
   const startedAt = Date.now();
   const trace = async (stage, state, message, details = {}, elapsedMs = null) => appendWhatsAppStatusTrace({
@@ -28423,7 +28425,9 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
 }
 
 async function markStaleWhatsAppStatusSendingLogs(campaignId = null) {
-  const staleSeconds = Math.max(60, Number(process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || 180));
+  // A limpeza não pode encerrar um envio que ainda está dentro do timeout HTTP.
+  const requestTimeoutSeconds = Math.ceil(Math.max(10000, Number(process.env.WAHA_STATUS_TIMEOUT_MS || 90000)) / 1000);
+  const staleSeconds = Math.max(60, requestTimeoutSeconds + 30, Number(process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || 180));
   const debug = [
     'WHATSAPP_STATUS_SEND_DEBUG',
     'Erro: envio ficou preso em andamento e foi encerrado automaticamente.',

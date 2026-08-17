@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.258-checkout-cartao-api",
+  "version": "v1.2.259-whatsapp-status-timeout",
   "date": "2026-08-17",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260817-194803-checkout-cartao-api",
+  "release_vps": "/var/www/mdv-site/releases/20260817-195708-whatsapp-status-timeout",
   "branch": "main",
-  "summary": "Processa o cartão Mercado Pago na API e elimina atualização administrativa pelo navegador."
+  "summary": "Corrige timeout e limpeza de envios de Status WhatsApp."
 }

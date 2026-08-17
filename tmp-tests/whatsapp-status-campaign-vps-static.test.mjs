@@ -62,7 +62,8 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /WAHA_STATUS_SERVER_URL/);
   assert.match(source, /WAHA_STATUS_API_KEY/);
   assert.match(source, /WAHA_STATUS_SESSION/);
-  assert.match(source, /WAHA_STATUS_TIMEOUT_MS \|\| 300000/);
+  assert.match(source, /WAHA_STATUS_TIMEOUT_MS \|\| 90000/);
+  assert.match(source, /requestTimeoutSeconds \+ 30/);
   assert.match(source, /sendWahaStatusMedia/);
   assert.match(source, /resolveWhatsAppStatusVideoUrl/);
   assert.match(source, /buildWhatsAppStatusVideoCandidates/);
@@ -173,7 +174,7 @@ assert.match(panel, /repeat_product_id/);
 
 assert.match(deployServerOnly, /WAHA_STATUS_SERVER_URL/);
 assert.match(deployServerOnly, /WAHA_STATUS_TIMEOUT_MS/);
-assert.match(deployServerOnly, /WAHA_STATUS_TIMEOUT_MS \|\| '300000'/);
+assert.match(deployServerOnly, /WAHA_STATUS_TIMEOUT_MS \|\| '90000'/);
 assert.match(deployServerOnly, /WAHA_STATUS_MEDIA_INTERVAL_MS/);
 assert.match(deployServerOnly, /WAHA_STATUS_API_KEY/);
 assert.match(deployServerOnly, /WAHA_STATUS_SESSION/);
