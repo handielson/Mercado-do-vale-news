@@ -10,8 +10,7 @@ import { paymentIntegrationService } from '@/services/paymentIntegrationService'
 import type { PublicCheckoutPaymentIntegration } from '@/services/paymentIntegrationService';
 import { formatCurrency, calculateCartVolume } from '@/utils/saleCalculations';
 import type { ShippingOption } from '@/types/shipping';
-import type { OrderDeliveryType, OrderPaymentMethod, OrderShippingAddress, PaymentGateway } from '@/types/order';
-import type { CardFormData } from '@/services/providers/mercadoPagoProvider';
+import type { MercadoPagoCardFormData, OrderDeliveryType, OrderPaymentMethod, OrderShippingAddress, PaymentGateway } from '@/types/order';
 import MercadoPagoCardBrick from '@/components/payment/MercadoPagoCardBrick';
 import { MapPin, CreditCard, Truck, Package, ChevronRight, Loader2, User } from 'lucide-react';
 import { useVpsAuth } from '@/contexts/VpsAuthContext';
@@ -217,7 +216,7 @@ export default function CheckoutPage() {
     };
 
     // Brick callback: recebe o token do cartão tokenizado
-    const handleCardBrickSubmit = async (cardFormData: CardFormData) => {
+    const handleCardBrickSubmit = async (cardFormData: MercadoPagoCardFormData) => {
         setError('');
         // Dados do cliente já vêm do useEffect
         if (!form.customer_name.trim()) {
@@ -231,7 +230,7 @@ export default function CheckoutPage() {
         await submitOrder(cardFormData);
     };
 
-    const submitOrder = async (cardFormData?: CardFormData) => {
+    const submitOrder = async (cardFormData?: MercadoPagoCardFormData) => {
         setSubmitting(true);
         try {
             const shippingAddress: OrderShippingAddress | undefined =
@@ -312,7 +311,7 @@ export default function CheckoutPage() {
                 notes: form.complement || undefined,
                 // Token do Brick para checkout transparente (se cartão MP)
                 ...(cardFormData ? { card_form_data: cardFormData } : {}),
-            } as any);
+            });
 
 
             // Se tem URL de checkout PRO (fallback redirect), redireciona

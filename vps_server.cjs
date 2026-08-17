@@ -1760,6 +1760,7 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
     pathname === '/check-video' ||
     pathname === '/field-presets' ||
     pathname === '/payment-fees' ||
+    pathname === '/public/payment-integrations' ||
     pathname === '/public/company-settings' ||
     pathname === '/public/check-video' ||
     pathname === '/rams' ||
@@ -1809,6 +1810,7 @@ function isVpsProxyCustomerOrderWritePath(proxyPath, method = 'GET') {
   if (normalizedMethod === 'POST' && pathname === '/table-data/order_items/bulk') return true;
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/priority-reservations') return true;
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/order-reservations/release') return true;
+  if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/card$/u.test(pathname)) return true;
   return normalizedMethod === 'DELETE' && /^\/table-data\/orders\/[^/]+$/u.test(pathname);
 }
 
@@ -1847,6 +1849,11 @@ async function assertVpsProxyCustomerOrderWriteAllowed(request, auth, proxyPath,
 
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/order-reservations/release') {
     return assertVpsProxyOrdersBelongToCustomer([body.order_id], auth.customerId);
+  }
+
+  if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/card$/u.test(pathname)) {
+    const orderId = pathname.split('/')[2] || '';
+    return assertVpsProxyOrdersBelongToCustomer([decodeURIComponent(orderId)], auth.customerId);
   }
 
   if (normalizedMethod === 'DELETE') {
@@ -25635,6 +25642,96 @@ fastify.post('/stock-locations/order-reservations/release', { preHandler: requir
   return processOrderReservation(input.order_id, 'release', String(input.reason || '').trim() || 'Liberacao de reserva', input.notes || null);
 });
 
+// O navegador envia somente o token descartável do Brick. A credencial do
+// Mercado Pago e a atualização do pedido ficam exclusivamente no servidor.
+fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  const orderId = String(req.params?.orderId || '').trim();
+  const input = req.body || {};
+  const access = req.customerAccess || {};
+  const cardToken = String(input.token || '').trim();
+  const paymentMethodId = String(input.payment_method_id || '').trim();
+
+  if (!orderId || !cardToken) return reply.code(400).send({ error: 'Pedido e token do cartão são obrigatórios.' });
+  if (!paymentMethodId) return reply.code(400).send({ error: 'Forma de pagamento do cartão inválida. Recarregue o checkout e tente novamente.' });
+
+  const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
+  const order = orders?.[0] || null;
+  if (!order) return reply.code(404).send({ error: 'Pedido não encontrado.' });
+  if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) {
+    return reply.code(403).send({ error: 'Forbidden for this order' });
+  }
+  if (!['pending', 'awaiting_payment'].includes(String(order.status || ''))) {
+    return reply.code(409).send({ error: 'O pedido não está disponível para pagamento.' });
+  }
+
+  const [integrations] = await pool.query(
+    "SELECT access_token FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 AND company_id = ? LIMIT 1",
+    [order.company_id],
+  );
+  const accessToken = integrations?.[0]?.access_token;
+  if (!accessToken) return reply.code(400).send({ error: 'Mercado Pago não configurado.' });
+
+  const installments = Math.max(1, Math.min(12, Number.parseInt(input.installments, 10) || 1));
+  const paymentPayload = {
+    token: cardToken,
+    transaction_amount: Number((Math.max(0, Number(order.total) || 0) / 100).toFixed(2)),
+    installments,
+    payment_method_id: paymentMethodId,
+    issuer_id: input.issuer_id ? Number(input.issuer_id) : undefined,
+    description: `Pedido Mercado do Vale - ${String(order.id).slice(0, 8)}`,
+    statement_descriptor: 'MERCADO DO VALE',
+    external_reference: order.id,
+    notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook',
+    payer: {
+      email: String(input.payer?.email || order.customer_email || 'cliente@mercadodovale.com.br'),
+      identification: input.payer?.identification || undefined,
+    },
+  };
+
+  const paymentResponse = await fetch('https://api.mercadopago.com/v1/payments', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': `${order.id}-${cardToken.slice(-24)}`,
+    },
+    body: JSON.stringify(paymentPayload),
+    signal: AbortSignal.timeout(15000),
+  });
+  const payment = await paymentResponse.json().catch(() => ({}));
+  if (!paymentResponse.ok) {
+    const detail = payment?.cause?.[0]?.description || payment?.message || 'Não foi possível processar o cartão.';
+    return reply.code(502).send({ error: `Pagamento recusado: ${detail}` });
+  }
+
+  const status = String(payment.status || 'pending').toLowerCase();
+  const isApproved = status === 'approved';
+  const isRejected = status === 'rejected';
+  const nextStatus = isApproved ? 'paid' : isRejected ? 'payment_failed' : 'awaiting_payment';
+  const paymentStatus = isApproved ? 'paid' : isRejected ? 'failed' : 'pending';
+  await pool.query(
+    `UPDATE orders
+     SET gateway_payment_id = ?, payment_gateway = 'mercado_pago', payment_method = 'credit_card',
+         status = ?, payment_status = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [String(payment.id || ''), nextStatus, paymentStatus, order.id],
+  );
+
+  if (isApproved) {
+    await processOrderReservation(order.id, 'consume', 'Pagamento Mercado Pago aprovado', 'Cartão aprovado pelo checkout seguro.');
+  } else if (isRejected) {
+    await processOrderReservation(order.id, 'release', 'Pagamento Mercado Pago recusado', 'Reserva liberada após recusa do cartão.');
+  }
+
+  return {
+    id: String(payment.id || ''),
+    status,
+    status_detail: String(payment.status_detail || ''),
+    order_status: nextStatus,
+    payment_status: paymentStatus,
+  };
+});
+
 async function restoreStockFromMovements(referenceType, restoreReferenceType, referenceId, reason, notes) {
   const [existing] = await pool.query(
     'SELECT id FROM stock_location_movements WHERE reference_type = ? AND reference_id = ? AND movement_type = ? LIMIT 1',
@@ -26987,6 +27084,26 @@ fastify.get('/public/company-settings', { config: { rateLimit: { max: 240, timeW
   return sanitizePublicCompanySettings(rows[0] || null);
 });
 
+// Dados estritamente públicos para o checkout. Nunca exponha access_token,
+// client_secret ou qualquer outra credencial de integração nesta rota.
+fastify.get('/public/payment-integrations', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const companyId = await getDefaultCompanyIdForCatalog();
+  const [rows] = await pool.query(
+    `SELECT gateway_name, is_active, public_key, environment
+     FROM payment_integrations
+     WHERE company_id = ? AND is_active = 1
+     ORDER BY gateway_name ASC`,
+    [companyId],
+  );
+  reply.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
+  return rows.map((row) => ({
+    gateway_name: row.gateway_name,
+    is_active: Boolean(row.is_active),
+    public_key: row.public_key || null,
+    environment: row.environment === 'production' ? 'production' : 'sandbox',
+  }));
+});
+
 // ─── Company Settings (PATCH) ─────────────────────────────────────────────
 fastify.patch('/company-settings', { preHandler: requireSyncKey }, async (req, reply) => {
   const ALLOWED = [
@@ -28282,6 +28399,7 @@ async function resolveWhatsAppStatusDailyLimit(campaign, loadedProducts = null) 
 }
 
 const WHATSAPP_STATUS_TIME_ZONE = 'America/Sao_Paulo';
+const activeWhatsAppStatusLogIds = new Set();
 
 function getWhatsAppStatusLocalClock(value = new Date()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
@@ -28425,9 +28543,12 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
 }
 
 async function markStaleWhatsAppStatusSendingLogs(campaignId = null) {
-  // A limpeza não pode encerrar um envio que ainda está dentro do timeout HTTP.
+  // A limpeza não pode encerrar um envio ativo. Um produto pode ter imagem e
+  // vídeo, cada um com seu próprio timeout, além do intervalo entre mídias.
   const requestTimeoutSeconds = Math.ceil(Math.max(10000, Number(process.env.WAHA_STATUS_TIMEOUT_MS || 90000)) / 1000);
-  const staleSeconds = Math.max(60, requestTimeoutSeconds + 30, Number(process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || 180));
+  const mediaIntervalSeconds = Math.ceil(Math.max(0, Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 3000)) / 1000);
+  const maximumAttemptSeconds = requestTimeoutSeconds * 2 + mediaIntervalSeconds + 30;
+  const staleSeconds = Math.max(60, maximumAttemptSeconds, Number(process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || 180));
   const debug = [
     'WHATSAPP_STATUS_SEND_DEBUG',
     'Erro: envio ficou preso em andamento e foi encerrado automaticamente.',
@@ -28439,6 +28560,11 @@ async function markStaleWhatsAppStatusSendingLogs(campaignId = null) {
   if (campaignId) {
     where += ' AND campaign_id = ?';
     params.push(campaignId);
+  }
+  const activeLogIds = Array.from(activeWhatsAppStatusLogIds);
+  if (activeLogIds.length > 0) {
+    where += ` AND id NOT IN (${activeLogIds.map(() => '?').join(',')})`;
+    params.push(...activeLogIds);
   }
   await pool.query(
     `UPDATE whatsapp_status_campaign_logs
@@ -28484,7 +28610,13 @@ async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledF
       [logId, runId, campaign.id, product.id, scheduledFor, slotIndex]
     );
     await appendWhatsAppStatusTrace({ runId, logId, campaignId: campaign.id, productId: product.id, stage: 'attempt.created', state: 'started', message: 'Tentativa de envio iniciada' });
-    const result = await sendWhatsAppStatusProduct(campaign, product, scheduledFor, { runId, logId });
+    activeWhatsAppStatusLogIds.add(logId);
+    let result;
+    try {
+      result = await sendWhatsAppStatusProduct(campaign, product, scheduledFor, { runId, logId });
+    } finally {
+      activeWhatsAppStatusLogIds.delete(logId);
+    }
     logs.push(result);
     await pool.query(
       `UPDATE whatsapp_status_campaign_logs

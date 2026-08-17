@@ -27,6 +27,17 @@ export type OrderDeliveryType = 'pickup' | 'delivery';
 
 export type PaymentGateway = 'mercado_pago' | 'pagseguro' | 'stripe' | 'pagaleve';
 
+export interface MercadoPagoCardFormData {
+    token: string;
+    installments: number;
+    payment_method_id: string;
+    issuer_id?: string;
+    payer: {
+        email: string;
+        identification?: { type: string; number: string };
+    };
+}
+
 // ─── Endereço de Entrega ─────────────────────────────────────────────────────
 
 export interface OrderShippingAddress {
@@ -146,10 +157,13 @@ export interface OrderInput {
 
     payment_method: OrderPaymentMethod;
     payment_gateway?: PaymentGateway;
+    card_form_data?: MercadoPagoCardFormData;
 
     delivery_type: OrderDeliveryType;
     shipping_address?: OrderShippingAddress;
     shipping_cost: number;            // em centavos
+    shipping_origin_cep?: string;
+    shipping_origin_label?: string;
 
     coupon_code?: string;
     coupon_discount?: number;         // em centavos

@@ -483,7 +483,7 @@ async function syncReturnedOrderStockToBling(
 
 export async function createOrder(input: OrderInput): Promise<Order> {
     const companyId = await getCompanyId();
-    const cardFormData = (input as any).card_form_data;
+    const cardFormData = input.card_form_data;
 
     const subtotal = input.items.reduce((sum, item) => sum + item.subtotal, 0);
     const couponDisc = input.coupon_discount ?? 0;
@@ -617,8 +617,8 @@ export async function createOrder(input: OrderInput): Promise<Order> {
                 }>(`/orders/${encodeURIComponent(order.id)}/payments/mercado-pago/card`, {
                     token: cardFormData.token,
                     installments: cardFormData.installments,
-                    payment_method_id: cardFormData.paymentMethodId,
-                    issuer_id: cardFormData.issuerId,
+                    payment_method_id: cardFormData.payment_method_id,
+                    issuer_id: cardFormData.issuer_id,
                     payer: cardFormData.payer,
                 });
 

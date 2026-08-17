@@ -63,7 +63,6 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /WAHA_STATUS_API_KEY/);
   assert.match(source, /WAHA_STATUS_SESSION/);
   assert.match(source, /WAHA_STATUS_TIMEOUT_MS \|\| 90000/);
-  assert.match(source, /requestTimeoutSeconds \+ 30/);
   assert.match(source, /sendWahaStatusMedia/);
   assert.match(source, /resolveWhatsAppStatusVideoUrl/);
   assert.match(source, /buildWhatsAppStatusVideoCandidates/);
@@ -80,6 +79,11 @@ for (const source of [server, serverCjs]) {
   assert.doesNotMatch(source, /marcando como enviado para evitar repeticao/);
   assert.match(source, /markStaleWhatsAppStatusSendingLogs/);
   assert.match(source, /WHATSAPP_STATUS_STALE_SENDING_SECONDS/);
+  assert.match(source, /activeWhatsAppStatusLogIds = new Set\(\)/);
+  assert.match(source, /activeWhatsAppStatusLogIds\.add\(logId\)/);
+  assert.match(source, /activeWhatsAppStatusLogIds\.delete\(logId\)/);
+  assert.match(source, /requestTimeoutSeconds \* 2 \+ mediaIntervalSeconds \+ 30/);
+  assert.match(source, /activeLogIds\.map\(\(\) => '\?'\)\.join\(','\)/);
   assert.match(source, /envio ficou preso em andamento/);
   assert.match(source, /AbortSignal\.timeout\(timeoutMs\)/);
   assert.match(source, /VALUES \(\?, \?, \?, \?, 'sending', NULL, \?, \?\)/);

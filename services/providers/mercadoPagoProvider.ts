@@ -1,4 +1,4 @@
-import type { OrderInput } from '../../types/order';
+import type { MercadoPagoCardFormData, OrderInput } from '../../types/order';
 
 interface MercadoPagoPixResponse {
     id: number;
@@ -27,17 +27,6 @@ export interface MercadoPagoCardPaymentResponse {
     payment_method_id: string;
     payment_type_id: string;
     installments: number;
-}
-
-export interface CardFormData {
-    token: string;
-    installments: number;
-    paymentMethodId: string;
-    issuerId: string;
-    payer: {
-        email: string;
-        identification?: { type: string; number: string };
-    };
 }
 
 export const mercadoPagoProvider = {
@@ -107,7 +96,7 @@ export const mercadoPagoProvider = {
      */
     async createCardPayment(
         orderData: OrderInput,
-        cardFormData: CardFormData,
+        cardFormData: MercadoPagoCardFormData,
         accessToken: string
     ): Promise<MercadoPagoCardPaymentResponse> {
         const totalCentavos = orderData.items.reduce((sum, item) => sum + item.subtotal, 0)
@@ -118,8 +107,8 @@ export const mercadoPagoProvider = {
             token: cardFormData.token,
             transaction_amount: Number((totalCentavos / 100).toFixed(2)),
             installments: cardFormData.installments || 1,
-            payment_method_id: cardFormData.paymentMethodId,
-            issuer_id: cardFormData.issuerId ? Number(cardFormData.issuerId) : undefined,
+            payment_method_id: cardFormData.payment_method_id,
+            issuer_id: cardFormData.issuer_id ? Number(cardFormData.issuer_id) : undefined,
             description: `Pedido Mercado do Vale - ${orderData.items.length} itens`,
             statement_descriptor: 'MERCADO DO VALE',
             payer: {

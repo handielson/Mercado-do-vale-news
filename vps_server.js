@@ -25649,8 +25649,10 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
   const input = req.body || {};
   const access = req.customerAccess || {};
   const cardToken = String(input.token || '').trim();
+  const paymentMethodId = String(input.payment_method_id || '').trim();
 
   if (!orderId || !cardToken) return reply.code(400).send({ error: 'Pedido e token do cartão são obrigatórios.' });
+  if (!paymentMethodId) return reply.code(400).send({ error: 'Forma de pagamento do cartão inválida. Recarregue o checkout e tente novamente.' });
 
   const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
   const order = orders?.[0] || null;
@@ -25663,7 +25665,8 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
   }
 
   const [integrations] = await pool.query(
-    "SELECT access_token FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 LIMIT 1"
+    "SELECT access_token FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 AND company_id = ? LIMIT 1",
+    [order.company_id],
   );
   const accessToken = integrations?.[0]?.access_token;
   if (!accessToken) return reply.code(400).send({ error: 'Mercado Pago não configurado.' });
@@ -25673,7 +25676,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
     token: cardToken,
     transaction_amount: Number((Math.max(0, Number(order.total) || 0) / 100).toFixed(2)),
     installments,
-    payment_method_id: String(input.payment_method_id || '').trim(),
+    payment_method_id: paymentMethodId,
     issuer_id: input.issuer_id ? Number(input.issuer_id) : undefined,
     description: `Pedido Mercado do Vale - ${String(order.id).slice(0, 8)}`,
     statement_descriptor: 'MERCADO DO VALE',
@@ -28396,6 +28399,7 @@ async function resolveWhatsAppStatusDailyLimit(campaign, loadedProducts = null) 
 }
 
 const WHATSAPP_STATUS_TIME_ZONE = 'America/Sao_Paulo';
+const activeWhatsAppStatusLogIds = new Set();
 
 function getWhatsAppStatusLocalClock(value = new Date()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
@@ -28539,9 +28543,12 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
 }
 
 async function markStaleWhatsAppStatusSendingLogs(campaignId = null) {
-  // A limpeza não pode encerrar um envio que ainda está dentro do timeout HTTP.
+  // A limpeza não pode encerrar um envio ativo. Um produto pode ter imagem e
+  // vídeo, cada um com seu próprio timeout, além do intervalo entre mídias.
   const requestTimeoutSeconds = Math.ceil(Math.max(10000, Number(process.env.WAHA_STATUS_TIMEOUT_MS || 90000)) / 1000);
-  const staleSeconds = Math.max(60, requestTimeoutSeconds + 30, Number(process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || 180));
+  const mediaIntervalSeconds = Math.ceil(Math.max(0, Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 3000)) / 1000);
+  const maximumAttemptSeconds = requestTimeoutSeconds * 2 + mediaIntervalSeconds + 30;
+  const staleSeconds = Math.max(60, maximumAttemptSeconds, Number(process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || 180));
   const debug = [
     'WHATSAPP_STATUS_SEND_DEBUG',
     'Erro: envio ficou preso em andamento e foi encerrado automaticamente.',
@@ -28553,6 +28560,11 @@ async function markStaleWhatsAppStatusSendingLogs(campaignId = null) {
   if (campaignId) {
     where += ' AND campaign_id = ?';
     params.push(campaignId);
+  }
+  const activeLogIds = Array.from(activeWhatsAppStatusLogIds);
+  if (activeLogIds.length > 0) {
+    where += ` AND id NOT IN (${activeLogIds.map(() => '?').join(',')})`;
+    params.push(...activeLogIds);
   }
   await pool.query(
     `UPDATE whatsapp_status_campaign_logs
@@ -28598,7 +28610,13 @@ async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledF
       [logId, runId, campaign.id, product.id, scheduledFor, slotIndex]
     );
     await appendWhatsAppStatusTrace({ runId, logId, campaignId: campaign.id, productId: product.id, stage: 'attempt.created', state: 'started', message: 'Tentativa de envio iniciada' });
-    const result = await sendWhatsAppStatusProduct(campaign, product, scheduledFor, { runId, logId });
+    activeWhatsAppStatusLogIds.add(logId);
+    let result;
+    try {
+      result = await sendWhatsAppStatusProduct(campaign, product, scheduledFor, { runId, logId });
+    } finally {
+      activeWhatsAppStatusLogIds.delete(logId);
+    }
     logs.push(result);
     await pool.query(
       `UPDATE whatsapp_status_campaign_logs

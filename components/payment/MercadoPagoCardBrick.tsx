@@ -4,23 +4,13 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-
-interface CardFormData {
-    token: string;
-    installments: number;
-    paymentMethodId: string;
-    issuerId: string;
-    payer: {
-        email: string;
-        identification?: { type: string; number: string };
-    };
-}
+import type { MercadoPagoCardFormData } from '@/types/order';
 
 interface Props {
     publicKey: string;
     amount: number; // Em reais (ex: 59.90)
     customerEmail?: string;
-    onSubmit: (formData: CardFormData) => Promise<void>;
+    onSubmit: (formData: MercadoPagoCardFormData) => Promise<void>;
     onError?: (error: unknown) => void;
     submitting?: boolean;
 }
@@ -99,7 +89,7 @@ export default function MercadoPagoCardBrick({ publicKey, amount, customerEmail,
                             onReady: () => {
                                 if (!cancelled) setLoading(false);
                             },
-                            onSubmit: async (formData: CardFormData) => {
+                            onSubmit: async (formData: MercadoPagoCardFormData) => {
                                 await onSubmit(formData);
                             },
                             onError: (err: unknown) => {
