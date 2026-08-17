@@ -22,6 +22,7 @@ assert.match(source, /shipping_origin_cep:[\s\S]*shipping_origin_label:/, 'order
 for (const vpsSource of vpsServers) {
   assert.match(vpsSource, /addColumnIfMissing\('orders', 'shipping_origin_cep', 'VARCHAR\(16\) NULL'\)/, 'VPS migration must add the shipping origin CEP before checkout writes it');
   assert.match(vpsSource, /addColumnIfMissing\('orders', 'shipping_origin_label', 'VARCHAR\(255\) NULL'\)/, 'VPS migration must add the shipping origin label before checkout writes it');
+  assert.match(vpsSource, /addColumnIfMissing\('order_items', 'combo_selections', 'JSON NULL'\)/, 'VPS migration must add combo selections before checkout writes order items');
 }
 
 assert.doesNotMatch(
