@@ -14,7 +14,6 @@ const VERIFY_NODE = 'Controle Bot - Verificar mensagem atual';
 const BOT_SENT_NODE = 'Handoff - Registrar bot enviado';
 const LOOP_NODE = 'Loop - Enviar mensagens em ordem';
 const MODEL_MARKER = 'catalog-model-memory-match-v246';
-const ORDER_MARKER = 'catalog-sequential-send-v246';
 const APPLY = process.argv.includes('--apply');
 
 const shQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -89,16 +88,28 @@ const productMatchesRequestedModel = (product) => {
   return result;
 }
 function patchGraph(nodes, connections) {
-  if (nodes.some((node) => node.name === LOOP_NODE)) return;
-  const split = nodeByName(nodes, SPLIT_NODE);
-  nodes.push({
-    id: 'catalog-sequential-send-v246', name: LOOP_NODE,
-    type: 'n8n-nodes-base.splitInBatches', typeVersion: 3,
-    position: [Number(split.position?.[0] || 800) + 220, Number(split.position?.[1] || 0)],
-    parameters: { batchSize: 1, options: {} },
-  });
+  let loop = nodes.find((node) => node.name === LOOP_NODE);
+  if (!loop) {
+    const split = nodeByName(nodes, SPLIT_NODE);
+    loop = {
+      id: 'catalog-sequential-send-v247',
+      name: LOOP_NODE,
+      type: 'n8n-nodes-base.splitInBatches',
+      typeVersion: 3,
+      position: [Number(split.position?.[0] || 800) + 220, Number(split.position?.[1] || 0)],
+      parameters: { batchSize: 1, options: {} },
+    };
+    nodes.push(loop);
+  }
+
+  loop.type = 'n8n-nodes-base.splitInBatches';
+  loop.typeVersion = 3;
+  loop.parameters = { batchSize: 1, options: {} };
+
+  // Split In Batches v3 has outputs [done, loop]. The loop output handles one
+  // item at a time; the send path must return here only after Evolution replies.
   connections[SPLIT_NODE] = { main: [[{ node: LOOP_NODE, type: 'main', index: 0 }]] };
-  connections[LOOP_NODE] = { main: [[{ node: VERIFY_NODE, type: 'main', index: 0 }], []] };
+  connections[LOOP_NODE] = { main: [[], [{ node: VERIFY_NODE, type: 'main', index: 0 }]] };
   connections[BOT_SENT_NODE] = { main: [[{ node: LOOP_NODE, type: 'main', index: 0 }]] };
 }
 function summarize(nodes, connections) {
@@ -106,9 +117,9 @@ function summarize(nodes, connections) {
   return {
     modelMemoryMatcher: context.includes(MODEL_MARKER),
     appleHeaderGuard: context.includes('availableBrandLabelsV246.has(currentBrandV227.label)'),
-    sequentialLoop: nodes.some((node) => node.name === LOOP_NODE && node.parameters?.batchSize === 1),
+    sequentialLoop: nodes.some((node) => node.name === LOOP_NODE && node.typeVersion === 3 && node.parameters?.batchSize === 1),
     splitFeedsLoop: connections[SPLIT_NODE]?.main?.[0]?.[0]?.node === LOOP_NODE,
-    loopFeedsVerifier: connections[LOOP_NODE]?.main?.[0]?.[0]?.node === VERIFY_NODE,
+    loopFeedsVerifier: connections[LOOP_NODE]?.main?.[1]?.[0]?.node === VERIFY_NODE,
     sentFeedsLoop: connections[BOT_SENT_NODE]?.main?.[0]?.[0]?.node === LOOP_NODE,
   };
 }

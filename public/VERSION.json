@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.250-avancar-proximo-aparelho",
-  "date": "2026-08-14",
+  "version": "v1.2.251-envio-whatsapp-sequencial",
+  "date": "2026-08-17",
   "status": "ready",
-  "release_vps": "20260814-200335-avancar-proximo-aparelho",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Após salvar um aparelho, avança ao próximo pendente e mantém concluídos no fim da fila."
+  "summary": "Envia catálogos do WhatsApp estritamente na ordem em que foram montados."
 }

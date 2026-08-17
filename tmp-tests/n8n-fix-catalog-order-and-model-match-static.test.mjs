@@ -59,6 +59,11 @@ const nodes = [
 ];
 const connections = { 'Dividir mensagens': { main: [[{ node: 'Controle Bot - Verificar mensagem atual' }]] } };
 patchGraph(nodes, connections);
+assert.equal(nodes.some((node) => node.name === 'Loop - Enviar mensagens em ordem'), true);
+assert.equal(connections['Dividir mensagens'].main[0][0].node, 'Loop - Enviar mensagens em ordem');
+assert.equal(connections['Loop - Enviar mensagens em ordem'].main[0].length, 0, 'done output must not send messages');
+assert.equal(connections['Loop - Enviar mensagens em ordem'].main[1][0].node, 'Controle Bot - Verificar mensagem atual');
+assert.equal(connections['Handoff - Registrar bot enviado'].main[0][0].node, 'Loop - Enviar mensagens em ordem');
 const result = summarize(nodes, connections);
 assert.deepEqual(result, {
   modelMemoryMatcher: true,
