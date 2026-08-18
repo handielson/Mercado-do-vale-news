@@ -4096,11 +4096,12 @@ async function handleMercadoPagoWebhookVps(body) {
     }
 
     const gatewayPaymentId = String(payment.id);
-    const orders = await vpsDbSelect(
-      'orders',
-      `select=*&gateway_payment_id=eq.${encodeURIComponent(gatewayPaymentId)}&limit=1`
-    );
-    const order = Array.isArray(orders) ? orders[0] : null;
+    const externalReference = String(payment.external_reference || '').trim();
+    let [orders] = await pool.query('SELECT * FROM orders WHERE gateway_payment_id = ? LIMIT 1', [gatewayPaymentId]);
+    if (!orders?.length && isUuidLike(externalReference)) {
+      [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [externalReference]);
+    }
+    const order = orders?.[0] || null;
 
     if (!order) {
       return {
@@ -4111,18 +4112,35 @@ async function handleMercadoPagoWebhookVps(body) {
             step: 'find order',
             paymentId,
             gatewayPaymentId,
-            rawMessage: 'No order found for gateway_payment_id',
+            externalReference,
+            rawMessage: 'No order found for gateway_payment_id or external_reference',
           }),
         },
       };
     }
 
-    const finalStatuses = ['paid', 'preparing', 'shipped', 'delivered', 'completed'];
-    if (finalStatuses.includes(order.status)) {
-      return { status: 200, body: { message: 'already processed', order_id: order.id } };
+    if (String(order.status || '') === 'cancelled') {
+      return { status: 200, body: { message: 'ignored', reason: 'order cancelled', order_id: order.id } };
     }
 
-    await vpsDbPatch('orders', `id=eq.${encodeURIComponent(order.id)}`, { status: 'paid', payment_status: 'paid' });
+    const wasAlreadyPaid = String(order.payment_status || '') === 'paid';
+    const finalStatuses = ['preparing', 'shipped', 'delivered'];
+    const nextOrderStatus = finalStatuses.includes(String(order.status || '')) ? order.status : 'confirmed';
+    const nextPaymentMethod = String(payment.payment_type_id || '').toLowerCase() === 'credit_card'
+      ? 'credit_card'
+      : order.payment_method;
+    await pool.query(
+      `UPDATE orders
+       SET gateway_payment_id = ?, payment_gateway = 'mercado_pago', payment_method = ?,
+           status = ?, payment_status = 'paid', updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [gatewayPaymentId, nextPaymentMethod, nextOrderStatus, order.id],
+    );
+    await processOrderReservation(order.id, 'consume', 'Pagamento Mercado Pago aprovado', 'Pagamento confirmado pelo webhook do Mercado Pago.');
+
+    if (wasAlreadyPaid) {
+      return { status: 200, body: { message: 'already processed', order_id: order.id } };
+    }
     await notifyTelegramOnlineOrderPaidVps(order.id).catch((notifyError) => {
       console.error('[telegram-sales] paid order notification failed:', buildCopyableDebug('telegram-sales', {
         step: 'notify paid order',
@@ -25642,6 +25660,35 @@ fastify.post('/stock-locations/order-reservations/release', { preHandler: requir
   return processOrderReservation(input.order_id, 'release', String(input.reason || '').trim() || 'Liberacao de reserva', input.notes || null);
 });
 
+async function findExistingMercadoPagoCardPayment(accessToken, order) {
+  const searchUrl = new URL('https://api.mercadopago.com/v1/payments/search');
+  searchUrl.searchParams.set('external_reference', String(order.id));
+  searchUrl.searchParams.set('sort', 'date_created');
+  searchUrl.searchParams.set('criteria', 'desc');
+  searchUrl.searchParams.set('limit', '20');
+
+  const response = await fetch(searchUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(12000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error('Não foi possível verificar cobranças anteriores. Nenhuma nova cobrança foi criada.');
+    error.statusCode = 502;
+    throw error;
+  }
+
+  const expectedAmountCents = Math.round(Number(order.total) || 0);
+  const reusableStatuses = new Set(['approved', 'authorized', 'pending', 'in_process']);
+  return (Array.isArray(payload.results) ? payload.results : []).find((payment) => (
+    String(payment.external_reference || '') === String(order.id)
+    && String(payment.currency_id || 'BRL').toUpperCase() === 'BRL'
+    && Math.round((Number(payment.transaction_amount) || 0) * 100) === expectedAmountCents
+    && String(payment.payment_type_id || '').toLowerCase() === 'credit_card'
+    && reusableStatuses.has(String(payment.status || '').toLowerCase())
+  )) || null;
+}
+
 // O navegador envia somente o token descartável do Brick. A credencial do
 // Mercado Pago e a atualização do pedido ficam exclusivamente no servidor.
 fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
@@ -25660,7 +25707,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
   if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) {
     return reply.code(403).send({ error: 'Forbidden for this order' });
   }
-  if (!['pending', 'awaiting_payment'].includes(String(order.status || ''))) {
+  if (String(order.status || '') !== 'pending') {
     return reply.code(409).send({ error: 'O pedido não está disponível para pagamento.' });
   }
 
@@ -25688,26 +25735,37 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
     },
   };
 
-  const paymentResponse = await fetch('https://api.mercadopago.com/v1/payments', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'X-Idempotency-Key': `${order.id}-${cardToken.slice(-24)}`,
-    },
-    body: JSON.stringify(paymentPayload),
-    signal: AbortSignal.timeout(15000),
-  });
-  const payment = await paymentResponse.json().catch(() => ({}));
-  if (!paymentResponse.ok) {
-    const detail = payment?.cause?.[0]?.description || payment?.message || 'Não foi possível processar o cartão.';
-    return reply.code(502).send({ error: `Pagamento recusado: ${detail}` });
+  let payment;
+  let reusedExistingPayment = false;
+  try {
+    payment = await findExistingMercadoPagoCardPayment(accessToken, order);
+    reusedExistingPayment = Boolean(payment);
+  } catch (error) {
+    return reply.code(error.statusCode || 502).send({ error: error.message });
+  }
+
+  if (!payment) {
+    const paymentResponse = await fetch('https://api.mercadopago.com/v1/payments', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': `${order.id}-${cardToken.slice(-24)}`,
+      },
+      body: JSON.stringify(paymentPayload),
+      signal: AbortSignal.timeout(15000),
+    });
+    payment = await paymentResponse.json().catch(() => ({}));
+    if (!paymentResponse.ok) {
+      const detail = payment?.cause?.[0]?.description || payment?.message || 'Não foi possível processar o cartão.';
+      return reply.code(502).send({ error: `Pagamento recusado: ${detail}` });
+    }
   }
 
   const status = String(payment.status || 'pending').toLowerCase();
   const isApproved = status === 'approved';
-  const isRejected = status === 'rejected';
-  const nextStatus = isApproved ? 'paid' : isRejected ? 'payment_failed' : 'awaiting_payment';
+  const isRejected = ['rejected', 'cancelled', 'canceled'].includes(status);
+  const nextStatus = isApproved ? 'confirmed' : 'pending';
   const paymentStatus = isApproved ? 'paid' : isRejected ? 'failed' : 'pending';
   await pool.query(
     `UPDATE orders
@@ -25729,6 +25787,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
     status_detail: String(payment.status_detail || ''),
     order_status: nextStatus,
     payment_status: paymentStatus,
+    reused_existing_payment: reusedExistingPayment,
   };
 });
 

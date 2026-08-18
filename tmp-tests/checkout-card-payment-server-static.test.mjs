@@ -18,8 +18,13 @@ for (const [fileName, server] of servers) {
   assert.match(server, /if \(!paymentMethodId\) return reply\.code\(400\)/, `${fileName}: a API deve rejeitar payload sem payment_method_id antes da cobrança`);
   assert.match(server, /gateway_name = 'mercado_pago' AND is_active = 1 AND company_id = \? LIMIT 1[\s\S]*?\[order\.company_id\]/, `${fileName}: a API deve usar a credencial Mercado Pago da empresa do pedido`);
   assert.match(server, /Authorization: `Bearer \$\{accessToken\}`/, `${fileName}: somente a API pode usar o access token do Mercado Pago`);
+  assert.match(server, /async function findExistingMercadoPagoCardPayment[\s\S]*?\/v1\/payments\/search[\s\S]*?external_reference/, `${fileName}: antes de cobrar, a API deve procurar uma tentativa anterior pela referência do pedido`);
+  assert.match(server, /reusableStatuses = new Set\(\['approved', 'authorized', 'pending', 'in_process'\]\)/, `${fileName}: cobranças ativas ou aprovadas não podem ser duplicadas`);
+  assert.match(server, /const nextStatus = isApproved \? 'confirmed' : 'pending'/, `${fileName}: o status operacional deve usar somente valores aceitos pela coluna orders.status`);
+  assert.doesNotMatch(server, /const nextStatus = isApproved \? 'paid'|isRejected \? 'payment_failed' : 'awaiting_payment'/, `${fileName}: estados financeiros não podem ser gravados em orders.status`);
   assert.match(server, /processOrderReservation\(order\.id, 'consume'/, `${fileName}: pagamento aprovado deve consumir a reserva de estoque`);
   assert.match(server, /processOrderReservation\(order\.id, 'release'/, `${fileName}: pagamento recusado deve liberar a reserva de estoque`);
+  assert.match(server, /reused_existing_payment: reusedExistingPayment/, `${fileName}: a resposta deve informar quando reutilizou uma cobrança existente`);
 }
 
 assert.match(orderTypes, /interface MercadoPagoCardFormData[\s\S]*payment_method_id:\s*string[\s\S]*issuer_id\??:\s*string/, 'o contrato canônico do Brick deve preservar campos snake_case');

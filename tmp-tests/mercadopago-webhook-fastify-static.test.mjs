@@ -30,14 +30,32 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 
   assert.match(
     source,
-    /vpsDbSelect\('payment_integrations'/,
+    /SELECT access_token, is_active FROM payment_integrations/,
     `${file} must load the Mercado Pago integration from the VPS database`,
   );
 
   assert.match(
     source,
-    /vpsDbPatch\('orders'/,
-    `${file} must update the matching order through the VPS database`,
+    /SELECT \* FROM orders WHERE gateway_payment_id = \?[\s\S]*?SELECT \* FROM orders WHERE id = \?/,
+    `${file} must recover an order by external_reference when the initial gateway id write failed`,
+  );
+
+  assert.match(
+    source,
+    /SET gateway_payment_id = \?, payment_gateway = 'mercado_pago'[\s\S]*?status = \?, payment_status = 'paid'/,
+    `${file} must persist both the gateway id and valid operational/financial statuses`,
+  );
+
+  assert.match(
+    source,
+    /nextOrderStatus = finalStatuses\.includes[\s\S]*?\? order\.status : 'confirmed'/,
+    `${file} must use confirmed instead of the invalid paid order status`,
+  );
+
+  assert.match(
+    source,
+    /processOrderReservation\(order\.id, 'consume',[\s\S]*?webhook do Mercado Pago/,
+    `${file} must consume the stock reservation idempotently after approval`,
   );
 
   assert.match(

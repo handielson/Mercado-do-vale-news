@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.263-pdp-video-modelo-legado",
-  "date": "2026-08-17",
+  "version": "v1.2.264-pagamento-cartao-reconciliacao",
+  "date": "2026-08-18",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260817-205801-pdp-video-modelo-legado",
+  "release_vps": "/var/www/mdv-site/releases/20260818-142855-pagamento-cartao-reconciliacao",
   "branch": "main",
-  "summary": "Localiza vídeo válido em cadastros legados do mesmo modelo sem expor uma variação incorreta na vitrine."
+  "summary": "Reconcilia cobranças de cartão aprovadas, grava estados válidos do pedido e evita cobrança duplicada em novas tentativas."
 }
