@@ -1,6 +1,7 @@
 import { VPS_DIRECT_BASE_URL } from './vpsProxyBase';
 import type { Customer } from '../types/customer';
 import type { CreateAccountData, VpsUser } from '../types/auth';
+import { normalizeCustomerFromVps } from './customers';
 
 export interface VpsAuthSession {
   token: string;
@@ -46,8 +47,13 @@ async function requestAuth(path: string, options: RequestInit = {}): Promise<Vps
   });
   const json = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(json.error || `Erro ${response.status}`);
-  storeSession(json as VpsAuthSession);
-  return json as VpsAuthSession;
+  const responseSession = json as VpsAuthSession;
+  const normalizedSession = {
+    ...responseSession,
+    customer: normalizeCustomerFromVps(responseSession.customer),
+  };
+  storeSession(normalizedSession);
+  return normalizedSession;
 }
 
 async function requestAuthJson(path: string, options: RequestInit = {}): Promise<any> {

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const customerService = readFileSync('services/customers.ts', 'utf8');
 const upgradeService = readFileSync('services/typeUpgradeRequests.ts', 'utf8');
+const authService = readFileSync('services/vpsAuthService.ts', 'utf8');
 
 assert.match(
   customerService,
@@ -26,6 +27,24 @@ assert.match(
   customerService,
   /function fromVpsCustomerType\(/,
   'customerService must translate VPS customer types back to UI values',
+);
+
+assert.match(
+  customerService,
+  /case 'reseller':\s*return 'resale'/,
+  'the VPS RESELLER role must become the resale pricing type in the UI',
+);
+
+assert.match(
+  customerService,
+  /export function normalizeCustomerFromVps\(/,
+  'customer normalization must be reusable at every VPS boundary',
+);
+
+assert.match(
+  authService,
+  /customer:\s*normalizeCustomerFromVps\(responseSession\.customer\)/,
+  'login and restored auth sessions must normalize RESELLER before pricing consumers receive the customer',
 );
 
 assert.match(

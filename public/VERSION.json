@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.264-pagamento-cartao-reconciliacao",
+  "version": "v1.2.265-preco-revenda-login",
   "date": "2026-08-18",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260818-142855-pagamento-cartao-reconciliacao",
+  "release_vps": "/var/www/mdv-site/releases/20260818-145055-preco-revenda-login",
   "branch": "main",
-  "summary": "Reconcilia cobranças de cartão aprovadas, grava estados válidos do pedido e evita cobrança duplicada em novas tentativas."
+  "summary": "Normaliza clientes RESELLER na sessão como revenda para aplicar price_reseller em todo o fluxo público."
 }

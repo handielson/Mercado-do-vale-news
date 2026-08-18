@@ -67,7 +67,7 @@ function parseJsonField<T>(value: unknown, fallback: T): T {
     }
 }
 
-function normalizeCustomer(row: Customer): Customer {
+export function normalizeCustomerFromVps(row: Customer): Customer {
     const active = row.is_active as unknown;
     const deliveryWorker = row.is_delivery_worker as unknown;
     const walkInCustomer = row.is_walk_in_customer as unknown;
@@ -153,7 +153,7 @@ class CustomerService {
             const data = await vpsClient.get<TableDataResponse<Customer>>(
                 `/table-data/customers?limit=${pageSize}&offset=${offset}`
             );
-            const pageRows = Array.isArray(data.rows) ? data.rows.map(normalizeCustomer) : [];
+            const pageRows = Array.isArray(data.rows) ? data.rows.map(normalizeCustomerFromVps) : [];
             rows.push(...pageRows);
             if (pageRows.length < pageSize) break;
         }
@@ -273,7 +273,7 @@ class CustomerService {
         const newId = crypto.randomUUID();
         const referralCode = this.generateReferralCode(newId);
 
-        const data = normalizeCustomer(await vpsClient.post<Customer>('/table-data/customers', {
+        const data = normalizeCustomerFromVps(await vpsClient.post<Customer>('/table-data/customers', {
             id: newId,
             company_id: companyId,
             referral_code: referralCode,
@@ -306,7 +306,7 @@ class CustomerService {
      * Update existing customer
      */
     async update(id: string, input: Partial<CustomerInput>): Promise<Customer> {
-        const data = normalizeCustomer(await vpsClient.patch<Customer>(
+        const data = normalizeCustomerFromVps(await vpsClient.patch<Customer>(
             `/table-data/customers/${encodeURIComponent(id)}?pk=id`,
             serializeCustomerPayload(input)
         ));
