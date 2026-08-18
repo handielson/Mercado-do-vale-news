@@ -3251,7 +3251,14 @@ function formatAutomationPaymentMethods(value) {
   const methods = parseAutomationJson(value, value);
   if (!Array.isArray(methods) || methods.length === 0) return 'Pagamento registrado';
   const labels = { money: 'Dinheiro', credit: 'Credito', debit: 'Debito', pix: 'Pix', a_prazo: 'A prazo' };
-  return methods.map((method) => `${labels[method.method] || method.method || 'Pagamento'} - ${formatAutomationMoney(method.total_with_fee ?? method.amount)}`).join('\n');
+  return methods.map((method) => {
+    const totalCents = Number(method.total_with_fee ?? method.amount) || 0;
+    const installments = Number(method.installments || 0);
+    const installmentLabel = method.method === 'credit' && Number.isInteger(installments) && installments > 1
+      ? ` (${installments}x de ${formatAutomationMoney(Math.round(totalCents / installments))})`
+      : '';
+    return `${labels[method.method] || method.method || 'Pagamento'} - ${formatAutomationMoney(totalCents)}${installmentLabel}`;
+  }).join('\n');
 }
 
 async function notifyCustomerRegisteredWhatsApp(customerId, source = 'admin') {
@@ -28286,12 +28293,39 @@ async function appendWhatsAppStatusTrace({ runId, logId = null, campaignId, prod
 }
 
 function buildWhatsAppStatusVideoCandidates(product) {
-  const products = [product, ...(Array.isArray(product?.status_group_products) ? product.status_group_products : [])];
-  const candidates = [
-    ...products.map((item) => String(item?.marketing_video_url || '').trim()),
-    ...products.map((item) => String(item?.video_url || '').trim()),
-  ].filter((value) => /^https?:\/\//i.test(value));
-  return Array.from(new Set(candidates));
+  const sourceProducts = Array.isArray(product?.status_group_products) && product.status_group_products.length
+    ? product.status_group_products
+    : [product];
+  const uniqueProducts = Array.from(new Map(
+    sourceProducts
+      .filter(Boolean)
+      .map((item, index) => [String(item?.id || item?.sku || index), item])
+  ).values()).sort((a, b) => {
+    const colorA = normalizeWhatsAppStatusText(getWhatsAppStatusProductVariation(a).color);
+    const colorB = normalizeWhatsAppStatusText(getWhatsAppStatusProductVariation(b).color);
+    return colorA.localeCompare(colorB, 'pt-BR')
+      || String(a?.id || a?.sku || '').localeCompare(String(b?.id || b?.sku || ''), 'pt-BR');
+  });
+  const byColor = new Map();
+
+  for (const item of uniqueProducts) {
+    const color = String(getWhatsAppStatusProductVariation(item).color || '').trim();
+    const colorKey = normalizeWhatsAppStatusText(color) || `produto:${item?.id || item?.sku || byColor.size}`;
+    if (!byColor.has(colorKey)) {
+      byColor.set(colorKey, { color, productId: item?.id || null, marketing: [], fallback: [] });
+    }
+    const group = byColor.get(colorKey);
+    const marketingVideo = String(item?.marketing_video_url || '').trim();
+    const fallbackVideo = String(item?.video_url || '').trim();
+    if (/^https?:\/\//i.test(marketingVideo) && !group.marketing.includes(marketingVideo)) group.marketing.push(marketingVideo);
+    if (/^https?:\/\//i.test(fallbackVideo) && !group.fallback.includes(fallbackVideo)) group.fallback.push(fallbackVideo);
+  }
+
+  return Array.from(byColor.values()).map((group) => ({
+    color: group.color,
+    productId: group.productId,
+    candidates: Array.from(new Set([...group.marketing, ...group.fallback])),
+  }));
 }
 
 function normalizeWhatsAppStatusRepeatDays(value) {
@@ -28559,15 +28593,24 @@ function buildWhatsAppStatusScheduledTime(dateKey, totalMinutes, iso = false) {
     : `${normalizedDate} ${hours}:${minutes}:00`;
 }
 
-async function resolveWhatsAppStatusVideoUrl(product) {
+async function resolveWhatsAppStatusVideoUrls(product) {
   const timeoutMs = Math.max(1000, Number(process.env.WAHA_STATUS_MEDIA_CHECK_TIMEOUT_MS || 5000));
-  for (const candidate of buildWhatsAppStatusVideoCandidates(product)) {
-    try {
-      const response = await fetch(candidate, { method: 'HEAD', signal: AbortSignal.timeout(timeoutMs) });
-      if (response.ok && String(response.headers.get('content-type') || '').toLowerCase().includes('video')) return candidate;
-    } catch {}
+  const resolved = [];
+  const usedUrls = new Set();
+  for (const group of buildWhatsAppStatusVideoCandidates(product)) {
+    for (const candidate of group.candidates) {
+      if (usedUrls.has(candidate)) continue;
+      try {
+        const response = await fetch(candidate, { method: 'HEAD', signal: AbortSignal.timeout(timeoutMs) });
+        if (response.ok && String(response.headers.get('content-type') || '').toLowerCase().includes('video')) {
+          usedUrls.add(candidate);
+          resolved.push({ url: candidate, color: group.color, productId: group.productId });
+          break;
+        }
+      } catch {}
+    }
   }
-  return '';
+  return resolved;
 }
 
 async function sendWahaStatusMedia({ baseUrl, apiKey, session, type, mediaUrl, caption, timeoutMs }) {
@@ -28596,17 +28639,36 @@ async function sendWahaStatusMedia({ baseUrl, apiKey, session, type, mediaUrl, c
   return { endpoint, status: response.status, body, bodyText: text };
 }
 
+let whatsAppStatusMediaQueueVps = Promise.resolve();
+
+function enqueueWhatsAppStatusMediaBatchVps(task) {
+  const cooldownMs = Math.max(0, Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 8000));
+  const queued = whatsAppStatusMediaQueueVps.catch(() => undefined).then(async () => {
+    try {
+      return await task();
+    } finally {
+      if (cooldownMs > 0) await new Promise((resolve) => setTimeout(resolve, cooldownMs));
+    }
+  });
+  whatsAppStatusMediaQueueVps = queued.catch(() => undefined);
+  return queued;
+}
+
 async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null, traceContext = {}) {
+  return enqueueWhatsAppStatusMediaBatchVps(() => sendWhatsAppStatusProductBatch(campaign, product, scheduledFor, traceContext));
+}
+
+async function sendWhatsAppStatusProductBatch(campaign, product, scheduledFor = null, traceContext = {}) {
   const baseUrl = String(process.env.WAHA_STATUS_SERVER_URL || 'http://127.0.0.1:18082').replace(/\/+$/, '');
   const apiKey = String(process.env.WAHA_STATUS_API_KEY || '');
   const session = String(process.env.WAHA_STATUS_SESSION || '').trim();
   const image = getWhatsAppStatusProductImage(product);
-  const video = await resolveWhatsAppStatusVideoUrl(product);
+  const videos = await resolveWhatsAppStatusVideoUrls(product);
   const caption = buildWhatsAppStatusCaption(product);
   // Status normalmente é aceito pelo WAHA em segundos. Não manter a campanha
   // em "sending" por cinco minutos quando o WAHA deixa a requisição pendurada.
   const timeoutMs = Math.max(10000, Number(process.env.WAHA_STATUS_TIMEOUT_MS || 90000));
-  const mediaIntervalMs = Math.max(0, Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 3000));
+  const mediaIntervalMs = Math.max(0, Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 8000));
   const startedAt = Date.now();
   const trace = async (stage, state, message, details = {}, elapsedMs = null) => appendWhatsAppStatusTrace({
     ...traceContext, campaignId: campaign.id, productId: product.id, stage, state, message, details, elapsedMs,
@@ -28614,11 +28676,11 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
   const debugEndpoint = `${baseUrl}/api/${encodeURIComponent(session || 'sessao-ausente')}/status/{image|video}`;
 
   await trace('product.prepared', 'ok', 'Produto e legenda preparados', {
-    has_image: Boolean(image), has_video: Boolean(video), caption_length: caption.length, scheduled: Boolean(scheduledFor),
+    has_image: Boolean(image), video_count: videos.length, caption_length: caption.length, scheduled: Boolean(scheduledFor),
   }, Date.now() - startedAt);
 
   if (!image) {
-    await trace('media.validation', 'failed', 'Produto sem imagem publica', { has_image: false, has_video: Boolean(video) });
+    await trace('media.validation', 'failed', 'Produto sem imagem publica', { has_image: false, video_count: videos.length });
     const debug = buildWhatsAppStatusDebug({ campaign, product, endpoint: debugEndpoint, scheduledFor, errorMessage: 'Produto sem imagem publica para enviar no Status' });
     return { productId: product.id, productName: product.name, status: 'failed', debug };
   }
@@ -28631,17 +28693,21 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
   const sentMedia = [];
   try {
     await trace('config.validation', 'ok', 'Configuracao WAHA validada', { session, endpoint_host: new URL(baseUrl).host, has_api_key: true });
-    for (const media of [{ type: 'image', url: image }, ...(video ? [{ type: 'video', url: video }] : [])]) {
+    const mediaBatch = [
+      { type: 'image', url: image, color: '' },
+      ...videos.map((video) => ({ type: 'video', url: video.url, color: video.color, productId: video.productId })),
+    ];
+    for (const [mediaIndex, media] of mediaBatch.entries()) {
       if (sentMedia.length && mediaIntervalMs > 0) await new Promise((resolve) => setTimeout(resolve, mediaIntervalMs));
       const requestStartedAt = Date.now();
       let mediaHost = '';
       try { mediaHost = new URL(media.url).host; } catch {}
-      await trace(`waha.${media.type}.request`, 'started', `Enviando ${media.type} para o Status pelo WAHA`, { media_host: mediaHost, timeout_ms: timeoutMs, convert: media.type === 'video' });
+      await trace(`waha.${media.type}.request`, 'started', `Enviando ${media.type} para o Status pelo WAHA`, { media_host: mediaHost, timeout_ms: timeoutMs, convert: media.type === 'video', media_index: mediaIndex + 1, media_total: mediaBatch.length, color: media.color || '' });
       const result = await sendWahaStatusMedia({ baseUrl, apiKey, session, type: media.type, mediaUrl: media.url, caption, timeoutMs });
-      sentMedia.push(media.type);
-      await trace(`waha.${media.type}.accepted`, 'ok', `${media.type} aceito para publicacao assincrona`, { http_status: result.status, response_id_present: Boolean(result.body?.id) }, Date.now() - requestStartedAt);
+      sentMedia.push(media.color ? `${media.type}:${media.color}` : media.type);
+      await trace(`waha.${media.type}.accepted`, 'ok', `${media.type} aceito para publicacao assincrona`, { http_status: result.status, response_id_present: Boolean(result.body?.id), media_index: mediaIndex + 1, media_total: mediaBatch.length, color: media.color || '' }, Date.now() - requestStartedAt);
     }
-    await trace('confirmation.checked', 'ok', 'Midias aceitas pelo WAHA para publicacao assincrona', { sent_media: sentMedia.join(','), has_video: Boolean(video) }, Date.now() - startedAt);
+    await trace('confirmation.checked', 'ok', 'Midias aceitas pelo WAHA para publicacao assincrona', { sent_media: sentMedia.join(','), video_count: videos.length }, Date.now() - startedAt);
     return { productId: product.id, productName: product.name, status: 'sent', media: sentMedia };
   } catch (error) {
     const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
@@ -28652,7 +28718,7 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
       scheduledFor,
       extraLines: [
         `Midias aceitas antes da falha: ${sentMedia.join(', ') || 'nenhuma'}`,
-        `Video encontrado: ${video ? 'sim' : 'nao'}`,
+        `Videos encontrados: ${videos.length}`,
         `Tempo decorrido: ${Date.now() - startedAt}ms`,
         `Timeout configurado: ${timeoutMs}ms`,
       ],
@@ -28665,10 +28731,11 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
 
 async function markStaleWhatsAppStatusSendingLogs(campaignId = null) {
   // A limpeza não pode encerrar um envio ativo. Um produto pode ter imagem e
-  // vídeo, cada um com seu próprio timeout, além do intervalo entre mídias.
+  // vários vídeos, cada um com seu próprio timeout, além dos intervalos entre mídias.
   const requestTimeoutSeconds = Math.ceil(Math.max(10000, Number(process.env.WAHA_STATUS_TIMEOUT_MS || 90000)) / 1000);
-  const mediaIntervalSeconds = Math.ceil(Math.max(0, Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 3000)) / 1000);
-  const maximumAttemptSeconds = requestTimeoutSeconds * 2 + mediaIntervalSeconds + 30;
+  const mediaIntervalSeconds = Math.ceil(Math.max(0, Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 8000)) / 1000);
+  const maxMediaPerProduct = Math.max(2, Number(process.env.WAHA_STATUS_MAX_MEDIA_PER_PRODUCT || 12) || 12);
+  const maximumAttemptSeconds = requestTimeoutSeconds * maxMediaPerProduct + mediaIntervalSeconds * (maxMediaPerProduct - 1) + 30;
   const staleSeconds = Math.max(60, maximumAttemptSeconds, Number(process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || 180));
   const debug = [
     'WHATSAPP_STATUS_SEND_DEBUG',

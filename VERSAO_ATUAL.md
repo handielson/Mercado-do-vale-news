@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.266-whatsapp-og-image-cache
+version: v1.2.267-whatsapp-status-videos-cor
 date: 2026-08-18
 status: ready
-release_vps: /var/www/mdv-site/releases/20260818-184832-v1266-whatsapp-og-image-cache
+release_vps: /var/www/mdv-site/releases/20260818-201904-v1267-whatsapp-status-videos-cor
 branch: main
-summary: Torna imagens legadas com hash cacheáveis pela CDN e completa os metadados Open Graph usados na prévia do WhatsApp.
+summary: Envia o card do Status seguido de um vídeo por cor em estoque, sem intercalar campanhas, e detalha parcelas do cartão na mensagem de venda.
 ```

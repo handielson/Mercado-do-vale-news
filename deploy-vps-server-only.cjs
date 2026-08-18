@@ -217,7 +217,7 @@ async function ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath = null)
     const entries = {
       WAHA_STATUS_SERVER_URL: wahaStatusServerUrl,
       WAHA_STATUS_TIMEOUT_MS: process.env.WAHA_STATUS_TIMEOUT_MS || '90000',
-      WAHA_STATUS_MEDIA_INTERVAL_MS: process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || '3000',
+      WAHA_STATUS_MEDIA_INTERVAL_MS: process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || '8000',
       WHATSAPP_STATUS_STALE_SENDING_SECONDS: process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || '120',
       META_GRAPH_API_VERSION: process.env.META_GRAPH_API_VERSION || readEnvValue(current, 'META_GRAPH_API_VERSION') || 'v25.0',
       META_OAUTH_REDIRECT_URI: process.env.META_OAUTH_REDIRECT_URI || readEnvValue(current, 'META_OAUTH_REDIRECT_URI') || 'https://api.xiaomipetrolina.com.br/integrations/meta/oauth/callback',
