@@ -19,6 +19,10 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /getPublicProductVariantRouteTargetVps\(product, routeCandidates\)/, `${file} must resolve readable variation aliases`);
   assert.match(source, /product\.seo_route_target \|\| product\.slug \|\| slug/, `${file} must keep the readable variation alias canonical`);
   assert.match(source, /meta property="og:type" content="product"/, `${file} must inject product Open Graph tags`);
+  assert.match(source, /loadSeoImageMetadata\(image\)/, `${file} must inspect the selected Open Graph image`);
+  assert.match(source, /property="og:image:type"/, `${file} must expose the Open Graph image MIME type`);
+  assert.match(source, /property="og:image:width"/, `${file} must expose the Open Graph image width`);
+  assert.match(source, /property="og:image:height"/, `${file} must expose the Open Graph image height`);
   assert.match(source, /<link rel="canonical" href="\$\{url\}" \/>/, `${file} must inject a canonical product URL`);
   assert.match(source, /application\/ld\+json/, `${file} must inject Schema.org JSON-LD`);
   assert.match(source, /Number\(value \|\| 0\) \/ 100/, `${file} must convert stored cent prices to BRL decimal prices`);

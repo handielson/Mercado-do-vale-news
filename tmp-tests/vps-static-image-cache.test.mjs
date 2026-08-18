@@ -14,6 +14,11 @@ for (const { file, source } of sources) {
   );
   assert.match(
     source,
+    /legacy[\s\S]*\{16,64\}/,
+    `${file} should identify content-addressed legacy images as immutable`,
+  );
+  assert.match(
+    source,
     /CDN-Cache-Control', 'public, max-age=31536000, immutable'/,
     `${file} should make generated derivatives cacheable by Cloudflare for a year`,
   );

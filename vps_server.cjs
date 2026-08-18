@@ -135,7 +135,11 @@ const AUTORESPONDER_RULE_TEMPLATES = [
 ];
 
 function isImmutableImageDerivative(filePath = '') {
-  return /-(320|480|768|800|1280)\.(webp|avif)$/i.test(filePath);
+  const normalizedPath = String(filePath || '').replace(/\\/g, '/');
+  return (
+    /-(320|480|768|800|1280)\.(webp|avif)$/i.test(normalizedPath) ||
+    /\/legacy\/(?:inline|external)\/(?:[^/]+\/)*[0-9a-f]{16,64}\.(?:jpe?g|png|webp|avif)$/i.test(normalizedPath)
+  );
 }
 
 const IMAGE_DERIVATIVE_FORMATS = ['webp', 'avif'];
@@ -12621,6 +12625,49 @@ function normalizeSeoPublicImages(images, baseUrl) {
   return [...new Set(normalized)];
 }
 
+const SEO_IMAGE_MIME_TYPES = {
+  avif: 'image/avif',
+  gif: 'image/gif',
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+};
+
+function inferSeoImageMimeType(imageUrl) {
+  try {
+    const extension = path.extname(new URL(imageUrl).pathname).slice(1).toLowerCase();
+    return SEO_IMAGE_MIME_TYPES[extension] || '';
+  } catch {
+    return '';
+  }
+}
+
+async function loadSeoImageMetadata(imageUrl) {
+  const fallback = { type: inferSeoImageMimeType(imageUrl), width: 0, height: 0 };
+  try {
+    const parsed = new URL(imageUrl);
+    if (!parsed.pathname.startsWith('/images/')) return fallback;
+
+    const uploadsRoot = path.resolve(UPLOADS_DIR);
+    const relativePath = decodeURIComponent(parsed.pathname.slice('/images/'.length))
+      .replace(/^[/\\]+/, '');
+    const localPath = path.resolve(uploadsRoot, relativePath);
+    if (localPath === uploadsRoot || !localPath.startsWith(`${uploadsRoot}${path.sep}`) || !fs.existsSync(localPath)) {
+      return fallback;
+    }
+
+    const metadata = await sharp(localPath).metadata();
+    return {
+      type: SEO_IMAGE_MIME_TYPES[String(metadata.format || '').toLowerCase()] || fallback.type,
+      width: Number(metadata.width) || 0,
+      height: Number(metadata.height) || 0,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function isUuidLike(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
@@ -12795,6 +12842,7 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     const canonicalSlug = product.seo_route_target || product.slug || slug;
     const url = `${baseUrl}/produto/${encodeURIComponent(canonicalSlug)}`;
     const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
+    const imageMetadata = await loadSeoImageMetadata(image);
     const stockQuantity = product.computed_stock_quantity ?? product.stock_quantity ?? 0;
     const availability = Number(stockQuantity) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
     const schemaProduct = {
@@ -12838,6 +12886,9 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     <meta property="og:description" content="${safeDescription}" />
     <meta property="og:image" content="${safeImage}" />
     <meta property="og:image:secure_url" content="${safeImage}" />
+    ${imageMetadata.type ? `<meta property="og:image:type" content="${escapeSeoHtml(imageMetadata.type)}" />` : ''}
+    ${imageMetadata.width ? `<meta property="og:image:width" content="${imageMetadata.width}" />` : ''}
+    ${imageMetadata.height ? `<meta property="og:image:height" content="${imageMetadata.height}" />` : ''}
     <meta property="og:site_name" content="Mercado do Vale" />
     <meta property="og:locale" content="pt_BR" />
     <meta name="twitter:card" content="summary_large_image" />

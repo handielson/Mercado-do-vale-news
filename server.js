@@ -73,7 +73,11 @@ const AUTORESPONDER_RULE_TEMPLATES = [
 ];
 
 function isImmutableImageDerivative(filePath = '') {
-  return /-\d+\.(webp|avif)$/i.test(filePath);
+  const normalizedPath = String(filePath || '').replace(/\\/g, '/');
+  return (
+    /-\d+\.(webp|avif)$/i.test(normalizedPath) ||
+    /\/legacy\/(?:inline|external)\/(?:[^/]+\/)*[0-9a-f]{16,64}\.(?:jpe?g|png|webp|avif)$/i.test(normalizedPath)
+  );
 }
 
 function safeAutoresponderAttachmentFilename(originalFilename = '') {
