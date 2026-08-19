@@ -285,6 +285,33 @@ function normalizeAuthEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function isValidAuthEmail(value) {
+  const email = normalizeAuthEmail(value);
+  return email.length <= 254 && !/[\r\n]/.test(email) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function normalizeAuthWhatsApp(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) return digits;
+  return '';
+}
+
+async function sendAuthPasswordResetWhatsApp({ customer, phone, resetLink, expiresMinutes }) {
+  const baseUrl = String(process.env.EVOLUTION_SERVER_URL || '').replace(/\/+$/, '');
+  const apiKey = String(process.env.EVOLUTION_API_KEY || '');
+  const instance = String(process.env.N8N_BOT_EVOLUTION_INSTANCE_NAME || 'botmercadodovale');
+  if (!baseUrl || !apiKey) return { ok: false, reason: 'whatsapp_not_configured' };
+  const firstName = String(customer?.name || 'Cliente').trim().split(/\s+/)[0];
+  const text = [`Olá, ${firstName}! 🔐`, '', 'Recebemos uma solicitação para redefinir sua senha do Mercado do Vale.', `Abra o link abaixo em até ${expiresMinutes} minutos:`, resetLink, '', 'Se não foi você, ignore esta mensagem.'].join('\n');
+  const response = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(instance)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: apiKey },
+    body: JSON.stringify({ number: phone, text }),
+  });
+  return { ok: response.ok, status: response.status };
+}
+
 function isAuthEmailConfirmationRequired() {
   const normalized = String(process.env.VPS_AUTH_REQUIRE_EMAIL_CONFIRMATION || 'false').trim().toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes';
@@ -489,15 +516,25 @@ async function sendSmtpMail(config, message) {
     ? tls.connect({ host: config.host, port: config.port, servername: config.host })
     : net.createConnection({ host: config.host, port: config.port });
   const state = { buffer: '', waiters: [] };
-  socket.on('data', (chunk) => {
-    state.buffer += chunk.toString('utf8');
-    const waiters = state.waiters.splice(0);
-    for (const waiter of waiters) waiter.resolve();
-  });
-  socket.on('error', (err) => {
-    const waiters = state.waiters.splice(0);
-    for (const waiter of waiters) waiter.reject(err);
-  });
+  const bindSocket = (target) => {
+    target.setTimeout(Math.max(5000, Number(process.env.SMTP_TIMEOUT_MS || 20000)));
+    target.on('data', (chunk) => {
+      state.buffer += chunk.toString('utf8');
+      const waiters = state.waiters.splice(0);
+      for (const waiter of waiters) waiter.resolve();
+    });
+    const rejectWaiters = (err) => {
+      const waiters = state.waiters.splice(0);
+      for (const waiter of waiters) waiter.reject(err);
+    };
+    target.on('error', rejectWaiters);
+    target.on('timeout', () => {
+      const timeoutError = new Error('SMTP connection timeout');
+      rejectWaiters(timeoutError);
+      target.destroy(timeoutError);
+    });
+  };
+  bindSocket(socket);
 
   try {
     await smtpReadResponse(state);
@@ -506,6 +543,11 @@ async function sendSmtpMail(config, message) {
       await smtpWrite(socket, state, 'STARTTLS', 220);
       socket = tls.connect({ socket, servername: config.host });
       state.buffer = '';
+      bindSocket(socket);
+      await new Promise((resolve, reject) => {
+        socket.once('secureConnect', resolve);
+        socket.once('error', reject);
+      });
       await smtpWrite(socket, state, `EHLO ${config.host}`, 250);
     }
     await smtpWrite(socket, state, 'AUTH LOGIN', 334);
@@ -786,23 +828,42 @@ fastify.post('/auth/register', async (request, reply) => {
   await ensureCustomerAuthTable();
   const body = request.body || {};
   const email = normalizeAuthEmail(body.email);
+  const phone = normalizeAuthWhatsApp(body.phone);
   const cpfCnpj = normalizeAuthDocument(body.cpf_cnpj);
   const password = String(body.password || '');
   const name = String(body.name || '').trim();
-  if (!email || !cpfCnpj || !password || !name) {
-    return reply.code(400).send({ error: 'Nome, email, CPF/CNPJ e senha sao obrigatorios' });
+  if (!cpfCnpj || !password || !name || (!email && !phone)) {
+    return reply.code(400).send({ error: 'Nome, CPF/CNPJ, senha e pelo menos email ou WhatsApp sao obrigatorios' });
+  }
+  if (email && !isValidAuthEmail(email)) {
+    return reply.code(400).send({ error: 'Informe um email valido' });
+  }
+  if (body.phone && !phone) {
+    return reply.code(400).send({ error: 'Informe um WhatsApp valido com DDD' });
   }
   if (password.length < 6) {
     return reply.code(400).send({ error: 'A senha deve ter pelo menos 6 caracteres' });
   }
 
   let customer = await findCustomerForAuth({ email, cpfCnpj });
-  const [existingAuth] = await pool.query(
-    'SELECT customer_id FROM customer_auth WHERE email = ? OR cpf_cnpj = ? LIMIT 1',
-    [email, cpfCnpj]
-  );
+  const authClauses = ['cpf_cnpj = ?'];
+  const authParams = [cpfCnpj];
+  if (email) {
+    authClauses.push('email = ?');
+    authParams.push(email);
+  }
+  const [existingAuth] = await pool.query(`SELECT customer_id FROM customer_auth WHERE ${authClauses.join(' OR ')} LIMIT 1`, authParams);
   if (existingAuth?.[0]) {
     return reply.code(409).send({ error: 'Este email ou CPF/CNPJ ja possui login' });
+  }
+  if (phone) {
+    const localPhone = phone.slice(2);
+    const [phoneAuth] = await pool.query(
+      `SELECT ca.customer_id FROM customer_auth ca JOIN customers c ON c.id = ca.customer_id
+       WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(c.phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+', '') IN (?, ?) LIMIT 1`,
+      [phone, localPhone]
+    );
+    if (phoneAuth?.[0]) return reply.code(409).send({ error: 'Este WhatsApp ja esta vinculado a outra conta' });
   }
 
   const companyId = String(body.company_id || process.env.COMPANY_ID || process.env.VITE_COMPANY_ID || '9717131e-7b14-4aec-84a4-4317c0489985');
@@ -819,8 +880,8 @@ fastify.post('/auth/register', async (request, reply) => {
         companyId,
         name,
         cpfCnpj,
-        email,
-        body.phone || null,
+        email || null,
+        phone || null,
         body.birth_date || null,
         normalizeAuthCustomerType(body.customer_type),
         body.address ? JSON.stringify(body.address) : null,
@@ -833,7 +894,7 @@ fastify.post('/auth/register', async (request, reply) => {
       `UPDATE customers
        SET user_id = COALESCE(user_id, id), email = COALESCE(NULLIF(email, ''), ?), phone = COALESCE(NULLIF(phone, ''), ?), account_status = 'active', updated_at = NOW()
        WHERE id = ?`,
-      [email, body.phone || null, customer.id]
+      [email || null, phone || null, customer.id]
     );
     customer = await findCustomerForAuth({ customerId: customer.id });
   }
@@ -842,7 +903,7 @@ fastify.post('/auth/register', async (request, reply) => {
   await pool.query(
     `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
      VALUES (?, ?, ?, ?, ?)`,
-    [customer.id, email, cpfCnpj, hash, salt]
+    [customer.id, email || null, cpfCnpj, hash, salt]
   );
 
   return reply.code(201).send(authResponseForCustomer(customer));
@@ -871,7 +932,7 @@ fastify.post('/auth/password', async (request, reply) => {
     `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
      VALUES (?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), salt = VALUES(salt), updated_at = NOW()`,
-    [customer.id, normalizeAuthEmail(customer.email), normalizeAuthDocument(customer.cpf_cnpj), hash, salt]
+    [customer.id, normalizeAuthEmail(customer.email) || null, normalizeAuthDocument(customer.cpf_cnpj), hash, salt]
   );
   return { ok: true };
 });
@@ -879,26 +940,43 @@ fastify.post('/auth/password', async (request, reply) => {
 fastify.post('/auth/password-reset/request', async (request, reply) => {
   await ensureCustomerAuthTable();
   await ensurePasswordResetTable();
-  const email = normalizeAuthEmail(request.body?.email);
-  if (!email || !email.includes('@')) {
-    return reply.code(400).send({ error: 'Informe um e-mail valido' });
+  const channel = request.body?.channel === 'whatsapp' ? 'whatsapp' : 'email';
+  const rawIdentifier = request.body?.identifier ?? request.body?.email ?? request.body?.phone;
+  const email = channel === 'email' ? normalizeAuthEmail(rawIdentifier) : '';
+  const phone = channel === 'whatsapp' ? normalizeAuthWhatsApp(rawIdentifier) : '';
+  if ((channel === 'email' && !isValidAuthEmail(email)) || (channel === 'whatsapp' && !phone)) {
+    return reply.code(400).send({ error: channel === 'email' ? 'Informe um e-mail valido' : 'Informe um WhatsApp valido com DDD' });
   }
 
   const genericResponse = { ok: true };
-  const [rows] = await pool.query(
-    `SELECT c.id, c.name, c.email
-     FROM customer_auth ca
-     JOIN customers c ON c.id = ca.customer_id
-     WHERE ca.email = ?
-     LIMIT 1`,
-    [email]
-  );
-  const customer = rows?.[0] || null;
+  const phoneWithoutCountry = phone.startsWith('55') ? phone.slice(2) : phone;
+  const [rows] = channel === 'email'
+    ? await pool.query(
+      `SELECT c.id, c.name, c.email, c.phone, ca.email AS auth_email
+       FROM customer_auth ca JOIN customers c ON c.id = ca.customer_id
+       WHERE ca.email = ? OR LOWER(c.email) = ? LIMIT 2`,
+      [email, email]
+    )
+    : await pool.query(
+      `SELECT c.id, c.name, c.email, c.phone, ca.email AS auth_email
+       FROM customer_auth ca JOIN customers c ON c.id = ca.customer_id
+       WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(c.phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+', '') IN (?, ?) LIMIT 2`,
+      [phone, phoneWithoutCountry]
+    );
+  const customer = rows?.length === 1 ? rows[0] : null;
   if (!customer) return genericResponse;
+
+  const [recentRows] = await pool.query(
+    `SELECT id FROM customer_auth_password_resets
+     WHERE customer_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 2 MINUTE) LIMIT 1`,
+    [customer.id]
+  );
+  if (recentRows?.[0]) return genericResponse;
 
   const token = crypto.randomBytes(32).toString('base64url');
   const tokenHash = hashAuthResetToken(token);
   const expiresMinutes = Math.max(10, Number(process.env.VPS_AUTH_PASSWORD_RESET_TTL_MINUTES || 60));
+  await pool.query('UPDATE customer_auth_password_resets SET used_at = NOW() WHERE customer_id = ? AND used_at IS NULL', [customer.id]);
   await pool.query(
     `INSERT INTO customer_auth_password_resets (id, customer_id, token_hash, expires_at)
      VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
@@ -906,16 +984,21 @@ fastify.post('/auth/password-reset/request', async (request, reply) => {
   );
 
   const resetLink = `${getPublicAppUrl()}/redefinir-senha?token=${encodeURIComponent(token)}`;
-  const emailMessage = buildPasswordResetEmail({ customer, resetLink, expiresMinutes });
-
-  try {
-    const result = await sendTransactionalEmail({
-      to: email,
-      ...emailMessage,
-    });
-    if (!result.sent) console.warn('[auth] Password reset email not sent:', result.reason);
-  } catch (err) {
-    console.warn('[auth] Password reset email failed:', err.message);
+  if (channel === 'email') {
+    const emailMessage = buildPasswordResetEmail({ customer, resetLink, expiresMinutes });
+    try {
+      const result = await sendTransactionalEmail({ to: email, ...emailMessage });
+      if (!result.sent) console.warn('[auth] Password reset email not sent:', result.reason);
+    } catch (err) {
+      console.warn('[auth] Password reset email failed:', err.message);
+    }
+  } else {
+    try {
+      const result = await sendAuthPasswordResetWhatsApp({ customer, phone, resetLink, expiresMinutes });
+      if (!result?.ok) console.warn('[auth] Password reset WhatsApp not sent:', result?.reason || result?.status || 'unknown');
+    } catch (err) {
+      console.warn('[auth] Password reset WhatsApp failed:', err.message);
+    }
   }
 
   return genericResponse;

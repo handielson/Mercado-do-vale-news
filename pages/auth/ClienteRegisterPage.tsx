@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Mail, Lock, CreditCard, Loader2 } from 'lucide-react';
+import { User, Mail, Lock, CreditCard, Loader2, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthLayout } from '../../components/auth/AuthLayout';
 import { GoogleButton } from '../../components/auth/GoogleButton';
@@ -10,6 +10,7 @@ export const ClienteRegisterPage: React.FC = () => {
     const [formData, setFormData] = useState({
         name: '',
         email: '',
+        phone: '',
         password: '',
         confirmPassword: '',
         cpf_cnpj: ''
@@ -55,9 +56,28 @@ export const ClienteRegisterPage: React.FC = () => {
         setFormData(prev => ({ ...prev, cpf_cnpj: formatted }));
     };
 
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
+        let phone = digits;
+        if (digits.length > 10) phone = digits.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
+        else if (digits.length > 6) phone = digits.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+        else if (digits.length > 2) phone = digits.replace(/(\d{2})(\d{0,5})/, '($1) $2');
+        setFormData(prev => ({ ...prev, phone }));
+    };
+
     const validateForm = () => {
-        if (!formData.name || !formData.email || !formData.password || !formData.cpf_cnpj) {
+        if (!formData.name || !formData.password || !formData.cpf_cnpj) {
             toast.error('Preencha todos os campos obrigatórios');
+            return false;
+        }
+
+        const phoneDigits = formData.phone.replace(/\D/g, '');
+        if (!formData.email.trim() && !phoneDigits) {
+            toast.error('Informe pelo menos um e-mail ou WhatsApp para recuperar sua senha');
+            return false;
+        }
+        if (phoneDigits && phoneDigits.length < 10) {
+            toast.error('Informe um WhatsApp válido com DDD');
             return false;
         }
 
@@ -89,7 +109,8 @@ export const ClienteRegisterPage: React.FC = () => {
         try {
             await createAccount({
                 name: formData.name,
-                email: formData.email,
+                email: formData.email.trim() || undefined,
+                phone: formData.phone.replace(/\D/g, '') || undefined,
                 password: formData.password,
                 cpf_cnpj: formData.cpf_cnpj.replace(/\D/g, ''),
                 customer_type: 'retail' // Always retail on self-registration
@@ -135,7 +156,7 @@ export const ClienteRegisterPage: React.FC = () => {
                         <div className="w-full border-t border-slate-300" />
                     </div>
                     <div className="relative flex justify-center text-sm">
-                        <span className="px-4 bg-white text-slate-500">ou cadastre-se com email</span>
+                        <span className="px-4 bg-white text-slate-500">ou cadastre-se com seus dados</span>
                     </div>
                 </div>
 
@@ -163,7 +184,7 @@ export const ClienteRegisterPage: React.FC = () => {
                     {/* Email */}
                     <div className="space-y-2">
                         <label className="text-sm font-semibold text-slate-700">
-                            E-mail *
+                            E-mail (opcional)
                         </label>
                         <div className="relative">
                             <Mail className="absolute left-3 top-3 text-slate-400" size={18} />
@@ -174,7 +195,23 @@ export const ClienteRegisterPage: React.FC = () => {
                                 onChange={handleChange}
                                 placeholder="seu@email.com"
                                 className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                                required
+                            />
+                        </div>
+                    </div>
+
+                    {/* WhatsApp */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-semibold text-slate-700">WhatsApp (opcional)</label>
+                        <div className="relative">
+                            <MessageCircle className="absolute left-3 top-3 text-slate-400" size={18} />
+                            <input
+                                type="tel"
+                                name="phone"
+                                value={formData.phone}
+                                onChange={handlePhoneChange}
+                                placeholder="(00) 00000-0000"
+                                autoComplete="tel"
+                                className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                             />
                         </div>
                     </div>
@@ -239,7 +276,7 @@ export const ClienteRegisterPage: React.FC = () => {
                     {/* Info Message */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                         <p className="text-sm text-blue-800">
-                            💡 Você poderá completar seus dados (telefone, endereço, etc.) após o login.
+                            🔐 Informe pelo menos um dos dois: e-mail ou WhatsApp. Esse contato será usado para recuperar sua senha. Sem e-mail, o acesso continua disponível pelo CPF/CNPJ.
                         </p>
                     </div>
 

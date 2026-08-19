@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.267-whatsapp-status-videos-cor
-date: 2026-08-18
+version: v1.2.268-pedidos-reembolso-recuperacao
+date: 2026-08-19
 status: ready
-release_vps: /var/www/mdv-site/releases/20260818-201904-v1267-whatsapp-status-videos-cor
+release_vps: /var/www/mdv-site/releases/20260819-124319-v1268-pedidos-reembolso-recuperacao
 branch: main
-summary: Envia o card do Status seguido de um vídeo por cor em estoque, sem intercalar campanhas, e detalha parcelas do cartão na mensagem de venda.
+summary: Adiciona estorno e aviso de situação nos pedidos online, além de recuperação de senha por e-mail ou WhatsApp e cadastro com pelo menos um contato.
 ```

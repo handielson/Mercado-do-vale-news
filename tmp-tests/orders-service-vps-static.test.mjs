@@ -39,7 +39,7 @@ assert.doesNotMatch(
 
 assert.match(
   adminOrdersPage,
-  /import \{ getOrders, updateOrderStatus, completeOnDeliveryOrder, cancelOrder \} from '@\/services\/orderService'/,
+  /import \{ getOrders, updateOrderStatus, completeOnDeliveryOrder, cancelOrder, notifyOrderStatusWhatsApp, refundOrderPayment \} from '@\/services\/orderService'/,
   'admin online orders page must keep using the orderService contract',
 );
 

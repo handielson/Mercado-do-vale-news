@@ -23,6 +23,7 @@ const deployedServer = readFileSync(deployedServerPath, 'utf8');
   'sale_completed',
   'birthday_greeting',
   'delivery_out_for_delivery',
+  'order_status_updated',
   'promotional_campaign',
   'informational_notice',
   'post_sale_followup',

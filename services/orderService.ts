@@ -11,6 +11,8 @@ import type {
     OrderStatus,
     OrderPaymentStatus,
     GatewayPaymentResult,
+    OrderRefundResult,
+    OrderWhatsAppNotificationResult,
 } from '../types/order';
 
 import { paymentIntegrationService } from './paymentIntegrationService';
@@ -870,6 +872,21 @@ export async function cancelOrder(id: string): Promise<void> {
     }
 }
 
+export async function notifyOrderStatusWhatsApp(id: string): Promise<OrderWhatsAppNotificationResult> {
+    const result = await vpsClient.post<{ whatsapp: OrderWhatsAppNotificationResult }>(
+        `/orders/${encodeURIComponent(id)}/status-notification`,
+        {}
+    );
+    return result.whatsapp;
+}
+
+export async function refundOrderPayment(id: string): Promise<OrderRefundResult> {
+    return vpsClient.post<OrderRefundResult>(
+        `/orders/${encodeURIComponent(id)}/payments/mercado-pago/refund`,
+        {}
+    );
+}
+
 // ─── Salvar resultado do gateway no pedido ────────────────────────────────────
 
 export async function saveGatewayResult(orderId: string, result: GatewayPaymentResult): Promise<void> {
@@ -895,6 +912,8 @@ export const orderService = {
     confirmPayment,
     completeOnDeliveryOrder,
     cancelOrder,
+    notifyOrderStatusWhatsApp,
+    refundOrderPayment,
     saveGatewayResult,
     releaseSerializedDocsForOrder,
 };

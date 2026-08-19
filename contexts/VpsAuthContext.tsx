@@ -4,6 +4,7 @@ import type {
     AuthContextType,
     ActivateAccountData,
     CreateAccountData,
+    PasswordResetChannel,
     VpsUser,
 } from '../types/auth';
 import type { TypeUpgradeRequest, RequestedCustomerType } from '../types/typeUpgradeRequest';
@@ -92,7 +93,7 @@ export const VpsAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const activateAccount = async (data: ActivateAccountData) => {
         const existingCustomer = await customerService.getByCpfCnpj(data.cpf_cnpj);
         const session = await vpsAuthService.createAccount({
-            name: existingCustomer?.name || data.email.split('@')[0],
+            name: existingCustomer?.name || data.email?.split('@')[0] || 'Cliente',
             email: data.email,
             password: data.password,
             cpf_cnpj: data.cpf_cnpj,
@@ -114,8 +115,8 @@ export const VpsAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
     };
 
-    const resetPassword = async (email: string) => {
-        await vpsAuthService.requestPasswordReset(email);
+    const resetPassword = async (identifier: string, channel: PasswordResetChannel = 'email') => {
+        await vpsAuthService.requestPasswordReset(identifier, channel);
     };
 
     const updatePassword = async (newPassword: string, resetToken?: string) => {

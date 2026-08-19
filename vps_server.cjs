@@ -451,6 +451,33 @@ function normalizeAuthEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function isValidAuthEmail(value) {
+  const email = normalizeAuthEmail(value);
+  return email.length <= 254 && !/[\r\n]/.test(email) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function normalizeAuthWhatsApp(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) return digits;
+  return '';
+}
+
+async function sendAuthPasswordResetWhatsApp({ customer, phone, resetLink, expiresMinutes }) {
+  if (typeof sendDeliveryWhatsappText !== 'function') return { ok: false, reason: 'whatsapp_not_configured' };
+  const firstName = String(customer?.name || 'Cliente').trim().split(/\s+/)[0];
+  const text = [
+    `Olá, ${firstName}! 🔐`,
+    '',
+    'Recebemos uma solicitação para redefinir sua senha do Mercado do Vale.',
+    `Abra o link abaixo em até ${expiresMinutes} minutos:`,
+    resetLink,
+    '',
+    'Se não foi você, ignore esta mensagem.',
+  ].join('\n');
+  return sendDeliveryWhatsappText(phone, text);
+}
+
 function isAuthEmailConfirmationRequired() {
   const normalized = String(process.env.VPS_AUTH_REQUIRE_EMAIL_CONFIRMATION || 'false').trim().toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes';
@@ -655,15 +682,25 @@ async function sendSmtpMail(config, message) {
     ? tls.connect({ host: config.host, port: config.port, servername: config.host })
     : net.createConnection({ host: config.host, port: config.port });
   const state = { buffer: '', waiters: [] };
-  socket.on('data', (chunk) => {
-    state.buffer += chunk.toString('utf8');
-    const waiters = state.waiters.splice(0);
-    for (const waiter of waiters) waiter.resolve();
-  });
-  socket.on('error', (err) => {
-    const waiters = state.waiters.splice(0);
-    for (const waiter of waiters) waiter.reject(err);
-  });
+  const bindSocket = (target) => {
+    target.setTimeout(Math.max(5000, Number(process.env.SMTP_TIMEOUT_MS || 20000)));
+    target.on('data', (chunk) => {
+      state.buffer += chunk.toString('utf8');
+      const waiters = state.waiters.splice(0);
+      for (const waiter of waiters) waiter.resolve();
+    });
+    const rejectWaiters = (err) => {
+      const waiters = state.waiters.splice(0);
+      for (const waiter of waiters) waiter.reject(err);
+    };
+    target.on('error', rejectWaiters);
+    target.on('timeout', () => {
+      const timeoutError = new Error('SMTP connection timeout');
+      rejectWaiters(timeoutError);
+      target.destroy(timeoutError);
+    });
+  };
+  bindSocket(socket);
 
   try {
     await smtpReadResponse(state);
@@ -672,6 +709,11 @@ async function sendSmtpMail(config, message) {
       await smtpWrite(socket, state, 'STARTTLS', 220);
       socket = tls.connect({ socket, servername: config.host });
       state.buffer = '';
+      bindSocket(socket);
+      await new Promise((resolve, reject) => {
+        socket.once('secureConnect', resolve);
+        socket.once('error', reject);
+      });
       await smtpWrite(socket, state, `EHLO ${config.host}`, 250);
     }
     await smtpWrite(socket, state, 'AUTH LOGIN', 334);
@@ -1266,23 +1308,45 @@ fastify.post('/auth/register', async (request, reply) => {
   await ensureCustomerAuthTable();
   const body = request.body || {};
   const email = normalizeAuthEmail(body.email);
+  const phone = normalizeAuthWhatsApp(body.phone);
   const cpfCnpj = normalizeAuthDocument(body.cpf_cnpj);
   const password = String(body.password || '');
   const name = String(body.name || '').trim();
-  if (!email || !cpfCnpj || !password || !name) {
-    return reply.code(400).send({ error: 'Nome, email, CPF/CNPJ e senha sao obrigatorios' });
+  if (!cpfCnpj || !password || !name || (!email && !phone)) {
+    return reply.code(400).send({ error: 'Nome, CPF/CNPJ, senha e pelo menos email ou WhatsApp sao obrigatorios' });
+  }
+  if (email && !isValidAuthEmail(email)) {
+    return reply.code(400).send({ error: 'Informe um email valido' });
+  }
+  if (body.phone && !phone) {
+    return reply.code(400).send({ error: 'Informe um WhatsApp valido com DDD' });
   }
   if (password.length < 6) {
     return reply.code(400).send({ error: 'A senha deve ter pelo menos 6 caracteres' });
   }
 
   let customer = await findCustomerForAuth({ email, cpfCnpj });
+  const authClauses = ['cpf_cnpj = ?'];
+  const authParams = [cpfCnpj];
+  if (email) {
+    authClauses.push('email = ?');
+    authParams.push(email);
+  }
   const [existingAuth] = await pool.query(
-    'SELECT customer_id FROM customer_auth WHERE email = ? OR cpf_cnpj = ? LIMIT 1',
-    [email, cpfCnpj]
+    `SELECT customer_id FROM customer_auth WHERE ${authClauses.join(' OR ')} LIMIT 1`,
+    authParams
   );
   if (existingAuth?.[0]) {
     return reply.code(409).send({ error: 'Este email ou CPF/CNPJ ja possui login' });
+  }
+  if (phone) {
+    const localPhone = phone.slice(2);
+    const [phoneAuth] = await pool.query(
+      `SELECT ca.customer_id FROM customer_auth ca JOIN customers c ON c.id = ca.customer_id
+       WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(c.phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+', '') IN (?, ?) LIMIT 1`,
+      [phone, localPhone]
+    );
+    if (phoneAuth?.[0]) return reply.code(409).send({ error: 'Este WhatsApp ja esta vinculado a outra conta' });
   }
 
   const companyId = String(body.company_id || process.env.COMPANY_ID || process.env.VITE_COMPANY_ID || '9717131e-7b14-4aec-84a4-4317c0489985');
@@ -1299,8 +1363,8 @@ fastify.post('/auth/register', async (request, reply) => {
         companyId,
         name,
         cpfCnpj,
-        email,
-        body.phone || null,
+        email || null,
+        phone || null,
         body.birth_date || null,
         normalizeAuthCustomerType(body.customer_type),
         body.address ? JSON.stringify(body.address) : null,
@@ -1313,7 +1377,7 @@ fastify.post('/auth/register', async (request, reply) => {
       `UPDATE customers
        SET user_id = COALESCE(user_id, id), email = COALESCE(NULLIF(email, ''), ?), phone = COALESCE(NULLIF(phone, ''), ?), account_status = 'active', updated_at = NOW()
        WHERE id = ?`,
-      [email, body.phone || null, customer.id]
+      [email || null, phone || null, customer.id]
     );
     customer = await findCustomerForAuth({ customerId: customer.id });
   }
@@ -1322,7 +1386,7 @@ fastify.post('/auth/register', async (request, reply) => {
   await pool.query(
     `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
      VALUES (?, ?, ?, ?, ?)`,
-    [customer.id, email, cpfCnpj, hash, salt]
+    [customer.id, email || null, cpfCnpj, hash, salt]
   );
 
   await syncCustomerGoogleContactRecord(customer, 'site-register');
@@ -1360,7 +1424,7 @@ fastify.post('/auth/password', async (request, reply) => {
     `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
      VALUES (?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), salt = VALUES(salt), updated_at = NOW()`,
-    [customer.id, normalizeAuthEmail(customer.email), normalizeAuthDocument(customer.cpf_cnpj), hash, salt]
+    [customer.id, normalizeAuthEmail(customer.email) || null, normalizeAuthDocument(customer.cpf_cnpj), hash, salt]
   );
   return { ok: true };
 });
@@ -1368,22 +1432,38 @@ fastify.post('/auth/password', async (request, reply) => {
 fastify.post('/auth/password-reset/request', async (request, reply) => {
   await ensureCustomerAuthTable();
   await ensurePasswordResetTable();
-  const email = normalizeAuthEmail(request.body?.email);
-  if (!email || !email.includes('@')) {
-    return reply.code(400).send({ error: 'Informe um e-mail valido' });
+  const channel = request.body?.channel === 'whatsapp' ? 'whatsapp' : 'email';
+  const rawIdentifier = request.body?.identifier ?? request.body?.email ?? request.body?.phone;
+  const email = channel === 'email' ? normalizeAuthEmail(rawIdentifier) : '';
+  const phone = channel === 'whatsapp' ? normalizeAuthWhatsApp(rawIdentifier) : '';
+  if ((channel === 'email' && !isValidAuthEmail(email)) || (channel === 'whatsapp' && !phone)) {
+    return reply.code(400).send({ error: channel === 'email' ? 'Informe um e-mail valido' : 'Informe um WhatsApp valido com DDD' });
   }
 
   const genericResponse = { ok: true };
-  const [rows] = await pool.query(
-    `SELECT c.id, c.name, c.email
-     FROM customer_auth ca
-     JOIN customers c ON c.id = ca.customer_id
-     WHERE ca.email = ?
-     LIMIT 1`,
-    [email]
-  );
-  const customer = rows?.[0] || null;
+  const phoneWithoutCountry = phone.startsWith('55') ? phone.slice(2) : phone;
+  const [rows] = channel === 'email'
+    ? await pool.query(
+      `SELECT c.id, c.name, c.email, c.phone, ca.email AS auth_email
+       FROM customer_auth ca JOIN customers c ON c.id = ca.customer_id
+       WHERE ca.email = ? OR LOWER(c.email) = ? LIMIT 2`,
+      [email, email]
+    )
+    : await pool.query(
+      `SELECT c.id, c.name, c.email, c.phone, ca.email AS auth_email
+       FROM customer_auth ca JOIN customers c ON c.id = ca.customer_id
+       WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(c.phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+', '') IN (?, ?) LIMIT 2`,
+      [phone, phoneWithoutCountry]
+    );
+  const customer = rows?.length === 1 ? rows[0] : null;
   if (!customer) return genericResponse;
+
+  const [recentRows] = await pool.query(
+    `SELECT id FROM customer_auth_password_resets
+     WHERE customer_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 2 MINUTE) LIMIT 1`,
+    [customer.id]
+  );
+  if (recentRows?.[0]) return genericResponse;
 
   const token = crypto.randomBytes(32).toString('base64url');
   const tokenHash = hashAuthResetToken(token);
@@ -1395,16 +1475,21 @@ fastify.post('/auth/password-reset/request', async (request, reply) => {
   );
 
   const resetLink = `${getPublicAppUrl()}/redefinir-senha?token=${encodeURIComponent(token)}`;
-  const emailMessage = buildPasswordResetEmail({ customer, resetLink, expiresMinutes });
-
-  try {
-    const result = await sendTransactionalEmail({
-      to: email,
-      ...emailMessage,
-    });
-    if (!result.sent) console.warn('[auth] Password reset email not sent:', result.reason);
-  } catch (err) {
-    console.warn('[auth] Password reset email failed:', err.message);
+  if (channel === 'email') {
+    const emailMessage = buildPasswordResetEmail({ customer, resetLink, expiresMinutes });
+    try {
+      const result = await sendTransactionalEmail({ to: email, ...emailMessage });
+      if (!result.sent) console.warn('[auth] Password reset email not sent:', result.reason);
+    } catch (err) {
+      console.warn('[auth] Password reset email failed:', err.message);
+    }
+  } else {
+    try {
+      const result = await sendAuthPasswordResetWhatsApp({ customer, phone, resetLink, expiresMinutes });
+      if (!result?.ok) console.warn('[auth] Password reset WhatsApp not sent:', result?.reason || result?.status || 'unknown');
+    } catch (err) {
+      console.warn('[auth] Password reset WhatsApp failed:', err.message);
+    }
   }
 
   return genericResponse;
@@ -3028,6 +3113,26 @@ const WHATSAPP_AUTOMATION_TEMPLATE_DEFAULTS_VPS = {
       'Fique de olho no telefone. \uD83D\uDC9A',
     ].join('\n'),
   },
+  order_status_updated: {
+    template_key: 'order_status_updated',
+    category: 'transactional',
+    title: 'Situacao do pedido atualizada',
+    enabled: true,
+    content: [
+      '\uD83D\uDCE6 Atualizacao do seu pedido',
+      '',
+      'Oi, {nome}! A situacao do pedido {pedido} mudou para:',
+      '*{situacao}*',
+      '',
+      'Data: {data}',
+      'Total: {total}',
+      '',
+      'Acompanhe os detalhes aqui:',
+      '{link_pedido}',
+      '',
+      'Se precisar, estamos por aqui. \uD83D\uDC9A',
+    ].join('\n'),
+  },
 };
 
 async function getWhatsAppAutomationTemplateVps(templateKey) {
@@ -3119,6 +3224,8 @@ function getWhatsAppAutomationSampleVariablesVps() {
     cupom: 'ANIVER10',
     validade_cupom: '30/06/2026',
     entregador: 'Joao Entregas',
+    situacao: 'Em separacao',
+    link_pedido: 'https://mercadodovale.com.br/pedido/A1B2C3D4',
     titulo_promocao: 'Oferta relampago Mercado do Vale',
     oferta: 'Smartphones selecionados com condicao especial hoje.',
     validade: 'Hoje ate 18h',
@@ -3259,6 +3366,41 @@ function formatAutomationPaymentMethods(value) {
       : '';
     return `${labels[method.method] || method.method || 'Pagamento'} - ${formatAutomationMoney(totalCents)}${installmentLabel}`;
   }).join('\n');
+}
+
+const ONLINE_ORDER_STATUS_LABELS_VPS = {
+  pending: 'Aguardando confirmacao',
+  awaiting_payment: 'Aguardando pagamento',
+  payment_failed: 'Pagamento nao concluido',
+  paid: 'Pago',
+  confirmed: 'Confirmado',
+  preparing: 'Em separacao',
+  shipped: 'Enviado',
+  delivered: 'Entregue',
+  completed: 'Concluido',
+  cancelled: 'Cancelado',
+  refunded: 'Pagamento estornado',
+};
+
+async function notifyOnlineOrderStatusWhatsAppVps(order, situationOverride = '') {
+  if (!order?.id) return { status: 'failed', error: 'order_not_found' };
+  const status = String(order.status || '').trim();
+  const situation = String(situationOverride || ONLINE_ORDER_STATUS_LABELS_VPS[status] || status || 'Atualizado');
+  return sendWhatsAppAutomationMessageVps({
+    templateKey: 'order_status_updated',
+    phone: order.customer_phone,
+    entityType: 'order',
+    entityId: order.id,
+    customerId: order.customer_id || null,
+    variables: {
+      nome: order.customer_name || 'Cliente',
+      pedido: `#${String(order.id).slice(0, 8).toUpperCase()}`,
+      situacao: situation,
+      data: formatAutomationDateTime(new Date()),
+      total: formatAutomationMoney(order.total || 0),
+      link_pedido: `https://mercadodovale.com.br/pedido/${encodeURIComponent(String(order.id))}`,
+    },
+  });
 }
 
 async function notifyCustomerRegisteredWhatsApp(customerId, source = 'admin') {
@@ -25825,6 +25967,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
   const isRejected = ['rejected', 'cancelled', 'canceled'].includes(status);
   const nextStatus = isApproved ? 'confirmed' : 'pending';
   const paymentStatus = isApproved ? 'paid' : isRejected ? 'failed' : 'pending';
+  await pool.query('UPDATE customer_auth_password_resets SET used_at = NOW() WHERE customer_id = ? AND used_at IS NULL', [customer.id]);
   await pool.query(
     `UPDATE orders
      SET gateway_payment_id = ?, payment_gateway = 'mercado_pago', payment_method = 'credit_card',
@@ -25846,6 +25989,106 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
     order_status: nextStatus,
     payment_status: paymentStatus,
     reused_existing_payment: reusedExistingPayment,
+  };
+});
+
+fastify.post('/orders/:orderId/status-notification', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const orderId = String(req.params?.orderId || '').trim();
+  if (!orderId) return reply.code(400).send({ error: 'Pedido obrigatorio.' });
+
+  const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
+  const order = orders?.[0] || null;
+  if (!order) return reply.code(404).send({ error: 'Pedido nao encontrado.' });
+
+  const whatsapp = await notifyOnlineOrderStatusWhatsAppVps(order);
+  return { ok: whatsapp.status === 'sent', order_id: order.id, status: order.status, whatsapp };
+});
+
+fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const orderId = String(req.params?.orderId || '').trim();
+  if (!orderId) return reply.code(400).send({ error: 'Pedido obrigatorio.' });
+
+  const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
+  const order = orders?.[0] || null;
+  if (!order) return reply.code(404).send({ error: 'Pedido nao encontrado.' });
+  if (String(order.status || '') !== 'cancelled') {
+    return reply.code(409).send({ error: 'Cancele o pedido antes de estornar o pagamento.' });
+  }
+  if (String(order.payment_status || '') === 'refunded') {
+    const whatsapp = await notifyOnlineOrderStatusWhatsAppVps(order, 'Pagamento estornado');
+    return { ok: true, already_refunded: true, payment_status: 'refunded', whatsapp };
+  }
+  if (String(order.payment_status || '') !== 'paid') {
+    return reply.code(409).send({ error: 'Somente pagamentos confirmados podem ser estornados.' });
+  }
+  if (String(order.payment_gateway || '') !== 'mercado_pago' || !String(order.gateway_payment_id || '').trim()) {
+    return reply.code(409).send({ error: 'Este pedido nao possui um pagamento Mercado Pago elegivel para estorno.' });
+  }
+
+  const [integrations] = await pool.query(
+    "SELECT access_token FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 AND company_id = ? LIMIT 1",
+    [order.company_id],
+  );
+  const accessToken = integrations?.[0]?.access_token;
+  if (!accessToken) return reply.code(400).send({ error: 'Mercado Pago nao configurado para a empresa do pedido.' });
+
+  const paymentId = String(order.gateway_payment_id).trim();
+  const paymentResponse = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(12000),
+  });
+  const payment = await paymentResponse.json().catch(() => ({}));
+  if (!paymentResponse.ok) {
+    return reply.code(502).send({ error: 'Nao foi possivel confirmar o pagamento no Mercado Pago. Nenhum estorno foi realizado.' });
+  }
+
+  const externalReference = String(payment.external_reference || '').trim();
+  if (externalReference && externalReference !== String(order.id)) {
+    return reply.code(409).send({ error: 'O pagamento encontrado nao pertence a este pedido. Nenhum estorno foi realizado.' });
+  }
+
+  const paidAmount = Number(payment.transaction_amount) || 0;
+  const refundedAmount = Number(payment.transaction_amount_refunded) || 0;
+  const alreadyRefundedAtGateway = String(payment.status || '').toLowerCase() === 'refunded'
+    || (paidAmount > 0 && refundedAmount >= paidAmount);
+
+  let refund = null;
+  if (!alreadyRefundedAtGateway) {
+    if (String(payment.status || '').toLowerCase() !== 'approved') {
+      return reply.code(409).send({ error: `O Mercado Pago nao permite estornar um pagamento com situacao ${String(payment.status || 'desconhecida')}.` });
+    }
+
+    const refundResponse = await fetch(
+      `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}/refunds`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': `order-refund-${String(order.id).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 48)}`,
+        },
+        body: '{}',
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    refund = await refundResponse.json().catch(() => ({}));
+    if (!refundResponse.ok) {
+      const detail = refund?.message || refund?.cause?.[0]?.description || 'Solicitacao recusada pelo Mercado Pago.';
+      return reply.code(502).send({ error: `Nao foi possivel estornar o pagamento: ${detail}` });
+    }
+  }
+
+  await pool.query(
+    "UPDATE orders SET payment_status = 'refunded', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [order.id],
+  );
+  const whatsapp = await notifyOnlineOrderStatusWhatsAppVps({ ...order, payment_status: 'refunded' }, 'Pagamento estornado');
+  return {
+    ok: true,
+    already_refunded: alreadyRefundedAtGateway,
+    payment_status: 'refunded',
+    refund_id: refund?.id ? String(refund.id) : undefined,
+    whatsapp,
   };
 });
 

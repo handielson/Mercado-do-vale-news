@@ -1,6 +1,6 @@
 import { VPS_DIRECT_BASE_URL } from './vpsProxyBase';
 import type { Customer } from '../types/customer';
-import type { CreateAccountData, VpsUser } from '../types/auth';
+import type { CreateAccountData, PasswordResetChannel, VpsUser } from '../types/auth';
 import { normalizeCustomerFromVps } from './customers';
 
 export interface VpsAuthSession {
@@ -113,10 +113,10 @@ export const vpsAuthService = {
     });
   },
 
-  async requestPasswordReset(email: string): Promise<void> {
+  async requestPasswordReset(identifier: string, channel: PasswordResetChannel = 'email'): Promise<void> {
     await requestAuthJson('/auth/password-reset/request', {
       method: 'POST',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ channel, identifier }),
     });
   },
 

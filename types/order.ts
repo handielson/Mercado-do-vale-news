@@ -11,6 +11,7 @@ export type OrderStatus =
     | 'awaiting_payment'  // Pagamento iniciado no gateway (PIX gerado, etc.)
     | 'payment_failed'    // Pagamento não concluído / recusado
     | 'paid'              // Pagamento confirmado pelo gateway (webhook)
+    | 'confirmed'         // Pagamento confirmado (status operacional atual da API)
     | 'preparing'         // Em preparação / separação
     | 'shipped'           // Enviado / saiu para entrega
     | 'delivered'         // Entregue ao cliente
@@ -203,4 +204,18 @@ export interface GatewayPaymentResult {
     pix_qr_code?: string;       // QR code PIX em base64
     pix_copy_paste?: string;    // Código copia-e-cola PIX
     status: OrderPaymentStatus;
+}
+
+export interface OrderWhatsAppNotificationResult {
+    status: 'sent' | 'skipped' | 'failed';
+    reason?: string;
+    error?: string;
+}
+
+export interface OrderRefundResult {
+    ok: boolean;
+    already_refunded?: boolean;
+    payment_status: 'refunded';
+    refund_id?: string;
+    whatsapp?: OrderWhatsAppNotificationResult;
 }

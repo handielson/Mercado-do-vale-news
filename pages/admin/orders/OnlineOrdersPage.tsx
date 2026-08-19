@@ -3,7 +3,7 @@
  * Rota: /admin/pedidos-online
  */
 import { useState, useEffect } from 'react';
-import { getOrders, updateOrderStatus, completeOnDeliveryOrder, cancelOrder } from '@/services/orderService';
+import { getOrders, updateOrderStatus, completeOnDeliveryOrder, cancelOrder, notifyOrderStatusWhatsApp, refundOrderPayment } from '@/services/orderService';
 import { vpsApiService } from '@/services/vpsApiService';
 import { companySettingsService } from '@/services/companySettingsService';
 import type { CompanySettings } from '@/types/companySettings';
@@ -17,7 +17,7 @@ import { buildGlobalHeader, getHeaderTemplate } from '@/utils/headerBuilder';
 import { customerService } from '@/services/customers';
 import {
     Package, Truck, CheckCircle, XCircle, Clock,
-    RefreshCw, AlertCircle, Loader2, Search, Printer, Shield
+    RefreshCw, AlertCircle, Loader2, Search, Printer, Shield, RotateCcw
 } from 'lucide-react';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -25,6 +25,7 @@ const STATUS_LABELS: Record<string, string> = {
     awaiting_payment: 'Ag. Pagamento',
     payment_failed: 'Pgto. Não Concluído',
     paid: 'Pago',
+    confirmed: 'Confirmado',
     preparing: 'Em Preparo',
     shipped: 'Enviado',
     delivered: 'Entregue',
@@ -121,8 +122,40 @@ export default function OnlineOrdersPage() {
             setOrders(prev => prev.map(o =>
                 o.id === orderId ? { ...o, status: newStatus } : o
             ));
+            try {
+                const whatsapp = await notifyOrderStatusWhatsApp(orderId);
+                if (whatsapp.status !== 'sent') {
+                    alert('Situacao atualizada, mas a mensagem de WhatsApp nao foi enviada. Verifique a conexao e tente novamente.');
+                }
+            } catch {
+                alert('Situacao atualizada, mas a mensagem de WhatsApp nao foi enviada. Verifique a conexao e tente novamente.');
+            }
         } catch (err: any) {
             alert(`Erro ao atualizar status: ${err.message}`);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleRefund = async (order: OrderWithItems) => {
+        const confirmed = window.confirm(
+            `Estornar ${formatCurrency(order.total)} para ${order.customer_name}?\n\n` +
+            'O estorno sera solicitado ao Mercado Pago e nao podera ser desfeito pelo sistema.'
+        );
+        if (!confirmed) return;
+
+        setActionLoading(order.id + 'refund');
+        try {
+            const result = await refundOrderPayment(order.id);
+            setOrders(prev => prev.map(item =>
+                item.id === order.id ? { ...item, payment_status: 'refunded' } : item
+            ));
+            const whatsappMessage = result.whatsapp?.status === 'sent'
+                ? ' O cliente foi avisado pelo WhatsApp.'
+                : ' O estorno foi concluido, mas o aviso por WhatsApp nao foi enviado.';
+            alert(`${result.already_refunded ? 'Este pagamento ja estava estornado.' : 'Pagamento estornado com sucesso.'}${whatsappMessage}`);
+        } catch (err: any) {
+            alert(`Erro ao estornar pagamento: ${err.message}`);
         } finally {
             setActionLoading(null);
         }
@@ -326,6 +359,14 @@ export default function OnlineOrdersPage() {
                                         <span className="text-xs text-gray-500">
                                             {PAYMENT_LABELS[order.payment_method]}
                                         </span>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${order.payment_status === 'refunded'
+                                            ? 'bg-purple-100 text-purple-700'
+                                            : order.payment_status === 'paid'
+                                                ? 'bg-emerald-100 text-emerald-700'
+                                                : 'bg-gray-100 text-gray-600'
+                                            }`}>
+                                            {order.payment_status === 'refunded' ? 'Pagamento estornado' : order.payment_status === 'paid' ? 'Pagamento confirmado' : 'Pagamento pendente'}
+                                        </span>
                                     </div>
 
                                     <p className="font-semibold text-gray-900">{order.customer_name}</p>
@@ -400,6 +441,7 @@ export default function OnlineOrdersPage() {
                                         <option value="awaiting_payment">💳 Ag. Pagamento</option>
                                         <option value="payment_failed">🚫 Pgto. Não Concluído</option>
                                         <option value="paid">✅ Aceito / Pago</option>
+                                        <option value="confirmed">✅ Confirmado</option>
                                         <option value="preparing">📦 Em Separação</option>
                                         <option value="shipped">🚚 Enviado</option>
                                         <option value="delivered">🏠 Entregue</option>
@@ -419,6 +461,24 @@ export default function OnlineOrdersPage() {
                                     <Printer className="w-3.5 h-3.5" />
                                     Comprovante
                                 </button>
+
+                                {order.status === 'cancelled'
+                                    && order.payment_status === 'paid'
+                                    && order.payment_gateway === 'mercado_pago'
+                                    && order.gateway_payment_id && (
+                                    <button
+                                        onClick={() => handleRefund(order)}
+                                        disabled={actionLoading?.startsWith(order.id)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                                    >
+                                        {actionLoading === order.id + 'refund' ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <RotateCcw className="w-3.5 h-3.5" />
+                                        )}
+                                        Estornar pagamento
+                                    </button>
+                                )}
 
                                 {/* Botão garantia — só aparece quando pedido tem item de garantia */}
                                 {getWarrantyItem(order) && (

@@ -14,6 +14,7 @@ export type AccountStatus = 'pending' | 'active'
 
 // OAuth providers supported
 export type AuthProvider = 'email' | 'google' | 'facebook'
+export type PasswordResetChannel = 'email' | 'whatsapp'
 
 // Auth context type
 export interface AuthContextType {
@@ -33,7 +34,7 @@ export interface AuthContextType {
     createAccount: (data: CreateAccountData) => Promise<void>
 
     // Password recovery
-    resetPassword: (email: string) => Promise<void>
+    resetPassword: (identifier: string, channel?: PasswordResetChannel) => Promise<void>
     updatePassword: (newPassword: string, resetToken?: string) => Promise<void>
 
     // Other
@@ -51,7 +52,7 @@ export interface AuthContextType {
 // Data for activating existing customer account
 export interface ActivateAccountData {
     cpf_cnpj: string
-    email: string
+    email?: string
     phone?: string
     password: string
 }
@@ -60,7 +61,7 @@ export interface ActivateAccountData {
 export interface CreateAccountData {
     name: string
     cpf_cnpj: string
-    email: string
+    email?: string
     phone?: string
     password: string
     birth_date?: string
