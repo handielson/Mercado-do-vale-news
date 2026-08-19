@@ -63,15 +63,13 @@ async function flushReviewsBatch() {
     if (ids.length === 0) return;
 
     try {
-        const reviews = (await enrichCustomers(await loadReviews()))
-            .filter(review => ids.includes(String(review.product_id)) && review.status === 'approved');
+        const grouped = await Promise.all(ids.map(async (productId) => ({
+            productId,
+            reviews: await vpsClient.get<ProductReview[]>(`/public/products/${encodeURIComponent(productId)}/reviews`),
+        })));
 
         const byProduct = new Map<string, ProductReview[]>();
-        reviews.forEach((review) => {
-            const list = byProduct.get(review.product_id) || [];
-            list.push(review);
-            byProduct.set(review.product_id, list);
-        });
+        grouped.forEach(({ productId, reviews }) => byProduct.set(productId, Array.isArray(reviews) ? reviews : []));
 
         resolvers.forEach((rs, productId) => {
             const list = byProduct.get(productId) || [];
@@ -102,12 +100,10 @@ export const reviewService = {
      */
     submitReview: async (review: ReviewInput, customerId: string): Promise<ProductReview | null> => {
         try {
-            return await vpsClient.post<ProductReview>('/table-data/product_reviews', {
+            return await vpsClient.post<ProductReview>('/customer/reviews', {
                 product_id: review.product_id,
-                customer_id: customerId,
                 rating: review.rating,
                 review_text: review.review_text,
-                status: 'pending',
             });
         } catch (error) {
             console.error('Erro ao enviar avaliacao:', error);

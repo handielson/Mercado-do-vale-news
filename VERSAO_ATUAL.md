@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.270-perfil-cliente-permissoes
+version: v1.2.271-cliente-autoatendimento
 date: 2026-08-19
 status: ready
-release_vps: /var/www/mdv-site/releases/20260819-132300-perfil-cliente-permissoes
+release_vps: pendente
 branch: main
-summary: Permite que o cliente autenticado atualize os próprios dados de perfil sem exigir permissão administrativa.
+summary: Remove bloqueios administrativos de fluxos de cliente, protege checkout e cria as tabelas de autoatendimento.
 ```

@@ -125,7 +125,16 @@ export const uploadService = {
             const formData = new FormData();
             formData.append('file', compressedFile);
 
-            const upload = await vpsClient.upload<SynologyUploadResponse>('/synology/upload?folder=imagens', formData);
+            const token = await getAuthSessionToken();
+            const response = await fetch(`${VPS_DIRECT_BASE_URL}/synology/upload?folder=imagens&scope=avatar`, {
+                method: 'POST',
+                headers: {
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: formData,
+            });
+            if (!response.ok) throw new Error(`Falha no upload da foto (${response.status})`);
+            const upload = await response.json() as SynologyUploadResponse;
             if (!upload.url) throw new Error('Erro ao obter URL pública da imagem');
             return `${upload.url}?t=${Date.now()}`;
         } catch (error: any) {

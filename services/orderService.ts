@@ -15,11 +15,9 @@ import type {
     OrderWhatsAppNotificationResult,
 } from '../types/order';
 
-import { paymentIntegrationService } from './paymentIntegrationService';
-import { mercadoPagoProvider } from './providers/mercadoPagoProvider';
 import { telegramBotService } from './telegramBot';
 import { formatCurrency } from '../utils/saleCalculations';
-import { addPendingCoinsForPurchase, confirmPendingCoins, cancelPendingCoins, cancelReferralReward, processReferralReward } from './cashbackService';
+import { confirmPendingCoins, cancelPendingCoins, cancelReferralReward, processReferralReward } from './cashbackService';
 import { unitService } from './units';
 import { UnitStatus } from '../utils/field-standards';
 import { stockLocationService } from './stockLocationService';
@@ -526,13 +524,6 @@ export async function createOrder(input: OrderInput): Promise<Order> {
     const order = await vpsClient.post<Order>('/table-data/orders', serializeOrderRowForTable(orderData));
     if (!order) throw new Error('Falha ao criar pedido.');
 
-    // Adiciona moedas pendentes (aguardando conf. de pagamento)
-    if (orderData.customer_id) {
-        // Moedas calculadas apenas sobre o valor dos produtos (excluindo frete)
-        const productTotalReais = (orderData.subtotal - orderData.discount) / 100;
-        addPendingCoinsForPurchase(orderData.customer_id, productTotalReais, order.id).catch(e => console.error("Erro ao emitir moedas pendentes:", e));
-    }
-
     // Insere os itens
     const items = input.items.map(item => serializeOrderItemRowForTable({
         order_id: order.id,
@@ -566,43 +557,20 @@ export async function createOrder(input: OrderInput): Promise<Order> {
     // ─── GATEWAY INTEGRATION BLOCK ──────────────────────────────────────────
     if (orderData.payment_gateway === 'mercado_pago' && orderData.payment_method === 'pix') {
         try {
-            // 1. Busca Token de Produção/Sandbox do Banco
-            const credentials = await paymentIntegrationService.getIntegrationByGateway('mercado_pago');
-            if (!credentials || !credentials.is_active || !credentials.access_token) {
-                throw new Error("Credenciais do Mercado Pago não configuradas no painel.");
-            }
-
-            // 2. Dispara requisição para a API REST do Mercado Pago local
-            const mpResponse = await mercadoPagoProvider.createPixPayment(input, credentials.access_token);
-
-            // 3. Verifica dados PIX gerados
-            const qrCode = mpResponse.point_of_interaction?.transaction_data?.qr_code;
-            const qrCode64 = mpResponse.point_of_interaction?.transaction_data?.qr_code_base64;
-            const ticketUrl = mpResponse.point_of_interaction?.transaction_data?.ticket_url;
-
-            if (qrCode && qrCode64) {
-                // Montar JSONB para a coluna `gateway_pix_data` e colocar o ID dele `gateway_payment_id`
-                const pixData = {
-                    qr_code: qrCode,
-                    qr_code_base64: qrCode64,
-                    ticket_url: ticketUrl
-                };
-
-                await patchOrder(order.id, {
-                    gateway_payment_id: String(mpResponse.id),
-                    gateway_pix_data: pixData,
-                    status: 'awaiting_payment'
-                } as Partial<Order>);
-
-                // Modifica objeto em menória para retorno rápido pro front
-                (order as any).gateway_pix_data = pixData;
-                (order as any).status = 'awaiting_payment';
-            }
+            const mpResponse = await vpsClient.post<{
+                id: string;
+                status: string;
+                gateway_pix_data: Order['gateway_pix_data'];
+                order_status: OrderStatus;
+                payment_status: OrderPaymentStatus;
+            }>(`/orders/${encodeURIComponent(order.id)}/payments/mercado-pago/pix`, {});
+            (order as any).gateway_payment_id = mpResponse.id;
+            (order as any).gateway_pix_data = mpResponse.gateway_pix_data;
+            (order as any).status = mpResponse.order_status;
+            (order as any).payment_status = mpResponse.payment_status;
         } catch (mpError: any) {
             console.error("Falha ao gerar Pix MP:", mpError);
-            // Marca pedido como payment_failed para preservar histórico (não deleta)
-            await patchOrder(order.id, { status: 'payment_failed', payment_status: 'failed' } as Partial<Order>);
-            await releaseOrderReservedStock(order.id);
+            // A API registra a falha e libera a reserva de forma atomica.
             throw new Error(mpError.message || "Erro ao gerar cobrança PIX. Tente novamente.");
         }
     } else if (orderData.payment_gateway === 'mercado_pago' && orderData.payment_method === 'credit_card') {
@@ -649,20 +617,14 @@ export async function createOrder(input: OrderInput): Promise<Order> {
                     throw new Error(friendlyMessage);
                 }
             } else {
-                // ── Fallback: Checkout PRO (redirect) ──
-                const credentials = await paymentIntegrationService.getIntegrationByGateway('mercado_pago');
-                if (!credentials || !credentials.is_active || !credentials.access_token) {
-                    throw new Error("Credenciais do Mercado Pago não configuradas no painel.");
-                }
-                const mpResponse = await mercadoPagoProvider.createPreference(input, credentials.access_token, order.id);
-                const initPoint = credentials.environment === 'production'
-                    ? mpResponse.init_point
-                    : mpResponse.sandbox_init_point;
-
-                if (initPoint) {
-                    await patchOrder(order.id, { gateway_payment_id: String(mpResponse.id), gateway_payment_url: initPoint, status: 'awaiting_payment' } as Partial<Order>);
-                    (order as any).gateway_payment_url = initPoint;
-                    (order as any).status = 'awaiting_payment';
+                const mpResponse = await vpsClient.post<{ id: string; checkout_url?: string | null; order_status: OrderStatus }>(
+                    `/orders/${encodeURIComponent(order.id)}/payments/mercado-pago/preference`,
+                    {},
+                );
+                if (mpResponse.checkout_url) {
+                    (order as any).gateway_payment_id = mpResponse.id;
+                    (order as any).gateway_payment_url = mpResponse.checkout_url;
+                    (order as any).status = mpResponse.order_status;
                 }
             }
         } catch (mpError: any) {
@@ -672,12 +634,18 @@ export async function createOrder(input: OrderInput): Promise<Order> {
             if (cardFormData?.token) {
                 throw new Error(mpError.message || "Erro de integração com o Mercado Pago.");
             }
-            await patchOrder(order.id, { status: 'payment_failed', payment_status: 'failed' } as Partial<Order>);
-            await releaseOrderReservedStock(order.id);
+            // A API registra a falha e libera a reserva de forma atomica.
             throw new Error(mpError.message || "Erro de integração com o Mercado Pago.");
         }
     }
     // ────────────────────────────────────────────────────────────────────────
+
+    // So registra as moedas depois que itens, estoque e pagamento inicial
+    // concluirem, evitando transacao orfa em checkout abortado.
+    if (orderData.customer_id) {
+        vpsClient.post(`/customer/orders/${encodeURIComponent(order.id)}/pending-coins`, {})
+            .catch(e => console.error("Erro ao emitir moedas pendentes:", e));
+    }
 
     return order as Order;
 }

@@ -18,6 +18,7 @@ const localServerCjs = path.join(__dirname, 'vps_server.cjs');
 const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim();
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
+const customerSelfServicePath = 'services/customerSelfServiceServer.cjs';
 const smartphonePhotoIntakeServiceFiles = [
   'services/physicalRamCore.cjs',
   'services/smartphonePhotoIntakeCore.cjs',
@@ -300,6 +301,8 @@ async function main() {
   await uploadSignedWarrantyFiles(appDir);
   await uploadMobileSalesPushFiles(appDir);
   await uploadMarketingCampaignFiles(appDir);
+  await upload(path.join(__dirname, customerSelfServicePath), remotePathJoin(appDir, customerSelfServicePath));
+  console.log(`Uploaded ${customerSelfServicePath}`);
   await uploadSmartphonePhotoIntakeFiles(appDir);
   const remoteFirebaseCredentialPath = await ensureRemoteFirebaseCredentials(appDir);
   await ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath);

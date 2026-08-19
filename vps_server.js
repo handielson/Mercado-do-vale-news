@@ -9,6 +9,7 @@ const { spawn } = require('child_process');
 const ffmpegStaticPath = require('ffmpeg-static');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
 const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
+const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
 const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
 const crypto = require('crypto');
 const sharp = require('sharp');
@@ -1561,6 +1562,10 @@ fastify.post('/auth/password-reset/request', async (request, reply) => {
   const tokenHash = hashAuthResetToken(token);
   const expiresMinutes = Math.max(10, Number(process.env.VPS_AUTH_PASSWORD_RESET_TTL_MINUTES || 60));
   await pool.query(
+    'UPDATE customer_auth_password_resets SET used_at = NOW() WHERE customer_id = ? AND used_at IS NULL',
+    [customer.id]
+  );
+  await pool.query(
     `INSERT INTO customer_auth_password_resets (id, customer_id, token_hash, expires_at)
      VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
     [crypto.randomUUID(), customer.id, tokenHash, expiresMinutes]
@@ -1921,6 +1926,8 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
     return true;
   }
 
+  if (normalizedMethod === 'POST' && pathname === '/public/feedback') return true;
+
   if (normalizedMethod === 'GET' && pathname === '/pdv/display-state') {
     return true;
   }
@@ -1958,6 +1965,7 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
 
   if (pathname.startsWith('/coupons/validate/')) return true;
   if (pathname.startsWith('/video/')) return true;
+  if (/^\/public\/products\/[^/]+\/reviews$/u.test(pathname)) return true;
   if (/^\/versions\/[^/]+$/u.test(pathname)) return true;
   if (isVpsProxyPublicTableDataReadPath(pathname)) return true;
 
@@ -1992,7 +2000,18 @@ function isVpsProxyCustomerOrderWritePath(proxyPath, method = 'GET') {
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/priority-reservations') return true;
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/order-reservations/release') return true;
   if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/card$/u.test(pathname)) return true;
+  if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/(?:pix|preference)$/u.test(pathname)) return true;
   return normalizedMethod === 'DELETE' && /^\/table-data\/orders\/[^/]+$/u.test(pathname);
+}
+
+function isVpsProxyCustomerSelfServicePath(proxyPath, method = 'GET') {
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  const pathname = proxyPath.split('?')[0] || '/';
+  if (normalizedMethod !== 'POST') return false;
+  return pathname === '/customer/checkin'
+    || pathname === '/customer/reviews'
+    || pathname === '/customer/type-upgrade'
+    || /^\/customer\/orders\/[^/]+\/pending-coins$/u.test(pathname);
 }
 
 async function assertVpsProxyOrdersBelongToCustomer(orderIds, customerId) {
@@ -2032,7 +2051,7 @@ async function assertVpsProxyCustomerOrderWriteAllowed(request, auth, proxyPath,
     return assertVpsProxyOrdersBelongToCustomer([body.order_id], auth.customerId);
   }
 
-  if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/card$/u.test(pathname)) {
+  if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/(?:card|pix|preference)$/u.test(pathname)) {
     const orderId = pathname.split('/')[2] || '';
     return assertVpsProxyOrdersBelongToCustomer([decodeURIComponent(orderId)], auth.customerId);
   }
@@ -13251,6 +13270,7 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
   const favoritesCustomerId = extractVpsProxyFavoritesCustomerId(vpsProxyTargetPath);
   const isCustomerFinancialPath = isVpsProxyCustomerFinancialPath(vpsProxyTargetPath, method);
   const isCustomerOrderWritePath = isVpsProxyCustomerOrderWritePath(vpsProxyTargetPath, method);
+  const isCustomerSelfServicePath = isVpsProxyCustomerSelfServicePath(vpsProxyTargetPath, method);
 
   if (favoritesCustomerId) {
     if (!auth.userId) return reply.code(401).send({ error: 'Auth required' });
@@ -13270,11 +13290,13 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
     if (!await assertVpsProxyCustomerOrderWriteAllowed(request, auth, vpsProxyTargetPath, method)) {
       return reply.code(403).send({ error: 'Forbidden for this order' });
     }
+  } else if (isCustomerSelfServicePath) {
+    if (!auth.userId || !auth.customerId) return reply.code(401).send({ error: 'Auth required' });
   } else if (!isPublicPath && (isWrite || isVpsProxySensitiveGetPath(vpsProxyTargetPath)) && !auth.isAdmin) {
     return reply.code(403).send({ error: 'Admin required' });
   }
 
-  const needsInternalSyncKey = (!isPublicPath && !isCustomerFinancialPath) || isVpsProxyPublicTableDataReadPath(vpsProxyTargetPath.split('?')[0] || '/');
+  const needsInternalSyncKey = (!isPublicPath && !isCustomerFinancialPath && !isCustomerSelfServicePath) || isVpsProxyPublicTableDataReadPath(vpsProxyTargetPath.split('?')[0] || '/');
   if (needsInternalSyncKey && !process.env.SYNC_SECRET) {
     return reply.code(500).send({ error: 'SYNC_SECRET not configured on server' });
   }
@@ -26059,7 +26081,6 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
   const isRejected = ['rejected', 'cancelled', 'canceled'].includes(status);
   const nextStatus = isApproved ? 'confirmed' : 'pending';
   const paymentStatus = isApproved ? 'paid' : isRejected ? 'failed' : 'pending';
-  await pool.query('UPDATE customer_auth_password_resets SET used_at = NOW() WHERE customer_id = ? AND used_at IS NULL', [customer.id]);
   await pool.query(
     `UPDATE orders
      SET gateway_payment_id = ?, payment_gateway = 'mercado_pago', payment_method = 'credit_card',
@@ -26082,6 +26103,78 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
     payment_status: paymentStatus,
     reused_existing_payment: reusedExistingPayment,
   };
+});
+
+async function markOnlineOrderPaymentFailed(order, reason) {
+  await pool.query(`UPDATE orders SET status = 'payment_failed', payment_status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [order.id]);
+  await processOrderReservation(order.id, 'release', 'Falha ao iniciar pagamento Mercado Pago', String(reason || 'Reserva liberada apos falha na criacao do pagamento.').slice(0, 500))
+    .catch((error) => console.warn('[orders] Falha ao liberar reserva apos erro de pagamento:', error?.message || error));
+}
+
+fastify.post('/orders/:orderId/payments/mercado-pago/pix', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  const orderId = String(req.params?.orderId || '').trim();
+  const access = req.customerAccess || {};
+  const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
+  const order = orders?.[0] || null;
+  if (!order) return reply.code(404).send({ error: 'Pedido não encontrado.' });
+  if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) return reply.code(403).send({ error: 'Forbidden for this order' });
+  if (!['pending', 'awaiting_payment'].includes(String(order.status || ''))) return reply.code(409).send({ error: 'O pedido não está disponível para pagamento.' });
+  const [integrations] = await pool.query("SELECT access_token FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 AND company_id = ? LIMIT 1", [order.company_id]);
+  const accessToken = integrations?.[0]?.access_token;
+  if (!accessToken) return reply.code(400).send({ error: 'Mercado Pago não configurado.' });
+  const [customers] = order.customer_id ? await pool.query('SELECT cpf_cnpj FROM customers WHERE id = ? LIMIT 1', [order.customer_id]) : [[]];
+  const documentDigits = String(customers?.[0]?.cpf_cnpj || '').replace(/\D/g, '');
+  const nameParts = String(order.customer_name || 'Cliente').trim().split(/\s+/u);
+  const payer = { email: String(order.customer_email || 'cliente@mercadodovale.com.br'), first_name: nameParts[0] || 'Cliente', last_name: nameParts.slice(1).join(' ') || 'Não Informado', identification: documentDigits.length === 11 ? { type: 'CPF', number: documentDigits } : documentDigits.length === 14 ? { type: 'CNPJ', number: documentDigits } : undefined };
+  let paymentResponse;
+  try {
+    paymentResponse = await fetch('https://api.mercadopago.com/v1/payments', { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `order-pix-${String(order.id).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 48)}` }, body: JSON.stringify({ transaction_amount: Number((Math.max(0, Number(order.total) || 0) / 100).toFixed(2)), description: `Pedido Mercado do Vale - ${String(order.id).slice(0, 8)}`, payment_method_id: 'pix', external_reference: order.id, notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook', payer }), signal: AbortSignal.timeout(15000) });
+  } catch (error) {
+    await markOnlineOrderPaymentFailed(order, error?.message);
+    return reply.code(502).send({ error: 'Falha de comunicacao ao gerar PIX Mercado Pago.' });
+  }
+  const payment = await paymentResponse.json().catch(() => ({}));
+  if (!paymentResponse.ok) {
+    const detail = payment?.cause?.[0]?.description || payment?.message || 'Não foi possível gerar o PIX.';
+    await markOnlineOrderPaymentFailed(order, detail);
+    return reply.code(502).send({ error: `Falha ao gerar PIX Mercado Pago: ${detail}` });
+  }
+  const transactionData = payment?.point_of_interaction?.transaction_data || {};
+  const pixData = { qr_code: String(transactionData.qr_code || ''), qr_code_base64: String(transactionData.qr_code_base64 || ''), ticket_url: String(transactionData.ticket_url || '') };
+  if (!pixData.qr_code || !pixData.qr_code_base64) {
+    await markOnlineOrderPaymentFailed(order, 'Resposta sem dados do PIX.');
+    return reply.code(502).send({ error: 'O Mercado Pago não devolveu os dados do PIX.' });
+  }
+  await pool.query(`UPDATE orders SET gateway_payment_id = ?, gateway_pix_data = ?, payment_gateway = 'mercado_pago', payment_method = 'pix', status = 'awaiting_payment', payment_status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [String(payment.id || ''), JSON.stringify(pixData), order.id]);
+  return { id: String(payment.id || ''), status: String(payment.status || 'pending'), gateway_pix_data: pixData, order_status: 'awaiting_payment', payment_status: 'pending' };
+});
+
+fastify.post('/orders/:orderId/payments/mercado-pago/preference', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  const orderId = String(req.params?.orderId || '').trim(); const access = req.customerAccess || {};
+  const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]); const order = orders?.[0] || null;
+  if (!order) return reply.code(404).send({ error: 'Pedido não encontrado.' });
+  if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) return reply.code(403).send({ error: 'Forbidden for this order' });
+  if (String(order.status || '') !== 'pending') return reply.code(409).send({ error: 'O pedido não está disponível para pagamento.' });
+  const [integrations] = await pool.query("SELECT access_token, environment FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 AND company_id = ? LIMIT 1", [order.company_id]); const integration = integrations?.[0] || null;
+  if (!integration?.access_token) return reply.code(400).send({ error: 'Mercado Pago não configurado.' });
+  const preferenceItems = [{ id: String(order.id), title: `Pedido Mercado do Vale - ${String(order.id).slice(0, 8)}`, description: 'Produtos, descontos e entrega incluidos', quantity: 1, currency_id: 'BRL', unit_price: Number((Math.max(0, Number(order.total) || 0) / 100).toFixed(2)) }];
+  const cleanPhone = String(order.customer_phone || '').replace(/\D/g, ''); const nameParts = String(order.customer_name || 'Cliente').trim().split(/\s+/u);
+  let preferenceResponse;
+  try {
+    preferenceResponse = await fetch('https://api.mercadopago.com/checkout/preferences', { method: 'POST', headers: { Authorization: `Bearer ${integration.access_token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `order-preference-${order.id}` }, body: JSON.stringify({ items: preferenceItems, payer: { name: nameParts[0] || 'Cliente', surname: nameParts.slice(1).join(' '), email: order.customer_email || 'cliente@mercadodovale.com.br', phone: { area_code: cleanPhone.slice(0, 2), number: cleanPhone.slice(2) } }, external_reference: order.id, notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook', payment_methods: { excluded_payment_types: [{ id: 'ticket' }], installments: 12 } }), signal: AbortSignal.timeout(15000) });
+  } catch (error) {
+    await markOnlineOrderPaymentFailed(order, error?.message);
+    return reply.code(502).send({ error: 'Falha de comunicacao ao gerar checkout Mercado Pago.' });
+  }
+  const preference = await preferenceResponse.json().catch(() => ({}));
+  if (!preferenceResponse.ok) {
+    const detail = preference?.message || 'erro desconhecido';
+    await markOnlineOrderPaymentFailed(order, detail);
+    return reply.code(502).send({ error: `Falha ao gerar checkout Mercado Pago: ${detail}` });
+  }
+  const checkoutUrl = String(integration.environment) === 'production' ? preference.init_point : preference.sandbox_init_point;
+  await pool.query(`UPDATE orders SET gateway_payment_id = ?, gateway_payment_url = ?, status = 'awaiting_payment', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [String(preference.id || ''), checkoutUrl || null, order.id]);
+  return { id: String(preference.id || ''), checkout_url: checkoutUrl || null, order_status: 'awaiting_payment' };
 });
 
 fastify.post('/orders/:orderId/status-notification', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
@@ -32109,6 +32202,8 @@ fastify.post('/shipping/price-ranges', { preHandler: requireSyncKey }, async (re
   return { ok: true, id };
 });
 
+registerCustomerSelfServiceRoutes(fastify, { pool, getVpsBearerAuthContext, requireSyncKeyOrCustomer });
+
 fastify.get('/customer/purchases', async (req, reply) => {
   const auth = await getVpsBearerAuthContext(req);
   if (!auth.customerId) return reply.code(401).send({ error: 'Unauthorized' });
@@ -32231,10 +32326,12 @@ fastify.get('/customer/purchases', async (req, reply) => {
 fastify.get('/customer/coins', async (req, reply) => {
   const auth = await getVpsBearerAuthContext(req);
   if (!auth.customerId) return reply.code(401).send({ error: 'Unauthorized' });
+  const requestedCustomerId = String(req.query?.customer_id || '').trim();
+  const customerId = auth.isAdmin && requestedCustomerId ? requestedCustomerId : auth.customerId;
 
   const [balances, transactions, settingsRows] = await Promise.all([
-    pool.query('SELECT * FROM coin_balances WHERE customer_id = ? LIMIT 1', [auth.customerId]),
-    pool.query('SELECT * FROM coin_transactions WHERE customer_id = ? ORDER BY created_at DESC LIMIT 100', [auth.customerId]),
+    pool.query('SELECT * FROM coin_balances WHERE customer_id = ? LIMIT 1', [customerId]),
+    pool.query('SELECT * FROM coin_transactions WHERE customer_id = ? ORDER BY created_at DESC LIMIT 100', [customerId]),
     pool.query('SELECT coins_per_real, min_purchase_for_coins, coins_to_brl_rate, max_redeem_percent, min_coins_to_redeem, active FROM cashback_settings ORDER BY updated_at DESC LIMIT 1'),
   ]);
   reply.header('Cache-Control', 'private, no-store');
@@ -35808,9 +35905,13 @@ fastify.get('/synology/upload-status', { preHandler: requireSyncKey }, async (re
 });
 
 // POST /synology/upload?folder=imagens|videos|arquivos
-fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+fastify.post('/synology/upload', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
   const folder = req.query.folder;
+  const access = req.customerAccess || {};
   if (!SYNO_FOLDERS[folder]) return reply.code(400).send({ error: 'Invalid folder' });
+  if (!access.isSync && !access.isAdmin && (folder !== 'imagens' || String(req.query.scope || '') !== 'avatar')) {
+    return reply.code(403).send({ error: 'Customer upload is restricted to avatar images' });
+  }
   if (!SYNO_USER || !SYNO_PASS) return reply.code(500).send({ error: 'Synology credentials not configured' });
 
   const parts = req.parts({ limits: { fileSize: 500 * 1024 * 1024 } }); // 500MB para vídeos
@@ -35827,6 +35928,9 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
   }
 
   if (!fileBuf || !fileName) return reply.code(400).send({ error: 'file field required' });
+  if (!access.isSync && !access.isAdmin && fileName !== `${access.customerId}_avatar.jpg`) {
+    return reply.code(403).send({ error: 'Avatar filename does not match authenticated customer' });
+  }
 
   const folderPath = SYNO_FOLDERS[folder];
   const cdnUrl = `${SYNO_CDN[folder]}/${fileName}`;
@@ -36507,6 +36611,8 @@ async function getDefaultCompanyIdForCatalog() {
 }
 
 async function runMigrations() {
+  await ensureCustomerSelfServiceTables(pool);
+  console.log('[migration] customer self-service tables: OK');
   await mobileSalesPushService.ensureTables();
   await pool.query(`
     CREATE TABLE IF NOT EXISTS shopee_review_automation_settings (

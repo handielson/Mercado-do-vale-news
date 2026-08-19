@@ -1,5 +1,4 @@
 import { CustomerFeedback, FeedbackInput } from '../types/feedback';
-import { companySettingsService } from './companySettingsService';
 import { vpsClient } from './vpsClient';
 
 const TABLE_NAME = 'customer_feedbacks';
@@ -39,27 +38,11 @@ function sortNewestFirst(feedbacks: CustomerFeedback[]): CustomerFeedback[] {
 
 export const feedbackService = {
     /**
-     * Busca o ID da empresa pela rota VPS de company settings.
-     */
-    async getDefaultCompanyId(): Promise<string> {
-        const settings = await companySettingsService.get();
-        if (!settings?.id) {
-            throw new Error('Falha ao identificar a empresa.');
-        }
-        return settings.id;
-    },
-
-    /**
      * Envia um novo feedback (Acesso Publico Anonimo)
      */
     async submitFeedback(input: FeedbackInput): Promise<void> {
-        const companyId = await this.getDefaultCompanyId();
-
         try {
-            await vpsClient.post<CustomerFeedback>(`/table-data/${TABLE_NAME}`, {
-                ...input,
-                company_id: companyId,
-            });
+            await vpsClient.post<{ ok: boolean }>('/public/feedback', input);
         } catch (error) {
             console.error('Erro ao enviar feedback:', error);
             throw new Error('Nao foi possivel enviar sua mensagem. Tente novamente.');

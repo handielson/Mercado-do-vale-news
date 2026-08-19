@@ -205,7 +205,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
 
     // Carregar gateways de pagamento ativos
     useEffect(() => {
-        paymentIntegrationService.getIntegrations()
+        paymentIntegrationService.getPublicCheckoutIntegrations()
             .then(integrations => {
                 const active = integrations.filter(i => i.is_active);
                 setHasOnlineGateway(active.length > 0);

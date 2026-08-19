@@ -17,20 +17,14 @@ assert.doesNotMatch(
 
 assert.match(
   source,
-  /companySettingsService/,
-  'feedbackService must resolve the company id from VPS company settings',
-);
-
-assert.match(
-  source,
   /vpsClient\.get[\s\S]*`\/table-data\/\$\{TABLE_NAME\}/,
   'feedbackService must list feedbacks through VPS table-data',
 );
 
 assert.match(
   source,
-  /vpsClient\.post<[^>]+>\(`\/table-data\/\$\{TABLE_NAME\}`/,
-  'feedbackService must create feedbacks through VPS table-data',
+  /vpsClient\.post<[^>]+>\('\/public\/feedback'/,
+  'public feedback creation must use the validated public endpoint',
 );
 
 assert.match(

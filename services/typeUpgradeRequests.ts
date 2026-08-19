@@ -57,19 +57,9 @@ export const createUpgradeRequest = async (
     customerId: string,
     requestedType: RequestedCustomerType
 ): Promise<TypeUpgradeRequest> => {
-    const requests = await loadUpgradeRequests();
-    const existing = requests.find(
-        request => String(request.customer_id) === String(customerId) && request.status === 'pending'
-    );
-
-    if (existing) {
-        throw new Error('Voce ja possui uma solicitacao pendente');
-    }
-
-    return vpsClient.post<TypeUpgradeRequest>('/table-data/customer_type_requests', {
-        customer_id: customerId,
+    void customerId;
+    return vpsClient.post<TypeUpgradeRequest>('/customer/type-upgrade', {
         requested_type: requestedType,
-        status: 'pending'
     });
 };
 
@@ -79,8 +69,8 @@ export const createUpgradeRequest = async (
 export const getCustomerUpgradeRequest = async (
     customerId: string
 ): Promise<TypeUpgradeRequest | null> => {
-    const requests = await loadUpgradeRequests();
-    return requests.find(request => String(request.customer_id) === String(customerId)) || null;
+    void customerId;
+    return vpsClient.get<TypeUpgradeRequest | null>('/customer/type-upgrade');
 };
 
 /**

@@ -132,8 +132,10 @@ export async function updateCashbackSettings(
 // ============================================================
 
 export async function getCoinBalance(customerId: string): Promise<CoinBalance | null> {
-    const balances = await loadCoinBalances();
-    return balances.find(balance => balance.customer_id === customerId) || null;
+    const response = await vpsClient.get<{ balance?: CoinBalance | null }>(
+        `/customer/coins?customer_id=${encodeURIComponent(customerId)}`
+    );
+    return response.balance || null;
 }
 
 export async function getOrCreateBalance(customerId: string): Promise<CoinBalance> {
@@ -522,24 +524,10 @@ export async function validateReferralCode(
     const normalizedCode = code.trim().toUpperCase();
     if (!normalizedCode) return { valid: false, error: 'CÃ³digo vazio.' };
 
-    const customers = await loadTableRows<CustomerSummary>('customers');
-
-    // Check if it's the user's own code
-    if (currentCustomerId) {
-        const currentCustomer = customers.find(customer => customer.id === currentCustomerId);
-
-        if (currentCustomer?.referral_code?.toUpperCase() === normalizedCode) {
-            return { valid: false, error: 'VocÃª nÃ£o pode usar seu prÃ³prio cÃ³digo de indicaÃ§Ã£o.' };
-        }
-    }
-
-    const referrer = customers.find(customer => customer.referral_code?.toUpperCase() === normalizedCode);
-
-    if (!referrer) {
-        return { valid: false, error: 'CÃ³digo de indicaÃ§Ã£o invÃ¡lido ou nÃ£o encontrado.' };
-    }
-
-    return { valid: true, referrerName: referrer.name };
+    void currentCustomerId;
+    return vpsClient.get<{ valid: boolean; error?: string; referrerName?: string }>(
+        `/customer/referrals/validate?code=${encodeURIComponent(normalizedCode)}`
+    );
 }
 
 export async function processReferralReward(input: {

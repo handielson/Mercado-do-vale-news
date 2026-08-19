@@ -97,10 +97,18 @@ function isPublicReadPath(pathname) {
     return true;
   }
 
+  if (/^\/public\/products\/[^/]+\/reviews$/u.test(pathname)) {
+    return true;
+  }
+
   return isPublicProductReadPath(pathname);
 }
 
 function isPublicWritePath(pathname, method) {
+  if (method === 'POST' && pathname === '/public/feedback') {
+    return true;
+  }
+
   if (method === 'POST' && /^\/products\/[^/]+\/view$/u.test(pathname)) {
     return true;
   }

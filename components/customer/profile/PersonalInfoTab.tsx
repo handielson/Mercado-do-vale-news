@@ -252,8 +252,12 @@ export const PersonalInfoTab: React.FC = () => {
     };
 
     const validateForm = (): boolean => {
-        if (!personalData.name || !personalData.email) {
-            toast.error('Nome e email sao obrigatorios');
+        if (!personalData.name) {
+            toast.error('Nome obrigatorio');
+            return false;
+        }
+        if (!personalData.email && !personalData.phone) {
+            toast.error('Informe pelo menos email ou WhatsApp para recuperar sua senha');
             return false;
         }
 
