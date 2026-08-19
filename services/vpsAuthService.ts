@@ -141,6 +141,29 @@ export const vpsAuthService = {
     });
   },
 
+  startGoogleSignIn(nextPath: string = '/'): void {
+    const safeNext = nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/';
+    const url = new URL(buildAuthUrl('/auth/google/start'));
+    url.searchParams.set('next', safeNext);
+    window.location.assign(url.toString());
+  },
+
+  async completeGoogleSignIn(token: string): Promise<VpsAuthSession> {
+    if (!token) throw new Error('Token Google ausente');
+    const response = await fetch(buildAuthUrl('/auth/me'), {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(json.error || `Erro ${response.status}`);
+    const session = {
+      ...(json as VpsAuthSession),
+      customer: normalizeCustomerFromVps((json as VpsAuthSession).customer),
+    };
+    storeSession(session);
+    return session;
+  },
+
   async updateProfile(data: Partial<Customer>): Promise<Customer> {
     const session = readStoredSession();
     if (!session?.token) throw new Error('Sessao expirada');

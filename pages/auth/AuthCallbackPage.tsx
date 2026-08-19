@@ -2,14 +2,42 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
+import { vpsAuthService } from '../../services/vpsAuthService';
 
 export const AuthCallbackPage: React.FC = () => {
     const [status, setStatus] = useState('Processando autenticação...');
+    const [processingGoogle] = useState(() => window.location.hash.includes('token='));
     const navigate = useNavigate();
     const { user, customer, isLoading } = useAuth();
 
     useEffect(() => {
+        const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const token = hash.get('token') || '';
+        if (!token) return;
+
+        const completeGoogleLogin = async () => {
+            setStatus('Confirmando login com Google...');
+            window.history.replaceState({}, '', window.location.pathname);
+            try {
+                const session = await vpsAuthService.completeGoogleSignIn(token);
+                const requestedNext = hash.get('next') || sessionStorage.getItem('auth_next') || '/';
+                const safeNext = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/';
+                sessionStorage.removeItem('auth_next');
+                const destination = !session.customer.phone || !session.customer.cpf_cnpj
+                    ? '/completar-cadastro'
+                    : safeNext;
+                window.location.replace(destination);
+            } catch {
+                window.location.replace('/cliente/login?google_error=oauth_failed');
+            }
+        };
+
+        void completeGoogleLogin();
+    }, []);
+
+    useEffect(() => {
         const handleCallback = async () => {
+            if (processingGoogle) return;
             console.log('[AuthCallback] State:', { isLoading, user: !!user, customer: !!customer });
 
             // Aguardar contexto carregar
@@ -58,7 +86,7 @@ export const AuthCallbackPage: React.FC = () => {
         };
 
         handleCallback();
-    }, [user, customer, isLoading, navigate]);
+    }, [user, customer, isLoading, navigate, processingGoogle]);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-slate-50">

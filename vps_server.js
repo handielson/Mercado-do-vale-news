@@ -10,6 +10,7 @@ const ffmpegStaticPath = require('ffmpeg-static');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
 const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
 const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
+const { registerCustomerGoogleAuthRoutes } = require('./services/customerGoogleAuthServer.cjs');
 const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
 const crypto = require('crypto');
 const sharp = require('sharp');
@@ -1265,6 +1266,15 @@ function getPdvReceiptPublicBaseUrl(req) {
   return 'https://www.mercadodovale.com.br';
 }
 
+registerCustomerGoogleAuthRoutes(fastify, {
+  pool,
+  authSecret: VPS_AUTH_SECRET,
+  authResponseForCustomer,
+  getPublicAppUrl,
+  normalizeAuthEmail,
+  normalizeAuthCustomerType,
+});
+
 fastify.post('/auth/login', async (request, reply) => {
   await ensureCustomerAuthTable();
   const body = request.body || {};
@@ -1412,6 +1422,7 @@ fastify.get('/auth/me', async (request, reply) => {
 });
 
 fastify.patch('/auth/profile', async (request, reply) => {
+  await ensureCustomerAuthTable();
   const auth = await getVpsBearerAuthContext(request);
   if (!auth.customerId) return reply.code(401).send({ error: 'Unauthorized' });
 
@@ -1427,6 +1438,33 @@ fastify.patch('/auth/profile', async (request, reply) => {
   const hasField = (field) => Object.prototype.hasOwnProperty.call(body, field);
   const name = hasField('name') ? String(body.name || '').trim().slice(0, 255) : String(current.name || '').trim();
   if (!name) return reply.code(400).send({ error: 'Nome obrigatorio' });
+
+  let cpfCnpj = normalizeAuthDocument(current.cpf_cnpj) || null;
+  if (hasField('cpf_cnpj')) {
+    const rawDocument = String(body.cpf_cnpj || '').trim();
+    const normalizedDocument = normalizeAuthDocument(rawDocument);
+    if (rawDocument && ![11, 14].includes(normalizedDocument.length)) {
+      return reply.code(400).send({ error: 'CPF/CNPJ invalido' });
+    }
+    cpfCnpj = normalizedDocument || null;
+  }
+
+  if (cpfCnpj) {
+    const [customerDocumentConflicts] = await pool.query(
+      `SELECT id FROM customers
+       WHERE id <> ?
+         AND REPLACE(REPLACE(REPLACE(REPLACE(cpf_cnpj, '.', ''), '-', ''), '/', ''), ' ', '') = ?
+       LIMIT 1`,
+      [auth.customerId, cpfCnpj]
+    );
+    const [authDocumentConflicts] = await pool.query(
+      'SELECT customer_id FROM customer_auth WHERE customer_id <> ? AND cpf_cnpj = ? LIMIT 1',
+      [auth.customerId, cpfCnpj]
+    );
+    if (customerDocumentConflicts?.[0] || authDocumentConflicts?.[0]) {
+      return reply.code(409).send({ error: 'Este CPF/CNPJ ja esta vinculado a outra conta' });
+    }
+  }
 
   let phone = current.phone || null;
   if (hasField('phone')) {
@@ -1487,12 +1525,28 @@ fastify.patch('/auth/profile', async (request, reply) => {
     }
   }
 
-  await pool.query(
-    `UPDATE customers
-        SET name = ?, phone = ?, birth_date = ?, avatar_url = ?, address = ?, updated_at = NOW()
-      WHERE id = ?`,
-    [name, phone, birthDate, avatarUrl, addressJson, auth.customerId]
-  );
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(
+      `UPDATE customers
+          SET name = ?, cpf_cnpj = ?, phone = ?, birth_date = ?, avatar_url = ?, address = ?, updated_at = NOW()
+        WHERE id = ?`,
+      [name, cpfCnpj, phone, birthDate, avatarUrl, addressJson, auth.customerId]
+    );
+    await connection.query(
+      `UPDATE customer_auth
+          SET cpf_cnpj = ?, email = COALESCE(email, ?), updated_at = NOW()
+        WHERE customer_id = ?`,
+      [cpfCnpj, normalizeAuthEmail(current.email) || null, auth.customerId]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
   const [updatedRows] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [auth.customerId]);
   const updated = updatedRows?.[0] || null;
   if (!updated) return reply.code(404).send({ error: 'Cliente nao encontrado' });

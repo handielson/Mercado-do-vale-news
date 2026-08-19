@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.271-cliente-autoatendimento
+version: v1.2.272-google-login-clientes
 date: 2026-08-19
 status: ready
-release_vps: /var/www/mdv-site/releases/20260819-135803-cliente-autoatendimento
+release_vps: /var/www/mdv-site/releases/20260819-192650-google-login-clientes
 branch: main
-summary: Remove bloqueios administrativos de fluxos de cliente, protege checkout e cria as tabelas de autoatendimento.
+summary: Ativa login Google de clientes com OAuth separado e impede contas administrativas nesse fluxo.
 ```

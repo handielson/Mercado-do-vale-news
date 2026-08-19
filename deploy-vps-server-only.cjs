@@ -19,6 +19,7 @@ const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_P
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
 const customerSelfServicePath = 'services/customerSelfServiceServer.cjs';
+const customerGoogleAuthPath = 'services/customerGoogleAuthServer.cjs';
 const smartphonePhotoIntakeServiceFiles = [
   'services/physicalRamCore.cjs',
   'services/smartphonePhotoIntakeCore.cjs',
@@ -226,6 +227,14 @@ async function ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath = null)
     };
     if (process.env.META_APP_ID) entries.META_APP_ID = process.env.META_APP_ID;
     if (process.env.META_APP_SECRET) entries.META_APP_SECRET = process.env.META_APP_SECRET;
+    const googleLoginClientId = process.env.GOOGLE_LOGIN_CLIENT_ID || readEnvValue(current, 'GOOGLE_LOGIN_CLIENT_ID');
+    const googleLoginClientSecret = process.env.GOOGLE_LOGIN_CLIENT_SECRET || readEnvValue(current, 'GOOGLE_LOGIN_CLIENT_SECRET');
+    const googleLoginRedirectUri = process.env.GOOGLE_LOGIN_REDIRECT_URI
+      || readEnvValue(current, 'GOOGLE_LOGIN_REDIRECT_URI')
+      || 'https://api.xiaomipetrolina.com.br/auth/google/callback';
+    if (googleLoginClientId) entries.GOOGLE_LOGIN_CLIENT_ID = googleLoginClientId;
+    if (googleLoginClientSecret) entries.GOOGLE_LOGIN_CLIENT_SECRET = googleLoginClientSecret;
+    entries.GOOGLE_LOGIN_REDIRECT_URI = googleLoginRedirectUri;
     if (wahaStatusApiKey) entries.WAHA_STATUS_API_KEY = wahaStatusApiKey;
     entries.WAHA_STATUS_SESSION = process.env.WAHA_STATUS_SESSION || 'statusloja-wpp';
     if (adminEmail && adminPassword) {
@@ -248,6 +257,11 @@ async function ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath = null)
     console.log(missingMetaKeys.length
       ? `Meta runtime configuration pending: ${missingMetaKeys.join(', ')}`
       : 'Meta runtime configuration ready');
+    const missingGoogleLoginKeys = ['GOOGLE_LOGIN_CLIENT_ID', 'GOOGLE_LOGIN_CLIENT_SECRET', 'GOOGLE_LOGIN_REDIRECT_URI']
+      .filter((key) => !readEnvValue(next, key));
+    console.log(missingGoogleLoginKeys.length
+      ? `Google customer login configuration pending: ${missingGoogleLoginKeys.join(', ')}`
+      : 'Google customer login configuration ready');
   });
   console.log(`Remote runtime env synced at ${remoteEnv}`);
 }
@@ -303,6 +317,8 @@ async function main() {
   await uploadMarketingCampaignFiles(appDir);
   await upload(path.join(__dirname, customerSelfServicePath), remotePathJoin(appDir, customerSelfServicePath));
   console.log(`Uploaded ${customerSelfServicePath}`);
+  await upload(path.join(__dirname, customerGoogleAuthPath), remotePathJoin(appDir, customerGoogleAuthPath));
+  console.log(`Uploaded ${customerGoogleAuthPath}`);
   await uploadSmartphonePhotoIntakeFiles(appDir);
   const remoteFirebaseCredentialPath = await ensureRemoteFirebaseCredentials(appDir);
   await ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath);

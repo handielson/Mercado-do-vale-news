@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, Loader2, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,6 +19,23 @@ export const ClienteLoginPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const nextPath = searchParams.get('next') || '/';
     const { signInWithEmail, signInWithCpf, signInWithGoogle } = useAuth();
+
+    useEffect(() => {
+        const googleError = searchParams.get('google_error');
+        if (!googleError) return;
+        const messages: Record<string, string> = {
+            not_configured: 'O login com Google ainda não está configurado. Use CPF/CNPJ ou e-mail por enquanto.',
+            cancelled: 'O login com Google foi cancelado.',
+            email_conflict: 'Este e-mail aparece em mais de um cadastro. Fale com a loja para corrigirmos o vínculo.',
+            admin_login_required: 'Contas administrativas devem entrar exclusivamente pelo painel administrativo.',
+            account_inactive: 'Esta conta está pendente ou inativa.',
+            invalid_state: 'A tentativa de login expirou. Tente novamente.',
+        };
+        toast.error(messages[googleError] || 'Não foi possível entrar com Google. Tente novamente.');
+        const cleaned = new URL(window.location.href);
+        cleaned.searchParams.delete('google_error');
+        window.history.replaceState({}, '', `${cleaned.pathname}${cleaned.search}${cleaned.hash}`);
+    }, [searchParams]);
 
     // Máscara dinâmica: CPF (000.000.000-00) ou CNPJ (00.000.000/0000-00)
     const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {

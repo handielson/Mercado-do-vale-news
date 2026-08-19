@@ -59,8 +59,10 @@ export const VpsAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     const signInWithGoogle = async () => {
-        notify.error('Login com Google esta temporariamente indisponivel durante a migracao para VPS.');
-        throw new Error('Login com Google indisponivel');
+        const nextPath = typeof sessionStorage === 'undefined'
+            ? '/'
+            : sessionStorage.getItem('auth_next') || '/';
+        vpsAuthService.startGoogleSignIn(nextPath);
     };
 
     const signInWithFacebook = async () => {

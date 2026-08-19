@@ -129,6 +129,7 @@ export const ClienteRegisterPage: React.FC = () => {
     const handleGoogleSignup = async () => {
         setGoogleLoading(true);
         try {
+            if (nextPath !== '/') sessionStorage.setItem('auth_next', nextPath);
             await signInWithGoogle();
             // Redirecionamento será feito pelo callback
         } catch (error: any) {
