@@ -19,13 +19,13 @@ CREATE TABLE IF NOT EXISTS customer_type_requests (
 CREATE TABLE IF NOT EXISTS benefit_redemptions (
   id CHAR(36) NOT NULL PRIMARY KEY,
   benefit_id VARCHAR(80) NOT NULL,
-  year_month CHAR(7) NOT NULL,
+  `year_month` CHAR(7) NOT NULL,
   redeemed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   redeemed_by VARCHAR(80) NOT NULL,
   notes TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uniq_benefit_redemption_month (benefit_id, year_month),
+  UNIQUE KEY uniq_benefit_redemption_month (benefit_id, `year_month`),
   KEY idx_benefit_redemptions_benefit (benefit_id, redeemed_at),
   KEY idx_benefit_redemptions_redeemer (redeemed_by)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

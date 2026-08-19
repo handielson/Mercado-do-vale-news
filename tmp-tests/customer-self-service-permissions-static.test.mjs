@@ -33,6 +33,7 @@ for (const serverPath of ['vps_server.cjs', 'vps_server.js']) {
 assert.match(apiModule, /fastify\.post\('\/customer\/checkin'/);
 assert.match(apiModule, /CREATE TABLE IF NOT EXISTS customer_type_requests/);
 assert.match(apiModule, /CREATE TABLE IF NOT EXISTS benefit_redemptions/);
+assert.match(apiModule, /\\`year_month\\` CHAR\(7\) NOT NULL/);
 assert.match(apiModule, /CREATE TABLE IF NOT EXISTS customer_feedbacks/);
 assert.match(apiModule, /beginTransaction\(\)/);
 assert.match(apiModule, /WHERE customer_id = \?/);
@@ -63,6 +64,7 @@ assert.match(quoteModal, /getPublicCheckoutIntegrations\(\)/);
 assert.match(deploy, /customerSelfServiceServer\.cjs/);
 assert.match(migration, /CREATE TABLE IF NOT EXISTS customer_type_requests/);
 assert.match(migration, /CREATE TABLE IF NOT EXISTS benefit_redemptions/);
+assert.match(migration, /`year_month` CHAR\(7\) NOT NULL/);
 assert.match(migration, /CREATE TABLE IF NOT EXISTS customer_feedbacks/);
 
 console.log('customer self-service permission boundaries: ok');
