@@ -112,6 +112,9 @@ export interface Order {
     payment_gateway?: PaymentGateway;
     gateway_payment_id?: string;      // ID da transação no gateway
     gateway_payment_url?: string;     // URL de pagamento (Mercado Pago, etc.)
+    refund_id?: string;               // ID do estorno no gateway
+    refunded_at?: string;             // Data/hora em que o estorno foi registrado
+    refund_amount?: number;           // Valor efetivamente estornado, em centavos
     gateway_pix_data?: {              // Dados para rendenizar o PIX
         qr_code: string;
         qr_code_base64: string;
@@ -217,5 +220,7 @@ export interface OrderRefundResult {
     already_refunded?: boolean;
     payment_status: 'refunded';
     refund_id?: string;
+    refunded_at?: string;
+    refund_amount?: number;
     whatsapp?: OrderWhatsAppNotificationResult;
 }

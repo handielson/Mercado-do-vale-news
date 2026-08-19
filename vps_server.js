@@ -26016,7 +26016,15 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
   }
   if (String(order.payment_status || '') === 'refunded') {
     const whatsapp = await notifyOnlineOrderStatusWhatsAppVps(order, 'Pagamento estornado');
-    return { ok: true, already_refunded: true, payment_status: 'refunded', whatsapp };
+    return {
+      ok: true,
+      already_refunded: true,
+      payment_status: 'refunded',
+      refund_id: order.refund_id ? String(order.refund_id) : undefined,
+      refunded_at: order.refunded_at || order.updated_at || undefined,
+      refund_amount: Number(order.refund_amount) || Number(order.total) || 0,
+      whatsapp,
+    };
   }
   if (String(order.payment_status || '') !== 'paid') {
     return reply.code(409).send({ error: 'Somente pagamentos confirmados podem ser estornados.' });
@@ -26078,8 +26086,21 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
     }
   }
 
+  const gatewayRefund = refund?.id ? refund : (Array.isArray(payment.refunds) ? payment.refunds[0] : null);
+  const refundId = gatewayRefund?.id ? String(gatewayRefund.id) : (order.refund_id ? String(order.refund_id) : null);
+  const refundAmount = Math.max(0, Math.round((paidAmount || (Number(order.total) / 100)) * 100));
   await pool.query(
-    "UPDATE orders SET payment_status = 'refunded', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    `UPDATE orders
+        SET payment_status = 'refunded',
+            refund_id = COALESCE(?, refund_id),
+            refunded_at = COALESCE(refunded_at, CURRENT_TIMESTAMP),
+            refund_amount = ?,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`,
+    [refundId, refundAmount, order.id],
+  );
+  const [[updatedRefund]] = await pool.query(
+    'SELECT refund_id, refunded_at, refund_amount FROM orders WHERE id = ? LIMIT 1',
     [order.id],
   );
   const whatsapp = await notifyOnlineOrderStatusWhatsAppVps({ ...order, payment_status: 'refunded' }, 'Pagamento estornado');
@@ -26087,7 +26108,9 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
     ok: true,
     already_refunded: alreadyRefundedAtGateway,
     payment_status: 'refunded',
-    refund_id: refund?.id ? String(refund.id) : undefined,
+    refund_id: updatedRefund?.refund_id ? String(updatedRefund.refund_id) : undefined,
+    refunded_at: updatedRefund?.refunded_at || undefined,
+    refund_amount: Number(updatedRefund?.refund_amount) || refundAmount,
     whatsapp,
   };
 });
@@ -36140,6 +36163,28 @@ async function addColumnIfMissing(table, column, definition) {
   }
 }
 
+async function ensureOrderPaymentStatusSupportsRefunded() {
+  const [[column]] = await pool.query(
+    `SELECT DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+       FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'payment_status'
+      LIMIT 1`
+  );
+  if (!column || String(column.DATA_TYPE || '').toLowerCase() !== 'enum') return;
+
+  const columnType = String(column.COLUMN_TYPE || '');
+  if (/(?:^|,)'refunded'(?:,|\)$)/i.test(columnType)) return;
+  if (!/^enum\(.+\)$/i.test(columnType)) {
+    throw new Error(`Formato inesperado de orders.payment_status: ${columnType}`);
+  }
+
+  const nextColumnType = `${columnType.slice(0, -1)},'refunded')`;
+  const nullableSql = String(column.IS_NULLABLE || '').toUpperCase() === 'NO' ? 'NOT NULL' : 'NULL';
+  const defaultSql = column.COLUMN_DEFAULT == null ? '' : ` DEFAULT ${pool.escape(column.COLUMN_DEFAULT)}`;
+  await pool.query(`ALTER TABLE \`orders\` MODIFY COLUMN \`payment_status\` ${nextColumnType} ${nullableSql}${defaultSql}`);
+  console.log('[migration] orders.payment_status now supports refunded');
+}
+
 async function addIndexIfMissing(table, indexName, column) {
   const [[row]] = await pool.query(
     `SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.STATISTICS
@@ -36593,6 +36638,10 @@ async function runMigrations() {
   await addColumnIfMissing('products', 'marketing_video_url', 'TEXT NULL');
   await addColumnIfMissing('orders', 'shipping_origin_cep', 'VARCHAR(16) NULL');
   await addColumnIfMissing('orders', 'shipping_origin_label', 'VARCHAR(255) NULL');
+  await ensureOrderPaymentStatusSupportsRefunded();
+  await addColumnIfMissing('orders', 'refund_id', 'VARCHAR(120) NULL');
+  await addColumnIfMissing('orders', 'refunded_at', 'DATETIME NULL');
+  await addColumnIfMissing('orders', 'refund_amount', 'BIGINT NULL');
   await addColumnIfMissing('order_items', 'combo_selections', 'JSON NULL');
   await addColumnIfMissing('payment_integrations', 'company_id', 'CHAR(36) NULL');
   await pool.query(

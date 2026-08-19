@@ -8,6 +8,11 @@ import { vpsApiService } from '@/services/vpsApiService';
 import { companySettingsService } from '@/services/companySettingsService';
 import type { CompanySettings } from '@/types/companySettings';
 import { printDeliveryReceipt } from '@/utils/printDeliveryReceipt';
+import {
+    downloadOrderRefundReceiptPdf,
+    generateOrderRefundReceiptPdf,
+    shareOrderRefundReceiptPdf,
+} from '@/utils/orderRefundReceiptPdf';
 import type { OrderWithItems, OrderStatus } from '@/types/order';
 import { formatCurrency } from '@/utils/saleCalculations';
 import { WarrantyTermModal } from '@/components/warranty/WarrantyTermModal';
@@ -17,7 +22,7 @@ import { buildGlobalHeader, getHeaderTemplate } from '@/utils/headerBuilder';
 import { customerService } from '@/services/customers';
 import {
     Package, Truck, CheckCircle, XCircle, Clock,
-    RefreshCw, AlertCircle, Loader2, Search, Printer, Shield, RotateCcw
+    RefreshCw, AlertCircle, Loader2, Search, Printer, Shield, RotateCcw, FileDown, MessageCircle
 } from 'lucide-react';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -147,13 +152,34 @@ export default function OnlineOrdersPage() {
         setActionLoading(order.id + 'refund');
         try {
             const result = await refundOrderPayment(order.id);
+            const refundedOrder: OrderWithItems = {
+                ...order,
+                payment_status: 'refunded',
+                refund_id: result.refund_id || order.refund_id,
+                refunded_at: result.refunded_at || order.refunded_at || new Date().toISOString(),
+                refund_amount: result.refund_amount ?? order.refund_amount ?? order.total,
+            };
             setOrders(prev => prev.map(item =>
-                item.id === order.id ? { ...item, payment_status: 'refunded' } : item
+                item.id === order.id ? refundedOrder : item
             ));
             const whatsappMessage = result.whatsapp?.status === 'sent'
                 ? ' O cliente foi avisado pelo WhatsApp.'
                 : ' O estorno foi concluido, mas o aviso por WhatsApp nao foi enviado.';
-            alert(`${result.already_refunded ? 'Este pagamento ja estava estornado.' : 'Pagamento estornado com sucesso.'}${whatsappMessage}`);
+            const baseMessage = `${result.already_refunded ? 'Este pagamento ja estava estornado.' : 'Pagamento estornado com sucesso.'}${whatsappMessage}`;
+
+            if (!companySettings) {
+                alert(`${baseMessage}\n\nO recibo em PDF ficará disponível assim que as configurações da empresa terminarem de carregar.`);
+                return;
+            }
+
+            const artifact = generateOrderRefundReceiptPdf(refundedOrder, companySettings);
+            const shouldShare = window.confirm(`${baseMessage}\n\nCompartilhar agora o comprovante de estorno em PDF?`);
+            if (shouldShare) {
+                const shareResult = await shareOrderRefundReceiptPdf(artifact, refundedOrder.customer_phone);
+                if (shareResult === 'downloaded') {
+                    alert('O PDF foi baixado e a conversa do cliente foi aberta. Anexe o arquivo baixado no WhatsApp.');
+                }
+            }
         } catch (err: any) {
             alert(`Erro ao estornar pagamento: ${err.message}`);
         } finally {
@@ -164,6 +190,29 @@ export default function OnlineOrdersPage() {
     const handlePrintReceipt = async (order: OrderWithItems) => {
         if (!companySettings) { alert('Aguarde carregar as configurações da empresa.'); return; }
         await printDeliveryReceipt(order, companySettings);
+    };
+
+    const handleDownloadRefundReceipt = (order: OrderWithItems) => {
+        if (!companySettings) { alert('Aguarde carregar as configurações da empresa.'); return; }
+        downloadOrderRefundReceiptPdf(generateOrderRefundReceiptPdf(order, companySettings));
+    };
+
+    const handleShareRefundReceipt = async (order: OrderWithItems) => {
+        if (!companySettings) { alert('Aguarde carregar as configurações da empresa.'); return; }
+        setActionLoading(order.id + 'share-refund');
+        try {
+            const result = await shareOrderRefundReceiptPdf(
+                generateOrderRefundReceiptPdf(order, companySettings),
+                order.customer_phone,
+            );
+            if (result === 'downloaded') {
+                alert('O PDF foi baixado e a conversa do cliente foi aberta. Anexe o arquivo baixado no WhatsApp.');
+            }
+        } catch (err: any) {
+            alert(`Erro ao preparar o comprovante: ${err.message}`);
+        } finally {
+            setActionLoading(null);
+        }
     };
 
     // Detecta item de garantia estendida no pedido
@@ -478,6 +527,32 @@ export default function OnlineOrdersPage() {
                                         )}
                                         Estornar pagamento
                                     </button>
+                                )}
+
+                                {order.payment_status === 'refunded' && (
+                                    <>
+                                        <button
+                                            onClick={() => handleShareRefundReceipt(order)}
+                                            disabled={actionLoading?.startsWith(order.id)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                                            title="Compartilhar o PDF pelo WhatsApp"
+                                        >
+                                            {actionLoading === order.id + 'share-refund' ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            ) : (
+                                                <MessageCircle className="w-3.5 h-3.5" />
+                                            )}
+                                            Enviar PDF
+                                        </button>
+                                        <button
+                                            onClick={() => handleDownloadRefundReceipt(order)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50 transition-colors"
+                                            title="Baixar o comprovante de estorno em PDF"
+                                        >
+                                            <FileDown className="w-3.5 h-3.5" />
+                                            Baixar PDF
+                                        </button>
+                                    </>
                                 )}
 
                                 {/* Botão garantia — só aparece quando pedido tem item de garantia */}

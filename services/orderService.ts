@@ -170,6 +170,7 @@ function normalizeOrderRow(row: any): Order {
         subtotal: Number(row.subtotal) || 0,
         discount: Number(row.discount) || 0,
         total: Number(row.total) || 0,
+        refund_amount: row.refund_amount == null ? undefined : Number(row.refund_amount) || 0,
         coupon_discount: Number(row.coupon_discount) || 0,
         coins_spent: Number(row.coins_spent) || 0,
         coins_discount: Number(row.coins_discount) || 0,

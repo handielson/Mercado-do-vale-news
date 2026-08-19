@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.268-pedidos-reembolso-recuperacao",
+  "version": "v1.2.269-estorno-recibo-pdf",
   "date": "2026-08-19",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260819-124319-v1268-pedidos-reembolso-recuperacao",
+  "release_vps": "/var/www/mdv-site/releases/20260819-125753-v1269-estorno-recibo-pdf",
   "branch": "main",
-  "summary": "Adiciona estorno e aviso de situação nos pedidos online, além de recuperação de senha por e-mail ou WhatsApp e cadastro com pelo menos um contato."
+  "summary": "Corrige a persistência do estorno Mercado Pago e adiciona comprovante em PDF compartilhável pelo WhatsApp."
 }
