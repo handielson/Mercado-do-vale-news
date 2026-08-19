@@ -76,6 +76,19 @@ assert.match(service, /UNIQUE KEY uniq_mobile_push_token/);
 assert.match(service, /ttl:\s*MAX_SALE_NOTIFICATION_AGE_MS/);
 assert.match(service, /notification_skipped:\s*inserted && notify \? 'stale_sale'/);
 assert.match(server, /event_type:\s*'ORDER_STATUS_CHANGE'/);
+const purchaseNotificationRoute = server.match(
+  /fastify\.post\('\/orders\/:orderId\/purchase-notification'[\s\S]*?\n\}\);/,
+)?.[0] || '';
+assert.match(
+  purchaseNotificationRoute,
+  /recordMobileOnlineSaleVps\(order\.id\)/,
+  'o checkout concluido deve registrar a venda Online no aplicativo sem depender do webhook de pagamento',
+);
+assert.match(
+  purchaseNotificationRoute,
+  /catch \(error\)[\s\S]*mobile = \{ status: 'failed' \}[\s\S]*notifyOnlineOrderCreatedWhatsAppVps/,
+  'uma falha do push nao deve impedir a notificacao de compra por WhatsApp',
+);
 assert.match(server, /pathname:\s*'\/event\/202309\/webhooks'/);
 assert.match(server, /COALESCE\(s\.finalization_status, 'success'\) = 'success'/);
 assert.doesNotMatch(

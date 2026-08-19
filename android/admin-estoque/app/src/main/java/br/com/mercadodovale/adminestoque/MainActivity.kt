@@ -1423,7 +1423,11 @@ class MainActivity : Activity() {
     }
 
     private fun defaultSalesFilter(channel: SalesChannel): SaleStatusGroup =
-        if (channel == SalesChannel.PDV) SaleStatusGroup.ALL else SaleStatusGroup.TO_SHIP
+        if (channel == SalesChannel.PDV || channel == SalesChannel.ONLINE) {
+            SaleStatusGroup.ALL
+        } else {
+            SaleStatusGroup.TO_SHIP
+        }
 
     private fun salesChannelColor(channel: SalesChannel): Int = when (channel) {
         SalesChannel.ONLINE -> Color.rgb(37, 99, 235)
@@ -1468,6 +1472,7 @@ class MainActivity : Activity() {
 
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
+        refreshAllSales(channel, currentSalesFilter, status, list)
     }
 
     private fun renderCachedSales(

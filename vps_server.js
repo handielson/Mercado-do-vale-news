@@ -3610,6 +3610,7 @@ async function notifyOnlineOrderCreatedWhatsAppVps(orderId) {
   );
   const order = orders?.[0] || null;
   if (!order) return { status: 'failed', error: 'order_not_found' };
+
   const [sentRows] = await pool.query(
     `SELECT id FROM whatsapp_automation_logs
       WHERE template_key = 'online_order_created'
@@ -3620,6 +3621,7 @@ async function notifyOnlineOrderCreatedWhatsAppVps(orderId) {
     [order.id],
   );
   if (sentRows?.length) return { status: 'already_sent' };
+
   const [items] = await pool.query(
     'SELECT product_name, product_color, quantity, unit_price, subtotal FROM order_items WHERE order_id = ? ORDER BY created_at ASC, id ASC LIMIT 200',
     [order.id],
@@ -3636,6 +3638,7 @@ async function notifyOnlineOrderCreatedWhatsAppVps(orderId) {
     : 'Retirada combinada com a loja';
   const status = String(order.status || '').trim();
   const paymentStatus = String(order.payment_status || '').trim();
+
   return sendWhatsAppAutomationMessageVps({
     templateKey: 'online_order_created',
     phone: order.customer_phone || order.registered_customer_phone,
@@ -26274,9 +26277,16 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
 });
 
 async function markOnlineOrderPaymentFailed(order, reason) {
-  await pool.query(`UPDATE orders SET status = 'payment_failed', payment_status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [order.id]);
-  await processOrderReservation(order.id, 'release', 'Falha ao iniciar pagamento Mercado Pago', String(reason || 'Reserva liberada apos falha na criacao do pagamento.').slice(0, 500))
-    .catch((error) => console.warn('[orders] Falha ao liberar reserva apos erro de pagamento:', error?.message || error));
+  await pool.query(
+    `UPDATE orders SET status = 'payment_failed', payment_status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [order.id],
+  );
+  await processOrderReservation(
+    order.id,
+    'release',
+    'Falha ao iniciar pagamento Mercado Pago',
+    String(reason || 'Reserva liberada apos falha na criacao do pagamento.').slice(0, 500),
+  ).catch((error) => console.warn('[orders] Falha ao liberar reserva apos erro de pagamento:', error?.message || error));
 }
 
 fastify.post('/orders/:orderId/payments/mercado-pago/pix', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
@@ -26285,18 +26295,52 @@ fastify.post('/orders/:orderId/payments/mercado-pago/pix', { preHandler: require
   const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
   const order = orders?.[0] || null;
   if (!order) return reply.code(404).send({ error: 'Pedido não encontrado.' });
-  if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) return reply.code(403).send({ error: 'Forbidden for this order' });
-  if (!['pending', 'awaiting_payment'].includes(String(order.status || ''))) return reply.code(409).send({ error: 'O pedido não está disponível para pagamento.' });
-  const [integrations] = await pool.query("SELECT access_token FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 AND company_id = ? LIMIT 1", [order.company_id]);
+  if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) {
+    return reply.code(403).send({ error: 'Forbidden for this order' });
+  }
+  if (!['pending', 'awaiting_payment'].includes(String(order.status || ''))) {
+    return reply.code(409).send({ error: 'O pedido não está disponível para pagamento.' });
+  }
+
+  const [integrations] = await pool.query(
+    "SELECT access_token FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 AND company_id = ? LIMIT 1",
+    [order.company_id],
+  );
   const accessToken = integrations?.[0]?.access_token;
   if (!accessToken) return reply.code(400).send({ error: 'Mercado Pago não configurado.' });
-  const [customers] = order.customer_id ? await pool.query('SELECT cpf_cnpj FROM customers WHERE id = ? LIMIT 1', [order.customer_id]) : [[]];
+
+  const [customers] = order.customer_id
+    ? await pool.query('SELECT cpf_cnpj FROM customers WHERE id = ? LIMIT 1', [order.customer_id])
+    : [[]];
   const documentDigits = String(customers?.[0]?.cpf_cnpj || '').replace(/\D/g, '');
   const nameParts = String(order.customer_name || 'Cliente').trim().split(/\s+/u);
-  const payer = { email: String(order.customer_email || 'cliente@mercadodovale.com.br'), first_name: nameParts[0] || 'Cliente', last_name: nameParts.slice(1).join(' ') || 'Não Informado', identification: documentDigits.length === 11 ? { type: 'CPF', number: documentDigits } : documentDigits.length === 14 ? { type: 'CNPJ', number: documentDigits } : undefined };
+  const payer = {
+    email: String(order.customer_email || 'cliente@mercadodovale.com.br'),
+    first_name: nameParts[0] || 'Cliente',
+    last_name: nameParts.slice(1).join(' ') || 'Não Informado',
+    identification: documentDigits.length === 11
+      ? { type: 'CPF', number: documentDigits }
+      : documentDigits.length === 14 ? { type: 'CNPJ', number: documentDigits } : undefined,
+  };
   let paymentResponse;
   try {
-    paymentResponse = await fetch('https://api.mercadopago.com/v1/payments', { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `order-pix-${String(order.id).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 48)}` }, body: JSON.stringify({ transaction_amount: Number((Math.max(0, Number(order.total) || 0) / 100).toFixed(2)), description: `Pedido Mercado do Vale - ${String(order.id).slice(0, 8)}`, payment_method_id: 'pix', external_reference: order.id, notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook', payer }), signal: AbortSignal.timeout(15000) });
+    paymentResponse = await fetch('https://api.mercadopago.com/v1/payments', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': `order-pix-${String(order.id).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 48)}`,
+      },
+      body: JSON.stringify({
+        transaction_amount: Number((Math.max(0, Number(order.total) || 0) / 100).toFixed(2)),
+        description: `Pedido Mercado do Vale - ${String(order.id).slice(0, 8)}`,
+        payment_method_id: 'pix',
+        external_reference: order.id,
+        notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook',
+        payer,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
   } catch (error) {
     await markOnlineOrderPaymentFailed(order, error?.message);
     return reply.code(502).send({ error: 'Falha de comunicacao ao gerar PIX Mercado Pago.' });
@@ -26308,28 +26352,63 @@ fastify.post('/orders/:orderId/payments/mercado-pago/pix', { preHandler: require
     return reply.code(502).send({ error: `Falha ao gerar PIX Mercado Pago: ${detail}` });
   }
   const transactionData = payment?.point_of_interaction?.transaction_data || {};
-  const pixData = { qr_code: String(transactionData.qr_code || ''), qr_code_base64: String(transactionData.qr_code_base64 || ''), ticket_url: String(transactionData.ticket_url || '') };
+  const pixData = {
+    qr_code: String(transactionData.qr_code || ''),
+    qr_code_base64: String(transactionData.qr_code_base64 || ''),
+    ticket_url: String(transactionData.ticket_url || ''),
+  };
   if (!pixData.qr_code || !pixData.qr_code_base64) {
     await markOnlineOrderPaymentFailed(order, 'Resposta sem dados do PIX.');
     return reply.code(502).send({ error: 'O Mercado Pago não devolveu os dados do PIX.' });
   }
-  await pool.query(`UPDATE orders SET gateway_payment_id = ?, gateway_pix_data = ?, payment_gateway = 'mercado_pago', payment_method = 'pix', status = 'awaiting_payment', payment_status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [String(payment.id || ''), JSON.stringify(pixData), order.id]);
+  await pool.query(
+    `UPDATE orders SET gateway_payment_id = ?, gateway_pix_data = ?, payment_gateway = 'mercado_pago',
+      payment_method = 'pix', status = 'awaiting_payment', payment_status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [String(payment.id || ''), JSON.stringify(pixData), order.id],
+  );
   return { id: String(payment.id || ''), status: String(payment.status || 'pending'), gateway_pix_data: pixData, order_status: 'awaiting_payment', payment_status: 'pending' };
 });
 
 fastify.post('/orders/:orderId/payments/mercado-pago/preference', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
-  const orderId = String(req.params?.orderId || '').trim(); const access = req.customerAccess || {};
-  const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]); const order = orders?.[0] || null;
+  const orderId = String(req.params?.orderId || '').trim();
+  const access = req.customerAccess || {};
+  const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
+  const order = orders?.[0] || null;
   if (!order) return reply.code(404).send({ error: 'Pedido não encontrado.' });
-  if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) return reply.code(403).send({ error: 'Forbidden for this order' });
+  if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) {
+    return reply.code(403).send({ error: 'Forbidden for this order' });
+  }
   if (String(order.status || '') !== 'pending') return reply.code(409).send({ error: 'O pedido não está disponível para pagamento.' });
-  const [integrations] = await pool.query("SELECT access_token, environment FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 AND company_id = ? LIMIT 1", [order.company_id]); const integration = integrations?.[0] || null;
+  const [integrations] = await pool.query(
+    "SELECT access_token, environment FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 AND company_id = ? LIMIT 1",
+    [order.company_id],
+  );
+  const integration = integrations?.[0] || null;
   if (!integration?.access_token) return reply.code(400).send({ error: 'Mercado Pago não configurado.' });
-  const preferenceItems = [{ id: String(order.id), title: `Pedido Mercado do Vale - ${String(order.id).slice(0, 8)}`, description: 'Produtos, descontos e entrega incluidos', quantity: 1, currency_id: 'BRL', unit_price: Number((Math.max(0, Number(order.total) || 0) / 100).toFixed(2)) }];
-  const cleanPhone = String(order.customer_phone || '').replace(/\D/g, ''); const nameParts = String(order.customer_name || 'Cliente').trim().split(/\s+/u);
+  const preferenceItems = [{
+    id: String(order.id),
+    title: `Pedido Mercado do Vale - ${String(order.id).slice(0, 8)}`,
+    description: 'Produtos, descontos e entrega incluidos',
+    quantity: 1,
+    currency_id: 'BRL',
+    unit_price: Number((Math.max(0, Number(order.total) || 0) / 100).toFixed(2)),
+  }];
+  const cleanPhone = String(order.customer_phone || '').replace(/\D/g, '');
+  const nameParts = String(order.customer_name || 'Cliente').trim().split(/\s+/u);
   let preferenceResponse;
   try {
-    preferenceResponse = await fetch('https://api.mercadopago.com/checkout/preferences', { method: 'POST', headers: { Authorization: `Bearer ${integration.access_token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `order-preference-${order.id}` }, body: JSON.stringify({ items: preferenceItems, payer: { name: nameParts[0] || 'Cliente', surname: nameParts.slice(1).join(' '), email: order.customer_email || 'cliente@mercadodovale.com.br', phone: { area_code: cleanPhone.slice(0, 2), number: cleanPhone.slice(2) } }, external_reference: order.id, notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook', payment_methods: { excluded_payment_types: [{ id: 'ticket' }], installments: 12 } }), signal: AbortSignal.timeout(15000) });
+    preferenceResponse = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${integration.access_token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `order-preference-${order.id}` },
+      body: JSON.stringify({
+        items: preferenceItems,
+        payer: { name: nameParts[0] || 'Cliente', surname: nameParts.slice(1).join(' '), email: order.customer_email || 'cliente@mercadodovale.com.br', phone: { area_code: cleanPhone.slice(0, 2), number: cleanPhone.slice(2) } },
+        external_reference: order.id,
+        notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook',
+        payment_methods: { excluded_payment_types: [{ id: 'ticket' }], installments: 12 },
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
   } catch (error) {
     await markOnlineOrderPaymentFailed(order, error?.message);
     return reply.code(502).send({ error: 'Falha de comunicacao ao gerar checkout Mercado Pago.' });
@@ -26369,8 +26448,16 @@ fastify.post('/orders/:orderId/purchase-notification', { preHandler: requireSync
     return reply.code(403).send({ error: 'Forbidden for this order' });
   }
 
+  let mobile;
+  try {
+    mobile = await recordMobileOnlineSaleVps(order.id);
+  } catch (error) {
+    console.error('[MOBILE SALES] Falha ao registrar venda online concluida no checkout:', error?.message || error);
+    mobile = { status: 'failed' };
+  }
+
   const whatsapp = await notifyOnlineOrderCreatedWhatsAppVps(order.id);
-  return { ok: ['sent', 'already_sent'].includes(whatsapp.status), order_id: order.id, whatsapp };
+  return { ok: ['sent', 'already_sent'].includes(whatsapp.status), order_id: order.id, mobile, whatsapp };
 });
 
 fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {

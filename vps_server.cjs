@@ -26448,8 +26448,16 @@ fastify.post('/orders/:orderId/purchase-notification', { preHandler: requireSync
     return reply.code(403).send({ error: 'Forbidden for this order' });
   }
 
+  let mobile;
+  try {
+    mobile = await recordMobileOnlineSaleVps(order.id);
+  } catch (error) {
+    console.error('[MOBILE SALES] Falha ao registrar venda online concluida no checkout:', error?.message || error);
+    mobile = { status: 'failed' };
+  }
+
   const whatsapp = await notifyOnlineOrderCreatedWhatsAppVps(order.id);
-  return { ok: ['sent', 'already_sent'].includes(whatsapp.status), order_id: order.id, whatsapp };
+  return { ok: ['sent', 'already_sent'].includes(whatsapp.status), order_id: order.id, mobile, whatsapp };
 });
 
 fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
