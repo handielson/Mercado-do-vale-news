@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.272-google-login-clientes
+version: v1.2.273-perfil-cors-patch
 date: 2026-08-19
 status: ready
-release_vps: /var/www/mdv-site/releases/20260819-192650-google-login-clientes
+release_vps: /var/www/mdv-site/releases/20260819-193800-perfil-cors-patch
 branch: main
-summary: Ativa login Google de clientes com OAuth separado e impede contas administrativas nesse fluxo.
+summary: Libera de forma versionada os metodos CORS da API usados na edicao autenticada do perfil do cliente.
 ```

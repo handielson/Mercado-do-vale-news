@@ -9,6 +9,8 @@ const API_PATTERNS = [
   /^vps_server\.(?:js|cjs)$/,
   /^server\.js$/,
   /^deploy-vps-server-only\.cjs$/,
+  /^infra\/nginx\/mdv-api(?:-|\.)/,
+  /^scripts\/install-vps-api-nginx\.cjs$/,
   /^api\//,
   /^routes\//,
   /^webhooks?\//,
@@ -288,6 +290,10 @@ function runSelfTest() {
   const api = classifyFiles(['vps_server.js']);
   assert(api.target === 'api', 'api classification failed');
   assert(api.needs.api === true, 'api deploy need failed');
+
+  const apiNginx = classifyFiles(['infra/nginx/mdv-api-ssl.conf', 'scripts/install-vps-api-nginx.cjs']);
+  assert(apiNginx.target === 'api', 'API Nginx classification failed');
+  assert(apiNginx.needs.api === true, 'API Nginx deploy need failed');
 
   const both = classifyFiles(['pages/Home.tsx', 'vps_server.cjs']);
   assert(both.target === 'both', 'both classification failed');
