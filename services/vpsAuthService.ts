@@ -141,6 +141,17 @@ export const vpsAuthService = {
     });
   },
 
+  async updateProfile(data: Partial<Customer>): Promise<Customer> {
+    const session = readStoredSession();
+    if (!session?.token) throw new Error('Sessao expirada');
+    const updatedSession = await requestAuth('/auth/profile', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify(data),
+    });
+    return updatedSession.customer;
+  },
+
   async createCustomerLogin(data: { customer_id: string; email?: string; cpf_cnpj: string; password: string }): Promise<void> {
     const session = readStoredSession();
     const response = await fetch(buildAuthUrl('/auth/admin/users'), {

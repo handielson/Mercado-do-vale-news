@@ -153,7 +153,7 @@ export const VpsAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const updateProfile = async (data: Partial<Customer>) => {
         if (!user) throw new Error('No user logged in');
         if (!customer) throw new Error('No customer profile loaded');
-        const updated = await customerService.update(customer.id, data as any);
+        const updated = await vpsAuthService.updateProfile(data);
         setCustomer(updated);
         notify.success('Perfil atualizado com sucesso!');
     };

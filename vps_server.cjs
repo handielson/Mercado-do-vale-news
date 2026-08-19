@@ -1410,6 +1410,98 @@ fastify.get('/auth/me', async (request, reply) => {
   return authResponseForCustomer(customer);
 });
 
+fastify.patch('/auth/profile', async (request, reply) => {
+  const auth = await getVpsBearerAuthContext(request);
+  if (!auth.customerId) return reply.code(401).send({ error: 'Unauthorized' });
+
+  const body = request.body || {};
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return reply.code(400).send({ error: 'Dados do perfil invalidos' });
+  }
+
+  const [rows] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [auth.customerId]);
+  const current = rows?.[0] || null;
+  if (!current) return reply.code(404).send({ error: 'Cliente nao encontrado' });
+
+  const hasField = (field) => Object.prototype.hasOwnProperty.call(body, field);
+  const name = hasField('name') ? String(body.name || '').trim().slice(0, 255) : String(current.name || '').trim();
+  if (!name) return reply.code(400).send({ error: 'Nome obrigatorio' });
+
+  let phone = current.phone || null;
+  if (hasField('phone')) {
+    const rawPhone = String(body.phone || '').trim();
+    const normalizedPhone = rawPhone ? normalizeAuthWhatsApp(rawPhone) : '';
+    if (rawPhone && !normalizedPhone) {
+      return reply.code(400).send({ error: 'Informe um WhatsApp valido com DDD' });
+    }
+    phone = normalizedPhone ? normalizedPhone.slice(2) : null;
+  }
+
+  if (!normalizeAuthEmail(current.email) && !phone) {
+    return reply.code(400).send({ error: 'Mantenha pelo menos email ou WhatsApp para recuperar sua senha' });
+  }
+
+  if (phone) {
+    const canonicalPhone = normalizeAuthWhatsApp(phone);
+    const localPhone = canonicalPhone.slice(2);
+    const [phoneConflicts] = await pool.query(
+      `SELECT id FROM customers
+       WHERE id <> ?
+         AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+', '') IN (?, ?)
+       LIMIT 1`,
+      [auth.customerId, canonicalPhone, localPhone]
+    );
+    if (phoneConflicts?.[0]) {
+      return reply.code(409).send({ error: 'Este WhatsApp ja esta vinculado a outra conta' });
+    }
+  }
+
+  let birthDate = current.birth_date || null;
+  if (hasField('birth_date')) {
+    birthDate = String(body.birth_date || '').trim() || null;
+    if (birthDate) {
+      const parsedBirthDate = new Date(`${birthDate}T00:00:00.000Z`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)
+        || Number.isNaN(parsedBirthDate.getTime())
+        || parsedBirthDate.toISOString().slice(0, 10) !== birthDate) {
+        return reply.code(400).send({ error: 'Data de nascimento invalida' });
+      }
+    }
+  }
+
+  const avatarUrl = hasField('avatar_url') ? String(body.avatar_url || '').trim().slice(0, 2048) || null : current.avatar_url;
+  let addressJson = current.address || null;
+  if (hasField('address')) {
+    if (body.address == null) {
+      addressJson = null;
+    } else if (typeof body.address !== 'object' || Array.isArray(body.address)) {
+      return reply.code(400).send({ error: 'Endereco invalido' });
+    } else {
+      const maxLength = { zipCode: 16, street: 255, number: 60, complement: 255, neighborhood: 160, city: 160, state: 2 };
+      const safeAddress = {};
+      for (const [field, limit] of Object.entries(maxLength)) {
+        safeAddress[field] = String(body.address[field] || '').trim().slice(0, limit);
+      }
+      addressJson = JSON.stringify(safeAddress);
+    }
+  }
+
+  await pool.query(
+    `UPDATE customers
+        SET name = ?, phone = ?, birth_date = ?, avatar_url = ?, address = ?, updated_at = NOW()
+      WHERE id = ?`,
+    [name, phone, birthDate, avatarUrl, addressJson, auth.customerId]
+  );
+  const [updatedRows] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [auth.customerId]);
+  const updated = updatedRows?.[0] || null;
+  if (!updated) return reply.code(404).send({ error: 'Cliente nao encontrado' });
+
+  syncCustomerGoogleContactRecord(updated, 'auth-profile-update').catch((error) => {
+    console.warn('[auth] Google contact profile sync failed:', error?.message || error);
+  });
+  return authResponseForCustomer(updated);
+});
+
 fastify.post('/auth/password', async (request, reply) => {
   await ensureCustomerAuthTable();
   const auth = await getVpsBearerAuthContext(request);
