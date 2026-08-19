@@ -305,6 +305,26 @@ function CartPageContent() {
     const grandTotal = subtotal + warrantyPrice + shippingCost - couponDiscount - cartCoinDiscount;
     const hasModifiers = warrantyPrice > 0 || couponDiscount > 0 || cartCoinDiscount > 0 || shippingCost > 0;
 
+    const openMercadoPagoCheckout = () => {
+        if (!customer) {
+            navigate('/cliente/login?next=/checkout');
+            return;
+        }
+
+        navigate('/checkout', {
+            state: {
+                selectedWarranty,
+                warrantyPrice,
+                warrantyProductName: eligibleItemNames,
+                warrantyProductId: eligibleProductId,
+                warrantyImageUrl: eligibleImageUrl,
+                referralCode: referralInput,
+                referralName,
+                delivery,
+            },
+        });
+    };
+
     useEffect(() => {
         sessionStorage.setItem('mv_cart_presencialOpen', String(presencialOpen));
         sessionStorage.setItem('mv_cart_referralInput', referralInput);
@@ -862,20 +882,14 @@ function CartPageContent() {
             </div>
 
             <button
-                onClick={() => {
-                    if (!customer) {
-                        navigate('/cliente/login?next=/checkout');
-                    } else {
-                        navigate('/checkout');
-                    }
-                }}
-                className="w-full flex items-center justify-between px-4 py-4 border border-gray-200 rounded-2xl bg-white shadow-sm active:bg-gray-50 hover:bg-gray-50 transition-colors"
+                onClick={openMercadoPagoCheckout}
+                className="w-full flex items-center justify-between px-4 py-4 border border-gray-200 rounded-2xl bg-white shadow-sm active:bg-gray-50 hover:bg-gray-50 transition-colors text-left"
             >
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
                         <CreditCard className="w-5 h-5 text-white" />
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1 text-left">
                         <p className="font-bold text-sm text-gray-900">Mercado Pago</p>
                         <p className="text-xs text-gray-400 mt-0.5">
                             {customer ? 'Pague online com segurança' : 'Faça login para continuar'}
@@ -1139,25 +1153,14 @@ function CartPageContent() {
                                     )}
                                 </div>
                                 <button
-                                    onClick={() => navigate('/checkout', {
-                                        state: {
-                                            selectedWarranty,
-                                            warrantyPrice,
-                                            warrantyProductName: eligibleItemNames,
-                                            warrantyProductId: eligibleProductId,
-                                            warrantyImageUrl: eligibleImageUrl,
-                                            referralCode: referralInput,
-                                            referralName: referralName,
-                                            delivery,
-                                        }
-                                    })}
+                                    onClick={openMercadoPagoCheckout}
                                     className="w-full flex items-center justify-between px-4 py-4 border border-gray-200 rounded-2xl active:bg-gray-50 text-left"
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
                                             <CreditCard className="w-5 h-5 text-white" />
                                         </div>
-                                        <div>
+                                        <div className="min-w-0 flex-1 text-left">
                                             <p className="font-bold text-sm text-gray-900">Mercado Pago</p>
                                             <p className="text-xs text-gray-400">Pague online com segurança</p>
                                         </div>

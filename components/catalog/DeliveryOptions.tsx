@@ -50,9 +50,13 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
                 .then(res => {
                     setShippingOptions(res.options);
                     setMissingForFree(res.missingForFree);
-                    // Atualiza a opção selecionada se a atual não bater ou sumir
-                    if (selected.shippingOption && !res.options.find(o => o.id === selected.shippingOption!.id)) {
-                         onSelect({ ...selected, shippingOption: res.options.length > 0 ? res.options[0] : undefined });
+                    // Mantém a opção escolhida sincronizada com o preço recalculado.
+                    if (selected.shippingOption) {
+                        const refreshedOption = res.options.find(option => option.id === selected.shippingOption!.id);
+                        onSelect({
+                            ...selected,
+                            shippingOption: refreshedOption || res.options[0],
+                        });
                     }
                 })
                 .catch(() => { });
@@ -60,7 +64,12 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
     }, [selected.address?.cep, subtotal, orderCost, cepError, cartVolume]);
 
     const handleTypeChange = (type: 'pickup' | 'delivery') => {
-        onSelect({ ...selected, type, address: type === 'pickup' ? undefined : selected.address });
+        onSelect({
+            ...selected,
+            type,
+            address: type === 'pickup' ? undefined : selected.address,
+            shippingOption: type === 'pickup' ? undefined : selected.shippingOption,
+        });
     };
 
     const handleCEPLookup = async () => {
@@ -112,6 +121,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
             {/* Delivery Type Toggle */}
             <div className="grid grid-cols-2 gap-3">
                 <button
+                    type="button"
                     onClick={() => handleTypeChange('pickup')}
                     className={`
                         p-4 rounded-lg border-2 transition-all duration-200
@@ -128,6 +138,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
                 </button>
 
                 <button
+                    type="button"
                     onClick={() => handleTypeChange('delivery')}
                     className={`
                         p-4 rounded-lg border-2 transition-all duration-200
@@ -157,12 +168,18 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
                                 type="text"
                                 value={cep}
                                 onChange={(e) => setCep(formatCEP(e.target.value))}
-                                onBlur={handleCEPLookup}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                        event.preventDefault();
+                                        handleCEPLookup();
+                                    }
+                                }}
                                 placeholder="00000-000"
                                 maxLength={9}
                                 className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                             <button
+                                type="button"
                                 onClick={handleCEPLookup}
                                 disabled={isLoadingCEP || !cep}
                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -382,6 +399,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
             {selected.type === 'pickup' && storeAddress && (
                 <div className="mt-3 rounded-xl border border-slate-200 overflow-hidden">
                     <button
+                        type="button"
                         onClick={() => setAddressOpen(o => !o)}
                         className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors"
                     >

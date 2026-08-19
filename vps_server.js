@@ -2053,6 +2053,7 @@ function isVpsProxyCustomerOrderWritePath(proxyPath, method = 'GET') {
   if (normalizedMethod === 'POST' && pathname === '/table-data/order_items/bulk') return true;
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/priority-reservations') return true;
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/order-reservations/release') return true;
+  if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/purchase-notification$/u.test(pathname)) return true;
   if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/card$/u.test(pathname)) return true;
   if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/(?:pix|preference)$/u.test(pathname)) return true;
   return normalizedMethod === 'DELETE' && /^\/table-data\/orders\/[^/]+$/u.test(pathname);
@@ -2103,6 +2104,11 @@ async function assertVpsProxyCustomerOrderWriteAllowed(request, auth, proxyPath,
 
   if (normalizedMethod === 'POST' && pathname === '/stock-locations/order-reservations/release') {
     return assertVpsProxyOrdersBelongToCustomer([body.order_id], auth.customerId);
+  }
+
+  if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/purchase-notification$/u.test(pathname)) {
+    const orderId = pathname.split('/')[2] || '';
+    return assertVpsProxyOrdersBelongToCustomer([decodeURIComponent(orderId)], auth.customerId);
   }
 
   if (normalizedMethod === 'POST' && /^\/orders\/[^/]+\/payments\/mercado-pago\/(?:card|pix|preference)$/u.test(pathname)) {
@@ -3298,6 +3304,36 @@ const WHATSAPP_AUTOMATION_TEMPLATE_DEFAULTS_VPS = {
       'Se precisar, estamos por aqui. \uD83D\uDC9A',
     ].join('\n'),
   },
+  online_order_created: {
+    template_key: 'online_order_created',
+    category: 'transactional',
+    title: 'Pedido online realizado',
+    enabled: true,
+    content: [
+      '\uD83D\uDED2 Pedido recebido!',
+      '',
+      'Oi, {nome}! Registramos sua compra {pedido}.',
+      'Situacao atual: *{situacao}*',
+      'Pagamento: {pagamento} - *{situacao_pagamento}*',
+      'Data: {data}',
+      '',
+      '\uD83D\uDCE6 Itens:',
+      '{itens}',
+      '',
+      'Subtotal: {subtotal}',
+      'Desconto: {desconto}',
+      'Frete: {frete}',
+      'Total: *{total}*',
+      '',
+      '\uD83D\uDE9A Entrega: {tipo_entrega}',
+      '{endereco_entrega}',
+      '',
+      'Acompanhe seu pedido:',
+      '{link_pedido}',
+      '',
+      'Se precisar, estamos por aqui. \uD83D\uDC9A',
+    ].join('\n'),
+  },
 };
 
 async function getWhatsAppAutomationTemplateVps(templateKey) {
@@ -3546,6 +3582,84 @@ const ONLINE_ORDER_STATUS_LABELS_VPS = {
   cancelled: 'Cancelado',
   refunded: 'Pagamento estornado',
 };
+
+const ONLINE_ORDER_PAYMENT_STATUS_LABELS_VPS = {
+  pending: 'Aguardando pagamento',
+  paid: 'Pagamento confirmado',
+  failed: 'Pagamento nao concluido',
+  cancelled: 'Pagamento cancelado',
+  refunded: 'Pagamento estornado',
+};
+
+const ONLINE_ORDER_PAYMENT_METHOD_LABELS_VPS = {
+  pix: 'PIX',
+  credit_card: 'Cartao de credito',
+  debit_card: 'Cartao de debito',
+  on_delivery: 'Pagamento na entrega',
+  cash: 'Dinheiro',
+};
+
+async function notifyOnlineOrderCreatedWhatsAppVps(orderId) {
+  const [orders] = await pool.query(
+    `SELECT o.*, c.phone AS registered_customer_phone
+       FROM orders o
+       LEFT JOIN customers c ON c.id = o.customer_id
+      WHERE o.id = ?
+      LIMIT 1`,
+    [orderId],
+  );
+  const order = orders?.[0] || null;
+  if (!order) return { status: 'failed', error: 'order_not_found' };
+  const [sentRows] = await pool.query(
+    `SELECT id FROM whatsapp_automation_logs
+      WHERE template_key = 'online_order_created'
+        AND entity_type = 'order'
+        AND entity_id = ?
+        AND status = 'sent'
+      LIMIT 1`,
+    [order.id],
+  );
+  if (sentRows?.length) return { status: 'already_sent' };
+  const [items] = await pool.query(
+    'SELECT product_name, product_color, quantity, unit_price, subtotal FROM order_items WHERE order_id = ? ORDER BY created_at ASC, id ASC LIMIT 200',
+    [order.id],
+  );
+  const itemLines = (items || []).map((item) => {
+    const quantity = Math.max(1, Number(item.quantity) || 1);
+    const color = String(item.product_color || '').trim();
+    const description = `${item.product_name || 'Item'}${color ? ` - ${color}` : ''}`;
+    return `- ${quantity}x ${description} - ${formatAutomationMoney(item.subtotal || (Number(item.unit_price || 0) * quantity))}`;
+  }).join('\n') || 'Itens registrados no pedido';
+  const deliveryType = String(order.delivery_type || '').toLowerCase() === 'delivery' ? 'Entrega' : 'Retirada na loja';
+  const deliveryAddress = deliveryType === 'Entrega'
+    ? buildAutomationAddressText(parseAutomationJson(order.shipping_address, null))
+    : 'Retirada combinada com a loja';
+  const status = String(order.status || '').trim();
+  const paymentStatus = String(order.payment_status || '').trim();
+  return sendWhatsAppAutomationMessageVps({
+    templateKey: 'online_order_created',
+    phone: order.customer_phone || order.registered_customer_phone,
+    entityType: 'order',
+    entityId: order.id,
+    customerId: order.customer_id || null,
+    variables: {
+      nome: order.customer_name || 'Cliente',
+      pedido: `#${String(order.id).slice(0, 8).toUpperCase()}`,
+      situacao: ONLINE_ORDER_STATUS_LABELS_VPS[status] || status || 'Pedido recebido',
+      data: formatAutomationDateTime(order.created_at || new Date()),
+      itens: itemLines,
+      pagamento: ONLINE_ORDER_PAYMENT_METHOD_LABELS_VPS[String(order.payment_method || '').trim()] || order.payment_method || 'A definir',
+      situacao_pagamento: ONLINE_ORDER_PAYMENT_STATUS_LABELS_VPS[paymentStatus] || paymentStatus || 'Pendente',
+      subtotal: formatAutomationMoney(order.subtotal || 0),
+      desconto: formatAutomationMoney(order.discount || 0),
+      frete: formatAutomationMoney(order.shipping_cost || 0),
+      total: formatAutomationMoney(order.total || 0),
+      tipo_entrega: deliveryType,
+      endereco_entrega: deliveryAddress,
+      link_pedido: `https://mercadodovale.com.br/pedido/${encodeURIComponent(String(order.id))}`,
+    },
+  });
+}
 
 async function notifyOnlineOrderStatusWhatsAppVps(order, situationOverride = '') {
   if (!order?.id) return { status: 'failed', error: 'order_not_found' };
@@ -26241,6 +26355,22 @@ fastify.post('/orders/:orderId/status-notification', { preHandler: requireSyncKe
 
   const whatsapp = await notifyOnlineOrderStatusWhatsAppVps(order);
   return { ok: whatsapp.status === 'sent', order_id: order.id, status: order.status, whatsapp };
+});
+
+fastify.post('/orders/:orderId/purchase-notification', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  const orderId = String(req.params?.orderId || '').trim();
+  const access = req.customerAccess || {};
+  if (!orderId) return reply.code(400).send({ error: 'Pedido obrigatorio.' });
+
+  const [orders] = await pool.query('SELECT id, customer_id FROM orders WHERE id = ? LIMIT 1', [orderId]);
+  const order = orders?.[0] || null;
+  if (!order) return reply.code(404).send({ error: 'Pedido nao encontrado.' });
+  if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) {
+    return reply.code(403).send({ error: 'Forbidden for this order' });
+  }
+
+  const whatsapp = await notifyOnlineOrderCreatedWhatsAppVps(order.id);
+  return { ok: ['sent', 'already_sent'].includes(whatsapp.status), order_id: order.id, whatsapp };
 });
 
 fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {

@@ -1,32 +1,24 @@
 /**
  * CheckoutPage — Dados do cliente + entrega + método de pagamento
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '@/contexts/CartContext';
-import { shippingService } from '@/services/shippingService';
 import { createOrder } from '@/services/orderService';
 import { paymentIntegrationService } from '@/services/paymentIntegrationService';
 import type { PublicCheckoutPaymentIntegration } from '@/services/paymentIntegrationService';
 import { formatCurrency, calculateCartVolume } from '@/utils/saleCalculations';
-import type { ShippingOption } from '@/types/shipping';
-import type { MercadoPagoCardFormData, OrderDeliveryType, OrderPaymentMethod, OrderShippingAddress, PaymentGateway } from '@/types/order';
+import type { MercadoPagoCardFormData, OrderPaymentMethod, OrderShippingAddress, PaymentGateway } from '@/types/order';
 import MercadoPagoCardBrick from '@/components/payment/MercadoPagoCardBrick';
-import { MapPin, CreditCard, Truck, Package, ChevronRight, Loader2, User } from 'lucide-react';
+import { CreditCard, ChevronRight, Loader2, User } from 'lucide-react';
 import { useVpsAuth } from '@/contexts/VpsAuthContext';
+import { DeliveryOptions, type DeliveryOption } from '@/components/catalog/DeliveryOptions';
+import { getStoreStatus, type StoreStatus } from '@/utils/storeStatus';
 
 interface CheckoutForm {
     customer_name: string;
     customer_phone: string;
     customer_email: string;
-    delivery_type: OrderDeliveryType;
-    cep: string;
-    street: string;
-    number: string;
-    complement: string;
-    neighborhood: string;
-    city: string;
-    state: string;
     selected_payment: string; // 'pix', 'on_delivery' or gateway names ('mercado_pago' etc)
 }
 
@@ -34,14 +26,6 @@ const INITIAL_FORM: CheckoutForm = {
     customer_name: '',
     customer_phone: '',
     customer_email: '',
-    delivery_type: 'pickup',
-    cep: '',
-    street: '',
-    number: '',
-    complement: '',
-    neighborhood: '',
-    city: '',
-    state: '',
     selected_payment: 'pix',
 };
 
@@ -58,7 +42,7 @@ export default function CheckoutPage() {
         warrantyImageUrl?: string,
         referralCode?: string,
         referralName?: string,
-        delivery?: { type: 'pickup' | 'delivery', shippingOption?: any },
+        delivery?: DeliveryOption,
     } || {};
 
     const [form, setForm] = useState<CheckoutForm>(() => {
@@ -67,29 +51,45 @@ export default function CheckoutPage() {
         if (saved) {
             try { base = JSON.parse(saved); } catch (e) { }
         }
-        // delivery_type do carrinho tem prioridade sobre sessionStorage
-        if (state.delivery?.type) {
-            base = { ...base, delivery_type: state.delivery.type };
-        }
         return base;
     });
 
     useEffect(() => {
         sessionStorage.setItem('mv_checkout_form', JSON.stringify(form));
     }, [form]);
-    const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
-    const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(
-        state.delivery?.type === 'delivery' && state.delivery?.shippingOption
-            ? state.delivery.shippingOption
-            : null
-    );
-    const [loadingShipping, setLoadingShipping] = useState(false);
+    const [delivery, setDelivery] = useState<DeliveryOption>(() => {
+        if (state.delivery?.type) return state.delivery;
+        const saved = sessionStorage.getItem('mv_cart_delivery');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved) as DeliveryOption;
+                if (parsed.type === 'pickup' || parsed.type === 'delivery') return parsed;
+            } catch {
+                // Ignora estado local inválido e usa retirada como padrão seguro.
+            }
+        }
+        return { type: 'pickup' };
+    });
+    const [storeStatus, setStoreStatus] = useState<StoreStatus | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [paymentRejected, setPaymentRejected] = useState<string | null>(null); // mensagem de rejeição
     const [activeGateways, setActiveGateways] = useState<PublicCheckoutPaymentIntegration[]>([]);
     const [gatewayLoadState, setGatewayLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
     const isRedirectingToGateway = useRef(false);
+    const cartVolume = useMemo(() => calculateCartVolume(items), [items]);
+    const orderCost = useMemo(
+        () => items.reduce((sum, item) => sum + (item.product.price_cost || 0) * item.quantity, 0),
+        [items],
+    );
+
+    useEffect(() => {
+        sessionStorage.setItem('mv_cart_delivery', JSON.stringify(delivery));
+    }, [delivery]);
+
+    useEffect(() => {
+        getStoreStatus().then(setStoreStatus).catch(() => { });
+    }, []);
 
     useEffect(() => {
         paymentIntegrationService.getPublicCheckoutIntegrations()
@@ -130,62 +130,10 @@ export default function CheckoutPage() {
         }
     }, [isHydrated, items.length, navigate, submitting]);
 
-    const set = (field: keyof CheckoutForm) => (
-        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-    ) => setForm(prev => ({ ...prev, [field]: e.target.value }));
-
-    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        let val = e.target.value.replace(/\D/g, ''); // Remove on-digits
-        if (val.length > 11) val = val.slice(0, 11); // Max 11 digits
-
-        let masked = val;
-        if (val.length > 2) {
-            masked = `(${val.substring(0, 2)}) ${val.substring(2)}`;
-            if (val.length > 7) {
-                masked = `(${val.substring(0, 2)}) ${val.substring(2, 7)}-${val.substring(7)}`;
-            }
-        }
-        setForm(prev => ({ ...prev, customer_phone: masked }));
-    };
-
-    // Busca CEP e calcula frete
-    const handleCepBlur = async () => {
-        const cep = form.cep.replace(/\D/g, '');
-        if (cep.length !== 8) return;
-
-        setLoadingShipping(true);
-        setShippingOptions([]);
-        setSelectedShipping(null);
-
-        try {
-            // Endereço via ViaCEP
-            const viaCep = await fetch(`https://viacep.com.br/ws/${cep}/json/`).then(r => r.json());
-            if (!viaCep.erro) {
-                setForm(prev => ({
-                    ...prev,
-                    street: viaCep.logradouro || prev.street,
-                    neighborhood: viaCep.bairro || prev.neighborhood,
-                    city: viaCep.localidade || prev.city,
-                    state: viaCep.uf || prev.state,
-                }));
-            }
-
-            // Calcula opções de frete
-            const res = await shippingService.calculate({
-                to_cep: cep,
-                order_value: subtotal,
-                ...calculateCartVolume(items)
-            });
-            setShippingOptions(res.options);
-        } catch {
-            setError('Não foi possível calcular o frete. Tente novamente.');
-        } finally {
-            setLoadingShipping(false);
-        }
-    };
-
-    // selectedShipping.price é em reais; subtotal em centavos → convertemos para centavos
-    const shippingCost = Math.round((selectedShipping?.price ?? 0) * 100);
+    // DeliveryOptions mantém o preço em reais; pedidos e totais usam centavos.
+    const shippingCost = delivery.type === 'delivery'
+        ? Math.round((delivery.shippingOption?.price ?? 0) * 100)
+        : 0;
     const total = subtotal + shippingCost;
     const mpGateway = activeGateways.find(g => g.gateway_name === 'mercado_pago');
     const isMpCardSelected = form.selected_payment === 'mercado_pago_pro';
@@ -200,8 +148,12 @@ export default function CheckoutPage() {
             setError('Não foi possível obter seus dados. Faça login novamente.');
             return;
         }
-        if (form.delivery_type === 'delivery' && !selectedShipping) {
+        if (delivery.type === 'delivery' && !delivery.shippingOption) {
             setError('Selecione uma opção de entrega.');
+            return;
+        }
+        if (delivery.type === 'delivery' && !delivery.address?.number?.trim()) {
+            setError('Informe o número do endereço de entrega.');
             return;
         }
         if (gatewayLoadState !== 'ready') {
@@ -223,8 +175,12 @@ export default function CheckoutPage() {
             setError('Não foi possível obter seus dados. Faça login novamente.');
             return;
         }
-        if (form.delivery_type === 'delivery' && !selectedShipping) {
+        if (delivery.type === 'delivery' && !delivery.shippingOption) {
             setError('Selecione uma opção de entrega.');
+            return;
+        }
+        if (delivery.type === 'delivery' && !delivery.address?.number?.trim()) {
+            setError('Informe o número do endereço de entrega.');
             return;
         }
         await submitOrder(cardFormData);
@@ -234,15 +190,15 @@ export default function CheckoutPage() {
         setSubmitting(true);
         try {
             const shippingAddress: OrderShippingAddress | undefined =
-                form.delivery_type === 'delivery'
+                delivery.type === 'delivery' && delivery.address
                     ? {
-                        cep: form.cep,
-                        street: form.street,
-                        number: form.number,
-                        complement: form.complement,
-                        neighborhood: form.neighborhood,
-                        city: form.city,
-                        state: form.state,
+                        cep: delivery.address.cep,
+                        street: delivery.address.street,
+                        number: delivery.address.number || '',
+                        complement: delivery.address.complement,
+                        neighborhood: delivery.address.neighborhood,
+                        city: delivery.address.city,
+                        state: delivery.address.state,
                     }
                     : undefined;
 
@@ -301,14 +257,14 @@ export default function CheckoutPage() {
                 items: [...productItems, ...warrantyItem],
                 payment_method: paymentMethodToSave,
                 payment_gateway: gatewayToSave,
-                delivery_type: form.delivery_type,
+                delivery_type: delivery.type,
                 shipping_address: shippingAddress,
                 shipping_cost: shippingCost,
-                shipping_origin_cep: selectedShipping?.origin_cep || undefined,
-                shipping_origin_label: selectedShipping?.origin_label || undefined,
+                shipping_origin_cep: delivery.shippingOption?.origin_cep || undefined,
+                shipping_origin_label: delivery.shippingOption?.origin_label || undefined,
                 referral_code: state.referralCode || undefined,
                 referral_name: state.referralName || undefined,
-                notes: form.complement || undefined,
+                notes: delivery.notes || undefined,
                 // Token do Brick para checkout transparente (se cartão MP)
                 ...(cardFormData ? { card_form_data: cardFormData } : {}),
             });
@@ -393,7 +349,19 @@ export default function CheckoutPage() {
                         <span className="text-[10px] font-bold text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full whitespace-nowrap">✓ Logado</span>
                     </section>
 
-
+                    <section className="bg-white rounded-2xl p-5 shadow-sm">
+                        <DeliveryOptions
+                            selected={delivery}
+                            onSelect={(nextDelivery) => {
+                                setDelivery(nextDelivery);
+                                setError('');
+                            }}
+                            storeStatus={storeStatus}
+                            subtotal={subtotal}
+                            cartVolume={cartVolume}
+                            orderCost={orderCost}
+                        />
+                    </section>
 
                     <section className="bg-white rounded-2xl p-5 shadow-sm">
                         <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -506,11 +474,13 @@ export default function CheckoutPage() {
                         ) : null}
                         <div className="flex justify-between text-gray-600 text-sm">
                             <span>Frete</span>
-                            <span className={shippingCost === 0 && form.delivery_type === 'delivery' ? 'text-gray-400' : 'text-green-600 font-medium'}>
-                                {form.delivery_type === 'pickup'
+                            <span className={shippingCost === 0 && delivery.type === 'delivery' ? 'text-gray-400' : 'text-green-600 font-medium'}>
+                                {delivery.type === 'pickup'
                                     ? '— (retirada)'
-                                    : shippingCost === 0
-                                        ? 'Selecione o CEP'
+                                    : !delivery.shippingOption
+                                        ? 'Calcule pelo CEP'
+                                        : shippingCost === 0
+                                            ? 'Grátis'
                                         : formatCurrency(shippingCost)
                                 }
                             </span>

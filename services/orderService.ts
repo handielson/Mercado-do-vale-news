@@ -647,6 +647,15 @@ export async function createOrder(input: OrderInput): Promise<Order> {
             .catch(e => console.error("Erro ao emitir moedas pendentes:", e));
     }
 
+    // A confirmacao da compra e enviada somente depois que itens, estoque e
+    // pagamento inicial estiverem registrados. Falhas no WhatsApp nao podem
+    // desfazer um pedido que ja foi concluido com sucesso.
+    try {
+        await vpsClient.post(`/orders/${encodeURIComponent(order.id)}/purchase-notification`, {});
+    } catch (notificationError) {
+        console.error('Falha ao enviar confirmacao da compra por WhatsApp:', notificationError);
+    }
+
     return order as Order;
 }
 

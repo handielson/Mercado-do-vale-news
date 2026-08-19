@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.273-perfil-cors-patch
+version: v1.2.274-checkout-frete-whatsapp
 date: 2026-08-19
 status: ready
-release_vps: /var/www/mdv-site/releases/20260819-193800-perfil-cors-patch
+release_vps: /var/www/mdv-site/releases/20260819-200306-checkout-frete-whatsapp
 branch: main
-summary: Libera de forma versionada os metodos CORS da API usados na edicao autenticada do perfil do cliente.
+summary: Inclui frete por CEP no checkout e confirmacao completa do pedido online por WhatsApp.
 ```
