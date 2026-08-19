@@ -1,4 +1,7 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const sharp = require('sharp');
 
 const APPROVAL_STATUSES = new Set([
   'pending', 'approved', 'rejected', 'executing', 'succeeded', 'failed', 'cancelled', 'expired',
@@ -11,6 +14,7 @@ const META_PAUSED_AD_BUNDLE_ACTION = 'meta.create_paused_whatsapp_ad_bundle.v1';
 const META_REVIEW_AUTO_LAUNCH_ACTION = 'meta.activate_after_review.v1';
 const META_SECURITY_REVIEW_ACTION = 'meta.submit_security_review.v1';
 const META_DELIVERY_STATUS_ACTION = 'meta.set_delivery_status.v1';
+const SOCIAL_STORY_SCHEDULE_ACTION = 'social.schedule_story.v1';
 const META_AUTHORIZED_MONTHLY_CEILING_BRL = 1000;
 const META_CAMPAIGN_SHELLS = Object.freeze([
   { itemKey: 'store-carousel', name: 'MDV | Loja inteira | Carrossel | Petrolina + Juazeiro' },
@@ -18,6 +22,7 @@ const META_CAMPAIGN_SHELLS = Object.freeze([
 ]);
 let metaApprovalWorkerStarted = false;
 let metaReviewMonitorRunning = false;
+let socialStoryWorkerStarted = false;
 
 function jsonParse(value, fallback) {
   if (value == null) return fallback;
@@ -37,7 +42,7 @@ function text(value, maxLength) {
 }
 
 function sha256(value) {
-  return crypto.createHash('sha256').update(String(value)).digest('hex');
+  return crypto.createHash('sha256').update(Buffer.isBuffer(value) ? value : String(value)).digest('hex');
 }
 
 function currencyCents(value) {
@@ -66,7 +71,7 @@ function marketingConfig() {
   const encryptionKey = String(process.env.META_TOKEN_ENCRYPTION_KEY || '').trim();
   const scopes = String(process.env.META_OAUTH_SCOPES || [
     'ads_read', 'ads_management', 'business_management', 'pages_show_list',
-    'pages_read_engagement',
+    'pages_read_engagement', 'instagram_basic', 'instagram_content_publish',
   ].join(',')).split(',').map((item) => item.trim()).filter(Boolean);
   return {
     graphApiVersion, appId, appSecret, redirectUri, encryptionKey, scopes,
@@ -191,6 +196,61 @@ async function ensureMarketingCampaignTables(pool) {
       connected_at DATETIME NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS social_story_schedules (
+      id CHAR(36) PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      source_type ENUM('standalone','whatsapp_campaign') NOT NULL DEFAULT 'standalone',
+      source_id CHAR(36) NULL,
+      scheduled_at DATETIME NOT NULL,
+      destinations JSON NOT NULL,
+      status ENUM('pending_approval','approved','processing','completed','partial','failed','cancelled') NOT NULL DEFAULT 'pending_approval',
+      approval_id CHAR(36) NULL,
+      content_hash CHAR(64) NOT NULL,
+      created_by VARCHAR(80) NULL,
+      last_error TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_social_story_schedule_due (status, scheduled_at),
+      INDEX idx_social_story_schedule_approval (approval_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS social_story_items (
+      id CHAR(36) PRIMARY KEY,
+      schedule_id CHAR(36) NOT NULL,
+      sequence_index INT UNSIGNED NOT NULL,
+      media_type ENUM('image','video') NOT NULL,
+      media_url VARCHAR(1200) NOT NULL,
+      label VARCHAR(255) NULL,
+      caption TEXT NULL,
+      scheduled_at DATETIME NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_social_story_sequence (schedule_id, sequence_index),
+      INDEX idx_social_story_item_schedule (schedule_id, scheduled_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS social_story_deliveries (
+      id CHAR(36) PRIMARY KEY,
+      schedule_id CHAR(36) NOT NULL,
+      item_id CHAR(36) NOT NULL,
+      destination ENUM('instagram','whatsapp') NOT NULL,
+      idempotency_key CHAR(64) NOT NULL,
+      status ENUM('waiting_approval','pending','processing','published','failed','cancelled') NOT NULL DEFAULT 'waiting_approval',
+      attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+      provider_container_id VARCHAR(160) NULL,
+      provider_publication_id VARCHAR(160) NULL,
+      last_error TEXT NULL,
+      claimed_at DATETIME NULL,
+      published_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_social_story_delivery (idempotency_key),
+      INDEX idx_social_story_delivery_due (status, destination, updated_at),
+      INDEX idx_social_story_delivery_schedule (schedule_id, item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
   await pool.query(`
@@ -1705,6 +1765,194 @@ async function runMetaReviewAutoLaunch(pool) {
   }
 }
 
+function sqlDateTime(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+async function executeSocialStoryScheduleApproval(pool, approval) {
+  const scheduleId = text(approval?.execution_payload?.schedule_id, 36);
+  const expectedHash = text(approval?.execution_payload?.content_hash, 64);
+  if (!scheduleId || !expectedHash) throw new Error('Invalid Story schedule approval payload');
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT * FROM social_story_schedules WHERE id=? LIMIT 1 FOR UPDATE', [scheduleId]);
+    const schedule = rows?.[0];
+    if (!schedule || schedule.status !== 'pending_approval') throw new Error('Story schedule is no longer pending approval');
+    if (String(schedule.content_hash) !== expectedHash || String(schedule.approval_id) !== String(approval.id)) {
+      throw new Error('Story schedule content changed after approval request');
+    }
+    await connection.query("UPDATE social_story_schedules SET status='approved',last_error=NULL WHERE id=?", [scheduleId]);
+    await connection.query("UPDATE social_story_deliveries SET status='pending',last_error=NULL WHERE schedule_id=? AND status='waiting_approval'", [scheduleId]);
+    await connection.commit();
+    return { schedule_id: scheduleId, activated: true, scheduled_at: schedule.scheduled_at };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
+}
+
+async function prepareInstagramStoryImage(mediaUrl, dependencies) {
+  const uploadsDir = dependencies.uploadsDir;
+  const publicApiUrl = String(dependencies.publicApiUrl || process.env.PUBLIC_API_URL || 'https://api.xiaomipetrolina.com.br').replace(/\/+$/, '');
+  if (!uploadsDir) throw new Error('Instagram Story media directory is not configured');
+  const response = await fetch(mediaUrl, { signal: AbortSignal.timeout(30000) });
+  if (!response.ok) throw new Error(`Story image download failed with HTTP ${response.status}`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > 30 * 1024 * 1024) throw new Error('Story image exceeds 30 MB');
+  const relativeDir = path.join('instagram-stories');
+  const targetDir = path.join(uploadsDir, relativeDir);
+  await fs.promises.mkdir(targetDir, { recursive: true });
+  const fileName = `${sha256(buffer)}.jpg`;
+  const target = path.join(targetDir, fileName);
+  if (!fs.existsSync(target)) {
+    await sharp(buffer)
+      .rotate()
+      .resize(1080, 1920, { fit: 'contain', background: '#ffffff', withoutEnlargement: false })
+      .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
+      .toFile(target);
+  }
+  return `${publicApiUrl}/images/${relativeDir.replace(/\\/g, '/')}/${fileName}`;
+}
+
+async function publishInstagramStory(pool, item, dependencies) {
+  const config = marketingConfig();
+  const row = await connectionRow(pool);
+  if (!row || row.status !== 'connected') throw new Error('Meta connection is not active');
+  const granted = new Set(jsonParse(row.granted_scopes, []));
+  for (const permission of ['instagram_basic', 'instagram_content_publish', 'pages_read_engagement']) {
+    if (!granted.has(permission)) throw new Error(`Meta permission missing: ${permission}. Reconnect the account.`);
+  }
+  const instagramId = text(row.selected_instagram_account_id, 80);
+  if (!instagramId) throw new Error('No Instagram professional account selected');
+  const token = decryptToken(row, config.encryptionKey);
+  const limit = await graphRequest(`${instagramId}/content_publishing_limit`, token, { fields: 'config,quota_usage' });
+  if (Number(limit?.data?.[0]?.quota_usage || 0) >= 100) throw new Error('Instagram publishing limit reached for the last 24 hours');
+
+  const mediaUrl = item.media_type === 'image'
+    ? await prepareInstagramStoryImage(item.media_url, dependencies)
+    : item.media_url;
+  const container = await graphPost(`${instagramId}/media`, token, {
+    media_type: 'STORIES',
+    ...(item.media_type === 'video' ? { video_url: mediaUrl } : { image_url: mediaUrl }),
+  });
+  if (!container?.id) throw new Error('Meta did not return a Story container id');
+  let status = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    status = await graphRequest(container.id, token, { fields: 'status_code,status' });
+    if (status?.status_code === 'FINISHED') break;
+    if (status?.status_code === 'ERROR' || status?.status_code === 'EXPIRED') {
+      throw new Error(`Instagram Story container ${status.status_code}: ${status.status || 'processing failed'}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+  if (status?.status_code !== 'FINISHED') throw new Error('Instagram Story container did not finish processing in time');
+  const publication = await graphPost(`${instagramId}/media_publish`, token, { creation_id: container.id });
+  if (!publication?.id) throw new Error('Meta did not confirm Story publication');
+  return { containerId: container.id, publicationId: publication.id, mediaUrl };
+}
+
+async function claimNextSocialStoryDelivery(pool) {
+  const [stale] = await pool.query(
+    `SELECT DISTINCT schedule_id FROM social_story_deliveries
+     WHERE status='processing' AND claimed_at<DATE_SUB(NOW(),INTERVAL 20 MINUTE)`,
+  );
+  if (stale.length) {
+    await pool.query(
+      `UPDATE social_story_deliveries
+       SET status='failed',last_error='Publicacao ficou em estado ambiguo apos interrupcao; envio automatico nao foi repetido para evitar duplicidade'
+       WHERE status='processing' AND claimed_at<DATE_SUB(NOW(),INTERVAL 20 MINUTE)`,
+    );
+    for (const row of stale) await refreshSocialStoryScheduleStatus(pool, row.schedule_id);
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      `SELECT d.*,i.media_type,i.media_url,i.caption,i.label,i.sequence_index,i.scheduled_at
+       FROM social_story_deliveries d
+       JOIN social_story_items i ON i.id=d.item_id
+       JOIN social_story_schedules s ON s.id=d.schedule_id
+       WHERE d.status='pending' AND s.status IN ('approved','processing') AND i.scheduled_at<=NOW()
+         AND NOT EXISTS (
+           SELECT 1 FROM social_story_items pi
+           JOIN social_story_deliveries pd ON pd.item_id=pi.id AND pd.destination=d.destination
+           WHERE pi.schedule_id=i.schedule_id AND pi.sequence_index<i.sequence_index
+             AND pd.status NOT IN ('published','failed','cancelled')
+         )
+       ORDER BY i.scheduled_at ASC,i.sequence_index ASC,d.destination ASC
+       LIMIT 1 FOR UPDATE SKIP LOCKED`
+    );
+    const delivery = rows?.[0] || null;
+    if (!delivery) { await connection.rollback(); return null; }
+    const [result] = await connection.query(
+      "UPDATE social_story_deliveries SET status='processing',claimed_at=NOW(),attempt_count=attempt_count+1 WHERE id=? AND status='pending'",
+      [delivery.id],
+    );
+    if (!result.affectedRows) { await connection.rollback(); return null; }
+    await connection.query("UPDATE social_story_schedules SET status='processing' WHERE id=? AND status='approved'", [delivery.schedule_id]);
+    await connection.commit();
+    return delivery;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
+}
+
+async function refreshSocialStoryScheduleStatus(pool, scheduleId) {
+  const [rows] = await pool.query(
+    `SELECT status,COUNT(*) total FROM social_story_deliveries WHERE schedule_id=? GROUP BY status`, [scheduleId],
+  );
+  const counts = Object.fromEntries(rows.map((row) => [row.status, Number(row.total)]));
+  const unfinished = (counts.waiting_approval || 0) + (counts.pending || 0) + (counts.processing || 0);
+  if (unfinished) return;
+  const status = counts.failed ? (counts.published ? 'partial' : 'failed') : 'completed';
+  await pool.query("UPDATE social_story_schedules SET status=?,last_error=IF(?='completed',NULL,last_error) WHERE id=? AND status<>'cancelled'", [status, status, scheduleId]);
+}
+
+async function syncSocialStoryApprovalOutcomes(pool) {
+  await pool.query(
+    `UPDATE social_story_schedules s
+     JOIN marketing_approval_requests a ON a.id=s.approval_id
+     SET s.status=IF(a.status='failed','failed','cancelled'),
+         s.last_error=COALESCE(a.last_error,a.review_note,s.last_error)
+     WHERE s.status='pending_approval' AND a.status IN ('rejected','cancelled','expired','failed')`,
+  );
+  await pool.query(
+    `UPDATE social_story_deliveries d
+     JOIN social_story_schedules s ON s.id=d.schedule_id
+     SET d.status='cancelled'
+     WHERE d.status='waiting_approval' AND s.status IN ('cancelled','failed')`,
+  );
+}
+
+async function runNextSocialStoryDelivery(pool, dependencies) {
+  await syncSocialStoryApprovalOutcomes(pool);
+  const delivery = await claimNextSocialStoryDelivery(pool);
+  if (!delivery) return null;
+  try {
+    const result = delivery.destination === 'instagram'
+      ? await publishInstagramStory(pool, delivery, dependencies)
+      : await dependencies.sendWhatsAppStoryMedia({
+        type: delivery.media_type,
+        mediaUrl: delivery.media_url,
+        caption: delivery.caption || '',
+        label: delivery.label || '',
+      });
+    await pool.query(
+      `UPDATE social_story_deliveries SET status='published',provider_container_id=?,provider_publication_id=?,last_error=NULL,published_at=NOW() WHERE id=?`,
+      [result?.containerId || null, result?.publicationId || result?.id || null, delivery.id],
+    );
+  } catch (error) {
+    await pool.query("UPDATE social_story_deliveries SET status='failed',last_error=? WHERE id=?", [text(error.message, 10000), delivery.id]);
+    await pool.query('UPDATE social_story_schedules SET last_error=? WHERE id=?', [text(error.message, 10000), delivery.schedule_id]);
+  }
+  await refreshSocialStoryScheduleStatus(pool, delivery.schedule_id);
+  return delivery.id;
+}
+
 async function runNextMetaApproval(pool) {
   const connection = await pool.getConnection();
   let approval = null;
@@ -1712,9 +1960,9 @@ async function runNextMetaApproval(pool) {
     await connection.beginTransaction();
     const [rows] = await connection.query(
       `SELECT * FROM marketing_approval_requests
-       WHERE status='approved' AND execution_mode='vps_meta_api' AND action_type IN (?, ?, ?)
+       WHERE status='approved' AND execution_mode='vps_meta_api' AND action_type IN (?, ?, ?, ?)
        ORDER BY approved_at ASC, created_at ASC LIMIT 1 FOR UPDATE`,
-      [META_CAMPAIGN_SHELL_ACTION, META_PAUSED_AD_BUNDLE_ACTION, META_DELIVERY_STATUS_ACTION],
+      [META_CAMPAIGN_SHELL_ACTION, META_PAUSED_AD_BUNDLE_ACTION, META_DELIVERY_STATUS_ACTION, SOCIAL_STORY_SCHEDULE_ACTION],
     );
     approval = rows?.[0] || null;
     if (!approval) { await connection.rollback(); return null; }
@@ -1737,7 +1985,9 @@ async function runNextMetaApproval(pool) {
     throw error;
   } finally { connection.release(); }
   try {
-    const result = approval.action_type === META_PAUSED_AD_BUNDLE_ACTION
+    const result = approval.action_type === SOCIAL_STORY_SCHEDULE_ACTION
+      ? await executeSocialStoryScheduleApproval(pool, approval)
+      : approval.action_type === META_PAUSED_AD_BUNDLE_ACTION
       ? await executePausedWhatsappAdBundle(pool, approval)
       : approval.action_type === META_DELIVERY_STATUS_ACTION
         ? await executeMetaDeliveryStatusChange(pool, approval)
@@ -1764,6 +2014,16 @@ function startMetaApprovalWorker(pool) {
   }, 60000);
   reviewTimer.unref?.();
   setTimeout(() => captureManagedReviewStatus(pool).catch(() => {}), 5000).unref?.();
+}
+
+function startSocialStoryWorker(pool, dependencies) {
+  if (socialStoryWorkerStarted) return;
+  socialStoryWorkerStarted = true;
+  const run = () => runNextSocialStoryDelivery(pool, dependencies)
+    .catch((error) => console.error('[social-story-worker]', text(error.message, 1000)));
+  const timer = setInterval(run, 10000);
+  timer.unref?.();
+  setTimeout(run, 4000).unref?.();
 }
 
 async function discoverAssets(token) {
@@ -3120,10 +3380,160 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
   });
 }
 
+function parseSocialStorySchedule(row) {
+  return {
+    ...row,
+    destinations: jsonParse(row.destinations, []),
+    items: Array.isArray(row.items) ? row.items : jsonParse(row.items, []),
+  };
+}
+
+function registerSocialStoryRoutes(fastify, dependencies) {
+  const { pool, requireAdminBearerToken, getBearerAuthContext } = dependencies;
+
+  fastify.get('/admin/marketing/stories', { preHandler: requireAdminBearerToken }, async () => {
+    await syncSocialStoryApprovalOutcomes(pool);
+    const [schedules] = await pool.query('SELECT * FROM social_story_schedules ORDER BY scheduled_at DESC,created_at DESC LIMIT 100');
+    if (!schedules.length) return { ok: true, items: [] };
+    const ids = schedules.map((row) => row.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const [items] = await pool.query(
+      `SELECT i.*,d.id delivery_id,d.destination,d.status delivery_status,d.attempt_count,d.provider_publication_id,d.last_error delivery_error,d.published_at
+       FROM social_story_items i LEFT JOIN social_story_deliveries d ON d.item_id=i.id
+       WHERE i.schedule_id IN (${placeholders}) ORDER BY i.schedule_id,i.sequence_index,d.destination`, ids,
+    );
+    const bySchedule = new Map();
+    for (const item of items) {
+      const list = bySchedule.get(item.schedule_id) || [];
+      let grouped = list.find((entry) => entry.id === item.id);
+      if (!grouped) {
+        grouped = { ...item, deliveries: [] };
+        delete grouped.delivery_id; delete grouped.destination; delete grouped.delivery_status;
+        delete grouped.attempt_count; delete grouped.provider_publication_id; delete grouped.delivery_error; delete grouped.published_at;
+        list.push(grouped); bySchedule.set(item.schedule_id, list);
+      }
+      if (item.delivery_id) grouped.deliveries.push({
+        id: item.delivery_id, destination: item.destination, status: item.delivery_status,
+        attempt_count: item.attempt_count, provider_publication_id: item.provider_publication_id,
+        error: item.delivery_error, published_at: item.published_at,
+      });
+    }
+    return { ok: true, items: schedules.map((row) => parseSocialStorySchedule({ ...row, items: bySchedule.get(row.id) || [] })) };
+  });
+
+  fastify.post('/admin/marketing/stories/preview-whatsapp', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+    const campaignId = text(req.body?.campaignId, 36);
+    if (!campaignId || typeof dependencies.buildWhatsAppStoryItems !== 'function') {
+      return reply.code(400).send({ error: 'WhatsApp campaign is required' });
+    }
+    try {
+      const items = await dependencies.buildWhatsAppStoryItems(campaignId);
+      return { ok: true, items };
+    } catch (error) {
+      return reply.code(400).send({ error: text(error.message, 1000) });
+    }
+  });
+
+  fastify.post('/admin/marketing/stories', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+    const body = req.body || {};
+    const auth = await getBearerAuthContext(req);
+    const title = text(body.title, 255);
+    const sourceType = body.sourceType === 'whatsapp_campaign' ? 'whatsapp_campaign' : 'standalone';
+    const sourceId = sourceType === 'whatsapp_campaign' ? text(body.sourceId, 36) : null;
+    const scheduledAt = sqlDateTime(body.scheduledAt);
+    const destinations = Array.from(new Set((Array.isArray(body.destinations) ? body.destinations : [])
+      .filter((value) => value === 'instagram' || value === 'whatsapp')));
+    if (!title || !scheduledAt || !destinations.length) return reply.code(400).send({ error: 'Title, valid date/time and destination are required' });
+    if (new Date(body.scheduledAt).getTime() < Date.now() - 60000) return reply.code(400).send({ error: 'Scheduled date/time cannot be in the past' });
+
+    let sourceItems = [];
+    if (sourceType === 'whatsapp_campaign') {
+      if (!sourceId || typeof dependencies.buildWhatsAppStoryItems !== 'function') return reply.code(400).send({ error: 'WhatsApp campaign is required' });
+      sourceItems = await dependencies.buildWhatsAppStoryItems(sourceId);
+    } else {
+      sourceItems = Array.isArray(body.items) ? body.items : [];
+    }
+    const delaySeconds = Math.max(5, Math.min(300, Number(body.mediaDelaySeconds || 15) || 15));
+    const normalizedItems = sourceItems.slice(0, 80).map((item, index) => ({
+      media_type: item.mediaType === 'video' ? 'video' : 'image',
+      media_url: text(item.mediaUrl, 1200),
+      label: text(item.label, 255) || `Story ${index + 1}`,
+      caption: text(item.caption, 5000),
+      offset_seconds: Number.isFinite(Number(item.offsetSeconds)) ? Math.max(0, Number(item.offsetSeconds)) : index * delaySeconds,
+    })).filter((item) => /^https:\/\//i.test(item.media_url));
+    if (!normalizedItems.length) return reply.code(400).send({ error: 'Add at least one public HTTPS image or video' });
+
+    const id = crypto.randomUUID();
+    const approvalId = crypto.randomUUID();
+    const snapshot = { title, sourceType, sourceId, scheduledAt, destinations, items: normalizedItems };
+    const contentHash = sha256(JSON.stringify(snapshot));
+    const channel = destinations.length === 2 ? 'multichannel' : destinations[0];
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(
+        `INSERT INTO social_story_schedules
+          (id,title,source_type,source_id,scheduled_at,destinations,status,approval_id,content_hash,created_by)
+         VALUES (?,?,?,?,?,?,'pending_approval',?,?,?)`,
+        [id, title, sourceType, sourceId, scheduledAt, jsonValue(destinations), approvalId, contentHash, auth.userId || null],
+      );
+      for (const [index, item] of normalizedItems.entries()) {
+        const itemId = crypto.randomUUID();
+        const itemDate = new Date(new Date(body.scheduledAt).getTime() + item.offset_seconds * 1000);
+        await connection.query(
+          `INSERT INTO social_story_items (id,schedule_id,sequence_index,media_type,media_url,label,caption,scheduled_at)
+           VALUES (?,?,?,?,?,?,?,?)`,
+          [itemId, id, index, item.media_type, item.media_url, item.label || null, item.caption || null, sqlDateTime(itemDate)],
+        );
+        for (const destination of destinations) {
+          await connection.query(
+            `INSERT INTO social_story_deliveries (id,schedule_id,item_id,destination,idempotency_key,status)
+             VALUES (?,?,?,?,?,'waiting_approval')`,
+            [crypto.randomUUID(), id, itemId, destination, sha256(`${id}:${index}:${destination}`)],
+          );
+        }
+      }
+      const requestedBy = auth.userId || 'marketing-admin';
+      await connection.query(
+        `INSERT INTO marketing_approval_requests
+          (id,channel,action_type,title,target_type,target_id,target_name,status,execution_mode,current_state,proposed_state,evidence,
+           financial_impact,success_criteria,rollback_plan,execution_payload,requested_by,requested_by_label,idempotency_key,approval_expires_at)
+         VALUES (?,?,?,?,?,?,?,'pending','vps_meta_api',?,?,?,?,?,?,?,?,?,?,DATE_ADD(NOW(),INTERVAL 7 DAY))`,
+        [approvalId, channel, SOCIAL_STORY_SCHEDULE_ACTION, `Agendar Stories: ${title}`, 'social_story_schedule', id, title,
+          jsonValue({ status: 'draft', publicationExecuted: false }), jsonValue(snapshot),
+          jsonValue({ itemCount: normalizedItems.length, destinations, sourceType, sourceId }),
+          jsonValue({ currency: 'BRL', amount: 0, recurring: false }),
+          jsonValue({ expectedDeliveries: normalizedItems.length * destinations.length, ordered: true, noDuplicates: true }),
+          'Cancelar o agendamento e as entregas ainda não publicadas.',
+          jsonValue({ schedule_id: id, content_hash: contentHash }), requestedBy, 'Administrador Gestão MV', `social-story:${id}`],
+      );
+      await approvalEvent(connection, approvalId, 'requested', { id: requestedBy, label: 'Administrador Gestão MV' }, { schedule_id: id, destinations, item_count: normalizedItems.length });
+      await connection.commit();
+      return reply.code(201).send({ ok: true, scheduleId: id, approvalId, status: 'pending_approval', itemCount: normalizedItems.length });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally { connection.release(); }
+  });
+
+  fastify.post('/admin/marketing/stories/:id/cancel', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+    const id = text(req.params?.id, 36);
+    const [result] = await pool.query(
+      "UPDATE social_story_schedules SET status='cancelled' WHERE id=? AND status IN ('pending_approval','approved','processing')", [id],
+    );
+    if (!result.affectedRows) return reply.code(409).send({ error: 'Schedule cannot be cancelled' });
+    await pool.query("UPDATE social_story_deliveries SET status='cancelled' WHERE schedule_id=? AND status IN ('waiting_approval','pending')", [id]);
+    await pool.query("UPDATE marketing_approval_requests SET status='cancelled' WHERE target_type='social_story_schedule' AND target_id=? AND status IN ('pending','approved')", [id]);
+    return { ok: true };
+  });
+}
+
 function registerMarketingCampaignRoutes(fastify, dependencies) {
   registerApprovalRoutes(fastify, dependencies);
   registerMetaRoutes(fastify, dependencies);
+  registerSocialStoryRoutes(fastify, dependencies);
   startMetaApprovalWorker(dependencies.pool);
+  startSocialStoryWorker(dependencies.pool, dependencies);
 }
 
 module.exports = { ensureMarketingCampaignTables, registerMarketingCampaignRoutes };

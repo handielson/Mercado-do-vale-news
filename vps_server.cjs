@@ -1904,6 +1904,10 @@ registerMarketingCampaignRoutes(fastify, {
   requireSyncKeyOrAdmin,
   getBearerAuthContext: getVpsBearerAuthContext,
   getPublicAppUrl,
+  uploadsDir: UPLOADS_DIR,
+  publicApiUrl: process.env.PUBLIC_API_URL || 'https://api.xiaomipetrolina.com.br',
+  buildWhatsAppStoryItems: buildWhatsAppStatusStoryItemsVps,
+  sendWhatsAppStoryMedia: sendWhatsAppStandaloneStoryMediaVps,
 });
 
 fastify.get('/admin/label-templates', { preHandler: requireSyncKeyOrAdmin }, async () => {
@@ -29374,6 +29378,55 @@ function enqueueWhatsAppStatusMediaBatchVps(task) {
   });
   whatsAppStatusMediaQueueVps = queued.catch(() => undefined);
   return queued;
+}
+
+async function buildWhatsAppStatusStoryItemsVps(campaignId) {
+  const campaign = await getWhatsAppStatusCampaign(campaignId);
+  if (!campaign) throw new Error('Campanha de Status do WhatsApp nao encontrada');
+  const loadedProducts = await getWhatsAppStatusCampaignProducts(campaign);
+  const products = campaign.repeat_mode === 'single_product' && campaign.repeat_product_id
+    ? loadedProducts.filter((product) => product.id === campaign.repeat_product_id)
+    : loadedProducts;
+  const grouped = rotateWhatsAppStatusProducts(products, null);
+  const limit = await resolveWhatsAppStatusDailyLimit(campaign, products);
+  const selected = grouped.slice(0, clampWhatsAppStatusDailyLimit(limit));
+  if (!selected.length) throw new Error('A campanha nao tem produtos elegiveis com arte e estoque');
+  const productIntervalSeconds = normalizeWhatsAppStatusInterval(campaign.interval_minutes) * 60;
+  const mediaIntervalSeconds = Math.max(5, Math.ceil(Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 8000) / 1000));
+  const items = [];
+  for (const [productIndex, product] of selected.entries()) {
+    const image = getWhatsAppStatusProductImage(product);
+    const videos = await resolveWhatsAppStatusVideoUrls(product);
+    const caption = buildWhatsAppStatusCaption(product);
+    const baseOffset = productIndex * productIntervalSeconds;
+    items.push({
+      mediaType: 'image', mediaUrl: image, caption,
+      label: `${product.name} - card`, offsetSeconds: baseOffset,
+      productId: product.id,
+    });
+    videos.forEach((video, mediaIndex) => items.push({
+      mediaType: 'video', mediaUrl: video.url, caption,
+      label: `${product.name} - ${video.color || `video ${mediaIndex + 1}`}`,
+      offsetSeconds: baseOffset + (mediaIndex + 1) * mediaIntervalSeconds,
+      productId: video.productId || product.id, color: video.color || '',
+    }));
+  }
+  return items;
+}
+
+async function sendWhatsAppStandaloneStoryMediaVps({ type, mediaUrl, caption = '' }) {
+  return enqueueWhatsAppStatusMediaBatchVps(async () => {
+    const baseUrl = String(process.env.WAHA_STATUS_SERVER_URL || 'http://127.0.0.1:18082').replace(/\/+$/, '');
+    const apiKey = String(process.env.WAHA_STATUS_API_KEY || '');
+    const session = String(process.env.WAHA_STATUS_SESSION || '').trim();
+    if (!apiKey || !session) throw new Error('WAHA_STATUS_API_KEY ou WAHA_STATUS_SESSION ausente no ambiente da VPS');
+    if (!/^https:\/\//i.test(String(mediaUrl || ''))) throw new Error('A midia do Status precisa ter URL HTTPS publica');
+    const timeoutMs = Math.max(10000, Number(process.env.WAHA_STATUS_TIMEOUT_MS || 90000));
+    const result = await sendWahaStatusMedia({
+      baseUrl, apiKey, session, type: type === 'video' ? 'video' : 'image', mediaUrl, caption, timeoutMs,
+    });
+    return { id: result?.body?.id || null };
+  });
 }
 
 async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null, traceContext = {}) {

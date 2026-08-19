@@ -33,6 +33,7 @@ import WhatsAppStatusCampaignPanel from './marketing/WhatsAppStatusCampaignPanel
 import FacebookMarketplaceSchedulerPanel from './marketing/FacebookMarketplaceSchedulerPanel';
 import MarketingApprovalCenterPanel from './marketing/MarketingApprovalCenterPanel';
 import MarketingCampaignAgentPanel from './marketing/MarketingCampaignAgentPanel';
+import SocialStorySchedulerPanel from './marketing/SocialStorySchedulerPanel';
 import ProductMarketingCard from './marketing/ProductMarketingCard';
 import { buildProductMarketingArtworkData, normalizeBrazilianWhatsapp } from './marketing/productMarketingArtwork';
 import { paymentFeesService } from '../../../services/payment-fees';
@@ -2385,7 +2386,8 @@ export default function MarketingPage() {
                         />
                     )}
                     {activeTab === 'whatsapp' && (
-                        <div className="animate-in fade-in duration-300">
+                        <div className="space-y-6 animate-in fade-in duration-300">
+                            <SocialStorySchedulerPanel />
                             <WhatsAppStatusCampaignPanel />
                         </div>
                     )}
@@ -2401,6 +2403,7 @@ export default function MarketingPage() {
                     {activeTab === 'approvals' && <MarketingApprovalCenterPanel />}
                     {activeTab === 'instagram' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
+                            <SocialStorySchedulerPanel />
                             {/* Day Selector */}
                             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
                                 <div className="flex gap-1 overflow-x-auto pb-1">
