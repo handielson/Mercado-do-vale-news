@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.276-stories-multicanal
+version: v1.2.277-story-autoaprovacao
 date: 2026-08-19
 status: ready
-release_vps: /var/www/mdv-site/releases/20260819-203304-v1276-stories-multicanal
+release_vps: /var/www/mdv-site/releases/20260819-204448-v1277-story-autoaprovacao
 branch: main
-summary: Agenda Stories avulsos ou importados do Status para Instagram, WhatsApp ou ambos, com aprovacao e ordem protegida.
+summary: Permite ao administrador unico aprovar Story organico sem custo, preservando a separacao para acoes pagas.
 ```

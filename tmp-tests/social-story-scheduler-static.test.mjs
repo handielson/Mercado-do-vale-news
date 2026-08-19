@@ -15,6 +15,19 @@ test('Story scheduling requires approval and creates idempotent deliveries', () 
   assert.match(api, /content changed after approval request/);
 });
 
+test('A single admin may approve only an organic zero-cost Story', () => {
+  assert.match(api, /function allowsOrganicStorySelfApproval\(approval\)/);
+  assert.match(api, /approval\?\.action_type !== SOCIAL_STORY_SCHEDULE_ACTION/);
+  assert.match(api, /approval\?\.target_type !== 'social_story_schedule'/);
+  assert.match(api, /financialImpact\.currency === 'BRL'/);
+  assert.match(api, /Number\(financialImpact\.amount\) === 0/);
+  assert.match(api, /financialImpact\.recurring === false/);
+  assert.match(api, /decision === 'approve' && allowsOrganicStorySelfApproval\(current\)/);
+  assert.match(api, /invalidSelfApproval = approval\.reviewed_by === approval\.requested_by/);
+  assert.match(api, /&& !allowsOrganicStorySelfApproval\(approval\)/);
+  assert.match(api, /organic_story_self_approval/);
+});
+
 test('Instagram publisher uses official Stories container flow and required permissions', () => {
   assert.match(api, /instagram_content_publish/);
   assert.match(api, /content_publishing_limit/);

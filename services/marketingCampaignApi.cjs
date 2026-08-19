@@ -313,6 +313,18 @@ function parseApproval(row) {
   return parsed;
 }
 
+function allowsOrganicStorySelfApproval(approval) {
+  if (approval?.action_type !== SOCIAL_STORY_SCHEDULE_ACTION
+    || approval?.target_type !== 'social_story_schedule') return false;
+  const financialImpact = jsonParse(approval.financial_impact, approval.financial_impact) || {};
+  if (!financialImpact || typeof financialImpact !== 'object' || Array.isArray(financialImpact)) return false;
+  return financialImpact.currency === 'BRL'
+    && Number(financialImpact.amount) === 0
+    && Number(financialImpact.maximum || 0) === 0
+    && Number(financialImpact.immediate || 0) === 0
+    && financialImpact.recurring === false;
+}
+
 async function approvalEvent(connection, approvalId, eventType, actor, details = null) {
   await connection.query(
     `INSERT INTO marketing_approval_events
@@ -439,7 +451,9 @@ function registerApprovalRoutes(fastify, { pool, requireAdminBearerToken, requir
       const current = await findApproval(connection, req.params.id, true);
       if (!current) { await connection.rollback(); return reply.code(404).send({ error: 'Approval request not found' }); }
       if (current.status !== 'pending') { await connection.rollback(); return reply.code(409).send({ error: `Approval request is already ${current.status}` }); }
-      if (current.requested_by && current.requested_by === (auth.userId || auth.customerId)) {
+      const reviewerId = auth.userId || auth.customerId;
+      const isSelfDecision = current.requested_by && current.requested_by === reviewerId;
+      if (isSelfDecision && !(decision === 'approve' && allowsOrganicStorySelfApproval(current))) {
         await connection.rollback();
         return reply.code(403).send({ error: 'The requester cannot approve their own marketing action' });
       }
@@ -461,9 +475,12 @@ function registerApprovalRoutes(fastify, { pool, requireAdminBearerToken, requir
          executed_at = IF(? = 'succeeded', NOW(), executed_at),
          execution_result = IF(? = 'succeeded', ?, execution_result)
          WHERE id = ?`,
-        [nextStatus, auth.userId || auth.customerId, note || null, nextStatus, nextStatus, nextStatus, nextStatus, manualResult, current.id],
+        [nextStatus, reviewerId, note || null, nextStatus, nextStatus, nextStatus, nextStatus, manualResult, current.id],
       );
-      await approvalEvent(connection, current.id, nextStatus, { id: auth.userId || auth.customerId, label: 'Administrador Gestão MV' }, { note: note || null });
+      await approvalEvent(connection, current.id, nextStatus, { id: reviewerId, label: 'Administrador Gestão MV' }, {
+        note: note || null,
+        organic_story_self_approval: Boolean(isSelfDecision && allowsOrganicStorySelfApproval(current)),
+      });
       await connection.commit();
       return parseApproval(await findApproval(pool, current.id));
     } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
@@ -1966,8 +1983,10 @@ async function runNextMetaApproval(pool) {
     );
     approval = rows?.[0] || null;
     if (!approval) { await connection.rollback(); return null; }
+    const invalidSelfApproval = approval.reviewed_by === approval.requested_by
+      && !allowsOrganicStorySelfApproval(approval);
     if ((approval.approval_expires_at && new Date(approval.approval_expires_at).getTime() <= Date.now())
-      || !approval.reviewed_by || approval.reviewed_by === approval.requested_by) {
+      || !approval.reviewed_by || invalidSelfApproval) {
       await connection.query("UPDATE marketing_approval_requests SET status='expired',last_error='Invalid or expired approval' WHERE id=?", [approval.id]);
       await approvalEvent(connection, approval.id, 'expired', { id: 'vps-meta-api', label: 'VPS Meta API' }, { reason: 'invalid_or_expired_approval' });
       await connection.commit();
