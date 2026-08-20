@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.277-story-autoaprovacao",
-  "date": "2026-08-19",
+  "version": "v1.2.278-story-preco-midia",
+  "date": "2026-08-20",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260819-204448-v1277-story-autoaprovacao",
+  "release_vps": "/var/www/mdv-site/releases/20260820-205552-story-preco-midia",
   "branch": "main",
-  "summary": "Permite ao administrador unico aprovar Story organico sem custo, preservando a separacao para acoes pagas."
+  "summary": "Adiciona ao agendador de Stories a escolha entre midia com preco e sem preco."
 }

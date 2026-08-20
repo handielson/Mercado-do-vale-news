@@ -41,7 +41,11 @@ test('WhatsApp import reuses card then ordered color videos', () => {
   for (const source of [server, serverJs]) {
     assert.match(source, /buildWhatsAppStatusStoryItemsVps/);
     assert.match(source, /getWhatsAppStatusProductImage\(product\)/);
+    assert.match(source, /getWhatsAppStatusStoryProductImageVps\(product, includePrice\)/);
+    assert.match(source, /item\?\.image_url/);
     assert.match(source, /resolveWhatsAppStatusVideoUrls\(product\)/);
+    assert.match(source, /resolveWhatsAppStatusStoryVideoUrlsVps\(product, includePrice\)/);
+    assert.match(source, /if \(includePrice\) return buildWhatsAppStatusVideoCandidates\(product\)/);
     assert.match(source, /sendWhatsAppStandaloneStoryMediaVps/);
   }
   assert.ok(server.indexOf('getWhatsAppStatusProductImage(product)') < server.lastIndexOf('resolveWhatsAppStatusVideoUrls(product)'));
@@ -53,4 +57,13 @@ test('Panel exposes standalone, WhatsApp import and both destinations', () => {
   assert.match(panel, /toggleDestination\('instagram'\)/);
   assert.match(panel, /toggleDestination\('whatsapp'\)/);
   assert.match(panel, /Central de Aprovações/);
+  assert.match(panel, /Com preço/);
+  assert.match(panel, /Sem preço/);
+  assert.match(panel, /previewWhatsApp\(campaignId, includePrice\)/);
+});
+
+test('Price choice is frozen into previews and approval snapshots', () => {
+  assert.match(api, /buildWhatsAppStoryItems\(campaignId, \{ includePrice \}\)/);
+  assert.match(api, /buildWhatsAppStoryItems\(sourceId, \{ includePrice \}\)/);
+  assert.match(api, /snapshot = \{ title, sourceType, sourceId, scheduledAt, destinations, includePrice, items: normalizedItems \}/);
 });

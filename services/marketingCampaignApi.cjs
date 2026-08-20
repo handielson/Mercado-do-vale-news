@@ -3442,11 +3442,12 @@ function registerSocialStoryRoutes(fastify, dependencies) {
 
   fastify.post('/admin/marketing/stories/preview-whatsapp', { preHandler: requireAdminBearerToken }, async (req, reply) => {
     const campaignId = text(req.body?.campaignId, 36);
+    const includePrice = req.body?.includePrice !== false;
     if (!campaignId || typeof dependencies.buildWhatsAppStoryItems !== 'function') {
       return reply.code(400).send({ error: 'WhatsApp campaign is required' });
     }
     try {
-      const items = await dependencies.buildWhatsAppStoryItems(campaignId);
+      const items = await dependencies.buildWhatsAppStoryItems(campaignId, { includePrice });
       return { ok: true, items };
     } catch (error) {
       return reply.code(400).send({ error: text(error.message, 1000) });
@@ -3459,6 +3460,7 @@ function registerSocialStoryRoutes(fastify, dependencies) {
     const title = text(body.title, 255);
     const sourceType = body.sourceType === 'whatsapp_campaign' ? 'whatsapp_campaign' : 'standalone';
     const sourceId = sourceType === 'whatsapp_campaign' ? text(body.sourceId, 36) : null;
+    const includePrice = body.includePrice !== false;
     const scheduledAt = sqlDateTime(body.scheduledAt);
     const destinations = Array.from(new Set((Array.isArray(body.destinations) ? body.destinations : [])
       .filter((value) => value === 'instagram' || value === 'whatsapp')));
@@ -3468,7 +3470,7 @@ function registerSocialStoryRoutes(fastify, dependencies) {
     let sourceItems = [];
     if (sourceType === 'whatsapp_campaign') {
       if (!sourceId || typeof dependencies.buildWhatsAppStoryItems !== 'function') return reply.code(400).send({ error: 'WhatsApp campaign is required' });
-      sourceItems = await dependencies.buildWhatsAppStoryItems(sourceId);
+      sourceItems = await dependencies.buildWhatsAppStoryItems(sourceId, { includePrice });
     } else {
       sourceItems = Array.isArray(body.items) ? body.items : [];
     }
@@ -3484,7 +3486,7 @@ function registerSocialStoryRoutes(fastify, dependencies) {
 
     const id = crypto.randomUUID();
     const approvalId = crypto.randomUUID();
-    const snapshot = { title, sourceType, sourceId, scheduledAt, destinations, items: normalizedItems };
+    const snapshot = { title, sourceType, sourceId, scheduledAt, destinations, includePrice, items: normalizedItems };
     const contentHash = sha256(JSON.stringify(snapshot));
     const channel = destinations.length === 2 ? 'multichannel' : destinations[0];
     const connection = await pool.getConnection();

@@ -29380,28 +29380,78 @@ function enqueueWhatsAppStatusMediaBatchVps(task) {
   return queued;
 }
 
-async function buildWhatsAppStatusStoryItemsVps(campaignId) {
+function getWhatsAppStatusStoryProductImageVps(product, includePrice) {
+  if (includePrice) return getWhatsAppStatusProductImage(product);
+  const sourceProducts = Array.isArray(product?.status_group_products) && product.status_group_products.length
+    ? [product, ...product.status_group_products]
+    : [product];
+  const candidates = sourceProducts.flatMap((item) => [item?.image_url, ...parseWhatsAppStatusImages(item?.images)]);
+  return String(candidates.find((value) => /^https:\/\//i.test(String(value || '').trim())) || '').trim();
+}
+
+function buildWhatsAppStatusStoryVideoCandidatesVps(product, includePrice) {
+  if (includePrice) return buildWhatsAppStatusVideoCandidates(product);
+  const sourceProducts = Array.isArray(product?.status_group_products) && product.status_group_products.length
+    ? product.status_group_products
+    : [product];
+  const byColor = new Map();
+  for (const item of sourceProducts) {
+    const color = String(getWhatsAppStatusProductVariation(item).color || '').trim();
+    const colorKey = normalizeWhatsAppStatusText(color) || `produto:${item?.id || item?.sku || byColor.size}`;
+    const videoUrl = String(item?.video_url || '').trim();
+    if (!byColor.has(colorKey) && /^https?:\/\//i.test(videoUrl)) {
+      byColor.set(colorKey, { color, productId: item?.id || null, candidates: [videoUrl] });
+    }
+  }
+  return Array.from(byColor.values());
+}
+
+async function resolveWhatsAppStatusStoryVideoUrlsVps(product, includePrice) {
+  const timeoutMs = Math.max(1000, Number(process.env.WAHA_STATUS_MEDIA_CHECK_TIMEOUT_MS || 5000));
+  const resolved = [];
+  const usedUrls = new Set();
+  for (const group of buildWhatsAppStatusStoryVideoCandidatesVps(product, includePrice)) {
+    for (const candidate of group.candidates) {
+      if (usedUrls.has(candidate)) continue;
+      try {
+        const response = await fetch(candidate, { method: 'HEAD', signal: AbortSignal.timeout(timeoutMs) });
+        if (response.ok && String(response.headers.get('content-type') || '').toLowerCase().includes('video')) {
+          usedUrls.add(candidate);
+          resolved.push({ url: candidate, color: group.color, productId: group.productId });
+          break;
+        }
+      } catch {}
+    }
+  }
+  return resolved;
+}
+
+async function buildWhatsAppStatusStoryItemsVps(campaignId, options = {}) {
+  const includePrice = options?.includePrice !== false;
   const campaign = await getWhatsAppStatusCampaign(campaignId);
   if (!campaign) throw new Error('Campanha de Status do WhatsApp nao encontrada');
   const loadedProducts = await getWhatsAppStatusCampaignProducts(campaign);
   const products = campaign.repeat_mode === 'single_product' && campaign.repeat_product_id
     ? loadedProducts.filter((product) => product.id === campaign.repeat_product_id)
     : loadedProducts;
-  const grouped = rotateWhatsAppStatusProducts(products, null);
+  const grouped = rotateWhatsAppStatusProducts(products, null)
+    .filter((product) => Boolean(getWhatsAppStatusStoryProductImageVps(product, includePrice)));
   const limit = await resolveWhatsAppStatusDailyLimit(campaign, products);
   const selected = grouped.slice(0, clampWhatsAppStatusDailyLimit(limit));
-  if (!selected.length) throw new Error('A campanha nao tem produtos elegiveis com arte e estoque');
+  if (!selected.length) throw new Error(includePrice
+    ? 'A campanha nao tem produtos elegiveis com arte de preco e estoque'
+    : 'A campanha nao tem produtos elegiveis com imagem limpa e estoque');
   const productIntervalSeconds = normalizeWhatsAppStatusInterval(campaign.interval_minutes) * 60;
   const mediaIntervalSeconds = Math.max(5, Math.ceil(Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 8000) / 1000));
   const items = [];
   for (const [productIndex, product] of selected.entries()) {
-    const image = getWhatsAppStatusProductImage(product);
-    const videos = await resolveWhatsAppStatusVideoUrls(product);
+    const image = getWhatsAppStatusStoryProductImageVps(product, includePrice);
+    const videos = await resolveWhatsAppStatusStoryVideoUrlsVps(product, includePrice);
     const caption = buildWhatsAppStatusCaption(product);
     const baseOffset = productIndex * productIntervalSeconds;
     items.push({
       mediaType: 'image', mediaUrl: image, caption,
-      label: `${product.name} - card`, offsetSeconds: baseOffset,
+      label: `${product.name} - ${includePrice ? 'arte com preco' : 'imagem sem preco'}`, offsetSeconds: baseOffset,
       productId: product.id,
     });
     videos.forEach((video, mediaIndex) => items.push({

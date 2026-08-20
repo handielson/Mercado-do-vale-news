@@ -48,6 +48,7 @@ export default function SocialStorySchedulerPanel() {
   const [destinations, setDestinations] = useState<SocialStoryDestination[]>(['instagram', 'whatsapp']);
   const [campaigns, setCampaigns] = useState<WhatsAppStatusCampaign[]>([]);
   const [campaignId, setCampaignId] = useState('');
+  const [includePrice, setIncludePrice] = useState(true);
   const [items, setItems] = useState<SocialStoryDraftItem[]>([]);
   const [url, setUrl] = useState('');
   const [caption, setCaption] = useState('');
@@ -83,7 +84,7 @@ export default function SocialStorySchedulerPanel() {
     if (!campaignId) return;
     setBusy(true);
     try {
-      const preview = await socialStoryScheduleService.previewWhatsApp(campaignId);
+      const preview = await socialStoryScheduleService.previewWhatsApp(campaignId, includePrice);
       setItems(preview);
       const campaign = campaigns.find((row) => row.id === campaignId);
       if (campaign) setTitle(`Stories - ${campaign.title}`);
@@ -122,7 +123,9 @@ export default function SocialStorySchedulerPanel() {
     try {
       const result = await socialStoryScheduleService.create({
         title: title.trim(), sourceType: mode, sourceId: mode === 'whatsapp_campaign' ? campaignId : null,
-        scheduledAt: new Date(scheduledAt).toISOString(), destinations, items: mode === 'standalone' ? items : undefined,
+        scheduledAt: new Date(scheduledAt).toISOString(), destinations,
+        includePrice: mode === 'whatsapp_campaign' ? includePrice : undefined,
+        items: mode === 'standalone' ? items : undefined,
       });
       toast.success(`Agendamento criado com ${result.itemCount} Stories. Aprove na Central de Aprovações.`);
       setItems([]);
@@ -173,11 +176,35 @@ export default function SocialStorySchedulerPanel() {
           </div>
 
           {mode === 'whatsapp_campaign' ? (
-            <div className="flex gap-2">
-              <select value={campaignId} onChange={(event) => setCampaignId(event.target.value)} className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm">
-                {campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.title}</option>)}
-              </select>
-              <button onClick={() => void previewCampaign()} disabled={busy || !campaignId} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold disabled:opacity-50">Ver conteúdo</button>
+            <div className="space-y-3">
+              <div>
+                <p className="mb-2 text-xs font-bold text-slate-600">Preço na mídia</p>
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => { setIncludePrice(true); setItems([]); }}
+                    className={`rounded-lg py-2 text-sm font-bold ${includePrice ? 'bg-white text-emerald-700 shadow' : 'text-slate-500'}`}
+                  >
+                    Com preço
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIncludePrice(false); setItems([]); }}
+                    className={`rounded-lg py-2 text-sm font-bold ${!includePrice ? 'bg-white text-blue-700 shadow' : 'text-slate-500'}`}
+                  >
+                    Sem preço
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {includePrice ? 'Usa a arte de marketing com o valor cadastrado.' : 'Usa a imagem limpa do produto, sem o cartão de preço.'}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <select value={campaignId} onChange={(event) => { setCampaignId(event.target.value); setItems([]); }} className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                  {campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.title}</option>)}
+                </select>
+                <button onClick={() => void previewCampaign()} disabled={busy || !campaignId} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold disabled:opacity-50">Ver conteúdo</button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3 rounded-xl border border-dashed border-slate-300 p-4">

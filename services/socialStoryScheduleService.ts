@@ -53,6 +53,7 @@ export interface CreateSocialStoryScheduleInput {
   sourceId?: string | null;
   scheduledAt: string;
   destinations: SocialStoryDestination[];
+  includePrice?: boolean;
   mediaDelaySeconds?: number;
   items?: SocialStoryDraftItem[];
 }
@@ -62,9 +63,9 @@ export const socialStoryScheduleService = {
     return (await vpsClient.get<{ ok: true; items: SocialStorySchedule[] }>('/admin/marketing/stories')).items;
   },
 
-  async previewWhatsApp(campaignId: string): Promise<SocialStoryDraftItem[]> {
+  async previewWhatsApp(campaignId: string, includePrice = true): Promise<SocialStoryDraftItem[]> {
     return (await vpsClient.post<{ ok: true; items: SocialStoryDraftItem[] }>(
-      '/admin/marketing/stories/preview-whatsapp', { campaignId },
+      '/admin/marketing/stories/preview-whatsapp', { campaignId, includePrice },
     )).items;
   },
 
