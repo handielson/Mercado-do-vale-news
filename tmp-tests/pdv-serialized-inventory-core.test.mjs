@@ -46,7 +46,7 @@ const cards = await mod.buildPdvSearchCards(products, {
   listUnitsByProduct: async (productId) => unitsByProduct.get(productId) || [],
 });
 
-assert.equal(cards.length, 3, 'serialized unit cards, one normal stock product card, and one legacy serial card');
+assert.equal(cards.length, 2, 'only real serialized units and normal stock products may be offered');
 
 const serialized = cards.find((card) => card.id === 'product:prod-athomics:serialized');
 assert.equal(serialized.kind, 'serialized-product');
@@ -78,11 +78,7 @@ assert.equal(cable.maxQuantity, 3);
 assert.equal(cable.stockLabel, '3 disponiveis');
 
 const legacySerial = cards.find((card) => card.id === 'product:prod-legacy-serial:serialized');
-assert.equal(legacySerial.kind, 'serialized-product');
-assert.equal(legacySerial.stockLabel, '1 unidade disponivel');
-assert.deepEqual(legacySerial.unitOptions.map((option) => option.label), ['Serial: AT2209900136']);
-assert.equal(legacySerial.unitOptions[0].unitData.unitId, undefined);
-assert.equal(legacySerial.unitOptions[0].unitData.serial, 'AT2209900136');
+assert.equal(legacySerial, undefined, 'a serial stored only in product specs must not be offered as a stock unit');
 
 const exactOption = mod.buildPdvUnitOption({
   id: 'unit-exact',
@@ -150,6 +146,16 @@ const soldOnlyCards = mod.fromHydratedPdvSearchPayload([{
   has_unit_history: true,
 }]);
 assert.deepEqual(soldOnlyCards, [], 'sold units in stale product specs must never return as available stock');
+
+const legacyOnlyCards = mod.fromHydratedPdvSearchPayload([{
+  product: {
+    id: 'prod-legacy-only', name: 'Receptor legado', sku: 'LEGACY-ONE', track_inventory: true,
+    stock_quantity: 1, price_retail: 40000, specs: { serial: '287994067561' },
+  },
+  available_units: [],
+  has_unit_history: false,
+}]);
+assert.deepEqual(legacyOnlyCards, [], 'legacy identifiers without a real unit id must stay blocked from PDV sale');
 
 const smartphoneCards = mod.fromHydratedPdvSearchPayload([
   {

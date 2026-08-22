@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.278-story-preco-midia",
-  "date": "2026-08-20",
+  "version": "v1.2.279-pdv-unidade-legada",
+  "date": "2026-08-22",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260820-205552-story-preco-midia",
+  "release_vps": "/var/www/mdv-site/releases/20260822-132422-pdv-unidade-legada",
   "branch": "main",
-  "summary": "Adiciona ao agendador de Stories a escolha entre midia com preco e sem preco."
+  "summary": "Impede o PDV de oferecer seriais legados sem unidade real e regulariza a unidade reportada."
 }

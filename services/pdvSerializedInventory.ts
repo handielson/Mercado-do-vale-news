@@ -83,50 +83,12 @@ function stripLegacySerializedSpecs(product: Product): Product {
     };
 }
 
-function buildLegacyProductUnitOption(product: Product): PdvSerializedUnitOption | null {
-    if (product.track_inventory && Math.max(0, Math.trunc(Number(product.stock_quantity || 0))) <= 0) return null;
-
+function hasLegacySerializedIdentifier(product: Product): boolean {
     const specs = (product as any).specs || {};
     const imei1 = cleanText(specs.imei1 || specs.imei_1 || specs.imei);
     const imei2 = cleanText(specs.imei2 || specs.imei_2);
     const serial = cleanText(specs.serial || specs.serial_number);
-    if (!imei1 && !imei2 && !serial) return null;
-
-    const identifierParts = [
-        imei1 ? `IMEI 1: ${imei1}` : '',
-        imei2 ? `IMEI 2: ${imei2}` : '',
-        serial ? `Serial: ${serial}` : '',
-    ].filter(Boolean);
-
-    return {
-        id: `legacy-unit:${product.id}`,
-        unit: {
-            id: '',
-            product_id: product.id,
-            imei_1: imei1,
-            imei_2: imei2,
-            serial_number: serial,
-            condition: 'new',
-            status: 'available' as any,
-            created: '',
-            updated: '',
-        },
-        label: identifierParts.join(' | '),
-        detail: '',
-        unitData: {
-            imei1: imei1 || undefined,
-            imei2: imei2 || undefined,
-            serial: serial || undefined,
-        },
-    };
-}
-
-function getUnitIdentifierKeys(unitData: PdvSerializedUnitOption['unitData']): string[] {
-    return [
-        unitData.serial,
-        unitData.imei1,
-        unitData.imei2,
-    ].map(normalizeKeyText).filter(Boolean);
+    return Boolean(imei1 || imei2 || serial);
 }
 
 function getProductGroupingKey(product: Product): string {
@@ -192,17 +154,9 @@ export function buildStockProductCard(product: Product): Extract<PdvSearchCard, 
 export function buildSerializedProductCard(
     product: Product,
     availableUnits: Unit[],
-    extraUnitOptions: PdvSerializedUnitOption[] = [],
 ): Extract<PdvSearchCard, { kind: 'serialized-product' }> {
     const displayProduct = stripLegacySerializedSpecs(product);
-    const unitOptions = [
-        ...availableUnits.filter(isAvailableUnit).map(buildPdvUnitOption),
-        ...extraUnitOptions,
-    ];
-    if (unitOptions.length === 0) {
-        const legacyOption = buildLegacyProductUnitOption(product);
-        if (legacyOption) unitOptions.push(legacyOption);
-    }
+    const unitOptions = availableUnits.filter(isAvailableUnit).map(buildPdvUnitOption);
     return {
         kind: 'serialized-product',
         id: `product:${product.id}:serialized`,
@@ -226,9 +180,8 @@ export async function buildPdvSearchCards(
             ? await deps.listUnitsByProduct(product.id).catch(() => [])
             : [];
         const availableUnits = units.filter(isAvailableUnit);
-        const legacyOption = units.length === 0 ? buildLegacyProductUnitOption(product) : null;
 
-        if (availableUnits.length > 0 || legacyOption) {
+        if (availableUnits.length > 0) {
             cards.push(buildSerializedProductCard(product, availableUnits));
             continue;
         }
@@ -237,6 +190,11 @@ export async function buildPdvSearchCards(
         // unidade realmente disponivel. Nunca converta um IMEI vendido/reservado
         // em estoque comum nem reutilize os specs legados do produto.
         if (units.length > 0) continue;
+
+        // Um identificador salvo apenas em products.specs nao e uma unidade de
+        // estoque. Nao o ofereca como disponivel: ele precisa ser migrado para
+        // units antes que o produto possa ser vendido no PDV.
+        if (product.track_inventory && hasLegacySerializedIdentifier(product)) continue;
 
         cards.push(buildStockProductCard(product));
     }
@@ -262,30 +220,18 @@ export function fromHydratedPdvSearchPayload(payload: HydratedPdvProduct[]): Pdv
         const canonical = entries.find((entry) => (entry.available_units || []).filter(isAvailableUnit).length > 0) || entries[entries.length - 1];
         const availableUnits = entries.flatMap((entry) => (entry.available_units || []).filter(isAvailableUnit));
         const groupHasUnitHistory = entries.some((entry) => entry.has_unit_history === true);
-        const legacyOptions = groupHasUnitHistory ? [] : entries
-            .filter((entry) => entry.product.id !== canonical.product.id)
-            .map((entry) => buildLegacyProductUnitOption(entry.product))
-            .filter((option): option is PdvSerializedUnitOption => Boolean(option));
+        const groupHasLegacySerializedIdentifier = entries.some((entry) => (
+            entry.product.track_inventory && hasLegacySerializedIdentifier(entry.product)
+        ));
 
-        const seenOptionKeys = new Set(
-            availableUnits
-                .map(buildPdvUnitOption)
-                .flatMap((option) => getUnitIdentifierKeys(option.unitData))
-        );
-        const dedupedLegacyOptions = legacyOptions.filter((option) => {
-            const keys = getUnitIdentifierKeys(option.unitData);
-            if (keys.length === 0 || keys.some((key) => seenOptionKeys.has(key))) return false;
-            keys.forEach((key) => seenOptionKeys.add(key));
-            return true;
-        });
-
-        if (availableUnits.length > 0 || dedupedLegacyOptions.length > 0 || (!groupHasUnitHistory && buildLegacyProductUnitOption(canonical.product))) {
-            return [buildSerializedProductCard(canonical.product, availableUnits, dedupedLegacyOptions)];
+        if (availableUnits.length > 0) {
+            return [buildSerializedProductCard(canonical.product, availableUnits)];
         }
 
         // Ha historico de unidades, mas nenhuma disponivel: o produto nao pode
         // aparecer como estoque comum, pois isso contornaria o controle de IMEI.
         if (groupHasUnitHistory) return [];
+        if (groupHasLegacySerializedIdentifier) return [];
         return [buildStockProductCard(canonical.product)];
     });
 }
