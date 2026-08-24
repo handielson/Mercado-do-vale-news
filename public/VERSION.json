@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.283-n8n-foto-modelo-cor",
+  "version": "v1.2.284-n8n-foto-interrompe-entrega",
   "date": "2026-08-24",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260824-223543-v1-2-283-n8n-foto-modelo-cor",
+  "release_vps": "/var/www/mdv-site/releases/20260824-230117-v1-2-284-n8n-foto-interrompe-entrega",
   "branch": "main",
-  "summary": "Corrige o envio de fotos pelo bot usando a galeria cadastrada por modelo e cor quando o SKU nao possui imagens proprias."
+  "summary": "Permite pedir foto durante a etapa de entrega e atualiza imagens de listas antigas pela API."
 }
