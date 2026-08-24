@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.281-garantia-whatsapp-pdv
-date: 2026-08-23
+version: v1.2.282-n8n-2357
+date: 2026-08-24
 status: ready
-release_vps: /var/www/mdv-site/releases/20260823-225532-v1281-garantia-whatsapp-pdv
+release_vps: /var/www/mdv-site/releases/20260824-190800-v1282-n8n-2357
 branch: main
-summary: Envia automaticamente pelo WhatsApp o termo de garantia em PDF ao finalizar uma venda elegivel no PDV.
+summary: Atualiza n8n e Task Runner para 2.35.7 com backup restauravel, espelho no Synology e rollback seguro.
 ```

@@ -5,6 +5,8 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env.vps.local'), q
 require('dotenv').config({ path: path.join(__dirname, '..', '.env.local'), quiet: true });
 
 const VERSION = String(process.argv[2] || '2.33.7').trim();
+const staleExecutionArg = process.argv.find((arg) => arg.startsWith('--stale-execution='));
+const STALE_EXECUTION_ID = staleExecutionArg ? staleExecutionArg.split('=')[1] : '';
 const N8N_SERVICE = 'n8n_n8n';
 const RUNNER_SERVICE = 'n8n_n8n-runner';
 
@@ -45,21 +47,43 @@ async function waitReplicas(conn, service, expected, timeoutMs = 180000) {
 
 async function main() {
   if (!/^\d+\.\d+\.\d+$/.test(VERSION)) throw new Error('Versao invalida. Use X.Y.Z.');
+  if (STALE_EXECUTION_ID && !/^\d+$/.test(STALE_EXECUTION_ID)) throw new Error('ID de execucao obsoleta invalido');
   const n8nImage = `docker.n8n.io/n8nio/n8n:${VERSION}`;
   const runnerImage = `n8nio/runners:${VERSION}`;
   const conn = new Client();
   await new Promise((resolve, reject) => conn.on('ready', resolve).on('error', reject).connect(sshConfig()));
   let stopped = false;
+  let databaseMayHaveMigrated = false;
+  let staleNeedsClosure = false;
+  let backupDir = '';
+  let oldN8nImage = '';
+  let oldRunnerImage = '';
   try {
     await run(conn, `docker manifest inspect ${quote(n8nImage)} >/dev/null`);
     await run(conn, `docker manifest inspect ${quote(runnerImage)} >/dev/null`);
+    backupDir = (await run(conn, `find /var/backups/mdv-system -maxdepth 1 -type d -name ${quote(`n8n-pre-upgrade-${VERSION}-*`)} -printf '%T@ %p\\n' | sort -nr | head -n 1 | cut -d' ' -f2-`)).trim();
+    if (!backupDir) throw new Error(`Backup pre-upgrade para ${VERSION} nao encontrado`);
+    await run(conn, `test -s ${quote(`${backupDir}/n8n-postgres.dump`)} && grep -qx 'restore_test=passed' ${quote(`${backupDir}/manifest.txt`)} && cd ${quote(backupDir)} && sha256sum -c SHA256SUMS >/dev/null`);
+    oldN8nImage = (await run(conn, `docker service inspect ${N8N_SERVICE} --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'`)).trim();
+    oldRunnerImage = (await run(conn, `docker service inspect ${RUNNER_SERVICE} --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'`)).trim();
+    const dbContainer = (await run(conn, "docker ps --filter 'name=n8n_n8n-db.1' --format '{{.Names}}' | head -n 1")).trim();
+    const runningIds = (await run(conn, `docker exec ${quote(dbContainer)} psql -U postgres -d n8n -X -q -t -A -c ${quote(`select id from execution_entity where status='running' order by id;`)}`)).trim().split(/\s+/).filter(Boolean);
+    if (runningIds.length && (runningIds.length !== 1 || runningIds[0] !== STALE_EXECUTION_ID)) {
+      throw new Error(`Existem execucoes em andamento nao autorizadas: ${runningIds.join(',')}`);
+    }
+    staleNeedsClosure = Boolean(STALE_EXECUTION_ID && runningIds.includes(STALE_EXECUTION_ID));
     await run(conn, `docker service scale ${RUNNER_SERVICE}=0 >/dev/null`);
     await waitReplicas(conn, RUNNER_SERVICE, 0);
     await run(conn, `docker service scale ${N8N_SERVICE}=0 >/dev/null`);
     await waitReplicas(conn, N8N_SERVICE, 0);
     stopped = true;
+    if (staleNeedsClosure) {
+      const changed = (await run(conn, `docker exec ${quote(dbContainer)} psql -U postgres -d n8n -X -q -t -A -c ${quote(`update execution_entity set status='crashed', "stoppedAt"=now() where id=${STALE_EXECUTION_ID} and status='running' and "startedAt" < now() - interval '30 minutes' returning id;`)}`)).trim();
+      if (!changed.split(/\s+/).includes(STALE_EXECUTION_ID)) throw new Error(`Execucao ${STALE_EXECUTION_ID} nao estava obsoleta ou nao foi atualizada`);
+    }
     await run(conn, `docker service update --image ${quote(n8nImage)} --detach=true ${N8N_SERVICE} >/dev/null`);
     await run(conn, `docker service update --image ${quote(runnerImage)} --detach=true ${RUNNER_SERVICE} >/dev/null`);
+    databaseMayHaveMigrated = true;
     await run(conn, `docker service scale ${N8N_SERVICE}=1 >/dev/null`);
     await waitReplicas(conn, N8N_SERVICE, 1);
     await run(conn, `docker service scale ${RUNNER_SERVICE}=1 >/dev/null`);
@@ -72,14 +96,28 @@ async function main() {
     const crashAbsent = !/Cannot assign to read only property 'prependListener'|Runner process exited with error/i.test(runnerTail);
     if (runningVersion !== VERSION) throw new Error(`n8n iniciou em ${runningVersion}, esperado ${VERSION}`);
     if (!crashAbsent) throw new Error('Task Runner ainda registra a falha de health check');
-    console.log(JSON.stringify({ version: runningVersion, images, services: { n8n: '1/1', runner: '1/1' }, runnerHealthCrashAbsent: true }, null, 2));
-  } finally {
+    const health = (await run(conn, "curl -fsS https://n8n.mercadodovale.com.br/healthz")).trim();
+    const consistency = (await run(conn, `docker exec ${quote(dbContainer)} psql -U postgres -d n8n -X -q -t -A -c ${quote(`select count(*) from workflow_entity we join workflow_history wh on wh."workflowId"=we.id and wh."versionId"=we."activeVersionId" where we.active=true and we.nodes::jsonb=wh.nodes::jsonb and we.connections::jsonb=wh.connections::jsonb;`)}`)).trim();
+    if (Number(consistency) < 1) throw new Error('Workflow ativo e historico divergiram apos o upgrade');
+    console.log(JSON.stringify({ version: runningVersion, images, services: { n8n: '1/1', runner: '1/1' }, health, activeWorkflowHistoryMatches: Number(consistency), runnerHealthCrashAbsent: true, staleExecutionClosed: STALE_EXECUTION_ID || null, rollbackBackup: backupDir }, null, 2));
+  } catch (error) {
     if (stopped) {
+      await run(conn, `docker service scale ${RUNNER_SERVICE}=0 ${N8N_SERVICE}=0 >/dev/null`).catch(() => {});
+      await waitReplicas(conn, RUNNER_SERVICE, 0).catch(() => {});
+      await waitReplicas(conn, N8N_SERVICE, 0).catch(() => {});
+      if (databaseMayHaveMigrated && backupDir) {
+        const dbContainer = (await run(conn, "docker ps --filter 'name=n8n_n8n-db.1' --format '{{.Names}}' | head -n 1")).trim();
+        await run(conn, `docker exec ${quote(dbContainer)} dropdb -U postgres --if-exists n8n && docker exec ${quote(dbContainer)} createdb -U postgres n8n && cat ${quote(`${backupDir}/n8n-postgres.dump`)} | docker exec -i ${quote(dbContainer)} pg_restore -U postgres -d n8n --exit-on-error --no-owner --no-privileges`);
+      }
+      if (oldN8nImage) await run(conn, `docker service update --image ${quote(oldN8nImage)} --detach=true ${N8N_SERVICE} >/dev/null`).catch(() => {});
+      if (oldRunnerImage) await run(conn, `docker service update --image ${quote(oldRunnerImage)} --detach=true ${RUNNER_SERVICE} >/dev/null`).catch(() => {});
       await run(conn, `docker service scale ${N8N_SERVICE}=1 >/dev/null`).catch(() => {});
       await waitReplicas(conn, N8N_SERVICE, 1).catch(() => {});
       await run(conn, `docker service scale ${RUNNER_SERVICE}=1 >/dev/null`).catch(() => {});
       await waitReplicas(conn, RUNNER_SERVICE, 1).catch(() => {});
     }
+    throw error;
+  } finally {
     conn.end();
   }
 }
