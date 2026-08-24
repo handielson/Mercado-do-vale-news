@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.284-n8n-foto-interrompe-entrega",
+  "version": "v1.2.285-n8n-foto-helper-http",
   "date": "2026-08-24",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260824-230117-v1-2-284-n8n-foto-interrompe-entrega",
+  "release_vps": "/var/www/mdv-site/releases/20260824-232515-v1-2-285-n8n-foto-helper-http",
   "branch": "main",
-  "summary": "Permite pedir foto durante a etapa de entrega e atualiza imagens de listas antigas pela API."
+  "summary": "Corrige a consulta de fotos antigas usando o helper HTTP suportado pelo task runner do n8n."
 }

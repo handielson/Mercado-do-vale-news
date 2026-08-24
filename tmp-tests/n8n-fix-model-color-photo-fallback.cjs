@@ -13,6 +13,7 @@ const NODE_NAME = 'Vendas - Contexto Produtos';
 const POST_LIST_NODE_NAME = 'Vendas - Verificar Pos Lista';
 const MARKER = 'catalog-model-color-photo-fallback-v283';
 const POST_LIST_MARKER = 'photo-interrupt-refresh-v284';
+const POST_LIST_HTTP_MARKER = 'photo-http-helper-v285';
 const APPLY = process.argv.includes('--apply');
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -58,7 +59,7 @@ function patchContext(code) {
   return next;
 }
 
-function patchPostList(code) {
+function patchPostListV284(code) {
   if (code.includes(POST_LIST_MARKER)) return code;
 
   const fulfillmentAnchor = `// default-one-unit-v245
@@ -167,6 +168,42 @@ async function buildPhotoMessages(item, selectedOption) {
   return next;
 }
 
+function patchPostList(code) {
+  let next = patchPostListV284(code);
+  const assertV285 = (candidate) => {
+    const hydrateSection = candidate.slice(candidate.indexOf('async function hydratePhotoItem'), candidate.indexOf('async function buildPhotoMessages'));
+    assert.ok(candidate.includes(POST_LIST_HTTP_MARKER), 'photo HTTP helper marker must exist');
+    assert.ok(hydrateSection.includes('helpers.httpRequest'), 'photo hydration must use the runner HTTP helper');
+    assert.ok(!hydrateSection.includes('fetch('), 'photo hydration must not use unavailable fetch');
+    assert.ok(!hydrateSection.includes('AbortSignal'), 'photo hydration must not use unavailable AbortSignal');
+    assert.equal((candidate.match(/(?<!await )buildPhotoMessages\(/g) || []).length, 1, 'all buildPhotoMessages calls must be awaited');
+  };
+  if (next.includes(POST_LIST_HTTP_MARKER)) {
+    assertV285(next);
+    return next;
+  }
+
+  const oldRequest = `const response = await fetch('https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=1&sku=' + encodeURIComponent(sku), {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return { ...item, images: [] };
+    const payload = await response.json();`;
+  assert.ok(next.includes(oldRequest), 'photo fetch anchor changed unexpectedly');
+  const helperRequest = `// ${POST_LIST_HTTP_MARKER}
+    const payload = await helpers.httpRequest({
+      method: 'GET',
+      url: 'https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=1&sku=' + encodeURIComponent(sku),
+      headers: { Accept: 'application/json' },
+      json: true,
+      timeout: 8000,
+    });`;
+  next = next.replace(oldRequest, helperRequest);
+  assertV285(next);
+  new Function('$json', '$input', '$getWorkflowStaticData', '$', '$env', 'helpers', next);
+  return next;
+}
+
 function summarize(nodes) {
   const node = nodes.find((item) => item.name === NODE_NAME);
   assert.ok(node, `${NODE_NAME} not found`);
@@ -183,6 +220,7 @@ function summarize(nodes) {
     photoBeforeFulfillment: postListCode.indexOf(POST_LIST_MARKER) < postListCode.indexOf("activeState?.step === 'awaiting_fulfillment'"),
     refreshesStaleImages: postListCode.includes("compact=true&limit=1&sku=") && postListCode.includes('product?.resolved_images'),
     awaitsPhotoMessages: postListCode.includes('messages: await buildPhotoMessages'),
+    usesRunnerHttpHelper: postListCode.includes(POST_LIST_HTTP_MARKER) && postListCode.includes('helpers.httpRequest'),
   };
 }
 
@@ -211,7 +249,7 @@ async function main() {
     assert.equal(activeExecutions, 0, 'workflow has an active execution; refusing to update it');
 
     const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
-    const backupDir = `/var/backups/mdv-system/n8n-workflow-photo-interrupt-${timestamp}`;
+    const backupDir = `/var/backups/mdv-system/n8n-workflow-photo-http-helper-${timestamp}`;
     await run(conn, `mkdir -p ${quote(backupDir)} && chmod 700 ${quote(backupDir)}`);
     const backupSql = `COPY (SELECT json_build_object('workflow', row_to_json(we), 'activeHistory', row_to_json(wh))::text FROM workflow_entity we LEFT JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
     await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(backupSql)} > ${quote(`${backupDir}/workflow.json`)} && chmod 600 ${quote(`${backupDir}/workflow.json`)} && sha256sum ${quote(`${backupDir}/workflow.json`)} > ${quote(`${backupDir}/SHA256SUMS`)}`);
@@ -221,8 +259,13 @@ async function main() {
     stopped = true;
     await run(conn, 'docker service scale n8n_n8n=0 >/dev/null');
     await waitService(conn, 'n8n_n8n', 0);
+    const activeAfterStop = Number((await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(activeExecutionsSql)}`)).trim());
+    assert.equal(activeAfterStop, 0, 'workflow received an execution during shutdown; refusing to update it');
+    const versionAfterStopSql = `COPY (SELECT "activeVersionId" FROM workflow_entity WHERE id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
+    const activeVersionAfterStop = (await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(versionAfterStopSql)}`)).trim();
+    assert.equal(activeVersionAfterStop, row.activeVersionId, 'active workflow version changed during preparation; refusing to overwrite it');
 
-    const remotePath = '/tmp/mdv-n8n-photo-interrupt-v284.json';
+    const remotePath = '/tmp/mdv-n8n-photo-http-helper-v285.json';
     await new Promise((resolve, reject) => conn.sftp((error, sftp) => {
       if (error) return reject(error);
       sftp.writeFile(remotePath, Buffer.from(JSON.stringify(nodes)), (writeError) => {
@@ -233,6 +276,7 @@ async function main() {
     await run(conn, `docker cp ${quote(remotePath)} ${quote(db)}:${quote(remotePath)}`);
     const updateSql = `BEGIN; UPDATE workflow_entity SET nodes=pg_read_file('${remotePath}')::json, connections=${quote(JSON.stringify(connections))}::json, "versionId"="activeVersionId", "updatedAt"=NOW() WHERE id=${quote(WORKFLOW_ID)}; UPDATE workflow_history SET nodes=pg_read_file('${remotePath}')::json, connections=${quote(JSON.stringify(connections))}::json, "updatedAt"=NOW() WHERE "workflowId"=${quote(WORKFLOW_ID)} AND "versionId"=${quote(row.activeVersionId)}; COMMIT;`;
     await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -v ON_ERROR_STOP=1 -c ${quote(updateSql)}`);
+    await run(conn, `docker exec ${quote(db)} rm -f ${quote(remotePath)} && rm -f ${quote(remotePath)}`);
 
     await run(conn, 'docker service scale n8n_n8n=1 >/dev/null');
     await waitService(conn, 'n8n_n8n', 1);
@@ -240,18 +284,22 @@ async function main() {
     await waitService(conn, 'n8n_n8n-runner', 1);
     stopped = false;
 
-    const verifySql = `COPY (SELECT json_build_object('entityMarker', we.nodes::text LIKE '%${MARKER}%', 'historyMarker', wh.nodes::text LIKE '%${MARKER}%', 'postListEntityMarker', we.nodes::text LIKE '%${POST_LIST_MARKER}%', 'postListHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_MARKER}%', 'sameNodes', we.nodes::jsonb = wh.nodes::jsonb, 'active', we.active)::text FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
+    const verifySql = `COPY (SELECT json_build_object('entityMarker', we.nodes::text LIKE '%${MARKER}%', 'historyMarker', wh.nodes::text LIKE '%${MARKER}%', 'postListEntityMarker', we.nodes::text LIKE '%${POST_LIST_MARKER}%', 'postListHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_MARKER}%', 'httpHelperEntityMarker', we.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'httpHelperHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'sameNodes', we.nodes::jsonb = wh.nodes::jsonb, 'active', we.active)::text FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
     const database = JSON.parse((await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(verifySql)}`)).trim());
-    console.log(JSON.stringify({ apply: true, backupDir, database, ...summary }, null, 2));
+    assert.ok(Object.values(database).every(Boolean), 'database verification failed');
+    const health = JSON.parse((await run(conn, 'curl -fsS https://n8n.mercadodovale.com.br/healthz')).trim());
+    assert.equal(health.status, 'ok', 'n8n healthcheck failed after update');
+    console.log(JSON.stringify({ apply: true, backupDir, database, health, ...summary }, null, 2));
   } finally {
     if (stopped) {
       await run(conn, 'docker service scale n8n_n8n=1 >/dev/null').catch(() => {});
       await waitService(conn, 'n8n_n8n', 1).catch(() => {});
       await run(conn, 'docker service scale n8n_n8n-runner=1 >/dev/null').catch(() => {});
+      await waitService(conn, 'n8n_n8n-runner', 1).catch(() => {});
     }
     conn.end();
   }
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.stack || error.message); process.exit(1); });
-module.exports = { patchContext, patchPostList, summarize, MARKER, POST_LIST_MARKER };
+module.exports = { patchContext, patchPostList, summarize, MARKER, POST_LIST_MARKER, POST_LIST_HTTP_MARKER };

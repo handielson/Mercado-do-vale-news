@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { patchContext, patchPostList, MARKER, POST_LIST_MARKER } = require('./n8n-fix-model-color-photo-fallback.cjs');
+const { patchContext, patchPostList, MARKER, POST_LIST_MARKER, POST_LIST_HTTP_MARKER } = require('./n8n-fix-model-color-photo-fallback.cjs');
 const servers = ['vps_server.cjs', 'vps_server.js'];
 
 for (const file of servers) {
@@ -86,6 +86,7 @@ const result = { messages: buildPhotoMessages(variant), };
 return result;
 })();`;
 const patchedPostList = patchPostList(oldPostListCode);
+assert.equal(patchPostList(patchedPostList), patchedPostList, 'the v285 patch must be byte-for-byte idempotent');
 assert.match(patchedPostList, new RegExp(POST_LIST_MARKER));
 assert.ok(patchedPostList.indexOf(POST_LIST_MARKER) < patchedPostList.indexOf("activeState?.step === 'awaiting_fulfillment'"));
 assert.match(patchedPostList, /products\?status=active&compact=true&limit=1&sku=/);
@@ -93,30 +94,33 @@ assert.match(patchedPostList, /product\?\.resolved_images/);
 assert.match(patchedPostList, /messages: await buildPhotoMessages\(photoVariant, photoOption\)/);
 assert.match(patchedPostList, /messages: await buildPhotoMessages\(variant, option\)/);
 assert.match(patchedPostList, /wantsPhoto \|\| wantsPhotoFromAI/);
-assert.match(patchedPostList, /AbortSignal\.timeout\(8000\)/);
+assert.match(patchedPostList, new RegExp(POST_LIST_HTTP_MARKER));
+assert.match(patchedPostList, /helpers\.httpRequest/);
+const hydrateSection = patchedPostList.slice(patchedPostList.indexOf('async function hydratePhotoItem'), patchedPostList.indexOf('async function buildPhotoMessages'));
+assert.doesNotMatch(hydrateSection, /fetch\(/);
+assert.doesNotMatch(hydrateSection, /AbortSignal/);
 
-const executePostList = (mockFetch) => new Function(
-  '$json', '$input', '$getWorkflowStaticData', '$', '$env', 'fetch', 'AbortSignal',
+const executePostList = (mockHttpRequest) => new Function(
+  '$json', '$input', '$getWorkflowStaticData', '$', '$env', 'helpers',
   `return ${patchedPostList}`,
-)({}, {}, () => ({}), {}, {}, mockFetch, { timeout: () => undefined });
+)({}, {}, () => ({}), {}, {}, { httpRequest: mockHttpRequest });
 
 const fetchCalls = [];
-const execution = await executePostList(async (url) => {
-  fetchCalls.push(url);
-  return {
-    ok: true,
-    json: async () => [{ id: 'product-1', images: [], resolved_images: [modelColorUrl], model_color_images: [modelColorUrl] }],
-  };
+const execution = await executePostList(async (options) => {
+  fetchCalls.push(options);
+  return [{ id: 'product-1', images: [], resolved_images: [modelColorUrl], model_color_images: [modelColorUrl] }];
 });
 assert.equal(fetchCalls.length, 1, 'a stale list must refresh its image once');
-assert.match(fetchCalls[0], /sku=W58P24816512L$/);
+assert.match(fetchCalls[0].url, /sku=W58P24816512L$/);
+assert.equal(fetchCalls[0].json, true);
+assert.equal(fetchCalls[0].timeout, 8000);
 assert.equal(execution[0].json.messages[0].type, 'image');
 assert.equal(execution[0].json.messages[0].mediaUrl, modelColorUrl);
 
-const mismatchedProduct = await executePostList(async () => ({
-  ok: true,
-  json: async () => [{ id: 'another-product', resolved_images: [modelColorUrl] }],
-}));
+const mismatchedProduct = await executePostList(async () => [{ id: 'another-product', resolved_images: [modelColorUrl] }]);
 assert.equal(mismatchedProduct[0].json.messages[0].type, 'text', 'an ID mismatch must never send another product photo');
+
+const helperFailure = await executePostList(async () => { throw new Error('timeout'); });
+assert.equal(helperFailure[0].json.messages[0].type, 'text', 'an HTTP helper failure must degrade to a safe text reply');
 
 console.log('n8n model/color photo fallback regression OK');
