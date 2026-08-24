@@ -14,6 +14,7 @@ const POST_LIST_NODE_NAME = 'Vendas - Verificar Pos Lista';
 const MARKER = 'catalog-model-color-photo-fallback-v283';
 const POST_LIST_MARKER = 'photo-interrupt-refresh-v284';
 const POST_LIST_HTTP_MARKER = 'photo-http-helper-v285';
+const PHOTO_CONTEXT_RECOVERY_MARKER = 'photo-context-recovery-v286';
 const APPLY = process.argv.includes('--apply');
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -180,17 +181,15 @@ function patchPostList(code) {
   };
   if (next.includes(POST_LIST_HTTP_MARKER)) {
     assertV285(next);
-    return next;
-  }
-
-  const oldRequest = `const response = await fetch('https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=1&sku=' + encodeURIComponent(sku), {
+  } else {
+    const oldRequest = `const response = await fetch('https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=1&sku=' + encodeURIComponent(sku), {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return { ...item, images: [] };
     const payload = await response.json();`;
-  assert.ok(next.includes(oldRequest), 'photo fetch anchor changed unexpectedly');
-  const helperRequest = `// ${POST_LIST_HTTP_MARKER}
+    assert.ok(next.includes(oldRequest), 'photo fetch anchor changed unexpectedly');
+    const helperRequest = `// ${POST_LIST_HTTP_MARKER}
     const payload = await helpers.httpRequest({
       method: 'GET',
       url: 'https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=1&sku=' + encodeURIComponent(sku),
@@ -198,8 +197,113 @@ function patchPostList(code) {
       json: true,
       timeout: 8000,
     });`;
-  next = next.replace(oldRequest, helperRequest);
-  assertV285(next);
+    next = next.replace(oldRequest, helperRequest);
+    assertV285(next);
+  }
+
+  const assertV286 = (candidate) => {
+    assert.ok(candidate.includes(PHOTO_CONTEXT_RECOVERY_MARKER), 'missing-list photo recovery marker must exist');
+    assert.ok(candidate.includes('recoverPhotoWithoutListState'), 'missing-list photo recovery helper must exist');
+    assert.ok(candidate.includes('salesSearchQuery'), 'missing-list photo recovery must consume the classified product query');
+    assert.ok(candidate.includes('historyProductSku'), 'missing-list photo recovery must support the exact recent product link');
+    assert.ok(candidate.includes("messages: recoveredPhotoMessages"), 'missing-list photo recovery must emit media messages directly');
+  };
+  if (!next.includes(PHOTO_CONTEXT_RECOVERY_MARKER)) {
+    const oldMissingState = `if (!activeState || !Array.isArray(activeState.options) || activeState.options.length === 0) {
+  if (wantsPhoto || wantsPhotoFromAI) {
+    return [{
+      json: {
+        ...source,
+        salesPostListHandled: true,
+        output: withGreeting('Consigo te mandar a foto sim 😊 Me confirma o numero do item ou o modelo que voce quer ver?'),
+      },
+    }];
+  }
+  return buildContinueItem();
+}`;
+    assert.ok(next.includes(oldMissingState), 'missing sales-list state anchor changed unexpectedly');
+    const recoveredMissingState = `// ${PHOTO_CONTEXT_RECOVERY_MARKER}
+async function recoverPhotoWithoutListState() {
+  const classifiedQuery = String(source.salesSearchQuery || '').trim();
+  const recentText = [source.conversationHistory, ...(Array.isArray(source.recentMessages) ? source.recentMessages.map((item) => item?.text) : [])]
+    .filter(Boolean)
+    .join(' ');
+  const productLinks = [...recentText.matchAll(new RegExp('https://mercadodovale[.]com[.]br/produto/([a-z0-9-]+)', 'gi'))];
+  const recentSlug = productLinks.length > 0 ? String(productLinks[productLinks.length - 1][1] || '') : '';
+  const previousOutbound = [...(Array.isArray(source.recentMessages) ? source.recentMessages : [])].reverse()
+    .find((item) => String(item?.direction || '') === 'outbound');
+  const followsPhotoNumberPrompt = aiAction === 'pedir_foto'
+    && /^\\d{1,3}$/.test(normalized)
+    && normalize(previousOutbound?.text).includes('confirma o numero do item');
+  const historyProductSku = followsPhotoNumberPrompt && recentSlug.includes('-') ? recentSlug.split('-').pop().toUpperCase() : '';
+  const requestedColor = normalize(aiColor);
+  const ignoredWords = new Set(['foto', 'fotos', 'imagem', 'imagens', 'video', 'videos', 'dele', 'dela', requestedColor].filter(Boolean));
+  const searchWords = normalize(classifiedQuery).split(/\\s+/).filter((word) => word && !ignoredWords.has(word));
+  if (!historyProductSku && searchWords.length === 0) return [];
+  try {
+    const requestUrl = historyProductSku
+      ? 'https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=1&sku=' + encodeURIComponent(historyProductSku)
+      : 'https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=20&search=' + encodeURIComponent(searchWords.join(' '));
+    const payload = await helpers.httpRequest({ method: 'GET', url: requestUrl, headers: { Accept: 'application/json' }, json: true, timeout: 8000 });
+    const products = Array.isArray(payload) ? payload : (Array.isArray(payload?.rows) ? payload.rows : []);
+    const candidates = products.filter((product) => {
+      if (product?.status && normalize(product.status) !== 'active') return false;
+      if (product?.hide_from_catalog === true || Number(product?.hide_from_catalog || 0) === 1) return false;
+      const stockQuantity = Number(product?.stock_quantity);
+      if (Number(product?.track_inventory || 0) === 1 && Number.isFinite(stockQuantity) && stockQuantity <= 0) return false;
+      const productColor = normalize(product?.specs?.color || product?.specs?.cor || product?.color);
+      if (requestedColor && productColor !== requestedColor) return false;
+      if (historyProductSku && normalize(product?.sku) !== normalize(historyProductSku)) return false;
+      const haystack = normalize([product?.name, product?.sku, ...(Array.isArray(product?.specs?.keywords) ? product.specs.keywords : [])].join(' '));
+      return historyProductSku || searchWords.every((word) => haystack.includes(word));
+    });
+    if (candidates.length !== 1) return [];
+    const product = candidates[0];
+    const images = [...new Set([product?.images, product?.resolved_images, product?.model_color_images]
+      .flatMap((value) => Array.isArray(value) ? value : [])
+      .map((url) => String(url || '').trim())
+      .filter((url) => url.startsWith('https://api.xiaomipetrolina.com.br/images/')))]
+      .slice(0, 3);
+    if (images.length === 0) return [];
+    const productUrl = product?.slug ? 'https://mercadodovale.com.br/produto/' + product.slug : '';
+    const recoveredVariant = {
+      productId: product?.id,
+      sku: product?.sku,
+      color: product?.specs?.color || product?.specs?.cor || product?.color || aiColor,
+      url: productUrl,
+      images,
+    };
+    const recoveredOption = {
+      number: aiSelectedNumber || 0,
+      name: product?.name || classifiedQuery || 'Produto',
+      memory: '',
+      url: productUrl,
+    };
+    return await buildPhotoMessages(recoveredVariant, recoveredOption);
+  } catch (error) {
+    return [];
+  }
+}
+
+if (!activeState || !Array.isArray(activeState.options) || activeState.options.length === 0) {
+  if (wantsPhoto || wantsPhotoFromAI) {
+    const recoveredPhotoMessages = await recoverPhotoWithoutListState();
+    if (recoveredPhotoMessages.length > 0) {
+      return [{ json: { ...source, salesPostListHandled: true, salesPostListStep: 'photo_recovered_without_list', messages: recoveredPhotoMessages } }];
+    }
+    return [{
+      json: {
+        ...source,
+        salesPostListHandled: true,
+        output: withGreeting('Consigo te mandar a foto sim 😊 Me informa o modelo e a cor que voce quer ver.'),
+      },
+    }];
+  }
+  return buildContinueItem();
+}`;
+    next = next.replace(oldMissingState, recoveredMissingState);
+  }
+  assertV286(next);
   new Function('$json', '$input', '$getWorkflowStaticData', '$', '$env', 'helpers', next);
   return next;
 }
@@ -221,6 +325,7 @@ function summarize(nodes) {
     refreshesStaleImages: postListCode.includes("compact=true&limit=1&sku=") && postListCode.includes('product?.resolved_images'),
     awaitsPhotoMessages: postListCode.includes('messages: await buildPhotoMessages'),
     usesRunnerHttpHelper: postListCode.includes(POST_LIST_HTTP_MARKER) && postListCode.includes('helpers.httpRequest'),
+    recoversPhotoWithoutListState: postListCode.includes(PHOTO_CONTEXT_RECOVERY_MARKER) && postListCode.includes('recoverPhotoWithoutListState'),
   };
 }
 
@@ -249,7 +354,7 @@ async function main() {
     assert.equal(activeExecutions, 0, 'workflow has an active execution; refusing to update it');
 
     const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
-    const backupDir = `/var/backups/mdv-system/n8n-workflow-photo-http-helper-${timestamp}`;
+    const backupDir = `/var/backups/mdv-system/n8n-workflow-photo-context-recovery-${timestamp}`;
     await run(conn, `mkdir -p ${quote(backupDir)} && chmod 700 ${quote(backupDir)}`);
     const backupSql = `COPY (SELECT json_build_object('workflow', row_to_json(we), 'activeHistory', row_to_json(wh))::text FROM workflow_entity we LEFT JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
     await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(backupSql)} > ${quote(`${backupDir}/workflow.json`)} && chmod 600 ${quote(`${backupDir}/workflow.json`)} && sha256sum ${quote(`${backupDir}/workflow.json`)} > ${quote(`${backupDir}/SHA256SUMS`)}`);
@@ -265,7 +370,7 @@ async function main() {
     const activeVersionAfterStop = (await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(versionAfterStopSql)}`)).trim();
     assert.equal(activeVersionAfterStop, row.activeVersionId, 'active workflow version changed during preparation; refusing to overwrite it');
 
-    const remotePath = '/tmp/mdv-n8n-photo-http-helper-v285.json';
+    const remotePath = '/tmp/mdv-n8n-photo-context-recovery-v286.json';
     await new Promise((resolve, reject) => conn.sftp((error, sftp) => {
       if (error) return reject(error);
       sftp.writeFile(remotePath, Buffer.from(JSON.stringify(nodes)), (writeError) => {
@@ -284,7 +389,7 @@ async function main() {
     await waitService(conn, 'n8n_n8n-runner', 1);
     stopped = false;
 
-    const verifySql = `COPY (SELECT json_build_object('entityMarker', we.nodes::text LIKE '%${MARKER}%', 'historyMarker', wh.nodes::text LIKE '%${MARKER}%', 'postListEntityMarker', we.nodes::text LIKE '%${POST_LIST_MARKER}%', 'postListHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_MARKER}%', 'httpHelperEntityMarker', we.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'httpHelperHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'sameNodes', we.nodes::jsonb = wh.nodes::jsonb, 'active', we.active)::text FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
+    const verifySql = `COPY (SELECT json_build_object('entityMarker', we.nodes::text LIKE '%${MARKER}%', 'historyMarker', wh.nodes::text LIKE '%${MARKER}%', 'postListEntityMarker', we.nodes::text LIKE '%${POST_LIST_MARKER}%', 'postListHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_MARKER}%', 'httpHelperEntityMarker', we.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'httpHelperHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'contextRecoveryEntityMarker', we.nodes::text LIKE '%${PHOTO_CONTEXT_RECOVERY_MARKER}%', 'contextRecoveryHistoryMarker', wh.nodes::text LIKE '%${PHOTO_CONTEXT_RECOVERY_MARKER}%', 'sameNodes', we.nodes::jsonb = wh.nodes::jsonb, 'active', we.active)::text FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
     const database = JSON.parse((await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(verifySql)}`)).trim());
     assert.ok(Object.values(database).every(Boolean), 'database verification failed');
     const health = JSON.parse((await run(conn, 'curl -fsS https://n8n.mercadodovale.com.br/healthz')).trim());
@@ -302,4 +407,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.stack || error.message); process.exit(1); });
-module.exports = { patchContext, patchPostList, summarize, MARKER, POST_LIST_MARKER, POST_LIST_HTTP_MARKER };
+module.exports = { patchContext, patchPostList, summarize, MARKER, POST_LIST_MARKER, POST_LIST_HTTP_MARKER, PHOTO_CONTEXT_RECOVERY_MARKER };

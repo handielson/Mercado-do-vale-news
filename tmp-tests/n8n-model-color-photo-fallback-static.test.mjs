@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { patchContext, patchPostList, MARKER, POST_LIST_MARKER, POST_LIST_HTTP_MARKER } = require('./n8n-fix-model-color-photo-fallback.cjs');
+const { patchContext, patchPostList, MARKER, POST_LIST_MARKER, POST_LIST_HTTP_MARKER, PHOTO_CONTEXT_RECOVERY_MARKER } = require('./n8n-fix-model-color-photo-fallback.cjs');
 const servers = ['vps_server.cjs', 'vps_server.js'];
 
 for (const file of servers) {
@@ -37,7 +37,7 @@ const selected = [...new Set([product.images, product.resolved_images, product.m
 assert.deepEqual(selected, [modelColorUrl], 'an empty product.images list must fall back to its model/color gallery');
 
 const oldPostListCode = `(async () => {
-const activeState = {
+const activeState = $json.activeState === null ? null : {
   step: 'awaiting_fulfillment',
   selectedOptionNumber: 36,
   orderDraft: { productId: 'product-1', color: 'Laranja' },
@@ -53,13 +53,29 @@ const wantsPhoto = true;
 const wantsPhotoFromAI = true;
 const hasOrderDraft = true;
 const aiSelectedNumber = 36;
-const source = {};
+const source = $json;
+const aiAction = String(source.salesFlowAction || 'pedir_foto');
+const aiColor = String(source.salesFlowColor || '');
 const uniqueColorItems = (items) => items;
 const normalize = (value) => String(value || '').toLowerCase();
+const normalized = normalize(source.conversation || '');
 const titleCase = (value) => value;
 const withGreeting = (value) => value;
 const periodGreeting = () => '';
 const lineBreak = '\\n';
+const buildContinueItem = () => [{ json: { ...source, salesPostListHandled: false } }];
+if (!activeState || !Array.isArray(activeState.options) || activeState.options.length === 0) {
+  if (wantsPhoto || wantsPhotoFromAI) {
+    return [{
+      json: {
+        ...source,
+        salesPostListHandled: true,
+        output: withGreeting('Consigo te mandar a foto sim 😊 Me confirma o numero do item ou o modelo que voce quer ver?'),
+      },
+    }];
+  }
+  return buildContinueItem();
+}
 // default-one-unit-v245
 if (activeState?.step === 'awaiting_fulfillment') {}
 const option = { name: 'Wp58 Pró', memory: '8GB/512GB', url: '' };
@@ -86,7 +102,7 @@ const result = { messages: buildPhotoMessages(variant), };
 return result;
 })();`;
 const patchedPostList = patchPostList(oldPostListCode);
-assert.equal(patchPostList(patchedPostList), patchedPostList, 'the v285 patch must be byte-for-byte idempotent');
+assert.equal(patchPostList(patchedPostList), patchedPostList, 'the v286 patch must be byte-for-byte idempotent');
 assert.match(patchedPostList, new RegExp(POST_LIST_MARKER));
 assert.ok(patchedPostList.indexOf(POST_LIST_MARKER) < patchedPostList.indexOf("activeState?.step === 'awaiting_fulfillment'"));
 assert.match(patchedPostList, /products\?status=active&compact=true&limit=1&sku=/);
@@ -96,14 +112,16 @@ assert.match(patchedPostList, /messages: await buildPhotoMessages\(variant, opti
 assert.match(patchedPostList, /wantsPhoto \|\| wantsPhotoFromAI/);
 assert.match(patchedPostList, new RegExp(POST_LIST_HTTP_MARKER));
 assert.match(patchedPostList, /helpers\.httpRequest/);
+assert.match(patchedPostList, new RegExp(PHOTO_CONTEXT_RECOVERY_MARKER));
+assert.match(patchedPostList, /recoverPhotoWithoutListState/);
 const hydrateSection = patchedPostList.slice(patchedPostList.indexOf('async function hydratePhotoItem'), patchedPostList.indexOf('async function buildPhotoMessages'));
 assert.doesNotMatch(hydrateSection, /fetch\(/);
 assert.doesNotMatch(hydrateSection, /AbortSignal/);
 
-const executePostList = (mockHttpRequest) => new Function(
+const executePostList = (mockHttpRequest, json = {}) => new Function(
   '$json', '$input', '$getWorkflowStaticData', '$', '$env', 'helpers',
   `return ${patchedPostList}`,
-)({}, {}, () => ({}), {}, {}, { httpRequest: mockHttpRequest });
+)(json, {}, () => ({}), {}, {}, { httpRequest: mockHttpRequest });
 
 const fetchCalls = [];
 const execution = await executePostList(async (options) => {
@@ -122,5 +140,67 @@ assert.equal(mismatchedProduct[0].json.messages[0].type, 'text', 'an ID mismatch
 
 const helperFailure = await executePostList(async () => { throw new Error('timeout'); });
 assert.equal(helperFailure[0].json.messages[0].type, 'text', 'an HTTP helper failure must degrade to a safe text reply');
+
+const recoveredCalls = [];
+const recovered = await executePostList(async (options) => {
+  recoveredCalls.push(options);
+  return [{
+    id: 'product-1',
+    name: 'Wp58 Pró',
+    sku: 'W58P24816512L',
+    slug: 'wp58-pro-24gb-8-16-512gb-laranja-w58p24816512l',
+    specs: { color: 'Laranja', keywords: ['wp58 pro'] },
+    images: [],
+    resolved_images: [modelColorUrl],
+    model_color_images: [modelColorUrl],
+  }];
+}, {
+  activeState: null,
+  salesSearchQuery: 'wp58 pro laranja',
+  salesFlowColor: 'laranja',
+  salesFlowAction: 'pergunta_sobre_item',
+  salesFlowItemNumber: 36,
+});
+assert.equal(recoveredCalls.length, 1, 'a classified model/color must trigger one recovery lookup');
+assert.match(recoveredCalls[0].url, /search=wp58%20pro$/);
+assert.equal(recovered[0].json.salesPostListStep, 'photo_recovered_without_list');
+assert.equal(recovered[0].json.messages[0].type, 'image');
+assert.equal(recovered[0].json.messages[0].mediaUrl, modelColorUrl);
+
+const numericHistoryCalls = [];
+const recoveredFromRecentLink = await executePostList(async (options) => {
+  numericHistoryCalls.push(options);
+  return [{
+    id: 'product-1', name: 'Wp58 Pró', sku: 'W58P24816512L',
+    slug: 'wp58-pro-24gb-8-16-512gb-laranja-w58p24816512l',
+    specs: { color: 'Laranja', keywords: ['wp58 pro'] },
+    resolved_images: [modelColorUrl],
+  }];
+}, {
+  activeState: null,
+  conversation: '36',
+  salesFlowAction: 'pedir_foto',
+  salesFlowItemNumber: 36,
+  recentMessages: [
+    { direction: 'outbound', text: 'Veja: https://mercadodovale.com.br/produto/wp58-pro-24gb-8-16-512gb-laranja-w58p24816512l' },
+    { direction: 'outbound', text: 'Consigo mandar. Me confirma o numero do item.' },
+  ],
+});
+assert.match(numericHistoryCalls[0].url, /sku=W58P24816512L$/);
+assert.equal(recoveredFromRecentLink[0].json.messages[0].type, 'image');
+
+const ambiguous = await executePostList(async () => [
+  { id: 'a', name: 'Wp58 Pró', sku: 'A', specs: { color: 'Laranja', keywords: ['wp58 pro'] }, resolved_images: [modelColorUrl] },
+  { id: 'b', name: 'Wp58 Pró', sku: 'B', specs: { color: 'Laranja', keywords: ['wp58 pro'] }, resolved_images: [modelColorUrl] },
+], { activeState: null, salesSearchQuery: 'wp58 pro laranja', salesFlowColor: 'laranja', salesFlowAction: 'pedir_foto' });
+assert.equal(ambiguous[0].json.messages, undefined, 'an ambiguous recovery must not send a product photo');
+assert.match(ambiguous[0].json.output, /modelo e a cor/);
+
+const noStock = await executePostList(async () => [{
+  id: 'product-1', name: 'Wp58 Pró', sku: 'W58P24816512L', status: 'active',
+  track_inventory: 1, stock_quantity: 0,
+  specs: { color: 'Laranja', keywords: ['wp58 pro'] }, resolved_images: [modelColorUrl],
+}], { activeState: null, salesSearchQuery: 'wp58 pro laranja', salesFlowColor: 'laranja', salesFlowAction: 'pedir_foto' });
+assert.equal(noStock[0].json.messages, undefined, 'an out-of-stock result must not be recovered as the requested catalog item');
 
 console.log('n8n model/color photo fallback regression OK');
