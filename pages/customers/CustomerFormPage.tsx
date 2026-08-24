@@ -6,7 +6,7 @@ import { customerService } from '../../services/customers';
 import { customFieldsService } from '../../services/custom-fields';
 import { Customer, CustomerInput, CustomerAddress } from '../../types/customer';
 import { CustomField } from '../../services/custom-fields';
-import { validateCpfCnpj, formatCpfCnpj, formatPhone, validateEmail } from '../../utils/cpfCnpjValidation';
+import { validateCpfCnpj, formatCpfCnpj, formatPhone, normalizeBrazilianPhone, validateEmail } from '../../utils/cpfCnpjValidation';
 import {
     capitalizeName,
     calculateAge,
@@ -212,6 +212,11 @@ export default function CustomerFormPage() {
 
         if (formData.email && !validateEmail(formData.email)) {
             toast.error('Email inválido');
+            return;
+        }
+
+        if (formData.phone && !normalizeBrazilianPhone(formData.phone)) {
+            toast.error('Telefone inválido. Informe DDD + número, com 10 ou 11 dígitos');
             return;
         }
 

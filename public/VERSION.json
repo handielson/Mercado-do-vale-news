@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.279-pdv-unidade-legada",
-  "date": "2026-08-22",
+  "version": "v1.2.280-telefone-cliente-valido",
+  "date": "2026-08-23",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260822-132422-pdv-unidade-legada",
+  "release_vps": "/var/www/mdv-site/releases/20260823-220932-v1280-telefone-cliente-valido",
   "branch": "main",
-  "summary": "Impede o PDV de oferecer seriais legados sem unidade real e regulariza a unidade reportada."
+  "summary": "Bloqueia telefones brasileiros invalidos no cadastro de clientes e impede envios WhatsApp com numero malformado."
 }

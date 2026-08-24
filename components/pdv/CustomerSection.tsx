@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Search, X, Calendar, ShoppingBag, ExternalLink, UserPlus, Loader2, MapPin, FileText, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
-import { formatCpfCnpj, formatPhone, validateCpfCnpj, validateEmail } from '../../utils/cpfCnpjValidation';
+import { formatCpfCnpj, formatPhone, normalizeBrazilianPhone, validateCpfCnpj, validateEmail } from '../../utils/cpfCnpjValidation';
 import { capitalizeName, formatCep, searchCep as searchCepUtil } from '../../utils/customerFormUtils';
 import { CustomerAddress, CustomerInput } from '../../types/customer';
 
@@ -180,7 +180,7 @@ export default function CustomerSection({
 
     const handleQuickCustomerField = (field: keyof CustomerInput, value: string | boolean) => {
         const nextValue =
-            field === 'phone' && typeof value === 'string' ? value.replace(/[^\d\s()-]/g, '')
+            field === 'phone' && typeof value === 'string' ? value.replace(/[^\d+\s()-]/g, '')
                 : field === 'cpf_cnpj' && typeof value === 'string' ? value.replace(/[^\d./-]/g, '')
                     : field === 'name' && typeof value === 'string' ? capitalizeName(value)
                     : value;
@@ -277,6 +277,11 @@ export default function CustomerSection({
 
         if (email && !validateEmail(email)) {
             toast.error('E-mail invalido');
+            return;
+        }
+
+        if (phone && !normalizeBrazilianPhone(phone)) {
+            toast.error('Telefone invalido. Informe DDD + numero, com 10 ou 11 digitos');
             return;
         }
 
@@ -614,7 +619,7 @@ export default function CustomerSection({
                                                 onBlur={(e) => handleQuickCustomerBlur('phone', e.target.value)}
                                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                                                 placeholder="(87) 99999-9999"
-                                                maxLength={15}
+                                                maxLength={19}
                                             />
                                         </label>
 

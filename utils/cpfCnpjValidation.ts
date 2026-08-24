@@ -137,7 +137,13 @@ export function formatCpfCnpj(value: string): string {
 export function formatPhone(value: string): string {
     if (!value) return '';
 
-    const cleaned = value.replace(/\D/g, '');
+    const rawDigits = value.replace(/\D/g, '');
+    const normalized = normalizeBrazilianPhone(value);
+    const cleaned = normalized || rawDigits;
+
+    // Preserve invalid oversized input so the form can show and reject it.
+    // Silently truncating here can turn a typo into a different valid number.
+    if (!normalized && rawDigits.length > 11) return value.trim();
 
     if (cleaned.length <= 10) {
         // Landline: (11) 3456-7890
@@ -150,6 +156,23 @@ export function formatPhone(value: string): string {
             .replace(/(\d{2})(\d)/, '($1) $2')
             .replace(/(\d{5})(\d{1,4})$/, '$1-$2');
     }
+}
+
+/**
+ * Normalizes a Brazilian phone to DDD + local number (10 or 11 digits).
+ * Accepts the same number with the Brazilian country code (55).
+ */
+export function normalizeBrazilianPhone(value: unknown): string {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (digits.length === 10 || digits.length === 11) return digits;
+    if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
+        return digits.slice(2);
+    }
+    return '';
+}
+
+export function isValidBrazilianPhone(value: unknown): boolean {
+    return Boolean(normalizeBrazilianPhone(value));
 }
 
 /**

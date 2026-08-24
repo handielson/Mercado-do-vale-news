@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { useVpsAuth } from '../../../hooks/useVpsAuth';
 import { uploadService } from '../../../services/uploadService';
+import { normalizeBrazilianPhone } from '../../../utils/cpfCnpjValidation';
 
 interface AddressData {
     zipCode: string;
@@ -262,9 +263,8 @@ export const PersonalInfoTab: React.FC = () => {
         }
 
         if (personalData.phone) {
-            const phoneNumbers = personalData.phone.replace(/\D/g, '');
-            if (phoneNumbers.length < 10) {
-                toast.error('Telefone invalido');
+            if (!normalizeBrazilianPhone(personalData.phone)) {
+                toast.error('Telefone invalido. Informe DDD + numero, com 10 ou 11 digitos');
                 return false;
             }
         }

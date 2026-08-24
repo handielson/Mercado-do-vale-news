@@ -2,6 +2,7 @@ import { vpsClient } from './vpsClient';
 import { Customer, CustomerInput, CustomerFilters } from '../types/customer';
 import { telegramBotService } from './telegramBot';
 import { capitalizeName } from '../utils/customerFormUtils';
+import { normalizeBrazilianPhone } from '../utils/cpfCnpjValidation';
 
 /**
  * Customer Service
@@ -88,6 +89,15 @@ function serializeCustomerPayload<T extends Partial<CustomerInput>>(input: T): T
 
     if ('name' in payload) {
         payload.name = capitalizeName(String(payload.name || ''));
+    }
+
+    if ('phone' in payload) {
+        const rawPhone = String(payload.phone || '').trim();
+        const normalizedPhone = rawPhone ? normalizeBrazilianPhone(rawPhone) : '';
+        if (rawPhone && !normalizedPhone) {
+            throw new Error('Informe um telefone valido com DDD');
+        }
+        payload.phone = normalizedPhone || null;
     }
 
     for (const key of ['address', 'custom_data']) {

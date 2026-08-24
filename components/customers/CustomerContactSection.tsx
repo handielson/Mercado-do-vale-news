@@ -64,13 +64,13 @@ export default function CustomerContactSection({
                             value={formData.phone || ''}
                             onChange={(e) => {
                                 // Permitir apenas números, parênteses, espaços e hífens
-                                const value = e.target.value.replace(/[^\d\s()-]/g, '');
+                                const value = e.target.value.replace(/[^\d+\s()-]/g, '');
                                 onFieldUpdate('phone', value);
                             }}
                             onBlur={(e) => onFieldUpdate('phone', formatPhone(e.target.value))}
                             className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="(00) 00000-0000"
-                            maxLength={15}
+                            maxLength={19}
                         />
                         {getWhatsAppUrl() && (
                             <a

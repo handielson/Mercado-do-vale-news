@@ -8,6 +8,7 @@
     "prebuild": "node scripts/assert-no-supabase-runtime.cjs",
     "build": "vite build",
     "test:customer-profile": "node tmp-tests/customer-profile-financial-tab-static.test.mjs",
+    "test:customer-phone": "node tmp-tests/customer-phone-validation-static.test.mjs",
     "test:android-admin-contract": "node tmp-tests/android-admin-vps-contract-static.test.mjs",
     "test:customer-delivery": "node tmp-tests/customer-delivery-ledger-static.test.mjs",
     "test:money": "node tmp-tests/money-normalization.test.mjs",

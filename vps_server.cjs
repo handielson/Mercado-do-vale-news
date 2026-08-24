@@ -465,6 +465,11 @@ function normalizeAuthWhatsApp(value) {
   return '';
 }
 
+function normalizeCustomerPhoneForStorage(value) {
+  const canonical = normalizeAuthWhatsApp(value);
+  return canonical ? canonical.slice(2) : '';
+}
+
 async function sendAuthPasswordResetWhatsApp({ customer, phone, resetLink, expiresMinutes }) {
   if (typeof sendDeliveryWhatsappText !== 'function') return { ok: false, reason: 'whatsapp_not_configured' };
   const firstName = String(customer?.name || 'Cliente').trim().split(/\s+/)[0];
@@ -2554,11 +2559,7 @@ function renderCustomerDeliveryTemplate(template, job) {
 }
 
 function normalizeDeliveryWhatsAppNumber(value) {
-  const digits = String(value || '').replace(/\D/g, '');
-  if (!digits) return '';
-  if (digits.startsWith('55')) return digits;
-  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-  return digits;
+  return normalizeAuthWhatsApp(value);
 }
 
 function normalizeN8nBotClientIdentity(input = {}) {
@@ -3475,6 +3476,7 @@ async function sendWhatsAppAutomationMessageVps(input) {
   const templateKey = String(input.templateKey || '').trim();
   const template = await getWhatsAppAutomationTemplateVps(templateKey);
   const renderedText = renderWhatsAppAutomationTemplateVps(template, input.variables || {});
+  const rawPhoneDigits = String(input.phone || '').replace(/\D/g, '');
   const phone = normalizeDeliveryWhatsAppNumber(input.phone);
 
   if (!template) {
@@ -3488,8 +3490,10 @@ async function sendWhatsAppAutomationMessageVps(input) {
   }
 
   if (!phone) {
-    await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'skipped', renderedText, message: 'automation_whatsapp_skipped: telefone ausente' });
-    return { status: 'skipped', reason: 'missing_phone' };
+    const reason = rawPhoneDigits ? 'invalid_phone' : 'missing_phone';
+    const detail = rawPhoneDigits ? 'telefone invalido' : 'telefone ausente';
+    await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'skipped', renderedText, message: `automation_whatsapp_skipped: ${detail}`, errorMessage: reason });
+    return { status: 'skipped', reason };
   }
 
   try {
@@ -28452,6 +28456,15 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
   const insertBody = { ...body };
   if (pk === 'id' && !insertBody.id) insertBody.id = crypto.randomUUID();
 
+  if (name === 'customers' && Object.prototype.hasOwnProperty.call(insertBody, 'phone')) {
+    const rawPhone = String(insertBody.phone || '').trim();
+    const normalizedPhone = rawPhone ? normalizeCustomerPhoneForStorage(rawPhone) : '';
+    if (rawPhone && !normalizedPhone) {
+      return reply.code(400).send({ error: 'Informe um telefone valido com DDD' });
+    }
+    insertBody.phone = normalizedPhone || null;
+  }
+
   const cols = Object.keys(insertBody);
   const vals = Object.values(insertBody).map(normalizeTableDataValue);
   const placeholders = cols.map(() => '?').join(', ');
@@ -30420,6 +30433,15 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
   const body = req.body;
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return reply.code(400).send({ error: 'Body must be a JSON object' });
+  }
+
+  if (name === 'customers' && Object.prototype.hasOwnProperty.call(body, 'phone')) {
+    const rawPhone = String(body.phone || '').trim();
+    const normalizedPhone = rawPhone ? normalizeCustomerPhoneForStorage(rawPhone) : '';
+    if (rawPhone && !normalizedPhone) {
+      return reply.code(400).send({ error: 'Informe um telefone valido com DDD' });
+    }
+    body.phone = normalizedPhone || null;
   }
 
   const entries = Object.entries(body).filter(([k]) => k !== pkCol);
