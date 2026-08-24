@@ -3140,6 +3140,39 @@ async function sendDeliveryWhatsappText(phone, text) {
   return { ok: response.ok, status: response.status, body: parsed, instanceName };
 }
 
+async function sendDeliveryWhatsappDocument(phone, pdfBuffer, fileName, caption = '') {
+  const number = normalizeDeliveryWhatsAppNumber(phone);
+  if (!number) throw new Error('Telefone do cliente nao informado');
+  if (!Buffer.isBuffer(pdfBuffer) || pdfBuffer.length === 0) throw new Error('PDF do termo de garantia vazio');
+
+  const settings = await getN8nBotEvolutionSettings();
+  const baseUrl = String(settings.baseUrl || '').replace(/\/+$/, '');
+  const apiKey = String(settings.apiKey || '');
+  const instanceName = String(settings.instanceName || '');
+  if (!baseUrl || !apiKey || !instanceName) throw new Error('Configuracao Evolution API incompleta');
+
+  const response = await fetch(`${baseUrl}/message/sendMedia/${encodeURIComponent(instanceName)}`, {
+    method: 'POST',
+    headers: {
+      apikey: apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      number,
+      mediatype: 'document',
+      mimetype: 'application/pdf',
+      media: pdfBuffer.toString('base64'),
+      fileName,
+      caption,
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+  const body = await response.text();
+  let parsed = body;
+  try { parsed = JSON.parse(body); } catch {}
+  return { ok: response.ok, status: response.status, body: parsed, instanceName };
+}
+
 async function notifyCustomerDeliveryCompleted(job) {
   if (!job?.id) return;
   const settings = await getCustomerDeliverySettings();
@@ -3728,6 +3761,29 @@ async function notifyCustomerRegisteredWhatsApp(customerId, source = 'admin') {
       senha_temporaria: temporaryPassword || 'temporaria',
     },
   });
+}
+
+async function sendSaleWarrantyPdfBufferWhatsAppVps(sale, customer, pdfBuffer) {
+  const saleCode = String(sale?.id || '').trim().slice(0, 8).toUpperCase();
+  const logBase = {
+    templateKey: 'sale_completed_warranty_pdf',
+    phone: normalizeDeliveryWhatsAppNumber(customer?.phone),
+    entityType: 'sale',
+    entityId: sale?.id || null,
+    customerId: customer?.id || sale?.customer_id || null,
+  };
+  try {
+    const fileName = `termo-garantia-venda-${saleCode || 'DOCUMENTO'}.pdf`;
+    const caption = `Termo de garantia da venda ${saleCode}`;
+    const result = await sendDeliveryWhatsappDocument(customer?.phone, pdfBuffer, fileName, caption);
+    if (!result?.ok) throw new Error(`WhatsApp API retornou HTTP ${result?.status || 'desconhecido'}`);
+    await logWhatsAppAutomationEventVps({ ...logBase, status: 'sent', message: 'warranty_pdf_sent', renderedText: caption });
+    return { status: 'sent', result: { status: result.status, instanceName: result.instanceName }, file_name: fileName };
+  } catch (err) {
+    const errorMessage = err?.message || 'Falha ao enviar PDF do termo de garantia';
+    await logWhatsAppAutomationEventVps({ ...logBase, status: 'failed', message: 'warranty_pdf_failed', errorMessage });
+    return { status: 'failed', error: errorMessage };
+  }
 }
 
 async function notifySaleCompletedWhatsApp(saleId) {
@@ -30420,6 +30476,35 @@ fastify.post('/whatsapp/automation/sale-completed', { preHandler: requireSyncKey
   const saleId = String(req.body?.sale_id || '').trim();
   if (!saleId) return reply.code(400).send({ error: 'sale_id obrigatorio' });
   return notifySaleCompletedWhatsApp(saleId);
+});
+fastify.post('/whatsapp/automation/sale-warranty-pdf', { preHandler: requireSyncKey }, async (req, reply) => {
+  const saleId = String(req.body?.sale_id || '').trim();
+  const rawBase64 = String(req.body?.pdf_base64 || '').replace(/^data:application\/pdf;base64,/i, '').trim();
+  if (!saleId) return reply.code(400).send({ error: 'sale_id obrigatorio' });
+  if (!rawBase64) return reply.code(400).send({ error: 'pdf_base64 obrigatorio' });
+  if (rawBase64.length > 20 * 1024 * 1024) return reply.code(413).send({ error: 'PDF excede o limite permitido' });
+
+  const [sales] = await pool.query('SELECT * FROM sales WHERE id = ? LIMIT 1', [saleId]);
+  const sale = sales?.[0] || null;
+  if (!sale) return reply.code(404).send({ error: 'Venda nao encontrada' });
+  const [customers] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [sale.customer_id]);
+  const customer = customers?.[0] || null;
+  if (!customer) return reply.code(409).send({ error: 'Cliente da venda nao encontrado' });
+  const [serializedItems] = await pool.query(
+    `SELECT id FROM sale_items
+      WHERE sale_id = ?
+        AND (serialized_unit_id IS NOT NULL OR (imei IS NOT NULL AND TRIM(imei) <> ''))
+      LIMIT 1`,
+    [saleId]
+  );
+  if (!serializedItems?.[0]) return reply.code(409).send({ error: 'Venda sem item serializado para termo de garantia' });
+
+  let pdfBuffer;
+  try { pdfBuffer = Buffer.from(rawBase64, 'base64'); } catch { pdfBuffer = null; }
+  if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.subarray(0, 5).toString('ascii') !== '%PDF-') {
+    return reply.code(400).send({ error: 'Arquivo PDF invalido' });
+  }
+  return sendSaleWarrantyPdfBufferWhatsAppVps(sale, customer, pdfBuffer);
 });
 fastify.post('/whatsapp/automation/birthdays/today', { preHandler: requireSyncKey }, async (req) => {
   return sendBirthdayGreetingsForToday(req.body || {});

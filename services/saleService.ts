@@ -652,12 +652,11 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         const saleItems = saleInput.items.map(item => serializeSaleItemRowForTable(item, sale.id));
 
         let saleItemsPersisted = false;
+        let saleWhatsAppNotification: Promise<any> | null = null;
         try {
             await vpsClient.post('/table-data/sale_items/bulk', saleItems);
             saleItemsPersisted = true;
-            vpsClient.post('/whatsapp/automation/sale-completed', { sale_id: sale.id }).catch(error => {
-                console.error('[whatsapp-automation] Falha ao disparar venda concluida', error);
-            });
+            saleWhatsAppNotification = vpsClient.post('/whatsapp/automation/sale-completed', { sale_id: sale.id });
             if (deliveryPersonCustomerId && saleInput.delivery_total && saleInput.delivery_total > 0) {
                 await vpsClient.post('/delivery/jobs/from-sale', { sale_id: sale.id });
             }
@@ -789,6 +788,25 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
                 }
             } catch (refError) {
                 console.error('Unexpected error processing referral:', refError);
+            }
+        }
+
+        if (saleWhatsAppNotification) {
+            try {
+                const notification = await saleWhatsAppNotification;
+                if (notification?.status !== 'sent') {
+                    recordFinalizationWarning(
+                        'sale_whatsapp',
+                        'A venda foi registrada, mas a confirmacao do WhatsApp nao foi enviada.',
+                        { status: notification?.status || 'unknown', reason: notification?.reason || notification?.error || null }
+                    );
+                }
+            } catch (whatsappError) {
+                recordFinalizationWarning(
+                    'sale_whatsapp',
+                    'A venda foi registrada, mas houve falha ao enviar a confirmacao do WhatsApp.',
+                    normalizeFinalizationError(whatsappError, 'sale_whatsapp')
+                );
             }
         }
 

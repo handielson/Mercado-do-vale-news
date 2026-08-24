@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.280-telefone-cliente-valido
+version: v1.2.281-garantia-whatsapp-pdv
 date: 2026-08-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260823-220932-v1280-telefone-cliente-valido
+release_vps: /var/www/mdv-site/releases/20260823-225532-v1281-garantia-whatsapp-pdv
 branch: main
-summary: Bloqueia telefones brasileiros invalidos no cadastro de clientes e impede envios WhatsApp com numero malformado.
+summary: Envia automaticamente pelo WhatsApp o termo de garantia em PDF ao finalizar uma venda elegivel no PDV.
 ```

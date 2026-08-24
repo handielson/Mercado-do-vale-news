@@ -30,6 +30,8 @@ import { categoryService } from '../../services/categories';
 import { customerService } from '../../services/customers';
 import { productService } from '../../services/products';
 import { warrantyTemplateService } from '../../services/warrantyTemplates';
+import { sendSaleWarrantyPdfWhatsApp } from '../../services/warrantyWhatsAppService';
+import { generateExistingWarrantyTermPdfBase64 } from '../../utils/warrantyPdfGenerator';
 import { teamService } from '../../services/team';
 import { getEffectiveRetailPrice, normalizeCentValue } from '../../utils/promoPrice';
 import { buildPdvProductName } from '../../utils/pdvProductDisplay';
@@ -1086,6 +1088,40 @@ export default function PDVPage() {
                 finalizationLog,
             });
 
+            // Reutiliza exatamente o mesmo termo exibido no botão "Gerar Termo de Garantia".
+            // A confirmação textual já foi aguardada dentro de createSale, preservando a ordem no WhatsApp.
+            updateFinalizeStep('receipt', 'saving', 'Gerando termo de garantia para WhatsApp');
+            try {
+                const warrantyData = await buildWarrantyTermData(sale, selectedCustomer, cartItems);
+                if (warrantyData) {
+                    setWarrantyContents(warrantyData.contents);
+                    setWarrantyTagDataList(warrantyData.tagDataList);
+                    setWarrantyDocsMeta(warrantyData.docsMeta);
+                    setWarrantyTemplate(warrantyData.template);
+                    setWarrantyDeliveryType(warrantyData.deliveryType);
+                    const pdfBase64 = await generateExistingWarrantyTermPdfBase64({
+                        warrantyContents: warrantyData.contents,
+                        warrantyTemplate: warrantyData.template,
+                        warrantyTagDataList: warrantyData.tagDataList,
+                    });
+                    const warrantySend = await sendSaleWarrantyPdfWhatsApp(sale.id, pdfBase64);
+                    if (warrantySend.status !== 'sent') {
+                        throw new Error(warrantySend.error || 'O WhatsApp nao confirmou o envio do termo');
+                    }
+                    updateFinalizeStep('receipt', 'done', 'Comprovante preparado e termo enviado no WhatsApp');
+                } else {
+                    updateFinalizeStep('receipt', 'done', 'Venda sem termo de garantia aplicavel');
+                }
+            } catch (warrantySendError) {
+                console.error('[warranty-whatsapp] Falha ao enviar o termo da venda:', warrantySendError);
+                updateFinalizeStep(
+                    'receipt',
+                    'error',
+                    warrantySendError instanceof Error ? warrantySendError.message : 'Falha ao enviar termo no WhatsApp'
+                );
+                toast.warning('Venda concluida, mas o termo de garantia nao foi enviado no WhatsApp');
+            }
+
             // Mostrar modal de sucesso
             setShowSuccessModal(true);
 
@@ -1232,46 +1268,55 @@ export default function PDVPage() {
         return eligibleItems;
     };
 
+    const buildWarrantyTermData = async (sale: any, customer: Customer, items: SaleItem[]) => {
+        const settings = await companySettingsService.get();
+        if (!settings?.warranty_template) return null;
+
+        const serializedItems = await loadWarrantyEligibleSerializedItems(items);
+        if (serializedItems.length === 0) return null;
+
+        const brands = await brandService.list();
+        const brandsByName = new Map<string, { warranty_days?: number }>();
+        brands.forEach(b => brandsByName.set(b.name.toLowerCase(), b));
+        const initialType: DeliveryTypeWarranty =
+            sale.delivery_type === 'delivery' || sale.delivery_type === 'store_delivery' || sale.delivery_type === 'hybrid_delivery'
+                ? 'delivery'
+                : 'store_pickup';
+        const contents: string[] = [];
+        const tagDataList: Record<string, string>[] = [];
+        const docsMeta: Array<{ id: string; serialized_unit_id: string }> = [];
+
+        for (const item of serializedItems) {
+            const days = await resolveWarrantyDays(item, brandsByName);
+            const docId = crypto.randomUUID();
+            const tagData = buildTagData(item, sale, customer, settings, days, initialType, docId);
+            const filtered = applyWarrantyDisplayFlags(tagData as any, settings);
+            contents.push(replaceWarrantyTags(settings.warranty_template, filtered));
+            tagDataList.push(filtered as any);
+            docsMeta.push({ id: docId, serialized_unit_id: (item as any).serialized_unit.unitId });
+        }
+
+        return {
+            contents,
+            tagDataList,
+            docsMeta,
+            template: settings.warranty_template,
+            deliveryType: initialType,
+        };
+    };
+
     const generateWarrantyTerm = async (sale: any, customer: Customer, items: SaleItem[]) => {
         try {
-            const settings = await companySettingsService.get();
-            if (!settings || !settings.warranty_template) {
-                console.warn('Template de garantia não configurado');
+            const data = await buildWarrantyTermData(sale, customer, items);
+            if (!data) {
+                console.warn('Template de garantia não configurado ou venda sem aparelho elegível');
                 return;
             }
-
-            const serializedItems = await loadWarrantyEligibleSerializedItems(items);
-            if (serializedItems.length === 0) {
-                // Sem aparelho serializado — não emite termo (acessórios não geram garantia)
-                return;
-            }
-
-            const brands = await brandService.list();
-            const brandsByName = new Map<string, { warranty_days?: number }>();
-            brands.forEach(b => brandsByName.set(b.name.toLowerCase(), b));
-
-            const initialType: DeliveryTypeWarranty =
-                deliveryType === 'delivery' ? 'delivery' : 'store_pickup';
-            const contents: string[] = [];
-            const tagDataList: Record<string, string>[] = [];
-            const docsMeta: Array<{ id: string; serialized_unit_id: string }> = [];
-
-            for (const item of serializedItems) {
-                const days = await resolveWarrantyDays(item, brandsByName);
-                const docId = crypto.randomUUID();
-                const tagData = buildTagData(item, sale, customer, settings, days, initialType, docId);
-                const filtered = applyWarrantyDisplayFlags(tagData as any, settings);
-                const content = replaceWarrantyTags(settings.warranty_template, filtered);
-                contents.push(content);
-                tagDataList.push(filtered as any);
-                docsMeta.push({ id: docId, serialized_unit_id: (item as any).serialized_unit.unitId });
-            }
-
-            setWarrantyContents(contents);
-            setWarrantyTagDataList(tagDataList);
-            setWarrantyDocsMeta(docsMeta);
-            setWarrantyTemplate(settings.warranty_template);
-            setWarrantyDeliveryType(initialType);
+            setWarrantyContents(data.contents);
+            setWarrantyTagDataList(data.tagDataList);
+            setWarrantyDocsMeta(data.docsMeta);
+            setWarrantyTemplate(data.template);
+            setWarrantyDeliveryType(data.deliveryType);
             setShowSuccessModal(false);
             setShowWarrantyModal(true);
         } catch (error) {
@@ -1658,7 +1703,12 @@ export default function PDVPage() {
                                 {lastSaleData.items.some((it: any) => it.serialized_unit?.unitId) && (
                                     <button
                                         onClick={() => {
-                                            generateWarrantyTerm(lastSaleData.sale, lastSaleData.customer, lastSaleData.items);
+                                            if (warrantyContents.length > 0) {
+                                                setShowSuccessModal(false);
+                                                setShowWarrantyModal(true);
+                                            } else {
+                                                generateWarrantyTerm(lastSaleData.sale, lastSaleData.customer, lastSaleData.items);
+                                            }
                                         }}
                                         className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-xl transition-colors border border-blue-100"
                                     >
