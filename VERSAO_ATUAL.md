@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.282-n8n-2357
+version: v1.2.283-n8n-foto-modelo-cor
 date: 2026-08-24
 status: ready
-release_vps: /var/www/mdv-site/releases/20260824-190800-v1282-n8n-2357
+release_vps: /var/www/mdv-site/releases/20260824-223543-v1-2-283-n8n-foto-modelo-cor
 branch: main
-summary: Atualiza n8n e Task Runner para 2.35.7 com backup restauravel, espelho no Synology e rollback seguro.
+summary: Corrige o envio de fotos pelo bot usando a galeria cadastrada por modelo e cor quando o SKU nao possui imagens proprias.
 ```

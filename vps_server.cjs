@@ -17676,6 +17676,50 @@ function getPublicProductRouteTargetVps(product) {
   return slugifyPublicProductRouteTargetVps(product?.name) || String(product?.id || '').trim();
 }
 
+async function attachCatalogModelColorImages(products, baseUrl) {
+  const list = Array.isArray(products) ? products : [];
+  const productIds = [...new Set(list.map((product) => String(product?.id || '').trim()).filter(Boolean))];
+  const galleryByProductId = new Map();
+
+  if (productIds.length) {
+    const placeholders = productIds.map(() => '?').join(',');
+    const [rows] = await pool.query(
+      `SELECT p.id AS product_id, mci.images, mci.image_url
+       FROM products p
+       INNER JOIN model_color_images mci
+         ON mci.model_id = p.model_id
+        AND (mci.company_id = p.company_id OR mci.company_id IS NULL)
+       INNER JOIN colors c ON c.id = mci.color_id
+       WHERE p.id IN (${placeholders})
+         AND (
+           c.id = COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.specs, '$.color')), JSON_UNQUOTE(JSON_EXTRACT(p.specs, '$.cor')))
+           OR LOWER(TRIM(c.name)) = LOWER(TRIM(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.specs, '$.color')), JSON_UNQUOTE(JSON_EXTRACT(p.specs, '$.cor')))))
+         )
+       ORDER BY p.id, (mci.company_id = p.company_id) DESC, COALESCE(mci.display_order, 2147483647), mci.updated_at DESC`,
+      productIds
+    );
+
+    for (const row of rows) {
+      const productId = String(row.product_id || '');
+      if (galleryByProductId.has(productId)) continue;
+      galleryByProductId.set(productId, normalizeSeoPublicImages([
+        ...normalizeSeoImages(row.images),
+        ...normalizeSeoImages(row.image_url),
+      ], baseUrl));
+    }
+  }
+
+  return list.map((product) => {
+    const modelColorImages = galleryByProductId.get(String(product?.id || '')) || [];
+    const resolvedImages = normalizeSeoPublicImages([
+      ...modelColorImages,
+      ...normalizeSeoImages(product?.images),
+      ...normalizeSeoImages(product?.image_url),
+    ], baseUrl);
+    return { ...product, model_color_images: modelColorImages, resolved_images: resolvedImages };
+  });
+}
+
 function getPublicProductDisambiguatedRouteTargetVps(product) {
   const routeTarget = getPublicProductRouteTargetVps(product);
   const specs = parsePublicJson(product?.specs, {});
@@ -24780,7 +24824,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
   } else {
     reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
   }
-  return result;
+  return attachCatalogModelColorImages(result, buildSeoBaseUrl(req));
 
 });
 
