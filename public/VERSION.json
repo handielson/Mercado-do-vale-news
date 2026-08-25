@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.286-n8n-foto-contexto-expirado",
+  "version": "v1.2.287-n8n-video-contextual-ia",
   "date": "2026-08-24",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260824-235012-v1-2-286-n8n-foto-contexto-expirado",
+  "release_vps": "/var/www/mdv-site/releases/20260825-021746-n8n-video-contextual-ia",
   "branch": "main",
-  "summary": "Recupera a foto pelo modelo, cor ou SKU recente quando o estado temporario da lista expirou."
+  "summary": "Mantem o produto mostrado como contexto e entrega perguntas de video ao Agente Geral com fatos do SKU exato."
 }

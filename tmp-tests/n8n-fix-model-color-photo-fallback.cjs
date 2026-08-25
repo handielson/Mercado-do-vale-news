@@ -15,6 +15,8 @@ const MARKER = 'catalog-model-color-photo-fallback-v283';
 const POST_LIST_MARKER = 'photo-interrupt-refresh-v284';
 const POST_LIST_HTTP_MARKER = 'photo-http-helper-v285';
 const PHOTO_CONTEXT_RECOVERY_MARKER = 'photo-context-recovery-v286';
+const CONTEXTUAL_VIDEO_AI_MARKER = 'contextual-video-ai-v287';
+const RESOLVER_NODE_NAME = 'Resolver Acao de Conversacao';
 const APPLY = process.argv.includes('--apply');
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -304,7 +306,215 @@ if (!activeState || !Array.isArray(activeState.options) || activeState.options.l
     next = next.replace(oldMissingState, recoveredMissingState);
   }
   assertV286(next);
+  next = patchPostListV287(next);
   new Function('$json', '$input', '$getWorkflowStaticData', '$', '$env', 'helpers', next);
+  return next;
+}
+
+function patchPostListV287(code) {
+  if (code.includes(CONTEXTUAL_VIDEO_AI_MARKER)) return code;
+
+  const continueAnchors = [
+    `function buildContinueItem() {\n  return [{`,
+    `const buildContinueItem = () => [{ json: { ...source, salesPostListHandled: false } }];`,
+  ];
+  const continueAnchor = continueAnchors.find((candidate) => code.includes(candidate));
+  assert.ok(continueAnchor, 'continue-item anchor changed before v287');
+  const mediaHelpers = `// ${CONTEXTUAL_VIDEO_AI_MARKER}
+async function resolveExactMediaFactsV287(item, selectedOption) {
+  const sku = String(item?.sku || '').trim();
+  const requestedProductId = String(item?.productId || '').trim();
+  const fallback = {
+    status: 'unknown', productId: requestedProductId, sku,
+    name: String(selectedOption?.name || '').trim(), memory: String(selectedOption?.memory || '').trim(),
+    color: String(item?.color || '').trim(), url: String(item?.url || selectedOption?.url || '').trim(),
+    videoUrl: '', marketingVideoUrl: '',
+  };
+  if (!sku) return fallback;
+  try {
+    const payload = await helpers.httpRequest({
+      method: 'GET',
+      url: 'https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=1&sku=' + encodeURIComponent(sku),
+      headers: { Accept: 'application/json' }, json: true, timeout: 8000,
+    });
+    const products = Array.isArray(payload) ? payload : (Array.isArray(payload?.rows) ? payload.rows : []);
+    const product = products.find((candidate) => (!requestedProductId || String(candidate?.id || '') === requestedProductId)
+      && normalize(candidate?.sku) === normalize(sku));
+    if (!product) return fallback;
+    const videoUrl = String(product?.video_url || '').trim();
+    const marketingVideoUrl = String(product?.marketing_video_url || '').trim();
+    return {
+      ...fallback,
+      status: videoUrl || marketingVideoUrl ? 'available' : 'unavailable',
+      productId: String(product?.id || requestedProductId),
+      name: String(product?.name || fallback.name).trim(),
+      color: String(product?.specs?.color || product?.specs?.cor || product?.color || fallback.color).trim(),
+      url: String(product?.slug ? 'https://mercadodovale.com.br/produto/' + product.slug : fallback.url).trim(),
+      videoUrl,
+      marketingVideoUrl,
+    };
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function rememberMediaContextV287(item, selectedOption) {
+  if (!activeState || !item?.productId || !item?.sku) return;
+  activeState.lastMediaContext = {
+    number: Number(selectedOption?.number || 0),
+    productId: String(item.productId), sku: String(item.sku),
+    name: String(selectedOption?.name || '').trim(), memory: String(selectedOption?.memory || '').trim(),
+    color: String(item?.color || '').trim(), url: String(item?.url || selectedOption?.url || '').trim(),
+    updatedAt: new Date(now).toISOString(), expiresAt: now + 15 * 60 * 1000,
+  };
+  activeState.updatedAt = new Date(now).toISOString();
+}
+
+${continueAnchor}`;
+  let next = code.replace(continueAnchor, mediaHelpers);
+
+  const photoReturn = `if (photoOption && photoVariant) {
+    return [{
+      json: {
+        ...source,
+        salesPostListHandled: true,
+        salesPostListStep: activeState.step,
+        orderDraft: activeState.orderDraft,
+        messages: await buildPhotoMessages(photoVariant, photoOption),
+      },
+    }];
+  }`;
+  assert.ok(next.includes(photoReturn), 'photo interrupt return anchor changed before v287');
+  next = next.replace(photoReturn, `if (photoOption && photoVariant) {
+    const photoMessagesV287 = await buildPhotoMessages(photoVariant, photoOption);
+    if (photoMessagesV287.some((message) => message?.type === 'image')) rememberMediaContextV287(photoVariant, photoOption);
+    return [{
+      json: {
+        ...source,
+        salesPostListHandled: true,
+        salesPostListStep: activeState.step,
+        orderDraft: activeState.orderDraft,
+        messages: photoMessagesV287,
+      },
+    }];
+  }`);
+
+  const fulfillmentAnchor = `// default-one-unit-v245
+if (activeState?.step === 'awaiting_fulfillment') {`;
+  assert.ok(next.includes(fulfillmentAnchor), 'fulfillment anchor changed before v287');
+  const videoRoute = `const contextualVideoQuestionV287 = aiAction === 'pergunta_sobre_item'
+  && /\\b(?:video|videos|filmagem|gravacao)\\b/.test(normalized);
+if (contextualVideoQuestionV287) {
+  const explicitNumberV287 = numberMatch ? Number(numberMatch[1] || 0) : 0;
+  const lastMediaV287 = activeState?.lastMediaContext && Number(activeState.lastMediaContext.expiresAt || 0) > now
+    ? activeState.lastMediaContext : null;
+  const mediaOptionsV287 = Array.isArray(activeState?.options) ? activeState.options : [];
+  const mediaOptionV287 = explicitNumberV287
+    ? mediaOptionsV287.find((candidate) => Number(candidate?.number || 0) === explicitNumberV287)
+    : (lastMediaV287
+      ? mediaOptionsV287.find((candidate) => Number(candidate?.number || 0) === Number(lastMediaV287.number || 0)
+        || uniqueColorItems(candidate?.colors || []).some((item) => String(item?.productId || '') === String(lastMediaV287.productId || '')))
+      : mediaOptionsV287.find((candidate) => Number(candidate?.number || 0) === Number(activeState?.selectedOptionNumber || 0)));
+  const mediaVariantsV287 = uniqueColorItems(mediaOptionV287?.colors || []);
+  const mentionedMediaColorV287 = findMentionedColor(mediaVariantsV287.map((item) => item.color));
+  const mediaVariantV287 = mentionedMediaColorV287
+    ? mediaVariantsV287.find((item) => normalize(item?.color) === normalize(mentionedMediaColorV287))
+    : (lastMediaV287 && !explicitNumberV287
+      ? mediaVariantsV287.find((item) => String(item?.productId || '') === String(lastMediaV287.productId || ''))
+      : (mediaVariantsV287.find((item) => String(item?.productId || '') === String(activeState?.orderDraft?.productId || ''))
+        || (mediaVariantsV287.length === 1 ? mediaVariantsV287[0] : null)));
+  const mediaFactsV287 = mediaOptionV287 && mediaVariantV287
+    ? await resolveExactMediaFactsV287(mediaVariantV287, mediaOptionV287)
+    : { status: 'unknown', productId: '', sku: '', name: '', memory: '', color: '', url: '', videoUrl: '', marketingVideoUrl: '' };
+  const identityV287 = [mediaFactsV287.name, mediaFactsV287.memory, mediaFactsV287.color].filter(Boolean).join(' - ');
+  const guidanceByStatusV287 = mediaFactsV287.status === 'available'
+    ? 'A consulta do SKU exato confirmou que existe video cadastrado para ' + identityV287 + '. Responda com palavras proprias, curta e naturalmente. Confirme que ha video e mantenha a conversa nesse produto. Nao retome entrega ou retirada nesta resposta e nao invente outros dados.'
+    : (mediaFactsV287.status === 'unavailable'
+      ? 'A consulta do SKU exato confirmou que nao existe video cadastrado para ' + identityV287 + '. Responda com palavras proprias, curta e naturalmente. Diga que ha fotos cadastradas quando o contexto recente mostrar fotos, mas que ainda nao ha video desse aparelho. Nao retome entrega ou retirada e nao invente video ou link.'
+      : 'Nao foi possivel confirmar com seguranca qual produto ou se existe video cadastrado. Responda com palavras proprias e peca somente o numero do item, modelo ou cor necessarios para confirmar. Nao diga que tem ou que nao tem video e nao retome entrega ou retirada.');
+  return [{ json: {
+    ...source,
+    salesPostListHandled: false,
+    salesPostListStep: String(activeState?.step || ''),
+    orderDraft: activeState?.orderDraft,
+    mediaProductFacts: mediaFactsV287,
+    forceGeneralAiResponse: true,
+    aiResponseGuidance: guidanceByStatusV287,
+  } }];
+}
+
+${fulfillmentAnchor}`;
+  next = next.replace(fulfillmentAnchor, videoRoute);
+
+  next = next.replaceAll('No link tem mais fotos, video e as caracteristicas dele: ', 'Veja mais fotos e as caracteristicas dele: ');
+  next = next.replace(`    { type: 'text', text: 'Gostou desse modelo?' + lineBreak + 'Posso separar ele para voce? 😊' },\n`, '');
+  next = next.replace(`  messages.push({ type: 'text', text: 'Gostou de alguma dessas cores?' + lineBreak + 'Posso separar para voce? 😊', delayMs: 1200 + messages.length * 4500 });\n`, '');
+
+  const repeatedPhotoBranch = `if (!variant && (wantsPhoto || wantsPhotoFromAI)) {
+  activeState.step = 'awaiting_quantity';
+  activeState.selectedOptionNumber = option.number;
+  activeState.updatedAt = new Date(now).toISOString();
+  return [{
+    json: {
+      ...source,
+      salesPostListHandled: true,
+      salesPostListStep: activeState.step,
+      messages: buildAllPhotoMessages(optionColorItems),
+    },
+  }];
+}`;
+  const repeatedCount = next.split(repeatedPhotoBranch).length - 1;
+  if (repeatedCount > 1) {
+    next = next.replace(new RegExp(repeatedPhotoBranch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\n\\n' + repeatedPhotoBranch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')*'), repeatedPhotoBranch);
+  }
+
+  const finalPhotoReturn = `if (wantsPhoto || wantsPhotoFromAI) {
+  return [{
+    json: {
+      ...source,
+      salesPostListHandled: true,
+      salesPostListStep: activeState.step,
+      orderDraft: activeState.orderDraft,
+      messages: await buildPhotoMessages(variant, option),
+    },
+  }];
+}`;
+  if (next.includes(finalPhotoReturn)) next = next.replace(finalPhotoReturn, `if (wantsPhoto || wantsPhotoFromAI) {
+  const selectedPhotoMessagesV287 = await buildPhotoMessages(variant, option);
+  if (selectedPhotoMessagesV287.some((message) => message?.type === 'image')) rememberMediaContextV287(variant, option);
+  return [{
+    json: {
+      ...source,
+      salesPostListHandled: true,
+      salesPostListStep: activeState.step,
+      orderDraft: activeState.orderDraft,
+      messages: selectedPhotoMessagesV287,
+    },
+  }];
+}`);
+
+  assert.ok(!next.includes('No link tem mais fotos, video e as caracteristicas dele'), 'stale video claim still reachable');
+  assert.ok(!next.includes('Gostou desse modelo?'), 'canned single-photo prompt still reachable');
+  assert.ok(!next.includes('Gostou de alguma dessas cores?'), 'canned multi-photo prompt still reachable');
+  new Function('$json', '$input', '$getWorkflowStaticData', '$', '$env', 'helpers', next);
+  return next;
+}
+
+function patchResolverV287(code) {
+  if (code.includes(CONTEXTUAL_VIDEO_AI_MARKER)) return code;
+  const decisionAnchor = `const legacy = legacyDecision($json, text);
+const decision = `;
+  assert.ok(code.includes(decisionAnchor), 'resolver decision anchor changed before v287');
+  let next = code.replace(decisionAnchor, `// ${CONTEXTUAL_VIDEO_AI_MARKER}
+const contextualMediaDecisionV287 = $json.forceGeneralAiResponse === true && $json.mediaProductFacts
+  ? { acao: 'responder_direto', intencao: 'midia_produto_contextual', confianca: 1, motivo: 'O Agente Geral deve redigir a resposta usando somente os fatos de midia apurados.' }
+  : null;
+const legacy = legacyDecision($json, text);
+const decision = contextualMediaDecisionV287 || `);
+  const outputAnchor = `    output: $json.output,`;
+  assert.ok(next.includes(outputAnchor), 'resolver output anchor changed before v287');
+  next = next.replace(outputAnchor, `    output: contextualMediaDecisionV287 ? '' : $json.output,`);
+  new Function('$json', '$getWorkflowStaticData', '$', next);
   return next;
 }
 
@@ -315,6 +525,9 @@ function summarize(nodes) {
   const postList = nodes.find((item) => item.name === POST_LIST_NODE_NAME);
   assert.ok(postList, `${POST_LIST_NODE_NAME} not found`);
   const postListCode = String(postList.parameters?.jsCode || '');
+  const resolver = nodes.find((item) => item.name === RESOLVER_NODE_NAME);
+  assert.ok(resolver, `${RESOLVER_NODE_NAME} not found`);
+  const resolverCode = String(resolver.parameters?.jsCode || '');
   return {
     marker: code.includes(MARKER),
     readsResolvedImages: code.includes('product.resolved_images'),
@@ -323,10 +536,66 @@ function summarize(nodes) {
     postListMarker: postListCode.includes(POST_LIST_MARKER),
     photoBeforeFulfillment: postListCode.indexOf(POST_LIST_MARKER) < postListCode.indexOf("activeState?.step === 'awaiting_fulfillment'"),
     refreshesStaleImages: postListCode.includes("compact=true&limit=1&sku=") && postListCode.includes('product?.resolved_images'),
-    awaitsPhotoMessages: postListCode.includes('messages: await buildPhotoMessages'),
+    awaitsPhotoMessages: postListCode.includes('await buildPhotoMessages'),
     usesRunnerHttpHelper: postListCode.includes(POST_LIST_HTTP_MARKER) && postListCode.includes('helpers.httpRequest'),
     recoversPhotoWithoutListState: postListCode.includes(PHOTO_CONTEXT_RECOVERY_MARKER) && postListCode.includes('recoverPhotoWithoutListState'),
+    contextualVideoUsesLastMedia: postListCode.includes(CONTEXTUAL_VIDEO_AI_MARKER) && postListCode.includes('lastMediaContext'),
+    contextualVideoBeforeFulfillment: postListCode.indexOf('contextualVideoQuestionV287') < postListCode.indexOf("activeState?.step === 'awaiting_fulfillment'"),
+    contextualVideoUsesExactSku: postListCode.includes('resolveExactMediaFactsV287') && postListCode.includes('product?.video_url') && postListCode.includes('product?.marketing_video_url'),
+    removesStaleVideoClaim: !postListCode.includes('No link tem mais fotos, video e as caracteristicas dele'),
+    removesCannedPhotoPrompt: !postListCode.includes('Gostou desse modelo?') && !postListCode.includes('Gostou de alguma dessas cores?'),
+    resolverRoutesContextualMediaToAi: resolverCode.includes(CONTEXTUAL_VIDEO_AI_MARKER) && resolverCode.includes("acao: 'responder_direto'") && resolverCode.includes("output: contextualMediaDecisionV287 ? '' : $json.output"),
   };
+}
+
+async function runV287SelfTest(nodes) {
+  const postListCode = String(nodes.find((item) => item.name === POST_LIST_NODE_NAME)?.parameters?.jsCode || '');
+  const resolverCode = String(nodes.find((item) => item.name === RESOLVER_NODE_NAME)?.parameters?.jsCode || '');
+  const product35 = { number: 35, name: 'Realme Note 70', memory: '4GB/256GB', url: 'https://mercadodovale.com.br/produto/realme-note-70-rn704256p', colors: [{ productId: 'product-35', sku: 'RN704256P', color: 'Preto', url: 'https://mercadodovale.com.br/produto/realme-note-70-rn704256p', images: ['https://api.xiaomipetrolina.com.br/images/realme.jpg'] }] };
+  const product36 = { number: 36, name: 'Wp58 Pró', memory: '8GB/512GB', url: 'https://mercadodovale.com.br/produto/wp58-pro-w58p', colors: [{ productId: 'product-36', sku: 'W58P', color: 'Laranja', url: 'https://mercadodovale.com.br/produto/wp58-pro-w58p', images: ['https://api.xiaomipetrolina.com.br/images/wp58.jpg'] }] };
+  const orderDraft = { productId: 'product-36', sku: 'W58P', name: 'Wp58 Pró', color: 'Laranja', quantity: 1 };
+  const buildStatic = () => ({ salesPostList: { 'test@s.whatsapp.net': {
+    flow: 'sales_post_list', step: 'awaiting_fulfillment', selectedOptionNumber: 36,
+    options: [product35, product36], orderDraft: { ...orderDraft }, expiresAt: Date.now() + 60 * 60 * 1000,
+    lastMediaContext: { number: 35, productId: 'product-35', sku: 'RN704256P', name: 'Realme Note 70', memory: '4GB/256GB', color: 'Preto', expiresAt: Date.now() + 15 * 60 * 1000 },
+  } } });
+  const executePostList = async (conversation, httpRequest) => {
+    const staticData = buildStatic();
+    const source = { remoteJid: 'test@s.whatsapp.net', conversation, salesFlowAction: 'pergunta_sobre_item', salesFlowItemNumber: 36, salesFlowColor: 'Laranja', salesSearchQuery: 'video wp58 pro' };
+    const result = await new Function('$json', '$input', '$getWorkflowStaticData', '$', '$env', 'helpers', postListCode)(
+      source, {}, () => staticData, () => ({ first: () => ({ json: {} }) }), {}, { httpRequest },
+    );
+    return { result: result[0].json, state: staticData.salesPostList['test@s.whatsapp.net'] };
+  };
+
+  const contextual = await executePostList('tem video?', async (options) => {
+    assert.match(options.url, /sku=RN704256P$/);
+    return [{ id: 'product-35', sku: 'RN704256P', name: 'Realme Note 70', slug: 'realme-note-70-rn704256p', specs: { color: 'Preto' }, video_url: null, marketing_video_url: null }];
+  });
+  assert.equal(contextual.result.salesPostListHandled, false);
+  assert.equal(contextual.result.mediaProductFacts.sku, 'RN704256P');
+  assert.equal(contextual.result.mediaProductFacts.status, 'unavailable');
+  assert.deepEqual(contextual.state.orderDraft, orderDraft, 'contextual media question must not mutate the checkout draft');
+  assert.doesNotMatch(contextual.result.aiResponseGuidance, /vai ser para entrega ou retirada/i);
+
+  const explicit = await executePostList('tem video do 36?', async (options) => {
+    assert.match(options.url, /sku=W58P$/);
+    return [{ id: 'product-36', sku: 'W58P', name: 'Wp58 Pró', slug: 'wp58-pro-w58p', specs: { color: 'Laranja' }, video_url: 'https://cdn.example.test/wp58.mp4', marketing_video_url: null }];
+  });
+  assert.equal(explicit.result.mediaProductFacts.sku, 'W58P');
+  assert.equal(explicit.result.mediaProductFacts.status, 'available');
+  assert.deepEqual(explicit.state.orderDraft, orderDraft, 'explicit media question must not mutate the checkout draft');
+
+  const unavailableHttp = await executePostList('tem video?', async () => { throw new Error('timeout'); });
+  assert.equal(unavailableHttp.result.mediaProductFacts.status, 'unknown');
+
+  const resolverResult = new Function('$json', '$getWorkflowStaticData', '$', resolverCode)(
+    contextual.result, () => ({}), () => ({ first: () => ({ json: contextual.result }) }),
+  );
+  assert.equal(resolverResult[0].json.conversationAction, 'responder_direto');
+  assert.equal(resolverResult[0].json.conversationIntent, 'midia_produto_contextual');
+  assert.equal(resolverResult[0].json.output, '');
+  return { contextualSku: contextual.result.mediaProductFacts.sku, contextualStatus: contextual.result.mediaProductFacts.status, explicitSku: explicit.result.mediaProductFacts.sku, explicitStatus: explicit.result.mediaProductFacts.status, timeoutStatus: unavailableHttp.result.mediaProductFacts.status, draftPreserved: true, resolverAction: resolverResult[0].json.conversationAction };
 }
 
 async function main() {
@@ -346,7 +615,14 @@ async function main() {
     const postList = nodes.find((item) => item.name === POST_LIST_NODE_NAME);
     assert.ok(postList, `${POST_LIST_NODE_NAME} not found`);
     postList.parameters.jsCode = patchPostList(String(postList.parameters?.jsCode || ''));
+    const resolver = nodes.find((item) => item.name === RESOLVER_NODE_NAME);
+    assert.ok(resolver, `${RESOLVER_NODE_NAME} not found`);
+    resolver.parameters.jsCode = patchResolverV287(String(resolver.parameters?.jsCode || ''));
     const summary = summarize(nodes);
+    if (process.argv.includes('--self-test')) {
+      const selfTest = await runV287SelfTest(nodes);
+      return console.log(JSON.stringify({ apply: false, selfTest, ...summary }, null, 2));
+    }
     if (!APPLY) return console.log(JSON.stringify({ apply: false, ...summary }, null, 2));
 
     const activeExecutionsSql = `COPY (SELECT count(*) FROM execution_entity WHERE "workflowId"=${quote(WORKFLOW_ID)} AND status IN ('new', 'running')) TO STDOUT;`;
@@ -354,7 +630,7 @@ async function main() {
     assert.equal(activeExecutions, 0, 'workflow has an active execution; refusing to update it');
 
     const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
-    const backupDir = `/var/backups/mdv-system/n8n-workflow-photo-context-recovery-${timestamp}`;
+    const backupDir = `/var/backups/mdv-system/n8n-workflow-contextual-video-ai-${timestamp}`;
     await run(conn, `mkdir -p ${quote(backupDir)} && chmod 700 ${quote(backupDir)}`);
     const backupSql = `COPY (SELECT json_build_object('workflow', row_to_json(we), 'activeHistory', row_to_json(wh))::text FROM workflow_entity we LEFT JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
     await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(backupSql)} > ${quote(`${backupDir}/workflow.json`)} && chmod 600 ${quote(`${backupDir}/workflow.json`)} && sha256sum ${quote(`${backupDir}/workflow.json`)} > ${quote(`${backupDir}/SHA256SUMS`)}`);
@@ -370,7 +646,7 @@ async function main() {
     const activeVersionAfterStop = (await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(versionAfterStopSql)}`)).trim();
     assert.equal(activeVersionAfterStop, row.activeVersionId, 'active workflow version changed during preparation; refusing to overwrite it');
 
-    const remotePath = '/tmp/mdv-n8n-photo-context-recovery-v286.json';
+    const remotePath = '/tmp/mdv-n8n-contextual-video-ai-v287.json';
     await new Promise((resolve, reject) => conn.sftp((error, sftp) => {
       if (error) return reject(error);
       sftp.writeFile(remotePath, Buffer.from(JSON.stringify(nodes)), (writeError) => {
@@ -389,7 +665,7 @@ async function main() {
     await waitService(conn, 'n8n_n8n-runner', 1);
     stopped = false;
 
-    const verifySql = `COPY (SELECT json_build_object('entityMarker', we.nodes::text LIKE '%${MARKER}%', 'historyMarker', wh.nodes::text LIKE '%${MARKER}%', 'postListEntityMarker', we.nodes::text LIKE '%${POST_LIST_MARKER}%', 'postListHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_MARKER}%', 'httpHelperEntityMarker', we.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'httpHelperHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'contextRecoveryEntityMarker', we.nodes::text LIKE '%${PHOTO_CONTEXT_RECOVERY_MARKER}%', 'contextRecoveryHistoryMarker', wh.nodes::text LIKE '%${PHOTO_CONTEXT_RECOVERY_MARKER}%', 'sameNodes', we.nodes::jsonb = wh.nodes::jsonb, 'active', we.active)::text FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
+    const verifySql = `COPY (SELECT json_build_object('entityMarker', we.nodes::text LIKE '%${MARKER}%', 'historyMarker', wh.nodes::text LIKE '%${MARKER}%', 'postListEntityMarker', we.nodes::text LIKE '%${POST_LIST_MARKER}%', 'postListHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_MARKER}%', 'httpHelperEntityMarker', we.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'httpHelperHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'contextRecoveryEntityMarker', we.nodes::text LIKE '%${PHOTO_CONTEXT_RECOVERY_MARKER}%', 'contextRecoveryHistoryMarker', wh.nodes::text LIKE '%${PHOTO_CONTEXT_RECOVERY_MARKER}%', 'contextualVideoEntityMarker', we.nodes::text LIKE '%${CONTEXTUAL_VIDEO_AI_MARKER}%', 'contextualVideoHistoryMarker', wh.nodes::text LIKE '%${CONTEXTUAL_VIDEO_AI_MARKER}%', 'staleVideoClaimAbsentEntity', we.nodes::text NOT LIKE '%No link tem mais fotos, video e as caracteristicas dele%', 'staleVideoClaimAbsentHistory', wh.nodes::text NOT LIKE '%No link tem mais fotos, video e as caracteristicas dele%', 'cannedPhotoPromptAbsentEntity', we.nodes::text NOT LIKE '%Gostou desse modelo?%', 'cannedPhotoPromptAbsentHistory', wh.nodes::text NOT LIKE '%Gostou desse modelo?%', 'sameNodes', we.nodes::jsonb = wh.nodes::jsonb, 'active', we.active)::text FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
     const database = JSON.parse((await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(verifySql)}`)).trim());
     assert.ok(Object.values(database).every(Boolean), 'database verification failed');
     const health = JSON.parse((await run(conn, 'curl -fsS https://n8n.mercadodovale.com.br/healthz')).trim());
@@ -407,4 +683,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.stack || error.message); process.exit(1); });
-module.exports = { patchContext, patchPostList, summarize, MARKER, POST_LIST_MARKER, POST_LIST_HTTP_MARKER, PHOTO_CONTEXT_RECOVERY_MARKER };
+module.exports = { patchContext, patchPostList, patchPostListV287, patchResolverV287, runV287SelfTest, summarize, MARKER, POST_LIST_MARKER, POST_LIST_HTTP_MARKER, PHOTO_CONTEXT_RECOVERY_MARKER, CONTEXTUAL_VIDEO_AI_MARKER };

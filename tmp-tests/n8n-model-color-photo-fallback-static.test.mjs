@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { patchContext, patchPostList, MARKER, POST_LIST_MARKER, POST_LIST_HTTP_MARKER, PHOTO_CONTEXT_RECOVERY_MARKER } = require('./n8n-fix-model-color-photo-fallback.cjs');
+const { patchContext, patchPostList, patchResolverV287, MARKER, POST_LIST_MARKER, POST_LIST_HTTP_MARKER, PHOTO_CONTEXT_RECOVERY_MARKER, CONTEXTUAL_VIDEO_AI_MARKER } = require('./n8n-fix-model-color-photo-fallback.cjs');
 const servers = ['vps_server.cjs', 'vps_server.js'];
 
 for (const file of servers) {
@@ -63,6 +63,9 @@ const titleCase = (value) => value;
 const withGreeting = (value) => value;
 const periodGreeting = () => '';
 const lineBreak = '\\n';
+const now = Date.now();
+const numberMatch = normalized.match(/\\b(\\d{1,3})\\b/);
+const findMentionedColor = () => '';
 const buildContinueItem = () => [{ json: { ...source, salesPostListHandled: false } }];
 if (!activeState || !Array.isArray(activeState.options) || activeState.options.length === 0) {
   if (wantsPhoto || wantsPhotoFromAI) {
@@ -107,16 +110,86 @@ assert.match(patchedPostList, new RegExp(POST_LIST_MARKER));
 assert.ok(patchedPostList.indexOf(POST_LIST_MARKER) < patchedPostList.indexOf("activeState?.step === 'awaiting_fulfillment'"));
 assert.match(patchedPostList, /products\?status=active&compact=true&limit=1&sku=/);
 assert.match(patchedPostList, /product\?\.resolved_images/);
-assert.match(patchedPostList, /messages: await buildPhotoMessages\(photoVariant, photoOption\)/);
+assert.match(patchedPostList, /const photoMessagesV287 = await buildPhotoMessages\(photoVariant, photoOption\)/);
 assert.match(patchedPostList, /messages: await buildPhotoMessages\(variant, option\)/);
 assert.match(patchedPostList, /wantsPhoto \|\| wantsPhotoFromAI/);
 assert.match(patchedPostList, new RegExp(POST_LIST_HTTP_MARKER));
 assert.match(patchedPostList, /helpers\.httpRequest/);
 assert.match(patchedPostList, new RegExp(PHOTO_CONTEXT_RECOVERY_MARKER));
+assert.match(patchedPostList, new RegExp(CONTEXTUAL_VIDEO_AI_MARKER));
+assert.match(patchedPostList, /contextualVideoQuestionV287/);
+assert.match(patchedPostList, /lastMediaContext/);
+assert.match(patchedPostList, /forceGeneralAiResponse: true/);
+assert.match(patchedPostList, /mediaProductFacts: mediaFactsV287/);
+assert.match(patchedPostList, /product\?\.video_url/);
+assert.match(patchedPostList, /product\?\.marketing_video_url/);
+assert.ok(patchedPostList.indexOf('contextualVideoQuestionV287') < patchedPostList.indexOf("activeState?.step === 'awaiting_fulfillment'"));
+assert.doesNotMatch(patchedPostList, /No link tem mais fotos, video e as caracteristicas dele/);
+assert.doesNotMatch(patchedPostList, /Gostou desse modelo\?/);
 assert.match(patchedPostList, /recoverPhotoWithoutListState/);
 const hydrateSection = patchedPostList.slice(patchedPostList.indexOf('async function hydratePhotoItem'), patchedPostList.indexOf('async function buildPhotoMessages'));
 assert.doesNotMatch(hydrateSection, /fetch\(/);
 assert.doesNotMatch(hydrateSection, /AbortSignal/);
+
+const resolverFixture = `
+const source = {};
+const text = '';
+const rawOutput = '';
+const allowedActions = new Set(['responder_direto']);
+const legacyDecision = () => ({ acao: 'responder_direto' });
+const parsed = null;
+const deterministicMetaSmartphonesIntroV167 = null;
+const deterministicPhoneStockListDecisionV165 = null;
+const deterministicFiscalDocumentDecisionV164 = null;
+const deterministicPhoneNfcFilterV228 = null;
+const deterministicSmartwatchCatalogV162 = null;
+const deterministicPhoneMemoryFilterV155 = null;
+const deterministicStoreLocationV129 = null;
+const deterministicServiceDecisionV135 = null;
+const fallbackDecision = () => ({ acao: 'responder_direto' });
+const metaSmartphonesListMessageV167 = false;
+const metaSmartphoneIntroGuidanceV167 = '';
+const fiscalDocumentGuidanceV164 = '';
+const SMARTPHONES_CATEGORY_ID = 'smartphones';
+const remoteJid = '';
+const decisionPrefix = true;
+const legacy = legacyDecision($json, text);
+const decision = deterministicMetaSmartphonesIntroV167 || deterministicPhoneStockListDecisionV165 || deterministicFiscalDocumentDecisionV164 || deterministicPhoneNfcFilterV228 || deterministicSmartwatchCatalogV162 || deterministicPhoneMemoryFilterV155 || deterministicStoreLocationV129 || deterministicServiceDecisionV135 || (parsed && allowedActions.has(String(parsed.acao || '')) ? parsed : (legacy || fallbackDecision()));
+const action = allowedActions.has(String(decision.acao || '')) ? String(decision.acao) : 'responder_direto';
+const catalogRequest = false;
+const productSearchRequest = false;
+const productQuery = '';
+const catalogSearchTermV162 = '';
+const catalogCategoryNameV162 = '';
+const catalogCategoryIdV162 = '';
+const phoneNfcFilterIntentV228 = false;
+const directOutput = '';
+return [{ json: {
+  ...source, ...$json, conversationAction: action,
+  conversationIntent: String(decision.intencao || ''),
+  metaSmartphoneAdRequest: metaSmartphonesListMessageV167,
+  aiResponseGuidance: metaSmartphoneIntroGuidanceV167 || fiscalDocumentGuidanceV164 || String($json.aiResponseGuidance || ''),
+  directOutput,
+    output: $json.output,
+  productSearchTerm: catalogRequest ? catalogSearchTermV162 : productQuery,
+  productSearchOriginalText: text,
+  salesRequestKind: '', salesSearchQuery: '', salesCategoryName: '', salesCategoryId: '',
+  salesPostListAction: '', salesFlowItemNumber: 0, requestedColor: '', requestedMemory: '', requestedNfc: '', deliveryCep: '', paymentQuestion: false,
+  conversationDecision: decision, remoteJid, Instancia: '',
+} }];`;
+const patchedResolver = patchResolverV287(resolverFixture);
+assert.equal(patchResolverV287(patchedResolver), patchedResolver, 'resolver v287 patch must be idempotent');
+assert.match(patchedResolver, /contextualMediaDecisionV287/);
+assert.match(patchedResolver, /contextualMediaDecisionV287 \|\| deterministicMetaSmartphonesIntroV167/);
+assert.match(patchedResolver, /output: contextualMediaDecisionV287 \? '' : \$json\.output/);
+const resolverResult = new Function('$json', '$getWorkflowStaticData', '$', patchedResolver)(
+  { forceGeneralAiResponse: true, mediaProductFacts: { status: 'unavailable' }, aiResponseGuidance: 'fatos internos', output: 'classificacao crua' },
+  () => ({}), {},
+);
+assert.equal(resolverResult[0].json.conversationAction, 'responder_direto');
+assert.equal(resolverResult[0].json.conversationIntent, 'midia_produto_contextual');
+assert.equal(resolverResult[0].json.output, '', 'raw classifier output must not reach the general agent');
+assert.equal(resolverResult[0].json.aiResponseGuidance, 'fatos internos');
 
 const executePostList = (mockHttpRequest, json = {}) => new Function(
   '$json', '$input', '$getWorkflowStaticData', '$', '$env', 'helpers',
