@@ -127,6 +127,8 @@ assert.ok(patchedPostList.indexOf('contextualVideoQuestionV287') < patchedPostLi
 assert.doesNotMatch(patchedPostList, /No link tem mais fotos, video e as caracteristicas dele/);
 assert.doesNotMatch(patchedPostList, /Gostou desse modelo\?/);
 assert.match(patchedPostList, /recoverPhotoWithoutListState/);
+assert.match(patchedPostList, /SMARTPHONES_CATEGORY_ID_V289/);
+assert.match(patchedPostList, /category_id=/);
 const hydrateSection = patchedPostList.slice(patchedPostList.indexOf('async function hydratePhotoItem'), patchedPostList.indexOf('async function buildPhotoMessages'));
 assert.doesNotMatch(hydrateSection, /fetch\(/);
 assert.doesNotMatch(hydrateSection, /AbortSignal/);
@@ -219,6 +221,7 @@ const recovered = await executePostList(async (options) => {
   recoveredCalls.push(options);
   return [{
     id: 'product-1',
+    category_id: '8b7c4852-c195-4527-8fd7-c3cc2debda42',
     name: 'Wp58 Pró',
     sku: 'W58P24816512L',
     slug: 'wp58-pro-24gb-8-16-512gb-laranja-w58p24816512l',
@@ -239,6 +242,29 @@ assert.match(recoveredCalls[0].url, /search=wp58%20pro$/);
 assert.equal(recovered[0].json.salesPostListStep, 'photo_recovered_without_list');
 assert.equal(recovered[0].json.messages[0].type, 'image');
 assert.equal(recovered[0].json.messages[0].mediaUrl, modelColorUrl);
+
+const redmiCollisionCalls = [];
+const recoveredRedmiA4 = await executePostList(async (options) => {
+  redmiCollisionCalls.push(options);
+  return [
+    {
+      id: 'accessory-1', category_id: 'accessories', name: 'Película 3D para Redmi A4 5G', sku: 'P3DR14C',
+      specs: { keywords: ['redmi a4 5g'] }, resolved_images: ['https://api.xiaomipetrolina.com.br/images/products/accessory.jpg'],
+    },
+    {
+      id: 'phone-1', category_id: '8b7c4852-c195-4527-8fd7-c3cc2debda42', name: 'Redmi A4 5G', sku: 'R4A5G4128P',
+      slug: 'redmi-a4-5g', specs: { color: 'Preto', keywords: ['redmi a4 5g'] }, resolved_images: [modelColorUrl],
+    },
+  ];
+}, {
+  activeState: null,
+  salesSearchQuery: 'redmi A4 5G',
+  salesFlowAction: 'pedir_foto',
+});
+assert.equal(redmiCollisionCalls.length, 1);
+assert.match(redmiCollisionCalls[0].url, /category_id=8b7c4852-c195-4527-8fd7-c3cc2debda42/);
+assert.equal(recoveredRedmiA4[0].json.messages[0].type, 'image', 'an accessory mentioning the model must not make the smartphone ambiguous');
+assert.equal(recoveredRedmiA4[0].json.messages[0].mediaUrl, modelColorUrl);
 
 const numericHistoryCalls = [];
 const recoveredFromRecentLink = await executePostList(async (options) => {
@@ -263,14 +289,15 @@ assert.match(numericHistoryCalls[0].url, /sku=W58P24816512L$/);
 assert.equal(recoveredFromRecentLink[0].json.messages[0].type, 'image');
 
 const ambiguous = await executePostList(async () => [
-  { id: 'a', name: 'Wp58 Pró', sku: 'A', specs: { color: 'Laranja', keywords: ['wp58 pro'] }, resolved_images: [modelColorUrl] },
-  { id: 'b', name: 'Wp58 Pró', sku: 'B', specs: { color: 'Laranja', keywords: ['wp58 pro'] }, resolved_images: [modelColorUrl] },
+  { id: 'a', category_id: '8b7c4852-c195-4527-8fd7-c3cc2debda42', name: 'Wp58 Pró', sku: 'A', specs: { color: 'Laranja', keywords: ['wp58 pro'] }, resolved_images: [modelColorUrl] },
+  { id: 'b', category_id: '8b7c4852-c195-4527-8fd7-c3cc2debda42', name: 'Wp58 Pró', sku: 'B', specs: { color: 'Laranja', keywords: ['wp58 pro'] }, resolved_images: [modelColorUrl] },
 ], { activeState: null, salesSearchQuery: 'wp58 pro laranja', salesFlowColor: 'laranja', salesFlowAction: 'pedir_foto' });
 assert.equal(ambiguous[0].json.messages, undefined, 'an ambiguous recovery must not send a product photo');
 assert.match(ambiguous[0].json.output, /modelo e a cor/);
 
 const noStock = await executePostList(async () => [{
   id: 'product-1', name: 'Wp58 Pró', sku: 'W58P24816512L', status: 'active',
+  category_id: '8b7c4852-c195-4527-8fd7-c3cc2debda42',
   track_inventory: 1, stock_quantity: 0,
   specs: { color: 'Laranja', keywords: ['wp58 pro'] }, resolved_images: [modelColorUrl],
 }], { activeState: null, salesSearchQuery: 'wp58 pro laranja', salesFlowColor: 'laranja', salesFlowAction: 'pedir_foto' });

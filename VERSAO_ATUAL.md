@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.288-whatsapp-memoria-filtros-followup
+version: v1.2.289-whatsapp-fluxo-lista-foto
 date: 2026-08-26
 status: ready
-release_vps: /var/www/mdv-site/releases/20260826-184547-whatsapp-memoria-filtros-followup
+release_vps: /var/www/mdv-site/releases/20260826-221605-whatsapp-fluxo-lista-foto
 branch: main
-summary: Acumula preferencias de celulares, filtra pelos campos estruturados e envia follow-up somente apos 10 minutos sem atividade.
+summary: Corrige envio da lista de celulares, recuperacao de fotos por modelo, filtros estruturados, saudacao e continuacao de mensagens rapidas no WhatsApp.
 ```

@@ -81,6 +81,7 @@ function executeInput(json, iso) {
 
 assert.equal(executeAt('Boa tarde, Luluzinha![[MSG]]Tudo bem?', '2026-07-22T11:48:00.000Z')[0].json.message, 'Bom dia, Luluzinha!');
 assert.equal(executeAt('[[SAUDACAO]], Ana!', '2026-07-22T15:00:00.000Z')[0].json.message, 'Boa tarde, Ana!');
+assert.equal(executeAt('[[SAUDACAO]] Boa tarde, Paullo!', '2026-07-22T15:00:00.000Z')[0].json.message, 'Boa tarde, Paullo!');
 assert.equal(executeAt('👋 Bom dia, Carlos!', '2026-07-22T22:00:00.000Z')[0].json.message, '👋 Boa noite, Carlos!');
 assert.equal(executeAt('Boa noite!', '2026-07-22T07:59:00.000Z')[0].json.message, 'Boa noite!');
 assert.equal(executeAt('Fique a vontade para escolher.', '2026-07-22T11:48:00.000Z')[0].json.message, 'Fique a vontade para escolher.');

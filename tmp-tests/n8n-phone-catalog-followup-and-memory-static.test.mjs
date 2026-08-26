@@ -41,6 +41,8 @@ for (const marker of [
 }
 assert.match(workflowPatch, /Handoff - Registrar bot enviado.*Envio - Restaurar item aceito/s);
 assert.match(workflowPatch, /phoneCatalogFollowupEligible === true/);
+assert.match(workflowPatch, /const normalizeStructuredV288 =/, 'structured filters must not call a later normalize declaration');
+assert.doesNotMatch(workflowPatch, /^const screenTypeV288 = normalize\(/m, 'screen filter must avoid the temporal dead zone');
 assert.match(workflowPatch, /Number\(\$json\.messageIndex\) === Number\(\$json\.totalMessages\)/);
 assert.match(workflowPatch, /if \(!apply\)/, 'workflow mutation must require explicit --apply');
 assert.match(deployScript, /autoresponderCatalogPreferencesPath = 'services\/autoresponderCatalogPreferences\.cjs'/);

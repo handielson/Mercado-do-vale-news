@@ -8,6 +8,9 @@ for (const root of [path.join(__dirname, '..'), path.join(__dirname, '..', '..',
 }
 
 const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
+const { patchGraph: patchSalesPreferencesGraphV289 } = require('./n8n-add-cumulative-sales-preferences-followup.cjs');
+const { patchWorkflow: patchGreetingWorkflowV289 } = require('./n8n-fix-central-greeting-time.cjs');
+const { patchWorkflow: patchRapidCatalogContinuationV290 } = require('./n8n-preserve-rapid-greeting.cjs');
 const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const NODE_NAME = 'Vendas - Contexto Produtos';
 const POST_LIST_NODE_NAME = 'Vendas - Verificar Pos Lista';
@@ -226,6 +229,7 @@ function patchPostList(code) {
     assert.ok(next.includes(oldMissingState), 'missing sales-list state anchor changed unexpectedly');
     const recoveredMissingState = `// ${PHOTO_CONTEXT_RECOVERY_MARKER}
 async function recoverPhotoWithoutListState() {
+  const SMARTPHONES_CATEGORY_ID_V289 = '8b7c4852-c195-4527-8fd7-c3cc2debda42';
   const classifiedQuery = String(source.salesSearchQuery || '').trim();
   const recentText = [source.conversationHistory, ...(Array.isArray(source.recentMessages) ? source.recentMessages.map((item) => item?.text) : [])]
     .filter(Boolean)
@@ -245,10 +249,11 @@ async function recoverPhotoWithoutListState() {
   try {
     const requestUrl = historyProductSku
       ? 'https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=1&sku=' + encodeURIComponent(historyProductSku)
-      : 'https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=20&search=' + encodeURIComponent(searchWords.join(' '));
+      : 'https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=20&category_id=' + encodeURIComponent(SMARTPHONES_CATEGORY_ID_V289) + '&search=' + encodeURIComponent(searchWords.join(' '));
     const payload = await helpers.httpRequest({ method: 'GET', url: requestUrl, headers: { Accept: 'application/json' }, json: true, timeout: 8000 });
     const products = Array.isArray(payload) ? payload : (Array.isArray(payload?.rows) ? payload.rows : []);
     const candidates = products.filter((product) => {
+      if (!historyProductSku && String(product?.category_id || '') !== SMARTPHONES_CATEGORY_ID_V289) return false;
       if (product?.status && normalize(product.status) !== 'active') return false;
       if (product?.hide_from_catalog === true || Number(product?.hide_from_catalog || 0) === 1) return false;
       const stockQuantity = Number(product?.stock_quantity);
@@ -306,6 +311,22 @@ if (!activeState || !Array.isArray(activeState.options) || activeState.options.l
     next = next.replace(oldMissingState, recoveredMissingState);
   }
   assertV286(next);
+  if (!next.includes("const SMARTPHONES_CATEGORY_ID_V289 = '8b7c4852-c195-4527-8fd7-c3cc2debda42';")) {
+    next = next.replace(
+      'async function recoverPhotoWithoutListState() {',
+      "async function recoverPhotoWithoutListState() {\n  const SMARTPHONES_CATEGORY_ID_V289 = '8b7c4852-c195-4527-8fd7-c3cc2debda42';",
+    );
+    next = next.replace(
+      "'https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=20&search=' + encodeURIComponent(searchWords.join(' '))",
+      "'https://api.xiaomipetrolina.com.br/products?status=active&compact=true&limit=20&category_id=' + encodeURIComponent(SMARTPHONES_CATEGORY_ID_V289) + '&search=' + encodeURIComponent(searchWords.join(' '))",
+    );
+    next = next.replace(
+      'const candidates = products.filter((product) => {',
+      "const candidates = products.filter((product) => {\n      if (!historyProductSku && String(product?.category_id || '') !== SMARTPHONES_CATEGORY_ID_V289) return false;",
+    );
+  }
+  assert.ok(next.includes("category_id=' + encodeURIComponent(SMARTPHONES_CATEGORY_ID_V289)"), 'photo recovery must restrict the API lookup to smartphones');
+  assert.ok(next.includes("String(product?.category_id || '') !== SMARTPHONES_CATEGORY_ID_V289"), 'photo recovery must reject accessory collisions');
   next = patchPostListV287(next);
   new Function('$json', '$input', '$getWorkflowStaticData', '$', '$env', 'helpers', next);
   return next;
@@ -618,6 +639,12 @@ async function main() {
     const resolver = nodes.find((item) => item.name === RESOLVER_NODE_NAME);
     assert.ok(resolver, `${RESOLVER_NODE_NAME} not found`);
     resolver.parameters.jsCode = patchResolverV287(String(resolver.parameters?.jsCode || ''));
+    patchSalesPreferencesGraphV289(nodes, connections);
+    patchGreetingWorkflowV289(nodes);
+    patchRapidCatalogContinuationV290(nodes);
+    for (const node of nodes.filter((item) => item.type === 'n8n-nodes-base.code')) {
+      new Function(String(node.parameters?.jsCode || ''));
+    }
     const summary = summarize(nodes);
     if (process.argv.includes('--self-test')) {
       const selfTest = await runV287SelfTest(nodes);
@@ -665,7 +692,7 @@ async function main() {
     await waitService(conn, 'n8n_n8n-runner', 1);
     stopped = false;
 
-    const verifySql = `COPY (SELECT json_build_object('entityMarker', we.nodes::text LIKE '%${MARKER}%', 'historyMarker', wh.nodes::text LIKE '%${MARKER}%', 'postListEntityMarker', we.nodes::text LIKE '%${POST_LIST_MARKER}%', 'postListHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_MARKER}%', 'httpHelperEntityMarker', we.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'httpHelperHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'contextRecoveryEntityMarker', we.nodes::text LIKE '%${PHOTO_CONTEXT_RECOVERY_MARKER}%', 'contextRecoveryHistoryMarker', wh.nodes::text LIKE '%${PHOTO_CONTEXT_RECOVERY_MARKER}%', 'contextualVideoEntityMarker', we.nodes::text LIKE '%${CONTEXTUAL_VIDEO_AI_MARKER}%', 'contextualVideoHistoryMarker', wh.nodes::text LIKE '%${CONTEXTUAL_VIDEO_AI_MARKER}%', 'staleVideoClaimAbsentEntity', we.nodes::text NOT LIKE '%No link tem mais fotos, video e as caracteristicas dele%', 'staleVideoClaimAbsentHistory', wh.nodes::text NOT LIKE '%No link tem mais fotos, video e as caracteristicas dele%', 'cannedPhotoPromptAbsentEntity', we.nodes::text NOT LIKE '%Gostou desse modelo?%', 'cannedPhotoPromptAbsentHistory', wh.nodes::text NOT LIKE '%Gostou desse modelo?%', 'sameNodes', we.nodes::jsonb = wh.nodes::jsonb, 'active', we.active)::text FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
+    const verifySql = `COPY (SELECT json_build_object('entityMarker', we.nodes::text LIKE '%${MARKER}%', 'historyMarker', wh.nodes::text LIKE '%${MARKER}%', 'postListEntityMarker', we.nodes::text LIKE '%${POST_LIST_MARKER}%', 'postListHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_MARKER}%', 'httpHelperEntityMarker', we.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'httpHelperHistoryMarker', wh.nodes::text LIKE '%${POST_LIST_HTTP_MARKER}%', 'contextRecoveryEntityMarker', we.nodes::text LIKE '%${PHOTO_CONTEXT_RECOVERY_MARKER}%', 'contextRecoveryHistoryMarker', wh.nodes::text LIKE '%${PHOTO_CONTEXT_RECOVERY_MARKER}%', 'contextualVideoEntityMarker', we.nodes::text LIKE '%${CONTEXTUAL_VIDEO_AI_MARKER}%', 'contextualVideoHistoryMarker', wh.nodes::text LIKE '%${CONTEXTUAL_VIDEO_AI_MARKER}%', 'smartphonePhotoCategoryEntity', we.nodes::text LIKE '%SMARTPHONES_CATEGORY_ID_V289%', 'smartphonePhotoCategoryHistory', wh.nodes::text LIKE '%SMARTPHONES_CATEGORY_ID_V289%', 'structuredNormalizerEntity', we.nodes::text LIKE '%const normalizeStructuredV288 =%', 'structuredNormalizerHistory', wh.nodes::text LIKE '%const normalizeStructuredV288 =%', 'duplicateGreetingGuardEntity', we.nodes::text LIKE '%SAUDACAO\\]\\]\\s*(?:bom dia|boa tarde|boa noite)%', 'duplicateGreetingGuardHistory', wh.nodes::text LIKE '%SAUDACAO\\]\\]\\s*(?:bom dia|boa tarde|boa noite)%', 'rapidCatalogContinuationEntity', we.nodes::text LIKE '%rapid-catalog-continuation-v290%', 'rapidCatalogContinuationHistory', wh.nodes::text LIKE '%rapid-catalog-continuation-v290%', 'staleVideoClaimAbsentEntity', we.nodes::text NOT LIKE '%No link tem mais fotos, video e as caracteristicas dele%', 'staleVideoClaimAbsentHistory', wh.nodes::text NOT LIKE '%No link tem mais fotos, video e as caracteristicas dele%', 'cannedPhotoPromptAbsentEntity', we.nodes::text NOT LIKE '%Gostou desse modelo?%', 'cannedPhotoPromptAbsentHistory', wh.nodes::text NOT LIKE '%Gostou desse modelo?%', 'sameNodes', we.nodes::jsonb = wh.nodes::jsonb, 'active', we.active)::text FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
     const database = JSON.parse((await run(conn, `docker exec ${quote(db)} psql -U postgres -d n8n -X -q -t -A -c ${quote(verifySql)}`)).trim());
     assert.ok(Object.values(database).every(Boolean), 'database verification failed');
     const health = JSON.parse((await run(conn, 'curl -fsS https://n8n.mercadodovale.com.br/healthz')).trim());

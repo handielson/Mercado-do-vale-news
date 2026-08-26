@@ -5,6 +5,7 @@ const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const APPLY = process.argv.includes('--apply');
 const NODE_NAME = 'Parse Classificacao';
 const MARKER = '// rapid-greeting-inheritance-v160';
+const CATALOG_CONTINUATION_MARKER = '// rapid-catalog-continuation-v290';
 
 function quote(value) { return `'${String(value).replace(/'/g, `'\\''`)}'`; }
 function dollar(value, tag) {
@@ -70,7 +71,30 @@ const inheritedRapidGreetingV160 = latestInboundAtV160 > 0 && recentGreetingRows
   if (String(row?.direction || '').toLowerCase() !== 'inbound' || !pureGreetingV160(row?.text)) return false;
   const sentAt = timestampV160(row);
   return sentAt > latestOutboundAtV160 && sentAt <= latestInboundAtV160 && latestInboundAtV160 - sentAt <= 3 * 60 * 1000;
-});`;
+});
+
+${CATALOG_CONTINUATION_MARKER}
+const currentCatalogContinuationV290 = normalizeGreetingV160(source.conversation);
+const shortCatalogContinuationV290 = /^(?:pra mim acessar|para mim acessar|manda ai|mande ai|pode mandar|manda|mande|pode enviar|envia ai|envie ai|sim|certo|isso)$/.test(currentCatalogContinuationV290);
+const rapidCatalogRequestRowsV290 = recentGreetingRowsV160
+  .filter((row) => String(row?.direction || '').toLowerCase() === 'inbound')
+  .filter((row) => {
+    const text = normalizeGreetingV160(row?.text);
+    return /(?:lista|grade|catalogo).{0,60}(?:celular|celulares|smartphone|smartphones)|(?:celular|celulares|smartphone|smartphones).{0,60}(?:lista|grade|catalogo)|(?:celular|celulares).{0,30}(?:que tem|disponiveis|estoque)/.test(text);
+  });
+const latestRapidCatalogRequestV290 = rapidCatalogRequestRowsV290.reduce((latest, row) =>
+  timestampV160(row) > timestampV160(latest) ? row : latest, null);
+const rapidCatalogRequestAtV290 = timestampV160(latestRapidCatalogRequestV290);
+const outboundCatalogAfterRequestV290 = rapidCatalogRequestAtV290 > 0 && recentGreetingRowsV160.some((row) => {
+  if (String(row?.direction || '').toLowerCase() !== 'outbound' || timestampV160(row) <= rapidCatalogRequestAtV290) return false;
+  const text = normalizeGreetingV160(row?.text);
+  return /(?:catalogo smartphones|orcamento).{0,80}(?:redmi|poco|realme|iphone|smartphone)|(?:redmi|poco|realme|iphone).{0,80}(?:r\$|pix|cartao)/.test(text);
+});
+const rapidCatalogContinuationV290 = shortCatalogContinuationV290
+  && rapidCatalogRequestAtV290 > 0
+  && latestInboundAtV160 >= rapidCatalogRequestAtV290
+  && latestInboundAtV160 - rapidCatalogRequestAtV290 <= 3 * 60 * 1000
+  && !outboundCatalogAfterRequestV290;`;
 
 function patchWorkflow(nodes) {
   const node = nodeByName(nodes, NODE_NAME);
@@ -81,9 +105,20 @@ function patchWorkflow(nodes) {
     code = code.replace(insertionPoint, `${insertionPoint}\n\n${greetingLogic}`);
   }
   const oldField = 'saudacaoDetectada: parsed.saudacao_detectada === true,';
-  const newField = 'saudacaoDetectada: parsed.saudacao_detectada === true || currentStartsWithGreetingV160 || inheritedRapidGreetingV160,';
-  if (code.includes(oldField)) code = code.replace(oldField, newField);
+  const newField = 'saudacaoDetectada: parsed.saudacao_detectada === true || currentStartsWithGreetingV160 || inheritedRapidGreetingV160';
+  if (code.includes(oldField)) code = code.replace(oldField, `${newField},`);
   if (!code.includes(newField)) throw new Error('Greeting inheritance output field not found');
+  const catalogOutputReplacements = [
+    ['intencao,', "intencao: rapidCatalogContinuationV290 ? 'vendas_produtos' : intencao,"],
+    ["salesRequestKind: String(venda.tipo || '').trim(),", "salesRequestKind: rapidCatalogContinuationV290 ? 'categoria' : String(venda.tipo || '').trim(),"],
+    ["salesSearchQuery: String(venda.busca || '').trim(),", "salesSearchQuery: rapidCatalogContinuationV290 ? '' : String(venda.busca || '').trim(),"],
+    ["salesCategoryName: String(venda.categoria || '').trim(),", "salesCategoryName: rapidCatalogContinuationV290 ? 'smartphones' : String(venda.categoria || '').trim(),"],
+    ["salesCategoryId: String(venda.categoria_id || '').trim(),", "salesCategoryId: rapidCatalogContinuationV290 ? '8b7c4852-c195-4527-8fd7-c3cc2debda42' : String(venda.categoria_id || '').trim(),"],
+  ];
+  for (const [oldOutput, newOutput] of catalogOutputReplacements) {
+    if (!code.includes(newOutput) && code.includes(oldOutput)) code = code.replace(oldOutput, newOutput);
+    if (!code.includes(newOutput)) throw new Error(`Catalog continuation output field not found: ${oldOutput.trim()}`);
+  }
   new Function(code);
   node.parameters.jsCode = code;
   return nodes;
@@ -97,6 +132,9 @@ function summarize(nodes) {
     boundedToThreeMinutes: code.includes('3 * 60 * 1000'),
     requiresAfterLastOutbound: code.includes('sentAt > latestOutboundAtV160'),
     oldFieldRemoved: !code.includes('saudacaoDetectada: parsed.saudacao_detectada === true,'),
+    rapidCatalogContinuation: code.includes(CATALOG_CONTINUATION_MARKER),
+    catalogContinuationBounded: code.includes('latestInboundAtV160 - rapidCatalogRequestAtV290 <= 3 * 60 * 1000'),
+    requiresCatalogNotSent: code.includes('!outboundCatalogAfterRequestV290'),
   };
 }
 async function serviceMap(conn) {
@@ -157,7 +195,7 @@ COPY (SELECT json_build_object(
   }
 }
 
-module.exports = { patchWorkflow, summarize };
+module.exports = { patchWorkflow, summarize, CATALOG_CONTINUATION_MARKER };
 if (require.main === module) main().catch((error) => {
   console.error(error.stack || error.message);
   process.exit(1);

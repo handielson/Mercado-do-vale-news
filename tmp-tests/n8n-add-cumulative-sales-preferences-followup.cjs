@@ -73,8 +73,13 @@ function ensureMain(connections, name, output = 0) {
 function replaceTarget(connections, from, oldTarget, newTarget, output = 0) {
   const list = ensureMain(connections, from, output);
   const index = list.findIndex((item) => item.node === oldTarget);
-  if (index < 0) throw new Error(`Connection not found: ${from} -> ${oldTarget}`);
-  list[index] = { ...list[index], node: newTarget };
+  const newIndex = list.findIndex((item) => item.node === newTarget);
+  if (index < 0) {
+    if (newIndex >= 0) return;
+    throw new Error(`Connection not found: ${from} -> ${oldTarget}`);
+  }
+  if (newIndex >= 0) list.splice(index, 1);
+  else list[index] = { ...list[index], node: newTarget };
 }
 function addTarget(connections, from, target, output = 0) {
   const list = ensureMain(connections, from, output);
@@ -190,7 +195,20 @@ ${anchor}`;
 
 function patchProductContext(node) {
   let code = String(node.parameters?.jsCode || '');
-  if (code.includes('structured-sales-filters-v288:start')) return;
+  if (code.includes('structured-sales-filters-v288:start')) {
+    code = code
+      .replace(
+        "const screenTypeV288 = normalize(base.screenType || base.salesFilters?.screenType || '');",
+        "const normalizeStructuredV288 = (value) => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();\nconst screenTypeV288 = normalizeStructuredV288(base.screenType || base.salesFilters?.screenType || '');",
+      )
+      .replace(
+        "const screenTextV288 = (p) => normalize(['tipo_de_display','tipo_de_tela','display','display_type'].map((name) => specV288(p, [name])).filter(Boolean).join(' '));",
+        "const screenTextV288 = (p) => normalizeStructuredV288(['tipo_de_display','tipo_de_tela','display','display_type'].map((name) => specV288(p, [name])).filter(Boolean).join(' '));",
+      );
+    if (!code.includes('const normalizeStructuredV288 =')) throw new Error('Structured filter normalizer migration failed');
+    node.parameters.jsCode = code;
+    return;
+  }
   const anchorMatch = code.match(/const featureFilteredRowsV228\s*=\s*phoneNfcFilterRequestV228[\s\S]*?:\s*memoryFilteredRowsV155;/);
   if (!anchorMatch) throw new Error('Anchor not found: structured product filters');
   const anchor = anchorMatch[0];
@@ -200,14 +218,15 @@ const maxPriceCentsV288 = Number(base.maxPriceCents || base.salesFilters?.maxPri
 const cameraPriorityV288 = base.cameraPriority === true || base.salesFilters?.cameraPriority === true || base.salesFilters?.cameraQuality === 'good';
 const cameraMinMpxV288 = Number(base.cameraMinMpx || base.salesFilters?.cameraMinMpx || base.salesFilters?.cameraMinMp || 0);
 const screenPriorityV288 = base.screenPriority === true || base.salesFilters?.screenPriority === true || base.salesFilters?.screenQuality === 'good';
-const screenTypeV288 = normalize(base.screenType || base.salesFilters?.screenType || '');
+const normalizeStructuredV288 = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+const screenTypeV288 = normalizeStructuredV288(base.screenType || base.salesFilters?.screenType || '');
 const screenMinHzV288 = Number(base.screenMinHz || base.salesFilters?.screenMinHz || base.salesFilters?.refreshRateMinHz || 0);
 const numericSpecV288 = (value) => { const m = String(value ?? '').replace(',', '.').match(/\\d+(?:\\.\\d+)?/); return m ? Number(m[0]) : 0; };
 const specV288 = (p, names) => { for (const name of names) { const value = p?.specs?.[name] ?? p?.custom_fields?.[name]; if (value !== undefined && value !== null && String(value).trim()) return value; } return ''; };
 const cameraScoreV288 = (p) => numericSpecV288(specV288(p, ['pontuacao_dxomak','dxomark','camera_score']));
 const cameraMpxV288 = (p) => numericSpecV288(specV288(p, ['cam_principal_mpx','camera_principal_mpx','main_camera_mpx']));
 const screenHzV288 = (p) => numericSpecV288(specV288(p, ['celular_fps_display','fps_do_display','refresh_rate']));
-const screenTextV288 = (p) => normalize(['tipo_de_display','tipo_de_tela','display','display_type'].map((name) => specV288(p, [name])).filter(Boolean).join(' '));
+const screenTextV288 = (p) => normalizeStructuredV288(['tipo_de_display','tipo_de_tela','display','display_type'].map((name) => specV288(p, [name])).filter(Boolean).join(' '));
 let structuredFilteredRowsV288 = featureFilteredRowsV228.filter((p) => {
   const price = Math.round(toNumber(p?.price_retail));
   if (maxPriceCentsV288 > 0 && price > maxPriceCentsV288) return false;

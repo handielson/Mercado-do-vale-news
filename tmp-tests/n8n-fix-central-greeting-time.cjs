@@ -102,11 +102,13 @@ const currentGreeting = currentGreetingHour >= 5 && currentGreetingHour < 12
   ? 'Bom dia'
   : (currentGreetingHour >= 12 && currentGreetingHour < 18 ? 'Boa tarde' : 'Boa noite');
 const normalizeGreetingPeriod = (value) => String(value || '')
+  .replace(/\\[\\[SAUDACAO\\]\\]\\s*(?:bom dia|boa tarde|boa noite)(?=$|[\\s,!\\.\\:;?\\-])/gi, '[[SAUDACAO]]')
   .replace(/\\[\\[SAUDACAO\\]\\]/gi, currentGreeting)
   .replace(/\\[\\[BR\\]\\]/gi, '\\n')
   .replace(/^(\\s*(?:(?:😊|👋|🙂|😀|😃|🤗)\\s*)?)(?:bom dia|boa tarde|boa noite)(?=$|[\\s,!\\.\\:;?\\-])/i, (_, prefix) => prefix + currentGreeting);`;
 
 const greetingPlaceholderNormalizer = ".replace(/\\[\\[SAUDACAO\\]\\]/gi, currentGreeting)";
+const duplicateGreetingGuard = ".replace(/\\[\\[SAUDACAO\\]\\]\\s*(?:bom dia|boa tarde|boa noite)(?=$|[\\s,!\\.\\:;?\\-])/gi, '[[SAUDACAO]]')";
 const internalLineBreakNormalizer = ".replace(/\\[\\[BR\\]\\]/gi, '\\n')";
 
 const oldToItem = "const toItem = (message, index, all) => ({ json: { message: message.text || message.caption || message, caption: message.caption || message.text || message, messageType: message.type === 'image' ? 'image' : 'text', mediaUrl: message.mediaUrl || '', mimetype: message.mimetype || (message.type === 'image' ? 'image/jpeg' : ''), fileName: message.fileName || 'produto.jpg', delayMs: Number(message.delayMs || 0), messageIndex: index + 1, totalMessages: all.length, remoteJid, instancia, inboundWaMessageId } });";
@@ -145,6 +147,10 @@ function patchSplitNode(node) {
     const marker = "const text = $json.output || $json.text || $json.response || '';";
     if (!code.includes(marker)) throw new Error('Split text marker not found');
     code = code.replace(marker, `${marker}\n${splitGreetingHelpers}`);
+  }
+  if (!code.includes(duplicateGreetingGuard)) {
+    if (!code.includes(greetingPlaceholderNormalizer)) throw new Error('Greeting placeholder normalizer not found');
+    code = code.replace(greetingPlaceholderNormalizer, `${duplicateGreetingGuard}\n  ${greetingPlaceholderNormalizer}`);
   }
   if (!code.includes(internalLineBreakNormalizer)) {
     if (!code.includes(greetingPlaceholderNormalizer)) throw new Error('Greeting normalizer marker not found');
