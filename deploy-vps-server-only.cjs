@@ -20,6 +20,7 @@ const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
 const customerSelfServicePath = 'services/customerSelfServiceServer.cjs';
 const customerGoogleAuthPath = 'services/customerGoogleAuthServer.cjs';
+const autoresponderCatalogPreferencesPath = 'services/autoresponderCatalogPreferences.cjs';
 const smartphonePhotoIntakeServiceFiles = [
   'services/physicalRamCore.cjs',
   'services/smartphonePhotoIntakeCore.cjs',
@@ -319,6 +320,8 @@ async function main() {
   console.log(`Uploaded ${customerSelfServicePath}`);
   await upload(path.join(__dirname, customerGoogleAuthPath), remotePathJoin(appDir, customerGoogleAuthPath));
   console.log(`Uploaded ${customerGoogleAuthPath}`);
+  await upload(path.join(__dirname, autoresponderCatalogPreferencesPath), remotePathJoin(appDir, autoresponderCatalogPreferencesPath));
+  console.log(`Uploaded ${autoresponderCatalogPreferencesPath}`);
   await uploadSmartphonePhotoIntakeFiles(appDir);
   const remoteFirebaseCredentialPath = await ensureRemoteFirebaseCredentials(appDir);
   await ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath);

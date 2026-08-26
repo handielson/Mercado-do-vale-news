@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.287-n8n-video-contextual-ia
-date: 2026-08-24
+version: v1.2.288-whatsapp-memoria-filtros-followup
+date: 2026-08-26
 status: ready
-release_vps: /var/www/mdv-site/releases/20260825-021746-n8n-video-contextual-ia
+release_vps: /var/www/mdv-site/releases/20260826-184547-whatsapp-memoria-filtros-followup
 branch: main
-summary: Mantem o produto mostrado como contexto e entrega perguntas de video ao Agente Geral com fatos do SKU exato.
+summary: Acumula preferencias de celulares, filtra pelos campos estruturados e envia follow-up somente apos 10 minutos sem atividade.
 ```

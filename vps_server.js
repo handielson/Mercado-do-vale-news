@@ -12,6 +12,14 @@ const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePh
 const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
 const { registerCustomerGoogleAuthRoutes } = require('./services/customerGoogleAuthServer.cjs');
 const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
+const {
+  CATALOG_PREFERENCE_HANDOFF_MESSAGE,
+  PHONE_LIST_FOLLOWUP_MESSAGE,
+  normalizePreferenceState,
+  extractCatalogPreferences,
+  filterProductsByPreferences,
+  hasActionablePreferences,
+} = require('./services/autoresponderCatalogPreferences.cjs');
 const crypto = require('crypto');
 const sharp = require('sharp');
 const { PDFDocument } = require('pdf-lib');
@@ -2699,6 +2707,7 @@ function mapN8nBotControlRow(row, identity) {
       human_handoff_until: row?.human_handoff_until || null,
       human_handoff_by: row?.human_handoff_by || null,
       human_handoff_active: Number(row?.human_handoff_active || 0) === 1,
+      sales_preferences: normalizePreferenceState(parsePublicJson(row?.sales_preferences, {})),
       updated_at: row?.updated_at || null,
     },
     memorySessionKey: remoteJid ? buildN8nBotMemorySessionKey(remoteJid, resetCount) : '',
@@ -2722,7 +2731,7 @@ async function getN8nBotClientControl(identity) {
       WHERE remote_jid = ?
         AND direction IN ('inbound', 'outbound')
       ORDER BY id DESC
-      LIMIT 12`,
+      LIMIT 30`,
     [identity.remoteJid]
   );
   const recentMessages = [...(messageRows || [])].reverse().map((row) => {
@@ -3080,6 +3089,15 @@ async function insertN8nBotMessage(input = {}) {
       identity.phone,
     ]
   );
+  const sourceNode = String(input.sourceNode || input.source_node || 'n8n').slice(0, 120);
+  if ((direction === 'inbound' || direction === 'outbound') && sourceNode !== 'phone-catalog-followup') {
+    await pool.query(
+      `UPDATE n8n_phone_catalog_followups
+          SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason='nova_atividade'
+        WHERE remote_jid=? AND status IN ('pending','claimed')`,
+      [identity.remoteJid]
+    );
+  }
   return { ok: true };
 }
 
@@ -18718,6 +18736,153 @@ async function upsertAutoresponderOptionsConversation(sender, options, paginatio
   );
 }
 
+async function loadAutoresponderCatalogPreferenceBrands() {
+  const [rows] = await pool.query(
+    `SELECT DISTINCT brand
+       FROM products
+      WHERE status = 'active'
+        AND stock_quantity > 0
+        AND (is_parent = 0 OR is_parent IS NULL)
+        AND brand IS NOT NULL
+        AND TRIM(brand) <> ''
+      ORDER BY brand ASC`
+  );
+  return rows.map((row) => String(row.brand || '').trim()).filter(Boolean);
+}
+
+async function pauseAutoresponderConversationForCatalogHandoff(sender, pauseMinutes = 120) {
+  const minutes = Number(pauseMinutes) > 0 ? Number(pauseMinutes) : 120;
+  await pool.query(
+    `INSERT INTO autoresponder_conversations
+      (sender, last_message_at, last_bot_reply_at, total_messages, paused_until, pause_reason)
+     VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'human_handoff')
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       last_bot_reply_at = CURRENT_TIMESTAMP,
+       total_messages = total_messages + 1,
+       paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+       pause_reason = 'human_handoff'`,
+    [sender, minutes, minutes]
+  );
+}
+
+async function activateAutoresponderPhoneCatalogPreferences(sender) {
+  const purchaseFlow = await getAutoresponderPurchaseFlow(sender);
+  const current = normalizePreferenceState(purchaseFlow.catalog_preferences || {});
+  const catalogPreferences = normalizePreferenceState({
+    ...current,
+    active: true,
+    family: 'smartphone',
+    updatedAt: new Date().toISOString(),
+  });
+  await saveAutoresponderPurchaseFlow(sender, {
+    ...purchaseFlow,
+    catalog_preferences: catalogPreferences,
+  });
+}
+
+async function handleAutoresponderAccumulatedCatalogPreferences({
+  senderKey,
+  message,
+  settings,
+  shouldPrefixGreeting = false,
+  purchaseFlow = null,
+}) {
+  const currentPurchaseFlow = purchaseFlow || await getAutoresponderPurchaseFlow(senderKey);
+  const availableBrands = await loadAutoresponderCatalogPreferenceBrands();
+  const extracted = extractCatalogPreferences(
+    message,
+    currentPurchaseFlow.catalog_preferences || {},
+    availableBrands
+  );
+  if (!extracted.recognized) return null;
+
+  const nextPurchaseFlow = {
+    ...currentPurchaseFlow,
+    catalog_preferences: extracted.state,
+  };
+  await saveAutoresponderPurchaseFlow(senderKey, nextPurchaseFlow);
+
+  if (extracted.state.awaiting === 'budget') {
+    const replyText = formatAutoresponderReply(
+      'Claro 😊 Qual valor maximo voce pretende investir? Assim eu junto essa informacao com as preferencias que voce ja me passou.',
+      settings,
+      shouldPrefixGreeting
+    );
+    await logAutoresponderReply({
+      sender: senderKey,
+      message,
+      intent: 'catalog_preferences_awaiting_budget',
+      replyText,
+      matchedCount: 0,
+    });
+    await upsertAutoresponderSuccessConversation(senderKey);
+    return { replies: [{ message: replyText }] };
+  }
+
+  if (!hasActionablePreferences(extracted.state)) return null;
+  const categories = await findAutoresponderAvailableCategories(100);
+  const selectedCategory = await resolveAutoresponderCatalogCategoryForMessage('smartphones', categories);
+  const effectiveCategory = selectedCategory?.id
+    ? await resolveAutoresponderEffectiveCatalogCategory(selectedCategory)
+    : null;
+  if (!effectiveCategory?.id) return null;
+
+  const candidates = await findAutoresponderProductsByCategory(effectiveCategory.id, 200);
+  const filtered = filterProductsByPreferences(candidates, extracted.state);
+  if (filtered.length === 0) {
+    const replyText = formatAutoresponderReply(
+      CATALOG_PREFERENCE_HANDOFF_MESSAGE,
+      settings,
+      shouldPrefixGreeting
+    );
+    await logAutoresponderReply({
+      sender: senderKey,
+      message,
+      intent: 'catalog_preferences_handoff',
+      replyText,
+      matchedCount: 0,
+    });
+    await pauseAutoresponderConversationForCatalogHandoff(senderKey);
+    return { replies: [{ message: replyText }] };
+  }
+
+  const pageSize = getAutoresponderInitialProductPageSize('smartphones');
+  const products = limitAutoresponderProductsByModelGroups(filtered, pageSize);
+  const productOptions = buildAutoresponderProductOptions(products);
+  const replyMessages = formatAutoresponderReplies(
+    appendAutoresponderReplyFooter(
+      await formatAutoresponderProductSearchReplies(products, 'celulares conforme suas preferencias', settings, {
+        offset: 0,
+        limit: pageSize,
+        total: filtered.length,
+        completeList: false,
+      }),
+      formatAutoresponderProductReplyInstructions(filtered.length > products.length)
+    ),
+    settings,
+    shouldPrefixGreeting
+  );
+  const replyText = replyMessages.join('\n\n');
+  await logAutoresponderReply({
+    sender: senderKey,
+    message,
+    intent: 'catalog_preferences_filtered',
+    replyText,
+    matchedCount: filtered.length,
+    matchedProducts: productOptions,
+  });
+  await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
+    source: 'catalog_preferences',
+    preferences: extracted.state.constraints,
+    offset: 0,
+    limit: pageSize,
+    total: filtered.length,
+    hasMore: filtered.length > products.length,
+  });
+  return { replies: formatAutoresponderProReplies(replyMessages) };
+}
+
 async function hasRecentAutoresponderNeedsPrompt(sender, validityMinutes = 15) {
   const minutes = Number(validityMinutes) > 0 ? Number(validityMinutes) : 15;
   const [rows] = await pool.query(
@@ -18805,6 +18970,7 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
     hasMore,
     completeList: isAutoresponderCompleteProductListKeyword(message) || isAutoresponderCompleteProductListKeyword(effectiveCategory.name),
   });
+  await activateAutoresponderPhoneCatalogPreferences(sender);
 
   return { replies: formatAutoresponderProReplies(replyMessages) };
 }
@@ -21504,6 +21670,17 @@ fastify.route({
 
           return { replies: [{ message: replyText }] };
         }
+      }
+
+      if (!hasActivePurchaseFlow) {
+        const accumulatedPreferenceReply = await handleAutoresponderAccumulatedCatalogPreferences({
+          senderKey,
+          message,
+          settings,
+          shouldPrefixGreeting,
+          purchaseFlow,
+        });
+        if (accumulatedPreferenceReply) return accumulatedPreferenceReply;
       }
 
 
@@ -30303,7 +30480,7 @@ fastify.post('/n8n-bot/client-control/reset', { preHandler: requireSyncKey }, as
     [identity.remoteJid]
   );
   const existing = existingRows?.[0] || {};
-  return upsertN8nBotClientControl(identity, {
+  await upsertN8nBotClientControl(identity, {
     blocked: Number(existing.blocked || 0) === 1,
     block_reason: existing.block_reason || null,
     blocked_at: existing.blocked_at || null,
@@ -30311,6 +30488,16 @@ fastify.post('/n8n-bot/client-control/reset', { preHandler: requireSyncKey }, as
     reset_requested_at: new Date(),
     reset_count: Number(existing.reset_count || 0) + 1,
   });
+  await pool.query(
+    'UPDATE n8n_bot_client_controls SET sales_preferences=NULL WHERE remote_jid=?',
+    [identity.remoteJid]
+  );
+  await pool.query(
+    `UPDATE n8n_phone_catalog_followups SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason='memoria_reiniciada'
+      WHERE remote_jid=? AND status IN ('pending','claimed')`,
+    [identity.remoteJid]
+  );
+  return getN8nBotClientControl(identity);
 });
 
 fastify.post('/n8n-bot/client-control/consume-reset', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -30334,6 +30521,250 @@ fastify.post('/n8n-bot/messages/log', { preHandler: requireSyncKey }, async (req
     return reply.code(error.statusCode || 500).send({ error: error.message || 'Falha ao registrar mensagem' });
   }
 });
+
+fastify.post('/n8n-bot/catalog-preferences/merge', { preHandler: requireSyncKey }, async (req, reply) => {
+  const identity = normalizeN8nBotClientIdentity(req.body || {});
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  const message = String(req.body?.message || req.body?.text || '').trim();
+  if (!message) return reply.code(400).send({ error: 'message obrigatoria' });
+  const [controlRows, brandRows] = await Promise.all([
+    pool.query('SELECT sales_preferences FROM n8n_bot_client_controls WHERE remote_jid = ? LIMIT 1', [identity.remoteJid]),
+    pool.query(
+      `SELECT DISTINCT brand FROM products
+        WHERE status = 'active' AND stock_quantity > 0
+          AND (is_parent = 0 OR is_parent IS NULL)
+          AND brand IS NOT NULL AND TRIM(brand) <> ''
+        ORDER BY brand ASC`
+    ),
+  ]);
+  const current = parsePublicJson(controlRows?.[0]?.[0]?.sales_preferences, {});
+  const brands = (brandRows?.[0] || []).map((row) => row.brand);
+  const merged = extractCatalogPreferences(message, current, brands);
+  await pool.query(
+    `INSERT INTO n8n_bot_client_controls (id, remote_jid, phone, sales_preferences, last_seen_at)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       phone = VALUES(phone),
+       sales_preferences = VALUES(sales_preferences),
+       last_seen_at = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP`,
+    [crypto.randomUUID(), identity.remoteJid, identity.phone, jsonStr(merged.state)]
+  );
+  return { ok: true, recognized: merged.recognized, patch: merged.patch, preferences: merged.state };
+});
+
+fastify.post('/n8n-bot/catalog-preferences/activate-phone-list', { preHandler: requireSyncKey }, async (req, reply) => {
+  const identity = normalizeN8nBotClientIdentity(req.body || {});
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  const [rows] = await pool.query(
+    'SELECT sales_preferences FROM n8n_bot_client_controls WHERE remote_jid = ? LIMIT 1',
+    [identity.remoteJid]
+  );
+  const current = normalizePreferenceState(parsePublicJson(rows?.[0]?.sales_preferences, {}));
+  const preferences = normalizePreferenceState({
+    ...current,
+    active: true,
+    family: 'smartphone',
+    updatedAt: new Date().toISOString(),
+  });
+  await pool.query(
+    `INSERT INTO n8n_bot_client_controls (id, remote_jid, phone, sales_preferences, last_seen_at)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE phone=VALUES(phone), sales_preferences=VALUES(sales_preferences), updated_at=CURRENT_TIMESTAMP`,
+    [crypto.randomUUID(), identity.remoteJid, identity.phone, jsonStr(preferences)]
+  );
+  return { ok: true, preferences };
+});
+
+fastify.post('/n8n-bot/catalog-preferences/clear', { preHandler: requireSyncKey }, async (req, reply) => {
+  const identity = normalizeN8nBotClientIdentity(req.body || {});
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  await pool.query(
+    'UPDATE n8n_bot_client_controls SET sales_preferences = NULL, updated_at = CURRENT_TIMESTAMP WHERE remote_jid = ?',
+    [identity.remoteJid]
+  );
+  return { ok: true };
+});
+
+async function scheduleN8nPhoneCatalogFollowup(input = {}) {
+  const identity = normalizeN8nBotClientIdentity(input);
+  if (!identity) throw Object.assign(new Error('phone ou remoteJid obrigatorio'), { statusCode: 400 });
+  const delayMinutes = Math.min(Math.max(Number(input.delayMinutes || 10), 1), 60);
+  const anchorWaMessageId = String(input.anchorWaMessageId || input.waMessageId || '').trim().slice(0, 160) || null;
+  const [messageRows] = await pool.query(
+    'SELECT COALESCE(MAX(id), 0) AS baseline_message_id FROM n8n_bot_messages WHERE remote_jid = ?',
+    [identity.remoteJid]
+  );
+  const baselineMessageId = Number(messageRows?.[0]?.baseline_message_id || 0);
+  const [controlRows] = await pool.query(
+    'SELECT sales_preferences FROM n8n_bot_client_controls WHERE remote_jid=? LIMIT 1',
+    [identity.remoteJid]
+  );
+  const currentPreferences = normalizePreferenceState(parsePublicJson(controlRows?.[0]?.sales_preferences, {}));
+  const activePreferences = normalizePreferenceState({
+    ...currentPreferences,
+    active: true,
+    family: 'smartphone',
+    updatedAt: new Date().toISOString(),
+  });
+  await pool.query(
+    `INSERT INTO n8n_bot_client_controls (id, remote_jid, phone, sales_preferences, last_seen_at)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE phone=VALUES(phone), sales_preferences=VALUES(sales_preferences), updated_at=CURRENT_TIMESTAMP`,
+    [crypto.randomUUID(), identity.remoteJid, identity.phone, jsonStr(activePreferences)]
+  );
+  await pool.query(
+    `UPDATE n8n_phone_catalog_followups
+        SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason='nova_lista'
+      WHERE remote_jid=? AND status IN ('pending','claimed')`,
+    [identity.remoteJid]
+  );
+  const id = crypto.randomUUID();
+  await pool.query(
+    `INSERT INTO n8n_phone_catalog_followups
+      (id, remote_jid, phone, baseline_message_id, anchor_wa_message_id, message_text, due_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'pending')`,
+    [id, identity.remoteJid, identity.phone, baselineMessageId, anchorWaMessageId, PHONE_LIST_FOLLOWUP_MESSAGE, delayMinutes]
+  );
+  return { ok: true, id, remoteJid: identity.remoteJid, delayMinutes, baselineMessageId };
+}
+
+async function runDueN8nPhoneCatalogFollowups({ limit = 30 } = {}) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 30, 1), 100);
+  const [rows] = await pool.query(
+    `SELECT jobs.*,
+            controls.blocked,
+            (controls.human_handoff_until IS NOT NULL AND controls.human_handoff_until > CURRENT_TIMESTAMP) AS human_handoff_active,
+            EXISTS(
+              SELECT 1 FROM n8n_bot_messages later
+               WHERE later.remote_jid=jobs.remote_jid AND later.id>jobs.baseline_message_id
+            ) AS has_later_activity
+       FROM n8n_phone_catalog_followups jobs
+       LEFT JOIN n8n_bot_client_controls controls ON controls.remote_jid=jobs.remote_jid
+      WHERE jobs.status='pending' AND jobs.due_at<=CURRENT_TIMESTAMP
+      ORDER BY jobs.due_at ASC
+      LIMIT ${safeLimit}`
+  );
+  const sent = [];
+  const cancelled = [];
+  const failed = [];
+  for (const job of rows) {
+    const cancellationReason = Number(job.blocked || 0) === 1
+      ? 'cliente_bloqueado'
+      : Number(job.human_handoff_active || 0) === 1
+        ? 'atendimento_humano'
+        : Number(job.has_later_activity || 0) === 1
+          ? 'nova_atividade'
+          : '';
+    if (cancellationReason) {
+      await pool.query(
+        `UPDATE n8n_phone_catalog_followups
+            SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason=?
+          WHERE id=? AND status='pending'`,
+        [cancellationReason, job.id]
+      );
+      cancelled.push(job.id);
+      continue;
+    }
+
+    const claimToken = crypto.randomUUID();
+    const [claim] = await pool.query(
+      `UPDATE n8n_phone_catalog_followups jobs
+          SET jobs.status='claimed', jobs.claim_token=?, jobs.claimed_at=CURRENT_TIMESTAMP
+        WHERE jobs.id=? AND jobs.status='pending'
+          AND NOT EXISTS(
+            SELECT 1 FROM n8n_bot_messages later
+             WHERE later.remote_jid=jobs.remote_jid AND later.id>jobs.baseline_message_id
+          )`,
+      [claimToken, job.id]
+    );
+    if (Number(claim?.affectedRows || 0) !== 1) continue;
+
+    const [sendChecks] = await pool.query(
+      `SELECT jobs.status,
+              controls.blocked,
+              (controls.human_handoff_until IS NOT NULL AND controls.human_handoff_until > CURRENT_TIMESTAMP) AS human_handoff_active,
+              EXISTS(
+                SELECT 1 FROM n8n_bot_messages later
+                 WHERE later.remote_jid=jobs.remote_jid AND later.id>jobs.baseline_message_id
+              ) AS has_later_activity
+         FROM n8n_phone_catalog_followups jobs
+         LEFT JOIN n8n_bot_client_controls controls ON controls.remote_jid=jobs.remote_jid
+        WHERE jobs.id=? AND jobs.claim_token=? LIMIT 1`,
+      [job.id, claimToken]
+    );
+    const sendCheck = sendChecks?.[0] || {};
+    if (sendCheck.status !== 'claimed'
+      || Number(sendCheck.blocked || 0) === 1
+      || Number(sendCheck.human_handoff_active || 0) === 1
+      || Number(sendCheck.has_later_activity || 0) === 1) {
+      await pool.query(
+        `UPDATE n8n_phone_catalog_followups
+            SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason='nova_atividade'
+          WHERE id=? AND status='claimed' AND claim_token=?`,
+        [job.id, claimToken]
+      );
+      cancelled.push(job.id);
+      continue;
+    }
+
+    const identity = normalizeN8nBotClientIdentity(job);
+    try {
+      const result = await sendN8nBotEvolutionTextMessage(identity, job.message_text);
+      if (!result.ok || result.body?.error === true) throw new Error(
+        formatEvolutionMessage(result.body?.message || result.body?.response || result.body) || `Evolution ${result.status}`
+      );
+      const waMessageId = String(result.body?.key?.id || result.body?.messageId || '').slice(0, 160) || null;
+      await insertN8nBotMessage({
+        remoteJid: identity.remoteJid,
+        phone: identity.phone,
+        direction: 'outbound',
+        message: job.message_text,
+        messageType: 'text',
+        sourceNode: 'phone-catalog-followup',
+        waMessageId,
+        payload: { followupId: job.id, baselineMessageId: job.baseline_message_id },
+      });
+      await pool.query(
+        `UPDATE n8n_phone_catalog_followups
+            SET status='sent', sent_at=CURRENT_TIMESTAMP, wa_message_id=?
+          WHERE id=? AND status='claimed' AND claim_token=?`,
+        [waMessageId, job.id, claimToken]
+      );
+      sent.push(job.id);
+    } catch (error) {
+      await pool.query(
+        `UPDATE n8n_phone_catalog_followups
+            SET status='failed', last_error=?
+          WHERE id=? AND status='claimed' AND claim_token=?`,
+        [String(error?.message || error).slice(0, 1000), job.id, claimToken]
+      );
+      failed.push(job.id);
+    }
+  }
+  return { ok: true, sent, cancelled, failed };
+}
+
+function startN8nPhoneCatalogFollowupScheduler() {
+  const timer = setInterval(() => {
+    void runDueN8nPhoneCatalogFollowups().catch((error) => {
+      console.warn('[n8n-phone-catalog-followup] scheduled run failed:', error?.message || error);
+    });
+  }, 60_000);
+  timer.unref?.();
+}
+
+fastify.post('/n8n-bot/phone-catalog-followups/schedule', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    return await scheduleN8nPhoneCatalogFollowup(req.body || {});
+  } catch (error) {
+    return reply.code(error.statusCode || 500).send({ error: error.message || 'Falha ao agendar follow-up' });
+  }
+});
+
+fastify.post('/n8n-bot/phone-catalog-followups/run-due', { preHandler: requireSyncKey }, async (req) => (
+  runDueN8nPhoneCatalogFollowups({ limit: req.body?.limit })
+));
 
 fastify.get('/n8n-bot/conversations', { preHandler: requireSyncKey }, async (req) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 40, 1), 100);
@@ -38926,6 +39357,7 @@ async function runMigrations() {
   await addColumnIfMissing('n8n_bot_client_controls', 'last_seen_at', 'DATETIME NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'human_handoff_until', 'DATETIME NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'human_handoff_by', 'VARCHAR(120) NULL');
+  await addColumnIfMissing('n8n_bot_client_controls', 'sales_preferences', 'JSON NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS n8n_bot_messages (
@@ -38948,6 +39380,31 @@ async function runMigrations() {
   await addColumnIfMissing('n8n_bot_messages', 'payload_json', 'JSON NULL');
   await addColumnIfMissing('n8n_bot_messages', 'wa_message_id', 'VARCHAR(160) NULL');
   await addColumnIfMissing('n8n_bot_messages', 'contact_name', 'VARCHAR(160) NULL');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS n8n_phone_catalog_followups (
+      id CHAR(36) PRIMARY KEY,
+      remote_jid VARCHAR(120) NOT NULL,
+      phone VARCHAR(32) NOT NULL,
+      baseline_message_id BIGINT NOT NULL DEFAULT 0,
+      anchor_wa_message_id VARCHAR(160) NULL,
+      message_text TEXT NOT NULL,
+      due_at DATETIME NOT NULL,
+      status ENUM('pending','claimed','sent','cancelled','failed') NOT NULL DEFAULT 'pending',
+      claim_token CHAR(36) NULL,
+      claimed_at DATETIME NULL,
+      sent_at DATETIME NULL,
+      cancelled_at DATETIME NULL,
+      cancel_reason VARCHAR(120) NULL,
+      wa_message_id VARCHAR(160) NULL,
+      last_error TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_n8n_phone_followups_due (status, due_at),
+      INDEX idx_n8n_phone_followups_remote (remote_jid, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('n8n_phone_catalog_followups', 'baseline_message_id', 'BIGINT NOT NULL DEFAULT 0');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_delivery_job_logs (
@@ -40184,6 +40641,7 @@ runMigrations().then(() => {
   startWhatsAppStatusAutomationVps();
   startShopeeReviewAutomationVps();
   startN8nBotHealthMonitorVps();
+  startN8nPhoneCatalogFollowupScheduler();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);
