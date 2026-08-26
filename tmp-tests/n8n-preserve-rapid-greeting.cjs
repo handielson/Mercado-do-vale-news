@@ -96,6 +96,10 @@ const rapidCatalogContinuationV290 = shortCatalogContinuationV290
   && latestInboundAtV160 - rapidCatalogRequestAtV290 <= 3 * 60 * 1000
   && !outboundCatalogAfterRequestV290;`;
 
+const catalogContinuationMigrationLogic = greetingLogic.slice(
+  greetingLogic.indexOf(CATALOG_CONTINUATION_MARKER),
+);
+
 function patchWorkflow(nodes) {
   const node = nodeByName(nodes, NODE_NAME);
   let code = String(node.parameters?.jsCode || '');
@@ -103,6 +107,13 @@ function patchWorkflow(nodes) {
     const insertionPoint = "const fluxoVenda = parsed?.fluxo_venda && typeof parsed.fluxo_venda === 'object' && !Array.isArray(parsed.fluxo_venda) ? parsed.fluxo_venda : {};";
     if (!code.includes(insertionPoint)) throw new Error('Parse classification insertion point not found');
     code = code.replace(insertionPoint, `${insertionPoint}\n\n${greetingLogic}`);
+  }
+  if (!code.includes(CATALOG_CONTINUATION_MARKER)) {
+    const catalogInsertionPoint = code.includes('// first-contact-cordiality-v227')
+      ? '// first-contact-cordiality-v227'
+      : 'return [{';
+    if (!code.includes(catalogInsertionPoint)) throw new Error('Catalog continuation insertion point not found');
+    code = code.replace(catalogInsertionPoint, `${catalogContinuationMigrationLogic}\n\n${catalogInsertionPoint}`);
   }
   const oldField = 'saudacaoDetectada: parsed.saudacao_detectada === true,';
   const newField = 'saudacaoDetectada: parsed.saudacao_detectada === true || currentStartsWithGreetingV160 || inheritedRapidGreetingV160';
