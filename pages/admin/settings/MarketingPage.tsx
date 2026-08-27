@@ -372,6 +372,7 @@ export default function MarketingPage() {
             ? tab as 'studio' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'
             : 'studio';
     });
+    const [whatsappSchedulerView, setWhatsappSchedulerView] = useState<'status' | 'stories'>('status');
     const safeStickerSettings = sanitizeMarketingStickerSettings(stickerSettings);
     const isStickerFormat = format === 'sticker';
     const updateStickerSetting = <K extends keyof MarketingStickerSettings>(
@@ -2387,8 +2388,38 @@ export default function MarketingPage() {
                     )}
                     {activeTab === 'whatsapp' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
-                            <SocialStorySchedulerPanel />
-                            <WhatsAppStatusCampaignPanel />
+                            <div className="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setWhatsappSchedulerView('status')}
+                                        className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-black transition-colors ${whatsappSchedulerView === 'status'
+                                            ? 'bg-emerald-600 text-white shadow-sm'
+                                            : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                                            }`}
+                                    >
+                                        <MessageCircle className="h-4 w-4" /> Status automático
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setWhatsappSchedulerView('stories')}
+                                        className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-black transition-colors ${whatsappSchedulerView === 'stories'
+                                            ? 'bg-pink-600 text-white shadow-sm'
+                                            : 'text-slate-600 hover:bg-pink-50 hover:text-pink-700'
+                                            }`}
+                                    >
+                                        <Instagram className="h-4 w-4" /> Stories avulsos
+                                    </button>
+                                </div>
+                                <p className="mt-2 px-1 text-xs text-slate-500">
+                                    {whatsappSchedulerView === 'status'
+                                        ? 'Programa produtos no Status do WhatsApp nos dias escolhidos.'
+                                        : 'Agenda imagens ou vídeos avulsos para WhatsApp e Instagram.'}
+                                </p>
+                            </div>
+                            {whatsappSchedulerView === 'status'
+                                ? <WhatsAppStatusCampaignPanel />
+                                : <SocialStorySchedulerPanel defaultDestinations={['whatsapp']} />}
                         </div>
                     )}
                     {activeTab === 'facebook' && (
@@ -2403,7 +2434,7 @@ export default function MarketingPage() {
                     {activeTab === 'approvals' && <MarketingApprovalCenterPanel />}
                     {activeTab === 'instagram' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
-                            <SocialStorySchedulerPanel />
+                            <SocialStorySchedulerPanel defaultDestinations={['instagram']} />
                             {/* Day Selector */}
                             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
                                 <div className="flex gap-1 overflow-x-auto pb-1">

@@ -29038,9 +29038,9 @@ function parseWhatsAppStatusProductIds(value, fallbackProductId = null) {
   return Array.from(new Set(ids.map((id) => String(id || '').trim()).filter(Boolean))).slice(0, 10);
 }
 
-function isWhatsAppStatusProductEligible(product) {
+function isWhatsAppStatusProductEligible(product, includePrice = true) {
   return isWhatsAppStatusProductInStock(product)
-    && Boolean(getWhatsAppStatusProductImage(product));
+    && Boolean(getWhatsAppStatusStoryProductImageVps(product, includePrice));
 }
 
 function isWhatsAppStatusProductInStock(product) {
@@ -29049,11 +29049,11 @@ function isWhatsAppStatusProductInStock(product) {
   return true;
 }
 
-function rotateWhatsAppStatusProducts(products, lastProductId) {
+function rotateWhatsAppStatusProducts(products, lastProductId, includePrice = true) {
   const inStock = products.filter(isWhatsAppStatusProductInStock);
   if (!inStock.length) return [];
   const grouped = groupWhatsAppStatusProductsByVariation(inStock)
-    .filter(isWhatsAppStatusProductEligible);
+    .filter((product) => isWhatsAppStatusProductEligible(product, includePrice));
   const startIndex = Math.max(0, grouped.findIndex((product) => product.id === lastProductId) + 1);
   return [...grouped.slice(startIndex), ...grouped.slice(0, startIndex)];
 }
@@ -29347,6 +29347,20 @@ function buildWhatsAppStatusVideoCandidates(product) {
 function normalizeWhatsAppStatusRepeatDays(value) {
   const parsed = Math.floor(Number(value) || 1);
   return Math.max(1, Math.min(30, parsed));
+}
+
+function normalizeWhatsAppStatusSelectedDates(value) {
+  let dates = value;
+  if (typeof dates === 'string' && dates.trim()) {
+    try { dates = JSON.parse(dates); } catch { dates = []; }
+  }
+  if (!Array.isArray(dates)) return [];
+  return Array.from(new Set(dates.map((date) => String(date || '').slice(0, 10))
+    .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))).sort().slice(0, 30);
+}
+
+function getWhatsAppStatusSelectedDates(campaign) {
+  return normalizeWhatsAppStatusSelectedDates(campaign?.selected_dates);
 }
 
 function getWhatsAppStatusEffectiveDailyLimit(campaign) {
@@ -29724,7 +29738,7 @@ async function buildWhatsAppStatusStoryItemsVps(campaignId, options = {}) {
   const products = campaign.repeat_mode === 'single_product' && campaign.repeat_product_id
     ? loadedProducts.filter((product) => product.id === campaign.repeat_product_id)
     : loadedProducts;
-  const grouped = rotateWhatsAppStatusProducts(products, null)
+  const grouped = rotateWhatsAppStatusProducts(products, null, includePrice)
     .filter((product) => Boolean(getWhatsAppStatusStoryProductImageVps(product, includePrice)));
   const limit = await resolveWhatsAppStatusDailyLimit(campaign, products);
   const selected = grouped.slice(0, clampWhatsAppStatusDailyLimit(limit));
@@ -29777,8 +29791,9 @@ async function sendWhatsAppStatusProductBatch(campaign, product, scheduledFor = 
   const baseUrl = String(process.env.WAHA_STATUS_SERVER_URL || 'http://127.0.0.1:18082').replace(/\/+$/, '');
   const apiKey = String(process.env.WAHA_STATUS_API_KEY || '');
   const session = String(process.env.WAHA_STATUS_SESSION || '').trim();
-  const image = getWhatsAppStatusProductImage(product);
-  const videos = await resolveWhatsAppStatusVideoUrls(product);
+  const includePrice = campaign.include_price !== 0 && campaign.include_price !== false;
+  const image = getWhatsAppStatusStoryProductImageVps(product, includePrice);
+  const videos = await resolveWhatsAppStatusStoryVideoUrlsVps(product, includePrice);
   const caption = buildWhatsAppStatusCaption(product);
   // Status normalmente é aceito pelo WAHA em segundos. Não manter a campanha
   // em "sending" por cinco minutos quando o WAHA deixa a requisição pendurada.
@@ -29883,13 +29898,14 @@ async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledF
   const products = campaign.repeat_mode === 'single_product' && campaign.repeat_product_id
     ? loadedProducts.filter((product) => product.id === campaign.repeat_product_id)
     : loadedProducts;
-  const stableDayProducts = rotateWhatsAppStatusProducts(products, null);
+  const includePrice = campaign.include_price !== 0 && campaign.include_price !== false;
+  const stableDayProducts = rotateWhatsAppStatusProducts(products, null, includePrice);
   const resolvedMaxProducts = maxProducts == null
     ? await resolveWhatsAppStatusDailyLimit(campaign, products)
     : Math.max(1, Number(maxProducts) || 1);
   const selected = scheduledFor && slotIndex !== null && campaign.start_date
     ? stableDayProducts.slice(slotIndex, slotIndex + 1)
-    : rotateWhatsAppStatusProducts(products, campaign.last_product_id)
+    : rotateWhatsAppStatusProducts(products, campaign.last_product_id, includePrice)
       .slice(0, clampWhatsAppStatusDailyLimit(resolvedMaxProducts));
   await appendWhatsAppStatusTrace({ runId, campaignId: campaign.id, stage: 'campaign.products', state: 'ok', message: 'Produtos elegiveis selecionados', details: { loaded_products: products.length, selected_products: selected.length, trigger: slotIndex == null ? 'manual' : 'scheduled' } });
 
@@ -29965,7 +29981,8 @@ async function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
     const startDateKey = getWhatsAppStatusDateKey(campaign.start_date) || localClock.dateKey;
     const dayIndex = getWhatsAppStatusDayIndex(localClock.dateKey, startDateKey);
     const repeatDays = normalizeWhatsAppStatusRepeatDays(campaign.repeat_days);
-    const eligibleToday = dayIndex >= 0 && dayIndex < repeatDays
+    const selectedDates = getWhatsAppStatusSelectedDates(campaign);
+    const eligibleToday = (selectedDates.length > 0 ? selectedDates.includes(localClock.dateKey) : dayIndex >= 0 && dayIndex < repeatDays)
       && (campaign.frequency !== 'weekly' || dayIndex % 7 === 0)
       && (campaign.frequency !== 'once' || dayIndex === 0);
     let nextSlotIndex = null;
@@ -29989,6 +30006,8 @@ async function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
       daily_limit: total,
       start_date: campaign.start_date || null,
       repeat_days: repeatDays,
+      selected_dates: selectedDates,
+      include_price: campaign.include_price !== 0 && campaign.include_price !== false,
       repeat_mode: campaign.repeat_mode || 'full_day',
       repeat_product_id: campaign.repeat_product_id || null,
       interval_minutes: interval,
@@ -30024,7 +30043,7 @@ fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey 
   const localDateKey = getWhatsAppStatusLocalClock().dateKey;
   const [campaigns] = await pool.query(
     `SELECT id, title, source_type, category_id, active, daily_limit, interval_minutes, start_time,
-            start_date, repeat_days, repeat_mode, repeat_product_id
+            start_date, repeat_days, selected_dates, repeat_mode, repeat_product_id, include_price
      FROM whatsapp_status_campaigns
      ORDER BY updated_at DESC
      LIMIT 200`
@@ -30121,11 +30140,14 @@ async function runDueWhatsAppStatusCampaigns() {
     const startDateKey = getWhatsAppStatusDateKey(campaign.start_date) || localClock.dateKey;
     const repeatDays = normalizeWhatsAppStatusRepeatDays(campaign.repeat_days);
     const dayIndex = getWhatsAppStatusDayIndex(localClock.dateKey, startDateKey);
-    if (dayIndex >= repeatDays) {
+    const selectedDates = getWhatsAppStatusSelectedDates(campaign);
+    const lastSelectedDate = selectedDates[selectedDates.length - 1] || null;
+    if (selectedDates.length > 0 ? localClock.dateKey > lastSelectedDate : dayIndex >= repeatDays) {
       await pool.query('UPDATE whatsapp_status_campaigns SET active = 0 WHERE id = ?', [campaign.id]);
       continue;
     }
     if (dayIndex < 0) continue;
+    if (selectedDates.length > 0 && !selectedDates.includes(localClock.dateKey)) continue;
     if (campaign.frequency === 'weekly' && dayIndex % 7 !== 0) continue;
     if (campaign.frequency === 'once' && dayIndex !== 0) continue;
 
@@ -30155,7 +30177,7 @@ async function runDueWhatsAppStatusCampaigns() {
     });
     results.push({ campaignId: campaign.id, slotIndex, ...result });
 
-    if ((campaign.frequency === 'once' || dayIndex === repeatDays - 1) && slotIndex >= limit - 1) {
+    if ((campaign.frequency === 'once' || (selectedDates.length > 0 ? localClock.dateKey === lastSelectedDate : dayIndex === repeatDays - 1)) && slotIndex >= limit - 1) {
       await pool.query('UPDATE whatsapp_status_campaigns SET active = 0 WHERE id = ?', [campaign.id]);
     }
   }
@@ -39175,8 +39197,10 @@ async function runMigrations() {
       frequency ENUM('once','daily','weekly') NOT NULL DEFAULT 'daily',
       start_date DATE NULL,
       repeat_days TINYINT UNSIGNED NOT NULL DEFAULT 1,
+      selected_dates JSON NULL,
       repeat_mode ENUM('full_day','single_product') NOT NULL DEFAULT 'full_day',
       repeat_product_id CHAR(36) NULL,
+      include_price TINYINT(1) NOT NULL DEFAULT 1,
       active TINYINT(1) NOT NULL DEFAULT 1,
       last_product_id CHAR(36) NULL,
       last_run_at DATETIME NULL,
@@ -39193,8 +39217,10 @@ async function runMigrations() {
   await addColumnIfMissing('whatsapp_status_campaigns', 'last_error_debug', 'TEXT NULL');
   await addColumnIfMissing('whatsapp_status_campaigns', 'start_date', 'DATE NULL');
   await addColumnIfMissing('whatsapp_status_campaigns', 'repeat_days', 'TINYINT UNSIGNED NOT NULL DEFAULT 1');
+  await addColumnIfMissing('whatsapp_status_campaigns', 'selected_dates', 'JSON NULL');
   await addColumnIfMissing('whatsapp_status_campaigns', 'repeat_mode', "ENUM('full_day','single_product') NOT NULL DEFAULT 'full_day'");
   await addColumnIfMissing('whatsapp_status_campaigns', 'repeat_product_id', 'CHAR(36) NULL');
+  await addColumnIfMissing('whatsapp_status_campaigns', 'include_price', 'TINYINT(1) NOT NULL DEFAULT 1');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS whatsapp_status_campaign_logs (

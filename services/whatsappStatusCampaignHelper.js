@@ -1,5 +1,32 @@
 export const MAX_STATUS_PRODUCTS_PER_RUN = 10;
 export const DEFAULT_STATUS_INTERVAL_MINUTES = 30;
+const PUBLIC_STATUS_IMAGE_ORIGIN = 'https://imagens.xiaomipetrolina.com.br';
+const PUBLIC_VPS_API_ORIGIN = 'https://api.xiaomipetrolina.com.br';
+
+export function toPublicCatalogStoryMediaUrl(value) {
+  const rawUrl = String(value || '').trim();
+  if (/^https:\/\//i.test(rawUrl)) return rawUrl;
+  if (!rawUrl) return '';
+
+  try {
+    const parsed = new URL(rawUrl, 'http://localhost');
+    if (parsed.pathname.endsWith('/vps-proxy')) {
+      const proxiedPath = String(parsed.searchParams.get('path') || '').trim();
+      if (/^https:\/\//i.test(proxiedPath)) return proxiedPath;
+      if (!proxiedPath.startsWith('/')) return '';
+      const origin = /^\/status-[^/]+/i.test(proxiedPath)
+        ? PUBLIC_STATUS_IMAGE_ORIGIN
+        : PUBLIC_VPS_API_ORIGIN;
+      return `${origin}${proxiedPath}`;
+    }
+    if (parsed.pathname === '/api/bling' && parsed.searchParams.get('resource') === 'image-proxy') {
+      const originalUrl = String(parsed.searchParams.get('url') || '').trim();
+      return /^https:\/\//i.test(originalUrl) ? originalUrl : '';
+    }
+  } catch {}
+
+  return '';
+}
 
 export function clampDailyProductLimit(value) {
   const parsed = Math.floor(Number(value) || 0);
@@ -34,12 +61,21 @@ export function resolveScheduledSendTimes({ startTime = '08:00', count = 1, inte
   return Array.from({ length: safeCount }, (_, index) => minutesToTime(start + index * safeInterval));
 }
 
-export function getStatusProductImage(product) {
-  return String(product?.marketing_background_url || '').trim();
+export function getStatusProductImage(product, includePrice = true) {
+  if (includePrice) return String(product?.marketing_background_url || '').trim();
+  const sourceProducts = Array.isArray(product?.status_group_products) && product.status_group_products.length
+    ? [product, ...product.status_group_products]
+    : [product];
+  for (const item of sourceProducts) {
+    const images = Array.isArray(item?.images) ? item.images : [];
+    const image = String(item?.image_url || images[0] || '').trim();
+    if (image) return image;
+  }
+  return '';
 }
 
-function hasUsableImage(product) {
-  return Boolean(getStatusProductImage(product));
+function hasUsableImage(product, includePrice = true) {
+  return Boolean(getStatusProductImage(product, includePrice));
 }
 
 function hasStock(product) {
@@ -196,14 +232,14 @@ export function groupStatusProductsByVariation(products) {
   });
 }
 
-export function selectStatusProducts(products, { dailyLimit = MAX_STATUS_PRODUCTS_PER_RUN, lastProductId = '' } = {}) {
+export function selectStatusProducts(products, { dailyLimit = MAX_STATUS_PRODUCTS_PER_RUN, lastProductId = '', includePrice = true } = {}) {
   const inStock = (Array.isArray(products) ? products : [])
     .filter((product) => product?.id)
     .filter(hasStock);
 
   if (!inStock.length) return [];
 
-  const grouped = groupStatusProductsByVariation(inStock).filter(hasUsableImage);
+  const grouped = groupStatusProductsByVariation(inStock).filter((product) => hasUsableImage(product, includePrice));
   const startIndex = Math.max(0, grouped.findIndex((product) => product.id === lastProductId) + 1);
   const rotated = [...grouped.slice(startIndex), ...grouped.slice(0, startIndex)];
   return rotated.slice(0, clampDailyProductLimit(dailyLimit));
@@ -235,8 +271,8 @@ export function buildStatusCaption({ product, siteBaseUrl = 'https://mercadodova
   ].filter((line) => line !== '').join('\n');
 }
 
-export function buildStatusPayload({ product, caption }) {
-  const image = getStatusProductImage(product);
+export function buildStatusPayload({ product, caption, includePrice = true }) {
+  const image = getStatusProductImage(product, includePrice);
 
   return {
     type: 'image',
@@ -245,6 +281,68 @@ export function buildStatusPayload({ product, caption }) {
     allContacts: false,
     statusJidList: [],
   };
+}
+
+export function buildCatalogStoryItems(products, {
+  includePrice = true,
+  dailyLimit = MAX_STATUS_PRODUCTS_PER_RUN,
+  productIntervalSeconds = DEFAULT_STATUS_INTERVAL_MINUTES * 60,
+  mediaIntervalSeconds = 8,
+} = {}) {
+  const flattened = (Array.isArray(products) ? products : []).flatMap((product) => (
+    Array.isArray(product?.status_group_products) && product.status_group_products.length
+      ? product.status_group_products
+      : [product]
+  ));
+  const grouped = groupStatusProductsByVariation(flattened.filter((product) => product?.id).filter(hasStock))
+    .filter((product) => hasUsableImage(product, includePrice));
+  const requestedLimit = Math.floor(Number(dailyLimit));
+  const effectiveLimit = requestedLimit === 0 ? grouped.length : Math.max(1, Math.min(80, requestedLimit || 1));
+  const selected = grouped.slice(0, effectiveLimit);
+  const items = [];
+
+  selected.forEach((product, productIndex) => {
+    const image = toPublicCatalogStoryMediaUrl(getStatusProductImage(product, includePrice));
+    if (!image) return;
+    const caption = buildStatusCaption({ product });
+    const baseOffset = productIndex * Math.max(0, Number(productIntervalSeconds) || 0);
+    items.push({
+      mediaType: 'image',
+      mediaUrl: image,
+      caption,
+      label: `${product.name} - ${includePrice ? 'arte com preço' : 'imagem sem preço'}`,
+      offsetSeconds: baseOffset,
+      productId: product.id,
+    });
+
+    const sourceProducts = Array.isArray(product?.status_group_products) && product.status_group_products.length
+      ? product.status_group_products
+      : [product];
+    const usedColors = new Set();
+    const usedUrls = new Set();
+    sourceProducts.forEach((sourceProduct) => {
+      const variation = getStatusProductVariation(sourceProduct);
+      const color = String(variation.color || '').trim();
+      const colorKey = normalizeStatusText(color) || `produto:${sourceProduct?.id || sourceProduct?.sku || usedColors.size}`;
+      const videoUrl = toPublicCatalogStoryMediaUrl(String(includePrice
+        ? sourceProduct?.marketing_video_url || sourceProduct?.video_url || ''
+        : sourceProduct?.video_url || '').trim());
+      if (!videoUrl || usedColors.has(colorKey) || usedUrls.has(videoUrl)) return;
+      usedColors.add(colorKey);
+      usedUrls.add(videoUrl);
+      items.push({
+        mediaType: 'video',
+        mediaUrl: videoUrl,
+        caption,
+        label: `${product.name} - ${color || `vídeo ${usedColors.size}`}`,
+        offsetSeconds: baseOffset + usedColors.size * Math.max(1, Number(mediaIntervalSeconds) || 8),
+        productId: sourceProduct?.id || product.id,
+        color,
+      });
+    });
+  });
+
+  return items.slice(0, 80);
 }
 
 export function sanitizeStatusDebugText(value) {

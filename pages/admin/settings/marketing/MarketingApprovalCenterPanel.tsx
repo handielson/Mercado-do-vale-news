@@ -529,11 +529,27 @@ export default function MarketingApprovalCenterPanel() {
                             </div>
                             <section className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="mb-3 text-xs font-black uppercase tracking-wide text-amber-600">Impacto financeiro máximo</p><Snapshot value={decisionTarget.financial_impact} emptyLabel="Nenhum impacto financeiro informado." /></section>
                             <section className="rounded-xl border border-slate-200 p-4"><p className="text-xs font-black uppercase tracking-wide text-slate-400">Como desfazer</p><p className="mt-2 text-sm font-medium text-slate-700">{translateText(decisionTarget.rollback_plan)}</p></section>
-                            <label className="block"><span className="text-sm font-bold text-slate-700">{decision === 'approve' ? 'Observação da aprovação (opcional)' : 'Motivo da rejeição'}</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500" placeholder={decision === 'approve' ? 'Ex.: aprovado somente dentro do teto exibido.' : 'Explique o que precisa ser corrigido.'} /></label>
                         </div>
-                        <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 bg-slate-50 p-4 sm:px-8">
-                            <button onClick={() => setDecisionTarget(null)} disabled={submitting} className="rounded-lg px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200">Cancelar</button>
-                            <button onClick={submitDecision} disabled={submitting} className={`inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-black text-white disabled:opacity-50 ${decision === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : decision === 'approve' ? <ShieldCheck className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}{decision === 'approve' ? 'Confirmar aprovação' : 'Confirmar rejeição'}</button>
+                        <div className="shrink-0 border-t border-slate-200 bg-white px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 shadow-[0_-8px_24px_rgba(15,23,42,0.10)] sm:px-8">
+                            <div className="mx-auto flex max-w-5xl flex-col gap-3">
+                                <label className="block">
+                                    <span className="text-sm font-bold text-slate-700">{decision === 'approve' ? 'Observação da aprovação (opcional)' : 'Motivo da rejeição (obrigatório)'}</span>
+                                    <textarea
+                                        value={note}
+                                        onChange={(event) => setNote(event.target.value)}
+                                        rows={2}
+                                        autoFocus={decision === 'reject'}
+                                        required={decision === 'reject'}
+                                        aria-required={decision === 'reject'}
+                                        className="mt-2 w-full resize-y rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                                        placeholder={decision === 'approve' ? 'Ex.: aprovado somente dentro do teto exibido.' : 'Explique o que precisa ser corrigido antes de uma nova aprovação.'}
+                                    />
+                                </label>
+                                <div className="flex flex-wrap justify-end gap-3">
+                                    <button onClick={() => setDecisionTarget(null)} disabled={submitting} className="rounded-lg px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">Cancelar</button>
+                                    <button onClick={submitDecision} disabled={submitting || (decision === 'reject' && !note.trim())} className={`inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50 ${decision === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : decision === 'approve' ? <ShieldCheck className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}{decision === 'approve' ? 'Confirmar aprovação' : 'Confirmar rejeição'}</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

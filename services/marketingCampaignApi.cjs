@@ -453,7 +453,7 @@ function registerApprovalRoutes(fastify, { pool, requireAdminBearerToken, requir
       if (current.status !== 'pending') { await connection.rollback(); return reply.code(409).send({ error: `Approval request is already ${current.status}` }); }
       const reviewerId = auth.userId || auth.customerId;
       const isSelfDecision = current.requested_by && current.requested_by === reviewerId;
-      if (isSelfDecision && !(decision === 'approve' && allowsOrganicStorySelfApproval(current))) {
+      if (isSelfDecision && decision === 'approve' && !allowsOrganicStorySelfApproval(current)) {
         await connection.rollback();
         return reply.code(403).send({ error: 'The requester cannot approve their own marketing action' });
       }
@@ -479,7 +479,7 @@ function registerApprovalRoutes(fastify, { pool, requireAdminBearerToken, requir
       );
       await approvalEvent(connection, current.id, nextStatus, { id: reviewerId, label: 'Administrador Gestão MV' }, {
         note: note || null,
-        organic_story_self_approval: Boolean(isSelfDecision && allowsOrganicStorySelfApproval(current)),
+        organic_story_self_approval: Boolean(decision === 'approve' && isSelfDecision && allowsOrganicStorySelfApproval(current)),
       });
       await connection.commit();
       return parseApproval(await findApproval(pool, current.id));
@@ -3475,13 +3475,17 @@ function registerSocialStoryRoutes(fastify, dependencies) {
       sourceItems = Array.isArray(body.items) ? body.items : [];
     }
     const delaySeconds = Math.max(5, Math.min(300, Number(body.mediaDelaySeconds || 15) || 15));
-    const normalizedItems = sourceItems.slice(0, 80).map((item, index) => ({
+    const limitedSourceItems = sourceItems.slice(0, 80);
+    const normalizedItems = limitedSourceItems.map((item, index) => ({
       media_type: item.mediaType === 'video' ? 'video' : 'image',
       media_url: text(item.mediaUrl, 1200),
       label: text(item.label, 255) || `Story ${index + 1}`,
       caption: text(item.caption, 5000),
       offset_seconds: Number.isFinite(Number(item.offsetSeconds)) ? Math.max(0, Number(item.offsetSeconds)) : index * delaySeconds,
     })).filter((item) => /^https:\/\//i.test(item.media_url));
+    if (normalizedItems.length !== limitedSourceItems.length) {
+      return reply.code(400).send({ error: 'Every Story item must have a public HTTPS image or video URL' });
+    }
     if (!normalizedItems.length) return reply.code(400).send({ error: 'Add at least one public HTTPS image or video' });
 
     const id = crypto.randomUUID();

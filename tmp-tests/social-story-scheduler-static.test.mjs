@@ -6,6 +6,7 @@ const api = await readFile(new URL('../services/marketingCampaignApi.cjs', impor
 const server = await readFile(new URL('../vps_server.cjs', import.meta.url), 'utf8');
 const serverJs = await readFile(new URL('../vps_server.js', import.meta.url), 'utf8');
 const panel = await readFile(new URL('../pages/admin/settings/marketing/SocialStorySchedulerPanel.tsx', import.meta.url), 'utf8');
+const calendar = await readFile(new URL('../pages/admin/settings/marketing/MultiDateCalendar.tsx', import.meta.url), 'utf8');
 
 test('Story scheduling requires approval and creates idempotent deliveries', () => {
   assert.match(api, /SOCIAL_STORY_SCHEDULE_ACTION/);
@@ -22,7 +23,9 @@ test('A single admin may approve only an organic zero-cost Story', () => {
   assert.match(api, /financialImpact\.currency === 'BRL'/);
   assert.match(api, /Number\(financialImpact\.amount\) === 0/);
   assert.match(api, /financialImpact\.recurring === false/);
-  assert.match(api, /decision === 'approve' && allowsOrganicStorySelfApproval\(current\)/);
+  assert.match(api, /isSelfDecision && decision === 'approve' && !allowsOrganicStorySelfApproval\(current\)/);
+  assert.doesNotMatch(api, /isSelfDecision && !\(decision === 'approve'/);
+  assert.match(api, /organic_story_self_approval: Boolean\(decision === 'approve' && isSelfDecision/);
   assert.match(api, /invalidSelfApproval = approval\.reviewed_by === approval\.requested_by/);
   assert.match(api, /&& !allowsOrganicStorySelfApproval\(approval\)/);
   assert.match(api, /organic_story_self_approval/);
@@ -52,18 +55,46 @@ test('WhatsApp import reuses card then ordered color videos', () => {
 });
 
 test('Panel exposes standalone, WhatsApp import and both destinations', () => {
+  assert.match(panel, /Stories de produtos/);
+  assert.match(panel, /Catálogo/);
   assert.match(panel, /Story avulso/);
   assert.match(panel, /Importar do WhatsApp/);
   assert.match(panel, /toggleDestination\('instagram'\)/);
   assert.match(panel, /toggleDestination\('whatsapp'\)/);
+  assert.match(panel, /defaultDestinations = \['instagram'\]/);
   assert.match(panel, /Central de Aprovações/);
   assert.match(panel, /Com preço/);
   assert.match(panel, /Sem preço/);
   assert.match(panel, /previewWhatsApp\(campaignId, includePrice\)/);
+  assert.match(panel, /buildCatalogStoryItems\(sourceProducts/);
+  assert.match(panel, /catalogService\.getCategoriesWithNames\(\)/);
+  assert.match(panel, /catalogService\.getProducts\(filters/);
+  assert.match(panel, /Categoria/);
+  assert.match(panel, /Categoria completa/);
+  assert.match(panel, /Intervalo entre produtos/);
+  assert.match(panel, /Escolher produtos/);
+  assert.match(panel, /Carregar mídias do catálogo/);
+  assert.match(panel, /toBrowserSafeMediaUrl\(item\.mediaUrl\)/);
+  assert.match(panel, /<img src=\{toBrowserSafeMediaUrl\(item\.mediaUrl\)\}/);
+  assert.match(panel, /<video[\s\S]{0,160}src=\{toBrowserSafeMediaUrl\(item\.mediaUrl\)\}/);
+  assert.match(panel, /Há mídias sem URL HTTPS pública/);
+  assert.match(panel, /onLoadedMetadata/);
+  assert.match(panel, /onError=\{\(\) => removeUnavailableMedia\(item\)\}/);
+  assert.match(panel, /está indisponível e foi removida da programação/);
+  assert.match(panel, /MultiDateCalendar/);
+  assert.match(panel, /for \(const date of \[\.\.\.selectedDates\]\.sort\(\)\)/);
+  assert.match(calendar, /Dia sim, dia não/);
+  assert.match(calendar, /Todos os dias/);
 });
 
 test('Price choice is frozen into previews and approval snapshots', () => {
   assert.match(api, /buildWhatsAppStoryItems\(campaignId, \{ includePrice \}\)/);
   assert.match(api, /buildWhatsAppStoryItems\(sourceId, \{ includePrice \}\)/);
   assert.match(api, /snapshot = \{ title, sourceType, sourceId, scheduledAt, destinations, includePrice, items: normalizedItems \}/);
+});
+
+test('API rejects partial Story schedules when any media URL is not public HTTPS', () => {
+  assert.match(api, /const limitedSourceItems = sourceItems\.slice\(0, 80\)/);
+  assert.match(api, /normalizedItems\.length !== limitedSourceItems\.length/);
+  assert.match(api, /Every Story item must have a public HTTPS image or video URL/);
 });

@@ -1,4 +1,4 @@
-import { VPS_DIRECT_BASE_URL } from './vpsProxyBase';
+import { buildVpsUrl, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
 import type { Customer } from '../types/customer';
 import type { CreateAccountData, PasswordResetChannel, VpsUser } from '../types/auth';
 import { normalizeCustomerFromVps } from './customers';
@@ -9,25 +9,60 @@ export interface VpsAuthSession {
   customer: Customer;
 }
 
-const STORAGE_KEY = '@mdv_vps_auth_session';
+type StoredVpsAuthSession = Pick<VpsAuthSession, 'token' | 'user'>;
 
-function readStoredSession(): VpsAuthSession | null {
-  if (typeof localStorage === 'undefined') return null;
+const STORAGE_KEY = '@mdv_vps_auth_session';
+let memorySession: StoredVpsAuthSession | null = null;
+
+function parseStoredSession(raw: string | null): StoredVpsAuthSession | null {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) as VpsAuthSession : null;
+    const session = JSON.parse(raw) as StoredVpsAuthSession;
+    return session?.token && session?.user?.id ? session : null;
   } catch {
     return null;
   }
 }
 
+function readStoredSession(): StoredVpsAuthSession | null {
+  if (memorySession) return memorySession;
+  if (typeof window === 'undefined') return null;
+
+  const sessionFallback = parseStoredSession(window.sessionStorage?.getItem(STORAGE_KEY));
+  const persistedSession = parseStoredSession(window.localStorage?.getItem(STORAGE_KEY));
+  memorySession = sessionFallback || persistedSession;
+  return memorySession;
+}
+
 function storeSession(session: VpsAuthSession | null): void {
-  if (typeof localStorage === 'undefined') return;
+  if (typeof window === 'undefined') return;
   if (!session) {
-    localStorage.removeItem(STORAGE_KEY);
+    memorySession = null;
+    window.localStorage?.removeItem(STORAGE_KEY);
+    window.sessionStorage?.removeItem(STORAGE_KEY);
     return;
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+
+  // Customer records may contain large images/catalog data. Authentication only
+  // needs the token and basic user identity between page loads.
+  const compactSession: StoredVpsAuthSession = {
+    token: session.token,
+    user: session.user,
+  };
+  const serializedSession = JSON.stringify(compactSession);
+  memorySession = compactSession;
+
+  try {
+    window.localStorage?.setItem(STORAGE_KEY, serializedSession);
+    window.sessionStorage?.removeItem(STORAGE_KEY);
+  } catch {
+    // Keep login working when localStorage is full, without deleting unrelated data.
+    try {
+      window.sessionStorage?.setItem(STORAGE_KEY, serializedSession);
+    } catch {
+      // The in-memory session still allows the current navigation to continue.
+    }
+  }
 }
 
 function buildAuthUrl(path: string): string {
@@ -35,9 +70,14 @@ function buildAuthUrl(path: string): string {
   return `${VPS_DIRECT_BASE_URL}${normalizedPath}`;
 }
 
+function buildAuthRequestUrl(path: string, method: string = 'GET'): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return buildVpsUrl(normalizedPath, { method });
+}
+
 async function requestAuth(path: string, options: RequestInit = {}): Promise<VpsAuthSession> {
   const session = readStoredSession();
-  const response = await fetch(buildAuthUrl(path), {
+  const response = await fetch(buildAuthRequestUrl(path, options.method || 'GET'), {
     ...options,
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -57,7 +97,7 @@ async function requestAuth(path: string, options: RequestInit = {}): Promise<Vps
 }
 
 async function requestAuthJson(path: string, options: RequestInit = {}): Promise<any> {
-  const response = await fetch(buildAuthUrl(path), {
+  const response = await fetch(buildAuthRequestUrl(path, options.method || 'GET'), {
     ...options,
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -70,7 +110,7 @@ async function requestAuthJson(path: string, options: RequestInit = {}): Promise
 }
 
 export const vpsAuthService = {
-  getStoredSession(): VpsAuthSession | null {
+  getStoredSession(): StoredVpsAuthSession | null {
     return readStoredSession();
   },
 

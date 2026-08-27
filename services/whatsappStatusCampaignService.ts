@@ -17,8 +17,10 @@ export interface WhatsAppStatusCampaign {
   frequency: WhatsAppStatusCampaignFrequency;
   start_date: string | null;
   repeat_days: number;
+  selected_dates?: string[] | string | null;
   repeat_mode: WhatsAppStatusRepeatMode;
   repeat_product_id: string | null;
+  include_price: boolean | number;
   active: boolean | number;
   last_product_id: string | null;
   last_run_at: string | null;
@@ -82,8 +84,10 @@ export interface WhatsAppStatusCampaignProgress {
   start_time: string;
   start_date: string | null;
   repeat_days: number;
+  selected_dates?: string[];
   repeat_mode: WhatsAppStatusRepeatMode;
   repeat_product_id: string | null;
+  include_price?: boolean;
   active: boolean;
   scheduled: {
     total: number;
@@ -136,6 +140,15 @@ function normalizeCampaign(row: WhatsAppStatusCampaign): WhatsAppStatusCampaign 
     }
   }
   if (!productIds.length && row.product_id) productIds = [row.product_id];
+  let selectedDates: string[] = [];
+  if (Array.isArray(row.selected_dates)) selectedDates = row.selected_dates;
+  else if (typeof row.selected_dates === 'string' && row.selected_dates.trim()) {
+    try {
+      const parsed = JSON.parse(row.selected_dates);
+      selectedDates = Array.isArray(parsed) ? parsed : [];
+    } catch { selectedDates = []; }
+  }
+  selectedDates = Array.from(new Set(selectedDates.map((date) => String(date).slice(0, 10)).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))).sort();
 
   return {
     ...row,
@@ -146,8 +159,10 @@ function normalizeCampaign(row: WhatsAppStatusCampaign): WhatsAppStatusCampaign 
     interval_minutes: Math.max(1, Number(row.interval_minutes || 30)),
     start_date: row.start_date ? String(row.start_date).slice(0, 10) : null,
     repeat_days: Math.max(1, Math.min(30, Number(row.repeat_days || 1))),
+    selected_dates: selectedDates,
     repeat_mode: row.repeat_mode === 'single_product' ? 'single_product' : 'full_day',
     repeat_product_id: row.repeat_product_id || null,
+    include_price: row.include_price !== false && row.include_price !== 0,
     active: row.active === true || row.active === 1,
   };
 }

@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.289-whatsapp-fluxo-lista-foto
-date: 2026-08-26
+version: v1.2.290-agenda-social-dias-rejeicao
+date: 2026-08-27
 status: ready
-release_vps: /var/www/mdv-site/releases/20260826-221605-whatsapp-fluxo-lista-foto
+release_vps: /var/www/mdv-site/releases/20260827-111405-agenda-social-dias-rejeicao
 branch: main
-summary: Corrige envio da lista de celulares, recuperacao de fotos por modelo, filtros estruturados, saudacao e continuacao de mensagens rapidas no WhatsApp.
+summary: Permite escolher dias e midia com ou sem preco no Status e Stories, separa os agendadores e corrige a rejeicao com motivo.
 ```

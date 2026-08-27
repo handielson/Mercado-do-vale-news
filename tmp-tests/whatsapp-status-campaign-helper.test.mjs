@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 import {
+  buildCatalogStoryItems,
   buildStatusCaption,
   buildStatusPayload,
   buildStatusSendDebug,
@@ -10,6 +11,7 @@ import {
   groupStatusProductsByVariation,
   resolveScheduledSendTimes,
   selectStatusProducts,
+  toPublicCatalogStoryMediaUrl,
 } from '../services/whatsappStatusCampaignHelper.js';
 
 const products = Array.from({ length: 12 }, (_, index) => ({
@@ -188,6 +190,36 @@ assert.equal(
     caption,
   }).content,
   'https://cdn.example.com/status-art.png',
+);
+
+const catalogMediaProduct = {
+  ...marketingImageProduct,
+  video_url: 'https://cdn.example.com/product-clean.mp4',
+  marketing_video_url: 'https://cdn.example.com/product-price.mp4',
+  specs: { color: 'Azul' },
+};
+const catalogItemsWithPrice = buildCatalogStoryItems([catalogMediaProduct], { includePrice: true, dailyLimit: 1 });
+assert.equal(catalogItemsWithPrice[0].mediaUrl, 'https://cdn.example.com/status-art.png');
+assert.equal(catalogItemsWithPrice[1].mediaUrl, 'https://cdn.example.com/product-price.mp4');
+const catalogItemsWithoutPrice = buildCatalogStoryItems([catalogMediaProduct], { includePrice: false, dailyLimit: 1 });
+assert.equal(catalogItemsWithoutPrice[0].mediaUrl, 'https://cdn.example.com/image-url-only.jpg');
+assert.equal(catalogItemsWithoutPrice[1].mediaUrl, 'https://cdn.example.com/product-clean.mp4');
+assert.equal(
+  buildCatalogStoryItems(products, { includePrice: true, dailyLimit: 0 }).length,
+  12,
+  'categoria completa deve incluir todos os grupos elegíveis',
+);
+assert.equal(
+  toPublicCatalogStoryMediaUrl('/vps-proxy?path=%2Fstatus-pf7g512256p.png%3Fv%3D1787083826041'),
+  'https://imagens.xiaomipetrolina.com.br/status-pf7g512256p.png?v=1787083826041',
+);
+assert.equal(
+  toPublicCatalogStoryMediaUrl('/vps-proxy?path=%2Fimages%2Fproducts%2Fphone.jpg'),
+  'https://api.xiaomipetrolina.com.br/images/products/phone.jpg',
+);
+assert.equal(
+  toPublicCatalogStoryMediaUrl('/api/bling?resource=image-proxy&url=https%3A%2F%2Forgbling.s3.amazonaws.com%2Fphone.jpg'),
+  'https://orgbling.s3.amazonaws.com/phone.jpg',
 );
 
 const debug = buildStatusSendDebug({

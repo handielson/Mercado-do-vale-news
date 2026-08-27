@@ -77,5 +77,7 @@ assert.match(productionApi, /status: 'PAUSED'/);
 assert.match(productionApi, /is_adset_budget_sharing_enabled: 'false'/);
 assert.match(productionApi, /metaSubcode/);
 assert.match(productionApi, /requester cannot approve their own/);
+assert.match(productionApi, /isSelfDecision && decision === 'approve' && !allowsOrganicStorySelfApproval\(current\)/);
+assert.doesNotMatch(productionApi, /isSelfDecision && !\(decision === 'approve'/);
 
 console.log('marketing approval center contract: OK');
