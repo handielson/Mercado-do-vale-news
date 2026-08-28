@@ -9,6 +9,11 @@ const { spawn } = require('child_process');
 const ffmpegStaticPath = require('ffmpeg-static');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
 const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
+const {
+  ensureMercadoLivreTables,
+  registerMercadoLivreRoutes,
+  syncMercadoLivreStockFromBlingTargets,
+} = require('./services/mercadoLivreServer.cjs');
 const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
 const { registerCustomerGoogleAuthRoutes } = require('./services/customerGoogleAuthServer.cjs');
 const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
@@ -10071,11 +10076,12 @@ async function syncTikTokStockFromBlingTargetsVps(stockTargets = []) {
 }
 
 async function syncMarketplaceStockFromBlingTargetsVps(stockTargets = []) {
-  const [shopee, tiktok] = await Promise.all([
+  const [shopee, tiktok, mercadoLivre] = await Promise.all([
     syncShopeeStockFromBlingTargetsVps(stockTargets),
     syncTikTokStockFromBlingTargetsVps(stockTargets),
+    syncMercadoLivreStockFromBlingTargets(pool, stockTargets),
   ]);
-  return { ok: Boolean(shopee.ok && tiktok.ok), shopee, tiktok };
+  return { ok: Boolean(shopee.ok && tiktok.ok && mercadoLivre.ok), shopee, tiktok, mercadoLivre };
 }
 
 async function recoverBlingWebhookStockTargetsVps({ blingId, sku, stockQty, vpsResult }) {
@@ -10290,6 +10296,7 @@ async function handleBlingWebhookVps(request, reply) {
         stockRecoveryApplied: Boolean(vpsStockResult.recovered),
         shopeeStockSync: marketplaceStockSync.shopee,
         tiktokStockSync: marketplaceStockSync.tiktok,
+        mercadoLivreStockSync: marketplaceStockSync.mercadoLivre,
       });
     }
 
@@ -10375,6 +10382,7 @@ async function handleBlingWebhookVps(request, reply) {
             ok: true,
             shopee: { ok: true, skipped: 'stock_unchanged', updated: 0, errors: [] },
             tiktok: { ok: true, skipped: 'stock_unchanged', updated: 0, errors: [] },
+            mercadoLivre: { ok: true, skipped: 'stock_unchanged', updated: 0, errors: [] },
           };
       return reply.code(200).send({
         ok: Boolean(vpsNameResult?.ok && effectivePriceStockResult?.ok && marketplaceStockSync.ok),
@@ -10386,6 +10394,18 @@ async function handleBlingWebhookVps(request, reply) {
         stockRecoveryApplied: Boolean(effectivePriceStockResult?.recovered),
         shopeeStockSync: marketplaceStockSync.shopee,
         tiktokStockSync: marketplaceStockSync.tiktok,
+        mercadoLivreStockSync: marketplaceStockSync.mercadoLivre,
+      });
+    }
+
+    const isOrderEvent = event.includes('order') || event.includes('pedido') || event.includes('venda');
+    if (isOrderEvent) {
+      return reply.code(200).send({
+        ok: true,
+        event,
+        saleDetected: true,
+        stockAction: 'awaiting_stock_webhook',
+        message: 'Venda registrada no log; a baixa sera aplicada somente pelo evento fisico de estoque do Bling.',
       });
     }
 
@@ -37589,6 +37609,8 @@ async function getDefaultCompanyIdForCatalog() {
 }
 
 async function runMigrations() {
+  await ensureMercadoLivreTables(pool);
+  console.log('[migration] Mercado Livre tables: OK');
   await ensureCustomerSelfServiceTables(pool);
   console.log('[migration] customer self-service tables: OK');
   await mobileSalesPushService.ensureTables();
@@ -40659,6 +40681,7 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 
 // Start
 registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname });
+registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin });
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {

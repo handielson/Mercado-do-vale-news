@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.290-agenda-social-dias-rejeicao
-date: 2026-08-27
+version: v1.2.291-mercado-livre-logistica
+date: 2026-08-28
 status: ready
-release_vps: /var/www/mdv-site/releases/20260827-111405-agenda-social-dias-rejeicao
+release_vps: /var/www/mdv-site/releases/20260828-202732-mercado-livre-logistica
 branch: main
-summary: Permite escolher dias e midia com ou sem preco no Status e Stories, separa os agendadores e corrige a rejeicao com motivo.
+summary: Integra o Mercado Livre com OAuth PKCE, pedidos, remessas, DC-e, etiquetas automaticas e estoque sincronizado pelo Bling.
 ```

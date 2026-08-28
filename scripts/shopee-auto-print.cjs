@@ -97,6 +97,29 @@ async function callVpsShopeeAction(action, payload = {}) {
     return { ok: response.ok, status: response.status, contentType, buffer: null, data };
 }
 
+async function callVpsMercadoLivre(pathname, options = {}) {
+    const requestFetch = await getFetch();
+    const response = await requestFetch(`${VPS_API_URL}/api/mercado-livre${pathname}`, {
+        method: options.method || 'GET',
+        headers: {
+            'x-sync-key': VPS_SYNC_KEY,
+            ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(options.body ? { body: JSON.stringify(options.body) } : {}),
+        signal: AbortSignal.timeout(60000),
+    });
+    if (response.status === 204) return { ok: true, empty: true };
+    if (options.pdf) {
+        if (!response.ok) throw new Error(`Mercado Livre etiqueta HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
+        return { ok: true, buffer: Buffer.from(await response.arrayBuffer()) };
+    }
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
+    if (!response.ok) throw new Error(data.error || `Mercado Livre HTTP ${response.status}`);
+    return { ok: true, data };
+}
+
 function orderPrintStatePaths(orderSn) {
     return {
         legacy: path.join(printedMarkersDir, `${orderSn}.txt`),
@@ -880,6 +903,43 @@ async function legacyRunLoop() {
 }
 
 let loopRunning = false;
+let mercadoLivreLoopRunning = false;
+
+async function runMercadoLivreLoop() {
+    if (mercadoLivreLoopRunning) return;
+    mercadoLivreLoopRunning = true;
+    try {
+        const settings = await getCompanySettings();
+        const printer = String(settings.shopee_printer_thermal || '').trim();
+        if (!printer) {
+            console.log('Mercado Livre: impressora termica ainda nao configurada no painel da Shopee.');
+            return;
+        }
+        const next = await callVpsMercadoLivre('/print-jobs/next');
+        if (next.empty || !next.data?.shipmentId) return;
+        const shipmentId = String(next.data.shipmentId);
+        const labelPath = path.join(shippingLabelsDir, `ML-${shipmentId}_etiqueta-10x15.pdf`);
+        try {
+            const label = await callVpsMercadoLivre(`/print-jobs/${encodeURIComponent(shipmentId)}/label`, { pdf: true });
+            fs.writeFileSync(labelPath, label.buffer);
+            const ptp = require('pdf-to-printer');
+            await ptp.print(labelPath, { printer, paperSize: '4x6', scale: 'fit' });
+            await callVpsMercadoLivre(`/print-jobs/${encodeURIComponent(shipmentId)}/complete`, {
+                method: 'POST', body: { ok: true, summaryPrinted: false },
+            });
+            console.log(`Mercado Livre: etiqueta da remessa ${shipmentId} impressa em ${printer}.`);
+        } catch (error) {
+            await callVpsMercadoLivre(`/print-jobs/${encodeURIComponent(shipmentId)}/complete`, {
+                method: 'POST', body: { ok: false, error: String(error.message || error) },
+            }).catch(() => {});
+            throw error;
+        }
+    } catch (error) {
+        console.error('Mercado Livre Auto Print:', error.message || error);
+    } finally {
+        mercadoLivreLoopRunning = false;
+    }
+}
 
 async function runLoop() {
     if (loopRunning) {
@@ -1046,4 +1106,6 @@ async function runLoop() {
 
 startLocalServer();
 void runLoop();
+void runMercadoLivreLoop();
 setInterval(() => void runLoop(), POLLING_INTERVAL);
+setInterval(() => void runMercadoLivreLoop(), 60 * 1000);

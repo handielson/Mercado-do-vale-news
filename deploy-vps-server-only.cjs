@@ -26,6 +26,7 @@ const smartphonePhotoIntakeServiceFiles = [
   'services/smartphonePhotoIntakeCore.cjs',
   'services/smartphonePhotoIntakeServer.cjs',
 ];
+const mercadoLivreServicePath = 'services/mercadoLivreServer.cjs';
 const autoresponderEngineFiles = [
   'services/autoresponder/engine/types.js',
   'services/autoresponder/engine/state.js',
@@ -155,6 +156,15 @@ async function uploadSmartphonePhotoIntakeFiles(appDir) {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }
+}
+
+async function uploadMercadoLivreFiles(appDir) {
+  await exec(`mkdir -p ${appDir}/services`);
+  await upload(
+    path.join(__dirname, mercadoLivreServicePath),
+    remotePathJoin(appDir, mercadoLivreServicePath),
+  );
+  console.log(`Uploaded ${mercadoLivreServicePath}`);
 }
 
 async function ensureRemoteFirebaseCredentials(appDir) {
@@ -323,6 +333,7 @@ async function main() {
   await upload(path.join(__dirname, autoresponderCatalogPreferencesPath), remotePathJoin(appDir, autoresponderCatalogPreferencesPath));
   console.log(`Uploaded ${autoresponderCatalogPreferencesPath}`);
   await uploadSmartphonePhotoIntakeFiles(appDir);
+  await uploadMercadoLivreFiles(appDir);
   const remoteFirebaseCredentialPath = await ensureRemoteFirebaseCredentials(appDir);
   await ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath);
   await ensureRemoteMediaDocumentDependencies(appDir);
