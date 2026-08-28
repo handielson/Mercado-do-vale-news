@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.291-mercado-livre-logistica
+version: v1.2.292-mercado-livre-impressao-completa
 date: 2026-08-28
 status: ready
-release_vps: /var/www/mdv-site/releases/20260828-202732-mercado-livre-logistica
+release_vps: /var/www/mdv-site/releases/20260828-205726-mercado-livre-impressao-completa
 branch: main
-summary: Integra o Mercado Livre com OAuth PKCE, pedidos, remessas, DC-e, etiquetas automaticas e estoque sincronizado pelo Bling.
+summary: Imprime etiqueta e declaracao DC-e do Mercado Livre na ZD e o comprovante de separacao na impressora Comprovante, sem alterar o fluxo Shopee.
 ```

@@ -46,6 +46,17 @@ function createPkcePair() {
   return { verifier, challenge };
 }
 
+function selectDcePdfDocument(info = {}) {
+  if (String(info.status || '').toLowerCase() !== 'completed') return null;
+  for (const document of info.documents || []) {
+    const status = String(document?.status || '').toLowerCase();
+    const dceKey = String(document?.dce_key || '').trim();
+    const hasPdf = (document?.files || []).some((file) => String(file?.format || '').toLowerCase() === 'pdf');
+    if (dceKey && hasPdf && (status === 'issued' || status === 'authorized')) return { dceKey };
+  }
+  return null;
+}
+
 function redirectUrl() {
   return process.env.MERCADO_LIVRE_REDIRECT_URL || DEFAULT_REDIRECT_URL;
 }
@@ -108,11 +119,16 @@ async function ensureMercadoLivreTables(pool) {
     attempts INT UNSIGNED NOT NULL DEFAULT 0,
     last_error TEXT NULL,
     label_printed_at DATETIME NULL,
+    declaration_printed_at DATETIME NULL,
     summary_printed_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_ml_print_queue (status, created_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  const [declarationColumns] = await pool.query("SHOW COLUMNS FROM mercado_livre_print_jobs LIKE 'declaration_printed_at'");
+  if (!declarationColumns.length) {
+    await pool.query('ALTER TABLE mercado_livre_print_jobs ADD COLUMN declaration_printed_at DATETIME NULL AFTER label_printed_at');
+  }
   await pool.query(`CREATE TABLE IF NOT EXISTS mercado_livre_products (
     product_id CHAR(36) NOT NULL,
     item_id VARCHAR(40) NOT NULL,
@@ -423,7 +439,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   const listJobs = async (request) => {
     const limit = Math.min(100, Math.max(1, Number(request.query?.limit || 30)));
     const [rows] = await pool.query(`SELECT shipment_id, order_id, pack_id, status, shipment_status, shipment_substatus,
-      tracking_number, attempts, last_error, label_printed_at, summary_printed_at, created_at, updated_at
+      tracking_number, attempts, last_error, label_printed_at, declaration_printed_at, summary_printed_at, created_at, updated_at
       FROM mercado_livre_print_jobs ORDER BY created_at DESC LIMIT ?`, [limit]);
     return { items: rows };
   };
@@ -434,7 +450,16 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
     if (!rows.length) return reply.code(204).send();
     const job = rows[0];
     await pool.query("UPDATE mercado_livre_print_jobs SET status='printing', attempts=attempts+1 WHERE shipment_id=?", [job.shipment_id]);
-    return { shipmentId: job.shipment_id, orderId: job.order_id, packId: job.pack_id, trackingNumber: job.tracking_number, payload: job.payload };
+    return {
+      shipmentId: job.shipment_id,
+      orderId: job.order_id,
+      packId: job.pack_id,
+      trackingNumber: job.tracking_number,
+      payload: job.payload,
+      labelPrintedAt: job.label_printed_at,
+      declarationPrintedAt: job.declaration_printed_at,
+      summaryPrintedAt: job.summary_printed_at,
+    };
   };
   registerAliases(fastify, 'get', '/mercado-livre/print-jobs/next', { preHandler: requireSyncKey }, nextJob);
 
@@ -446,13 +471,47 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   };
   registerAliases(fastify, 'get', '/mercado-livre/print-jobs/:shipmentId/label', { preHandler: requireSyncKey }, label);
 
+  const declaration = async (request, reply) => {
+    const shipmentId = String(request.params.shipmentId || '');
+    const [jobs] = await pool.query('SELECT order_id FROM mercado_livre_print_jobs WHERE shipment_id=? LIMIT 1', [shipmentId]);
+    const orderId = String(jobs?.[0]?.order_id || '');
+    if (!orderId) return reply.code(404).send({ error: 'Remessa Mercado Livre nao encontrada' });
+    const infoResponse = await mlRequest(pool, `/mlb/order/${encodeURIComponent(orderId)}/dce/info`);
+    const document = selectDcePdfDocument(await infoResponse.json().catch(() => ({})));
+    if (!document) return reply.code(409).send({ error: 'Declaracao DC-e ainda nao esta pronta para impressao' });
+    const response = await mlRequest(pool, `/mlb/order/${encodeURIComponent(orderId)}/dce/info/${encodeURIComponent(document.dceKey)}?doctype=pdf`);
+    const pdf = Buffer.from(await response.arrayBuffer());
+    return reply.type('application/pdf').header('content-disposition', `inline; filename=ML-${shipmentId}-DCE.pdf`).send(pdf);
+  };
+  registerAliases(fastify, 'get', '/mercado-livre/print-jobs/:shipmentId/declaration', { preHandler: requireSyncKey }, declaration);
+
+  const markStep = async (request, reply) => {
+    const shipmentId = String(request.params.shipmentId || '');
+    const columns = { label: 'label_printed_at', declaration: 'declaration_printed_at', summary: 'summary_printed_at' };
+    const column = columns[String(request.body?.step || '')];
+    if (!column) return reply.code(400).send({ error: 'Etapa de impressao invalida' });
+    const [result] = await pool.query(`UPDATE mercado_livre_print_jobs SET ${column}=COALESCE(${column},NOW()), last_error=NULL WHERE shipment_id=?`, [shipmentId]);
+    if (!result.affectedRows) return reply.code(404).send({ error: 'Remessa Mercado Livre nao encontrada' });
+    return { ok: true, step: request.body.step };
+  };
+  registerAliases(fastify, 'post', '/mercado-livre/print-jobs/:shipmentId/step', { preHandler: requireSyncKey }, markStep);
+
   const completeJob = async (request, reply) => {
     const shipmentId = String(request.params.shipmentId || '');
     const body = request.body || {};
     if (body.ok === false) {
-      await pool.query("UPDATE mercado_livre_print_jobs SET status='intervention', last_error=? WHERE shipment_id=?", [String(body.error || 'Falha de impressao').slice(0, 2000), shipmentId]);
+      const nextStatus = body.retryable ? 'ready' : 'intervention';
+      await pool.query('UPDATE mercado_livre_print_jobs SET status=?, last_error=? WHERE shipment_id=?', [nextStatus, String(body.error || 'Falha de impressao').slice(0, 2000), shipmentId]);
     } else {
-      await pool.query("UPDATE mercado_livre_print_jobs SET status='printed', label_printed_at=NOW(), summary_printed_at=IF(?,NOW(),summary_printed_at), last_error=NULL WHERE shipment_id=?", [body.summaryPrinted ? 1 : 0, shipmentId]);
+      const [jobs] = await pool.query('SELECT label_printed_at, declaration_printed_at, summary_printed_at FROM mercado_livre_print_jobs WHERE shipment_id=? LIMIT 1', [shipmentId]);
+      if (!jobs.length) return reply.code(404).send({ error: 'Remessa Mercado Livre nao encontrada' });
+      const missing = [
+        !jobs[0].label_printed_at && 'etiqueta',
+        !jobs[0].declaration_printed_at && 'declaracao',
+        !jobs[0].summary_printed_at && 'comprovante',
+      ].filter(Boolean);
+      if (missing.length) return reply.code(409).send({ error: `Impressao incompleta: ${missing.join(', ')}` });
+      await pool.query("UPDATE mercado_livre_print_jobs SET status='printed', last_error=NULL WHERE shipment_id=?", [shipmentId]);
     }
     return reply.send({ ok: true });
   };
@@ -491,4 +550,5 @@ module.exports = {
   normalizeAvailableQuantity,
   buildEventKey,
   createPkcePair,
+  selectDcePdfDocument,
 };

@@ -8,6 +8,7 @@ const {
     createShopeeInterventionReceiptPdf,
     createShopeeSeparationSummaryPdf,
 } = require('./shopee-separation-summary.cjs');
+const { buildMercadoLivreSummaryData } = require('./mercado-livre-print-core.cjs');
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -110,13 +111,21 @@ async function callVpsMercadoLivre(pathname, options = {}) {
     });
     if (response.status === 204) return { ok: true, empty: true };
     if (options.pdf) {
-        if (!response.ok) throw new Error(`Mercado Livre etiqueta HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
+        if (!response.ok) {
+            const error = new Error(`Mercado Livre documento HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
+            error.status = response.status;
+            throw error;
+        }
         return { ok: true, buffer: Buffer.from(await response.arrayBuffer()) };
     }
     const text = await response.text();
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
-    if (!response.ok) throw new Error(data.error || `Mercado Livre HTTP ${response.status}`);
+    if (!response.ok) {
+        const error = new Error(data.error || `Mercado Livre HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+    }
     return { ok: true, data };
 }
 
@@ -905,32 +914,89 @@ async function legacyRunLoop() {
 let loopRunning = false;
 let mercadoLivreLoopRunning = false;
 
+async function getMercadoLivreSummaryData(job) {
+    const summary = buildMercadoLivreSummaryData(job);
+    const skus = Array.from(new Set(summary.items.map((item) => String(item.sku || '').trim()).filter(Boolean)));
+    if (!skus.length) return summary;
+    try {
+        const locations = await callVpsShopeeAction('get_stock_locations', { skus });
+        if (!isVpsActionSuccess(locations)) return summary;
+        const locationsBySku = new Map((locations.data?.items || []).map((entry) => [
+            String(entry?.sku || '').trim().toUpperCase(),
+            Array.isArray(entry?.locations) ? entry.locations.filter(Boolean) : [],
+        ]));
+        summary.items = summary.items.map((item) => {
+            const itemLocations = locationsBySku.get(String(item.sku || '').trim().toUpperCase()) || [];
+            return { ...item, stockLocation: itemLocations.length ? itemLocations.join(' | ') : 'Nao cadastrada' };
+        });
+    } catch (error) {
+        console.warn(`Mercado Livre: localizacao de estoque indisponivel: ${error.message}`);
+    }
+    return summary;
+}
+
+async function markMercadoLivrePrintStep(shipmentId, step) {
+    await callVpsMercadoLivre(`/print-jobs/${encodeURIComponent(shipmentId)}/step`, {
+        method: 'POST', body: { step },
+    });
+}
+
 async function runMercadoLivreLoop() {
     if (mercadoLivreLoopRunning) return;
     mercadoLivreLoopRunning = true;
     try {
         const settings = await getCompanySettings();
-        const printer = String(settings.shopee_printer_thermal || '').trim();
-        if (!printer) {
+        const labelPrinter = String(settings.shopee_printer_thermal || '').trim();
+        const summaryPrinter = String(settings.shopee_printer_a4 || '').trim();
+        if (!labelPrinter) {
             console.log('Mercado Livre: impressora termica ainda nao configurada no painel da Shopee.');
+            return;
+        }
+        if (!summaryPrinter) {
+            console.log('Mercado Livre: impressora de comprovante ainda nao configurada no painel da Shopee.');
             return;
         }
         const next = await callVpsMercadoLivre('/print-jobs/next');
         if (next.empty || !next.data?.shipmentId) return;
         const shipmentId = String(next.data.shipmentId);
         const labelPath = path.join(shippingLabelsDir, `ML-${shipmentId}_etiqueta-10x15.pdf`);
+        const declarationPath = path.join(shippingLabelsDir, `ML-${shipmentId}_declaracao-dce.pdf`);
+        const summaryPath = path.join(shippingLabelsDir, `ML-${shipmentId}_resumo-separacao-80mm.pdf`);
         try {
-            const label = await callVpsMercadoLivre(`/print-jobs/${encodeURIComponent(shipmentId)}/label`, { pdf: true });
-            fs.writeFileSync(labelPath, label.buffer);
             const ptp = require('pdf-to-printer');
-            await ptp.print(labelPath, { printer, paperSize: '4x6', scale: 'fit' });
+            if (!next.data.labelPrintedAt) {
+                const label = await callVpsMercadoLivre(`/print-jobs/${encodeURIComponent(shipmentId)}/label`, { pdf: true });
+                fs.writeFileSync(labelPath, label.buffer);
+                await ptp.print(labelPath, { printer: labelPrinter, paperSize: '4x6', scale: 'fit' });
+                await markMercadoLivrePrintStep(shipmentId, 'label');
+                console.log(`Mercado Livre: etiqueta da remessa ${shipmentId} impressa em ${labelPrinter}.`);
+            }
+            if (!next.data.declarationPrintedAt) {
+                const declaration = await callVpsMercadoLivre(`/print-jobs/${encodeURIComponent(shipmentId)}/declaration`, { pdf: true });
+                fs.writeFileSync(declarationPath, declaration.buffer);
+                await ptp.print(declarationPath, { printer: labelPrinter, paperSize: '4x6', scale: 'fit' });
+                await markMercadoLivrePrintStep(shipmentId, 'declaration');
+                console.log(`Mercado Livre: declaracao DC-e da remessa ${shipmentId} impressa em ${labelPrinter}.`);
+            }
+            if (!next.data.summaryPrintedAt) {
+                const summaryData = await getMercadoLivreSummaryData(next.data);
+                fs.writeFileSync(summaryPath, await createShopeeSeparationSummaryPdf(summaryData));
+                await ptp.print(summaryPath, { printer: summaryPrinter, scale: 'shrink' });
+                await markMercadoLivrePrintStep(shipmentId, 'summary');
+                console.log(`Mercado Livre: comprovante da remessa ${shipmentId} impresso em ${summaryPrinter}.`);
+            }
             await callVpsMercadoLivre(`/print-jobs/${encodeURIComponent(shipmentId)}/complete`, {
-                method: 'POST', body: { ok: true, summaryPrinted: false },
+                method: 'POST', body: { ok: true },
             });
-            console.log(`Mercado Livre: etiqueta da remessa ${shipmentId} impressa em ${printer}.`);
+            console.log(`Mercado Livre: fluxo completo da remessa ${shipmentId}.`);
         } catch (error) {
             await callVpsMercadoLivre(`/print-jobs/${encodeURIComponent(shipmentId)}/complete`, {
-                method: 'POST', body: { ok: false, error: String(error.message || error) },
+                method: 'POST',
+                body: {
+                    ok: false,
+                    retryable: Number(error.status) === 409,
+                    error: String(error.message || error),
+                },
             }).catch(() => {});
             throw error;
         }

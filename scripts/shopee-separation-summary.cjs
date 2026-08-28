@@ -256,7 +256,8 @@ async function createShopeeSeparationSummaryPdf(order) {
         page.drawRectangle({ x: 0, y: 0, width: RECEIPT_WIDTH, height: RECEIPT_HEIGHT, color: rgb(1, 1, 1) });
         page.drawRectangle({ x: RECEIPT_MARGIN, y: 381, width: RECEIPT_CONTENT_WIDTH, height: 36, borderColor: black, borderWidth: 1, color: rgb(1, 1, 1) });
         page.drawText('RESUMO DE SEPARACAO', { x: RECEIPT_MARGIN + 6, y: 395, size: 8.5, font: bold, color: black });
-        drawRightAlignedText(page, `SHOPEE | ${pageIndex + 1}/${pages.length}`, {
+        const marketplaceName = printableText(order?.marketplaceName) || 'SHOPEE';
+        drawRightAlignedText(page, `${marketplaceName} | ${pageIndex + 1}/${pages.length}`, {
             right: RECEIPT_RIGHT - 4, y: 396, size: 5.8, font: bold, color: black,
         });
 
@@ -279,9 +280,9 @@ async function createShopeeSeparationSummaryPdf(order) {
             page.drawRectangle({ x: RECEIPT_MARGIN + 4, y: 289, width: RECEIPT_CONTENT_WIDTH - 8, height: 34, borderColor: border, borderWidth: 0.8 });
         }
 
-        const [buyerLine] = wrapText(`Cliente: ${printableText(order?.buyerName) || 'Cliente Shopee'}`, bold, 7.2, RECEIPT_CONTENT_WIDTH - 8, 1);
+        const [buyerLine] = wrapText(`Cliente: ${printableText(order?.buyerName) || `Cliente ${marketplaceName}`}`, bold, 7.2, RECEIPT_CONTENT_WIDTH - 8, 1);
         page.drawText(buyerLine, { x: RECEIPT_MARGIN + 4, y: 275, size: 7.2, font: bold, color: black });
-        const [carrierLine] = wrapText(`Envio: ${printableText(order?.shippingCarrier) || 'Shopee'}`, regular, 6.5, RECEIPT_CONTENT_WIDTH - 8, 1);
+        const [carrierLine] = wrapText(`Envio: ${printableText(order?.shippingCarrier) || marketplaceName}`, regular, 6.5, RECEIPT_CONTENT_WIDTH - 8, 1);
         page.drawText(carrierLine, { x: RECEIPT_MARGIN + 4, y: 263, size: 6.5, font: regular, color: gray });
         page.drawText(`Data: ${formatOrderDate(order?.createdAt)}`, { x: RECEIPT_MARGIN + 4, y: 252, size: 6.5, font: regular, color: gray });
         const note = printableText(order?.note);

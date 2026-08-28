@@ -12,12 +12,16 @@ for (const route of [
   '/mercado-livre/oauth/callback',
   '/mercado-livre/print-jobs/next',
   '/mercado-livre/print-jobs/:shipmentId/label',
+  '/mercado-livre/print-jobs/:shipmentId/declaration',
+  '/mercado-livre/print-jobs/:shipmentId/step',
   '/mercado-livre/print-jobs/:shipmentId/complete',
   '/mercado-livre/products/link',
 ]) assert.ok(moduleSource.includes(route), `rota ausente: ${route}`);
 
 assert.ok(moduleSource.includes('/dce/emission'), 'emissao DC-e ausente');
 assert.ok(moduleSource.includes('/shipment_labels'), 'download de etiqueta ausente');
+assert.ok(moduleSource.includes('/dce/info/'), 'download do PDF da declaracao DC-e ausente');
+assert.ok(moduleSource.includes('declaration_printed_at'), 'fila deve controlar declaracao impressa sem duplicar etiqueta');
 assert.ok(moduleSource.includes('mercado_livre_webhook_events'), 'deduplicacao de webhook ausente');
 assert.ok(moduleSource.includes('mercado_livre_print_jobs'), 'fila de impressao ausente');
 assert.ok(moduleSource.includes('refreshPromise'), 'refresh OAuth precisa de trava local');
@@ -36,5 +40,11 @@ for (const source of [vps, legacy]) {
 assert.ok(printer.includes('runMercadoLivreLoop'), 'servico local sem consumidor Mercado Livre');
 assert.ok(printer.includes("paperSize: '4x6'"), 'etiqueta deve usar papel termico 10x15');
 assert.ok(printer.includes('/print-jobs/next'), 'servico local deve consumir a fila idempotente');
+assert.ok(printer.includes("markMercadoLivrePrintStep(shipmentId, 'label')"), 'etiqueta Mercado Livre deve ser marcada apos imprimir');
+assert.ok(printer.includes("markMercadoLivrePrintStep(shipmentId, 'declaration')"), 'declaracao Mercado Livre deve ser impressa separadamente');
+assert.ok(printer.includes("markMercadoLivrePrintStep(shipmentId, 'summary')"), 'comprovante Mercado Livre deve ser impresso separadamente');
+assert.ok(printer.includes('printer: labelPrinter'), 'etiqueta e declaracao devem usar a termica ZD configurada');
+assert.ok(printer.includes('printer: summaryPrinter'), 'comprovante deve usar a impressora Comprovante configurada');
+assert.ok(printer.includes('retryable: Number(error.status) === 409'), 'DC-e ainda em processamento deve voltar para a fila');
 
 console.log('Mercado Livre integration static contract: OK');
