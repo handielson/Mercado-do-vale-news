@@ -1788,6 +1788,15 @@ function sqlDateTime(value) {
   return date.toISOString().slice(0, 19).replace('T', ' ');
 }
 
+function expandSocialStoryItemsForDates(normalizedItems, scheduledDates) {
+  return scheduledDates.flatMap((date, dayIndex) => normalizedItems.map((item, itemIndex) => ({
+    ...item,
+    day_index: dayIndex,
+    source_item_index: itemIndex,
+    scheduled_at: new Date(date.getTime() + item.offset_seconds * 1000),
+  })));
+}
+
 async function executeSocialStoryScheduleApproval(pool, approval) {
   const scheduleId = text(approval?.execution_payload?.schedule_id, 36);
   const expectedHash = text(approval?.execution_payload?.content_hash, 64);
@@ -3461,12 +3470,22 @@ function registerSocialStoryRoutes(fastify, dependencies) {
     const sourceType = body.sourceType === 'whatsapp_campaign' ? 'whatsapp_campaign' : 'standalone';
     const sourceId = sourceType === 'whatsapp_campaign' ? text(body.sourceId, 36) : null;
     const includePrice = body.includePrice !== false;
-    const scheduledAtDate = new Date(body.scheduledAt);
+    const rawScheduledDates = Array.isArray(body.scheduledDates) && body.scheduledDates.length
+      ? body.scheduledDates
+      : [body.scheduledAt];
+    if (rawScheduledDates.length > 30) return reply.code(400).send({ error: 'Selecione no máximo 30 dias por lote' });
+    const parsedScheduledDates = rawScheduledDates.map((value) => new Date(value));
+    if (parsedScheduledDates.some((date) => Number.isNaN(date.getTime()))) {
+      return reply.code(400).send({ error: 'Há uma data ou horário inválido no lote' });
+    }
+    const scheduledDates = [...new Map(parsedScheduledDates.map((date) => [date.getTime(), date])).values()]
+      .sort((left, right) => left.getTime() - right.getTime());
+    const scheduledAtDate = scheduledDates[0];
     const scheduledAt = sqlDateTime(scheduledAtDate);
     const destinations = Array.from(new Set((Array.isArray(body.destinations) ? body.destinations : [])
       .filter((value) => value === 'instagram' || value === 'whatsapp')));
     if (!title || !scheduledAt || !destinations.length) return reply.code(400).send({ error: 'Title, valid date/time and destination are required' });
-    if (scheduledAtDate.getTime() < Date.now() - 60000) return reply.code(400).send({ error: 'A data e o horário do Story precisam estar no futuro' });
+    if (scheduledDates.some((date) => date.getTime() < Date.now() - 60000)) return reply.code(400).send({ error: 'A data e o horário do Story precisam estar no futuro' });
 
     let sourceItems = [];
     if (sourceType === 'whatsapp_campaign') {
@@ -3488,10 +3507,15 @@ function registerSocialStoryRoutes(fastify, dependencies) {
       return reply.code(400).send({ error: 'Every Story item must have a public HTTPS image or video URL' });
     }
     if (!normalizedItems.length) return reply.code(400).send({ error: 'Add at least one public HTTPS image or video' });
+    const scheduledItems = expandSocialStoryItemsForDates(normalizedItems, scheduledDates);
 
     const id = crypto.randomUUID();
     const approvalId = crypto.randomUUID();
-    const snapshot = { title, sourceType, sourceId, scheduledAt, destinations, includePrice, items: normalizedItems };
+    const snapshot = {
+      title, sourceType, sourceId, scheduledAt,
+      scheduledDates: scheduledDates.map((date) => sqlDateTime(date)),
+      destinations, includePrice, items: normalizedItems,
+    };
     const contentHash = sha256(JSON.stringify(snapshot));
     const channel = destinations.length === 2 ? 'multichannel' : destinations[0];
     const connection = await pool.getConnection();
@@ -3503,13 +3527,12 @@ function registerSocialStoryRoutes(fastify, dependencies) {
          VALUES (?,?,?,?,?,?,'pending_approval',?,?,?)`,
         [id, title, sourceType, sourceId, scheduledAt, jsonValue(destinations), approvalId, contentHash, auth.userId || null],
       );
-      for (const [index, item] of normalizedItems.entries()) {
+      for (const [index, item] of scheduledItems.entries()) {
         const itemId = crypto.randomUUID();
-        const itemDate = new Date(scheduledAtDate.getTime() + item.offset_seconds * 1000);
         await connection.query(
           `INSERT INTO social_story_items (id,schedule_id,sequence_index,media_type,media_url,label,caption,scheduled_at)
            VALUES (?,?,?,?,?,?,?,?)`,
-          [itemId, id, index, item.media_type, item.media_url, item.label || null, item.caption || null, sqlDateTime(itemDate)],
+          [itemId, id, index, item.media_type, item.media_url, item.label || null, item.caption || null, sqlDateTime(item.scheduled_at)],
         );
         for (const destination of destinations) {
           await connection.query(
@@ -3527,15 +3550,15 @@ function registerSocialStoryRoutes(fastify, dependencies) {
          VALUES (?,?,?,?,?,?,?,'pending','vps_meta_api',?,?,?,?,?,?,?,?,?,?,DATE_ADD(NOW(),INTERVAL 7 DAY))`,
         [approvalId, channel, SOCIAL_STORY_SCHEDULE_ACTION, `Agendar Stories: ${title}`, 'social_story_schedule', id, title,
           jsonValue({ status: 'draft', publicationExecuted: false }), jsonValue(snapshot),
-          jsonValue({ itemCount: normalizedItems.length, destinations, sourceType, sourceId }),
+          jsonValue({ dayCount: scheduledDates.length, sourceItemCount: normalizedItems.length, itemCount: scheduledItems.length, destinations, sourceType, sourceId }),
           jsonValue({ currency: 'BRL', amount: 0, recurring: false }),
-          jsonValue({ expectedDeliveries: normalizedItems.length * destinations.length, ordered: true, noDuplicates: true }),
+          jsonValue({ expectedDeliveries: scheduledItems.length * destinations.length, ordered: true, noDuplicates: true }),
           'Cancelar o agendamento e as entregas ainda não publicadas.',
           jsonValue({ schedule_id: id, content_hash: contentHash }), requestedBy, 'Administrador Gestão MV', `social-story:${id}`],
       );
-      await approvalEvent(connection, approvalId, 'requested', { id: requestedBy, label: 'Administrador Gestão MV' }, { schedule_id: id, destinations, item_count: normalizedItems.length });
+      await approvalEvent(connection, approvalId, 'requested', { id: requestedBy, label: 'Administrador Gestão MV' }, { schedule_id: id, destinations, day_count: scheduledDates.length, item_count: scheduledItems.length });
       await connection.commit();
-      return reply.code(201).send({ ok: true, scheduleId: id, approvalId, status: 'pending_approval', itemCount: normalizedItems.length });
+      return reply.code(201).send({ ok: true, scheduleId: id, approvalId, status: 'pending_approval', itemCount: scheduledItems.length, dayCount: scheduledDates.length });
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -3562,4 +3585,4 @@ function registerMarketingCampaignRoutes(fastify, dependencies) {
   startSocialStoryWorker(dependencies.pool, dependencies);
 }
 
-module.exports = { ensureMarketingCampaignTables, registerMarketingCampaignRoutes };
+module.exports = { ensureMarketingCampaignTables, registerMarketingCampaignRoutes, expandSocialStoryItemsForDates };

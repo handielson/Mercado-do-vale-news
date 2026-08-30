@@ -52,6 +52,7 @@ export interface CreateSocialStoryScheduleInput {
   sourceType: 'standalone' | 'whatsapp_campaign';
   sourceId?: string | null;
   scheduledAt: string;
+  scheduledDates?: string[];
   destinations: SocialStoryDestination[];
   includePrice?: boolean;
   mediaDelaySeconds?: number;
@@ -69,7 +70,7 @@ export const socialStoryScheduleService = {
     )).items;
   },
 
-  async create(input: CreateSocialStoryScheduleInput): Promise<{ scheduleId: string; approvalId: string; itemCount: number }> {
+  async create(input: CreateSocialStoryScheduleInput): Promise<{ scheduleId: string; approvalId: string; itemCount: number; dayCount: number }> {
     return await vpsClient.post('/admin/marketing/stories', input);
   },
 

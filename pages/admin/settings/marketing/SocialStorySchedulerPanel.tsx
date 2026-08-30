@@ -32,6 +32,18 @@ function statusLabel(status: string) {
   } as Record<string, string>)[status] || status;
 }
 
+function destinationSelectionKey(destinations: SocialStoryDestination[]) {
+  return [...destinations].sort().join('+');
+}
+
+function scheduleSummary(schedule: SocialStorySchedule) {
+  const dates = [...new Set(schedule.items.map((item) => new Date(item.scheduled_at).toLocaleDateString('pt-BR')))];
+  if (dates.length <= 1) {
+    return `${new Date(schedule.scheduled_at).toLocaleString('pt-BR')} · ${schedule.items.length} Stories`;
+  }
+  return `${dates[0]} a ${dates[dates.length - 1]} · ${dates.length} dias · ${schedule.items.length} Stories`;
+}
+
 async function uploadStoryFile(file: File): Promise<SocialStoryDraftItem> {
   const isVideo = file.type.startsWith('video/');
   const extension = file.name.split('.').pop()?.toLowerCase() || (isVideo ? 'mp4' : 'jpg');
@@ -124,11 +136,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
 
   const expectedDeliveries = useMemo(() => items.length * destinations.length * selectedDates.length, [items.length, destinations.length, selectedDates.length]);
 
-  const toggleDestination = (destination: SocialStoryDestination) => {
-    setDestinations((current) => current.includes(destination)
-      ? current.filter((value) => value !== destination)
-      : [...current, destination]);
-  };
+  const selectedDestinationKey = destinationSelectionKey(destinations);
 
   const previewCampaign = async () => {
     if (!campaignId) return;
@@ -219,19 +227,15 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
     }
     setBusy(true);
     try {
-      let totalStories = 0;
-      for (const { dateKey: date, instant } of schedulePlan.entries) {
-        if (!instant) continue;
-        const result = await socialStoryScheduleService.create({
-          title: selectedDates.length > 1 ? `${title.trim()} - ${new Date(`${date}T00:00:00`).toLocaleDateString('pt-BR')}` : title.trim(),
-          sourceType: mode === 'whatsapp_campaign' ? 'whatsapp_campaign' : 'standalone', sourceId: mode === 'whatsapp_campaign' ? campaignId : null,
-          scheduledAt: instant.toISOString(), destinations,
-          includePrice: mode === 'whatsapp_campaign' ? includePrice : undefined,
-          items: mode !== 'whatsapp_campaign' ? items : undefined,
-        });
-        totalStories += result.itemCount;
-      }
-      toast.success(`${selectedDates.length} dia(s) agendado(s), com ${totalStories} Stories. Aprove na Central de Aprovações.`);
+      const scheduledDates = schedulePlan.entries.flatMap(({ instant }) => instant ? [instant.toISOString()] : []);
+      const result = await socialStoryScheduleService.create({
+        title: title.trim(),
+        sourceType: mode === 'whatsapp_campaign' ? 'whatsapp_campaign' : 'standalone', sourceId: mode === 'whatsapp_campaign' ? campaignId : null,
+        scheduledAt: scheduledDates[0], scheduledDates, destinations,
+        includePrice: mode === 'whatsapp_campaign' ? includePrice : undefined,
+        items: mode !== 'whatsapp_campaign' ? items : undefined,
+      });
+      toast.success(`1 aprovação criada para ${result.dayCount} dia(s), com ${result.itemCount} Stories.`);
       setItems([]);
       await load();
     } catch (error) {
@@ -249,8 +253,8 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
     <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="p-5 border-b border-slate-100 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-black text-slate-900 flex items-center gap-2"><CalendarClock className="w-5 h-5 text-pink-600" /> Publicação automática de Stories</h2>
-          <p className="text-sm text-slate-500 mt-1">Agende uma peça avulsa ou reutilize, na mesma ordem, o conteúdo de uma campanha do WhatsApp.</p>
+          <h2 className="text-lg font-black text-slate-900 flex items-center gap-2"><CalendarClock className="w-5 h-5 text-violet-600" /> Agendamento de Stories</h2>
+          <p className="text-sm text-slate-500 mt-1">Escolha a mídia, os dias e se o lote será enviado ao WhatsApp, Instagram ou aos dois.</p>
         </div>
         <button onClick={() => void load()} className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" title="Atualizar"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
       </div>
@@ -274,11 +278,19 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
 
           <MultiDateCalendar value={selectedDates} onChange={setSelectedDates} minDate={todayDateKey()} maxSelected={30} label="Abra o calendário e escolha os dias" />
 
-          <div>
-            <p className="text-xs font-bold text-slate-600 mb-2">Publicar em</p>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => toggleDestination('instagram')} className={`px-3 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 ${destinations.includes('instagram') ? 'bg-pink-50 border-pink-300 text-pink-700' : 'border-slate-200 text-slate-400'}`}><Instagram className="w-4 h-4" /> Instagram {destinations.includes('instagram') && <Check className="w-4 h-4" />}</button>
-              <button onClick={() => toggleDestination('whatsapp')} className={`px-3 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 ${destinations.includes('whatsapp') ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'border-slate-200 text-slate-400'}`}><MessageCircle className="w-4 h-4" /> WhatsApp {destinations.includes('whatsapp') && <Check className="w-4 h-4" />}</button>
+          <div className="rounded-xl border border-slate-200 p-4">
+            <p className="text-sm font-black text-slate-800">Onde publicar?</p>
+            <p className="mt-1 text-xs text-slate-500">Escolha uma opção. O canal selecionado vale para todos os dias deste lote.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <button type="button" aria-pressed={selectedDestinationKey === 'whatsapp'} onClick={() => setDestinations(['whatsapp'])} className={`rounded-xl border px-3 py-3 text-left transition-colors ${selectedDestinationKey === 'whatsapp' ? 'border-emerald-400 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-100' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                <span className="flex items-center gap-2 text-sm font-black"><MessageCircle className="h-4 w-4" /> Somente WhatsApp {selectedDestinationKey === 'whatsapp' && <Check className="ml-auto h-4 w-4" />}</span>
+              </button>
+              <button type="button" aria-pressed={selectedDestinationKey === 'instagram'} onClick={() => setDestinations(['instagram'])} className={`rounded-xl border px-3 py-3 text-left transition-colors ${selectedDestinationKey === 'instagram' ? 'border-pink-400 bg-pink-50 text-pink-800 ring-2 ring-pink-100' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                <span className="flex items-center gap-2 text-sm font-black"><Instagram className="h-4 w-4" /> Somente Instagram {selectedDestinationKey === 'instagram' && <Check className="ml-auto h-4 w-4" />}</span>
+              </button>
+              <button type="button" aria-pressed={selectedDestinationKey === 'instagram+whatsapp'} onClick={() => setDestinations(['whatsapp', 'instagram'])} className={`rounded-xl border px-3 py-3 text-left transition-colors ${selectedDestinationKey === 'instagram+whatsapp' ? 'border-violet-400 bg-violet-50 text-violet-800 ring-2 ring-violet-100' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                <span className="flex items-center gap-2 text-sm font-black"><MessageCircle className="h-4 w-4" /><Instagram className="h-4 w-4" /> WhatsApp + Instagram {selectedDestinationKey === 'instagram+whatsapp' && <Check className="ml-auto h-4 w-4" />}</span>
+              </button>
             </div>
           </div>
 
@@ -418,8 +430,12 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
             {!items.length && <p className="text-sm text-center text-slate-400 py-4">Nenhuma mídia selecionada.</p>}
           </div>
 
-          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">A criação gera um pedido na Central de Aprovações. Nada será publicado antes da aprovação por outro administrador.</div>
-          <button onClick={() => void schedule()} disabled={busy || !items.length || !destinations.length} className="w-full py-3 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-black flex items-center justify-center gap-2 disabled:opacity-50"><Send className="w-4 h-4" /> Solicitar aprovação ({expectedDeliveries} entregas)</button>
+          <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">
+            <p className="font-black">Resumo do lote</p>
+            <p className="mt-1">{selectedDates.length} dia(s) × {items.length} mídia(s) × {destinations.length} canal(is) = <strong>{expectedDeliveries} entregas</strong>.</p>
+            <p className="mt-1 text-xs text-violet-700">Será criada apenas 1 solicitação na Central de Aprovações para todo o lote.</p>
+          </div>
+          <button onClick={() => void schedule()} disabled={busy || !items.length || !destinations.length} className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black flex items-center justify-center gap-2 disabled:opacity-50"><Send className="w-4 h-4" /> Solicitar 1 aprovação ({expectedDeliveries} entregas)</button>
         </div>
 
         <div>
@@ -427,8 +443,8 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
           <div className="space-y-3 max-h-[720px] overflow-y-auto pr-1">
             {schedules.map((scheduleRow) => (
               <div key={scheduleRow.id} className="rounded-xl border border-slate-200 p-4">
-                <div className="flex items-start justify-between gap-2"><div><p className="font-bold text-slate-800">{scheduleRow.title}</p><p className="text-xs text-slate-500">{new Date(scheduleRow.scheduled_at).toLocaleString('pt-BR')} · {scheduleRow.items.length} Stories</p></div><span className="text-[10px] font-black uppercase px-2 py-1 rounded-full bg-slate-100 text-slate-600">{statusLabel(scheduleRow.status)}</span></div>
-                <div className="flex items-center gap-2 mt-3 text-xs text-slate-500">{scheduleRow.destinations.includes('instagram') && <Instagram className="w-4 h-4 text-pink-500" />}{scheduleRow.destinations.includes('whatsapp') && <MessageCircle className="w-4 h-4 text-emerald-500" />}{scheduleRow.last_error && <span className="text-red-600 truncate" title={scheduleRow.last_error}>{scheduleRow.last_error}</span>}</div>
+                <div className="flex items-start justify-between gap-2"><div><p className="font-bold text-slate-800">{scheduleRow.title}</p><p className="text-xs text-slate-500">{scheduleSummary(scheduleRow)}</p></div><span className="text-[10px] font-black uppercase px-2 py-1 rounded-full bg-slate-100 text-slate-600">{statusLabel(scheduleRow.status)}</span></div>
+                <div className="flex items-center gap-2 mt-3 text-xs font-bold text-slate-600">{scheduleRow.destinations.includes('whatsapp') && <span className="inline-flex items-center gap-1 text-emerald-700"><MessageCircle className="w-4 h-4" /> WhatsApp</span>}{scheduleRow.destinations.includes('instagram') && <span className="inline-flex items-center gap-1 text-pink-700"><Instagram className="w-4 h-4" /> Instagram</span>}{scheduleRow.last_error && <span className="text-red-600 truncate font-normal" title={scheduleRow.last_error}>{scheduleRow.last_error}</span>}</div>
                 {['pending_approval', 'approved', 'processing'].includes(scheduleRow.status) && <button onClick={() => void cancel(scheduleRow.id)} className="mt-3 text-xs font-bold text-red-600 hover:underline">Cancelar pendentes</button>}
               </div>
             ))}

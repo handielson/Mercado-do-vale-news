@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { flushSync } from 'react-dom';
-import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, CheckCircle2, Calendar, Trash2, Clock, ToggleLeft, ToggleRight, Facebook, Instagram, MessageCircle, ShieldCheck, BrainCircuit } from 'lucide-react';
+import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, CheckCircle2, Calendar, CalendarClock, Trash2, Clock, ToggleLeft, ToggleRight, Facebook, Instagram, MessageCircle, ShieldCheck, BrainCircuit } from 'lucide-react';
 import { toast } from 'sonner';
 import { toBlob, toPng } from 'html-to-image';
 import { catalogService } from '../../../services/catalogService';
@@ -2404,17 +2404,17 @@ export default function MarketingPage() {
                                         type="button"
                                         onClick={() => setWhatsappSchedulerView('stories')}
                                         className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-black transition-colors ${whatsappSchedulerView === 'stories'
-                                            ? 'bg-pink-600 text-white shadow-sm'
-                                            : 'text-slate-600 hover:bg-pink-50 hover:text-pink-700'
+                                            ? 'bg-violet-600 text-white shadow-sm'
+                                            : 'text-slate-600 hover:bg-violet-50 hover:text-violet-700'
                                             }`}
                                     >
-                                        <Instagram className="h-4 w-4" /> Stories avulsos
+                                        <CalendarClock className="h-4 w-4" /> Agendar Stories
                                     </button>
                                 </div>
                                 <p className="mt-2 px-1 text-xs text-slate-500">
                                     {whatsappSchedulerView === 'status'
                                         ? 'Programa produtos no Status do WhatsApp nos dias escolhidos.'
-                                        : 'Agenda imagens ou vídeos avulsos para WhatsApp e Instagram.'}
+                                        : 'Escolha explicitamente WhatsApp, Instagram ou os dois para cada lote.'}
                                 </p>
                             </div>
                             {whatsappSchedulerView === 'status'

@@ -7,6 +7,7 @@ const server = await readFile(new URL('../vps_server.cjs', import.meta.url), 'ut
 const serverJs = await readFile(new URL('../vps_server.js', import.meta.url), 'utf8');
 const panel = await readFile(new URL('../pages/admin/settings/marketing/SocialStorySchedulerPanel.tsx', import.meta.url), 'utf8');
 const calendar = await readFile(new URL('../pages/admin/settings/marketing/MultiDateCalendar.tsx', import.meta.url), 'utf8');
+const marketingPage = await readFile(new URL('../pages/admin/settings/MarketingPage.tsx', import.meta.url), 'utf8');
 
 test('Story scheduling requires approval and creates idempotent deliveries', () => {
   assert.match(api, /SOCIAL_STORY_SCHEDULE_ACTION/);
@@ -54,13 +55,19 @@ test('WhatsApp import reuses card then ordered color videos', () => {
   assert.ok(server.indexOf('getWhatsAppStatusProductImage(product)') < server.lastIndexOf('resolveWhatsAppStatusVideoUrls(product)'));
 });
 
-test('Panel exposes standalone, WhatsApp import and both destinations', () => {
+test('Panel exposes standalone, WhatsApp import and explicit destination choices', () => {
   assert.match(panel, /Stories de produtos/);
   assert.match(panel, /Catálogo/);
   assert.match(panel, /Story avulso/);
   assert.match(panel, /Importar do WhatsApp/);
-  assert.match(panel, /toggleDestination\('instagram'\)/);
-  assert.match(panel, /toggleDestination\('whatsapp'\)/);
+  assert.match(panel, /Somente WhatsApp/);
+  assert.match(panel, /Somente Instagram/);
+  assert.match(panel, /WhatsApp \+ Instagram/);
+  assert.match(panel, /setDestinations\(\['whatsapp'\]\)/);
+  assert.match(panel, /setDestinations\(\['instagram'\]\)/);
+  assert.match(panel, /setDestinations\(\['whatsapp', 'instagram'\]\)/);
+  assert.match(marketingPage, /Agendar Stories/);
+  assert.match(marketingPage, /Escolha explicitamente WhatsApp, Instagram ou os dois/);
   assert.match(panel, /defaultDestinations = \['instagram'\]/);
   assert.match(panel, /Central de Aprovações/);
   assert.match(panel, /Com preço/);
@@ -82,7 +89,7 @@ test('Panel exposes standalone, WhatsApp import and both destinations', () => {
   assert.match(panel, /onError=\{\(\) => removeUnavailableMedia\(item\)\}/);
   assert.match(panel, /está indisponível e foi removida da programação/);
   assert.match(panel, /MultiDateCalendar/);
-  assert.match(panel, /for \(const \{ dateKey: date, instant \} of schedulePlan\.entries\)/);
+  assert.doesNotMatch(panel, /for \(const \{ dateKey: date, instant \} of schedulePlan\.entries\)/);
   assert.match(calendar, /Dia sim, dia não/);
   assert.match(calendar, /Todos os dias/);
 });
@@ -91,16 +98,29 @@ test('Panel rejects a stale local Story time before calling the VPS', () => {
   assert.match(panel, /prepareSocialStoryScheduleDates\(selectedDates, time\)/);
   assert.match(panel, /schedulePlan\.past\?\.instant/);
   assert.match(panel, /já passou\. Escolha um dia e horário futuros/);
-  assert.match(panel, /scheduledAt: instant\.toISOString\(\)/);
-  assert.match(api, /const scheduledAtDate = new Date\(body\.scheduledAt\)/);
+  assert.match(panel, /const scheduledDates = schedulePlan\.entries\.flatMap/);
+  assert.match(panel, /scheduledAt: scheduledDates\[0\], scheduledDates, destinations/);
+  assert.match(api, /const scheduledAtDate = scheduledDates\[0\]/);
   assert.match(api, /A data e o horário do Story precisam estar no futuro/);
   assert.doesNotMatch(api, /Scheduled date\/time cannot be in the past/);
+});
+
+test('One multi-date Story batch creates one schedule and one approval', () => {
+  assert.match(api, /const rawScheduledDates = Array\.isArray\(body\.scheduledDates\)/);
+  assert.match(api, /Selecione no máximo 30 dias por lote/);
+  assert.match(api, /const scheduledItems = expandSocialStoryItemsForDates\(normalizedItems, scheduledDates\)/);
+  assert.match(api, /scheduledDates: scheduledDates\.map/);
+  assert.match(api, /dayCount: scheduledDates\.length/);
+  assert.match(api, /expectedDeliveries: scheduledItems\.length \* destinations\.length/);
+  assert.match(panel, /1 aprovação criada para/);
+  assert.match(panel, /Será criada apenas 1 solicitação na Central de Aprovações/);
+  assert.match(panel, /Solicitar 1 aprovação/);
 });
 
 test('Price choice is frozen into previews and approval snapshots', () => {
   assert.match(api, /buildWhatsAppStoryItems\(campaignId, \{ includePrice \}\)/);
   assert.match(api, /buildWhatsAppStoryItems\(sourceId, \{ includePrice \}\)/);
-  assert.match(api, /snapshot = \{ title, sourceType, sourceId, scheduledAt, destinations, includePrice, items: normalizedItems \}/);
+  assert.match(api, /destinations, includePrice, items: normalizedItems/);
 });
 
 test('API rejects partial Story schedules when any media URL is not public HTTPS', () => {
