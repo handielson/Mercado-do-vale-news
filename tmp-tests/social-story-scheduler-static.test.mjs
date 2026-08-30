@@ -82,9 +82,19 @@ test('Panel exposes standalone, WhatsApp import and both destinations', () => {
   assert.match(panel, /onError=\{\(\) => removeUnavailableMedia\(item\)\}/);
   assert.match(panel, /está indisponível e foi removida da programação/);
   assert.match(panel, /MultiDateCalendar/);
-  assert.match(panel, /for \(const date of \[\.\.\.selectedDates\]\.sort\(\)\)/);
+  assert.match(panel, /for \(const \{ dateKey: date, instant \} of schedulePlan\.entries\)/);
   assert.match(calendar, /Dia sim, dia não/);
   assert.match(calendar, /Todos os dias/);
+});
+
+test('Panel rejects a stale local Story time before calling the VPS', () => {
+  assert.match(panel, /prepareSocialStoryScheduleDates\(selectedDates, time\)/);
+  assert.match(panel, /schedulePlan\.past\?\.instant/);
+  assert.match(panel, /já passou\. Escolha um dia e horário futuros/);
+  assert.match(panel, /scheduledAt: instant\.toISOString\(\)/);
+  assert.match(api, /const scheduledAtDate = new Date\(body\.scheduledAt\)/);
+  assert.match(api, /A data e o horário do Story precisam estar no futuro/);
+  assert.doesNotMatch(api, /Scheduled date\/time cannot be in the past/);
 });
 
 test('Price choice is frozen into previews and approval snapshots', () => {

@@ -13,6 +13,7 @@ import {
   type SocialStoryDraftItem,
   type SocialStorySchedule,
 } from '../../../../services/socialStoryScheduleService';
+import { prepareSocialStoryScheduleDates } from '../../../../services/socialStoryScheduleTime.js';
 import MultiDateCalendar from './MultiDateCalendar';
 
 function defaultDateTime() {
@@ -208,15 +209,23 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
     if (items.some((item) => !/^https:\/\//i.test(String(item.mediaUrl || '')))) {
       return toast.error('Há mídias sem URL HTTPS pública. Recarregue as mídias do catálogo antes de agendar.');
     }
+    const time = scheduledAt.slice(11, 16) || '08:00';
+    const schedulePlan = prepareSocialStoryScheduleDates(selectedDates, time);
+    if (schedulePlan.invalid) {
+      return toast.error('Há um dia ou horário inválido na programação. Revise a seleção antes de agendar.');
+    }
+    if (schedulePlan.past?.instant) {
+      return toast.error(`O horário ${schedulePlan.past.instant.toLocaleString('pt-BR')} já passou. Escolha um dia e horário futuros.`);
+    }
     setBusy(true);
     try {
-      const time = scheduledAt.slice(11, 16) || '08:00';
       let totalStories = 0;
-      for (const date of [...selectedDates].sort()) {
+      for (const { dateKey: date, instant } of schedulePlan.entries) {
+        if (!instant) continue;
         const result = await socialStoryScheduleService.create({
           title: selectedDates.length > 1 ? `${title.trim()} - ${new Date(`${date}T00:00:00`).toLocaleDateString('pt-BR')}` : title.trim(),
           sourceType: mode === 'whatsapp_campaign' ? 'whatsapp_campaign' : 'standalone', sourceId: mode === 'whatsapp_campaign' ? campaignId : null,
-          scheduledAt: new Date(`${date}T${time}:00`).toISOString(), destinations,
+          scheduledAt: instant.toISOString(), destinations,
           includePrice: mode === 'whatsapp_campaign' ? includePrice : undefined,
           items: mode !== 'whatsapp_campaign' ? items : undefined,
         });

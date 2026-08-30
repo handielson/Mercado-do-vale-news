@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.297-crediario-taxas",
+  "version": "v1.2.298-story-horario-futuro",
   "date": "2026-08-30",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260830-045500-crediario-taxas-release",
+  "release_vps": "/var/www/mdv-site/releases/20260830-153204-v12298-story-horario-futuro",
   "branch": "main",
-  "summary": "Aplica as taxas oficiais de pagamento ao crediário parcelado do PDV com parcelas exatas em centavos."
+  "summary": "Impede o agendamento de Stories em horários já expirados e apresenta a validação em português."
 }

@@ -3461,11 +3461,12 @@ function registerSocialStoryRoutes(fastify, dependencies) {
     const sourceType = body.sourceType === 'whatsapp_campaign' ? 'whatsapp_campaign' : 'standalone';
     const sourceId = sourceType === 'whatsapp_campaign' ? text(body.sourceId, 36) : null;
     const includePrice = body.includePrice !== false;
-    const scheduledAt = sqlDateTime(body.scheduledAt);
+    const scheduledAtDate = new Date(body.scheduledAt);
+    const scheduledAt = sqlDateTime(scheduledAtDate);
     const destinations = Array.from(new Set((Array.isArray(body.destinations) ? body.destinations : [])
       .filter((value) => value === 'instagram' || value === 'whatsapp')));
     if (!title || !scheduledAt || !destinations.length) return reply.code(400).send({ error: 'Title, valid date/time and destination are required' });
-    if (new Date(body.scheduledAt).getTime() < Date.now() - 60000) return reply.code(400).send({ error: 'Scheduled date/time cannot be in the past' });
+    if (scheduledAtDate.getTime() < Date.now() - 60000) return reply.code(400).send({ error: 'A data e o horário do Story precisam estar no futuro' });
 
     let sourceItems = [];
     if (sourceType === 'whatsapp_campaign') {
@@ -3504,7 +3505,7 @@ function registerSocialStoryRoutes(fastify, dependencies) {
       );
       for (const [index, item] of normalizedItems.entries()) {
         const itemId = crypto.randomUUID();
-        const itemDate = new Date(new Date(body.scheduledAt).getTime() + item.offset_seconds * 1000);
+        const itemDate = new Date(scheduledAtDate.getTime() + item.offset_seconds * 1000);
         await connection.query(
           `INSERT INTO social_story_items (id,schedule_id,sequence_index,media_type,media_url,label,caption,scheduled_at)
            VALUES (?,?,?,?,?,?,?,?)`,
