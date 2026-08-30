@@ -161,7 +161,8 @@ export interface Product {
 
     // Media Add-ons
     video_url?: string;        // URL do vídeo do produto (YouTube, Synology, etc.)
-    marketing_background_url?: string; // Foto oficial de marketing usada no Status
+    marketing_background_url?: string; // Foto oficial de marketing usada no Status (com preço)
+    marketing_background_no_price_url?: string; // Foto oficial de marketing usada no Status (sem preço)
     marketing_video_url?: string; // Vídeo oficial de marketing usado no Status
 
     // Product Kits (Volume Pricing)
@@ -232,6 +233,7 @@ export interface ProductInput {
     // Media Add-ons
     video_url?: string;
     marketing_background_url?: string;
+    marketing_background_no_price_url?: string;
     marketing_video_url?: string;
 
     // Product Combos (Bundles)

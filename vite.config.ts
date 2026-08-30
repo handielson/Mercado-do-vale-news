@@ -55,7 +55,16 @@ export default defineConfig(({ mode }) => {
         },
         '/vps-proxy': {
           target: 'https://api.xiaomipetrolina.com.br',
-          router: () => 'https://api.xiaomipetrolina.com.br',
+          router: (req) => {
+            try {
+              const url = new URL(`http://localhost${req.url}`);
+              const targetPath = url.searchParams.get('path') || '';
+              if (/^\/status-/i.test(targetPath) || /imagens\.xiaomipetrolina\.com\.br/i.test(targetPath)) {
+                return 'https://imagens.xiaomipetrolina.com.br';
+              }
+            } catch {}
+            return 'https://api.xiaomipetrolina.com.br';
+          },
           changeOrigin: true,
           secure: false,
           rewrite: (pathStr) => {

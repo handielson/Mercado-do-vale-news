@@ -21,9 +21,9 @@ assert.match(page, /Cadastre uma foto para este modelo e esta cor na galeria/);
 assert.doesNotMatch(page, /getModelImageWithCache/);
 assert.match(page, /saveMarketingArtworkForWhatsappStatus/);
 assert.match(page, /\/synology\/upload\?folder=imagens/);
-assert.match(page, /\/synology\/upload-status\?id=/);
-assert.match(page, /marketing_background_url: versionedUrl/);
-assert.match(page, /format === 'status' && showArtworkPrice/);
+assert.match(page, /\[targetField\]:\s*versionedUrl/);
+assert.match(page, /targetField = showPrice \? 'marketing_background_url' : 'marketing_background_no_price_url'/);
+assert.match(page, /format === 'status'/);
 assert.match(page, /salva automaticamente como foto de marketing do Status/);
 assert.doesNotMatch(page, /const productBackground = selectedProduct\?\.marketing_background_url/);
 

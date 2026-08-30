@@ -215,7 +215,7 @@ export default function ProductMarketingCard({ data, format, imageUrl, whatsapp,
             </div>
           </div>
         ) : (
-          <div className={`${story ? 'mt-4 min-h-[150px]' : 'mt-3 min-h-[100px]'} flex shrink-0 flex-col items-center justify-center rounded-[2rem] border-2 bg-black/50`} style={{ borderColor: data.theme.accent }}>
+          <div className={`${story ? 'mt-4 min-h-[176px]' : 'mt-3 min-h-[116px]'} flex shrink-0 flex-col items-center justify-center rounded-[2rem] border-2 bg-black/50`} style={{ borderColor: data.theme.accent }}>
             <strong className={`${story ? 'text-4xl' : 'text-3xl'} uppercase`} style={{ color: data.theme.accent }}>Consulte condições e disponibilidade</strong>
             <span className="mt-2 text-2xl font-bold">Fale com nossa equipe</span>
           </div>

@@ -24857,7 +24857,7 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
        ${comboStockSql('products')} AS stock_quantity,
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
-       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_video_url,
+       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -24957,7 +24957,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        ${imgCol},
-       status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_video_url,
+       status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -24969,7 +24969,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        ${comboStockSql('products')} AS stock_quantity,
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
-       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_video_url,
+       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -27367,12 +27367,12 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           optionalBool(p.is_parent),
         ]
       );
-      if ('marketing_background_url' in p || 'marketing_video_url' in p) {
+      if ('marketing_background_url' in p || 'marketing_background_no_price_url' in p || 'marketing_video_url' in p) {
         await pool.query(
           `UPDATE products
-              SET marketing_background_url = ?, marketing_video_url = ?
+              SET marketing_background_url = ?, marketing_background_no_price_url = ?, marketing_video_url = ?
             WHERE id = ?`,
-          [p.marketing_background_url || null, p.marketing_video_url || null, p.id]
+          [p.marketing_background_url || null, p.marketing_background_no_price_url || null, p.marketing_video_url || null, p.id]
         );
       }
       results.upserted++;
@@ -27502,7 +27502,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       stock_quantity=?, status=?, category_id=?, brand=?, model_id=?,
       images=?, specs=?, custom_fields=?, dimensions=?, weight_kg=?,
       ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?, is_parent=COALESCE(?, is_parent, 0),
-      video_url=?, marketing_background_url=?, marketing_video_url=?, track_inventory=?, is_gift=?,
+      video_url=?, marketing_background_url=?, marketing_background_no_price_url=?, marketing_video_url=?, track_inventory=?, is_gift=?,
       warranty_type=?, warranty_template_id=?, kits=?,
       hide_from_catalog=?, meta_title=?, meta_description=?, keywords=?,
       production_days=?,
@@ -27521,7 +27521,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       jsonStr(p.dimensions), p.weight_kg || null,
       p.ncm || null, p.cest || null, p.origin || null,
       p.bling_id || null, p.bling_parent_id || null, p.parent_id || null, optionalBool(p.is_parent),
-      p.video_url || null, p.marketing_background_url || null, p.marketing_video_url || null,
+      p.video_url || null, p.marketing_background_url || null, p.marketing_background_no_price_url || null, p.marketing_video_url || null,
       p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
       p.warranty_type || 'brand', p.warranty_template_id || null, jsonStr(p.kits),
       p.hide_from_catalog ? 1 : 0,
@@ -29262,7 +29262,7 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
     if (!productIds.length) return [];
     const placeholders = productIds.map(() => '?').join(',');
     const [rows] = await pool.query(
-      `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, marketing_background_url, marketing_video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
+      `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
        FROM products WHERE id IN (${placeholders})`,
       productIds
     );
@@ -29273,7 +29273,7 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
     if (!modelIds.length) return selectedProducts;
     const modelPlaceholders = modelIds.map(() => '?').join(',');
     const [siblings] = await pool.query(
-      `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, marketing_background_url, marketing_video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
+      `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
        FROM products
        WHERE model_id IN (${modelPlaceholders}) AND status = 'active'
        ORDER BY name ASC
@@ -29305,7 +29305,7 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
   if (!categoryIdList.length) return [];
   const categoryPlaceholders = categoryIdList.map(() => '?').join(',');
   const [rows] = await pool.query(
-    `SELECT p.id, p.model_id, p.brand, p.name, p.sku, p.slug, p.images, p.image_url, p.video_url, p.marketing_background_url, p.marketing_video_url,
+    `SELECT p.id, p.model_id, p.brand, p.name, p.sku, p.slug, p.images, p.image_url, p.video_url, p.marketing_background_url, p.marketing_background_no_price_url, p.marketing_video_url,
             p.price_retail, p.stock_quantity, p.track_inventory, p.specs, p.custom_fields
      FROM products p
      WHERE (p.category_id IN (${categoryPlaceholders}) OR EXISTS (
@@ -29751,7 +29751,7 @@ function getWhatsAppStatusStoryProductImageVps(product, includePrice) {
   const sourceProducts = Array.isArray(product?.status_group_products) && product.status_group_products.length
     ? [product, ...product.status_group_products]
     : [product];
-  const candidates = sourceProducts.flatMap((item) => [item?.image_url, ...parseWhatsAppStatusImages(item?.images)]);
+  const candidates = sourceProducts.flatMap((item) => [item?.marketing_background_no_price_url, item?.image_url, ...parseWhatsAppStatusImages(item?.images)]);
   return String(candidates.find((value) => /^https:\/\//i.test(String(value || '').trim())) || '').trim();
 }
 
@@ -37031,40 +37031,49 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrCustomer }, async
           cdnUrl,
         }),
       });
-      const sid = await synoLogin();
-      const boundary = `MDVBoundary${Date.now()}`;
-
-      const textFields = [
-        ['api', 'SYNO.FileStation.Upload'],
-        ['version', '2'],
-        ['method', 'upload'],
-        ['path', folderPath],
-        ['create_parents', 'true'],
-        ['overwrite', 'true'],
-        ['_sid', sid],
-      ].map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join('');
-
-      const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`;
-      const body = Buffer.concat([Buffer.from(textFields), Buffer.from(fileHeader), fileBuf, Buffer.from(`\r\n--${boundary}--\r\n`)]);
-
       const https = require('https');
       const urlObj = new URL(SYNO_URL);
-      const uploadPath = `/webapi/entry.cgi?_sid=${encodeURIComponent(sid)}`;
-      const result = await new Promise((resolve, reject) => {
-        const options = {
-          hostname: urlObj.hostname, port: getSynologyRequestPort(urlObj),
-          path: uploadPath, method: 'POST', rejectUnauthorized: false,
-          headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length },
-        };
-        const r = https.request(options, (res) => {
-          let d = '';
-          res.on('data', c => d += c);
-          res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+
+      const performSynoUpload = async () => {
+        const currentSid = await synoLogin();
+        const boundary = `MDVBoundary${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const textFields = [
+          ['api', 'SYNO.FileStation.Upload'],
+          ['version', '2'],
+          ['method', 'upload'],
+          ['path', folderPath],
+          ['create_parents', 'true'],
+          ['overwrite', 'true'],
+          ['_sid', currentSid],
+        ].map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join('');
+
+        const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`;
+        const body = Buffer.concat([Buffer.from(textFields), Buffer.from(fileHeader), fileBuf, Buffer.from(`\r\n--${boundary}--\r\n`)]);
+        const uploadPath = `/webapi/entry.cgi?_sid=${encodeURIComponent(currentSid)}`;
+
+        return new Promise((resolve, reject) => {
+          const options = {
+            hostname: urlObj.hostname, port: getSynologyRequestPort(urlObj),
+            path: uploadPath, method: 'POST', rejectUnauthorized: false,
+            headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length },
+          };
+          const r = https.request(options, (res) => {
+            let d = '';
+            res.on('data', c => d += c);
+            res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+          });
+          r.on('error', reject);
+          r.write(body);
+          r.end();
         });
-        r.on('error', reject);
-        r.write(body);
-        r.end();
-      });
+      };
+
+      let result = await performSynoUpload();
+      if (!result?.success && (result?.error?.code === 119 || result?.error?.code === 106)) {
+        console.warn(`[synology] Upload retry for ${fileName} after auth error ${result?.error?.code}...`);
+        await new Promise((r) => setTimeout(r, 600));
+        result = await performSynoUpload();
+      }
 
       if (result.success) {
         if (folder === 'videos') {
@@ -37905,6 +37914,7 @@ async function runMigrations() {
   await addColumnIfMissing('products', 'keywords', "TEXT NULL");
   await addColumnIfMissing('products', 'view_count', "INT DEFAULT 0");
   await addColumnIfMissing('products', 'marketing_background_url', 'TEXT NULL');
+  await addColumnIfMissing('products', 'marketing_background_no_price_url', 'TEXT NULL');
   await addColumnIfMissing('products', 'marketing_video_url', 'TEXT NULL');
   await addColumnIfMissing('orders', 'shipping_origin_cep', 'VARCHAR(16) NULL');
   await addColumnIfMissing('orders', 'shipping_origin_label', 'VARCHAR(255) NULL');

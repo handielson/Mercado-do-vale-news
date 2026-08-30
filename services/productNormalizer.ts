@@ -44,6 +44,7 @@ export interface NormalizedProduct {
   image_url: string | null;       // sempre derivado de images[0]
   video_url?: string | null;
   marketing_background_url?: string | null;
+  marketing_background_no_price_url?: string | null;
   marketing_video_url?: string | null;
 
   // Relacionamentos
@@ -184,6 +185,7 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
     image_url,
     video_url: p.video_url ? toBrowserSafeMediaUrl(p.video_url) : null,
     marketing_background_url: p.marketing_background_url ? toBrowserSafeMediaUrl(p.marketing_background_url) : null,
+    marketing_background_no_price_url: p.marketing_background_no_price_url ? toBrowserSafeMediaUrl(p.marketing_background_no_price_url) : null,
     marketing_video_url: p.marketing_video_url ? toBrowserSafeMediaUrl(p.marketing_video_url) : null,
     category_id: p.category_id,
     brand: p.brand,

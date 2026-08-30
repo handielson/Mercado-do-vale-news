@@ -318,6 +318,7 @@ const waitForMarketingArtworkUpload = async (uploadId: string): Promise<Marketin
 const saveMarketingArtworkForWhatsappStatus = async (
     product: CatalogProduct,
     pngDataUrl: string,
+    showPrice: boolean = true,
 ): Promise<string> => {
     if (!product.id) throw new Error('Produto sem identificador para vincular a arte');
 
@@ -329,7 +330,9 @@ const saveMarketingArtworkForWhatsappStatus = async (
         .replace(/[^a-zA-Z0-9_-]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .toLowerCase() || product.id;
-    const file = new File([imageBlob], `status-${fileKey}.png`, { type: 'image/png' });
+    const filePrefix = showPrice ? 'status' : 'status-sem-preco';
+    const targetField = showPrice ? 'marketing_background_url' : 'marketing_background_no_price_url';
+    const file = new File([imageBlob], `${filePrefix}-${fileKey}.png`, { type: 'image/png' });
     const formData = new FormData();
     formData.append('file', file);
 
@@ -346,7 +349,7 @@ const saveMarketingArtworkForWhatsappStatus = async (
     const versionedUrl = `${publicUrl}${publicUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
     await vpsClient.patch(
         `/table-data/products/${encodeURIComponent(product.id)}?pk=id`,
-        { marketing_background_url: versionedUrl },
+        { [targetField]: versionedUrl },
     );
     return versionedUrl;
 };
@@ -584,7 +587,7 @@ export default function MarketingPage() {
         [groupedResults],
     );
     const readyMarketingVariantCount = useMemo(
-        () => marketingVariantOptions.filter(({ variant }) => variant.products.some((product) => Boolean(product.marketing_background_url))).length,
+        () => marketingVariantOptions.filter(({ variant }) => variant.products.some((product) => Boolean(product.marketing_background_url || product.marketing_background_no_price_url))).length,
         [marketingVariantOptions],
     );
     const videoMarketingVariantCount = useMemo(
@@ -1150,10 +1153,13 @@ export default function MarketingPage() {
                     );
                 } else {
                     const dataUrl = await exportCurrentCanvasPng(slide.imageUrl);
-                    if (format === 'status' && showArtworkPrice && selectedProduct && slide.slideNumber === 1) {
-                        const savedUrl = await saveMarketingArtworkForWhatsappStatus(selectedProduct, dataUrl);
+                    if (format === 'status' && selectedProduct && slide.slideNumber === 1) {
+                        const savedUrl = await saveMarketingArtworkForWhatsappStatus(selectedProduct, dataUrl, showArtworkPrice);
                         setSelectedProduct((current) => current?.id === selectedProduct.id
-                            ? { ...current, marketing_background_url: savedUrl }
+                            ? {
+                                ...current,
+                                [showArtworkPrice ? 'marketing_background_url' : 'marketing_background_no_price_url']: savedUrl,
+                            }
                             : current);
                     }
                     triggerImageDownload(
@@ -1168,8 +1174,10 @@ export default function MarketingPage() {
             toast.success(
                 isStickerFormat
                     ? `Figurinha ${currentStickerExportMode.toUpperCase()} gerada com sucesso! ${slidesToExport.length} arquivo(s) baixado(s).`
-                    : format === 'status' && showArtworkPrice && selectedProduct
-                    ? 'Arte baixada e salva automaticamente como foto de marketing do Status!'
+                    : format === 'status' && selectedProduct
+                    ? (showArtworkPrice
+                        ? 'Arte baixada e salva automaticamente como foto de marketing do Status!'
+                        : 'Arte sem preço baixada e salva automaticamente como foto de marketing do Status!')
                     : slidesToExport.length > 1
                     ? `Carrossel gerado com sucesso! ${slidesToExport.length} slides baixados.`
                     : 'Arte gerada e baixada com sucesso!'
@@ -1232,8 +1240,8 @@ export default function MarketingPage() {
                     completedSlides += 1;
                 } else {
                     const dataUrl = await exportCurrentCanvasPng(slide.imageUrl);
-                    if (format === 'status' && showArtworkPrice && slide.slideNumber === 1) {
-                        await saveMarketingArtworkForWhatsappStatus(slide.product, dataUrl);
+                    if (format === 'status' && slide.slideNumber === 1) {
+                        await saveMarketingArtworkForWhatsappStatus(slide.product, dataUrl, showArtworkPrice);
                     }
                     triggerImageDownload(
                         dataUrl,
@@ -1249,8 +1257,8 @@ export default function MarketingPage() {
             }
 
             toast.success(
-                format === 'status' && showArtworkPrice
-                    ? `Lote gerado: ${completedSlides} imagens baixadas e vinculadas automaticamente ao Status.`
+                format === 'status'
+                    ? `Lote gerado: ${completedSlides} imagens baixadas e vinculadas automaticamente ao Status (${showArtworkPrice ? 'com preço' : 'sem preço'}).`
                     : `Lote gerado com sucesso! ${completedSlides} imagens baixadas.`,
             );
             setBulkSelectedIds(new Set());
@@ -1980,7 +1988,7 @@ export default function MarketingPage() {
                                                             const groupPreviewImage = getRenderableProductImages(p)[0] ?? null;
                                                             const isSelectedPreview = selectedProduct?.id === p.id;
                                                             const isChecked = bulkSelectedIds.has(p.id);
-                                                            const hasArtwork = variant.products.some((product) => Boolean(product.marketing_background_url));
+                                                            const hasArtwork = variant.products.some((product) => Boolean(product.marketing_background_url || product.marketing_background_no_price_url));
                                                             const hasVideo = variant.products.some((product) => Boolean(product.marketing_video_url || product.video_url));
                                                             return (
                                                                 <div

@@ -63,9 +63,15 @@ export function resolveScheduledSendTimes({ startTime = '08:00', count = 1, inte
 
 export function getStatusProductImage(product, includePrice = true) {
   if (includePrice) return String(product?.marketing_background_url || '').trim();
+  const directNoPrice = String(product?.marketing_background_no_price_url || '').trim();
+  if (directNoPrice) return directNoPrice;
   const sourceProducts = Array.isArray(product?.status_group_products) && product.status_group_products.length
     ? [product, ...product.status_group_products]
     : [product];
+  for (const item of sourceProducts) {
+    const noPriceImage = String(item?.marketing_background_no_price_url || '').trim();
+    if (noPriceImage) return noPriceImage;
+  }
   for (const item of sourceProducts) {
     const images = Array.isArray(item?.images) ? item.images : [];
     const image = String(item?.image_url || images[0] || '').trim();

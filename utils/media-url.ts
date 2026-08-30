@@ -1,7 +1,6 @@
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
 const PROXIED_MEDIA_HOSTNAMES = new Set([
     'api.xiaomipetrolina.com.br',
-    'imagens.xiaomipetrolina.com.br',
 ]);
 
 const CACHEABLE_IMAGE_PROXY_HOSTNAMES = new Set([

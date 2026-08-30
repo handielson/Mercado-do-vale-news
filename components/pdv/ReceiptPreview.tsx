@@ -413,7 +413,7 @@ export default function ReceiptPreview({
                                     </div>
                                     <span className="font-mono text-slate-800">
                                         {formatCurrency(payment.total_with_fee ?? payment.amount)}
-                                        {payment.method === 'credit' && payment.installments && payment.installments > 1 && (
+                                        {(payment.method === 'credit' || payment.method === 'a_prazo') && payment.installments && payment.installments > 1 && (
                                             <span className="ml-1 text-xs text-slate-500">
                                                 {payment.installments}x de {formatCurrency(Math.round((payment.total_with_fee ?? payment.amount) / payment.installments))}
                                             </span>
