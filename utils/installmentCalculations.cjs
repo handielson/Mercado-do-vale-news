@@ -212,23 +212,26 @@ function recalculateAPrazoPayment(payments, saleTotal, defaultDueDate) {
     if (idx !== aPrazoIndex) return p;
 
     const count = p.installment_schedule?.length || p.installments || 1;
+    const feePercentage = Math.max(0, Number(p.fee_percentage || 0));
+    const feeAmount = Math.round(nextAPrazoAmount * (feePercentage / 100));
+    const totalWithFee = nextAPrazoAmount + feeAmount;
     const dueDate = p.installment_schedule?.[0]?.due_date || p.due_date || defaultDueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     let nextSchedule;
 
-    if (count > 1 && nextAPrazoAmount > 0) {
+    if (totalWithFee > 0) {
       try {
-        nextSchedule = generatePaymentInstallmentSchedule(nextAPrazoAmount, count, dueDate);
+        nextSchedule = generatePaymentInstallmentSchedule(totalWithFee, count, dueDate);
       } catch {
         nextSchedule = undefined;
       }
-    } else {
-      nextSchedule = undefined;
     }
 
     return {
       ...p,
       amount: nextAPrazoAmount,
-      total_with_fee: nextAPrazoAmount,
+      fee_percentage: feePercentage,
+      fee_amount: feeAmount,
+      total_with_fee: totalWithFee,
       due_date: dueDate,
       installment_schedule: nextSchedule,
     };

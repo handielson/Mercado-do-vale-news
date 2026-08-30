@@ -12,6 +12,7 @@ const {
   toSafeIntegerCents,
   generatePaymentInstallmentSchedule,
   validatePaymentInstallmentSchedule,
+  recalculateAPrazoPayment,
 } = require(path.join(__dirname, '..', 'utils', 'installmentCalculations.cjs'));
 
 test('isLeapYear & getDaysInMonth: anos bissextos e dias por mes', () => {
@@ -153,4 +154,40 @@ test('validatePaymentInstallmentSchedule: validacao de integridade e rejeicao de
     { installment_number: 2, installment_count: 2, amount: 50, due_date: '2027-01-10' },
   ];
   assert.equal(validatePaymentInstallmentSchedule(100, badDates).valid, false);
+});
+
+test('recalculateAPrazoPayment: preserva taxa do crediario e distribui total com taxa', () => {
+  const payments = [{
+    method: 'a_prazo',
+    amount: 10000,
+    fee_percentage: 5,
+    fee_amount: 500,
+    total_with_fee: 10500,
+    installment_schedule: generatePaymentInstallmentSchedule(10500, 3, '2027-01-31'),
+  }];
+
+  const [updated] = recalculateAPrazoPayment(payments, 10000);
+  assert.equal(updated.amount, 10000);
+  assert.equal(updated.fee_percentage, 5);
+  assert.equal(updated.fee_amount, 500);
+  assert.equal(updated.total_with_fee, 10500);
+  assert.deepEqual(updated.installment_schedule.map(item => item.amount), [3500, 3500, 3500]);
+  assert.equal(updated.installment_schedule.reduce((sum, item) => sum + item.amount, 0), 10500);
+});
+
+test('recalculateAPrazoPayment: suporta taxas deterministicas de 1x a 12x', () => {
+  for (let count = 1; count <= 12; count += 1) {
+    const feePercentage = count;
+    const base = 10000;
+    const totalWithFee = base + Math.round(base * feePercentage / 100);
+    const [updated] = recalculateAPrazoPayment([{
+      method: 'a_prazo',
+      amount: base,
+      fee_percentage: feePercentage,
+      installment_schedule: generatePaymentInstallmentSchedule(base, count, '2027-01-31'),
+    }], base);
+    assert.equal(updated.total_with_fee, totalWithFee);
+    assert.equal(updated.installment_schedule.length, count);
+    assert.equal(updated.installment_schedule.reduce((sum, item) => sum + item.amount, 0), totalWithFee);
+  }
 });

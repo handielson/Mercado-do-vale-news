@@ -186,26 +186,35 @@ export default function PaymentSection({
         }
 
         const firstDueDate = getDueDateDefault();
+        const fee = getBestCreditFeeByInstallment(paymentFees || [], 1);
+        const feeAmount = Math.round(targetAmount * (Math.max(0, Number(fee?.applied_fee || 0)) / 100));
         setAPrazoAmount(targetAmount);
         setAPrazoInstallmentCount(1);
         setAPrazoFirstDueDate(firstDueDate);
-        setAPrazoSchedule(generatePaymentInstallmentSchedule(targetAmount, 1, firstDueDate));
+        setAPrazoSchedule(generatePaymentInstallmentSchedule(targetAmount + feeAmount, 1, firstDueDate));
         setIsAPrazoModalOpen(true);
     };
 
     const handleAPrazoCountChange = (count: number) => {
         const safeCount = Math.max(1, Math.min(12, count));
+        const fee = getBestCreditFeeByInstallment(paymentFees || [], safeCount);
+        const feePercentage = Math.max(0, Number(fee?.applied_fee || 0));
+        const feeAmount = Math.round(aPrazoAmount * (feePercentage / 100));
         setAPrazoInstallmentCount(safeCount);
-        setAPrazoSchedule(generatePaymentInstallmentSchedule(aPrazoAmount, safeCount, aPrazoFirstDueDate));
+        setAPrazoSchedule(generatePaymentInstallmentSchedule(aPrazoAmount + feeAmount, safeCount, aPrazoFirstDueDate));
     };
 
     const handleAPrazoFirstDueDateChange = (date: string) => {
         setAPrazoFirstDueDate(date);
-        setAPrazoSchedule(generatePaymentInstallmentSchedule(aPrazoAmount, aPrazoInstallmentCount, date));
+        const fee = getBestCreditFeeByInstallment(paymentFees || [], aPrazoInstallmentCount);
+        const feeAmount = Math.round(aPrazoAmount * (Math.max(0, Number(fee?.applied_fee || 0)) / 100));
+        setAPrazoSchedule(generatePaymentInstallmentSchedule(aPrazoAmount + feeAmount, aPrazoInstallmentCount, date));
     };
 
     const handleAPrazoResetSchedule = () => {
-        setAPrazoSchedule(generatePaymentInstallmentSchedule(aPrazoAmount, aPrazoInstallmentCount, aPrazoFirstDueDate));
+        const fee = getBestCreditFeeByInstallment(paymentFees || [], aPrazoInstallmentCount);
+        const feeAmount = Math.round(aPrazoAmount * (Math.max(0, Number(fee?.applied_fee || 0)) / 100));
+        setAPrazoSchedule(generatePaymentInstallmentSchedule(aPrazoAmount + feeAmount, aPrazoInstallmentCount, aPrazoFirstDueDate));
         toast.success('Cronograma recalculado com sugestão civil');
     };
 
@@ -216,7 +225,13 @@ export default function PaymentSection({
     };
 
     const handleConfirmAPrazo = () => {
-        const validation = validatePaymentInstallmentSchedule(aPrazoAmount, aPrazoSchedule);
+        const fee = getBestCreditFeeByInstallment(paymentFees || [], aPrazoInstallmentCount);
+        const feePercentage = Math.max(0, Number(fee?.applied_fee || 0));
+        const operatorFeePercentage = Math.max(0, Number(fee?.operator_fee || 0));
+        const feeAmount = Math.round(aPrazoAmount * (feePercentage / 100));
+        const operatorFeeAmount = Math.round(aPrazoAmount * (operatorFeePercentage / 100));
+        const totalWithFee = aPrazoAmount + feeAmount;
+        const validation = validatePaymentInstallmentSchedule(totalWithFee, aPrazoSchedule);
         if (!validation.valid) {
             toast.error(validation.error || 'Cronograma de parcelamento inválido');
             return;
@@ -225,7 +240,12 @@ export default function PaymentSection({
         const payment: PaymentMethod = {
             method: 'a_prazo',
             amount: aPrazoAmount,
-            total_with_fee: aPrazoAmount,
+            installments: aPrazoInstallmentCount,
+            fee_percentage: feePercentage,
+            fee_amount: feeAmount,
+            operator_fee_percentage: operatorFeePercentage,
+            operator_fee_amount: operatorFeeAmount,
+            total_with_fee: totalWithFee,
             due_date: aPrazoSchedule[0]?.due_date || aPrazoFirstDueDate,
             installment_schedule: aPrazoSchedule,
         };
@@ -343,68 +363,7 @@ export default function PaymentSection({
                 )}
             </div>
 
-            {/* Desconto de Ajuste Final - aplicado por ultimo */}
-            {false && onFinalAdjustmentDiscountChange && (
-                <div className="mb-4 p-4 bg-rose-50 border-2 border-rose-200 rounded-lg">
-                    <h4 className="text-sm font-semibold text-rose-800 mb-2 flex items-center gap-2">
-                        <span className="text-lg">🧾</span>
-                        Desconto de Ajuste Final
-                    </h4>
-                    <p className="text-xs text-rose-700 mb-3">
-                        Aplicado por ultimo, apos todos os calculos (frete, juros e descontos anteriores).
-                    </p>
-                    <div className="flex gap-2">
-                        <div className="flex-1">
-                            <input
-                                type="text"
-                                value={finalAdjustmentInput}
-                                onChange={(e) => {
-                                    const rawValue = e.target.value.replace(/[^\d,.]/g, '');
-                                    setFinalAdjustmentInput(rawValue);
-                                }}
-                                onBlur={() => {
-                                    const cleanValue = finalAdjustmentInput.replace(',', '.');
-                                    const parsedValue = parseFloat(cleanValue) * 100;
-                                    const safeValue = isNaN(parsedValue) || parsedValue < 0 ? 0 : Math.round(parsedValue);
-                                    const maxValue = Math.max(0, maxFinalAdjustmentDiscount ?? Number.MAX_SAFE_INTEGER);
-                                    onFinalAdjustmentDiscountChange(Math.min(safeValue, maxValue));
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        const cleanValue = finalAdjustmentInput.replace(',', '.');
-                                        const parsedValue = parseFloat(cleanValue) * 100;
-                                        const safeValue = isNaN(parsedValue) || parsedValue < 0 ? 0 : Math.round(parsedValue);
-                                        const maxValue = Math.max(0, maxFinalAdjustmentDiscount ?? Number.MAX_SAFE_INTEGER);
-                                        onFinalAdjustmentDiscountChange(Math.min(safeValue, maxValue));
-                                        e.currentTarget.blur();
-                                    }
-                                }}
-                                placeholder="0,00"
-                                className="w-full px-4 py-2 border border-rose-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent"
-                            />
-                        </div>
-                        <button
-                            onClick={() => {
-                                setFinalAdjustmentInput('');
-                                onFinalAdjustmentDiscountChange(0);
-                            }}
-                            className="px-4 py-2 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors text-sm font-medium"
-                        >
-                            Limpar
-                        </button>
-                    </div>
-                    {maxFinalAdjustmentDiscount !== undefined && (
-                        <p className="text-xs text-rose-700 mt-2">
-                            Maximo permitido: {formatCurrency(Math.max(0, maxFinalAdjustmentDiscount))}
-                        </p>
-                    )}
-                    {(finalAdjustmentDiscount || 0) > 0 && (
-                        <p className="text-xs text-rose-700 mt-1">
-                            Ajuste final aplicado: {formatCurrency(finalAdjustmentDiscount || 0)}
-                        </p>
-                    )}
-                </div>
-            )}
+
 
             {/* Pagamentos Adicionados */}
             {payments.length > 0 && (
@@ -517,16 +476,28 @@ export default function PaymentSection({
                         </button>
                     </div>
                     <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                        <div className="rounded border border-rose-200 bg-white p-2 text-slate-700">
-                            <strong>Total com juros:</strong> {formatCurrency(creditPaymentTotal)}
+                        <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
+                            <span className="block text-rose-700">Total original</span>
+                            <strong className="text-slate-800">{formatCurrency(totalBeforeFinalAdjustment)}</strong>
                         </div>
-                        <div className="rounded border border-rose-200 bg-white p-2 text-slate-700">
-                            <strong>Valor por parcela:</strong> {formatCurrency(creditInstallmentValue)}
+                        <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
+                            <span className="block text-rose-700">Ajuste aplicado</span>
+                            <strong className="text-red-600">-{formatCurrency(finalAdjustmentDiscount || 0)}</strong>
                         </div>
-                        <div className="rounded border border-rose-200 bg-white p-2 text-slate-700">
-                            <strong>Desconto aplicado:</strong> {formatCurrency(finalAdjustmentDiscount || 0)}
+                        <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
+                            <span className="block text-rose-700">Parcelas atuais</span>
+                            <strong className="text-slate-800">
+                                {creditPayment.installments && creditPayment.installments > 1
+                                    ? `${creditPayment.installments}x de ${formatCurrency(creditInstallmentValue)}`
+                                    : formatCurrency(creditPaymentTotal)}
+                            </strong>
                         </div>
                     </div>
+                    {maxFinalAdjustmentDiscount !== undefined && (
+                        <p className="text-xs text-rose-700 mt-2">
+                            Valor minimo permitido: {formatCurrency(Math.max(0, totalBeforeFinalAdjustment - maxFinalAdjustmentDiscount))}
+                        </p>
+                    )}
                 </div>
             )}
 
@@ -782,16 +753,34 @@ export default function PaymentSection({
                             </button>
                         </div>
 
-                        <div className="rounded-xl bg-blue-50/80 p-3.5 border border-blue-100 text-sm space-y-1">
-                            <div className="flex justify-between text-slate-700">
-                                <span>Cliente:</span>
-                                <strong className="text-slate-900">{selectedCustomer?.name || 'Cliente selecionado'}</strong>
-                            </div>
-                            <div className="flex justify-between text-slate-700">
-                                <span>Valor total a prazo:</span>
-                                <strong className="text-blue-800 text-base">{formatCurrency(aPrazoAmount)}</strong>
-                            </div>
-                        </div>
+                        {(() => {
+                            const fee = getBestCreditFeeByInstallment(paymentFees || [], aPrazoInstallmentCount);
+                            const feePct = Math.max(0, Number(fee?.applied_fee || 0));
+                            const feeAmt = Math.round(aPrazoAmount * (feePct / 100));
+                            const totalWithFee = aPrazoAmount + feeAmt;
+                            return (
+                                <div className="rounded-xl bg-blue-50/80 p-3.5 border border-blue-100 text-sm space-y-1.5">
+                                    <div className="flex justify-between text-slate-700">
+                                        <span>Cliente:</span>
+                                        <strong className="text-slate-900">{selectedCustomer?.name || 'Cliente selecionado'}</strong>
+                                    </div>
+                                    <div className="flex justify-between text-slate-700">
+                                        <span>Valor base à vista:</span>
+                                        <strong className="text-slate-800 font-semibold">{formatCurrency(aPrazoAmount)}</strong>
+                                    </div>
+                                    {feeAmt > 0 && (
+                                        <div className="flex justify-between text-amber-700 text-xs">
+                                            <span>Taxa do crediário ({feePct}%):</span>
+                                            <strong className="font-semibold">+ {formatCurrency(feeAmt)}</strong>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between text-slate-700 border-t border-blue-200/60 pt-1.5">
+                                        <span>Total a prazo:</span>
+                                        <strong className="text-blue-800 text-base font-bold">{formatCurrency(totalWithFee)}</strong>
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
@@ -803,11 +792,18 @@ export default function PaymentSection({
                                     onChange={(e) => handleAPrazoCountChange(Number(e.target.value))}
                                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                 >
-                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => (
-                                        <option key={num} value={num}>
-                                            {num}x {num === 1 ? '(à vista a prazo)' : `de ${formatCurrency(Math.round(aPrazoAmount / num))}`}
-                                        </option>
-                                    ))}
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => {
+                                        const fee = getBestCreditFeeByInstallment(paymentFees || [], num);
+                                        const feePct = Math.max(0, Number(fee?.applied_fee || 0));
+                                        const feeAmt = Math.round(aPrazoAmount * (feePct / 100));
+                                        const totalWithFee = aPrazoAmount + feeAmt;
+                                        const monthly = Math.round(totalWithFee / num);
+                                        return (
+                                            <option key={num} value={num}>
+                                                {num}x {num === 1 && feePct === 0 ? '(à vista a prazo)' : `de ${formatCurrency(monthly)} (Total: ${formatCurrency(totalWithFee)})`}
+                                            </option>
+                                        );
+                                    })}
                                 </select>
                             </div>
 

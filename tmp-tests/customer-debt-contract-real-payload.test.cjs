@@ -110,14 +110,15 @@ function simulateFromSaleEndpoint(body, mockDb) {
 }
 
 // Simula a serializacao real de saleService.ts
-function buildRealSaleServicePayload({ customerId, saleId, amountCents, installmentCount, firstDueDate }) {
+function buildRealSaleServicePayload({ customerId, saleId, amountCents, installmentCount, firstDueDate, feePercentage = 0 }) {
   const saleCode = saleId.slice(0, 8).toUpperCase();
+  const totalWithFee = amountCents + Math.round(amountCents * (feePercentage / 100));
   if (installmentCount > 1) {
-    const schedule = generatePaymentInstallmentSchedule(amountCents, installmentCount, firstDueDate);
+    const schedule = generatePaymentInstallmentSchedule(totalWithFee, installmentCount, firstDueDate);
     return {
       customer_id: customerId,
       sale_id: saleId,
-      valor_total: amountCents,
+      valor_total: totalWithFee,
       descricao: `Venda PDV #${saleCode}`,
       data_vencimento: schedule[0]?.due_date || firstDueDate,
       installments: schedule.map(item => ({
@@ -132,7 +133,7 @@ function buildRealSaleServicePayload({ customerId, saleId, amountCents, installm
     return {
       customer_id: customerId,
       sale_id: saleId,
-      valor_total: amountCents,
+      valor_total: totalWithFee,
       descricao: `Venda PDV #${saleCode}`,
       data_vencimento: firstDueDate,
     };
@@ -225,4 +226,24 @@ test('Contrato Real: Venda 12x a prazo distribui centavos com exatidao e calcula
   assert.equal(mockDb.customer_debts[9].data_vencimento, '2027-10-31');
   assert.equal(mockDb.customer_debts[10].data_vencimento, '2027-11-30');
   assert.equal(mockDb.customer_debts[11].data_vencimento, '2027-12-31');
+});
+
+test('Contrato Real: payload de crediario usa total_with_fee e soma exata das parcelas', () => {
+  const mockDb = { customer_debts: [], customer_debt_reminders: [] };
+  const payload = buildRealSaleServicePayload({
+    customerId: 'cust-fee',
+    saleId: 'sale-fee-uuid',
+    amountCents: 10000,
+    installmentCount: 3,
+    feePercentage: 5,
+    firstDueDate: '2027-01-31',
+  });
+
+  assert.equal(payload.valor_total, 10500);
+  assert.deepEqual(payload.installments.map(item => item.amount), [3500, 3500, 3500]);
+  assert.equal(payload.installments.reduce((sum, item) => sum + item.amount, 0), payload.valor_total);
+
+  const response = simulateFromSaleEndpoint(payload, mockDb);
+  assert.equal(response.status, 201);
+  assert.equal(mockDb.customer_debts.reduce((sum, debt) => sum + debt.valor_total, 0), 10500);
 });

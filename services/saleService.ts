@@ -352,7 +352,7 @@ async function createCustomerDebtForAPrazoSale(saleInput: SaleInput, sale: Sale)
         await vpsClient.post('/financial/customer-debts/from-sale', {
             customer_id: saleInput.customer_id,
             sale_id: sale.id,
-            valor_total: aPrazoPayment.amount,
+            valor_total: aPrazoPayment.total_with_fee ?? aPrazoPayment.amount,
             descricao: `Venda PDV #${saleCode}`,
             data_vencimento: schedule[0]?.due_date || aPrazoPayment.due_date || getDefaultDebtDueDate(),
             installments: schedule.map(item => ({
@@ -367,7 +367,7 @@ async function createCustomerDebtForAPrazoSale(saleInput: SaleInput, sale: Sale)
         await vpsClient.post('/financial/customer-debts/from-sale', {
             customer_id: saleInput.customer_id,
             sale_id: sale.id,
-            valor_total: aPrazoPayment.amount,
+            valor_total: aPrazoPayment.total_with_fee ?? aPrazoPayment.amount,
             descricao: `Venda PDV #${saleCode}`,
             data_vencimento: aPrazoPayment.due_date || getDefaultDebtDueDate(),
         });

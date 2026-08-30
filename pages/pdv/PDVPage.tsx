@@ -479,7 +479,7 @@ export default function PDVPage() {
     ): PaymentMethod[] => {
         const totals = calculateSaleTotals(currentCartItems);
         const giftDiscount = currentCartItems.reduce((sum, item) => item.is_gift ? sum + (item.unit_price * item.quantity) : sum, 0);
-        const totalFees = currentPayments.reduce((sum, payment) => sum + (payment.fee_amount || 0), 0);
+        const totalFees = currentPayments.reduce((sum, payment) => payment.method === 'a_prazo' ? sum : sum + (payment.fee_amount || 0), 0);
         const totalBeforeFinalAdj = totals.total - giftDiscount - promoDiscount + deliveryCustomer + totalFees;
         const validFinalAdj = Math.min(finalAdjDiscount, Math.max(0, totalBeforeFinalAdj));
         const saleTotal = Math.max(0, totalBeforeFinalAdj - validFinalAdj);
@@ -499,12 +499,12 @@ export default function PDVPage() {
             );
             const oldAPrazo = currentPayments.find(p => p.method === 'a_prazo');
             const newAPrazo = updated.find(p => p.method === 'a_prazo');
-            if (oldAPrazo?.amount === newAPrazo?.amount && oldAPrazo?.installment_schedule?.length === newAPrazo?.installment_schedule?.length) {
+            if (oldAPrazo?.amount === newAPrazo?.amount && oldAPrazo?.total_with_fee === newAPrazo?.total_with_fee && oldAPrazo?.installment_schedule?.length === newAPrazo?.installment_schedule?.length) {
                 return currentPayments;
             }
             return updated;
         });
-    }, [cartItems, promotionalDiscount, deliveryCostCustomer, finalAdjustmentDiscount]);
+    }, [cartItems, promotionalDiscount, deliveryCostCustomer, finalAdjustmentDiscount, paymentFees]);
 
     const handleUpdatePrice = (itemId: string, newPrice: number) => {
         const newItems = cartItems.map(item => {
