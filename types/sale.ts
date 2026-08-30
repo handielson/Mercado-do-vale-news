@@ -2,11 +2,22 @@
  * Sale Types
  * Types for POS (Point of Sale) system
  */
+/**
+ * Sale Types
+ * Types for POS (Point of Sale) system
+ */
 
 /**
  * Payment Methods
  */
 export type PaymentMethodType = 'money' | 'credit' | 'debit' | 'pix' | 'a_prazo';
+
+export interface PaymentInstallmentScheduleItem {
+    installment_number: number;
+    installment_count: number;
+    amount: number; // em centavos
+    due_date: string; // YYYY-MM-DD
+}
 
 export interface PaymentMethod {
     method: PaymentMethodType;
@@ -18,6 +29,7 @@ export interface PaymentMethod {
     operator_fee_amount?: number; // Custo da operadora/maquina em centavos
     total_with_fee: number; // Valor total (amount + fee_amount)
     due_date?: string; // Data de vencimento se for a_prazo (YYYY-MM-DD)
+    installment_schedule?: PaymentInstallmentScheduleItem[];
     pix_payment_id?: string;
     mercado_pago_payment_id?: string;
     pix_status?: 'pending' | 'approved' | 'rejected' | 'expired' | 'error';

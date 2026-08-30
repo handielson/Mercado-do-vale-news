@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.293-smartphone-preco-unico
+version: v1.2.294-crediario-parcelado-whatsapp
 date: 2026-08-30
 status: ready
-release_vps: /var/www/mdv-site/releases/20260830-000400-v1293-smartphone-preco-unico
+release_vps: pendente
 branch: main
-summary: Unifica os preços de venda por modelo, RAM física e armazenamento, independente da cor, e corrige a busca de configurações no catálogo do WhatsApp.
+summary: Crediário parcelado no PDV com distribuição exata de centavos, bloqueio de múltiplos pagamentos a_prazo, criação transacional idempotente com recuperação ER_DUP_ENTRY e lembretes WhatsApp protegidos por guarda de schema e dry-run.
 ```

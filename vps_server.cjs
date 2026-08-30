@@ -5,43 +5,18 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const zlib = require('zlib');
-const { spawn } = require('child_process');
-const ffmpegStaticPath = require('ffmpeg-static');
-const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
-const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
+let isWhatsAppAutomationLogsSchemaReady = false;
+
 const {
-  ensureMercadoLivreTables,
-  registerMercadoLivreRoutes,
-  syncMercadoLivreStockFromBlingTargets,
-} = require('./services/mercadoLivreServer.cjs');
-const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
-const { registerCustomerGoogleAuthRoutes } = require('./services/customerGoogleAuthServer.cjs');
-const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
-const {
-  CATALOG_PREFERENCE_HANDOFF_MESSAGE,
-  PHONE_LIST_FOLLOWUP_MESSAGE,
-  normalizePreferenceState,
-  extractCatalogPreferences,
-  filterProductsByPreferences,
-  hasActionablePreferences,
-} = require('./services/autoresponderCatalogPreferences.cjs');
-const crypto = require('crypto');
-const sharp = require('sharp');
-const { PDFDocument } = require('pdf-lib');
-const {
-  normalizeSaleCode,
-  parseSignedWarrantyFileName,
-  buildSignedWarrantyNames,
-  buildDiscardMessage,
-  fitImageInsideA4,
-} = require('./services/signedWarrantyDocumentCore.cjs');
-const {
-  createMobileSalesPushService,
-} = require('./services/mobileSalesPushService.cjs');
-const {
-  ensureMarketingCampaignTables,
-  registerMarketingCampaignRoutes,
-} = require('./services/marketingCampaignApi.cjs');
+  DEFAULT_CUSTOMER_DEBT_REMINDER_TEMPLATE,
+  buildCustomerDebtReminderVariables,
+  cancelPendingRemindersForDebt,
+  processCustomerDebtReminders,
+  createOrGetDebtsFromSale,
+  logWhatsAppAutomationEventCore,
+  ensureWhatsAppAutomationLogsStatusEnum,
+  evaluateDebtsIdempotency,
+} = require('./services/customerDebtReminderCore.cjs');
 require('dotenv').config({ path: path.join(__dirname, '.env.tiktok.local'), override: false });
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -3395,6 +3370,7 @@ const WHATSAPP_AUTOMATION_TEMPLATE_DEFAULTS_VPS = {
       'Se precisar, estamos por aqui. \uD83D\uDC9A',
     ].join('\n'),
   },
+  customer_debt_due_reminder: DEFAULT_CUSTOMER_DEBT_REMINDER_TEMPLATE,
 };
 
 async function getWhatsAppAutomationTemplateVps(templateKey) {
@@ -3425,25 +3401,10 @@ function renderWhatsAppAutomationTemplateVps(template, variables = {}) {
 
 async function logWhatsAppAutomationEventVps(input) {
   try {
-    await pool.query(
-      `INSERT INTO whatsapp_automation_logs
-        (id, template_key, entity_type, entity_id, customer_id, phone, status, message, rendered_text, error_message)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID(),
-        String(input.templateKey || '').slice(0, 120),
-        input.entityType || null,
-        input.entityId || null,
-        input.customerId || null,
-        input.phone || null,
-        input.status || 'failed',
-        String(input.message || '').slice(0, 1000),
-        input.renderedText || null,
-        input.errorMessage ? String(input.errorMessage).slice(0, 1000) : null,
-      ]
-    );
+    return await logWhatsAppAutomationEventCore(pool, input);
   } catch (err) {
-    console.warn('[whatsapp-automation-log] failed:', err.message);
+    console.warn('[whatsapp-automation-log] failed:', err?.message || String(err));
+    return { ok: false, error: err?.message || String(err) };
   }
 }
 
@@ -3554,13 +3515,24 @@ async function sendWhatsAppAutomationMessageVps(input) {
 
   try {
     const result = await sendDeliveryWhatsappText(phone, renderedText);
-    if (!result?.ok) throw new Error(`WhatsApp API retornou HTTP ${result?.status || 'desconhecido'}`);
+    if (!result?.ok) {
+      const httpStatus = Number(result?.status || 0);
+      const isAmbiguousHttp = [502, 503, 504].includes(httpStatus);
+      if (isAmbiguousHttp) {
+        const error = `WhatsApp API gateway/server status HTTP ${httpStatus}`;
+        await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'ambiguous', renderedText, message: 'automation_whatsapp_ambiguous', errorMessage: error });
+        return { status: 'ambiguous', error, reason: 'gateway_uncertain_status' };
+      }
+      throw new Error(`WhatsApp API retornou HTTP ${result?.status || 'desconhecido'}`);
+    }
     await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'sent', renderedText, message: 'automation_whatsapp_sent' });
     return { status: 'sent', result };
   } catch (err) {
     const errorMessage = err?.message || 'Falha ao enviar WhatsApp automatico';
-    await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'failed', renderedText, message: 'automation_whatsapp_failed', errorMessage });
-    return { status: 'failed', error: errorMessage };
+    const isTimeout = /timeout|etimedout|econnreset|socket|eai_again|gateway|502|503|504/i.test(errorMessage) || err?.code === 'ETIMEDOUT';
+    const status = isTimeout ? 'ambiguous' : 'failed';
+    await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status, renderedText, message: `automation_whatsapp_${status}`, errorMessage });
+    return { status, error: errorMessage, reason: isTimeout ? 'network_timeout_or_uncertain' : 'send_failed' };
   }
 }
 
@@ -12772,6 +12744,22 @@ async function handleCronDispatcherVps(request, reply) {
       ok: false,
       error: err.message || String(err),
     }));
+    const customerDebtRemindersSummary = isWhatsAppAutomationLogsSchemaReady
+      ? await processCustomerDebtReminders({
+          pool,
+          sendWhatsAppMessage: sendWhatsAppAutomationMessageVps,
+          dryRun: true, // Estritamente em dry-run ate autorizacao explicita
+          limit: 50,
+          logger: console,
+        }).catch((err) => ({
+          ok: false,
+          error: err?.message || String(err),
+        }))
+      : {
+          ok: false,
+          skipped: true,
+          error: 'schema_incompatible: whatsapp_automation_logs ENUM migration pending or failed',
+        };
     const rows = await vpsDbSelect('telegram_settings', 'select=*&limit=1');
     const settings = cronDispatcherFirstRowVps(rows);
     let facebookMarketplaceCampaignsGenerated = 0;
@@ -12786,6 +12774,7 @@ async function handleCronDispatcherVps(request, reply) {
         message: 'Telegram integration inactive or not fully configured',
         birthdaySummary,
         whatsappStatusSummary,
+        customerDebtRemindersSummary,
         facebookMarketplaceCampaignsGenerated,
         debug: buildCopyableDebug('cron-dispatcher', {
           hasSettings: !!settings,
@@ -24999,7 +24988,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
   }
 
   const [rows] = await pool.query(sql, params);
-  
+
   if (search || status === 'all') {
     console.log(`[VPS GET /products] Returned ${rows.length} rows for search="${search || ''}"`);
   }
@@ -25058,7 +25047,7 @@ fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 m
   const [rows] = await pool.query(
     `SELECT *,
       ${comboStockSql('products')} AS stock_quantity
-     FROM products WHERE id = ?`, 
+     FROM products WHERE id = ?`,
     [req.params.id]
   );
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
@@ -27972,7 +27961,7 @@ fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
   const id = p.id || require('crypto').randomUUID();
   const children = p.combo_children || [];
   const choiceGroups = p.combo_choice_groups || [];
-  
+
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -28019,7 +28008,7 @@ fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
         );
       }
     }
-    
+
     await connection.commit();
     reply.code(201).send({ ok: true, id });
   } catch (err) {
@@ -28035,12 +28024,12 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
   const comboId = req.params.id;
   const children = p.combo_children || [];
   const choiceGroups = p.combo_choice_groups || [];
-  
+
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
     await connection.query(
-      `UPDATE products SET 
+      `UPDATE products SET
         name=?, slug=?, sku=?, is_combo=1, combo_discount_type=?, combo_discount_value=?,
         price_retail=?, price_wholesale=?, price_cost=?, price_reseller=?,
         status=?, images=?, category_id=?, brand=?, description=?, specs=?, dimensions=?, weight_kg=?, is_virtual=?,
@@ -28085,7 +28074,7 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
         );
       }
     }
-    
+
     await connection.commit();
     reply.send({ ok: true, id: comboId });
   } catch (err) {
@@ -28268,9 +28257,9 @@ fastify.patch('/company-settings', { preHandler: requireSyncKey }, async (req, r
     // Campos de Identidade / Dados Gerais (usados por companyToRow em companyService.ts)
     'name', 'razao_social', 'state_registration', 'cnae', 'situacao_cadastral',
     'data_abertura', 'porte', 'logo', 'watermark_url', 'favicon',
-    
+
     // Shopee Integration
-    'shopee_partner_id', 'shopee_partner_key', 'shopee_shop_id', 
+    'shopee_partner_id', 'shopee_partner_key', 'shopee_shop_id',
     'shopee_access_token', 'shopee_refresh_token',
     'tiktok_app_key', 'tiktok_app_secret', 'tiktok_service_id', 'tiktok_shop_cipher',
     'tiktok_access_token', 'tiktok_refresh_token',
@@ -28283,15 +28272,15 @@ fastify.patch('/company-settings', { preHandler: requireSyncKey }, async (req, r
     // Campos de Endereço Extensos
     'address_zip_code', 'address_street', 'address_number', 'address_complement',
     'address_neighborhood', 'address_city', 'address_state', 'address_lat', 'address_lng',
-    
+
     // Redes Sociais e Contatos Visuais
     'social_instagram', 'social_facebook', 'social_youtube', 'social_website',
     'google_reviews_link',
-    
+
     // Dados Financeiros
     'pix_key', 'pix_key_type', 'pix_beneficiary_name',
     'bank_name', 'bank_agency', 'bank_account',
-    
+
     // Campos adicionais e integrações
     'description', 'internal_notes', 'google_analytics_id', 'catalog_footer_text',
     'maintenance_mode', 'maintenance_message', 'maintenance_bypass_key',
@@ -28474,8 +28463,8 @@ fastify.get('/admin/reports/favorites-ranking', { preHandler: requireSyncKey }, 
   try {
     const limit = Math.min(parseInt(req.query.limit) || 100, 500);
     const sql = `
-      SELECT 
-        cf.product_id, 
+      SELECT
+        cf.product_id,
         COUNT(cf.customer_id) as favorite_count,
         p.name, p.sku, p.images, p.price_retail, p.stock_quantity
       FROM customer_favorites cf
@@ -28485,13 +28474,13 @@ fastify.get('/admin/reports/favorites-ranking', { preHandler: requireSyncKey }, 
       LIMIT ?
     `;
     const [rows] = await pool.query(sql, [limit]);
-    
+
     // Parse JSON images
     const result = rows.map(r => ({
       ...r,
       images: typeof r.images === 'string' ? JSON.parse(r.images) : (r.images || [])
     }));
-    
+
     return result;
   } catch (error) {
     console.error('Error fetching favorites ranking:', error);
@@ -28504,8 +28493,8 @@ fastify.get('/admin/reports/carts-ranking', { preHandler: requireSyncKey }, asyn
   try {
     const limit = Math.min(parseInt(req.query.limit) || 100, 500);
     const sql = `
-      SELECT 
-        cc.product_id, 
+      SELECT
+        cc.product_id,
         COUNT(DISTINCT cc.customer_id) as cart_count,
         SUM(cc.quantity) as total_quantity,
         p.name, p.sku, p.images, p.price_retail, p.stock_quantity
@@ -28516,13 +28505,13 @@ fastify.get('/admin/reports/carts-ranking', { preHandler: requireSyncKey }, asyn
       LIMIT ?
     `;
     const [rows] = await pool.query(sql, [limit]);
-    
+
     // Parse JSON images
     const result = rows.map(r => ({
       ...r,
       images: typeof r.images === 'string' ? JSON.parse(r.images) : (r.images || [])
     }));
-    
+
     return result;
   } catch (error) {
     console.error('Error fetching carts ranking:', error);
@@ -31026,6 +31015,30 @@ fastify.post('/whatsapp/automation/sale-warranty-pdf', { preHandler: requireSync
 fastify.post('/whatsapp/automation/birthdays/today', { preHandler: requireSyncKey }, async (req) => {
   return sendBirthdayGreetingsForToday(req.body || {});
 });
+fastify.post('/whatsapp/automation/customer-debts/reminders/run', { preHandler: requireSyncKey }, async (req, reply) => {
+  if (!isWhatsAppAutomationLogsSchemaReady) {
+    return reply.code(503).send({
+      ok: false,
+      skipped: true,
+      error: 'schema_incompatible: whatsapp_automation_logs ENUM migration pending or failed',
+    });
+  }
+  const options = req.body && typeof req.body === 'object' ? req.body : {};
+  try {
+    const result = await processCustomerDebtReminders({
+      pool,
+      sendWhatsAppMessage: sendWhatsAppAutomationMessageVps,
+      dryRun: options.dry_run !== false && options.dryRun !== false,
+      limit: options.limit,
+      referenceDate: options.reference_date || options.referenceDate,
+      logger: req.log,
+    });
+    return result;
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Erro ao executar lembretes de debito', message: err?.message });
+  }
+});
 // UPDATE por PK
 fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, async (req, reply) => {
   const { name, pkValue } = req.params;
@@ -32858,7 +32871,7 @@ fastify.get('/schema/tables', { preHandler: requireSyncKey }, async (req, reply)
     result[tableName] = columns.map(c => ({ field: c.Field, type: c.Type, null: c.Null, key: c.Key, default: c.Default }));
   }
   return result;
-}); 
+});
 fastify.get('/schema/table/:name', { preHandler: requireSyncKey }, async (req, reply) => {
   const [columns] = await pool.query('DESCRIBE ??', [req.params.name]);
   return columns.map(c => ({ field: c.Field, type: c.Type, null: c.Null, key: c.Key, default: c.Default }));
@@ -35402,7 +35415,7 @@ const LOCAL_FOLDERS = {
 function listLocalSynologyFiles(folder, limit = 10000, offset = 0) {
   const configured = LOCAL_FOLDERS[folder] || '';
   const folderPath = path.isAbsolute(configured) ? configured : path.join(SYNOLOGY_DRIVE_BASE, configured);
-  
+
   try {
     if (!fs.existsSync(folderPath)) {
       return { ok: false, error: `Folder not found: ${folder}` };
@@ -35447,8 +35460,8 @@ function synoHttpGet(urlObj, path, timeoutMs = 15000) {
     const req = https.get({ hostname: urlObj.hostname, port, path, rejectUnauthorized: false }, (res) => {
       let d = '';
       res.on('data', c => d += c);
-      res.on('end', () => { 
-        try { 
+      res.on('end', () => {
+        try {
           const parsed = JSON.parse(d);
           resolve(parsed);
         } catch (e) {
@@ -36758,7 +36771,7 @@ fastify.get('/video/:filename', async (req, reply) => {
         'Cache-Control': 'public, max-age=3600',
         'Accept-Ranges': 'bytes',
       };
-      
+
       if (res.headers['content-type']) replyHeaders['Content-Type'] = res.headers['content-type'];
       if (res.headers['content-length']) replyHeaders['Content-Length'] = res.headers['content-length'];
       if (res.headers['content-range']) replyHeaders['Content-Range'] = res.headers['content-range'];
@@ -37303,7 +37316,7 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
         return { exists, url: exists ? canonicalUrl : null };
       } catch (synoErr) {
         console.warn('[check-video] Synology indisponível, tentando HEAD fallback no CDN:', synoErr.message);
-        
+
         // Fallback: validar existência do arquivo no CDN via HEAD request (com timeout)
         try {
           const controller = new AbortController();
@@ -37316,7 +37329,7 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
         } catch (headErr) {
           console.warn('[check-video] HEAD fallback falhou:', headErr.message);
         }
-        
+
         // Sem Synology e sem confirmação via CDN: retorna false (pessimista)
         return { exists: false, url: null };
       }
@@ -37334,7 +37347,7 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
     } catch (headErr) {
       console.warn('[check-video] HEAD direto falhou:', headErr.message);
     }
-    
+
     return { exists: false, url: null };
   } catch (err) {
     console.error('[check-video] Erro geral:', err.message);
@@ -37401,7 +37414,13 @@ async function addUniqueIndexIfMissing(table, indexName, column) {
     [table, indexName]
   );
   if (Number(row.cnt) === 0) {
-    await pool.query(`ALTER TABLE \`${table}\` ADD UNIQUE KEY \`${indexName}\` (\`${column}\`)`);
+    const rawCols = String(column || '').split(',').map((c) => c.trim()).filter(Boolean);
+    const validIdent = /^[a-zA-Z0-9_]+$/;
+    if (!validIdent.test(table) || !validIdent.test(indexName) || rawCols.length === 0 || !rawCols.every((c) => validIdent.test(c))) {
+      throw new Error(`Identificador invalido em addUniqueIndexIfMissing: table=${table}, index=${indexName}, column=${column}`);
+    }
+    const columnsSql = rawCols.map((c) => `\`${c}\``).join(', ');
+    await pool.query(`ALTER TABLE \`${table}\` ADD UNIQUE KEY \`${indexName}\` (${columnsSql})`);
     console.log(`[migration] Added unique index ${table}.${indexName}`);
   } else {
     console.log(`[migration] unique index ${table}.${indexName} already exists - skip`);
@@ -39063,6 +39082,70 @@ async function runMigrations() {
   await addColumnIfMissing('customer_debt_payments', 'recibo_numero', 'VARCHAR(80) DEFAULT NULL');
   await addUniqueIndexIfMissing('customer_debt_payments', 'uniq_customer_debt_payments_mp_id', 'mercado_pago_id');
 
+  await addColumnIfMissing('customer_debts', 'installment_number', 'INT NOT NULL DEFAULT 1');
+  await addColumnIfMissing('customer_debts', 'installment_count', 'INT NOT NULL DEFAULT 1');
+
+  // Auditoria read-only de duplicidades antes de criar o indice UNIQUE para nao derrubar a VPS
+  try {
+    const [duplicates] = await pool.query(`
+      SELECT sale_id, installment_number, COUNT(*) as cnt
+        FROM customer_debts
+       WHERE sale_id IS NOT NULL
+       GROUP BY sale_id, installment_number
+      HAVING cnt > 1
+    `);
+    if (duplicates && duplicates.length > 0) {
+      console.warn(`[migration] ALERTA: Detectadas ${duplicates.length} duplicidades em customer_debts (sale_id, installment_number). Pulando indice UNIQUE para manter a inicializacao da VPS.`);
+    } else {
+      await addUniqueIndexIfMissing('customer_debts', 'uniq_customer_debts_sale_installment', 'sale_id, installment_number');
+    }
+  } catch (dupAuditErr) {
+    console.warn('[migration] Falha ao auditar duplicidades de customer_debts:', dupAuditErr?.message);
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_debt_reminders (
+      id CHAR(36) PRIMARY KEY,
+      debt_id CHAR(36) NOT NULL,
+      status ENUM('pending', 'processing', 'sent', 'failed', 'skipped', 'ambiguous') NOT NULL DEFAULT 'pending',
+      scheduled_date DATE NOT NULL,
+      attempts INT NOT NULL DEFAULT 0,
+      last_error TEXT NULL,
+      provider_message_id VARCHAR(160) NULL,
+      sent_at DATETIME NULL,
+      reference_date DATE NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_customer_debt_reminders_debt (debt_id),
+      INDEX idx_customer_debt_reminders_status_sched (status, scheduled_date),
+      INDEX idx_customer_debt_reminders_ref (reference_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  // Compatibilidade com schemas existentes
+  await addColumnIfMissing('customer_debt_reminders', 'scheduled_date', 'DATE NULL');
+  await addColumnIfMissing('customer_debt_reminders', 'attempts', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('customer_debt_reminders', 'last_error', 'TEXT NULL');
+  await addColumnIfMissing('customer_debt_reminders', 'provider_message_id', 'VARCHAR(160) NULL');
+  await addColumnIfMissing('customer_debt_reminders', 'sent_at', 'DATETIME NULL');
+  await addColumnIfMissing('customer_debt_reminders', 'reference_date', 'DATE NULL');
+  try {
+    const [[hasScheduledFor]] = await pool.query(`
+      SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'customer_debt_reminders' AND COLUMN_NAME = 'scheduled_for'
+    `);
+    if (Number(hasScheduledFor?.cnt) > 0) {
+      await pool.query(`
+        UPDATE customer_debt_reminders
+           SET scheduled_date = scheduled_for
+         WHERE scheduled_date IS NULL AND scheduled_for IS NOT NULL
+      `);
+    }
+  } catch (colErr) {
+    console.warn('[migration] Aviso ao sincronizar scheduled_for em customer_debt_reminders:', colErr?.message);
+  }
+  console.log('[migration] customer_debt_reminders table: OK');
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_debt_payment_intents (
       id CHAR(36) PRIMARY KEY,
@@ -39340,7 +39423,7 @@ async function runMigrations() {
       entity_id VARCHAR(120) NULL,
       customer_id VARCHAR(120) NULL,
       phone VARCHAR(32) NULL,
-      status ENUM('sent','skipped','failed') NOT NULL DEFAULT 'failed',
+      status ENUM('sent','skipped','failed','ambiguous') NOT NULL DEFAULT 'failed',
       message TEXT NULL,
       rendered_text TEXT NULL,
       error_message TEXT NULL,
@@ -39351,6 +39434,14 @@ async function runMigrations() {
       INDEX idx_whatsapp_automation_logs_created (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  try {
+    await ensureWhatsAppAutomationLogsStatusEnum(pool);
+    isWhatsAppAutomationLogsSchemaReady = true;
+  } catch (err) {
+    isWhatsAppAutomationLogsSchemaReady = false;
+    console.error('[FATAL] Falha critica ao verificar/migrar ENUM de whatsapp_automation_logs. Dispatcher desativado:', err?.message || err);
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS n8n_bot_admin_numbers (
@@ -39959,7 +40050,7 @@ fastify.get('/financial/customer-debts/payments', { preHandler: requireSyncKeyOr
   if (!access.isSync && !access.isAdmin && req.query?.customer_id && String(req.query.customer_id) !== String(access.customerId)) {
     return reply.code(403).send({ error: 'Forbidden' });
   }
-  
+
   let queryStr = '';
   const params = [];
 
@@ -40039,88 +40130,57 @@ fastify.post('/financial/customer-debts/manual', { preHandler: requireSyncKey },
 // Criar debito vinculado a uma venda PDV a prazo
 fastify.post('/financial/customer-debts/from-sale', { preHandler: requireSyncKey }, async (req, reply) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
-  const { customer_id, sale_id, valor_total, descricao, data_vencimento } = body;
-
-  if (!customer_id) {
-    return reply.code(400).send({
-      error: 'customer_id obrigatorio',
-      debug: buildCustomerDebtDebug('validate from-sale payload', { sale_id, customer_id, valor_total, data_vencimento }),
-    });
-  }
-  if (!sale_id) {
-    return reply.code(400).send({
-      error: 'sale_id obrigatorio',
-      debug: buildCustomerDebtDebug('validate from-sale payload', { sale_id, customer_id, valor_total, data_vencimento }),
-    });
-  }
-  if (!valor_total || isNaN(Number(valor_total)) || Number(valor_total) <= 0) {
-    return reply.code(400).send({
-      error: 'valor_total invalido',
-      debug: buildCustomerDebtDebug('validate from-sale payload', { sale_id, customer_id, valor_total, data_vencimento }),
-    });
-  }
-  if (!descricao || typeof descricao !== 'string' || !descricao.trim()) {
-    return reply.code(400).send({
-      error: 'descricao obrigatoria',
-      debug: buildCustomerDebtDebug('validate from-sale payload', { sale_id, customer_id, valor_total, data_vencimento }),
-    });
-  }
-  if (!data_vencimento || !/^\d{4}-\d{2}-\d{2}$/.test(data_vencimento)) {
-    return reply.code(400).send({
-      error: 'data_vencimento invalida (YYYY-MM-DD)',
-      debug: buildCustomerDebtDebug('validate from-sale payload', { sale_id, customer_id, valor_total, data_vencimento }),
-    });
-  }
-
-  const valor = Math.round(Number(valor_total)); // em centavos
-
+  let connection = await pool.getConnection();
   try {
-    const [existing] = await pool.query(
-      'SELECT * FROM customer_debts WHERE sale_id = ? LIMIT 1',
-      [sale_id]
-    );
-
-    if (existing.length > 0) {
-      return reply.code(200).send(existing[0]);
+    await connection.beginTransaction();
+    const result = await createOrGetDebtsFromSale(connection, body);
+    if (result.status === 201 || result.status === 200) {
+      await connection.commit();
+      if (result.debts && result.debts.length === 1) {
+        return reply.code(result.status).send(result.debts[0]);
+      }
+      return reply.code(result.status).send(result.debts ? { success: true, debts: result.debts } : result);
+    } else {
+      await connection.rollback();
+      return reply.code(result.status || 400).send({ error: result.error, details: result.details });
+    }
+  } catch (err) {
+    if (connection) {
+      try { await connection.rollback(); } catch (_) {}
+      try { connection.release(); } catch (_) {}
+      connection = null;
     }
 
-    const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+    // Se houve conflito concorrente de insercao (ER_DUP_ENTRY / 1062)
+    if (err && (err.code === 'ER_DUP_ENTRY' || err.errno === 1062 || /duplicate/i.test(err.message))) {
+      try {
+        const [freshDebts] = await pool.query(
+          'SELECT * FROM customer_debts WHERE sale_id = ? ORDER BY installment_number ASC',
+          [body.sale_id]
+        );
+        if (freshDebts && freshDebts.length > 0) {
+          const check = evaluateDebtsIdempotency(freshDebts, body);
+          if (check.isMatch) {
+            if (freshDebts.length === 1) {
+              return reply.code(200).send(freshDebts[0]);
+            }
+            return reply.code(200).send({ success: true, debts: freshDebts, isRetry: true });
+          } else {
+            return reply.code(409).send({
+              error: 'Divergência detectada com parcelamento anterior desta venda',
+              details: check.details,
+            });
+          }
+        }
+      } catch (recoveryErr) {
+        req.log.error(recoveryErr);
+      }
+    }
 
-    await pool.query(
-      `INSERT INTO customer_debts (id, customer_id, sale_id, valor_total, saldo_devedor, descricao, data_vencimento, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-      [id, customer_id, sale_id, valor, valor, descricao.trim(), data_vencimento]
-    );
-
-    return reply.code(201).send({
-      id,
-      customer_id,
-      sale_id,
-      valor_total: valor,
-      saldo_devedor: valor,
-      descricao: descricao.trim(),
-      data_vencimento,
-      status: 'pending'
-    });
-  } catch (err) {
-    req.log.error({
-      debug: buildCustomerDebtDebug('insert from-sale debt failed', {
-        sale_id,
-        customer_id,
-        valor_total,
-        data_vencimento,
-        error: err?.message,
-      }),
-    });
-    return reply.code(500).send({
-      error: 'Erro no banco de dados ao criar debito da venda a prazo',
-      debug: buildCustomerDebtDebug('insert from-sale debt failed', {
-        sale_id,
-        customer_id,
-        valor_total,
-        data_vencimento,
-      }),
-    });
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Erro no banco de dados ao processar parcelamento da venda', message: err?.message });
+  } finally {
+    if (connection) connection.release();
   }
 });
 
@@ -40588,8 +40648,8 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 
     if (valorPagoCentavos > debt.saldo_devedor) {
       await connection.rollback();
-      return reply.code(400).send({ 
-        error: `Valor pago excede o saldo devedor. Saldo atual: R$ ${(debt.saldo_devedor / 100).toFixed(2)}` 
+      return reply.code(400).send({
+        error: `Valor pago excede o saldo devedor. Saldo atual: R$ ${(debt.saldo_devedor / 100).toFixed(2)}`
       });
     }
 
@@ -40610,6 +40670,10 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
       'UPDATE customer_debts SET saldo_devedor = ?, status = ? WHERE id = ?',
       [novoSaldo, novoStatus, debt_id]
     );
+
+    if (novoStatus === 'paid' || novoSaldo === 0) {
+      await cancelPendingRemindersForDebt(connection, debt_id);
+    }
 
     // 4. Buscar dados do cliente para registrar o recibo avulso
     const [customers] = await connection.query(

@@ -333,7 +333,11 @@ function getDefaultDebtDueDate(): string {
 }
 
 function getAPrazoPayment(paymentMethods: PaymentMethod[] = []): PaymentMethod | null {
-    return paymentMethods.find(payment => payment.method === 'a_prazo' && Number(payment.amount) > 0) || null;
+    const aPrazoPayments = paymentMethods.filter(payment => payment.method === 'a_prazo' && Number(payment.amount) > 0);
+    if (aPrazoPayments.length > 1) {
+        throw new Error('Venda não pode conter múltiplos pagamentos a prazo.');
+    }
+    return aPrazoPayments[0] || null;
 }
 
 async function createCustomerDebtForAPrazoSale(saleInput: SaleInput, sale: Sale): Promise<void> {
@@ -341,13 +345,33 @@ async function createCustomerDebtForAPrazoSale(saleInput: SaleInput, sale: Sale)
     if (!aPrazoPayment) return;
     if (!saleInput.customer_id) return;
 
-    await vpsClient.post('/financial/customer-debts/from-sale', {
-        customer_id: saleInput.customer_id,
-        sale_id: sale.id,
-        valor_total: aPrazoPayment.amount,
-        descricao: `Venda PDV #${sale.id.slice(0, 8).toUpperCase()}`,
-        data_vencimento: aPrazoPayment.due_date || getDefaultDebtDueDate(),
-    });
+    const saleCode = sale.id.slice(0, 8).toUpperCase();
+    const schedule = aPrazoPayment.installment_schedule;
+
+    if (Array.isArray(schedule) && schedule.length > 1) {
+        await vpsClient.post('/financial/customer-debts/from-sale', {
+            customer_id: saleInput.customer_id,
+            sale_id: sale.id,
+            valor_total: aPrazoPayment.amount,
+            descricao: `Venda PDV #${saleCode}`,
+            data_vencimento: schedule[0]?.due_date || aPrazoPayment.due_date || getDefaultDebtDueDate(),
+            installments: schedule.map(item => ({
+                installment_number: item.installment_number,
+                installment_count: item.installment_count,
+                amount: item.amount,
+                due_date: item.due_date,
+                descricao: `Venda PDV #${saleCode} — Parcela ${item.installment_number}/${item.installment_count}`,
+            })),
+        });
+    } else {
+        await vpsClient.post('/financial/customer-debts/from-sale', {
+            customer_id: saleInput.customer_id,
+            sale_id: sale.id,
+            valor_total: aPrazoPayment.amount,
+            descricao: `Venda PDV #${saleCode}`,
+            data_vencimento: aPrazoPayment.due_date || getDefaultDebtDueDate(),
+        });
+    }
 }
 
 function shouldScaleSaleMoneyFromReais(sale: any, saleItems: any[] = []): boolean {
@@ -606,6 +630,11 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             console.warn(`[saleService] Venda registrada com aviso em ${step}: ${message}`);
             return warning;
         };
+
+        const aPrazoPayments = (saleInput.payment_methods || []).filter(p => p.method === 'a_prazo' && Number(p.amount) > 0);
+        if (aPrazoPayments.length > 1) {
+            throw new Error('Venda não pode conter múltiplos pagamentos a prazo.');
+        }
 
         const saleId = createLocalId();
         const deliveryPersonCustomerId = resolveDeliveryPersonCustomerId(saleInput);

@@ -9,6 +9,8 @@ export interface CustomerDebt {
     descricao?: string;
     data_vencimento?: string;
     status?: string;
+    installment_number?: number;
+    installment_count?: number;
     created_at?: string;
 }
 

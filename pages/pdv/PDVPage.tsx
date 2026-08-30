@@ -34,6 +34,7 @@ import { sendSaleWarrantyPdfWhatsApp } from '../../services/warrantyWhatsAppServ
 import { generateExistingWarrantyTermPdfBase64 } from '../../utils/warrantyPdfGenerator';
 import { teamService } from '../../services/team';
 import { getEffectiveRetailPrice, normalizeCentValue } from '../../utils/promoPrice';
+import { generatePaymentInstallmentSchedule, recalculateAPrazoPayment } from '../../utils/installmentCalculations';
 import { buildPdvProductName } from '../../utils/pdvProductDisplay';
 import type { PdvDisplay, PdvPixPayment } from '../../types/pdvDisplay';
 import {
@@ -468,54 +469,53 @@ export default function PDVPage() {
     };
 
     // Atualizar preço unitário de um item
-    const syncAPrazoPaymentAmount = (nextItems: SaleItem[]) => {
-        if (!payments.some(payment => payment.method === 'a_prazo')) return;
+    // Centralizar recalculo do pagamento a prazo
+    const syncAPrazoWithSaleState = (
+        currentPayments: PaymentMethod[],
+        currentCartItems: SaleItem[],
+        promoDiscount: number,
+        deliveryCustomer: number,
+        finalAdjDiscount: number
+    ): PaymentMethod[] => {
+        const totals = calculateSaleTotals(currentCartItems);
+        const giftDiscount = currentCartItems.reduce((sum, item) => item.is_gift ? sum + (item.unit_price * item.quantity) : sum, 0);
+        const totalFees = currentPayments.reduce((sum, payment) => sum + (payment.fee_amount || 0), 0);
+        const totalBeforeFinalAdj = totals.total - giftDiscount - promoDiscount + deliveryCustomer + totalFees;
+        const validFinalAdj = Math.min(finalAdjDiscount, Math.max(0, totalBeforeFinalAdj));
+        const saleTotal = Math.max(0, totalBeforeFinalAdj - validFinalAdj);
 
-        const nextTotals = calculateSaleTotals(nextItems);
-        const nextGiftDiscount = nextItems.reduce((sum, item) => item.is_gift ? sum + (item.unit_price * item.quantity) : sum, 0);
-        const currentTotalFees = payments.reduce((sum, payment) => sum + (payment.fee_amount || 0), 0);
-        const nextTotalBeforeFinalAdjustment = nextTotals.total - nextGiftDiscount - promotionalDiscount + deliveryCostCustomer + currentTotalFees;
-        const nextFinalAdjustmentDiscount = Math.min(finalAdjustmentDiscount, Math.max(0, nextTotalBeforeFinalAdjustment));
-        const nextSaleTotal = Math.max(0, nextTotalBeforeFinalAdjustment - nextFinalAdjustmentDiscount);
-
-        setPayments(currentPayments => {
-            let aPrazoIndex = -1;
-            for (let index = currentPayments.length - 1; index >= 0; index -= 1) {
-                if (currentPayments[index].method === 'a_prazo') {
-                    aPrazoIndex = index;
-                    break;
-                }
-            }
-
-            if (aPrazoIndex < 0) return currentPayments;
-
-            const paidWithoutAPrazo = currentPayments.reduce((sum, payment, index) => {
-                if (index === aPrazoIndex) return sum;
-                return sum + (payment.total_with_fee ?? payment.amount ?? 0);
-            }, 0);
-            const nextAPrazoAmount = Math.max(0, nextSaleTotal - paidWithoutAPrazo);
-
-            return currentPayments.map((payment, index) => {
-                if (index !== aPrazoIndex) return payment;
-                return {
-                    ...payment,
-                    amount: nextAPrazoAmount,
-                    total_with_fee: nextAPrazoAmount
-                };
-            });
-        });
+        return recalculateAPrazoPayment(currentPayments, saleTotal);
     };
+
+    useEffect(() => {
+        setPayments(currentPayments => {
+            if (!currentPayments.some(p => p.method === 'a_prazo')) return currentPayments;
+            const updated = syncAPrazoWithSaleState(
+                currentPayments,
+                cartItems,
+                promotionalDiscount,
+                deliveryCostCustomer,
+                finalAdjustmentDiscount
+            );
+            const oldAPrazo = currentPayments.find(p => p.method === 'a_prazo');
+            const newAPrazo = updated.find(p => p.method === 'a_prazo');
+            if (oldAPrazo?.amount === newAPrazo?.amount && oldAPrazo?.installment_schedule?.length === newAPrazo?.installment_schedule?.length) {
+                return currentPayments;
+            }
+            return updated;
+        });
+    }, [cartItems, promotionalDiscount, deliveryCostCustomer, finalAdjustmentDiscount]);
 
     const handleUpdatePrice = (itemId: string, newPrice: number) => {
         const newItems = cartItems.map(item => {
             if (item.id === itemId && !item.is_gift) {
-                // Se o item tem "warranty_months", precisamos re-calcular o preço da garantia 
-                // pois a garantia é um % do valor base. Mas dependendo de como as regras 
-                // da empresa funcionam, pode-se querer manter fixo. 
+                // Se o item tem "warranty_months", precisamos re-calcular o preço da garantia
+                // pois a garantia é um % do valor base. Mas dependendo de como as regras
+                // da empresa funcionam, pode-se querer manter fixo.
                 // Aqui iremos manter o preço da garantia anterior (ou atualizar se preferir).
                 // Como não sabemos a porcentagem exata aqui sem as options, vamos manter o valor da garantia como está,
                 // ou apenas somá-lo ao novo subtotal.
-                
+
                 const subtotal = (newPrice * item.quantity) + (item.warranty_price || 0);
                 return {
                     ...item,
@@ -530,7 +530,6 @@ export default function PDVPage() {
             return item;
         });
         setCartItems(newItems);
-        syncAPrazoPaymentAmount(newItems);
     };
 
     const handleUpdateItemPrice = (itemId: string, newPrice: number) => {
@@ -573,12 +572,37 @@ export default function PDVPage() {
 
     // Adicionar pagamento
     const handleAddPayment = (payment: PaymentMethod) => {
-        setPayments([...payments, payment]);
+        if (payment.method === 'a_prazo' && payments.some(p => p.method === 'a_prazo')) {
+            toast.error('Já existe um pagamento a prazo nesta venda.');
+            return;
+        }
+        setPayments(currentPayments => {
+            if (payment.method === 'a_prazo' && currentPayments.some(p => p.method === 'a_prazo')) {
+                return currentPayments;
+            }
+            const nextList = [...currentPayments, payment];
+            return syncAPrazoWithSaleState(
+                nextList,
+                cartItems,
+                promotionalDiscount,
+                deliveryCostCustomer,
+                finalAdjustmentDiscount
+            );
+        });
     };
 
     // Remover pagamento
     const handleRemovePayment = (index: number) => {
-        setPayments(payments.filter((_, i) => i !== index));
+        setPayments(currentPayments => {
+            const nextList = currentPayments.filter((_, i) => i !== index);
+            return syncAPrazoWithSaleState(
+                nextList,
+                cartItems,
+                promotionalDiscount,
+                deliveryCostCustomer,
+                0
+            );
+        });
         setFinalAdjustmentDiscount(0);
         toast.info('Pagamento removido');
     };
@@ -1588,9 +1612,17 @@ export default function PDVPage() {
                             maxFinalAdjustmentDiscount={maxFinalAdjustmentDiscount}
                             selectedCustomer={selectedCustomer}
                             onUpdatePayment={(index, updated) => {
-                                const next = [...payments];
-                                next[index] = updated;
-                                setPayments(next);
+                                setPayments(currentPayments => {
+                                    const next = [...currentPayments];
+                                    next[index] = updated;
+                                    return syncAPrazoWithSaleState(
+                                        next,
+                                        cartItems,
+                                        promotionalDiscount,
+                                        deliveryCostCustomer,
+                                        finalAdjustmentDiscount
+                                    );
+                                });
                             }}
                             pdvPixPayment={pdvPixPayment}
                             pdvPixLoading={pdvPixLoading}

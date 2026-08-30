@@ -277,6 +277,43 @@ export const WHATSAPP_AUTOMATION_TEMPLATE_DEFAULTS: WhatsAppAutomationTemplate[]
       '{portal_link}',
     ].join('\n'),
   },
+  {
+    template_key: 'customer_debt_due_reminder',
+    category: 'transactional',
+    title: 'Lembrete de Vencimento de Parcela a Prazo',
+    description: 'Enviado no dia do vencimento da parcela de venda a prazo do cliente com resumo da compra e saldo restante.',
+    enabled: true,
+    variables: [
+      'nome',
+      'pedido',
+      'parcela',
+      'total_parcelas',
+      'vencimento',
+      'valor_parcela',
+      'valor_pago_parcela',
+      'saldo_parcela',
+      'historico_compra',
+      'portal_link',
+    ],
+    content: [
+      'Olá, {nome}! 💚',
+      '',
+      'Passando para lembrar o vencimento da parcela {parcela}/{total_parcelas} da compra {pedido}.',
+      '',
+      'Vencimento: {vencimento}',
+      'Valor da parcela: {valor_parcela}',
+      'Valor já pago nesta parcela: {valor_pago_parcela}',
+      'Saldo atual: {saldo_parcela}',
+      '',
+      'Histórico desta compra:',
+      '{historico_compra}',
+      '',
+      'Você também pode conferir seus pagamentos em:',
+      '{portal_link}',
+      '',
+      'Se você acabou de pagar, pode desconsiderar esta mensagem. Qualquer dúvida, estamos por aqui.',
+    ].join('\n'),
+  },
 ];
 
 function extractRows<T>(response: TableDataResponse<T> | T[]): T[] {
@@ -355,6 +392,13 @@ export function previewWhatsAppAutomationTemplate(template: WhatsAppAutomationTe
     produto: 'Smartphone Exemplo',
     link_avaliacao: 'https://mercadodovale.com.br/avaliar',
     garantia_ate: '20/06/2027',
+    parcela: '1',
+    total_parcelas: '3',
+    vencimento: '31/01/2027',
+    valor_parcela: 'R$ 33,34',
+    valor_pago_parcela: 'R$ 0,00',
+    saldo_parcela: 'R$ 33,34',
+    historico_compra: '• Parcela 1/3: R$ 33,34 — Venc: 31/01/2027 [Pendente]\n• Parcela 2/3: R$ 33,33 — Venc: 28/02/2027 [Pendente]\n• Parcela 3/3: R$ 33,33 — Venc: 31/03/2027 [Pendente]',
   };
 
   return (template.content || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => samples[key] || match);

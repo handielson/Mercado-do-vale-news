@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { CreditCard, DollarSign, Share2, Smartphone, Trash2, Calendar } from 'lucide-react';
-import { PaymentMethod, PaymentMethodType } from '../../types/sale';
+import { CreditCard, DollarSign, Share2, Smartphone, Trash2, Calendar, X, RefreshCw } from 'lucide-react';
+import { PaymentMethod, PaymentMethodType, PaymentInstallmentScheduleItem } from '../../types/sale';
 import type { PdvDisplay, PdvPixPayment } from '../../types/pdvDisplay';
 import {
     calculateTotalPaid,
@@ -10,6 +10,10 @@ import {
     getPaymentMethodLabel,
     getPaymentMethodIcon
 } from '../../utils/saleCalculations';
+import {
+    generatePaymentInstallmentSchedule,
+    validatePaymentInstallmentSchedule
+} from '../../utils/installmentCalculations';
 import { toast } from 'sonner';
 import InstallmentCalculator from './InstallmentCalculator';
 import { getBestCreditFeeByInstallment } from '../../utils/paymentFeeCalculations';
@@ -106,6 +110,13 @@ export default function PaymentSection({
         : 0;
     const totalBeforeFinalAdjustment = total + (finalAdjustmentDiscount || 0);
 
+    // Estado e configuracao de Venda a Prazo (Crediario)
+    const [isAPrazoModalOpen, setIsAPrazoModalOpen] = useState(false);
+    const [aPrazoAmount, setAPrazoAmount] = useState(0);
+    const [aPrazoInstallmentCount, setAPrazoInstallmentCount] = useState(1);
+    const [aPrazoFirstDueDate, setAPrazoFirstDueDate] = useState('');
+    const [aPrazoSchedule, setAPrazoSchedule] = useState<PaymentInstallmentScheduleItem[]>([]);
+
     const applyFinalPaymentAmount = () => {
         if (!onApplyFinalPaymentAmount) return;
 
@@ -156,8 +167,82 @@ export default function PaymentSection({
         }
     }
 
+    const openAPrazoModal = () => {
+        if (!selectedCustomer) {
+            toast.error('Selecione um cliente para vender a prazo');
+            return;
+        }
+
+        if (payments.some(p => p.method === 'a_prazo')) {
+            toast.error('Já existe um pagamento a prazo nesta venda. Remova-o antes de adicionar outro.');
+            return;
+        }
+
+        const typedAmount = getTypedPaymentAmount();
+        const targetAmount = typedAmount > 0 ? typedAmount : (remaining > 0 ? remaining : total);
+        if (!targetAmount || targetAmount <= 0) {
+            toast.error('Digite um valor válido');
+            return;
+        }
+
+        const firstDueDate = getDueDateDefault();
+        setAPrazoAmount(targetAmount);
+        setAPrazoInstallmentCount(1);
+        setAPrazoFirstDueDate(firstDueDate);
+        setAPrazoSchedule(generatePaymentInstallmentSchedule(targetAmount, 1, firstDueDate));
+        setIsAPrazoModalOpen(true);
+    };
+
+    const handleAPrazoCountChange = (count: number) => {
+        const safeCount = Math.max(1, Math.min(12, count));
+        setAPrazoInstallmentCount(safeCount);
+        setAPrazoSchedule(generatePaymentInstallmentSchedule(aPrazoAmount, safeCount, aPrazoFirstDueDate));
+    };
+
+    const handleAPrazoFirstDueDateChange = (date: string) => {
+        setAPrazoFirstDueDate(date);
+        setAPrazoSchedule(generatePaymentInstallmentSchedule(aPrazoAmount, aPrazoInstallmentCount, date));
+    };
+
+    const handleAPrazoResetSchedule = () => {
+        setAPrazoSchedule(generatePaymentInstallmentSchedule(aPrazoAmount, aPrazoInstallmentCount, aPrazoFirstDueDate));
+        toast.success('Cronograma recalculado com sugestão civil');
+    };
+
+    const handleAPrazoItemDueDateChange = (index: number, date: string) => {
+        const next = [...aPrazoSchedule];
+        next[index] = { ...next[index], due_date: date };
+        setAPrazoSchedule(next);
+    };
+
+    const handleConfirmAPrazo = () => {
+        const validation = validatePaymentInstallmentSchedule(aPrazoAmount, aPrazoSchedule);
+        if (!validation.valid) {
+            toast.error(validation.error || 'Cronograma de parcelamento inválido');
+            return;
+        }
+
+        const payment: PaymentMethod = {
+            method: 'a_prazo',
+            amount: aPrazoAmount,
+            total_with_fee: aPrazoAmount,
+            due_date: aPrazoSchedule[0]?.due_date || aPrazoFirstDueDate,
+            installment_schedule: aPrazoSchedule,
+        };
+
+        onAddPayment(payment);
+        setPaymentAmount('');
+        setIsAPrazoModalOpen(false);
+        toast.success(`A Prazo (${aPrazoSchedule.length}x) adicionado`);
+    };
+
     // Adicionar pagamento
     const handleAddPayment = (method: PaymentMethodType) => {
+        if (method === 'a_prazo') {
+            openAPrazoModal();
+            return;
+        }
+
         const amount = parseFloat(paymentAmount.replace(',', '.')) * 100; // converter para centavos
 
         if (!amount || amount <= 0) {
@@ -165,16 +250,10 @@ export default function PaymentSection({
             return;
         }
 
-        if (method === 'a_prazo' && !selectedCustomer) {
-            toast.error('Selecione um cliente para vender a prazo');
-            return;
-        }
-
         const payment: PaymentMethod = {
             method: method,
             amount: Math.round(amount),
-            total_with_fee: Math.round(amount), // Sem taxa por enquanto
-            ...(method === 'a_prazo' && { due_date: getDueDateDefault() })
+            total_with_fee: Math.round(amount),
         };
 
         onAddPayment(payment);
@@ -340,7 +419,9 @@ export default function PaymentSection({
                                 <span className="text-xl">{getPaymentMethodIcon(payment.method)}</span>
                                 <div>
                                     <p className="font-medium text-slate-800">
-                                        {getPaymentMethodLabel(payment.method, payment.installments)}
+                                        {payment.method === 'a_prazo' && payment.installment_schedule && payment.installment_schedule.length > 1
+                                            ? `A Prazo (${payment.installment_schedule.length}x)`
+                                            : getPaymentMethodLabel(payment.method, payment.installments)}
                                     </p>
                                     <p className="text-sm text-slate-600">
                                         {formatCurrency(payment.total_with_fee ?? payment.amount)}
@@ -349,11 +430,29 @@ export default function PaymentSection({
                                                 ({payment.installments}x de {formatCurrency(Math.round((payment.total_with_fee ?? payment.amount) / payment.installments))})
                                             </span>
                                         )}
+                                        {payment.method === 'a_prazo' && payment.installment_schedule && payment.installment_schedule.length > 1 && (
+                                            <span className="ml-1 text-xs text-blue-700 font-medium">
+                                                ({payment.installment_schedule.length}x de ~{formatCurrency(payment.installment_schedule[0].amount)})
+                                            </span>
+                                        )}
                                     </p>
+                                    {payment.method === 'a_prazo' && payment.installment_schedule && payment.installment_schedule.length > 1 && (
+                                        <div className="mt-2 space-y-1 rounded-lg border border-blue-100 bg-white p-2.5 text-xs">
+                                            <p className="font-semibold text-blue-900 mb-1">Parcelas do Crediário:</p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                                {payment.installment_schedule.map((item, idx) => (
+                                                    <div key={idx} className="flex justify-between items-center bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                                                        <span className="text-slate-700">Parcela {item.installment_number}/{item.installment_count} ({item.due_date})</span>
+                                                        <span className="font-semibold text-blue-700">{formatCurrency(item.amount)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                {payment.method === 'a_prazo' && (
+                                {payment.method === 'a_prazo' && (!payment.installment_schedule || payment.installment_schedule.length <= 1) && (
                                     <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
                                         <span>Vencimento</span>
                                         <input
@@ -418,84 +517,84 @@ export default function PaymentSection({
                         </button>
                     </div>
                     <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                        <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
-                            <span className="block text-rose-700">Total original</span>
-                            <strong className="text-slate-800">{formatCurrency(totalBeforeFinalAdjustment)}</strong>
+                        <div className="rounded border border-rose-200 bg-white p-2 text-slate-700">
+                            <strong>Total com juros:</strong> {formatCurrency(creditPaymentTotal)}
                         </div>
-                        <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
-                            <span className="block text-rose-700">Ajuste aplicado</span>
-                            <strong className="text-red-600">-{formatCurrency(finalAdjustmentDiscount || 0)}</strong>
+                        <div className="rounded border border-rose-200 bg-white p-2 text-slate-700">
+                            <strong>Valor por parcela:</strong> {formatCurrency(creditInstallmentValue)}
                         </div>
-                        <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
-                            <span className="block text-rose-700">Parcelas atuais</span>
-                            <strong className="text-slate-800">
-                                {creditPayment.installments && creditPayment.installments > 1
-                                    ? `${creditPayment.installments}x de ${formatCurrency(creditInstallmentValue)}`
-                                    : formatCurrency(creditPaymentTotal)}
-                            </strong>
+                        <div className="rounded border border-rose-200 bg-white p-2 text-slate-700">
+                            <strong>Desconto aplicado:</strong> {formatCurrency(finalAdjustmentDiscount || 0)}
                         </div>
                     </div>
-                    {maxFinalAdjustmentDiscount !== undefined && (
-                        <p className="text-xs text-rose-700 mt-2">
-                            Valor minimo permitido: {formatCurrency(Math.max(0, totalBeforeFinalAdjustment - maxFinalAdjustmentDiscount))}
-                        </p>
-                    )}
                 </div>
             )}
 
-            {/* Status do Pagamento */}
-            <div className="mb-4 space-y-2">
+            {/* Totais do Pagamento */}
+            <div className="bg-slate-50 p-4 rounded-lg space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
                     <span className="text-slate-600">Total Pago:</span>
-                    <span className={`font-bold ${isComplete ? 'text-green-600' : 'text-slate-800'}`}>
-                        {formatCurrency(totalPaid)}
-                        {isComplete && ' ✅'}
+                    <span className="font-semibold text-slate-800">{formatCurrency(totalPaid)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Restante:</span>
+                    <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                        {formatCurrency(remaining)}
                     </span>
                 </div>
-                {remaining > 0 && (
-                    <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Falta:</span>
-                        <span className="font-bold text-red-600">{formatCurrency(remaining)}</span>
-                    </div>
-                )}
                 {change > 0 && (
-                    <div className="flex justify-between text-sm p-2 bg-green-50 border border-green-200 rounded">
-                        <span className="text-green-700 font-medium">Troco:</span>
-                        <span className="font-bold text-green-700">{formatCurrency(change)}</span>
+                    <div className="flex justify-between text-sm pt-2 border-t border-slate-200">
+                        <span className="text-green-600 font-medium">Troco:</span>
+                        <span className="font-bold text-green-600 text-lg">{formatCurrency(change)}</span>
                     </div>
                 )}
             </div>
 
-            <div className="mb-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
+            {/* Totem / Display / Pix Mercado Pago */}
+            <div className="mb-4 rounded-lg border border-cyan-100 bg-cyan-50/60 p-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
                     <div>
-                        <h4 className="text-sm font-semibold text-cyan-900">Pix Mercado Pago</h4>
-                        <p className="text-xs text-cyan-700">Cobranca segura pela VPS, com envio opcional para o display Android.</p>
+                        <h4 className="text-sm font-semibold text-cyan-900">Pix Mercado Pago e Totem</h4>
+                        <p className="text-xs text-cyan-700">
+                            Gere o Pix dinâmico e envie o QR Code para o display do cliente no PDV.
+                        </p>
                     </div>
-                    <Smartphone size={20} className="text-cyan-700" />
+                    <span className="rounded bg-cyan-100 px-2 py-0.5 text-[11px] font-semibold text-cyan-800">
+                        Totem visual
+                    </span>
                 </div>
 
                 <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <label className="text-xs font-medium text-cyan-900">
-                        Caixa
-                        <input
-                            value={pdvPixCashierKey}
-                            onChange={(event) => onPdvPixCashierKeyChange?.(event.target.value)}
-                            placeholder="caixa-01"
-                            className="mt-1 w-full rounded border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-cyan-500 focus:outline-none"
-                        />
-                    </label>
-                    <label className="text-xs font-medium text-cyan-900">
-                        Display
+                    <label className="text-xs text-slate-700">
+                        <span className="mb-1 block font-medium">Display do caixa</span>
                         <select
                             value={pdvPixDisplayId}
-                            onChange={(event) => onPdvPixDisplayIdChange?.(event.target.value)}
-                            className="mt-1 w-full rounded border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-cyan-500 focus:outline-none"
+                            onChange={(e) => onPdvPixDisplayIdChange?.(e.target.value)}
+                            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:border-cyan-500 focus:outline-none"
                         >
-                            <option value="">Selecione um display</option>
+                            <option value="">Selecione o display pareado</option>
                             {pdvPixDisplays.map((display) => (
                                 <option key={display.id} value={display.id}>
-                                    {display.name} {display.cashier_key ? `(${display.cashier_key})` : ''}
+                                    {display.name || display.code} ({display.is_online ? 'Online' : 'Offline'})
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="text-xs text-slate-700">
+                        <span className="mb-1 block font-medium">Identificador do caixa</span>
+                        <select
+                            value={pdvPixCashierKey}
+                            onChange={(e) => onPdvPixCashierKeyChange?.(e.target.value)}
+                            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:border-cyan-500 focus:outline-none"
+                        >
+                            <option value="caixa-01">Caixa 01</option>
+                            <option value="caixa-02">Caixa 02</option>
+                            <option value="caixa-03">Caixa 03</option>
+                            <option value="pdv-principal">PDV Principal</option>
+                            {pdvPixDisplays.map((display) => (
+                                <option key={`opt-${display.id}`} value={display.cashier_key || display.id}>
+                                    {display.name || display.code} ({display.cashier_key || 'sem chave'})
                                 </option>
                             ))}
                         </select>
@@ -610,7 +709,7 @@ export default function PaymentSection({
                             Restante
                         </button>
                     </div>
-                    
+
                     <div className="grid grid-cols-4 gap-2">
                         <button
                             onClick={() => handleAddPayment('pix')}
@@ -635,11 +734,20 @@ export default function PaymentSection({
                             <span className="text-xs font-semibold text-purple-800">Add Débito</span>
                         </button>
                         <button
-                            onClick={() => handleAddPayment('a_prazo')}
-                            className="flex flex-col items-center justify-center p-3 border-2 border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                            type="button"
+                            disabled={payments.some(p => p.method === 'a_prazo')}
+                            onClick={() => openAPrazoModal()}
+                            title={payments.some(p => p.method === 'a_prazo') ? 'Já existe um pagamento a prazo nesta venda' : undefined}
+                            className={`flex flex-col items-center justify-center p-3 border-2 rounded-lg transition-colors ${
+                                payments.some(p => p.method === 'a_prazo')
+                                    ? 'border-slate-200 bg-slate-100 opacity-50 cursor-not-allowed text-slate-400'
+                                    : 'border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 text-blue-800'
+                            }`}
                         >
-                            <Calendar size={20} className="mb-1 text-blue-700" />
-                            <span className="text-xs font-semibold text-blue-800">Add A Prazo</span>
+                            <Calendar size={20} className={`mb-1 ${payments.some(p => p.method === 'a_prazo') ? 'text-slate-400' : 'text-blue-700'}`} />
+                            <span className={`text-xs font-semibold ${payments.some(p => p.method === 'a_prazo') ? 'text-slate-500' : 'text-blue-800'}`}>
+                                {payments.some(p => p.method === 'a_prazo') ? 'A Prazo (Já add)' : 'Add A Prazo'}
+                            </span>
                         </button>
                     </div>
 
@@ -653,6 +761,126 @@ export default function PaymentSection({
                             />
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Modal de Configuracao de Venda a Prazo (Crediario) */}
+            {isAPrazoModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+                    <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div className="flex items-center gap-2 text-blue-800">
+                                <Calendar size={22} />
+                                <h3 className="text-lg font-bold text-slate-900">Venda a Prazo (Crediário)</h3>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsAPrazoModalOpen(false)}
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="rounded-xl bg-blue-50/80 p-3.5 border border-blue-100 text-sm space-y-1">
+                            <div className="flex justify-between text-slate-700">
+                                <span>Cliente:</span>
+                                <strong className="text-slate-900">{selectedCustomer?.name || 'Cliente selecionado'}</strong>
+                            </div>
+                            <div className="flex justify-between text-slate-700">
+                                <span>Valor total a prazo:</span>
+                                <strong className="text-blue-800 text-base">{formatCurrency(aPrazoAmount)}</strong>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                                    Quantidade de parcelas
+                                </label>
+                                <select
+                                    value={aPrazoInstallmentCount}
+                                    onChange={(e) => handleAPrazoCountChange(Number(e.target.value))}
+                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                >
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => (
+                                        <option key={num} value={num}>
+                                            {num}x {num === 1 ? '(à vista a prazo)' : `de ${formatCurrency(Math.round(aPrazoAmount / num))}`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                                    1º Vencimento (D+30)
+                                </label>
+                                <input
+                                    type="date"
+                                    value={aPrazoFirstDueDate}
+                                    onChange={(e) => handleAPrazoFirstDueDateChange(e.target.value)}
+                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-1">
+                            <span className="text-xs font-bold uppercase text-slate-500">Cronograma de Vencimentos:</span>
+                            <button
+                                type="button"
+                                onClick={handleAPrazoResetSchedule}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900"
+                            >
+                                <RefreshCw size={12} />
+                                Recalcular Sugestão (Mensal Civil)
+                            </button>
+                        </div>
+
+                        {/* Tabela de parcelas com datas editáveis e valores exatos */}
+                        <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+                            {aPrazoSchedule.map((item, index) => (
+                                <div key={index} className="flex items-center justify-between p-2.5 bg-white hover:bg-slate-50/80 text-xs sm:text-sm">
+                                    <span className="font-semibold text-slate-800 w-24">
+                                        Parcela {item.installment_number}/{item.installment_count}
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-slate-500 text-xs">Venc:</span>
+                                        <input
+                                            type="date"
+                                            value={item.due_date}
+                                            onChange={(e) => handleAPrazoItemDueDateChange(index, e.target.value)}
+                                            className="h-8 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                                        />
+                                    </div>
+                                    <span className="font-bold text-blue-700 w-24 text-right">
+                                        {formatCurrency(item.amount)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 pt-3">
+                            <span>Soma das parcelas: <strong className="text-slate-800">{formatCurrency(aPrazoSchedule.reduce((acc, it) => acc + it.amount, 0))}</strong></span>
+                            <span className="text-[11px] text-emerald-700 font-medium">✓ Resto em centavos distribuído</span>
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setIsAPrazoModalOpen(false)}
+                                className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmAPrazo}
+                                className="flex-1 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-800 shadow-md transition-all"
+                            >
+                                Confirmar Venda a Prazo
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
