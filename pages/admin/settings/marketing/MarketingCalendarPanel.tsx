@@ -169,12 +169,21 @@ export default function MarketingCalendarPanel({
     const safeSchedules = Array.isArray(schedules) ? schedules : [];
     const safeApprovals = Array.isArray(approvals) ? approvals : [];
 
-    // 1. Social Story Schedules
+    // 1. Social Story Schedules & Individual Scheduled Items
     for (const schedule of safeSchedules) {
-      const dateKey = parseDateKey(schedule.scheduled_at);
-      const timeStr = parseTimeStr(schedule.scheduled_at);
-
-      const firstImage = schedule.items?.find((it) => it.media_url)?.media_url;
+      let destinations: Array<'instagram' | 'whatsapp' | 'facebook'> = [];
+      if (Array.isArray(schedule.destinations)) {
+        destinations = schedule.destinations as any;
+      } else if (typeof schedule.destinations === 'string') {
+        try {
+          destinations = JSON.parse(schedule.destinations);
+        } catch {
+          destinations = ['whatsapp'];
+        }
+      }
+      if (!destinations || destinations.length === 0) {
+        destinations = ['whatsapp'];
+      }
 
       let normalizedStatus: CalendarEvent['status'] = 'pending';
       let statusLabel = 'Aguardando aprovação';
@@ -196,34 +205,60 @@ export default function MarketingCalendarPanel({
         statusLabel = 'Cancelado';
       }
 
-      let destinations: Array<'instagram' | 'whatsapp' | 'facebook'> = [];
-      if (Array.isArray(schedule.destinations)) {
-        destinations = schedule.destinations as any;
-      } else if (typeof schedule.destinations === 'string') {
-        try {
-          destinations = JSON.parse(schedule.destinations);
-        } catch {
-          destinations = ['whatsapp'];
-        }
-      }
-      if (!destinations || destinations.length === 0) {
-        destinations = ['whatsapp'];
-      }
+      const scheduleItems = Array.isArray(schedule.items) ? schedule.items : [];
 
-      if (dateKey) {
-        events.push({
-          id: 'sched-' + schedule.id,
-          type: 'story_schedule',
-          title: schedule.title || (schedule.items?.length || 0) + ' Stories',
-          dateKey,
-          timeStr,
-          destinations,
-          status: normalizedStatus,
-          statusLabel,
-          itemsCount: schedule.items?.length || 1,
-          thumbnailUrl: firstImage ? toBrowserSafeMediaUrl(firstImage) : null,
-          rawPayload: schedule,
-        });
+      if (scheduleItems.length > 0) {
+        // Agrupa itens por dia (YYYY-MM-DD)
+        const itemsByDate = new Map<string, typeof scheduleItems>();
+        for (const item of scheduleItems) {
+          const itemDateKey = parseDateKey(item.scheduled_at || schedule.scheduled_at);
+          if (itemDateKey) {
+            const list = itemsByDate.get(itemDateKey) || [];
+            list.push(item);
+            itemsByDate.set(itemDateKey, list);
+          }
+        }
+
+        for (const [dateKey, dayItems] of itemsByDate.entries()) {
+          const firstItem = dayItems[0];
+          const timeStr = parseTimeStr(firstItem?.scheduled_at || schedule.scheduled_at);
+          const firstImage = dayItems.find((it) => it.media_url)?.media_url;
+          const title = dayItems.length === 1
+            ? (firstItem?.label || schedule.title || '1 Story')
+            : `${dayItems.length} Stories · ${firstItem?.label || schedule.title || 'Lote'}`;
+
+          events.push({
+            id: `sched-${schedule.id}-${dateKey}`,
+            type: 'story_schedule',
+            title,
+            dateKey,
+            timeStr,
+            destinations,
+            status: normalizedStatus,
+            statusLabel,
+            itemsCount: dayItems.length,
+            thumbnailUrl: firstImage ? toBrowserSafeMediaUrl(firstImage) : null,
+            rawPayload: { schedule, dayItems },
+          });
+        }
+      } else {
+        const dateKey = parseDateKey(schedule.scheduled_at);
+        const timeStr = parseTimeStr(schedule.scheduled_at);
+        if (dateKey) {
+          events.push({
+            id: `sched-${schedule.id}`,
+            type: 'story_schedule',
+            title: schedule.title || 'Agendamento de Stories',
+            dateKey,
+            timeStr,
+            destinations,
+            status: normalizedStatus,
+            statusLabel,
+            itemsCount: 1,
+            thumbnailUrl: null,
+            rawPayload: { schedule, dayItems: [] },
+          });
+        }
       }
     }
 
@@ -740,13 +775,27 @@ export default function MarketingCalendarPanel({
                       <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-bold text-slate-900 truncate">{event.title}</h4>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          {event.itemsCount} arte(s) / storie(s) neste lote
+                          {event.itemsCount} arte(s) / storie(s) neste dia
                         </p>
+                        {Array.isArray(event.rawPayload?.dayItems) && event.rawPayload.dayItems.length > 1 && (
+                          <div className="mt-2.5 space-y-1.5 pt-2 border-t border-slate-200/60 max-h-36 overflow-y-auto pr-1">
+                            {event.rawPayload.dayItems.map((it: any, i: number) => (
+                              <div key={it.id || i} className="flex items-center gap-2 text-[11px] text-slate-700 bg-white/70 p-1 rounded border border-slate-200/40">
+                                {it.media_url ? (
+                                  <img src={toBrowserSafeMediaUrl(it.media_url)} alt="" className="w-5 h-7 object-cover rounded shrink-0 border border-slate-200" />
+                                ) : (
+                                  <div className="w-5 h-7 rounded bg-slate-100 shrink-0" />
+                                )}
+                                <span className="truncate font-medium">{it.label || `Story ${i + 1}`}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {event.type === 'approval_request' && onNavigateToTab && (
                           <button
                             type="button"
                             onClick={() => onNavigateToTab('approvals')}
-                            className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700"
+                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700"
                           >
                             Ver na Central de Aprovações <ExternalLink className="w-3 h-3" />
                           </button>

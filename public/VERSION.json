@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.304-calendario-parse-date-exacto",
+  "version": "v1.2.305-calendario-expansao-stories-dias",
   "date": "2026-08-30",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260830-233833",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Parse determinístico de datas e exibição precisa de agendamentos no calendário de marketing."
+  "summary": "Expansão e mapeamento de todos os stories diários na grade e painel do calendário."
 }
