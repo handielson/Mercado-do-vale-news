@@ -5,6 +5,44 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const zlib = require('zlib');
+const { spawn } = require('child_process');
+const ffmpegStaticPath = require('ffmpeg-static');
+const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
+const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
+const {
+  ensureMercadoLivreTables,
+  registerMercadoLivreRoutes,
+  syncMercadoLivreStockFromBlingTargets,
+} = require('./services/mercadoLivreServer.cjs');
+const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
+const { registerCustomerGoogleAuthRoutes } = require('./services/customerGoogleAuthServer.cjs');
+const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
+const {
+  CATALOG_PREFERENCE_HANDOFF_MESSAGE,
+  PHONE_LIST_FOLLOWUP_MESSAGE,
+  normalizePreferenceState,
+  extractCatalogPreferences,
+  filterProductsByPreferences,
+  hasActionablePreferences,
+} = require('./services/autoresponderCatalogPreferences.cjs');
+const crypto = require('crypto');
+const sharp = require('sharp');
+const { PDFDocument } = require('pdf-lib');
+const {
+  normalizeSaleCode,
+  parseSignedWarrantyFileName,
+  buildSignedWarrantyNames,
+  buildDiscardMessage,
+  fitImageInsideA4,
+} = require('./services/signedWarrantyDocumentCore.cjs');
+const {
+  createMobileSalesPushService,
+} = require('./services/mobileSalesPushService.cjs');
+const {
+  ensureMarketingCampaignTables,
+  registerMarketingCampaignRoutes,
+} = require('./services/marketingCampaignApi.cjs');
+
 let isWhatsAppAutomationLogsSchemaReady = false;
 
 const {

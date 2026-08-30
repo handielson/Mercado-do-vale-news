@@ -334,6 +334,11 @@ async function main() {
   console.log(`Uploaded ${autoresponderCatalogPreferencesPath}`);
   await uploadSmartphonePhotoIntakeFiles(appDir);
   await uploadMercadoLivreFiles(appDir);
+  await exec(`mkdir -p ${appDir}/services ${appDir}/utils`);
+  await upload(path.join(__dirname, 'services/customerDebtReminderCore.cjs'), remotePathJoin(appDir, 'services/customerDebtReminderCore.cjs'));
+  console.log('Uploaded services/customerDebtReminderCore.cjs');
+  await upload(path.join(__dirname, 'utils/installmentCalculations.cjs'), remotePathJoin(appDir, 'utils/installmentCalculations.cjs'));
+  console.log('Uploaded utils/installmentCalculations.cjs');
   const remoteFirebaseCredentialPath = await ensureRemoteFirebaseCredentials(appDir);
   await ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath);
   await ensureRemoteMediaDocumentDependencies(appDir);
