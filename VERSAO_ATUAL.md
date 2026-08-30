@@ -4,7 +4,7 @@
 version: v1.2.302-calendario-programacoes-marketing
 date: 2026-08-30
 status: ready
-release_vps: pendente
+release_vps: /var/www/mdv-site/releases/20260830-231718
 branch: main
 summary: Painel de Calendário Visual de Programações e Agendamentos no módulo de Marketing.
 ```
