@@ -83,23 +83,35 @@ export default function MarketingCalendarPanel({
     setLoading(true);
     try {
       const [schedRes, appRes, slotsRes] = await Promise.allSettled([
-        socialStoryScheduleService.list(),
-        marketingApprovalService.list(),
-        instagramScheduleService.listSlots(),
+        socialStoryScheduleService.list().catch(() => []),
+        marketingApprovalService.list('all').catch(() => ({ items: [] })),
+        instagramScheduleService.listSlots().catch(() => []),
       ]);
 
       if (schedRes.status === 'fulfilled') {
-        setSchedules(schedRes.value || []);
+        const val = schedRes.value;
+        const list = Array.isArray(val)
+          ? val
+          : Array.isArray((val as any)?.items)
+          ? (val as any).items
+          : [];
+        setSchedules(list);
       }
       if (appRes.status === 'fulfilled') {
-        setApprovals(appRes.value || []);
+        const val = appRes.value;
+        const list = Array.isArray((val as any)?.items)
+          ? (val as any).items
+          : Array.isArray(val)
+          ? val
+          : [];
+        setApprovals(list);
       }
       if (slotsRes.status === 'fulfilled') {
-        setSlots(slotsRes.value || []);
+        const val = slotsRes.value;
+        setSlots(Array.isArray(val) ? val : []);
       }
     } catch (error) {
       console.error('Erro ao carregar dados do calendário de marketing:', error);
-      toast.error('Não foi possível carregar todos os dados do calendário.');
     } finally {
       setLoading(false);
     }
@@ -128,9 +140,11 @@ export default function MarketingCalendarPanel({
 
   const allEvents = useMemo(() => {
     const events: CalendarEvent[] = [];
+    const safeSchedules = Array.isArray(schedules) ? schedules : [];
+    const safeApprovals = Array.isArray(approvals) ? approvals : [];
 
     // 1. Social Story Schedules
-    for (const schedule of schedules) {
+    for (const schedule of safeSchedules) {
       const scheduleDate = new Date(schedule.scheduled_at);
       const dateKey = !Number.isNaN(scheduleDate.getTime())
         ? new Date(scheduleDate.getTime() - scheduleDate.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
@@ -177,7 +191,7 @@ export default function MarketingCalendarPanel({
     }
 
     // 2. Approval Requests
-    for (const app of approvals) {
+    for (const app of safeApprovals) {
       const propState = (app.proposed_state || {}) as any;
       const scheduledAt = propState.scheduledAt || (app as any).created_at;
       if (scheduledAt) {
