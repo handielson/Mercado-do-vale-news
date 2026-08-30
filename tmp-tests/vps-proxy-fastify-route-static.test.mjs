@@ -48,6 +48,12 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 
   assert.match(
     source,
+    /normalizedMethod\s*===\s*'POST'[\s\S]*pathname\s*===\s*'\/auth\/login'[\s\S]*pathname\s*===\s*'\/auth\/password-reset\/confirm'/,
+    `${file} must allow authentication endpoints through the proxy before requiring admin access`,
+  );
+
+  assert.match(
+    source,
     /normalizedMethod\s*===\s*'GET'[\s\S]*pathname\s*===\s*'\/pdv\/display-state'/,
     `${file} must allow public Android display state polling through the VPS proxy without admin auth`,
   );

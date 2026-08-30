@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.294-crediario-parcelado-whatsapp
+version: v1.2.295-corrigir-login-admin-proxy
 date: 2026-08-30
 status: ready
-release_vps: /var/www/mdv-site/releases/20260830-035752
+release_vps: /var/www/mdv-site/releases/20260830-011137-corrigir-login-admin-proxy
 branch: main
-summary: Crediário parcelado no PDV com distribuição exata de centavos, bloqueio de múltiplos pagamentos a_prazo, criação transacional idempotente com recuperação ER_DUP_ENTRY e lembretes WhatsApp protegidos por guarda de schema e dry-run.
+summary: Corrige o proxy do site para encaminhar o login e a recuperação de senha à autenticação da VPS, sem exigir uma sessão administrativa prévia.
 ```

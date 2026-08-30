@@ -2007,6 +2007,21 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const pathname = proxyPath.split('?')[0] || '/';
 
+  // Authentication is validated by each /auth route itself. These requests
+  // cannot require an already authenticated admin at the proxy boundary.
+  if (
+    normalizedMethod === 'POST' &&
+    (
+      pathname === '/auth/login' ||
+      pathname === '/auth/register' ||
+      pathname === '/auth/password' ||
+      pathname === '/auth/password-reset/request' ||
+      pathname === '/auth/password-reset/confirm'
+    )
+  ) {
+    return true;
+  }
+
   if (normalizedMethod === 'POST' && /^\/banners\/[^/]+\/(?:click|view)$/u.test(pathname)) {
     return true;
   }
