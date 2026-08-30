@@ -4,7 +4,7 @@
 version: v1.2.294-crediario-parcelado-whatsapp
 date: 2026-08-30
 status: ready
-release_vps: pendente
+release_vps: /var/www/mdv-site/releases/20260830-035145
 branch: main
 summary: Crediário parcelado no PDV com distribuição exata de centavos, bloqueio de múltiplos pagamentos a_prazo, criação transacional idempotente com recuperação ER_DUP_ENTRY e lembretes WhatsApp protegidos por guarda de schema e dry-run.
 ```
