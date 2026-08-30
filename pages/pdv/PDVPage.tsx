@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, ArrowLeft, Ticket, X as XIcon, Printer, FileText, User, CheckCircle2, RotateCcw, Copy, Download, AlertTriangle } from 'lucide-react';
 import { Product } from '../../types/product';

@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.295-corrigir-login-admin-proxy
+version: v1.2.296-corrigir-pdv-useeffect
 date: 2026-08-30
 status: ready
-release_vps: /var/www/mdv-site/releases/20260830-011137-corrigir-login-admin-proxy
+release_vps: /var/www/mdv-site/releases/20260830-011524-corrigir-pdv-useeffect
 branch: main
-summary: Corrige o proxy do site para encaminhar o login e a recuperação de senha à autenticação da VPS, sem exigir uma sessão administrativa prévia.
+summary: Corrige o carregamento do PDV após o login, importando o hook useEffect usado na sincronização de pagamentos.
 ```
