@@ -4,7 +4,7 @@
 version: v1.2.297-crediario-taxas
 date: 2026-08-30
 status: ready
-release_vps: pendente
+release_vps: /var/www/mdv-site/releases/20260830-043850-crediario-taxas
 branch: main
 summary: Aplica as taxas oficiais de pagamento ao crediário parcelado do PDV com parcelas exatas em centavos.
 ```
