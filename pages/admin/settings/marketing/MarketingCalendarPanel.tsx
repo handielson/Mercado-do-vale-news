@@ -63,6 +63,31 @@ interface MarketingCalendarPanelProps {
   onSelectDateForNewSchedule?: (dateKey: string) => void;
 }
 
+function parseDateKey(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string') {
+    const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  }
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function parseTimeStr(val: any): string {
+  if (!val) return '00:00';
+  if (typeof val === 'string') {
+    const match = val.match(/(\d{2}):(\d{2})/);
+    if (match) return `${match[1]}:${match[2]}`;
+  }
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return '00:00';
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+}
+
 export default function MarketingCalendarPanel({
   onNavigateToTab,
   onSelectDateForNewSchedule,
@@ -72,10 +97,7 @@ export default function MarketingCalendarPanel({
   const [approvals, setApprovals] = useState<MarketingApprovalRequest[]>([]);
   const [slots, setSlots] = useState<InstagramSlot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(() => {
-    const today = new Date();
-    return new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  });
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(() => parseDateKey(new Date()));
   const [channelFilter, setChannelFilter] = useState<'all' | 'instagram' | 'whatsapp' | 'facebook'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'completed'>('all');
 
@@ -125,17 +147,21 @@ export default function MarketingCalendarPanel({
   const month = currentDate.getMonth();
 
   const handlePrevMonth = () => {
-    setCurrentDate(new Date(year, month - 1, 1));
+    const nextDate = new Date(year, month - 1, 1);
+    setCurrentDate(nextDate);
+    setSelectedDayKey(parseDateKey(nextDate));
   };
 
   const handleNextMonth = () => {
-    setCurrentDate(new Date(year, month + 1, 1));
+    const nextDate = new Date(year, month + 1, 1);
+    setCurrentDate(nextDate);
+    setSelectedDayKey(parseDateKey(nextDate));
   };
 
   const handleToday = () => {
     const today = new Date();
     setCurrentDate(today);
-    setSelectedDayKey(new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+    setSelectedDayKey(parseDateKey(today));
   };
 
   const allEvents = useMemo(() => {
@@ -145,14 +171,8 @@ export default function MarketingCalendarPanel({
 
     // 1. Social Story Schedules
     for (const schedule of safeSchedules) {
-      const scheduleDate = new Date(schedule.scheduled_at);
-      const dateKey = !Number.isNaN(scheduleDate.getTime())
-        ? new Date(scheduleDate.getTime() - scheduleDate.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
-        : '';
-
-      const timeStr = !Number.isNaN(scheduleDate.getTime())
-        ? scheduleDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
-        : '00:00';
+      const dateKey = parseDateKey(schedule.scheduled_at);
+      const timeStr = parseTimeStr(schedule.scheduled_at);
 
       const firstImage = schedule.items?.find((it) => it.media_url)?.media_url;
 
@@ -161,7 +181,7 @@ export default function MarketingCalendarPanel({
 
       if (schedule.status === 'approved') {
         normalizedStatus = 'approved';
-        statusLabel = 'Aprovado / Agendado';
+        statusLabel = 'Aprovado';
       } else if (schedule.status === 'processing' || schedule.status === 'executing') {
         normalizedStatus = 'executing';
         statusLabel = 'Publicando';
@@ -171,6 +191,23 @@ export default function MarketingCalendarPanel({
       } else if (schedule.status === 'failed') {
         normalizedStatus = 'failed';
         statusLabel = 'Falhou';
+      } else if (schedule.status === 'cancelled') {
+        normalizedStatus = 'failed';
+        statusLabel = 'Cancelado';
+      }
+
+      let destinations: Array<'instagram' | 'whatsapp' | 'facebook'> = [];
+      if (Array.isArray(schedule.destinations)) {
+        destinations = schedule.destinations as any;
+      } else if (typeof schedule.destinations === 'string') {
+        try {
+          destinations = JSON.parse(schedule.destinations);
+        } catch {
+          destinations = ['whatsapp'];
+        }
+      }
+      if (!destinations || destinations.length === 0) {
+        destinations = ['whatsapp'];
       }
 
       if (dateKey) {
@@ -180,10 +217,10 @@ export default function MarketingCalendarPanel({
           title: schedule.title || (schedule.items?.length || 0) + ' Stories',
           dateKey,
           timeStr,
-          destinations: schedule.destinations as any,
+          destinations,
           status: normalizedStatus,
           statusLabel,
-          itemsCount: schedule.items?.length || 0,
+          itemsCount: schedule.items?.length || 1,
           thumbnailUrl: firstImage ? toBrowserSafeMediaUrl(firstImage) : null,
           rawPayload: schedule,
         });
@@ -195,13 +232,8 @@ export default function MarketingCalendarPanel({
       const propState = (app.proposed_state || {}) as any;
       const scheduledAt = propState.scheduledAt || (app as any).created_at;
       if (scheduledAt) {
-        const appDate = new Date(scheduledAt);
-        const dateKey = !Number.isNaN(appDate.getTime())
-          ? new Date(appDate.getTime() - appDate.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
-          : '';
-        const timeStr = !Number.isNaN(appDate.getTime())
-          ? appDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
-          : '00:00';
+        const dateKey = parseDateKey(scheduledAt);
+        const timeStr = parseTimeStr(scheduledAt);
 
         if (!events.some((e) => e.rawPayload?.approval_id === app.id || e.id === 'app-' + app.id)) {
           let normalizedStatus: CalendarEvent['status'] = 'pending';
@@ -219,6 +251,9 @@ export default function MarketingCalendarPanel({
           } else if (app.status === 'failed') {
             normalizedStatus = 'failed';
             statusLabel = 'Falhou';
+          } else if (app.status === 'cancelled' || app.status === 'rejected') {
+            normalizedStatus = 'failed';
+            statusLabel = app.status === 'rejected' ? 'Rejeitada' : 'Cancelada';
           }
 
           const destinations: Array<'instagram' | 'whatsapp' | 'facebook'> = [];
@@ -287,12 +322,12 @@ export default function MarketingCalendarPanel({
       slotsCount: number;
     }> = [];
 
-    const todayDateKey = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const todayDateKey = parseDateKey(new Date());
 
     for (let i = firstDayIndex - 1; i >= 0; i--) {
       const dayNum = daysInPrevMonth - i;
       const d = new Date(year, month - 1, dayNum);
-      const dateKey = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      const dateKey = parseDateKey(d);
       const dayOfWeek = d.getDay();
       const slotsForDay = slots.filter((s) => s.day_of_week === dayOfWeek && s.active).length;
 
@@ -308,7 +343,7 @@ export default function MarketingCalendarPanel({
 
     for (let dayNum = 1; dayNum <= daysInCurrentMonth; dayNum++) {
       const d = new Date(year, month, dayNum);
-      const dateKey = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      const dateKey = parseDateKey(d);
       const dayOfWeek = d.getDay();
       const slotsForDay = slots.filter((s) => s.day_of_week === dayOfWeek && s.active).length;
 
@@ -325,7 +360,7 @@ export default function MarketingCalendarPanel({
     const remaining = (7 - (days.length % 7)) % 7;
     for (let i = 1; i <= remaining; i++) {
       const d = new Date(year, month + 1, i);
-      const dateKey = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      const dateKey = parseDateKey(d);
       const dayOfWeek = d.getDay();
       const slotsForDay = slots.filter((s) => s.day_of_week === dayOfWeek && s.active).length;
 
@@ -345,7 +380,8 @@ export default function MarketingCalendarPanel({
   const selectedDayData = useMemo(() => {
     if (!selectedDayKey) return null;
     const events = eventsByDate.get(selectedDayKey) || [];
-    const dateObj = new Date(selectedDayKey + 'T12:00:00');
+    const parts = selectedDayKey.split('-').map(Number);
+    const dateObj = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date(selectedDayKey + 'T12:00:00');
     const dayOfWeek = dateObj.getDay();
     const daySlots = slots.filter((s) => s.day_of_week === dayOfWeek && s.active);
 
