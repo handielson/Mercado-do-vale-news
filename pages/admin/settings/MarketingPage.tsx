@@ -34,6 +34,7 @@ import FacebookMarketplaceSchedulerPanel from './marketing/FacebookMarketplaceSc
 import MarketingApprovalCenterPanel from './marketing/MarketingApprovalCenterPanel';
 import MarketingCampaignAgentPanel from './marketing/MarketingCampaignAgentPanel';
 import SocialStorySchedulerPanel from './marketing/SocialStorySchedulerPanel';
+import MarketingCalendarPanel from './marketing/MarketingCalendarPanel';
 import ProductMarketingCard from './marketing/ProductMarketingCard';
 import { buildProductMarketingArtworkData, normalizeBrazilianWhatsapp } from './marketing/productMarketingArtwork';
 import { paymentFeesService } from '../../../services/payment-fees';
@@ -368,11 +369,11 @@ export default function MarketingPage() {
     const [showArtworkPrice, setShowArtworkPrice] = useState(true);
     const [marketingPaymentFees, setMarketingPaymentFees] = useState<PaymentFee[]>([]);
     const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
-    const [activeTab, setActiveTab] = useState<'studio' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'>(() => {
+    const [activeTab, setActiveTab] = useState<'studio' | 'calendar' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'>(() => {
         if (typeof window === 'undefined') return 'studio';
         const tab = new URLSearchParams(window.location.search).get('tab');
-        return ['studio', 'instagram', 'facebook', 'whatsapp', 'campaigns', 'approvals'].includes(tab || '')
-            ? tab as 'studio' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'
+        return ['studio', 'calendar', 'instagram', 'facebook', 'whatsapp', 'campaigns', 'approvals'].includes(tab || '')
+            ? tab as 'studio' | 'calendar' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'
             : 'studio';
     });
     const [whatsappSchedulerView, setWhatsappSchedulerView] = useState<'status' | 'stories'>('status');
@@ -1470,7 +1471,7 @@ export default function MarketingPage() {
                     </div>
                 </div>
 
-                <div className="mt-6 grid w-full grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-3 xl:grid-cols-6">
+                <div className="mt-6 grid w-full grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-4 xl:grid-cols-7">
                     <button
                         onClick={() => setActiveTab('studio')}
                         className={`col-span-2 rounded-xl px-4 py-3 text-sm font-black transition-colors md:col-span-1 ${
@@ -1480,6 +1481,16 @@ export default function MarketingPage() {
                         }`}
                     >
                         <span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4" /> Gerador de Artes</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('calendar')}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
+                            activeTab === 'calendar'
+                                ? 'bg-pink-600 text-white shadow-sm'
+                                : 'text-slate-600 hover:bg-pink-50 hover:text-pink-700'
+                        }`}
+                    >
+                        <span className="inline-flex items-center gap-2"><Calendar className="h-4 w-4" /> Calendário</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('instagram')}
@@ -2437,6 +2448,12 @@ export default function MarketingPage() {
                                 initialDescription={marketingKit.caption}
                             />
                         </div>
+                    )}
+                    {activeTab === 'calendar' && (
+                        <MarketingCalendarPanel
+                            onNavigateToTab={(t) => setActiveTab(t as any)}
+                            onSelectDateForNewSchedule={() => setActiveTab('instagram')}
+                        />
                     )}
                     {activeTab === 'campaigns' && <MarketingCampaignAgentPanel />}
                     {activeTab === 'approvals' && <MarketingApprovalCenterPanel />}

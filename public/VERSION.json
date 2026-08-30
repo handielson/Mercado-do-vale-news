@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.301-logo-og-cover-whatsapp",
+  "version": "v1.2.302-calendario-programacoes-marketing",
   "date": "2026-08-30",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260830-190049",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Atualização do logo na imagem de preview Open Graph do WhatsApp."
+  "summary": "Painel de Calendário Visual de Programações e Agendamentos no módulo de Marketing."
 }
