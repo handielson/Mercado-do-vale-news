@@ -216,6 +216,13 @@ function getSmartphoneConfigurationKey(product) {
   return [modelKey, ram, storage, color].join('|');
 }
 
+function getSmartphoneSaleConfigurationKey(product) {
+  const modelKey = String(product?.model_id || `${normalizeText(product?.brand || product?.brand_name)}:${normalizeText(product?.name || product?.sku || product?.id)}`);
+  const ram = normalizePhysicalRamValue(getProductSpec(product, ['ram_fisica', 'memoria_ram_fisica', 'ram', 'memoria_ram', 'memory_ram']));
+  const storage = normalizeMemory(getProductSpec(product, ['storage', 'armazenamento', 'memoria', 'capacity']));
+  return [modelKey, ram, storage].join('|');
+}
+
 function findConflictingNfcConfigurations(products) {
   const valuesByConfiguration = new Map();
   for (const product of Array.isArray(products) ? products : []) {
@@ -261,6 +268,7 @@ module.exports = {
   calculateBrandPrices,
   filterSmartphonesByFeatures,
   findConflictingNfcConfigurations,
+  getSmartphoneSaleConfigurationKey,
   isAffirmativeFeature,
   isValidGtin,
   isValidImei,

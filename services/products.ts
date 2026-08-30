@@ -140,9 +140,8 @@ async function syncVariationPrices(source: Product): Promise<VariationPriceAdjus
     const modelId = String(source.model_id || '').trim();
     const ram = normalizeVariationSpec(source.specs?.ram);
     const storage = normalizeVariationSpec(source.specs?.storage);
-    const color = normalizeVariationSpec(source.specs?.color_id || source.specs?.color || source.specs?.cor);
 
-    if (!modelId || !ram || !storage || !color) return null;
+    if (!modelId || !ram || !storage) return null;
 
     const rows = await vpsApiService.getProducts({
         model_id: modelId,
@@ -158,7 +157,6 @@ async function syncVariationPrices(source: Product): Promise<VariationPriceAdjus
             hasSellableStock(product) &&
             normalizeVariationSpec(product.specs?.ram) === ram &&
             normalizeVariationSpec(product.specs?.storage) === storage &&
-            normalizeVariationSpec(product.specs?.color_id || product.specs?.color || product.specs?.cor) === color &&
             salePricesDiffer(product, source)
         );
 

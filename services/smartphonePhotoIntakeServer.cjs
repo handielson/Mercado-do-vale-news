@@ -7,6 +7,7 @@ const {
   PHOTO_INTAKE_STATUS,
   buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
+  getSmartphoneSaleConfigurationKey,
   normalizeMemory,
   resolvePhotoIntakeStatus,
   translateColorToPtBr,
@@ -96,6 +97,26 @@ function productMatchesIntakeConfiguration(product, intake) {
     && productRam === wantedRam
     && productStorage === wantedStorage
     && colorMatches;
+}
+
+function productMatchesIntakeSaleConfiguration(product, intake) {
+  const specs = safeJson(product?.specs, {});
+  return getSmartphoneSaleConfigurationKey({ ...product, specs }) === getSmartphoneSaleConfigurationKey({
+    model_id: intake?.matched_model_id,
+    specs: { ram: intake?.detected_ram, storage: intake?.detected_storage },
+  });
+}
+
+async function lockSmartphoneSaleConfiguration(connection, intake) {
+  const [products] = await connection.query(
+    `SELECT id,price_retail,price_reseller,price_wholesale,specs FROM products
+      WHERE model_id=? AND status='active' AND stock_quantity > 0
+        AND COALESCE(hide_from_catalog,0)=0 AND COALESCE(is_parent,0)=0
+        AND (? IS NULL OR company_id=? OR company_id IS NULL)
+      FOR UPDATE`,
+    [intake.matched_model_id, intake.company_id || null, intake.company_id || null]
+  );
+  return products.filter((product) => productMatchesIntakeSaleConfiguration(product, intake));
 }
 
 async function findExactIntakeProduct(connection, intake) {
@@ -726,6 +747,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       const model = modelRows[0];
       if (!model) { await connection.rollback(); return reply.code(409).send({ error: 'Modelo vinculado não existe mais' }); }
       const template = safeJson(model.template_values, {});
+      const saleConfigurationProducts = await lockSmartphoneSaleConfiguration(connection, intake);
       let productId = String(request.body?.product_id || intake.matched_product_id || '').trim();
       if (productId) {
         const [products] = await connection.query('SELECT id,model_id FROM products WHERE id=? LIMIT 1', [productId]);
@@ -794,9 +816,18 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
          stock_quantity=(SELECT COUNT(*) FROM units WHERE product_id=? AND status='available'),updated_at=CURRENT_TIMESTAMP WHERE id=?`,
         [intake.price_cost, intake.price_retail, intake.price_reseller, intake.price_wholesale, productId, productId]
       );
+      if (saleConfigurationProducts.length > 0) {
+        const saleProductIds = saleConfigurationProducts.map((product) => product.id);
+        const salePlaceholders = saleProductIds.map(() => '?').join(',');
+        await connection.query(
+          `UPDATE products SET price_retail=?,price_reseller=?,price_wholesale=?,updated_at=CURRENT_TIMESTAMP
+            WHERE id IN (${salePlaceholders})`,
+          [intake.price_retail, intake.price_reseller, intake.price_wholesale, ...saleProductIds]
+        );
+      }
       await connection.query(
-        `UPDATE smartphone_photo_intakes SET status=?,matched_product_id=?,unit_id=?,completed_at=NOW() WHERE id=?`,
-        [PHOTO_INTAKE_STATUS.COMPLETED, productId, unitId, intake.id]
+        `UPDATE smartphone_photo_intakes SET status=?,matched_product_id=?,unit_id=?,price_retail=?,price_reseller=?,price_wholesale=?,completed_at=NOW() WHERE id=?`,
+        [PHOTO_INTAKE_STATUS.COMPLETED, productId, unitId, intake.price_retail, intake.price_reseller, intake.price_wholesale, intake.id]
       );
       await connection.commit();
       return { intake: toPublicIntake(await loadIntake(intake.id)), product_id: productId, unit_id: unitId, idempotent: false };

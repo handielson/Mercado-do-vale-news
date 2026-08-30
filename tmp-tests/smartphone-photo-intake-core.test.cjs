@@ -6,6 +6,7 @@ const {
   buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
   filterSmartphonesByFeatures,
+  getSmartphoneSaleConfigurationKey,
   isValidGtin,
   isValidImei,
   resolvePhotoIntakeStatus,
@@ -56,6 +57,16 @@ assert.deepEqual(calculateBrandPrices(87000, {
   price_wholesale: 97000,
 });
 
+assert.equal(
+  getSmartphoneSaleConfigurationKey({ model_id: 'poco-c71', specs: { ram: '4GB', storage: '128GB', color: 'Preto' } }),
+  getSmartphoneSaleConfigurationKey({ model_id: 'poco-c71', specs: { ram: '4GB', storage: '128GB', color: 'Dourado' } }),
+  'a cor não pode criar outro preço de venda para a mesma configuração'
+);
+assert.notEqual(
+  getSmartphoneSaleConfigurationKey({ model_id: 'poco-c71', specs: { ram: '4GB', storage: '128GB' } }),
+  getSmartphoneSaleConfigurationKey({ model_id: 'poco-c71', specs: { ram: '8GB', storage: '256GB' } }),
+  'RAM e armazenamento diferentes precisam manter preços independentes'
+);
 assert.equal(resolvePhotoIntakeStatus({ matchedModelId: null }), PHOTO_INTAKE_STATUS.WAITING_MODEL_REGISTRATION);
 assert.equal(resolvePhotoIntakeStatus({ matchedModelId: 'model-1' }), PHOTO_INTAKE_STATUS.WAITING_PRICE_CONFIRMATION);
 assert.equal(resolvePhotoIntakeStatus({ matchedModelId: 'model-1', pricesConfirmed: true }), PHOTO_INTAKE_STATUS.READY_TO_FINALIZE);

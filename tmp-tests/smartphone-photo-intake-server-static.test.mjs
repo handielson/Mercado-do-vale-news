@@ -39,6 +39,8 @@ assert.match(source, /findExactIntakeProduct\(connection, intake\)/, 'deve vincu
 assert.match(reviewCard, /Produto encontrado\.[\s\S]*O produto já existe[\s\S]*Falta concluir este aparelho[\s\S]*não será criado outro produto/, 'a conferência deve explicar que o produto existe, mas o aparelho ainda precisa ser concluído');
 assert.match(queue, /Produto encontrado/, 'a fila deve identificar variações já cadastradas com texto simples');
 assert.match(source, /reserveAvailableSku\(connection, request\.body\?\.sku, intake, model\)/, 'deve gerar outro SKU quando o informado ja estiver ocupado');
+assert.match(source, /lockSmartphoneSaleConfiguration\(connection, intake\)/, 'deve obter todos os produtos da mesma combinação de modelo, RAM e armazenamento');
+assert.match(source, /UPDATE products SET price_retail=\?,price_reseller=\?,price_wholesale=\?[\s\S]*saleProductIds/, 'deve propagar os preços de venda para todas as cores da configuração');
 assert.match(source, /No campo RAM, informe somente a memória física; não some nem inclua expansão ou RAM virtual/, 'IA deve extrair apenas a RAM física da etiqueta');
 assert.match(capturePanel, /function isDuplicateQueuePhotoError[\s\S]*\[VPS\\\]\\s\*409[\s\S]*Esta foto já está na fila/, 'frontend deve reconhecer especificamente a duplicidade informada pela API');
 assert.match(capturePanel, /smartphonePhotoIntakeService\.upload\(file, batchId\)[\s\S]*catch \(error\)[\s\S]*duplicateCount \+= 1[\s\S]*continue;/, 'uma foto duplicada não deve interromper o restante do lote');

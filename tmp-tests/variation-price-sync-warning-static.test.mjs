@@ -26,6 +26,12 @@ assert(
   'variation price synchronization must apply the submitted sale prices to peers',
 );
 
+assert.doesNotMatch(
+  service.slice(service.indexOf('async function syncVariationPrices'), service.indexOf('async function enrichProductsWithShopeeLinks')),
+  /normalizeVariationSpec\(product\.specs\?\.(?:color_id|color|cor)/,
+  'a cor não pode separar preços de venda da mesma combinação de modelo, RAM e armazenamento',
+);
+
 assert(
   /bulkSyncPricesStock\(updates\)/.test(service),
   'variation price synchronization must update peers through VPS bulk price endpoint',
