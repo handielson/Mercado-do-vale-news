@@ -94,6 +94,14 @@ test('Panel exposes standalone, WhatsApp import and explicit destination choices
   assert.match(calendar, /Todos os dias/);
 });
 
+test('Unavailable public media is preflighted and retried without calling a publisher', () => {
+  assert.match(api, /assertSocialStoryMediaAvailable\(delivery, dependencies\)/);
+  assert.match(api, /SOCIAL_STORY_MEDIA_UNAVAILABLE/);
+  assert.match(api, /Nova tentativa automatica em/);
+  assert.match(api, /deliveryStatus = retryableMediaFailure \? 'pending' : 'failed'/);
+  assert.match(api, /DATE_SUB\(NOW\(\),INTERVAL \$\{SOCIAL_STORY_MEDIA_RETRY_DELAY_MINUTES\} MINUTE\)/);
+});
+
 test('Panel rejects a stale local Story time before calling the VPS', () => {
   assert.match(panel, /prepareSocialStoryScheduleDates\(selectedDates, time\)/);
   assert.match(panel, /schedulePlan\.past\?\.instant/);

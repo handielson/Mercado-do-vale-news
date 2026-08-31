@@ -29,6 +29,8 @@ export interface MetaMarketingConnection {
     graphApiVersion: string | null;
     redirectUri: string | null;
     grantedScopes: string[];
+    requiredPublishingScopes: string[];
+    missingPublishingScopes: string[];
     availableAdAccounts: MetaAdAccount[];
     availablePages: MetaPage[];
     selectedAdAccount: MetaAdAccount | null;

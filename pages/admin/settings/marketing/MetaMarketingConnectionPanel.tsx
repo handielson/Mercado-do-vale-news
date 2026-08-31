@@ -129,6 +129,10 @@ export default function MetaMarketingConnectionPanel() {
 
     const pagesWithInstagram = connection.availablePages.filter((page) => page.instagram_business_account?.id);
     const readyToAudit = connection.status === 'connected' && Boolean(connection.selectedAdAccount && connection.selectedPage);
+    const missingPublishingScopes = connection.missingPublishingScopes || [];
+    const readyToPublishStories = connection.status === 'connected'
+        && Boolean(connection.selectedInstagramAccountId)
+        && missingPublishingScopes.length === 0;
     const reviews = connection.lastAudit?.managedAdReviews || [];
     const managedCampaignIds = new Set(reviews.map((item) => item.campaignId));
     const activeOutsidePortfolio = (connection.lastAudit?.accountAudits || []).flatMap((accountAudit) => (
@@ -145,11 +149,13 @@ export default function MetaMarketingConnectionPanel() {
                     <div className="rounded-xl bg-blue-600 p-2.5 text-white"><Facebook className="h-5 w-5" /></div>
                     <div><p className="text-xs font-black uppercase tracking-wide text-blue-600">Conexão oficial Meta</p><h3 className="mt-1 text-lg font-black text-slate-900">{STATUS_LABELS[connection.status]}</h3><p className="mt-1 text-sm text-slate-600">A VPS guarda o token criptografado. A auditoria abaixo não cria, pausa ou edita anúncios.</p></div>
                 </div>
-                <button onClick={connect} disabled={!connection.configured || working !== null} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">{working === 'connect' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}{connection.status === 'connected' ? 'Reconectar Meta' : 'Conectar Meta'}</button>
+                <button onClick={connect} disabled={!connection.configured || working !== null} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">{working === 'connect' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}{connection.status === 'connected' ? (readyToPublishStories ? 'Reconectar Meta' : 'Corrigir permissões Meta') : 'Conectar Meta'}</button>
             </div>
 
             <div className="space-y-4 p-5">
                 {!connection.configured && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Configuração pendente na VPS.</strong><p className="mt-1">Faltam: {connection.missingConfiguration.join(', ')}.</p>{connection.redirectUri && <p className="mt-1">Callback: <code>{connection.redirectUri}</code></p>}</div>}
+
+                {connection.status === 'connected' && missingPublishingScopes.length > 0 && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><strong>Instagram conectado, mas sem autorização para publicar Stories.</strong><p className="mt-1">Clique em “Corrigir permissões Meta” e autorize novamente. Permissões pendentes: {missingPublishingScopes.join(', ')}.</p></div>}
 
                 {connection.status === 'connected' && (
                     <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">

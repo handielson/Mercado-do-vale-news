@@ -15,6 +15,10 @@ const META_REVIEW_AUTO_LAUNCH_ACTION = 'meta.activate_after_review.v1';
 const META_SECURITY_REVIEW_ACTION = 'meta.submit_security_review.v1';
 const META_DELIVERY_STATUS_ACTION = 'meta.set_delivery_status.v1';
 const SOCIAL_STORY_SCHEDULE_ACTION = 'social.schedule_story.v1';
+const SOCIAL_STORY_REQUIRED_INSTAGRAM_SCOPES = Object.freeze([
+  'instagram_basic', 'instagram_content_publish', 'pages_read_engagement',
+]);
+const SOCIAL_STORY_MEDIA_RETRY_DELAY_MINUTES = 5;
 const META_AUTHORIZED_MONTHLY_CEILING_BRL = 1000;
 const META_CAMPAIGN_SHELLS = Object.freeze([
   { itemKey: 'store-carousel', name: 'MDV | Loja inteira | Carrossel | Petrolina + Juazeiro' },
@@ -71,7 +75,7 @@ function marketingConfig() {
   const encryptionKey = String(process.env.META_TOKEN_ENCRYPTION_KEY || '').trim();
   const scopes = String(process.env.META_OAUTH_SCOPES || [
     'ads_read', 'ads_management', 'business_management', 'pages_show_list',
-    'pages_read_engagement', 'instagram_basic', 'instagram_content_publish',
+    ...SOCIAL_STORY_REQUIRED_INSTAGRAM_SCOPES,
   ].join(',')).split(',').map((item) => item.trim()).filter(Boolean);
   return {
     graphApiVersion, appId, appSecret, redirectUri, encryptionKey, scopes,
@@ -551,6 +555,7 @@ function registerApprovalRoutes(fastify, { pool, requireAdminBearerToken, requir
 function sanitizeConnection(row, config = marketingConfig()) {
   const adAccounts = jsonParse(row?.available_ad_accounts, []);
   const pages = jsonParse(row?.available_pages, []);
+  const grantedScopes = jsonParse(row?.granted_scopes, []);
   return {
     configured: config.ready,
     missingConfiguration: [
@@ -561,7 +566,9 @@ function sanitizeConnection(row, config = marketingConfig()) {
     status: row?.status || 'disconnected',
     graphApiVersion: config.graphApiVersion || row?.graph_api_version || null,
     redirectUri: config.redirectUri || null,
-    grantedScopes: jsonParse(row?.granted_scopes, []),
+    grantedScopes,
+    requiredPublishingScopes: [...SOCIAL_STORY_REQUIRED_INSTAGRAM_SCOPES],
+    missingPublishingScopes: SOCIAL_STORY_REQUIRED_INSTAGRAM_SCOPES.filter((scope) => !grantedScopes.includes(scope)),
     availableAdAccounts: adAccounts,
     availablePages: pages,
     selectedAdAccount: adAccounts.find((item) => item.id === row?.selected_ad_account_id) || null,
@@ -1848,7 +1855,7 @@ async function publishInstagramStory(pool, item, dependencies) {
   const row = await connectionRow(pool);
   if (!row || row.status !== 'connected') throw new Error('Meta connection is not active');
   const granted = new Set(jsonParse(row.granted_scopes, []));
-  for (const permission of ['instagram_basic', 'instagram_content_publish', 'pages_read_engagement']) {
+  for (const permission of SOCIAL_STORY_REQUIRED_INSTAGRAM_SCOPES) {
     if (!granted.has(permission)) throw new Error(`Meta permission missing: ${permission}. Reconnect the account.`);
   }
   const instagramId = text(row.selected_instagram_account_id, 80);
@@ -1902,6 +1909,7 @@ async function claimNextSocialStoryDelivery(pool) {
        JOIN social_story_items i ON i.id=d.item_id
        JOIN social_story_schedules s ON s.id=d.schedule_id
        WHERE d.status='pending' AND s.status IN ('approved','processing') AND i.scheduled_at<=NOW()
+         AND (d.attempt_count=0 OR d.updated_at<=DATE_SUB(NOW(),INTERVAL ${SOCIAL_STORY_MEDIA_RETRY_DELAY_MINUTES} MINUTE))
          AND NOT EXISTS (
            SELECT 1 FROM social_story_items pi
            JOIN social_story_deliveries pd ON pd.item_id=pi.id AND pd.destination=d.destination
@@ -1925,6 +1933,44 @@ async function claimNextSocialStoryDelivery(pool) {
     await connection.rollback();
     throw error;
   } finally { connection.release(); }
+}
+
+function socialStoryMediaRetryLimit() {
+  return Math.max(1, Math.min(288, Number(process.env.SOCIAL_STORY_MEDIA_RETRY_LIMIT || 144) || 144));
+}
+
+function socialStoryMediaUnavailable(message) {
+  const error = new Error(message);
+  error.code = 'SOCIAL_STORY_MEDIA_UNAVAILABLE';
+  return error;
+}
+
+async function assertSocialStoryMediaAvailable(item, dependencies = {}) {
+  const fetchImpl = dependencies.fetchImpl || fetch;
+  const timeoutMs = Math.max(3000, Math.min(30000, Number(process.env.SOCIAL_STORY_MEDIA_PREFLIGHT_TIMEOUT_MS || 10000) || 10000));
+  let response;
+  try {
+    response = await fetchImpl(item.media_url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (response.status === 405 || response.status === 501) {
+      response = await fetchImpl(item.media_url, {
+        method: 'GET',
+        headers: { Range: 'bytes=0-0' },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      await response.body?.cancel?.().catch?.(() => {});
+    }
+  } catch (error) {
+    throw socialStoryMediaUnavailable(`Midia temporariamente indisponivel: ${text(error?.message, 500) || 'falha de acesso'}`);
+  }
+  if (!response.ok) {
+    throw socialStoryMediaUnavailable(`Midia temporariamente indisponivel: HTTP ${response.status}`);
+  }
+  return true;
 }
 
 async function refreshSocialStoryScheduleStatus(pool, scheduleId) {
@@ -1959,6 +2005,7 @@ async function runNextSocialStoryDelivery(pool, dependencies) {
   const delivery = await claimNextSocialStoryDelivery(pool);
   if (!delivery) return null;
   try {
+    await assertSocialStoryMediaAvailable(delivery, dependencies);
     const result = delivery.destination === 'instagram'
       ? await publishInstagramStory(pool, delivery, dependencies)
       : await dependencies.sendWhatsAppStoryMedia({
@@ -1972,8 +2019,17 @@ async function runNextSocialStoryDelivery(pool, dependencies) {
       [result?.containerId || null, result?.publicationId || result?.id || null, delivery.id],
     );
   } catch (error) {
-    await pool.query("UPDATE social_story_deliveries SET status='failed',last_error=? WHERE id=?", [text(error.message, 10000), delivery.id]);
-    await pool.query('UPDATE social_story_schedules SET last_error=? WHERE id=?', [text(error.message, 10000), delivery.schedule_id]);
+    const retryableMediaFailure = error?.code === 'SOCIAL_STORY_MEDIA_UNAVAILABLE'
+      && Number(delivery.attempt_count || 0) < socialStoryMediaRetryLimit();
+    const deliveryStatus = retryableMediaFailure ? 'pending' : 'failed';
+    const errorMessage = retryableMediaFailure
+      ? `${text(error.message, 9000)}. Nova tentativa automatica em ${SOCIAL_STORY_MEDIA_RETRY_DELAY_MINUTES} minutos.`
+      : text(error.message, 10000);
+    await pool.query(
+      'UPDATE social_story_deliveries SET status=?,claimed_at=NULL,last_error=? WHERE id=?',
+      [deliveryStatus, errorMessage, delivery.id],
+    );
+    await pool.query('UPDATE social_story_schedules SET last_error=? WHERE id=?', [errorMessage, delivery.schedule_id]);
   }
   await refreshSocialStoryScheduleStatus(pool, delivery.schedule_id);
   return delivery.id;
@@ -3207,6 +3263,7 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
     url.searchParams.set('redirect_uri', config.redirectUri);
     url.searchParams.set('state', state);
     url.searchParams.set('scope', config.scopes.join(','));
+    url.searchParams.set('auth_type', 'rerequest');
     url.searchParams.set('response_type', 'code');
     return { ok: true, authorizationUrl: url.toString() };
   });
@@ -3585,4 +3642,9 @@ function registerMarketingCampaignRoutes(fastify, dependencies) {
   startSocialStoryWorker(dependencies.pool, dependencies);
 }
 
-module.exports = { ensureMarketingCampaignTables, registerMarketingCampaignRoutes, expandSocialStoryItemsForDates };
+module.exports = {
+  ensureMarketingCampaignTables,
+  registerMarketingCampaignRoutes,
+  expandSocialStoryItemsForDates,
+  assertSocialStoryMediaAvailable,
+};
