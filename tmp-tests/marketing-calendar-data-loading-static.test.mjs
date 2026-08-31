@@ -71,5 +71,10 @@ assert.match(
   /Possível duplicidade em/,
   'Overlapping Story schedules must be visibly flagged instead of silently looking identical',
 );
+assert.match(
+  calendar,
+  /if \(event\.status === 'failed'\) return false;/,
+  'Cancelled or rejected records must not look like active publications in the calendar',
+);
 
 console.log('marketing calendar data-loading static checks passed');

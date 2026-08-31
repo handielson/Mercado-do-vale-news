@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.307-calendario-video-horario
-date: 2026-08-30
+version: v1.2.308-calendario-ocultar-cancelados
+date: 2026-08-31
 status: ready
-release_vps: /var/www/mdv-site/releases/20260830-212115-v12307-calendario-video-horario
+release_vps: /var/www/mdv-site/releases/20260831-002513-calendario-ocultar-cancelados
 branch: main
-summary: Correção do horário, da miniatura de vídeo e da sinalização de duplicidade no calendário editorial.
+summary: Programações canceladas deixam de aparecer como publicações ativas no calendário editorial.
 ```

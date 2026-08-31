@@ -563,6 +563,9 @@ export default function MarketingCalendarPanel({
 
   const filteredEvents = useMemo(() => {
     return allEvents.filter((event) => {
+      // Cancelled/rejected records remain available for audit in the backend, but
+      // must not look like active publications in the editorial calendar.
+      if (event.status === 'failed') return false;
       if (channelFilter !== 'all') {
         if (!event.destinations.includes(channelFilter)) return false;
       }
