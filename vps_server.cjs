@@ -42,6 +42,11 @@ const {
   ensureMarketingCampaignTables,
   registerMarketingCampaignRoutes,
 } = require('./services/marketingCampaignApi.cjs');
+const {
+  DEFAULT_CONTEXT_IDLE_MS,
+  buildMemorySessionKey: buildN8nBotContextMemorySessionKey,
+  selectConversationContext,
+} = require('./services/n8nBotConversationContext.cjs');
 
 let isWhatsAppAutomationLogsSchemaReady = false;
 
@@ -2767,7 +2772,25 @@ async function getN8nBotClientControl(identity) {
       LIMIT 30`,
     [identity.remoteJid]
   );
-  const recentMessages = [...(messageRows || [])].reverse().map((row) => {
+  const [contextBoundaryRows] = await pool.query(
+    `WITH ordered_messages AS (
+       SELECT created_at,
+              LAG(created_at) OVER (ORDER BY id) AS previous_created_at
+         FROM n8n_bot_messages
+        WHERE remote_jid = ?
+     )
+     SELECT created_at AS context_started_at
+       FROM ordered_messages
+      WHERE previous_created_at IS NULL
+         OR TIMESTAMPDIFF(MICROSECOND, previous_created_at, created_at) > ?
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [identity.remoteJid, DEFAULT_CONTEXT_IDLE_MS * 1000]
+  );
+  const context = selectConversationContext(messageRows, {
+    contextStartedAt: contextBoundaryRows?.[0]?.context_started_at,
+  });
+  const recentMessages = [...context.rows].reverse().map((row) => {
     const direction = String(row.direction || 'inbound');
     const sourceNode = String(row.source_node || '');
     const role = direction === 'inbound'
@@ -2778,6 +2801,12 @@ async function getN8nBotClientControl(identity) {
   }).filter((row) => row.text);
   return {
     ...result,
+    memorySessionKey: buildN8nBotContextMemorySessionKey(
+      identity.remoteJid,
+      result.control.reset_count,
+      context.contextStartedAt
+    ),
+    conversationContextIdle: context.isIdle,
     humanHandoffPaused: Boolean(result.control.human_handoff_active),
     recentMessages,
     conversationHistory: recentMessages.map((row) => `${row.role}: ${row.text}`).join('\n'),
