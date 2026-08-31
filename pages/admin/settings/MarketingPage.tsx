@@ -249,6 +249,24 @@ const loadAllMarketingProducts = async ({
     return Array.from(productsById.values());
 };
 
+const normalizeBlueprintProductNamesByModel = (products: CatalogProduct[]): CatalogProduct[] => {
+    const canonicalNameByModel = new Map<string, string>();
+    for (const product of products) {
+        const modelKey = String(product.model_id || product.id || '').trim();
+        const candidate = String(product.name || '').trim();
+        if (!modelKey || !candidate) continue;
+        const current = canonicalNameByModel.get(modelKey);
+        if (!current || candidate.length < current.length || (candidate.length === current.length && candidate.localeCompare(current, 'pt-BR') < 0)) {
+            canonicalNameByModel.set(modelKey, candidate);
+        }
+    }
+
+    return products.map((product) => {
+        const canonicalName = canonicalNameByModel.get(String(product.model_id || product.id || '').trim());
+        return canonicalName && canonicalName !== product.name ? { ...product, name: canonicalName } : product;
+    });
+};
+
 const saveMarketingPrimaryProduct = (groupKey: string, productId: string) => {
     const saved = readMarketingPrimaryVariants();
     localStorage.setItem(MARKETING_PRIMARY_VARIANTS_KEY, JSON.stringify({ ...saved, [groupKey]: productId }));
@@ -857,7 +875,10 @@ export default function MarketingPage() {
                 const preparedProducts = await prepareMarketingProducts(products);
                 if (requestId !== searchRequestRef.current) return;
 
-                const grouped = groupProductsByVariants(preparedProducts, isBlueprintFormat).map((group) => ({
+                const productsToGroup = isBlueprintFormat
+                    ? normalizeBlueprintProductNamesByModel(preparedProducts)
+                    : preparedProducts;
+                const grouped = groupProductsByVariants(productsToGroup, isBlueprintFormat).map((group) => ({
                     ...group,
                     representativeProduct: chooseMarketingPrimaryProduct(group),
                 }));

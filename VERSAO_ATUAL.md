@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.313-blueprints-cadastro-completo
+version: v1.2.314-blueprints-um-por-modelo
 date: 2026-08-31
 status: ready
-release_vps: /var/www/mdv-site/releases/20260831-091903-blueprints-cadastro-completo
+release_vps: /var/www/mdv-site/releases/20260831-092157-blueprints-um-por-modelo
 branch: main
-summary: Modo Blueprint consulta diretamente todos os celulares ativos cadastrados, sem filtros do catálogo público.
+summary: Produtos com grafias diferentes são consolidados pelo model_id para gerar exatamente um blueprint por modelo.
 ```
