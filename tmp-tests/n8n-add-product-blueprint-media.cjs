@@ -5,6 +5,7 @@ const { Client } = require('ssh2');
 const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
 
 const MARKER = 'blueprint-product-media-v309';
+const STATE_MARKER = 'blueprint-state-caption-v320';
 const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const DRY_RUN = process.argv.includes('--dry-run');
 const MEDIA_PREFIXES = [
@@ -159,16 +160,30 @@ function findFunctionRange(code, signature) {
 }
 
 function patchProductContext(code) {
-  if (code.includes(`// ${MARKER}-context`)) return code;
-  const imageMarker = '// catalog-model-color-photo-fallback-v283';
-  const markerIndex = code.indexOf(imageMarker);
-  assert.ok(markerIndex >= 0, 'canonical model/color image mapping marker not found');
-  const sliceToken = '.slice(0, 3),';
-  const sliceIndex = code.indexOf(sliceToken, markerIndex);
-  assert.ok(sliceIndex >= 0, 'canonical image limit not found');
-  const insertionIndex = sliceIndex + sliceToken.length;
-  const addition = `\n      // ${MARKER}-context\n      blueprintImageUrl: ${JSON.stringify(MEDIA_PREFIXES)}.some((prefix) => String(product.blueprint_image_url || '').trim().startsWith(prefix))\n        ? String(product.blueprint_image_url).trim()\n        : '',`;
-  return code.slice(0, insertionIndex) + addition + code.slice(insertionIndex);
+  let next = String(code || '');
+  if (!next.includes(`// ${MARKER}-context`)) {
+    const imageMarker = '// catalog-model-color-photo-fallback-v283';
+    const markerIndex = next.indexOf(imageMarker);
+    assert.ok(markerIndex >= 0, 'canonical model/color image mapping marker not found');
+    const sliceToken = '.slice(0, 3),';
+    const sliceIndex = next.indexOf(sliceToken, markerIndex);
+    assert.ok(sliceIndex >= 0, 'canonical image limit not found');
+    const insertionIndex = sliceIndex + sliceToken.length;
+    const addition = `\n      // ${MARKER}-context\n      blueprintImageUrl: ${JSON.stringify(MEDIA_PREFIXES)}.some((prefix) => String(product.blueprint_image_url || '').trim().startsWith(prefix))\n        ? String(product.blueprint_image_url).trim()\n        : '',`;
+    next = next.slice(0, insertionIndex) + addition + next.slice(insertionIndex);
+  }
+  if (next.includes(`// ${STATE_MARKER}-context`)) return next;
+
+  const firstVariant = 'variants: [{ color: product.color, productId: product.id, sku: product.sku, stock: product.stock, url: product.url, images: product.images }],';
+  const nextVariant = 'existing.variants.push({ color: product.color, productId: product.id, sku: product.sku, stock: product.stock, url: product.url, images: product.images });';
+  const storedVariant = '            images: Array.isArray(variant.images) ? variant.images : [],\n          })),';
+  assert.ok(next.includes(firstVariant), 'first grouped variant anchor not found');
+  assert.ok(next.includes(nextVariant), 'subsequent grouped variant anchor not found');
+  assert.ok(next.includes(storedVariant), 'stored post-list variant anchor not found');
+  next = next.replace(firstVariant, `// ${STATE_MARKER}-context\n      variants: [{ color: product.color, productId: product.id, sku: product.sku, stock: product.stock, url: product.url, images: product.images, blueprintImageUrl: product.blueprintImageUrl || '' }],`);
+  next = next.replace(nextVariant, `existing.variants.push({ color: product.color, productId: product.id, sku: product.sku, stock: product.stock, url: product.url, images: product.images, blueprintImageUrl: product.blueprintImageUrl || '' });`);
+  next = next.replace(storedVariant, `            images: Array.isArray(variant.images) ? variant.images : [],\n            blueprintImageUrl: variant.blueprintImageUrl || product.blueprintImageUrl || '',\n          })),`);
+  return next;
 }
 
 function patchClassifierPrompt(systemMessage) {
@@ -241,11 +256,11 @@ function buildPhotoFunctionSource() {
 }
 
 function patchPostList(code) {
-  if (code.includes(`// ${MARKER}-post-list`)) return code;
   let next = String(code || '');
-  const aiPhotoAnchor = "const wantsPhotoFromAI = aiAction === 'pedir_foto';";
-  assert.ok(next.includes(aiPhotoAnchor), 'AI photo intent anchor not found');
-  next = next.replace(aiPhotoAnchor, `// ${MARKER}-post-list
+  if (!next.includes(`// ${MARKER}-post-list`)) {
+    const aiPhotoAnchor = "const wantsPhotoFromAI = aiAction === 'pedir_foto';";
+    assert.ok(next.includes(aiPhotoAnchor), 'AI photo intent anchor not found');
+    next = next.replace(aiPhotoAnchor, `// ${MARKER}-post-list
 const MEDIA_PREFIXES_V309 = ${JSON.stringify(MEDIA_PREFIXES)};
 const isAllowedMediaUrlV309 = (value) => {
   const url = String(value || '').trim();
@@ -258,11 +273,45 @@ const normalizeBlueprintUrlV309 = (value) => {
 const wantsBlueprintOnlyV309 = aiAction === 'pedir_ficha' || /\\b(?:blueprint|ficha tecnica)\\b/.test(normalized);
 const wantsPhotoFromAI = aiAction === 'pedir_foto' || wantsBlueprintOnlyV309;`);
 
-  next = patchHydratedBlueprint(next);
-  next = patchMissingStateRecovery(next);
-  const range = findFunctionRange(next, 'async function buildPhotoMessages');
-  next = next.slice(0, range.start) + buildPhotoFunctionSource() + next.slice(range.end);
+    next = patchHydratedBlueprint(next);
+    next = patchMissingStateRecovery(next);
+    const range = findFunctionRange(next, 'async function buildPhotoMessages');
+    next = next.slice(0, range.start) + buildPhotoFunctionSource() + next.slice(range.end);
+  }
+  if (next.includes(`// ${STATE_MARKER}-hydrate`)) return next;
+  const currentImagesAnchor = `  if (currentImages.length > 0) return { ...item, images: currentImages };\n  const sku = String(item?.sku || '').trim();\n  if (!sku) return { ...item, images: [] };`;
+  assert.ok(next.includes(currentImagesAnchor), 'photo hydration early-return anchor not found');
+  next = next.replace(currentImagesAnchor, `  // ${STATE_MARKER}-hydrate
+  const currentBlueprintImageUrlV320 = normalizeBlueprintUrlV309(item?.blueprintImageUrl);
+  if (currentImages.length > 0 && currentBlueprintImageUrlV320) {
+    return { ...item, images: currentImages, blueprintImageUrl: currentBlueprintImageUrlV320 };
+  }
+  const sku = String(item?.sku || '').trim();
+  if (!sku) return { ...item, images: currentImages, blueprintImageUrl: currentBlueprintImageUrlV320 };`);
+  next = next.replace(
+    `if (!product) return { ...item, images: [] };`,
+    `if (!product) return { ...item, images: currentImages, blueprintImageUrl: currentBlueprintImageUrlV320 };`,
+  );
+  const catchAnchor = `  } catch (error) {\n    return { ...item, images: [] };\n  }\n}`;
+  assert.ok(next.includes(catchAnchor), 'photo hydration catch anchor not found');
+  next = next.replace(catchAnchor, `  } catch (error) {\n    return { ...item, images: currentImages, blueprintImageUrl: currentBlueprintImageUrlV320 };\n  }\n}`);
   return next;
+}
+
+function patchSplitter(code) {
+  let next = String(code || '');
+  if (next.includes(`// ${STATE_MARKER}-splitter`)) return next;
+  const anchor = `const message = normalizeOutboundPayload(rawMessage);\n  return { json: { message: message.text || message.caption || message, caption: message.caption || message.text || message, messageType:`;
+  assert.ok(next.includes(anchor), 'splitter image caption anchor not found');
+  return next.replace(anchor, `const message = normalizeOutboundPayload(rawMessage);
+  // ${STATE_MARKER}-splitter
+  const safeMessageTextV320 = typeof message === 'string'
+    ? message
+    : (typeof message?.text === 'string' ? message.text : (typeof message?.caption === 'string' ? message.caption : ''));
+  const safeCaptionV320 = typeof message === 'object' && message !== null
+    ? (typeof message.caption === 'string' ? message.caption : (typeof message.text === 'string' ? message.text : ''))
+    : safeMessageTextV320;
+  return { json: { message: safeMessageTextV320, caption: safeCaptionV320, messageType:`);
 }
 
 function patchWorkflow(workflow) {
@@ -272,6 +321,8 @@ function patchWorkflow(workflow) {
   context.parameters.jsCode = patchProductContext(String(context.parameters?.jsCode || ''));
   const postList = findNode(cloned.nodes, 'Vendas - Verificar Pos Lista');
   postList.parameters.jsCode = patchPostList(String(postList.parameters?.jsCode || ''));
+  const splitter = findNode(cloned.nodes, 'Dividir mensagens');
+  splitter.parameters.jsCode = patchSplitter(String(splitter.parameters?.jsCode || ''));
 
   const classifier = cloned.nodes.find((node) => String(node?.parameters?.options?.systemMessage || '').includes('- pedir_foto:'));
   assert.ok(classifier, 'sales classifier system prompt not found');
@@ -313,7 +364,7 @@ async function main() {
     const current = await readActiveWorkflow(conn, db);
     const patched = patchWorkflow({ nodes: current.nodes, connections: current.connections });
     const changed = JSON.stringify(patched.nodes) !== JSON.stringify(current.nodes);
-    for (const nodeName of ['Vendas - Contexto Produtos', 'Vendas - Verificar Pos Lista']) {
+    for (const nodeName of ['Vendas - Contexto Produtos', 'Vendas - Verificar Pos Lista', 'Dividir mensagens']) {
       const node = findNode(patched.nodes, nodeName);
       new Function(node.parameters.jsCode);
     }
@@ -354,7 +405,7 @@ COPY (
     'active', we.active,
     'versionAligned', we."versionId"=we."activeVersionId",
     'entityHistoryEqual', we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb,
-    'markerPresent', we.nodes::text LIKE '%${MARKER}%'
+    'markerPresent', we.nodes::text LIKE '%${MARKER}%' AND we.nodes::text LIKE '%${STATE_MARKER}%'
   )::text
   FROM workflow_entity we
   JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId"
@@ -383,12 +434,14 @@ COPY (
 module.exports = {
   MEDIA_PREFIXES,
   MARKER,
+  STATE_MARKER,
   imageMediaMetadata,
   isAllowedMediaUrl,
   normalizeBlueprintUrl,
   patchClassifierPrompt,
   patchPostList,
   patchProductContext,
+  patchSplitter,
   patchWorkflow,
   selectBlueprintMedia,
 };

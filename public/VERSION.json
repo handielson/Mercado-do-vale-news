@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.319-bot-memoria-contexto",
+  "version": "v1.2.320-blueprint-foto-bot",
   "date": "2026-08-31",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260831-192730-memoria-contexto-bot",
+  "release_vps": "/var/www/mdv-site/releases/20260831-200220-blueprint-foto-bot",
   "branch": "main",
-  "summary": "O bot inicia um novo contexto após inatividade, evita saudação duplicada e entende a confirmação para enviar a foto do produto já identificado."
+  "summary": "Pedidos de foto preservam e enviam o blueprint antes da foto real, sem transformar legendas vazias em objetos inválidos."
 }
