@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.312-blueprints-sem-estoque",
+  "version": "v1.2.313-blueprints-cadastro-completo",
   "date": "2026-08-31",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260831-091627-blueprints-sem-estoque",
+  "release_vps": "/var/www/mdv-site/releases/20260831-091903-blueprints-cadastro-completo",
   "branch": "main",
-  "summary": "Modo Blueprint inclui também modelos ativos cujas variações estão totalmente sem estoque."
+  "summary": "Modo Blueprint consulta diretamente todos os celulares ativos cadastrados, sem filtros do catálogo público."
 }

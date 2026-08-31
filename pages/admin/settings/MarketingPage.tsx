@@ -4,6 +4,8 @@ import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Lay
 import { toast } from 'sonner';
 import { toBlob, toPng } from 'html-to-image';
 import { catalogService } from '../../../services/catalogService';
+import { normalizeProduct } from '../../../services/productNormalizer';
+import { vpsApiService } from '../../../services/vpsApiService';
 import type { CatalogProduct, ProductGroup, ProductVariant } from '../../../types/catalog';
 import { groupProductsByVariants } from '../../../services/productGrouping';
 import { colorService } from '../../../services/colors';
@@ -217,6 +219,18 @@ const loadAllMarketingProducts = async ({
     categoryId?: string;
     includeOutOfStock?: boolean;
 }) => {
+    if (includeOutOfStock) {
+        const rawProducts = await vpsApiService.getProducts({
+            search: search || undefined,
+            category: categoryId || undefined,
+            status: 'active',
+            limit: 2000,
+            compact: true,
+            noCache: true,
+        });
+        return (rawProducts || []).map((product) => normalizeProduct(product) as CatalogProduct);
+    }
+
     const pageSize = 200;
     const productsById = new Map<string, CatalogProduct>();
 
