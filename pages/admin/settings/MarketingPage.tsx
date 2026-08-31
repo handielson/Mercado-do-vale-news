@@ -394,12 +394,22 @@ const saveProductBlueprintForModel = async (
     const formData = new FormData();
     formData.append('file', file);
 
-    const queued = await vpsClient.upload<MarketingArtworkUploadResponse>(
-        '/synology/upload?folder=imagens',
-        formData,
-    );
-    const completed = queued.uploadId ? await waitForMarketingArtworkUpload(queued.uploadId) : queued;
-    const publicUrl = String(completed.url || queued.url || '').trim();
+    let publicUrl = '';
+    try {
+        const queued = await vpsClient.upload<MarketingArtworkUploadResponse>(
+            '/synology/upload?folder=imagens',
+            formData,
+        );
+        const completed = queued.uploadId ? await waitForMarketingArtworkUpload(queued.uploadId) : queued;
+        publicUrl = String(completed.url || queued.url || '').trim();
+    } catch (synologyError) {
+        console.warn('Synology indisponível para o blueprint; usando armazenamento da API.', synologyError);
+        const fallbackFormData = new FormData();
+        fallbackFormData.append('file', file);
+        fallbackFormData.append('path', `products/blueprints/${file.name}`);
+        const fallback = await vpsClient.upload<{ url?: string }>('/images/upload', fallbackFormData);
+        publicUrl = String(fallback.url || '').trim();
+    }
     if (!publicUrl) throw new Error('O armazenamento não retornou a URL pública do blueprint');
 
     const versionedUrl = `${publicUrl}${publicUrl.includes('?') ? '&' : '?'}v=${sourceHash?.slice(0, 12) || Date.now()}`;

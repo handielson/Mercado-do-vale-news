@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.310-blueprints-categoria-smartphones
+version: v1.2.311-blueprints-storage-fallback
 date: 2026-08-31
 status: ready
-release_vps: /var/www/mdv-site/releases/20260831-082016-blueprints-categoria-smartphones
+release_vps: /var/www/mdv-site/releases/20260831-083311-blueprints-storage-fallback
 branch: main
-summary: Atalho de blueprints prioriza a categoria Smartphones e carrega corretamente todos os modelos cadastrados.
+summary: Blueprints usam armazenamento público da API quando o túnel do Synology estiver indisponível.
 ```

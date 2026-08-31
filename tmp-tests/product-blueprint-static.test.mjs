@@ -19,6 +19,8 @@ assert.match(page, /includeOutOfStock: isBlueprintFormat/, 'blueprint mode must 
 assert.match(page, /!isBlueprintFormat && selectedProduct && selectedProductImages\.length === 0/, 'a missing gallery photo must be reported in the blueprint checklist without blocking model registration');
 assert.match(page, /sourceHash\.slice\(0, 12\)/, 'immutable blueprint filenames must include the source hash');
 assert.match(page, /\/synology\/upload\?folder=imagens/);
+assert.match(page, /products\/blueprints\/\$\{file\.name\}/, 'blueprints must have a public API storage fallback when the Synology tunnel is offline');
+assert.match(page, /vpsClient\.upload<\{ url\?: string \}>\('\/images\/upload'/);
 assert.match(page, /Checklist incompleto/);
 assert.match(page, /nenhum dado será inventado/);
 assert.match(page, /Todos celulares/);
