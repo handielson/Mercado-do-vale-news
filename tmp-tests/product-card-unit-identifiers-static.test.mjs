@@ -5,8 +5,8 @@ const source = readFileSync('components/products/ProductCard.tsx', 'utf8');
 
 assert.match(
   source,
-  /unitService\.listByProduct\(product\.id\)/,
-  'ProductCard must load serialized units for products whose identifiers live outside product.specs',
+  /equivalentProductIds\.map\(productId => unitService\.listByProduct\(productId\)\)/,
+  'ProductCard must load serialized units from every equivalent product record',
 );
 
 assert.match(
@@ -17,8 +17,8 @@ assert.match(
 
 assert.match(
   source,
-  /hasSpecIdentifiers/,
-  'ProductCard must keep legacy specs identifiers as a fallback only',
+  /unitIdentifierChips\.length > 0 \? unitIdentifierChips : specIdentifierChips/,
+  'ProductCard must prefer unit identifiers and keep legacy specs as fallback only',
 );
 
 assert.match(

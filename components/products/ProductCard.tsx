@@ -230,6 +230,7 @@ const getSpecIdentifierChips = (product: Product): IdentifierChip[] => {
 };
 
 const getUnitIdentifierChips = (units: Awaited<ReturnType<typeof unitService.listByProduct>>): IdentifierChip[] => {
+    const seen = new Set<string>();
     return units
         .filter((unit) => String(unit.status) === 'available')
         .flatMap((unit) => {
@@ -242,7 +243,12 @@ const getUnitIdentifierChips = (units: Awaited<ReturnType<typeof unitService.lis
                 !imei1 && serial ? { key: `${unit.id}-serial`, label: 'Serial', value: serial } : null,
             ].filter(Boolean) as IdentifierChip[];
         })
-        .slice(0, 6);
+        .filter((chip) => {
+            const token = `${chip.label}:${chip.value}`.toLowerCase();
+            if (seen.has(token)) return false;
+            seen.add(token);
+            return true;
+        });
 };
 
 const uploadVideoWithProgress = (
@@ -313,6 +319,10 @@ const pollSynologyUploadStatus = async (uploadId: string, token: string | undefi
  * Displays product information in a card format with image, prices, and status
  */
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
+    const equivalentProductIds = product.equivalent_product_ids?.length
+        ? product.equivalent_product_ids
+        : [product.id];
+    const equivalentProductIdsKey = equivalentProductIds.join('|');
     const [fetchedImages, setFetchedImages] = useState<string[]>([]);
     const [productImages, setProductImages] = useState<string[]>(() => normalizeImageList(product.images));
     const [isImageGalleryExpanded, setIsImageGalleryExpanded] = useState(false);
@@ -400,8 +410,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const stockLocationReserved = displayStockLocationRows.reduce((sum, item) => sum + item.reserved, 0);
     const stockLocationAvailable = Math.max(0, stockLocationTotal - stockLocationReserved);
     const specIdentifierChips = getSpecIdentifierChips(product);
-    const hasSpecIdentifiers = specIdentifierChips.length > 0;
-    const identifierChips = hasSpecIdentifiers ? specIdentifierChips : unitIdentifierChips;
+    // Units sao a fonte da verdade. Identificadores legados em specs ficam
+    // apenas como fallback para produtos ainda nao migrados.
+    const identifierChips = unitIdentifierChips.length > 0 ? unitIdentifierChips : specIdentifierChips;
 
     // Check video: URLs do Synology precisam existir de verdade; URLs externas salvas continuam confiaveis.
     useEffect(() => {
@@ -468,15 +479,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     useEffect(() => {
         let cancelled = false;
 
-        if (!product.track_inventory || hasSpecIdentifiers || !product.id || Number(product.stock_quantity || 0) <= 0) {
+        if (!product.track_inventory || !product.id || Number(product.stock_quantity || 0) <= 0) {
             setUnitIdentifierChips([]);
             return;
         }
 
-        unitService.listByProduct(product.id)
-            .then((units) => {
+        Promise.all(equivalentProductIds.map(productId => unitService.listByProduct(productId)))
+            .then((unitGroups) => {
                 if (cancelled) return;
-                setUnitIdentifierChips(getUnitIdentifierChips(units));
+                setUnitIdentifierChips(getUnitIdentifierChips(unitGroups.flat()));
             })
             .catch(() => {
                 if (!cancelled) setUnitIdentifierChips([]);
@@ -485,7 +496,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         return () => {
             cancelled = true;
         };
-    }, [hasSpecIdentifiers, product.id, product.stock_quantity, product.track_inventory]);
+    }, [equivalentProductIdsKey, product.stock_quantity, product.track_inventory]);
 
     // Handle Upload video
     const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.314-blueprints-um-por-modelo",
+  "version": "v1.2.315-estoque-imei-cards",
   "date": "2026-08-31",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260831-092157-blueprints-um-por-modelo",
+  "release_vps": "/var/www/mdv-site/releases/20260831-134500-estoque-imei-cards",
   "branch": "main",
-  "summary": "Produtos com grafias diferentes são consolidados pelo model_id para gerar exatamente um blueprint por modelo."
+  "summary": "Cards serializados equivalentes reúnem estoque e IMEIs, novos lotes reutilizam o produto existente e blueprints preservam imagens cadastradas."
 }

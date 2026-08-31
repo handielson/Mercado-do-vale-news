@@ -52,6 +52,11 @@ export interface ProductKit {
 export interface Product {
     id: string;
 
+    // Campo calculado apenas nas listas administrativas. Quando cadastros
+    // legados representam a mesma variacao serializada, o card canonico usa
+    // estes IDs para reunir todas as unidades/IMEIs disponiveis.
+    equivalent_product_ids?: string[];
+
     // Model Reference (source of truth for brand, category, dimensions)
     model_id: string;          // FK to models table
     model: string;             // Model name (denormalized for display)

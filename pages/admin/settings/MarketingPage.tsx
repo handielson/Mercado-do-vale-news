@@ -125,7 +125,10 @@ const getRenderableProductImages = (product?: CatalogProduct | null): string[] =
 
 const prepareMarketingProducts = async (products: CatalogProduct[]): Promise<CatalogProduct[]> => {
     const modelIds = [...new Set(products.map((product) => product.model_id).filter(Boolean))];
-    if (modelIds.length === 0) return products.map((product) => ({ ...product, images: [], image_url: null }));
+    if (modelIds.length === 0) return products.map((product) => {
+        const fallbackImages = getRenderableProductImages(product);
+        return { ...product, images: fallbackImages, image_url: fallbackImages[0] || null };
+    });
 
     try {
         const [galleryRows, colors] = await Promise.all([
@@ -143,16 +146,21 @@ const prepareMarketingProducts = async (products: CatalogProduct[]): Promise<Cat
             const galleryImages = (galleryEntry?.images || [])
                 .map((value) => toBrowserSafeMediaUrl(value))
                 .filter((value) => hasRenderableMediaUrl(value));
+            const fallbackImages = getRenderableProductImages(product);
+            const renderableImages = galleryImages.length > 0 ? galleryImages : fallbackImages;
 
             return {
                 ...product,
-                images: galleryImages,
-                image_url: galleryImages[0] || null,
+                images: renderableImages,
+                image_url: renderableImages[0] || null,
             };
         });
     } catch (error) {
         console.warn('[Marketing] Não foi possível carregar a galeria oficial de modelo/cor.', error);
-        return products.map((product) => ({ ...product, images: [], image_url: null }));
+        return products.map((product) => {
+            const fallbackImages = getRenderableProductImages(product);
+            return { ...product, images: fallbackImages, image_url: fallbackImages[0] || null };
+        });
     }
 };
 

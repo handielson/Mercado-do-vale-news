@@ -1,5 +1,6 @@
 import { Product } from '../types/product';
 import { ProductFiltersState } from '../components/products/ProductFilters';
+import { isArchivedProductRecord } from '../utils/localProductVisibility';
 
 export function mergeProductsById(current: Product[], incoming: Product[]): Product[] {
     const byId = new Map(current.map(product => [product.id, product]));
@@ -19,6 +20,71 @@ export function mergeProductsById(current: Product[], incoming: Product[]): Prod
 
 function normalizeSearchValue(value: unknown): string {
     return String(value ?? '').toLowerCase();
+}
+
+function normalizeCommercialValue(value: unknown): string {
+    return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizeCapacityValue(value: unknown): string {
+    return normalizeCommercialValue(value).replace(/\s+/g, '').replace(/gib\b/g, 'gb');
+}
+
+function getSerializedCommercialKey(product: Product): string | null {
+    const specs = product.specs || {};
+    const modelId = normalizeCommercialValue(product.model_id);
+    const sku = normalizeCommercialValue(product.sku);
+    const ram = normalizeCapacityValue(specs.ram);
+    const storage = normalizeCapacityValue(specs.storage || specs.armazenamento);
+    const color = normalizeCommercialValue(specs.color || specs.cor);
+    const version = normalizeCommercialValue(specs.version || specs.versao);
+
+    // RAM + armazenamento + cor caracterizam as variacoes de celulares e
+    // tablets. Esta trava impede agrupar por engano produtos comuns que
+    // reutilizem um SKU (por exemplo, trilhos ou acessorios).
+    if (!modelId || !sku || !ram || !storage || !color) return null;
+
+    const eans = (product.eans || []).map(normalizeCommercialValue).filter(Boolean).sort().join(',');
+    const blingId = normalizeCommercialValue(product.bling_id);
+    return [modelId, sku, ram, storage, color, version, eans, blingId].join('|');
+}
+
+export function groupEquivalentSerializedProducts(products: Product[]): Product[] {
+    const groups = new Map<string, Product[]>();
+    const standalone: Product[] = [];
+
+    for (const product of products) {
+        const key = getSerializedCommercialKey(product);
+        if (!key) {
+            standalone.push(product);
+            continue;
+        }
+        const group = groups.get(key) || [];
+        group.push(product);
+        groups.set(key, group);
+    }
+
+    const grouped = [...groups.values()].map(group => {
+        if (group.length === 1) return group[0];
+
+        const canonical = [...group].sort((a, b) => {
+            const unitDelta = Number(b.stock_quantity || 0) - Number(a.stock_quantity || 0);
+            if (unitDelta !== 0) return unitDelta;
+            return new Date(a.created || 0).getTime() - new Date(b.created || 0).getTime();
+        })[0];
+        const images = group.flatMap(product => product.images || []).filter((url, index, all) => url && all.indexOf(url) === index);
+        const availableUnits = group.flatMap(product => (product as any).available_units || []);
+
+        return {
+            ...canonical,
+            images: images.length > 0 ? images : canonical.images,
+            stock_quantity: group.reduce((total, product) => total + Number(product.stock_quantity || 0), 0),
+            equivalent_product_ids: group.map(product => product.id),
+            ...(availableUnits.length > 0 ? { available_units: availableUnits } : {}),
+        };
+    });
+
+    return [...standalone, ...grouped];
 }
 
 function collectSerializedSearchValues(product: Product): string[] {
@@ -60,7 +126,7 @@ function collectSerializedSearchValues(product: Product): string[] {
 }
 
 export function filterAdminProducts(products: Product[], filters: ProductFiltersState): Product[] {
-    let filtered = [...products];
+    let filtered = products.filter(product => !isArchivedProductRecord(product));
 
     if (filters.search.trim() !== '') {
         const searchLower = filters.search.toLowerCase();
@@ -118,6 +184,8 @@ export function filterAdminProducts(products: Product[], filters: ProductFilters
     } else if (filters.videoStatus === 'without_video') {
         filtered = filtered.filter(product => !((product as any).video_url || '').trim());
     }
+
+    filtered = groupEquivalentSerializedProducts(filtered);
 
     filtered.sort((a, b) => {
         switch (filters.sortBy) {

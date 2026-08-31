@@ -124,10 +124,27 @@ interface VariationPriceAdjustment {
 
 type ProductWithPriceAdjustment = Product & {
     priceAdjustment?: VariationPriceAdjustment;
+    reusedExistingProduct?: boolean;
 };
 
 function normalizeVariationSpec(value: unknown): string {
     return String(value || '').trim().toLowerCase();
+}
+
+function isEquivalentSerializedVariation(row: any, input: ProductInput): boolean {
+    const rowSpecs = row?.specs || {};
+    const inputSpecs = input.specs || {};
+    const same = (left: unknown, right: unknown) => normalizeVariationSpec(left) === normalizeVariationSpec(right);
+    const sameCapacity = (left: unknown, right: unknown) =>
+        normalizeVariationSpec(left).replace(/\s+/g, '').replace(/gib\b/g, 'gb')
+        === normalizeVariationSpec(right).replace(/\s+/g, '').replace(/gib\b/g, 'gb');
+
+    return same(row?.model_id, input.model_id)
+        && same(row?.sku, input.sku)
+        && sameCapacity(rowSpecs.ram, inputSpecs.ram)
+        && sameCapacity(rowSpecs.storage || rowSpecs.armazenamento, inputSpecs.storage || inputSpecs.armazenamento)
+        && same(rowSpecs.color || rowSpecs.cor, inputSpecs.color || inputSpecs.cor)
+        && same(rowSpecs.version || rowSpecs.versao, inputSpecs.version || inputSpecs.versao);
 }
 
 function hasSellableStock(product: Product): boolean {
@@ -330,7 +347,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
     // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
     const UNIT_CODES = ['PCS', 'UN', 'PC', 'CX'];
     if (input.sku && !UNIT_CODES.includes(input.sku.toUpperCase())) {
-        const skuConflict = await vpsApiService.getProducts({ sku: input.sku, limit: 1 });
+        const skuConflict = await vpsApiService.getProducts({ sku: input.sku, status: 'all', limit: 50, noCache: true });
         
         // Filtra correspondência exata para segurança (ilike pode retornar substrings em alguns BDs)
         const exactMatch = (skuConflict || []).filter(
@@ -339,7 +356,17 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
 
         if (exactMatch.length > 0) {
             if (isSerializedCategory) {
-                console.warn(`[WARNING] SKU "${input.sku}" já existe (produto "${exactMatch[0].name}"). Cadastro permitido (categoria serializada).`);
+                const reusable = exactMatch.find((row: any) =>
+                    String(row.status || '').toLowerCase() === ProductStatus.ACTIVE
+                    && isEquivalentSerializedVariation(row, input)
+                );
+                if (reusable) {
+                    const existing = transformFromDB(reusable) as ProductWithPriceAdjustment;
+                    existing.reusedExistingProduct = true;
+                    console.info(`[productService] Produto serializado existente reutilizado para o SKU "${input.sku}".`);
+                    return existing;
+                }
+                console.warn(`[WARNING] SKU "${input.sku}" já existe, mas pertence a outra variacao. Novo cadastro serializado mantido separado.`);
             } else {
                 throw new Error(`SKU "${input.sku}" já está em uso pelo produto "${exactMatch[0].name}". Cada produto deve ter um SKU único.`);
             }

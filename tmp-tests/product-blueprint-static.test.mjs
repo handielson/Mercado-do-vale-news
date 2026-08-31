@@ -20,6 +20,8 @@ assert.match(page, /if \(includeOutOfStock\)[\s\S]*vpsApiService\.getProducts\([
 assert.match(page, /normalizeBlueprintProductNamesByModel/);
 assert.match(page, /canonicalNameByModel\.get\(String\(product\.model_id \|\| product\.id/, 'blueprint grouping must collapse spelling variants under one model id');
 assert.match(page, /groupProductsByVariants\(productsToGroup, isBlueprintFormat\)/, 'the model-normalized list must feed blueprint grouping');
+assert.match(page, /const fallbackImages = getRenderableProductImages\(product\)/, 'registered product images must remain available when the color gallery has no exact match');
+assert.match(page, /galleryImages\.length > 0 \? galleryImages : fallbackImages/, 'the official color gallery should win without erasing the product image fallback');
 assert.match(page, /!isBlueprintFormat && selectedProduct && selectedProductImages\.length === 0/, 'a missing gallery photo must be reported in the blueprint checklist without blocking model registration');
 assert.match(page, /sourceHash\.slice\(0, 12\)/, 'immutable blueprint filenames must include the source hash');
 assert.match(page, /\/synology\/upload\?folder=imagens/);
