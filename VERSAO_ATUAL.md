@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.306-calendario-programacoes
+version: v1.2.307-calendario-video-horario
 date: 2026-08-30
 status: ready
-release_vps: /var/www/mdv-site/releases/20260830-210210-v12306-calendario-programacoes
+release_vps: /var/www/mdv-site/releases/20260830-212115-v12307-calendario-video-horario
 branch: main
-summary: Correção e integração das programações de marketing no calendário editorial.
+summary: Correção do horário, da miniatura de vídeo e da sinalização de duplicidade no calendário editorial.
 ```

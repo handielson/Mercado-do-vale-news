@@ -56,5 +56,20 @@ assert.match(
   /Parte das programações não pôde ser carregada/,
   'Partial data-source failures must be visible to the operator',
 );
+assert.match(
+  calendar,
+  /hasTimeZone[\s\S]*?timeZone:\s*'America\/Sao_Paulo'/,
+  'Zoned Story timestamps must be converted to the Sao Paulo calendar time',
+);
+assert.match(
+  calendar,
+  /function CalendarMediaPreview[\s\S]*?<video[\s\S]*?preload="metadata"/,
+  'Video Story media must render a real video-frame preview instead of a broken image',
+);
+assert.match(
+  calendar,
+  /Possível duplicidade em/,
+  'Overlapping Story schedules must be visibly flagged instead of silently looking identical',
+);
 
 console.log('marketing calendar data-loading static checks passed');

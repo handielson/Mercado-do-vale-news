@@ -55,6 +55,7 @@ export interface CalendarEvent {
   statusLabel: string;
   itemsCount: number;
   thumbnailUrl?: string | null;
+  thumbnailMediaType?: 'image' | 'video' | null;
   rawPayload?: any;
 }
 
@@ -74,25 +75,92 @@ function parseDateKey(val: any): string {
   if (!val) return '';
   if (typeof val === 'string') {
     const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+    const hasTimeZone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(val.trim());
+    if (match && !hasTimeZone) return `${match[1]}-${match[2]}-${match[3]}`;
   }
   const d = new Date(val);
   if (Number.isNaN(d.getTime())) return '';
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const y = parts.find((part) => part.type === 'year')?.value || '';
+  const m = parts.find((part) => part.type === 'month')?.value || '';
+  const day = parts.find((part) => part.type === 'day')?.value || '';
   return `${y}-${m}-${day}`;
 }
 
 function parseTimeStr(val: any): string {
   if (!val) return '00:00';
   if (typeof val === 'string') {
+    const hasTimeZone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(val.trim());
+    if (hasTimeZone) {
+      const zonedDate = new Date(val);
+      if (!Number.isNaN(zonedDate.getTime())) {
+        return zonedDate.toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'America/Sao_Paulo',
+        });
+      }
+    }
     const match = val.match(/(\d{2}):(\d{2})/);
     if (match) return `${match[1]}:${match[2]}`;
   }
   const d = new Date(val);
   if (Number.isNaN(d.getTime())) return '00:00';
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+}
+
+function isVideoMedia(mediaType: unknown, mediaUrl: unknown): boolean {
+  return mediaType === 'video' || /\.(?:mp4|mov|webm)(?:[?#]|$)/i.test(String(mediaUrl || ''));
+}
+
+function CalendarMediaPreview({
+  url,
+  mediaType,
+  title,
+  className,
+}: {
+  url: string;
+  mediaType?: unknown;
+  title: string;
+  className: string;
+}) {
+  if (isVideoMedia(mediaType, url)) {
+    return (
+      <video
+        src={url}
+        aria-label={`Prévia do vídeo ${title}`}
+        muted
+        playsInline
+        preload="metadata"
+        onLoadedMetadata={(event) => {
+          const video = event.currentTarget;
+          if (Number.isFinite(video.duration) && video.duration > 0 && video.currentTime === 0) {
+            video.currentTime = Math.min(0.1, video.duration / 2);
+          }
+        }}
+        className={className}
+      />
+    );
+  }
+
+  return <img src={url} alt={title} className={className} />;
+}
+
+function duplicateDestinations(event: CalendarEvent, events: CalendarEvent[]): CalendarEvent['destinations'] {
+  const normalizedTitle = event.title.trim().toLocaleLowerCase('pt-BR');
+  return event.destinations.filter((destination) => events.some((candidate) => (
+    candidate.id !== event.id
+    && candidate.type === 'story_schedule'
+    && event.type === 'story_schedule'
+    && candidate.timeStr === event.timeStr
+    && candidate.title.trim().toLocaleLowerCase('pt-BR') === normalizedTitle
+    && candidate.destinations.includes(destination)
+  )));
 }
 
 function dateKeyDayOffset(dateKey: string, startDateKey: string): number {
@@ -302,7 +370,7 @@ export default function MarketingCalendarPanel({
         for (const [dateKey, dayItems] of itemsByDate.entries()) {
           const firstItem = dayItems[0];
           const timeStr = parseTimeStr(firstItem?.scheduled_at || schedule.scheduled_at);
-          const firstImage = dayItems.find((it) => it.media_url)?.media_url;
+          const firstMedia = dayItems.find((it) => it.media_url);
           const title = dayItems.length === 1
             ? (firstItem?.label || schedule.title || '1 Story')
             : `${dayItems.length} Stories · ${firstItem?.label || schedule.title || 'Lote'}`;
@@ -317,7 +385,8 @@ export default function MarketingCalendarPanel({
             status: normalizedStatus,
             statusLabel,
             itemsCount: dayItems.length,
-            thumbnailUrl: firstImage ? toBrowserSafeMediaUrl(firstImage) : null,
+            thumbnailUrl: firstMedia?.media_url ? toBrowserSafeMediaUrl(firstMedia.media_url) : null,
+            thumbnailMediaType: firstMedia?.media_type || null,
             rawPayload: { schedule, dayItems },
           });
         }
@@ -888,11 +957,13 @@ export default function MarketingCalendarPanel({
 
             <div className="mt-4 flex-1 overflow-y-auto space-y-3 max-h-[550px] pr-1">
               {selectedDayData && selectedDayData.events.length > 0 ? (
-                selectedDayData.events.map((event) => (
-                  <div
-                    key={event.id}
-                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all flex flex-col gap-2"
-                  >
+                selectedDayData.events.map((event) => {
+                  const duplicates = duplicateDestinations(event, selectedDayData.events);
+                  return (
+                    <div
+                      key={event.id}
+                      className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all flex flex-col gap-2"
+                    >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
@@ -928,11 +999,21 @@ export default function MarketingCalendarPanel({
                       </div>
                     </div>
 
+                    {duplicates.length > 0 && (
+                      <div className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-800">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        Possível duplicidade em {duplicates.map((destination) => (
+                          destination === 'whatsapp' ? 'WhatsApp' : destination === 'instagram' ? 'Instagram' : 'Facebook'
+                        )).join(' + ')} neste horário
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-3">
                       {event.thumbnailUrl ? (
-                        <img
-                          src={event.thumbnailUrl}
-                          alt={event.title}
+                        <CalendarMediaPreview
+                          url={event.thumbnailUrl}
+                          mediaType={event.thumbnailMediaType}
+                          title={event.title}
                           className="w-12 h-16 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-100"
                         />
                       ) : (
@@ -957,7 +1038,12 @@ export default function MarketingCalendarPanel({
                             {event.rawPayload.dayItems.map((it: any, i: number) => (
                               <div key={it.id || i} className="flex items-center gap-2 text-[11px] text-slate-700 bg-white/70 p-1 rounded border border-slate-200/40">
                                 {it.media_url ? (
-                                  <img src={toBrowserSafeMediaUrl(it.media_url)} alt="" className="w-5 h-7 object-cover rounded shrink-0 border border-slate-200" />
+                                  <CalendarMediaPreview
+                                    url={toBrowserSafeMediaUrl(it.media_url)}
+                                    mediaType={it.media_type}
+                                    title={it.label || `Story ${i + 1}`}
+                                    className="w-5 h-7 object-cover rounded shrink-0 border border-slate-200"
+                                  />
                                 ) : (
                                   <div className="w-5 h-7 rounded bg-slate-100 shrink-0" />
                                 )}
@@ -995,8 +1081,9 @@ export default function MarketingCalendarPanel({
                         )}
                       </div>
                     </div>
-                  </div>
-                ))
+                    </div>
+                  );
+                })
               ) : (
                 <div className="text-center py-12 px-4">
                   <CalendarIcon className="w-10 h-10 text-slate-200 mx-auto mb-2" />
