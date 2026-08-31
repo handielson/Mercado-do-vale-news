@@ -16,6 +16,7 @@ assert.match(page, /blueprint:\$\{group\.groupKey\}/, 'bulk blueprint selection 
 assert.match(page, /\/models\/\$\{encodeURIComponent\(blueprint\.modelId\)\}\/blueprint/);
 assert.match(page, /blueprint_source_hash/);
 assert.match(page, /includeOutOfStock: isBlueprintFormat/, 'blueprint mode must include every active registered phone, even without stock');
+assert.match(page, /groupProductsByVariants\(preparedProducts, isBlueprintFormat\)/, 'blueprint grouping must not discard models whose variants are all out of stock');
 assert.match(page, /!isBlueprintFormat && selectedProduct && selectedProductImages\.length === 0/, 'a missing gallery photo must be reported in the blueprint checklist without blocking model registration');
 assert.match(page, /sourceHash\.slice\(0, 12\)/, 'immutable blueprint filenames must include the source hash');
 assert.match(page, /\/synology\/upload\?folder=imagens/);

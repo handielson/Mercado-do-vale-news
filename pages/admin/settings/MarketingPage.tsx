@@ -843,7 +843,7 @@ export default function MarketingPage() {
                 const preparedProducts = await prepareMarketingProducts(products);
                 if (requestId !== searchRequestRef.current) return;
 
-                const grouped = groupProductsByVariants(preparedProducts).map((group) => ({
+                const grouped = groupProductsByVariants(preparedProducts, isBlueprintFormat).map((group) => ({
                     ...group,
                     representativeProduct: chooseMarketingPrimaryProduct(group),
                 }));
