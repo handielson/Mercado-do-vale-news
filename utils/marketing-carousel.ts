@@ -1,4 +1,4 @@
-export type MarketingExportFormat = 'feed' | 'status' | 'sticker';
+export type MarketingExportFormat = 'feed' | 'status' | 'sticker' | 'blueprint';
 
 export interface MarketingExportSlide {
     imageUrl: string | null;

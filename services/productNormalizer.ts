@@ -46,6 +46,9 @@ export interface NormalizedProduct {
   marketing_background_url?: string | null;
   marketing_background_no_price_url?: string | null;
   marketing_video_url?: string | null;
+  blueprint_image_url?: string | null;
+  blueprint_source_hash?: string | null;
+  blueprint_generated_at?: string | null;
 
   // Relacionamentos
   category_id?: string;
@@ -187,6 +190,9 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
     marketing_background_url: p.marketing_background_url ? toBrowserSafeMediaUrl(p.marketing_background_url) : null,
     marketing_background_no_price_url: p.marketing_background_no_price_url ? toBrowserSafeMediaUrl(p.marketing_background_no_price_url) : null,
     marketing_video_url: p.marketing_video_url ? toBrowserSafeMediaUrl(p.marketing_video_url) : null,
+    blueprint_image_url: p.blueprint_image_url ? toBrowserSafeMediaUrl(p.blueprint_image_url) : null,
+    blueprint_source_hash: typeof p.blueprint_source_hash === 'string' ? p.blueprint_source_hash : null,
+    blueprint_generated_at: typeof p.blueprint_generated_at === 'string' ? p.blueprint_generated_at : null,
     category_id: p.category_id,
     brand: p.brand,
     model_id: p.model_id,

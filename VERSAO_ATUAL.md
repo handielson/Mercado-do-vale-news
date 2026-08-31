@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.308-calendario-ocultar-cancelados
+version: v1.2.309-blueprints-celulares
 date: 2026-08-31
 status: ready
-release_vps: /var/www/mdv-site/releases/20260831-002513-calendario-ocultar-cancelados
+release_vps: /var/www/mdv-site/releases/20260831-044435-blueprints-celulares
 branch: main
-summary: Programações canceladas deixam de aparecer como publicações ativas no calendário editorial.
+summary: Blueprint técnico por modelo com marca d'água, exibição no site e envio pelo bot do WhatsApp.
 ```

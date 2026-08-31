@@ -1,4 +1,4 @@
-import { Model, ModelInput } from '../types/model';
+import { Model, ModelBlueprintInput, ModelInput } from '../types/model';
 import { vpsClient } from './vpsClient';
 
 /**
@@ -30,6 +30,10 @@ async function update(id: string, input: ModelInput): Promise<Model> {
     return vpsClient.put<Model>(`/models/${encodeURIComponent(id)}`, input);
 }
 
+async function updateBlueprint(id: string, input: ModelBlueprintInput): Promise<Model> {
+    return vpsClient.patch<Model>(`/models/${encodeURIComponent(id)}/blueprint`, input);
+}
+
 async function deleteModel(id: string): Promise<void> {
     await vpsClient.delete(`/models/${encodeURIComponent(id)}`);
 }
@@ -48,6 +52,7 @@ export const modelService = {
     listByBrand,
     create,
     update,
+    updateBlueprint,
     delete: deleteModel,
     listActive,
     listActiveByBrand

@@ -13249,6 +13249,7 @@ function isUuidLike(value) {
 
 async function loadSeoProductBySlug(slug) {
   const select = `SELECT id, company_id, model_id, name, description, meta_title, meta_description, keywords, images, image_url, specs,
+      ${modelBlueprintSelectSql('products')},
       price_retail, stock_quantity, sku, slug, status, is_parent, exclude_from_seo,
       ${comboStockSql('products')} AS computed_stock_quantity
      FROM products`;
@@ -17080,7 +17081,8 @@ async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
        (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
-       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
+       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl,
+       ${modelBlueprintSelectSql('products')}
      FROM products
      WHERE status = 'active'
        AND (is_parent = 0 OR is_parent IS NULL)
@@ -17120,7 +17122,8 @@ async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset
        (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
-       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
+       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl,
+       ${modelBlueprintSelectSql('products')}
      FROM products
      WHERE status = 'active'
        AND (is_parent = 0 OR is_parent IS NULL)
@@ -17157,7 +17160,8 @@ async function findAutoresponderProductsByCategoryBudget(categoryId, budgetCents
        (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
-       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
+       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl,
+       ${modelBlueprintSelectSql('products')}
      FROM products
      WHERE status = 'active'
        AND (is_parent = 0 OR is_parent IS NULL)
@@ -18281,7 +18285,8 @@ async function findAutoresponderProductById(productId) {
        (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
-       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
+       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl,
+       ${modelBlueprintSelectSql('products')}
      FROM products
      WHERE id = ?
      LIMIT 1`,
@@ -18604,6 +18609,7 @@ async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) 
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl,
+       ${modelBlueprintSelectSql('products')},
        (${score.sql}) AS search_score
      FROM products
      WHERE status = 'active'
@@ -24075,7 +24081,41 @@ function mapVpsModel(row) {
     description: row.description || undefined,
     template_values: templateValues && typeof templateValues === 'object' ? templateValues : {},
     eans: Array.isArray(eans) ? eans : undefined,
+    blueprint_image_url: row.blueprint_image_url || null,
+    blueprint_source_hash: row.blueprint_source_hash || null,
+    blueprint_generated_at: row.blueprint_generated_at || null,
   };
+}
+
+function normalizeModelBlueprintUrl(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  try {
+    const parsed = new URL(text);
+    return parsed.protocol === 'https:' ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeModelBlueprintHash(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return null;
+  return /^[a-f0-9]{64}$/.test(text) ? text : null;
+}
+
+function normalizeModelBlueprintGeneratedAt(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function modelBlueprintSelectSql(productAlias = 'products') {
+  return `
+    (SELECT m.blueprint_image_url FROM models m WHERE m.id = ${productAlias}.model_id LIMIT 1) AS blueprint_image_url,
+    (SELECT m.blueprint_source_hash FROM models m WHERE m.id = ${productAlias}.model_id LIMIT 1) AS blueprint_source_hash,
+    (SELECT m.blueprint_generated_at FROM models m WHERE m.id = ${productAlias}.model_id LIMIT 1) AS blueprint_generated_at`;
 }
 
 function parseJsonCell(value, fallback) {
@@ -24359,6 +24399,20 @@ fastify.post('/models', { preHandler: requireSyncKey }, async (req, reply) => {
   if (!body.name || !body.brand_id) {
     return reply.code(400).send({ error: 'name and brand_id are required' });
   }
+  if (String(body.blueprint_image_url || '').trim() && !normalizeModelBlueprintUrl(body.blueprint_image_url)) {
+    return reply.code(400).send({ error: 'blueprint_image_url must be a valid HTTPS URL' });
+  }
+  if (String(body.blueprint_source_hash || '').trim() && !normalizeModelBlueprintHash(body.blueprint_source_hash)) {
+    return reply.code(400).send({ error: 'blueprint_source_hash must be a SHA-256 hex digest' });
+  }
+  if (body.blueprint_generated_at && !normalizeModelBlueprintGeneratedAt(body.blueprint_generated_at)) {
+    return reply.code(400).send({ error: 'blueprint_generated_at must be a valid date' });
+  }
+  const createBlueprintUrl = normalizeModelBlueprintUrl(body.blueprint_image_url);
+  const createBlueprintGeneratedAt = createBlueprintUrl
+    ? (normalizeModelBlueprintGeneratedAt(body.blueprint_generated_at)
+      || new Date().toISOString().slice(0, 19).replace('T', ' '))
+    : null;
 
   const companyId = await resolveModelCompanyId(body.company_id);
   const slug = generateModelSlug(body.name);
@@ -24389,6 +24443,9 @@ fastify.post('/models', { preHandler: requireSyncKey }, async (req, reply) => {
       description: body.description || null,
       template_values: body.template_values || {},
       eans: Array.isArray(body.eans) && body.eans.length ? body.eans : null,
+      blueprint_image_url: createBlueprintUrl,
+      blueprint_source_hash: createBlueprintUrl ? normalizeModelBlueprintHash(body.blueprint_source_hash) : null,
+      blueprint_generated_at: createBlueprintGeneratedAt,
     });
     return reply.code(201).send(mapVpsModel(Array.isArray(rows) ? rows[0] : rows));
   } catch (error) {
@@ -24403,6 +24460,15 @@ fastify.put('/models/:id', { preHandler: requireSyncKey }, async (req, reply) =>
   const body = req.body || {};
   if (!body.name || !body.brand_id) {
     return reply.code(400).send({ error: 'name and brand_id are required' });
+  }
+  if (String(body.blueprint_image_url || '').trim() && !normalizeModelBlueprintUrl(body.blueprint_image_url)) {
+    return reply.code(400).send({ error: 'blueprint_image_url must be a valid HTTPS URL' });
+  }
+  if (String(body.blueprint_source_hash || '').trim() && !normalizeModelBlueprintHash(body.blueprint_source_hash)) {
+    return reply.code(400).send({ error: 'blueprint_source_hash must be a SHA-256 hex digest' });
+  }
+  if (body.blueprint_generated_at && !normalizeModelBlueprintGeneratedAt(body.blueprint_generated_at)) {
+    return reply.code(400).send({ error: 'blueprint_generated_at must be a valid date' });
   }
 
   const companyId = await resolveModelCompanyId(body.company_id);
@@ -24420,7 +24486,20 @@ fastify.put('/models/:id', { preHandler: requireSyncKey }, async (req, reply) =>
     description: body.description || null,
     template_values: body.template_values || {},
     eans: Array.isArray(body.eans) && body.eans.length ? body.eans : null,
+    ...(Object.prototype.hasOwnProperty.call(body, 'blueprint_image_url')
+      ? { blueprint_image_url: normalizeModelBlueprintUrl(body.blueprint_image_url) }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(body, 'blueprint_source_hash')
+      ? { blueprint_source_hash: normalizeModelBlueprintHash(body.blueprint_source_hash) }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(body, 'blueprint_generated_at')
+      ? { blueprint_generated_at: normalizeModelBlueprintGeneratedAt(body.blueprint_generated_at) }
+      : {}),
   };
+  if (Object.prototype.hasOwnProperty.call(body, 'blueprint_image_url') && !payload.blueprint_image_url) {
+    payload.blueprint_source_hash = null;
+    payload.blueprint_generated_at = null;
+  }
   if (payload.name !== current.name) payload.slug = generateModelSlug(payload.name);
 
   try {
@@ -24444,6 +24523,63 @@ fastify.put('/models/:id', { preHandler: requireSyncKey }, async (req, reply) =>
     }
     throw error;
   }
+});
+
+fastify.patch('/models/:id/blueprint', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  if (!Object.prototype.hasOwnProperty.call(body, 'blueprint_image_url')) {
+    return reply.code(400).send({ error: 'blueprint_image_url is required' });
+  }
+
+  const companyId = await resolveModelCompanyId(body.company_id || req.query?.company_id);
+  const currentRows = await vpsDbSelect(
+    'models',
+    `select=*&id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+  );
+  const current = Array.isArray(currentRows) ? currentRows[0] : null;
+  if (!current) return reply.code(404).send({ error: 'Modelo nao encontrado.' });
+
+  const requestedUrl = String(body.blueprint_image_url || '').trim();
+  const blueprintImageUrl = normalizeModelBlueprintUrl(requestedUrl);
+  if (requestedUrl && !blueprintImageUrl) {
+    return reply.code(400).send({ error: 'blueprint_image_url must be a valid HTTPS URL' });
+  }
+
+  const requestedHash = String(body.blueprint_source_hash || '').trim();
+  const blueprintSourceHash = normalizeModelBlueprintHash(requestedHash);
+  if (requestedHash && !blueprintSourceHash) {
+    return reply.code(400).send({ error: 'blueprint_source_hash must be a SHA-256 hex digest' });
+  }
+
+  const requestedGeneratedAt = body.blueprint_generated_at;
+  const blueprintGeneratedAt = blueprintImageUrl
+    ? (requestedGeneratedAt == null || requestedGeneratedAt === ''
+      ? new Date().toISOString().slice(0, 19).replace('T', ' ')
+      : normalizeModelBlueprintGeneratedAt(requestedGeneratedAt))
+    : null;
+  if (blueprintImageUrl && requestedGeneratedAt != null && requestedGeneratedAt !== '' && !blueprintGeneratedAt) {
+    return reply.code(400).send({ error: 'blueprint_generated_at must be a valid date' });
+  }
+
+  const payload = blueprintImageUrl
+    ? {
+      blueprint_image_url: blueprintImageUrl,
+      blueprint_source_hash: blueprintSourceHash,
+      blueprint_generated_at: blueprintGeneratedAt,
+    }
+    : {
+      blueprint_image_url: null,
+      blueprint_source_hash: null,
+      blueprint_generated_at: null,
+    };
+
+  const rows = await vpsDbPatch(
+    'models',
+    `id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}`,
+    payload
+  );
+  const updated = Array.isArray(rows) ? rows[0] : rows;
+  return mapVpsModel(updated || { ...current, ...payload, company_id: companyId });
 });
 
 fastify.delete('/models/:id', { preHandler: requireSyncKey }, async (req) => {
@@ -24958,6 +25094,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        warranty_type, warranty_template_id,
        ${imgCol},
        status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
+       ${modelBlueprintSelectSql('products')},
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -24970,6 +25107,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
+       ${modelBlueprintSelectSql('products')},
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -25079,6 +25217,7 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
   const placeholders = ids.map(() => '?').join(',');
   const [rows] = await pool.query(
     `SELECT *,
+      ${modelBlueprintSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products
      WHERE id IN (${placeholders})
@@ -25099,6 +25238,7 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
 fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [rows] = await pool.query(
     `SELECT *,
+      ${modelBlueprintSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products WHERE id = ?`,
     [req.params.id]
@@ -25123,6 +25263,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   let rows;
   [rows] = await pool.query(
     `SELECT *,
+      ${modelBlueprintSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products WHERE slug = ?
      ORDER BY
@@ -25140,6 +25281,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   if (!rows.length && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(slugParam)) {
     [rows] = await pool.query(
       `SELECT *,
+        ${modelBlueprintSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products WHERE id = ?`,
       [slugParam]
@@ -25149,6 +25291,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   if (!rows.length) {
     const [routeCandidates] = await pool.query(
       `SELECT *,
+        ${modelBlueprintSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products
        WHERE ? LIKE CONCAT(slug, '-%')
@@ -25173,6 +25316,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   if (Number(r.is_parent) === 1) {
     const [variantRows] = await pool.query(
       `SELECT *,
+        ${modelBlueprintSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products
        WHERE parent_id = ?
@@ -25224,7 +25368,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 fastify.get('/products/by-ean/:ean', async (req, reply) => {
   const ean = req.params.ean;
   const [rows] = await pool.query(
-    `SELECT *, ${comboStockSql('products')} AS stock_quantity
+    `SELECT *, ${modelBlueprintSelectSql('products')}, ${comboStockSql('products')} AS stock_quantity
      FROM products
      WHERE ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?))`,
     [ean, ean]
@@ -38510,6 +38654,9 @@ async function runMigrations() {
       description LONGTEXT NULL,
       template_values JSON NULL,
       eans JSON NULL,
+      blueprint_image_url TEXT NULL,
+      blueprint_source_hash CHAR(64) NULL,
+      blueprint_generated_at DATETIME NULL,
       active TINYINT(1) NOT NULL DEFAULT 1,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -38526,6 +38673,9 @@ async function runMigrations() {
   await addColumnIfMissing('models', 'description', 'LONGTEXT NULL');
   await addColumnIfMissing('models', 'template_values', 'JSON NULL');
   await addColumnIfMissing('models', 'eans', 'JSON NULL');
+  await addColumnIfMissing('models', 'blueprint_image_url', 'TEXT NULL');
+  await addColumnIfMissing('models', 'blueprint_source_hash', 'CHAR(64) NULL');
+  await addColumnIfMissing('models', 'blueprint_generated_at', 'DATETIME NULL');
   await addColumnIfMissing('models', 'active', 'TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('models', 'created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
   await addColumnIfMissing('models', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');

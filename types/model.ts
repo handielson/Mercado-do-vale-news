@@ -30,6 +30,11 @@ export interface Model {
 
     // EAN codes for product identification
     eans?: string[];  // Array of EAN/GTIN codes for barcode scanning
+
+    // Blueprint tecnico/comercial (um artefato canonico por modelo)
+    blueprint_image_url?: string | null;
+    blueprint_source_hash?: string | null;
+    blueprint_generated_at?: string | null;
 }
 
 export interface ModelInput {
@@ -49,5 +54,16 @@ export interface ModelInput {
 
     // EAN codes
     eans?: string[];
+
+    // Blueprint tecnico/comercial. Normalmente atualizado pelo endpoint dedicado.
+    blueprint_image_url?: string | null;
+    blueprint_source_hash?: string | null;
+    blueprint_generated_at?: string | null;
+}
+
+export interface ModelBlueprintInput {
+    blueprint_image_url: string | null;
+    blueprint_source_hash?: string | null;
+    blueprint_generated_at?: string | null;
 }
 

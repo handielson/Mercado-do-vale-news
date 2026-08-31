@@ -4,7 +4,7 @@ import {
     sanitizeStickerTypographySettings,
 } from './marketing-typography';
 
-export type MarketingAssetFormat = 'feed' | 'status' | 'sticker';
+export type MarketingAssetFormat = 'feed' | 'status' | 'sticker' | 'blueprint';
 export type MarketingStickerExportMode = 'png' | 'webp';
 export type MarketingStickerExportExtension = 'png' | 'webp';
 
@@ -159,6 +159,10 @@ export const getMarketingCanvasSize = (
 ): { width: number; height: number } => {
     if (format === 'sticker') {
         return { width: 512, height: 512 };
+    }
+
+    if (format === 'blueprint') {
+        return { width: 1536, height: 1024 };
     }
 
     return {

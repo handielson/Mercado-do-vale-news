@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers, Pencil } from 'lucide-react';
+import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers, Pencil, FileImage } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { useVpsAuth } from '@/contexts/VpsAuthContext';
@@ -624,6 +624,8 @@ export const PublicProductPage: React.FC = () => {
     }
 
     if (!product) return null;
+
+    const blueprintImageUrl = String((product as CatalogProduct & { blueprint_image_url?: string | null }).blueprint_image_url || '').trim();
 
     // Calculate total stock across all siblings (variants)
     const totalGroupStock = (() => {
@@ -1909,6 +1911,35 @@ export const PublicProductPage: React.FC = () => {
                         </div>
                     </div>
                 </div>
+
+                {blueprintImageUrl && (
+                    <section className="mt-10 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="product-blueprint-title">
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <h2 id="product-blueprint-title" className="flex items-center gap-2 text-xl font-bold text-slate-900">
+                                    <FileImage className="h-5 w-5 text-blue-600" /> Blueprint do modelo
+                                </h2>
+                                <p className="mt-1 text-sm text-slate-500">Ficha técnica ilustrada oficial do modelo, com marca d’água Mercado do Vale.</p>
+                            </div>
+                            <a
+                                href={blueprintImageUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-blue-600 hover:border-blue-300 hover:bg-blue-50"
+                            >
+                                Abrir em tamanho completo
+                            </a>
+                        </div>
+                        <a href={blueprintImageUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl bg-[#050c12]">
+                            <img
+                                src={blueprintImageUrl}
+                                alt={`Blueprint e ficha técnica de ${publicProductTitle}`}
+                                loading="lazy"
+                                className="h-auto w-full object-contain"
+                            />
+                        </a>
+                    </section>
+                )}
 
                 {/* ── Seção full-width: Descrição + Especificações ── */}
                 {(resolvedDescription || resolvedTechnicalSpecifications || (product.specs && Object.keys(product.specs).length > 0)) && (

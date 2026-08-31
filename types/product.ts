@@ -164,6 +164,9 @@ export interface Product {
     marketing_background_url?: string; // Foto oficial de marketing usada no Status (com preço)
     marketing_background_no_price_url?: string; // Foto oficial de marketing usada no Status (sem preço)
     marketing_video_url?: string; // Vídeo oficial de marketing usado no Status
+    blueprint_image_url?: string | null; // Derivado do modelo; nao editar pelo produto
+    blueprint_source_hash?: string | null;
+    blueprint_generated_at?: string | null;
 
     // Product Kits (Volume Pricing)
     kits?: ProductKit[];       // Descontos por quantidade no mesmo produto

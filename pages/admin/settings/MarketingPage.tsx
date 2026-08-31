@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { flushSync } from 'react-dom';
-import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, CheckCircle2, Calendar, CalendarClock, Trash2, Clock, ToggleLeft, ToggleRight, Facebook, Instagram, MessageCircle, ShieldCheck, BrainCircuit } from 'lucide-react';
+import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, CheckCircle2, Calendar, CalendarClock, Trash2, Clock, ToggleLeft, ToggleRight, Facebook, Instagram, MessageCircle, ShieldCheck, BrainCircuit, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { toBlob, toPng } from 'html-to-image';
 import { catalogService } from '../../../services/catalogService';
@@ -37,6 +37,8 @@ import SocialStorySchedulerPanel from './marketing/SocialStorySchedulerPanel';
 import MarketingCalendarPanel from './marketing/MarketingCalendarPanel';
 import ProductMarketingCard from './marketing/ProductMarketingCard';
 import { buildProductMarketingArtworkData, normalizeBrazilianWhatsapp } from './marketing/productMarketingArtwork';
+import ProductBlueprintCard from './marketing/ProductBlueprintCard';
+import { buildProductBlueprintArtworkData, buildProductBlueprintSourcePayload } from './marketing/productBlueprintArtwork';
 import { paymentFeesService } from '../../../services/payment-fees';
 import type { PaymentFee } from '../../../types/payment-fees';
 import { vpsClient } from '../../../services/vpsClient';
@@ -206,7 +208,15 @@ const buildMarketingVariantOptions = (groups: ProductGroup[]): MarketingVariantO
         representativeProduct: chooseMarketingVariantProduct(group, variant),
     })));
 
-const loadAllMarketingProducts = async ({ search, categoryId }: { search?: string; categoryId?: string }) => {
+const loadAllMarketingProducts = async ({
+    search,
+    categoryId,
+    includeOutOfStock = false,
+}: {
+    search?: string;
+    categoryId?: string;
+    includeOutOfStock?: boolean;
+}) => {
     const pageSize = 200;
     const productsById = new Map<string, CatalogProduct>();
 
@@ -214,7 +224,7 @@ const loadAllMarketingProducts = async ({ search, categoryId }: { search?: strin
         const result = await catalogService.getProducts({
             search: search || undefined,
             categories: categoryId ? [categoryId] : undefined,
-            inStockOnly: true,
+            inStockOnly: !includeOutOfStock,
         }, page, pageSize);
         result.products.forEach((product) => {
             if (product.id) productsById.set(product.id, product);
@@ -355,6 +365,52 @@ const saveMarketingArtworkForWhatsappStatus = async (
     return versionedUrl;
 };
 
+const buildSha256 = async (value: unknown): Promise<string | undefined> => {
+    if (!globalThis.crypto?.subtle) return undefined;
+    const bytes = new TextEncoder().encode(JSON.stringify(value));
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+};
+
+const saveProductBlueprintForModel = async (
+    group: ProductGroup,
+    pngDataUrl: string,
+    imageUrls: string[],
+): Promise<string> => {
+    const blueprint = buildProductBlueprintArtworkData(group);
+    if (!blueprint.modelId) throw new Error('Modelo sem identificador para vincular o blueprint');
+    const sourceHash = await buildSha256(buildProductBlueprintSourcePayload(blueprint, imageUrls));
+
+    const imageResponse = await fetch(pngDataUrl);
+    const imageBlob = await imageResponse.blob();
+    const fileKey = blueprint.name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase() || blueprint.modelId;
+    const hashSuffix = sourceHash ? `-${sourceHash.slice(0, 12)}` : '';
+    const file = new File([imageBlob], `blueprint-${fileKey}${hashSuffix}.png`, { type: 'image/png' });
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const queued = await vpsClient.upload<MarketingArtworkUploadResponse>(
+        '/synology/upload?folder=imagens',
+        formData,
+    );
+    const completed = queued.uploadId ? await waitForMarketingArtworkUpload(queued.uploadId) : queued;
+    const publicUrl = String(completed.url || queued.url || '').trim();
+    if (!publicUrl) throw new Error('O armazenamento não retornou a URL pública do blueprint');
+
+    const versionedUrl = `${publicUrl}${publicUrl.includes('?') ? '&' : '?'}v=${sourceHash?.slice(0, 12) || Date.now()}`;
+    await vpsClient.patch(`/models/${encodeURIComponent(blueprint.modelId)}/blueprint`, {
+        blueprint_image_url: versionedUrl,
+        ...(sourceHash ? { blueprint_source_hash: sourceHash } : {}),
+        blueprint_generated_at: new Date().toISOString(),
+    });
+    return versionedUrl;
+};
+
 export default function MarketingPage() {
     const { settings } = useTheme();
     const [selectedBg, setSelectedBg] = useState(BACKGROUND_OPTIONS[0]);
@@ -379,6 +435,7 @@ export default function MarketingPage() {
     const [whatsappSchedulerView, setWhatsappSchedulerView] = useState<'status' | 'stories'>('status');
     const safeStickerSettings = sanitizeMarketingStickerSettings(stickerSettings);
     const isStickerFormat = format === 'sticker';
+    const isBlueprintFormat = format === 'blueprint';
     const updateStickerSetting = <K extends keyof MarketingStickerSettings>(
         key: K,
         value: MarketingStickerSettings[K],
@@ -587,6 +644,21 @@ export default function MarketingPage() {
         () => buildMarketingVariantOptions(groupedResults),
         [groupedResults],
     );
+    const marketingSelectionOptions = useMemo<MarketingVariantOption[]>(() => {
+        if (!isBlueprintFormat) return marketingVariantOptions;
+        return groupedResults.map((group) => ({
+            key: `blueprint:${group.groupKey}`,
+            group,
+            variant: {
+                ram: group.variants.map((variant) => variant.ram).filter(Boolean).join(', '),
+                storage: group.variants.map((variant) => variant.storage).filter(Boolean).join(', '),
+                colors: group.allColors,
+                products: getGroupProducts(group),
+                priceRange: group.globalPriceRange,
+            },
+            representativeProduct: chooseMarketingPrimaryProduct(group),
+        }));
+    }, [groupedResults, isBlueprintFormat, marketingVariantOptions]);
     const readyMarketingVariantCount = useMemo(
         () => marketingVariantOptions.filter(({ variant }) => variant.products.some((product) => Boolean(product.marketing_background_url || product.marketing_background_no_price_url))).length,
         [marketingVariantOptions],
@@ -598,6 +670,19 @@ export default function MarketingPage() {
     const selectedProductGroup = useMemo(() => groupedResults.find((group) =>
         getGroupProducts(group).some((product) => product.id === selectedProduct?.id)
     ) || null, [groupedResults, selectedProduct?.id]);
+    const productBlueprintData = useMemo(
+        () => selectedProductGroup ? buildProductBlueprintArtworkData(selectedProductGroup) : null,
+        [selectedProductGroup],
+    );
+    const selectedBlueprintImages = useMemo(() => {
+        if (!selectedProductGroup) return [];
+        return Array.from(new Set([
+            selectedProductImage,
+            ...getGroupProducts(selectedProductGroup)
+                .flatMap((product) => getRenderableProductImages(product).slice(0, 1)),
+        ].filter((value): value is string => Boolean(value))))
+            .slice(0, 4);
+    }, [selectedProductGroup, selectedProductImage]);
     const selectedPriceAnomaly = useMemo(() => {
         if (!selectedProduct || !selectedProductGroup) return null;
         const comparablePrices = getGroupProducts(selectedProductGroup)
@@ -741,6 +826,7 @@ export default function MarketingPage() {
                 const products = await loadAllMarketingProducts({
                     search: searchQuery || undefined,
                     categoryId: selectedCategory || undefined,
+                    includeOutOfStock: isBlueprintFormat,
                 });
 
                 // Agrupa cores, mas preserva cada combinacao de RAM/armazenamento.
@@ -766,7 +852,7 @@ export default function MarketingPage() {
             }
         }, 500);
         return () => clearTimeout(timer);
-    }, [searchQuery, selectedCategory]);
+    }, [searchQuery, selectedCategory, isBlueprintFormat]);
 
     useEffect(() => {
         writeMarketingState('dayRules', dayRules, {
@@ -1124,11 +1210,11 @@ export default function MarketingPage() {
     // Export to Image Logic
     const handleDownload = async (stickerExportMode?: MarketingStickerExportMode) => {
         if (!canvasRef.current) return;
-        if (selectedProduct && selectedProductImages.length === 0) {
+        if (!isBlueprintFormat && selectedProduct && selectedProductImages.length === 0) {
             toast.error('Cadastre uma foto para este modelo e esta cor na galeria antes de gerar a arte.');
             return;
         }
-        if (!isStickerFormat && showArtworkPrice && selectedPriceAnomaly) {
+        if (!isStickerFormat && !isBlueprintFormat && showArtworkPrice && selectedPriceAnomaly) {
             toast.error('Confira e corrija o preço deste SKU antes de gerar a arte.');
             return;
         }
@@ -1163,6 +1249,9 @@ export default function MarketingPage() {
                             }
                             : current);
                     }
+                    if (format === 'blueprint' && selectedProductGroup && slide.slideNumber === 1) {
+                        await saveProductBlueprintForModel(selectedProductGroup, dataUrl, selectedBlueprintImages);
+                    }
                     triggerImageDownload(
                         dataUrl,
                         buildMarketingDownloadName(selectedProduct?.name, slide.slideNumber, slide.totalSlides),
@@ -1175,6 +1264,8 @@ export default function MarketingPage() {
             toast.success(
                 isStickerFormat
                     ? `Figurinha ${currentStickerExportMode.toUpperCase()} gerada com sucesso! ${slidesToExport.length} arquivo(s) baixado(s).`
+                    : format === 'blueprint' && selectedProductGroup
+                    ? 'Blueprint baixado, salvo no modelo e disponibilizado para o site e o bot!'
                     : format === 'status' && selectedProduct
                     ? (showArtworkPrice
                         ? 'Arte baixada e salva automaticamente como foto de marketing do Status!'
@@ -1199,13 +1290,13 @@ export default function MarketingPage() {
         if (!canvasRef.current || bulkSelectedIds.size === 0) return;
         const currentStickerExportMode = stickerExportMode ?? 'png';
 
-        const productsToGenerate = marketingVariantOptions
+        const productsToGenerate = marketingSelectionOptions
             .map((option) => option.representativeProduct)
             .filter(p => bulkSelectedIds.has(p.id));
 
         if (productsToGenerate.length === 0) return;
         const productsWithoutGalleryImage = productsToGenerate.filter((product) => getRenderableProductImages(product).length === 0);
-        if (productsWithoutGalleryImage.length > 0) {
+        if (!isBlueprintFormat && productsWithoutGalleryImage.length > 0) {
             toast.error(`${productsWithoutGalleryImage.length} produto(s) não têm foto na galeria para o modelo e a cor selecionados.`);
             return;
         }
@@ -1244,6 +1335,15 @@ export default function MarketingPage() {
                     if (format === 'status' && slide.slideNumber === 1) {
                         await saveMarketingArtworkForWhatsappStatus(slide.product, dataUrl, showArtworkPrice);
                     }
+                    if (format === 'blueprint' && slide.slideNumber === 1) {
+                        const blueprintGroup = groupedResults.find((group) => getGroupProducts(group)
+                            .some((product) => product.id === slide.product.id));
+                        if (!blueprintGroup) throw new Error(`Modelo não encontrado para ${slide.product.name}`);
+                        const blueprintImages = Array.from(new Set(getGroupProducts(blueprintGroup)
+                            .flatMap((product) => getRenderableProductImages(product).slice(0, 1))))
+                            .slice(0, 4);
+                        await saveProductBlueprintForModel(blueprintGroup, dataUrl, blueprintImages);
+                    }
                     triggerImageDownload(
                         dataUrl,
                         buildMarketingDownloadName(slide.product.name, slide.slideNumber, slide.totalSlides),
@@ -1258,7 +1358,9 @@ export default function MarketingPage() {
             }
 
             toast.success(
-                format === 'status'
+                format === 'blueprint'
+                    ? `Lote concluído: ${completedSlides} blueprint(s) salvos por modelo e disponibilizados no site.`
+                    : format === 'status'
                     ? `Lote gerado: ${completedSlides} imagens baixadas e vinculadas automaticamente ao Status (${showArtworkPrice ? 'com preço' : 'sem preço'}).`
                     : `Lote gerado com sucesso! ${completedSlides} imagens baixadas.`,
             );
@@ -1305,10 +1407,12 @@ export default function MarketingPage() {
     const canvasSize = getMarketingCanvasSize(format);
     const previewFrameClass = isStickerFormat
         ? 'aspect-square w-[420px] rounded-[2rem] ring-4 ring-emerald-200 bg-slate-100'
+        : isBlueprintFormat
+            ? 'aspect-[3/2] w-[690px] rounded-xl ring-1 ring-slate-200'
         : format === 'feed'
             ? 'aspect-square w-[432px] rounded-xl ring-1 ring-slate-200'
             : 'aspect-[9/16] w-[324px] rounded-3xl ring-4 ring-slate-200';
-    const previewScale = isStickerFormat ? 0.82 : format === 'feed' ? 0.40 : 0.30;
+    const previewScale = isStickerFormat ? 0.82 : isBlueprintFormat ? 0.449 : format === 'feed' ? 0.40 : 0.30;
     const canvasBackgroundStyle: React.CSSProperties = isStickerFormat
         ? customBgUrl
             ? {
@@ -1612,6 +1716,12 @@ export default function MarketingPage() {
                                     >
                                         Figurinha
                                     </button>
+                                    <button
+                                        onClick={() => setFormat('blueprint')}
+                                        className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${format === 'blueprint' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        Blueprint
+                                    </button>
                                 </div>
 
                                 {isStickerFormat ? (
@@ -1640,13 +1750,13 @@ export default function MarketingPage() {
                                                 Ao baixar, a arte também será salva no produto para o Status.
                                             </span>
                                         )}
-                                        <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-1">
+                                        {!isBlueprintFormat && <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-1">
                                             <button type="button" onClick={() => setShowArtworkPrice(true)} className={`rounded-md px-3 py-1.5 text-xs font-black ${showArtworkPrice ? 'bg-white text-slate-900 shadow' : 'text-slate-500'}`}>COM PREÇO</button>
                                             <button type="button" onClick={() => setShowArtworkPrice(false)} className={`rounded-md px-3 py-1.5 text-xs font-black ${!showArtworkPrice ? 'bg-white text-slate-900 shadow' : 'text-slate-500'}`}>META SEM PREÇO</button>
-                                        </div>
+                                        </div>}
                                         <button
                                             onClick={() => handleDownload()}
-                                            disabled={isGenerating || (!selectedProduct && !customBgUrl) || Boolean(selectedProduct && selectedProductImages.length === 0)}
+                                            disabled={isGenerating || (!selectedProduct && !customBgUrl) || Boolean(!isBlueprintFormat && selectedProduct && selectedProductImages.length === 0)}
                                             className="bg-pink-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-700 transition-colors disabled:opacity-50"
                                         >
                                             <Download className="w-5 h-5" />
@@ -1946,6 +2056,20 @@ export default function MarketingPage() {
                                                 </div>
                                             )}
 
+                                            {isBlueprintFormat && productBlueprintData && (
+                                                <div className={`rounded-lg border p-3 ${productBlueprintData.missingFields.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                                                    <div className="flex items-center gap-2 text-xs font-black uppercase">
+                                                        {productBlueprintData.missingFields.length ? <AlertTriangle className="h-4 w-4 text-amber-600" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                                                        <span>{productBlueprintData.missingFields.length ? 'Checklist incompleto' : 'Blueprint pronto'}</span>
+                                                    </div>
+                                                    <p className="mt-1 text-[11px] leading-snug text-slate-600">
+                                                        {productBlueprintData.missingFields.length
+                                                            ? `Faltando no cadastro: ${productBlueprintData.missingFields.join(', ')}. Os blocos vazios serão omitidos; nenhum dado será inventado.`
+                                                            : 'Foto, tela, processador, câmera, bateria, memória, cores e marca d’água estão prontos para exportação.'}
+                                                    </p>
+                                                </div>
+                                            )}
+
                                             {/* Busca e Lista */}
                                             <div className="flex gap-2">
                                                 <div className="relative flex-1">
@@ -1969,33 +2093,51 @@ export default function MarketingPage() {
                                                         <option key={cat.id} value={cat.id}>{cat.name}</option>
                                                     ))}
                                                 </select>
+                                                {isBlueprintFormat && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const phoneCategory = categories.find((category) => /celular|smartphone/i.test(category.name));
+                                                            if (!phoneCategory) {
+                                                                toast.error('Categoria de celulares não encontrada. Selecione-a manualmente.');
+                                                                return;
+                                                            }
+                                                            setSearchQuery('');
+                                                            setSelectedCategory(phoneCategory.id);
+                                                        }}
+                                                        className="shrink-0 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-black text-white hover:bg-slate-800"
+                                                        title="Carregar todos os celulares ativos cadastrados para gerar um blueprint por modelo"
+                                                    >
+                                                        Todos celulares
+                                                    </button>
+                                                )}
                                             </div>
 
                                             {/* Botao de Lote e Lista de Selecionaveis */}
-                                            {marketingVariantOptions.length > 0 && (
+                                            {marketingSelectionOptions.length > 0 && (
                                                 <>
                                                     <div className="flex justify-between items-end px-1 mt-2">
                                                         <div className="text-xs font-semibold text-slate-500">
-                                                            <span>{marketingVariantOptions.length} versões listadas</span>
-                                                            <span className="ml-2 text-emerald-700">{readyMarketingVariantCount} com arte</span>
-                                                            <span className="ml-2 text-blue-700">{videoMarketingVariantCount} com vídeo</span>
+                                                            <span>{marketingSelectionOptions.length} {isBlueprintFormat ? 'modelos listados' : 'versões listadas'}</span>
+                                                            {!isBlueprintFormat && <span className="ml-2 text-emerald-700">{readyMarketingVariantCount} com arte</span>}
+                                                            {!isBlueprintFormat && <span className="ml-2 text-blue-700">{videoMarketingVariantCount} com vídeo</span>}
                                                         </div>
                                                         <button
                                                             onClick={() => {
-                                                                if (bulkSelectedIds.size === marketingVariantOptions.length) {
+                                                                if (bulkSelectedIds.size === marketingSelectionOptions.length) {
                                                                     setBulkSelectedIds(new Set());
                                                                 } else {
-                                                                    setBulkSelectedIds(new Set(marketingVariantOptions.map((option) => option.representativeProduct.id)));
+                                                                    setBulkSelectedIds(new Set(marketingSelectionOptions.map((option) => option.representativeProduct.id)));
                                                                 }
                                                             }}
                                                             className="text-[11px] font-bold text-purple-600 hover:text-purple-700 hover:underline"
                                                         >
-                                                            {bulkSelectedIds.size === marketingVariantOptions.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                                                            {bulkSelectedIds.size === marketingSelectionOptions.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
                                                         </button>
                                                     </div>
 
                                                     <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-[220px] overflow-y-auto bg-white shadow-inner">
-                                                        {marketingVariantOptions.map(({ key, group, variant, representativeProduct: p }) => {
+                                                        {marketingSelectionOptions.map(({ key, group, variant, representativeProduct: p }) => {
                                                             const groupPreviewImage = getRenderableProductImages(p)[0] ?? null;
                                                             const isSelectedPreview = selectedProduct?.id === p.id;
                                                             const isChecked = bulkSelectedIds.has(p.id);
@@ -2030,16 +2172,22 @@ export default function MarketingPage() {
                                                                         <div className="flex-1 min-w-0">
                                                                             <p className={`text-xs font-bold truncate flex items-center gap-2 ${isSelectedPreview ? 'text-purple-700' : 'text-slate-800'}`}>
                                                                                 <span className="truncate">{group.model}</span>
-                                                                                {variant.ram && variant.storage && (
+                                                                                {!isBlueprintFormat && variant.ram && variant.storage && (
                                                                                     <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded whitespace-nowrap">
                                                                                         {variant.ram}/{variant.storage}
                                                                                     </span>
                                                                                 )}
                                                                             </p>
                                                                             <p className="text-[10px] text-slate-500 flex flex-wrap gap-x-2">
-                                                                                <span>{variant.priceRange.min !== variant.priceRange.max ? `A partir de R$ ${formatCurrency(variant.priceRange.min || 0)}` : `R$ ${formatCurrency(p.price_retail || 0)}`}</span>
-                                                                                <span className={hasArtwork ? 'text-emerald-700' : 'text-amber-700'}>{hasArtwork ? 'Arte pronta' : 'Sem arte'}</span>
-                                                                                <span className={hasVideo ? 'text-blue-700' : 'text-slate-400'}>{hasVideo ? 'Vídeo cadastrado' : 'Sem vídeo'}</span>
+                                                                                {isBlueprintFormat ? (
+                                                                                    <span>{group.variants.length} configuração(ões) • {group.allColors.length} cor(es)</span>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        <span>{variant.priceRange.min !== variant.priceRange.max ? `A partir de R$ ${formatCurrency(variant.priceRange.min || 0)}` : `R$ ${formatCurrency(p.price_retail || 0)}`}</span>
+                                                                                        <span className={hasArtwork ? 'text-emerald-700' : 'text-amber-700'}>{hasArtwork ? 'Arte pronta' : 'Sem arte'}</span>
+                                                                                        <span className={hasVideo ? 'text-blue-700' : 'text-slate-400'}>{hasVideo ? 'Vídeo cadastrado' : 'Sem vídeo'}</span>
+                                                                                    </>
+                                                                                )}
                                                                             </p>
                                                                         </div>
                                                                     </div>
@@ -2196,7 +2344,7 @@ export default function MarketingPage() {
                                         >
                                             <div
                                                 ref={canvasRef}
-                                                className={`${isStickerFormat ? 'w-[512px] h-[512px]' : `w-[1080px] ${format === 'feed' ? 'h-[1080px]' : 'h-[1920px]'} bg-white ${!customBgUrl ? selectedBg.class : ''}`} flex flex-col items-center justify-center relative`}
+                                                className={`${isStickerFormat ? 'w-[512px] h-[512px]' : isBlueprintFormat ? 'w-[1536px] h-[1024px] bg-[#050c12]' : `w-[1080px] ${format === 'feed' ? 'h-[1080px]' : 'h-[1920px]'} bg-white ${!customBgUrl ? selectedBg.class : ''}`} flex flex-col items-center justify-center relative`}
                                                 style={canvasBackgroundStyle}
                                             >
                                                 {/* Conteúdo Placeholder */}
@@ -2215,7 +2363,7 @@ export default function MarketingPage() {
 
                                                 {isStickerFormat && renderStickerArtwork(true)}
 
-                                                {!isStickerFormat && selectedProduct && productArtworkData && (
+                                                {!isStickerFormat && !isBlueprintFormat && selectedProduct && productArtworkData && (
                                                     <ProductMarketingCard
                                                         data={productArtworkData}
                                                         format={format}
@@ -2225,6 +2373,14 @@ export default function MarketingPage() {
                                                         website={artworkWebsite}
                                                         showPrice={showArtworkPrice}
                                                         carouselLabel={showCarouselPreview ? `Slide ${activeCarouselSlide?.slideNumber ?? 1} de ${activeCarouselSlide?.totalSlides ?? 1}` : undefined}
+                                                    />
+                                                )}
+
+                                                {isBlueprintFormat && selectedProduct && productBlueprintData && (
+                                                    <ProductBlueprintCard
+                                                        data={productBlueprintData}
+                                                        imageUrls={selectedBlueprintImages}
+                                                        watermarkUrl={companyInfo?.watermarkLogoUrl || settings.logo_url || '/brand/mercado-do-vale-logo.png'}
                                                     />
                                                 )}
 
