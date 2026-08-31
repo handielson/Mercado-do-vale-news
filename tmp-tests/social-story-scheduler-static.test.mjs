@@ -33,7 +33,8 @@ test('A single admin may approve only an organic zero-cost Story', () => {
 });
 
 test('Instagram publisher uses official Stories container flow and required permissions', () => {
-  assert.match(api, /instagram_content_publish/);
+  assert.match(api, /instagram_content_publishing/);
+  assert.doesNotMatch(api, /'instagram_content_publish'/);
   assert.match(api, /content_publishing_limit/);
   assert.match(api, /media_type: 'STORIES'/);
   assert.match(api, /media_publish/);

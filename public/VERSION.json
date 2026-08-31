@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.316-story-media-retry",
+  "version": "v1.2.317-meta-instagram-permission",
   "date": "2026-08-31",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260831-144454-story-media-retry",
+  "release_vps": "/var/www/mdv-site/releases/20260831-150413-meta-instagram-permission",
   "branch": "main",
-  "summary": "Stories aguardam mídias temporariamente indisponíveis e a reconexão Meta identifica e solicita permissões de publicação."
+  "summary": "A reconexão Meta solicita a permissão oficial de publicação do Instagram após habilitar o caso de uso de conteúdo."
 }

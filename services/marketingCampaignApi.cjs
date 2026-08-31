@@ -16,7 +16,7 @@ const META_SECURITY_REVIEW_ACTION = 'meta.submit_security_review.v1';
 const META_DELIVERY_STATUS_ACTION = 'meta.set_delivery_status.v1';
 const SOCIAL_STORY_SCHEDULE_ACTION = 'social.schedule_story.v1';
 const SOCIAL_STORY_REQUIRED_INSTAGRAM_SCOPES = Object.freeze([
-  'instagram_basic', 'instagram_content_publish', 'pages_read_engagement',
+  'instagram_basic', 'instagram_content_publishing', 'pages_read_engagement',
 ]);
 const SOCIAL_STORY_MEDIA_RETRY_DELAY_MINUTES = 5;
 const META_AUTHORIZED_MONTHLY_CEILING_BRL = 1000;
