@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const calendar = readFileSync(
+  'pages/admin/settings/marketing/MarketingCalendarPanel.tsx',
+  'utf8',
+);
+
+assert.match(
+  calendar,
+  /instagramScheduleService\.list\(\)/,
+  'Calendar must call the canonical Instagram schedule list method',
+);
+assert.match(
+  calendar,
+  /whatsappStatusCampaignService\.list\(\)/,
+  'Calendar must load the canonical WhatsApp Status campaign schedule',
+);
+assert.match(
+  calendar,
+  /facebookMarketplaceScheduleService\.list\(\)/,
+  'Calendar must load the canonical Facebook Marketplace publication queue',
+);
+assert.doesNotMatch(
+  calendar,
+  /instagramScheduleService\.listSlots\(/,
+  'Calendar must not call the nonexistent listSlots method',
+);
+assert.match(
+  calendar,
+  /type:\s*'weekly_slot'[\s\S]*?dateKey,[\s\S]*?statusLabel:\s*'Grade semanal'/,
+  'Recurring weekly Instagram slots must be materialized as dated calendar events',
+);
+assert.match(
+  calendar,
+  /type:\s*'whatsapp_campaign'[\s\S]*?destinations:\s*\['whatsapp'\]/,
+  'WhatsApp Status campaigns must be materialized as dated calendar events',
+);
+assert.match(
+  calendar,
+  /type:\s*'facebook_schedule'[\s\S]*?destinations:\s*\['facebook'\]/,
+  'Facebook Marketplace schedules must be materialized as dated calendar events',
+);
+assert.match(
+  calendar,
+  /setChannelFilter\('facebook'\)/,
+  'Calendar must expose the Facebook channel filter',
+);
+assert.match(
+  calendar,
+  /event\.rawPayload\?\.schedule\?\.approval_id\s*===\s*app\.id/,
+  'A Story schedule and its approval request must not appear as duplicate events',
+);
+assert.match(
+  calendar,
+  /Parte das programações não pôde ser carregada/,
+  'Partial data-source failures must be visible to the operator',
+);
+
+console.log('marketing calendar data-loading static checks passed');

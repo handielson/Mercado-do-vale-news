@@ -14,7 +14,6 @@ import {
   Plus,
   Eye,
   Filter,
-  Sparkles,
   Layers,
   X,
   CalendarDays,
@@ -35,11 +34,19 @@ import {
   type InstagramSlot,
   CONTENT_TYPE_LABELS,
 } from '../../../../services/instagramScheduleService';
+import {
+  whatsappStatusCampaignService,
+  type WhatsAppStatusCampaign,
+} from '../../../../services/whatsappStatusCampaignService';
+import {
+  facebookMarketplaceScheduleService,
+  type FacebookMarketplaceSchedule,
+} from '../../../../services/facebookMarketplaceScheduleService';
 import { toBrowserSafeMediaUrl } from '../../../../utils/media-url';
 
 export interface CalendarEvent {
   id: string;
-  type: 'story_schedule' | 'approval_request' | 'weekly_slot';
+  type: 'story_schedule' | 'approval_request' | 'weekly_slot' | 'whatsapp_campaign' | 'facebook_schedule';
   title: string;
   dateKey: string; // YYYY-MM-DD
   timeStr: string; // HH:mm
@@ -88,6 +95,38 @@ function parseTimeStr(val: any): string {
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 }
 
+function dateKeyDayOffset(dateKey: string, startDateKey: string): number {
+  const dateParts = dateKey.split('-').map(Number);
+  const startParts = startDateKey.split('-').map(Number);
+  if (dateParts.length !== 3 || startParts.length !== 3) return Number.NaN;
+  const dateUtc = Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]);
+  const startUtc = Date.UTC(startParts[0], startParts[1] - 1, startParts[2]);
+  return Math.round((dateUtc - startUtc) / 86_400_000);
+}
+
+function whatsappCampaignDateKeys(campaign: WhatsAppStatusCampaign): string[] {
+  const selectedDates = Array.isArray(campaign.selected_dates)
+    ? campaign.selected_dates.map(parseDateKey).filter(Boolean)
+    : [];
+  const startDateKey = parseDateKey(campaign.start_date) || selectedDates[0] || '';
+  if (!startDateKey) return [];
+
+  const candidates = selectedDates.length > 0
+    ? selectedDates
+    : Array.from({ length: Math.max(1, Number(campaign.repeat_days) || 1) }, (_, offset) => {
+        const parts = startDateKey.split('-').map(Number);
+        return parseDateKey(new Date(parts[0], parts[1] - 1, parts[2] + offset));
+      });
+
+  return Array.from(new Set(candidates)).filter((dateKey) => {
+    const dayOffset = dateKeyDayOffset(dateKey, startDateKey);
+    if (!Number.isFinite(dayOffset) || dayOffset < 0) return false;
+    if (campaign.frequency === 'once') return dayOffset === 0;
+    if (campaign.frequency === 'weekly') return dayOffset % 7 === 0;
+    return true;
+  });
+}
+
 export default function MarketingCalendarPanel({
   onNavigateToTab,
   onSelectDateForNewSchedule,
@@ -96,6 +135,8 @@ export default function MarketingCalendarPanel({
   const [schedules, setSchedules] = useState<SocialStorySchedule[]>([]);
   const [approvals, setApprovals] = useState<MarketingApprovalRequest[]>([]);
   const [slots, setSlots] = useState<InstagramSlot[]>([]);
+  const [whatsappCampaigns, setWhatsappCampaigns] = useState<WhatsAppStatusCampaign[]>([]);
+  const [facebookSchedules, setFacebookSchedules] = useState<FacebookMarketplaceSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(() => parseDateKey(new Date()));
   const [channelFilter, setChannelFilter] = useState<'all' | 'instagram' | 'whatsapp' | 'facebook'>('all');
@@ -104,10 +145,12 @@ export default function MarketingCalendarPanel({
   const loadData = async () => {
     setLoading(true);
     try {
-      const [schedRes, appRes, slotsRes] = await Promise.allSettled([
-        socialStoryScheduleService.list().catch(() => []),
-        marketingApprovalService.list('all').catch(() => ({ items: [] })),
-        instagramScheduleService.listSlots().catch(() => []),
+      const [schedRes, appRes, slotsRes, whatsappRes, facebookRes] = await Promise.allSettled([
+        socialStoryScheduleService.list(),
+        marketingApprovalService.list('all'),
+        instagramScheduleService.list(),
+        whatsappStatusCampaignService.list(),
+        facebookMarketplaceScheduleService.list(),
       ]);
 
       if (schedRes.status === 'fulfilled') {
@@ -118,6 +161,9 @@ export default function MarketingCalendarPanel({
           ? (val as any).items
           : [];
         setSchedules(list);
+      } else {
+        setSchedules([]);
+        console.error('Erro ao carregar lotes de Stories no calendário:', schedRes.reason);
       }
       if (appRes.status === 'fulfilled') {
         const val = appRes.value;
@@ -127,13 +173,45 @@ export default function MarketingCalendarPanel({
           ? val
           : [];
         setApprovals(list);
+      } else {
+        setApprovals([]);
+        console.error('Erro ao carregar aprovações no calendário:', appRes.reason);
       }
       if (slotsRes.status === 'fulfilled') {
         const val = slotsRes.value;
         setSlots(Array.isArray(val) ? val : []);
+      } else {
+        setSlots([]);
+        console.error('Erro ao carregar a agenda semanal do Instagram no calendário:', slotsRes.reason);
+      }
+      if (whatsappRes.status === 'fulfilled') {
+        setWhatsappCampaigns(Array.isArray(whatsappRes.value) ? whatsappRes.value : []);
+      } else {
+        setWhatsappCampaigns([]);
+        console.error('Erro ao carregar campanhas de Status do WhatsApp no calendário:', whatsappRes.reason);
+      }
+      if (facebookRes.status === 'fulfilled') {
+        setFacebookSchedules(Array.isArray(facebookRes.value) ? facebookRes.value : []);
+      } else {
+        setFacebookSchedules([]);
+        console.error('Erro ao carregar programações do Facebook Marketplace no calendário:', facebookRes.reason);
+      }
+
+      const results = [schedRes, appRes, slotsRes, whatsappRes, facebookRes];
+      const failedSources = results.filter((result) => result.status === 'rejected').length;
+      if (failedSources > 0) {
+        toast.error(
+          failedSources === results.length
+            ? 'Não foi possível carregar as programações do calendário.'
+            : 'Parte das programações não pôde ser carregada.',
+          { id: 'marketing-calendar-load-error' },
+        );
       }
     } catch (error) {
       console.error('Erro ao carregar dados do calendário de marketing:', error);
+      toast.error('Não foi possível carregar as programações do calendário.', {
+        id: 'marketing-calendar-load-error',
+      });
     } finally {
       setLoading(false);
     }
@@ -168,6 +246,8 @@ export default function MarketingCalendarPanel({
     const events: CalendarEvent[] = [];
     const safeSchedules = Array.isArray(schedules) ? schedules : [];
     const safeApprovals = Array.isArray(approvals) ? approvals : [];
+    const safeWhatsappCampaigns = Array.isArray(whatsappCampaigns) ? whatsappCampaigns : [];
+    const safeFacebookSchedules = Array.isArray(facebookSchedules) ? facebookSchedules : [];
 
     // 1. Social Story Schedules & Individual Scheduled Items
     for (const schedule of safeSchedules) {
@@ -270,7 +350,13 @@ export default function MarketingCalendarPanel({
         const dateKey = parseDateKey(scheduledAt);
         const timeStr = parseTimeStr(scheduledAt);
 
-        if (!events.some((e) => e.rawPayload?.approval_id === app.id || e.id === 'app-' + app.id)) {
+        const alreadyRepresentedBySchedule = events.some(
+          (event) => event.type === 'story_schedule' && event.rawPayload?.schedule?.approval_id === app.id,
+        );
+        const alreadyRepresentedByDirectSchedule = [...safeWhatsappCampaigns, ...safeFacebookSchedules]
+          .some((schedule) => schedule.id === app.target_id);
+
+        if (!alreadyRepresentedBySchedule && !alreadyRepresentedByDirectSchedule && !events.some((event) => event.id === 'app-' + app.id)) {
           let normalizedStatus: CalendarEvent['status'] = 'pending';
           let statusLabel = 'Aguardando aprovação';
 
@@ -316,8 +402,95 @@ export default function MarketingCalendarPanel({
       }
     }
 
+    // 3. Recurring slots from the canonical weekly Instagram schedule.
+    // Materialize only the dates visible in the current calendar grid.
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
+    const visibleDays = Math.ceil((firstDayIndex + daysInCurrentMonth) / 7) * 7;
+    const firstVisibleDate = new Date(year, month, 1 - firstDayIndex);
+
+    for (let offset = 0; offset < visibleDays; offset++) {
+      const date = new Date(
+        firstVisibleDate.getFullYear(),
+        firstVisibleDate.getMonth(),
+        firstVisibleDate.getDate() + offset,
+      );
+      const dateKey = parseDateKey(date);
+
+      for (const slot of slots) {
+        if (!slot.active || Number(slot.day_of_week) !== date.getDay()) continue;
+
+        events.push({
+          id: `slot-${slot.id}-${dateKey}`,
+          type: 'weekly_slot',
+          title: slot.hook?.trim() || CONTENT_TYPE_LABELS[slot.content_type] || 'Post do Instagram',
+          dateKey,
+          timeStr: parseTimeStr(slot.scheduled_time),
+          destinations: ['instagram'],
+          status: 'slot',
+          statusLabel: 'Grade semanal',
+          itemsCount: 1,
+          thumbnailUrl: null,
+          rawPayload: { slot },
+        });
+      }
+    }
+
+    // 4. Automated WhatsApp Status campaigns.
+    for (const campaign of safeWhatsappCampaigns) {
+      for (const dateKey of whatsappCampaignDateKeys(campaign)) {
+        events.push({
+          id: `whatsapp-${campaign.id}-${dateKey}`,
+          type: 'whatsapp_campaign',
+          title: campaign.title || 'Status do WhatsApp',
+          dateKey,
+          timeStr: parseTimeStr(campaign.start_time),
+          destinations: ['whatsapp'],
+          status: campaign.active ? 'approved' : 'completed',
+          statusLabel: campaign.active ? 'Programado' : 'Encerrado',
+          itemsCount: campaign.repeat_mode === 'single_product'
+            ? 1
+            : Math.max(1, Number(campaign.daily_limit) || 1),
+          thumbnailUrl: null,
+          rawPayload: { campaign },
+        });
+      }
+    }
+
+    // 5. Facebook Marketplace assisted publication queue.
+    for (const schedule of safeFacebookSchedules) {
+      const dateKey = parseDateKey(schedule.scheduled_for);
+      if (!dateKey) continue;
+
+      const scheduledTimestamp = new Date(String(schedule.scheduled_for).replace(' ', 'T')).getTime();
+      const effectiveStatus = schedule.status === 'scheduled' && Number.isFinite(scheduledTimestamp) && scheduledTimestamp <= Date.now()
+        ? 'ready'
+        : schedule.status;
+      const normalized = effectiveStatus === 'published'
+        ? { status: 'completed' as const, label: 'Publicado' }
+        : effectiveStatus === 'cancelled'
+        ? { status: 'failed' as const, label: 'Cancelado' }
+        : effectiveStatus === 'ready'
+        ? { status: 'pending' as const, label: 'Pronto para publicar' }
+        : { status: 'approved' as const, label: 'Agendado' };
+
+      events.push({
+        id: `facebook-${schedule.id}`,
+        type: 'facebook_schedule',
+        title: schedule.product_name || 'Facebook Marketplace',
+        dateKey,
+        timeStr: parseTimeStr(schedule.scheduled_for),
+        destinations: ['facebook'],
+        status: normalized.status,
+        statusLabel: normalized.label,
+        itemsCount: 1,
+        thumbnailUrl: schedule.image_urls?.[0] ? toBrowserSafeMediaUrl(schedule.image_urls[0]) : null,
+        rawPayload: { schedule },
+      });
+    }
+
     return events;
-  }, [schedules, approvals]);
+  }, [schedules, approvals, slots, whatsappCampaigns, facebookSchedules, year, month]);
 
   const filteredEvents = useMemo(() => {
     return allEvents.filter((event) => {
@@ -354,7 +527,6 @@ export default function MarketingCalendarPanel({
       isCurrentMonth: boolean;
       isToday: boolean;
       events: CalendarEvent[];
-      slotsCount: number;
     }> = [];
 
     const todayDateKey = parseDateKey(new Date());
@@ -363,8 +535,6 @@ export default function MarketingCalendarPanel({
       const dayNum = daysInPrevMonth - i;
       const d = new Date(year, month - 1, dayNum);
       const dateKey = parseDateKey(d);
-      const dayOfWeek = d.getDay();
-      const slotsForDay = slots.filter((s) => s.day_of_week === dayOfWeek && s.active).length;
 
       days.push({
         dayNumber: dayNum,
@@ -372,15 +542,12 @@ export default function MarketingCalendarPanel({
         isCurrentMonth: false,
         isToday: dateKey === todayDateKey,
         events: eventsByDate.get(dateKey) || [],
-        slotsCount: slotsForDay,
       });
     }
 
     for (let dayNum = 1; dayNum <= daysInCurrentMonth; dayNum++) {
       const d = new Date(year, month, dayNum);
       const dateKey = parseDateKey(d);
-      const dayOfWeek = d.getDay();
-      const slotsForDay = slots.filter((s) => s.day_of_week === dayOfWeek && s.active).length;
 
       days.push({
         dayNumber: dayNum,
@@ -388,7 +555,6 @@ export default function MarketingCalendarPanel({
         isCurrentMonth: true,
         isToday: dateKey === todayDateKey,
         events: eventsByDate.get(dateKey) || [],
-        slotsCount: slotsForDay,
       });
     }
 
@@ -396,8 +562,6 @@ export default function MarketingCalendarPanel({
     for (let i = 1; i <= remaining; i++) {
       const d = new Date(year, month + 1, i);
       const dateKey = parseDateKey(d);
-      const dayOfWeek = d.getDay();
-      const slotsForDay = slots.filter((s) => s.day_of_week === dayOfWeek && s.active).length;
 
       days.push({
         dayNumber: i,
@@ -405,20 +569,17 @@ export default function MarketingCalendarPanel({
         isCurrentMonth: false,
         isToday: dateKey === todayDateKey,
         events: eventsByDate.get(dateKey) || [],
-        slotsCount: slotsForDay,
       });
     }
 
     return days;
-  }, [year, month, eventsByDate, slots]);
+  }, [year, month, eventsByDate]);
 
   const selectedDayData = useMemo(() => {
     if (!selectedDayKey) return null;
     const events = eventsByDate.get(selectedDayKey) || [];
     const parts = selectedDayKey.split('-').map(Number);
     const dateObj = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date(selectedDayKey + 'T12:00:00');
-    const dayOfWeek = dateObj.getDay();
-    const daySlots = slots.filter((s) => s.day_of_week === dayOfWeek && s.active);
 
     return {
       dateKey: selectedDayKey,
@@ -429,9 +590,8 @@ export default function MarketingCalendarPanel({
         year: 'numeric',
       }),
       events: [...events].sort((a, b) => a.timeStr.localeCompare(b.timeStr)),
-      slots: daySlots,
     };
-  }, [selectedDayKey, eventsByDate, slots]);
+  }, [selectedDayKey, eventsByDate]);
 
   const getStatusBadgeClass = (status: CalendarEvent['status']) => {
     switch (status) {
@@ -557,6 +717,15 @@ export default function MarketingCalendarPanel({
               >
                 <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
               </button>
+              <button
+                type="button"
+                onClick={() => setChannelFilter('facebook')}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold transition-colors ${
+                  channelFilter === 'facebook' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-blue-600'
+                }`}
+              >
+                <Facebook className="w-3.5 h-3.5" /> Facebook
+              </button>
             </div>
 
             <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
@@ -647,14 +816,6 @@ export default function MarketingCalendarPanel({
                         {hasEvents && (
                           <span className="w-2 h-2 rounded-full bg-pink-500 animate-pulse" />
                         )}
-                        {day.slotsCount > 0 && (
-                          <span
-                            className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1 rounded"
-                            title={`${day.slotsCount} slot(s) de grade configurados`}
-                          >
-                            {day.slotsCount}s
-                          </span>
-                        )}
                       </div>
                     </div>
 
@@ -675,6 +836,9 @@ export default function MarketingCalendarPanel({
                           )}
                           {ev.destinations.includes('whatsapp') && (
                             <MessageCircle className="w-2.5 h-2.5 shrink-0 text-emerald-600" />
+                          )}
+                          {ev.destinations.includes('facebook') && (
+                            <Facebook className="w-2.5 h-2.5 shrink-0 text-blue-600" />
                           )}
                           <span className="truncate">{ev.timeStr} · {ev.title}</span>
                         </div>
@@ -756,6 +920,11 @@ export default function MarketingCalendarPanel({
                             <MessageCircle className="w-3.5 h-3.5" />
                           </span>
                         )}
+                        {event.destinations.includes('facebook') && (
+                          <span className="p-1 bg-blue-50 text-blue-600 rounded" title="Facebook Marketplace">
+                            <Facebook className="w-3.5 h-3.5" />
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -775,7 +944,13 @@ export default function MarketingCalendarPanel({
                       <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-bold text-slate-900 truncate">{event.title}</h4>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          {event.itemsCount} arte(s) / storie(s) neste dia
+                          {event.type === 'weekly_slot'
+                            ? `${CONTENT_TYPE_LABELS[event.rawPayload?.slot?.content_type as keyof typeof CONTENT_TYPE_LABELS] || 'Post do Instagram'} · programação recorrente`
+                            : event.type === 'whatsapp_campaign'
+                            ? `${event.itemsCount} Status · programação automática`
+                            : event.type === 'facebook_schedule'
+                            ? 'Publicação assistida no Marketplace'
+                            : `${event.itemsCount} arte(s) / storie(s) neste dia`}
                         </p>
                         {Array.isArray(event.rawPayload?.dayItems) && event.rawPayload.dayItems.length > 1 && (
                           <div className="mt-2.5 space-y-1.5 pt-2 border-t border-slate-200/60 max-h-36 overflow-y-auto pr-1">
@@ -798,6 +973,24 @@ export default function MarketingCalendarPanel({
                             className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700"
                           >
                             Ver na Central de Aprovações <ExternalLink className="w-3 h-3" />
+                          </button>
+                        )}
+                        {event.type === 'facebook_schedule' && onNavigateToTab && (
+                          <button
+                            type="button"
+                            onClick={() => onNavigateToTab('facebook')}
+                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700"
+                          >
+                            Ver no Facebook Marketplace <ExternalLink className="w-3 h-3" />
+                          </button>
+                        )}
+                        {event.type === 'whatsapp_campaign' && onNavigateToTab && (
+                          <button
+                            type="button"
+                            onClick={() => onNavigateToTab('whatsapp')}
+                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-700"
+                          >
+                            Ver no Status WhatsApp <ExternalLink className="w-3 h-3" />
                           </button>
                         )}
                       </div>
@@ -823,30 +1016,6 @@ export default function MarketingCalendarPanel({
                 </div>
               )}
 
-              {/* Weekly Slots Reference for this day */}
-              {selectedDayData && selectedDayData.slots.length > 0 && (
-                <div className="mt-6 pt-4 border-t border-slate-100">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Slots Fixos da Grade Semanal
-                  </h4>
-                  <div className="space-y-1.5">
-                    {selectedDayData.slots.map((slot) => (
-                      <div
-                        key={slot.id}
-                        className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs"
-                      >
-                        <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          {slot.scheduled_time?.slice(0, 5)}
-                        </span>
-                        <span className="text-pink-600 font-semibold">
-                          {CONTENT_TYPE_LABELS[slot.content_type as any] || slot.content_type}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -854,4 +1023,3 @@ export default function MarketingCalendarPanel({
     </div>
   );
 }
-
