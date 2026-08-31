@@ -22,6 +22,7 @@ assert.match(page, /\/synology\/upload\?folder=imagens/);
 assert.match(page, /Checklist incompleto/);
 assert.match(page, /nenhum dado será inventado/);
 assert.match(page, /Todos celulares/);
+assert.match(page, /\^smartphones\?\$[\s\S]*\^celulares\?\$/, 'the shortcut must prioritize the populated Smartphones category over the legacy Celulares category');
 
 assert.match(card, /data-blueprint-watermark="true"/, 'watermark must be part of the exported canvas');
 assert.match(card, /opacity-\[0\.12\]/, 'watermark must remain visible without covering specifications');

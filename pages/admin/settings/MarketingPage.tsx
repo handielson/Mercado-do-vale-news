@@ -2097,7 +2097,10 @@ export default function MarketingPage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => {
-                                                            const phoneCategory = categories.find((category) => /celular|smartphone/i.test(category.name));
+                                                            const phoneCategory =
+                                                                categories.find((category) => /^smartphones?$/i.test(category.name.trim()))
+                                                                || categories.find((category) => /^celulares?$/i.test(category.name.trim()))
+                                                                || categories.find((category) => /smartphone|celular/i.test(category.name));
                                                             if (!phoneCategory) {
                                                                 toast.error('Categoria de celulares não encontrada. Selecione-a manualmente.');
                                                                 return;
