@@ -7,16 +7,17 @@ const indexSource = readFileSync('index.html', 'utf8');
 const requiredAppSnippets = [
   'sm:hidden sticky z-40 bg-white border-b border-slate-200 shadow-sm px-3 py-2 flex items-center gap-2',
   'h-10 rounded-xl bg-slate-100 animate-pulse',
-  'h-[52px] w-[210px] max-w-[58vw] rounded-full bg-white border border-slate-200 shadow-sm animate-pulse',
+  'h-10 w-28 shrink-0 rounded-xl bg-slate-100 animate-pulse',
+  'h-10 w-[175px] max-w-[58vw] rounded-full bg-white border border-slate-200 shadow-sm animate-pulse',
   'aria-hidden="true" className="mt-5 flex items-stretch gap-2"',
-  'aria-label="Colecoes carregando"',
+  'aria-label="Colecoes carregando" className="mt-4 hidden',
   'py-8 sm:py-6',
 ];
 
 const requiredCheckinSnippets = [
   "if (cardState === 'loading')",
   'aria-hidden="true"',
-  'h-[52px] w-[210px] max-w-[58vw] rounded-full bg-white/80 border border-slate-200/60 shadow-sm animate-pulse',
+  'h-10 w-[175px] max-w-[58vw] rounded-full bg-white/80 border border-slate-200/60 shadow-sm animate-pulse',
 ];
 
 const requiredIndexSnippets = [

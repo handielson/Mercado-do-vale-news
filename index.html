@@ -86,12 +86,12 @@
     .initial-banner-image { object-fit: cover; }
     .initial-checkin-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin: 1rem 0 1.25rem; }
     .initial-favorites { width: 96px; height: 40px; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; }
-    .initial-checkin { width: 210px; max-width: 58vw; height: 52px; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(15, 23, 42, .05); }
+    .initial-checkin { width: 175px; max-width: 58vw; height: 40px; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(15, 23, 42, .05); }
     .initial-search { display: none; height: 48px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0; margin: 1rem 0 1.5rem; }
     .initial-controls { display: flex; align-items: stretch; gap: .5rem; margin: 1.25rem 0 1rem; }
     .initial-control-square { width: 40px; height: 40px; flex: 0 0 auto; border-radius: 10px; background: #fff; border: 1px solid #e2e8f0; }
     .initial-control-wide { width: 152px; max-width: 44vw; height: 40px; flex: 0 0 auto; border-radius: 10px; background: #fff; border: 1px solid #e2e8f0; }
-    .initial-collections { display: flex; gap: .5rem; overflow: hidden; margin: 0 0 1.5rem; }
+    .initial-collections { display: none; gap: .5rem; overflow: hidden; margin: 0 0 1.5rem; }
     .initial-chip { height: 30px; flex: 0 0 auto; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; }
     .initial-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
     .initial-card { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; }
@@ -109,6 +109,7 @@
       .initial-mobile-search, .initial-mobile-meta, .initial-checkin-row { display: none; }
       .initial-main { padding-top: 1.5rem; }
       .initial-controls { margin-top: 1rem; justify-content: flex-end; }
+      .initial-collections { display: flex; }
       .initial-control-square { display: none; }
       .initial-search { display: block; }
       .initial-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
@@ -139,7 +140,7 @@
       </header>
       <div class="initial-mobile-search">
         <div class="initial-mobile-input initial-skel"></div>
-        <div class="initial-mobile-button initial-skel"></div>
+        <div class="initial-mobile-button initial-skel" style="width: 112px"></div>
       </div>
       <main class="initial-main">
         <div class="initial-banner">

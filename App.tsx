@@ -52,8 +52,8 @@ const CatalogRouteFallback: React.FC = () => (
     </header>
 
     <div className="sm:hidden sticky z-40 bg-white border-b border-slate-200 shadow-sm px-3 py-2 flex items-center gap-2">
-      <div className="flex-1 h-10 rounded-xl bg-slate-100 animate-pulse" />
-      <div className="h-10 w-10 rounded-xl bg-slate-100 animate-pulse" />
+      <div className="min-w-0 flex-1 h-10 rounded-xl bg-slate-100 animate-pulse" />
+      <div className="h-10 w-28 shrink-0 rounded-xl bg-slate-100 animate-pulse" />
     </div>
 
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-6">
@@ -61,7 +61,7 @@ const CatalogRouteFallback: React.FC = () => (
 
       <div className="mt-4 sm:hidden flex items-center justify-between gap-2">
         <div className="h-10 w-24 rounded-full bg-white border border-slate-200 animate-pulse" />
-        <div className="h-[52px] w-[210px] max-w-[58vw] rounded-full bg-white border border-slate-200 shadow-sm animate-pulse" />
+        <div className="h-10 w-[175px] max-w-[58vw] rounded-full bg-white border border-slate-200 shadow-sm animate-pulse" />
       </div>
 
       <div aria-hidden="true" className="mt-5 flex items-stretch gap-2">
@@ -70,7 +70,7 @@ const CatalogRouteFallback: React.FC = () => (
         <div className="h-10 w-40 max-w-[44vw] rounded-xl bg-slate-100 animate-pulse" />
       </div>
 
-      <div aria-label="Colecoes carregando" className="mt-4 flex items-center gap-2 overflow-hidden">
+      <div aria-label="Colecoes carregando" className="mt-4 hidden items-center gap-2 overflow-hidden sm:flex">
         {['w-20', 'w-24', 'w-16', 'w-28', 'w-24', 'w-32'].map((widthClass, index) => (
           <div key={index} className={`h-9 shrink-0 rounded-full bg-slate-100 animate-pulse ${widthClass}`} />
         ))}

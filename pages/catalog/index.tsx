@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, type CSSProperties } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useSearchParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import { X, LayoutGrid, List, Heart, Search, MoreHorizontal } from 'lucide-react';
+import { X, LayoutGrid, List, Heart, Search, Menu } from 'lucide-react';
 import {
     BannerCarousel,
     ProductFilters,
@@ -49,12 +49,11 @@ import {
 } from './catalogCollections.js';
 
 const CatalogSectionsLoadingSkeleton = () => (
-    <div className="mb-12 space-y-12" aria-label="Secoes do catalogo carregando">
-        <section className="py-8">
-            <div className="flex items-center justify-between mb-6">
+    <div className="mb-8 space-y-2 sm:mb-12 sm:space-y-12" aria-label="Secoes do catalogo carregando">
+        <section className="py-3 sm:py-8">
+            <div className="mb-4 flex items-center justify-between sm:mb-6">
                 <div className="animate-pulse">
                     <div className="h-7 bg-slate-200 rounded w-40" />
-                    <div className="h-4 bg-slate-100 rounded w-64 max-w-full mt-2" />
                 </div>
                 <div className="h-5 bg-slate-100 rounded w-16 animate-pulse" />
             </div>
@@ -81,13 +80,13 @@ function CatalogContent() {
     const [mobileView, setMobileView] = useState<'grid' | 'list'>('grid');
     const [autoDetectedBrand, setAutoDetectedBrand] = useState<string | null>(null);
     const [expandCats, setExpandCats] = useState(false);
-    const [headerHeight, setHeaderHeight] = useState(56);
+    const [headerHeight, setHeaderHeight] = useState(64);
 
     // Mede a altura real do header para posicionar a sticky bar corretamente
     useEffect(() => {
         const header = document.querySelector('header');
         if (!header) return;
-        const update = () => setHeaderHeight(header.offsetHeight);
+        const update = () => setHeaderHeight(Math.max(64, Math.ceil(header.getBoundingClientRect().height)));
         update();
         const observer = new ResizeObserver(update);
         observer.observe(header);
@@ -564,11 +563,11 @@ function CatalogContent() {
             <PublicHeader />
 
             <main>
-            {/* Mobile Sticky Search Bar + Categories Dropdown */}
+            {/* Mobile Sticky Search Bar + Categories Button */}
             <div className="sm:hidden sticky z-40" style={{ top: headerHeight }}>
                 {/* Barra de busca */}
                 <div className="bg-white border-b border-slate-200 shadow-sm px-3 py-2 flex items-center gap-2">
-                    <div className="flex-1 relative">
+                    <div className="min-w-0 flex-1 relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                         <input
                             type="text"
@@ -588,23 +587,55 @@ function CatalogContent() {
                         )}
                     </div>
                     <button
-                        onClick={() => setExpandCats(v => !v)}
-                        className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all shrink-0 ${
+                        onClick={() => setExpandCats(value => !value)}
+                        className={`h-10 shrink-0 inline-flex items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors ${
                             expandCats
-                                ? 'bg-slate-900 text-white shadow-md'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                ? 'border-slate-900 bg-slate-900 text-white'
+                                : 'border-slate-200 bg-slate-100 text-slate-700'
                         }`}
-                        title="Ver categorias"
-                        aria-label="Categorias"
+                        aria-expanded={expandCats}
+                        aria-controls="mobile-category-menu"
                     >
-                        <MoreHorizontal className="w-5 h-5" />
+                        <Menu className="h-3.5 w-3.5" />
+                        Categorias
+                        {filters.categories.length > 0 && (
+                            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] text-white">
+                                {filters.categories.length}
+                            </span>
+                        )}
                     </button>
                 </div>
 
-                {/* Dropdown de categorias (Mobile Tree) */}
+                {/* Painel de categorias no padrão dos filtros */}
                 {expandCats && (
-                    <div className="bg-white border-b border-slate-200 shadow-lg px-3 py-3 max-h-[70vh] overflow-y-auto overscroll-contain">
-                        <div className="flex flex-col gap-2">
+                    <>
+                        <button
+                            type="button"
+                            aria-label="Fechar categorias"
+                            className="fixed inset-0 z-40 bg-slate-950/20"
+                            onClick={() => setExpandCats(false)}
+                        />
+                        <div
+                            id="mobile-category-menu"
+                            role="dialog"
+                            aria-label="Escolher categoria"
+                            className="fixed left-3 right-3 bottom-3 z-50 max-h-[75dvh] overflow-y-auto overscroll-contain rounded-3xl border border-white/20 bg-white/95 p-4 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] backdrop-blur-2xl"
+                        >
+                            <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-4">
+                                <span className="flex items-center gap-2 text-base font-medium text-slate-800">
+                                    <Menu className="h-4 w-4 text-slate-400" />
+                                    Categorias
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setExpandCats(false)}
+                                    className="rounded-full bg-slate-100 p-2 text-slate-500 transition-colors hover:bg-slate-200"
+                                    aria-label="Fechar painel de categorias"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                            <div className="flex flex-col gap-2">
                             {/* Botão TODOS */}
                             <button
                                 onClick={() => {
@@ -684,8 +715,9 @@ function CatalogContent() {
                                     </div>
                                 );
                             })}
+                            </div>
                         </div>
-                    </div>
+                    </>
                 )}
             </div>
 
@@ -698,8 +730,8 @@ function CatalogContent() {
                         </div>
                     </div>
 
-                    {/* Check-in Widget + Atalho de Favoritos */}
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex items-center justify-between gap-2 relative z-10 flex-nowrap">
+                    {/* Check-in, dúvidas e atalho de favoritos */}
+                    <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex items-center gap-2 relative z-10 flex-nowrap ${customer ? 'justify-between' : 'justify-center sm:justify-end'}`}>
 
                 {/* Atalho de Favoritos — só para clientes autenticados (não-admin) */}
                 {customer ? (
@@ -716,12 +748,13 @@ function CatalogContent() {
                             </span>
                         )}
                     </Link>
-                ) : (
-                    <div />
-                )}
+                ) : null}
 
-                <div className="min-w-0 shrink">
-                    <CheckinWidget />
+                <div className="flex min-w-0 items-center justify-end gap-2">
+                    <FeedbackFloatingButton />
+                    <div className="min-w-0 shrink">
+                        <CheckinWidget />
+                    </div>
                 </div>
             </div>
                 </>
@@ -816,11 +849,17 @@ function CatalogContent() {
             )}
 
             {/* Main Content */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 sm:py-8 lg:px-8">
                 {/* Header com busca e controles */}
-                <div className="mb-6">
+                <div
+                    className="sticky top-[var(--catalog-actions-top-mobile)] z-30 -mx-4 mb-4 border-y border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur-md sm:top-[var(--catalog-actions-top-desktop)] sm:-mx-6 sm:mb-6 sm:px-6 sm:py-3 lg:-mx-8 lg:px-8"
+                    style={{
+                        '--catalog-actions-top-mobile': `${headerHeight + 57}px`,
+                        '--catalog-actions-top-desktop': `${headerHeight}px`,
+                    } as CSSProperties}
+                >
                     {/* Barra de busca + Filtros + Toggle de colunas + Compartilhar */}
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex flex-nowrap items-stretch gap-2">
                         {/* Busca — escondida no mobile (coberta pela sticky bar acima) */}
                         <div className="hidden sm:flex flex-1 relative">
                             <SearchBar
@@ -852,11 +891,12 @@ function CatalogContent() {
                             filterStats={filterStats || { brands: [] }}
                         />
                         <ShareCatalogButton categoryId={filters.categories[0] || undefined} />
+                        <CartIcon />
                     </div>
 
                     <nav
                         aria-label="Colecoes de produtos"
-                        className="mt-4 flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible -mx-4 px-4 sm:mx-0 sm:px-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                        className="mt-4 hidden gap-2 sm:flex sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0"
                     >
                         <Link
                             to="/produtos"
@@ -957,7 +997,7 @@ function CatalogContent() {
                 )}
 
                 {isHomeCatalogPage && !sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && !hasActiveSearch && (
-                    <div className="mb-12 space-y-12">
+                    <div className="mb-8 space-y-2 sm:mb-12 sm:space-y-12">
                         {sections.map((section) => (
                             <CatalogSectionComponent
                                 key={section.id}
@@ -972,11 +1012,14 @@ function CatalogContent() {
                 )}
 
                 {!filters.categories.length && !hasActiveSearch && (
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900">{catalogSeo.heading}</h2>
+                    <div className="mb-4 flex items-center justify-between gap-3 sm:mb-6">
+                        <div className="min-w-0">
+                            <h2 className="text-2xl font-bold text-gray-900">{catalogSeo.heading}</h2>
                         {isCollectionPage && catalogSeo.intro && (
                             <p className="mt-2 max-w-3xl text-sm text-slate-600">{catalogSeo.intro}</p>
                         )}
+                        </div>
+                        {!isHomeCatalogPage && <FeedbackFloatingButton />}
                     </div>
                 )}
 
@@ -1168,13 +1211,6 @@ function CatalogContent() {
                 )}
             </div>
             </main>
-
-            {/* Carrinho de Compras Online */}
-            <CartIcon />
-
-            {/* Feedback Button */}
-            <FeedbackFloatingButton />
-
 
             {/* Rodapé do Catálogo */}
             {footerText && (

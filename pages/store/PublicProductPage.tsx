@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers, Pencil, FileImage } from 'lucide-react';
+import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers, Pencil, FileImage, ChevronRight } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { useVpsAuth } from '@/contexts/VpsAuthContext';
@@ -10,6 +10,7 @@ import { useCompare } from '@/contexts/CompareContext';
 import { PublicHeader } from '@/components/PublicHeader';
 import { QuoteCartSidebar } from '@/components/catalog/QuoteCartSidebar';
 import { FloatingCartButton } from '@/components/catalog/FloatingCartButton';
+import { SearchBar } from '@/components/catalog/SearchBar';
 import { CatalogProduct } from '@/types/catalog';
 import { ModernProductCard } from '@/components/catalog/ModernProductCard';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
@@ -66,6 +67,22 @@ export const PublicProductPage: React.FC = () => {
     const [selectedComboOptions, setSelectedComboOptions] = useState<Record<string, any>>({});
     const [selectedKitQuantity, setSelectedKitQuantity] = useState<number>(1);
     const [isQuoteCartOpen, setIsQuoteCartOpen] = useState(false);
+    const handleCatalogSearch = useCallback((query: string) => {
+        const normalizedQuery = query.trim();
+        if (!normalizedQuery) return;
+        navigate(`/?search=${encodeURIComponent(normalizedQuery)}`);
+    }, [navigate]);
+
+    const persistentCatalogSearch = (
+        <div className="sticky top-[64px] z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur-md">
+            <div className="mx-auto flex max-w-7xl items-center px-3 py-2 sm:px-6 lg:px-8">
+                <SearchBar
+                    onSearch={handleCatalogSearch}
+                    placeholder="Buscar por nome, marca ou EAN..."
+                />
+            </div>
+        </div>
+    );
 
     // Config da categoria: define quais campos existem no template
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
@@ -616,6 +633,7 @@ export const PublicProductPage: React.FC = () => {
         return (
             <div className="min-h-screen bg-slate-50">
                 <PublicHeader />
+                {persistentCatalogSearch}
                 <div className="flex justify-center items-center h-[60vh]">
                     <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                 </div>
@@ -1242,6 +1260,7 @@ export const PublicProductPage: React.FC = () => {
             </Helmet>
 
             <PublicHeader />
+            {persistentCatalogSearch}
 
             <FloatingCartButton onClick={() => setIsQuoteCartOpen(true)} />
             <QuoteCartSidebar
@@ -1249,26 +1268,29 @@ export const PublicProductPage: React.FC = () => {
                 onClose={() => setIsQuoteCartOpen(false)}
             />
 
-            <main className="max-w-7xl mx-auto px-4 py-8">
+            <main className="max-w-7xl mx-auto px-4 py-4 sm:py-8">
                 {/* Breadcrumbs */}
-                <nav className="flex items-center gap-2 text-sm text-slate-500 mb-8">
-                    <button onClick={() => navigate('/')} className="hover:text-blue-600 transition-colors">
+                <nav
+                    aria-label="Navegação estrutural"
+                    className="mb-4 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 shadow-sm sm:mb-8 sm:gap-2 sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm sm:shadow-none"
+                >
+                    <button onClick={() => navigate('/')} className="shrink-0 hover:text-blue-600 transition-colors">
                         Início
                     </button>
                     {product.category && (
                         <>
-                            <span>/</span>
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300" aria-hidden="true" />
                             <a
                                 href={`/?categoria=${encodeURIComponent(typeof product.category === 'string' ? product.category : 'Categoria')}`}
-                                className="hover:text-blue-600 transition-colors"
+                                className="min-w-0 max-w-[38%] truncate hover:text-blue-600 transition-colors sm:max-w-xs"
                                 title="Ver produtos desta categoria"
                             >
                                 {typeof product.category === 'string' ? product.category : 'Categoria'}
                             </a>
                         </>
                     )}
-                    <span>/</span>
-                    <span className="text-slate-900 font-medium truncate max-w-[200px] sm:max-w-xs">
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate font-medium text-slate-900" title={publicProductTitle}>
                         {publicProductTitle}
                     </span>
                 </nav>

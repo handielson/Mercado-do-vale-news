@@ -27,6 +27,8 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
     const [loading, setLoading] = useState(true);
     const [colorHexMap, setColorHexMap] = useState<Record<string, string>>({});
     const { customer } = useVpsAuth();
+    const showSubtitle = Boolean(section.subtitle)
+        && !['recent', 'featured', 'bestsellers'].includes(section.section_type);
 
     useEffect(() => {
         loadProducts();
@@ -94,11 +96,11 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
 
     if (loading) {
         return (
-            <section className="py-8">
-                <div className="flex items-center justify-between mb-6">
+            <section className="py-3 sm:py-8">
+                <div className="mb-4 flex items-center justify-between sm:mb-6">
                     <div className="animate-pulse">
                         <div className="h-7 bg-slate-200 rounded w-40" />
-                        {section.subtitle && <div className="h-4 bg-slate-100 rounded w-64 max-w-full mt-2" />}
+                        {showSubtitle && <div className="h-4 bg-slate-100 rounded w-64 max-w-full mt-2" />}
                     </div>
                     {section.show_view_all && <div className="h-5 bg-slate-100 rounded w-16 animate-pulse" />}
                 </div>
@@ -116,22 +118,22 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
     }
 
     return (
-        <section className="py-8">
+        <section className="py-3 sm:py-8">
             {/* Header da Seção */}
-            <div className="flex items-center justify-between mb-6">
-                <div>
+            <div className="mb-4 flex items-center justify-between gap-3 sm:mb-6">
+                <div className="min-w-0 flex-1">
                     <h2 className="text-2xl font-bold text-gray-900">{section.title}</h2>
-                    {section.subtitle && (
+                    {showSubtitle && (
                         <p className="text-gray-600 mt-1">{section.subtitle}</p>
                     )}
                 </div>
                 {(section.show_view_all && (section.view_all_url || section.category_id)) && (
                     <Link
                         to={section.view_all_url || `/?categoria=${section.category_id}`}
-                        className="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium"
+                        className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700"
                     >
                         Ver todos
-                        <ChevronRight className="w-5 h-5" />
+                        <ChevronRight className="h-4 w-4" />
                     </Link>
                 )}
             </div>

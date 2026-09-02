@@ -58,13 +58,18 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center sm:p-4">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="feedback-dialog-title"
+                className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-white shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200 sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:zoom-in"
+            >
 
                 {/* Header */}
-                <div className="bg-blue-600 p-5 text-white flex justify-between items-center">
+                <div className="flex shrink-0 items-center justify-between bg-blue-600 p-4 text-white sm:p-5">
                     <div>
-                        <h2 className="text-xl font-bold flex items-center gap-2">
+                        <h2 id="feedback-dialog-title" className="flex items-center gap-2 text-lg font-bold sm:text-xl">
                             <MessageSquare className="w-5 h-5 opacity-90" />
                             Fale Conosco
                         </h2>
@@ -73,16 +78,18 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose })
                         </p>
                     </div>
                     <button
+                        type="button"
                         onClick={onClose}
                         disabled={isSubmitting}
                         className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+                        aria-label="Fechar formulário de contato"
                     >
                         <X size={20} />
                     </button>
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-5 sm:p-6">
 
                     {/* Tipo */}
                     <div>

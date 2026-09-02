@@ -80,13 +80,14 @@ export function ShareCatalogButton({ categoryId }: ShareCatalogButtonProps) {
         <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl border text-xs sm:text-sm font-medium transition-all duration-300 shadow-sm whitespace-nowrap ${isOpen
+                className={`flex h-10 items-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-xs font-medium shadow-sm transition-all duration-300 sm:h-auto sm:gap-2 sm:rounded-2xl sm:px-4 sm:py-2.5 sm:text-sm ${isOpen
                         ? 'bg-slate-900 text-white border-slate-900 shadow-md shadow-slate-900/10'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                     }`}
             >
                 <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span>
+                <span className="sm:hidden">Compartilhar</span>
+                <span className="hidden sm:inline">
                     {categoryId ? 'Compartilhar Categoria' : 'Compartilhar Catálogo'}
                 </span>
             </button>
@@ -95,12 +96,12 @@ export function ShareCatalogButton({ categoryId }: ShareCatalogButtonProps) {
                 <>
                     {/* Backdrop */}
                     <div
-                        className="fixed inset-0 z-10"
+                        className="fixed inset-0 z-40 bg-slate-950/20 sm:bg-transparent"
                         onClick={() => setIsOpen(false)}
                     />
 
                     {/* Dropdown Menu Minimalista */}
-                    <div className="absolute right-0 mt-3 w-64 bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] border border-white/20 z-50 overflow-hidden transform origin-top-right transition-all animate-in fade-in zoom-in-95 duration-200">
+                    <div role="dialog" aria-label="Compartilhar catálogo" className="fixed left-3 right-3 top-1/2 z-50 max-h-[calc(100dvh-1.5rem)] w-auto -translate-y-1/2 overflow-y-auto bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] border border-white/20 transform transition-all animate-in fade-in zoom-in-95 duration-200 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-3 sm:max-h-none sm:w-64 sm:translate-y-0 sm:overflow-hidden sm:origin-top-right">
                         <div className="p-3 space-y-1.5">
                             {/* Option 1: WhatsApp */}
                             <button

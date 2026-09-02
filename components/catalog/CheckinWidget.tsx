@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Coins, CheckCircle2, LogIn, Flame, Info, ChevronRight, Gift } from 'lucide-react';
+import { Coins, CheckCircle2, Flame, Info, ChevronRight, Gift } from 'lucide-react';
 import { useVpsAuth } from '../../contexts/VpsAuthContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -76,7 +76,7 @@ export function CheckinWidget() {
         return (
             <div
                 aria-hidden="true"
-                className="h-[52px] w-[210px] max-w-[58vw] rounded-full bg-white/80 border border-slate-200/60 shadow-sm animate-pulse"
+                className="h-10 w-[175px] max-w-[58vw] rounded-full bg-white/80 border border-slate-200/60 shadow-sm animate-pulse"
             />
         );
     }
@@ -88,17 +88,14 @@ export function CheckinWidget() {
                 onClick={handleClick}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
-                className="group relative flex items-center gap-3 px-4 py-3 rounded-full bg-white/80 backdrop-blur-md border border-slate-200/60 shadow-sm hover:shadow-md cursor-pointer transition-all duration-300"
+                className="group relative flex h-10 items-center gap-2 rounded-full border border-slate-200/60 bg-white/80 px-3 shadow-sm backdrop-blur-md transition-all duration-300 hover:shadow-md cursor-pointer"
             >
                 <div className="absolute inset-0 rounded-full bg-gradient-to-r from-yellow-50 to-orange-50 opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-yellow-100 text-yellow-600 group-hover:scale-110 transition-transform">
+                <div className="relative flex h-7 w-7 items-center justify-center rounded-full bg-yellow-100 text-yellow-600 transition-transform group-hover:scale-110">
                     <Coins className="w-4 h-4" />
                 </div>
-                <div className="relative flex flex-col items-start pr-2">
+                <div className="relative pr-1">
                     <span className="text-sm font-bold text-slate-800">Check-in Diário</span>
-                    <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-                        <LogIn className="w-3 h-3" /> Entre para ganhar moedas
-                    </span>
                 </div>
                 <ChevronRight className={`relative w-4 h-4 text-slate-400 transition-transform duration-300 ${isHovered ? 'translate-x-1' : ''}`} />
             </div>
@@ -118,7 +115,7 @@ export function CheckinWidget() {
                 onClick={isDone || checking ? undefined : handleClick}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
-                className={`relative flex items-center justify-between gap-2 p-1.5 pl-3 rounded-full transition-all duration-300 border backdrop-blur-md min-w-0
+                className={`relative flex h-10 min-w-0 items-center justify-between gap-2 rounded-full border p-1 pl-2 backdrop-blur-md transition-all duration-300
                     ${isDone
                         ? 'bg-green-50/90 border-green-200/60 shadow-sm'
                         : 'bg-white/90 border-slate-200/60 shadow-sm hover:shadow-md hover:border-yellow-300/60 cursor-pointer'
@@ -134,7 +131,7 @@ export function CheckinWidget() {
 
                 <div className="relative flex items-center gap-3">
                     {/* Icone Esquerdo */}
-                    <div className={`relative flex items-center justify-center w-9 h-9 rounded-full shrink-0 transition-all duration-500 
+                    <div className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-500
                         ${isDone
                             ? 'bg-gradient-to-br from-green-400 to-emerald-500 text-white shadow-inner scale-100'
                             : 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-md group-hover:scale-110'

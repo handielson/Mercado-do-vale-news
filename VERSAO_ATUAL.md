@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.320-blueprint-foto-bot
-date: 2026-08-31
+version: v1.2.321-catalogo-mobile-busca
+date: 2026-09-02
 status: ready
-release_vps: /var/www/mdv-site/releases/20260831-200220-blueprint-foto-bot
+release_vps: pendente
 branch: main
-summary: Pedidos de foto preservam e enviam o blueprint antes da foto real, sem transformar legendas vazias em objetos inválidos.
+summary: Busca persistente no catálogo mobile e desktop, breadcrumb responsivo e controles móveis reorganizados.
 ```

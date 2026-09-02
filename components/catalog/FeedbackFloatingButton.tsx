@@ -8,19 +8,14 @@ export const FeedbackFloatingButton: React.FC = () => {
     return (
         <>
             <button
+                type="button"
                 onClick={() => setIsModalOpen(true)}
-                className="fixed bottom-24 right-6 z-40 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 hover:scale-105 transition-all duration-200 group flex items-center justify-center"
+                className="inline-flex h-10 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
                 aria-label="Fale Conosco"
                 title="Dúvidas ou Sugestões?"
             >
-                <MessageSquare className="w-6 h-6 group-hover:animate-pulse" />
-
-                {/* Tooltip on hover (desktop only) */}
-                <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-sm px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none hidden md:block">
-                    Dúvidas ou Sugestões?
-                    {/* Arrow */}
-                    <span className="absolute left-full top-1/2 -translate-y-1/2 border-4 border-transparent border-l-slate-800"></span>
-                </span>
+                <MessageSquare className="h-3.5 w-3.5" />
+                Dúvidas?
             </button>
 
             <FeedbackModal

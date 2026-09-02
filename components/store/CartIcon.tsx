@@ -1,6 +1,6 @@
 /**
- * CartIcon — Ícone flutuante do carrinho com badge de quantidade
- * Exibido no catálogo público
+ * CartIcon — Atalho do carrinho com badge de quantidade
+ * Exibido junto aos controles do catálogo público
  */
 import { useCart } from '@/contexts/CartContext';
 import { useNavigate } from 'react-router-dom';
@@ -14,12 +14,14 @@ export function CartIcon() {
 
     return (
         <button
+            type="button"
             onClick={() => navigate('/carrinho')}
-            className="fixed bottom-6 right-6 z-50 bg-blue-600 text-white rounded-full p-4 shadow-2xl hover:bg-blue-700 transition-all hover:scale-110 active:scale-95"
+            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95 sm:h-auto sm:w-auto sm:gap-2 sm:px-4"
             aria-label={`Ver carrinho (${totalItems} itens)`}
         >
-            <ShoppingCart className="w-6 h-6" />
-            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+            <ShoppingCart className="h-5 w-5" />
+            <span className="hidden text-sm font-medium sm:inline">Carrinho</span>
+            <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
                 {totalItems > 9 ? '9+' : totalItems}
             </span>
         </button>

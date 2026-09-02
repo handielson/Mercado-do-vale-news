@@ -107,10 +107,19 @@ export function CatalogFilters({ filters, onFiltersChange, filterStats }: Catalo
 
             {/* Dropdown panel */}
             {isOpen && (
-                <div
-                    ref={panelRef}
-                    className="absolute right-0 top-full mt-3 w-[340px] bg-white/95 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] p-6 z-50"
-                >
+                <>
+                    <button
+                        type="button"
+                        aria-label="Fechar filtros"
+                        className="fixed inset-0 z-40 bg-slate-950/20 sm:bg-transparent"
+                        onClick={() => setIsOpen(false)}
+                    />
+                    <div
+                        ref={panelRef}
+                        role="dialog"
+                        aria-label="Filtros da loja"
+                        className="fixed left-3 right-3 bottom-3 z-50 max-h-[calc(100dvh-1.5rem)] w-auto overflow-y-auto bg-white/95 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] p-4 sm:absolute sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-3 sm:max-h-none sm:w-[340px] sm:overflow-visible sm:p-6"
+                    >
                     {/* Cabeçalho */}
                     <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
                         <span className="text-base font-medium text-slate-800 flex items-center gap-2">
@@ -228,7 +237,8 @@ export function CatalogFilters({ filters, onFiltersChange, filterStats }: Catalo
                             </div>
                         )}
                     </div>
-                </div>
+                    </div>
+                </>
             )}
         </div>
     );
