@@ -4,7 +4,7 @@
 version: v1.2.321-catalogo-mobile-busca
 date: 2026-09-02
 status: ready
-release_vps: pendente
+release_vps: /var/www/mdv-site/releases/20260902-024107-catalogo-mobile-busca
 branch: main
 summary: Busca persistente no catálogo mobile e desktop, breadcrumb responsivo e controles móveis reorganizados.
 ```
