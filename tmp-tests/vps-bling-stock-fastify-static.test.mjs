@@ -8,11 +8,11 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /resource === 'stock-sync'/, `${file} must route Bling stock-sync through Fastify`);
   assert.match(source, /Missing Authorization header/, `${file} must reject stock reads without Authorization`);
   assert.match(source, /reqIdsProdutos|idsProdutos/, `${file} must forward idsProdutos filters to Bling stock`);
-  assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/estoques\/saldos\?pagina=\$\{page\}&limite=100/, `${file} must preserve the Bling stock balance endpoint`);
+  assert.match(source, /https:\/\/api\.bling\.com\.br\/Api\/v3\/estoques\/saldos\?pagina=\$\{page\}&limite=100/, `${file} must preserve the official Bling stock balance endpoint`);
   assert.match(source, /if\s*\(stockResponse\.status === 400\)[\s\S]*\{ data: \[\] \}/, `${file} must normalize Bling stock 400 responses to an empty data array`);
   assert.match(source, /blingId and quantity required/, `${file} must validate stock-sync payload`);
-  assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/depositos\?pagina=1&limite=1/, `${file} must fetch a Bling deposit before stock-sync`);
-  assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/estoques['"`]/, `${file} must post stock movements to Bling`);
+  assert.match(source, /https:\/\/api\.bling\.com\.br\/Api\/v3\/depositos\?pagina=1&limite=1/, `${file} must fetch a Bling deposit before stock-sync`);
+  assert.match(source, /https:\/\/api\.bling\.com\.br\/Api\/v3\/estoques['"`]/, `${file} must post stock movements to Bling`);
   assert.match(source, /const normalizedOperation = String\(operation \|\| 'S'\)/, `${file} must preserve outgoing stock as the default operation`);
   assert.match(source, /operacao:\s*normalizedOperation/, `${file} must support outgoing and incoming stock movements`);
   assert.match(source, /normalizedOperation === 'E' \? 'Devolucao Mercado do Vale' : 'Venda PDV Mercado do Vale'/, `${file} must preserve direction-specific default notes`);

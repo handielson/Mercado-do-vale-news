@@ -8351,7 +8351,7 @@ async function isShopeeFulfillmentAuthorizedVps(request) {
 }
 
 async function readBlingNfeDetailVps(id, authHeader) {
-  const response = await fetch(`https://www.bling.com.br/Api/v3/nfe/${encodeURIComponent(String(id))}`, {
+  const response = await fetch(`https://api.bling.com.br/Api/v3/nfe/${encodeURIComponent(String(id))}`, {
     headers: { Authorization: authHeader, Accept: 'application/json' },
     signal: AbortSignal.timeout(15000),
   });
@@ -8374,7 +8374,7 @@ async function findBlingNfeForShopeeOrderVps(orderSn, authHeader) {
     dataEmissaoInicial: saoPauloIsoDateVps(start),
     dataEmissaoFinal: saoPauloIsoDateVps(end),
   });
-  const response = await fetch(`https://www.bling.com.br/Api/v3/nfe?${params.toString()}`, {
+  const response = await fetch(`https://api.bling.com.br/Api/v3/nfe?${params.toString()}`, {
     headers: { Authorization: authHeader, Accept: 'application/json' },
     signal: AbortSignal.timeout(15000),
   });
@@ -8398,7 +8398,7 @@ async function findBlingNfeForShopeeOrderVps(orderSn, authHeader) {
 async function ensureBlingNfeAuthorizedForShopeeVps(invoice, authHeader) {
   if (invoice?.chaveAcesso && invoice?.xml) return invoice;
   const response = await fetch(
-    `https://www.bling.com.br/Api/v3/nfe/${encodeURIComponent(String(invoice.id))}/enviar?enviarEmail=false`,
+    `https://api.bling.com.br/Api/v3/nfe/${encodeURIComponent(String(invoice.id))}/enviar?enviarEmail=false`,
     {
       method: 'POST',
       headers: { Authorization: authHeader, Accept: 'application/json' },
@@ -9142,7 +9142,7 @@ async function handleShopeeActionsVps(request, reply) {
 
 async function requestBlingToken(params, clientId, clientSecret) {
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  const response = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
+  const response = await fetch('https://api.bling.com.br/Api/v3/oauth/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -9375,7 +9375,7 @@ async function fetchAllBlingProductsForReconcileVps(accessToken) {
     let response;
     let body;
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      response = await fetch(`https://www.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5`, {
+      response = await fetch(`https://api.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5`, {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
         signal: AbortSignal.timeout(15000),
       });
@@ -9401,7 +9401,7 @@ function sleepBlingReconcileVps(ms) {
 async function fetchAllBlingStocksForReconcileVps(accessToken, productIds = []) {
   const remoteStocks = [];
   for (let page = 1; ; page += 1) {
-    const response = await fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`, {
+    const response = await fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(15000),
     });
@@ -9422,7 +9422,7 @@ async function fetchAllBlingStocksForReconcileVps(accessToken, productIds = []) 
     let response;
     let body;
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      response = await fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=100&${idsQuery}`, {
+      response = await fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=100&${idsQuery}`, {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
         signal: AbortSignal.timeout(15000),
       });
@@ -9616,7 +9616,7 @@ async function fetchBlingSalesOrderDetailForSerialSyncVps(accessToken, id) {
   let lastStatus = 0;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (attempt > 0) await sleepBlingReconcileVps(1500 * attempt);
-    const response = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas/${encodeURIComponent(String(id))}`, {
+    const response = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${encodeURIComponent(String(id))}`, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(15000),
     });
@@ -9635,7 +9635,7 @@ async function fetchRecentBlingSalesOrdersForSerialSyncVps(accessToken, maxOrder
   const limit = Math.min(100, Math.max(1, Number(maxOrders) || 25));
   for (let page = 1; orders.length < limit; page += 1) {
     if (page > 1) await sleepBlingReconcileVps(350);
-    const response = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas?pagina=${page}&limite=100`, {
+    const response = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas?pagina=${page}&limite=100`, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(15000),
     });
@@ -9830,7 +9830,7 @@ function readBlingPayloadStockForWebhookVps(productData, body) {
 
 async function fetchBlingStockForWebhookVps(blingId, accessToken) {
   try {
-    const response = await fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${encodeURIComponent(String(blingId))}`, {
+    const response = await fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${encodeURIComponent(String(blingId))}`, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(10000),
     });
@@ -9846,7 +9846,7 @@ async function fetchBlingStockForWebhookVps(blingId, accessToken) {
 
 async function fetchBlingProductDetailForWebhookVps(blingId, accessToken) {
   try {
-    const response = await fetch(`https://www.bling.com.br/Api/v3/produtos/${encodeURIComponent(String(blingId))}`, {
+    const response = await fetch(`https://api.bling.com.br/Api/v3/produtos/${encodeURIComponent(String(blingId))}`, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(10000),
     });
@@ -10658,7 +10658,7 @@ async function handleBlingApiVps(request, reply) {
 
     try {
       if (query.variacoes === '1') {
-        const response = await fetch(`https://www.bling.com.br/Api/v3/produtos/variacoes/${id}`, {
+        const response = await fetch(`https://api.bling.com.br/Api/v3/produtos/variacoes/${id}`, {
           headers: { Authorization: authHeader, Accept: 'application/json' },
         });
         const body = await readBlingProxyResponse(response);
@@ -10667,8 +10667,8 @@ async function handleBlingApiVps(request, reply) {
       }
 
       const [productResponse, stockResponse] = await Promise.all([
-        fetch(`https://www.bling.com.br/Api/v3/produtos/${id}`, { headers: { Authorization: authHeader, Accept: 'application/json' } }),
-        fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=100&idsProdutos[]=${id}`, { headers: { Authorization: authHeader, Accept: 'application/json' } }),
+        fetch(`https://api.bling.com.br/Api/v3/produtos/${id}`, { headers: { Authorization: authHeader, Accept: 'application/json' } }),
+        fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=100&idsProdutos[]=${id}`, { headers: { Authorization: authHeader, Accept: 'application/json' } }),
       ]);
       const productBody = await readBlingProxyResponse(productResponse);
       if (!productResponse.ok) return reply.code(productResponse.status).send({ error: `Bling error: ${productResponse.status}`, detail: productBody.text });
@@ -10714,7 +10714,7 @@ async function handleBlingApiVps(request, reply) {
       if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
 
       const encodedId = encodeURIComponent(String(blingId));
-      const productResponse = await fetch(`https://www.bling.com.br/Api/v3/produtos/${encodedId}`, {
+      const productResponse = await fetch(`https://api.bling.com.br/Api/v3/produtos/${encodedId}`, {
         headers: { Authorization: authHeader, Accept: 'application/json' },
       });
       const productBody = await readBlingProxyResponse(productResponse);
@@ -10741,7 +10741,7 @@ async function handleBlingApiVps(request, reply) {
       const payload = { ...produto, tributacao: tributacaoNova };
       delete payload.estoque;
 
-      const updateResponse = await fetch(`https://www.bling.com.br/Api/v3/produtos/${encodedId}`, {
+      const updateResponse = await fetch(`https://api.bling.com.br/Api/v3/produtos/${encodedId}`, {
         method: 'PUT',
         headers: { Authorization: authHeader, 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(payload),
@@ -10790,7 +10790,7 @@ async function handleBlingApiVps(request, reply) {
       const results = [];
       for (const blingId of blingIds) {
         const encodedId = encodeURIComponent(String(blingId));
-        const productResponse = await fetch(`https://www.bling.com.br/Api/v3/produtos/${encodedId}`, {
+        const productResponse = await fetch(`https://api.bling.com.br/Api/v3/produtos/${encodedId}`, {
           headers: { Authorization: authHeader, Accept: 'application/json' },
         });
         const productBody = await readBlingProxyResponse(productResponse);
@@ -10810,7 +10810,7 @@ async function handleBlingApiVps(request, reply) {
         };
         delete payload.estoque;
 
-        const updateResponse = await fetch(`https://www.bling.com.br/Api/v3/produtos/${encodedId}`, {
+        const updateResponse = await fetch(`https://api.bling.com.br/Api/v3/produtos/${encodedId}`, {
           method: 'PUT',
           headers: { Authorization: authHeader, 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(payload),
@@ -10889,7 +10889,7 @@ async function handleBlingApiVps(request, reply) {
     try {
       const authHeader = await getBlingProductDetailAuthHeaderVps(request);
       if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
-      const response = await fetch(`https://www.bling.com.br/Api/v3/produtos/${debugBlingId}`, {
+      const response = await fetch(`https://api.bling.com.br/Api/v3/produtos/${debugBlingId}`, {
         headers: { Authorization: authHeader, Accept: 'application/json' },
         signal: AbortSignal.timeout(12000),
       });
@@ -10918,11 +10918,11 @@ async function handleBlingApiVps(request, reply) {
       const authHeader = await getBlingProductDetailAuthHeaderVps(request);
       if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
       const [stockResponse, productResponse] = await Promise.all([
-        fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${debugBlingId}`, {
+        fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${debugBlingId}`, {
           headers: { Authorization: authHeader, Accept: 'application/json' },
           signal: AbortSignal.timeout(12000),
         }),
-        fetch(`https://www.bling.com.br/Api/v3/produtos/${debugBlingId}`, {
+        fetch(`https://api.bling.com.br/Api/v3/produtos/${debugBlingId}`, {
           headers: { Authorization: authHeader, Accept: 'application/json' },
           signal: AbortSignal.timeout(12000),
         }),
@@ -11056,7 +11056,7 @@ async function handleBlingApiVps(request, reply) {
     const reqIdsProdutos = request.query?.['idsProdutos[]'] || request.query?.idsProdutos;
     const ids = reqIdsProdutos ? (Array.isArray(reqIdsProdutos) ? reqIdsProdutos : [reqIdsProdutos]) : [];
     const idsQuery = ids.map((id) => `idsProdutos[]=${encodeURIComponent(String(id))}`).join('&');
-    const url = `https://www.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100${idsQuery ? `&${idsQuery}` : ''}`;
+    const url = `https://api.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100${idsQuery ? `&${idsQuery}` : ''}`;
 
     try {
       const stockResponse = await fetch(url, {
@@ -11114,7 +11114,7 @@ async function handleBlingApiVps(request, reply) {
           .trim();
         const preferredDepositKey = normalizeDepositName(preferredDepositName);
 
-        const depositResponse = await fetch('https://www.bling.com.br/Api/v3/depositos?pagina=1&limite=100', {
+        const depositResponse = await fetch('https://api.bling.com.br/Api/v3/depositos?pagina=1&limite=100', {
           headers: { Authorization: authHeader, Accept: 'application/json' },
         });
         const depositBody = await readBlingProxyResponse(depositResponse);
@@ -11140,7 +11140,7 @@ async function handleBlingApiVps(request, reply) {
       const depositoId = selectedDeposit?.id;
       if (!depositoId) return reply.code(422).send({ error: 'No Bling deposit found' });
 
-      const stockResponse = await fetch('https://www.bling.com.br/Api/v3/estoques', {
+      const stockResponse = await fetch('https://api.bling.com.br/Api/v3/estoques', {
         method: 'POST',
         headers: { Authorization: authHeader, 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
@@ -11333,7 +11333,7 @@ async function handleBlingApiVps(request, reply) {
       return reply.code(400).send({ error: 'resourceType must be "pagar" or "receber"' });
     }
 
-    const base = 'https://www.bling.com.br/Api/v3';
+    const base = 'https://api.bling.com.br/Api/v3';
     const endpoint = resourceType === 'pagar' ? 'contas/pagar' : 'contas/receber';
     const sendFinanceError = (status, error, extra = {}) => reply.code(status).send({
       error,
@@ -11433,7 +11433,7 @@ async function handleBlingApiVps(request, reply) {
     try {
       const authHeader = await getBlingProductDetailAuthHeaderVps(request);
       if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
-      const response = await fetch(`https://www.bling.com.br/Api/v3/${tipo}/${id}`, {
+      const response = await fetch(`https://api.bling.com.br/Api/v3/${tipo}/${id}`, {
         headers: { Authorization: authHeader, Accept: 'application/json' },
       });
       const body = await readBlingProxyResponse(response);
@@ -11471,7 +11471,7 @@ async function handleBlingApiVps(request, reply) {
     const fim = query.dataEmissaoFim || query.dataEmissaoFinal || '';
     const situacao = query.situacao || '';
     const pagina = query.pagina || '1';
-    let url = `https://www.bling.com.br/Api/v3/${endpoint}?pagina=${pagina}&limite=100`;
+    let url = `https://api.bling.com.br/Api/v3/${endpoint}?pagina=${pagina}&limite=100`;
     if (inicio) url += `&dataEmissaoInicial=${inicio}`;
     if (fim) url += `&dataEmissaoFinal=${fim}`;
     if (situacao) url += `&situacao=${situacao}`;
@@ -11516,7 +11516,7 @@ async function handleBlingApiVps(request, reply) {
     const page = request.query?.page || 1;
 
     try {
-      const response = await fetch(`https://www.bling.com.br/Api/v3/categorias/produtos?pagina=${page}&limite=100`, {
+      const response = await fetch(`https://api.bling.com.br/Api/v3/categorias/produtos?pagina=${page}&limite=100`, {
         headers: { Authorization: authHeader, Accept: 'application/json' },
       });
       const body = await readBlingProxyResponse(response);
@@ -11542,7 +11542,7 @@ async function handleBlingApiVps(request, reply) {
     const page = request.query?.page || 1;
     const search = request.query?.search ? String(request.query.search) : '';
     const headers = { Authorization: authHeader, Accept: 'application/json' };
-    const base = `https://www.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5`;
+    const base = `https://api.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5`;
     const debug = {
       resource,
       page: String(page),

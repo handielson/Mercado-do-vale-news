@@ -13,7 +13,7 @@ import { buildComboStockDeductionTargets, type BlingComboSelection } from './bli
 import { resolveBlingDescription } from './blingDescription.js';
 import { markBlingNameManaged, stripBlingNameFieldsWhenLocalManaged } from './blingNameSyncPolicy.js';
 
-const BLING_API_BASE = 'https://www.bling.com.br/Api/v3';
+const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
 const parentDetailCache = new Map<number, any>();
 
 function normalizeSlug(value: string): string {
