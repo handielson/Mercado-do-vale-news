@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.321-catalogo-mobile-busca
+version: v1.2.322-n8n-ai-vendas-natural
 date: 2026-09-02
 status: ready
-release_vps: /var/www/mdv-site/releases/20260902-024107-catalogo-mobile-busca
+release_vps: /var/www/mdv-site/releases/20260902-125423-n8n-ai-vendas-natural
 branch: main
-summary: Busca persistente no catálogo mobile e desktop, breadcrumb responsivo e controles móveis reorganizados.
+summary: Corrige buscas por modelos numéricos no n8n e deixa a IA gerar as respostas comerciais sem frases prontas de disponibilidade.
 ```
