@@ -37,7 +37,7 @@ function runRemote(connection, command) {
 
 function psql(connection, database, sql) {
   return new Promise((resolve, reject) => {
-    connection.exec(`docker exec -i ${shQuote(database)} psql -U postgres -d n8n -X -q -t -A`, (error, stream) => {
+    connection.exec(`docker exec -i ${shQuote(database)} psql -U postgres -d n8n -X -q -t -A -v ON_ERROR_STOP=1`, (error, stream) => {
       if (error) return reject(error);
       let stdout = '';
       let stderr = '';
@@ -420,21 +420,44 @@ async function main() {
     await waitService(connection, 'n8n_n8n', 0);
     servicesStopped = true;
 
+    const nodesPath = `/tmp/${WORKFLOW_ID}-${MARKER}-${timestamp}-nodes.json`;
+    const connectionsPath = `/tmp/${WORKFLOW_ID}-${MARKER}-${timestamp}-connections.json`;
+    await new Promise((resolve, reject) => connection.sftp((error, sftp) => {
+      if (error) return reject(error);
+      sftp.writeFile(nodesPath, Buffer.from(JSON.stringify(workflow.nodes), 'utf8'), (nodesError) => {
+        if (nodesError) {
+          sftp.end();
+          return reject(nodesError);
+        }
+        sftp.writeFile(connectionsPath, Buffer.from(JSON.stringify(workflow.connections), 'utf8'), (connectionsError) => {
+          sftp.end();
+          connectionsError ? reject(connectionsError) : resolve();
+        });
+      });
+    }));
+    await runRemote(connection, `docker cp ${shQuote(nodesPath)} ${shQuote(database)}:${shQuote(nodesPath)}`);
+    await runRemote(connection, `docker cp ${shQuote(connectionsPath)} ${shQuote(database)}:${shQuote(connectionsPath)}`);
+
     const updateSql = `BEGIN;
       UPDATE workflow_entity
-      SET nodes=${shQuote(JSON.stringify(workflow.nodes))}::json,
-          connections=${shQuote(JSON.stringify(workflow.connections))}::json,
+      SET nodes=pg_read_file('${nodesPath}')::json,
+          connections=pg_read_file('${connectionsPath}')::json,
           "versionId"="activeVersionId",
           "updatedAt"=NOW()
       WHERE id=${shQuote(WORKFLOW_ID)};
       UPDATE workflow_history
-      SET nodes=${shQuote(JSON.stringify(workflow.nodes))}::json,
-          connections=${shQuote(JSON.stringify(workflow.connections))}::json,
+      SET nodes=pg_read_file('${nodesPath}')::json,
+          connections=pg_read_file('${connectionsPath}')::json,
           "updatedAt"=NOW()
       WHERE "workflowId"=${shQuote(WORKFLOW_ID)}
         AND "versionId"=${shQuote(workflow.activeVersionId)};
       COMMIT;`;
-    await psql(connection, database, updateSql);
+    try {
+      await psql(connection, database, updateSql);
+    } finally {
+      await runRemote(connection, `rm -f ${shQuote(nodesPath)} ${shQuote(connectionsPath)}`).catch(() => {});
+      await runRemote(connection, `docker exec ${shQuote(database)} rm -f ${shQuote(nodesPath)} ${shQuote(connectionsPath)}`).catch(() => {});
+    }
 
     await runRemote(connection, 'docker service scale n8n_n8n=1 >/dev/null');
     await waitService(connection, 'n8n_n8n', 1);

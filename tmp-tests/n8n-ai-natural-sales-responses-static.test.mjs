@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 
 const require = createRequire(import.meta.url);
+const applyScriptSource = fs.readFileSync(new URL('./n8n-ai-natural-sales-responses.cjs', import.meta.url), 'utf8');
+assert.match(applyScriptSource, /ON_ERROR_STOP=1/);
+assert.match(applyScriptSource, /pg_read_file\('\$\{nodesPath\}'\)::json/);
+assert.match(applyScriptSource, /docker cp/);
 const {
   MARKER,
   patchPrepareSearch,
