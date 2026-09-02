@@ -266,7 +266,8 @@ return [{
 function patchGraph(nodes, connections) {
   const context = findNode(nodes, CONTEXT_NODE);
   const agent = findNode(nodes, AGENT_NODE);
-  const router = findNode(nodes, ROUTER_NODE);
+  const router = nodes.find((node) => node.name === ROUTER_NODE || node.name === 'Vendas - Precisa Handoff?');
+  assert.ok(router, `Node not found: ${ROUTER_NODE}`);
 
   let composer = nodes.find((node) => node.name === COMPOSER_NODE);
   if (!composer) {

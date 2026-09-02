@@ -168,6 +168,7 @@ const connections = {
   'Especialista - Vendas': { main: [[{ node: 'Vendas - Preparar Handoff Especialista', type: 'main', index: 0 }]] },
 };
 patchGraph(nodes, connections);
+patchGraph(nodes, connections);
 assert.equal(connections['Vendas - Contexto Produtos'].main[0][0].node, 'Especialista - Vendas');
 assert.equal(connections['Especialista - Vendas'].main[0][0].node, 'Vendas - Compor Resposta IA');
 assert.equal(connections['Vendas - Compor Resposta IA'].main[0][0].node, 'Vendas - Precisa Handoff?');
