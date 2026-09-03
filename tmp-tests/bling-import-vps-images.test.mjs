@@ -35,8 +35,14 @@ assert.doesNotMatch(
 
 assert.match(
   source,
-  /row\.images = await materializeBlingImagesToVps\(/,
+  /if \(blingImages\.length > 0\) \{[\s\S]*row\.images = await materializeBlingImagesToVps\(/,
   'bulk Bling imports must upload images before persisting product rows',
+);
+
+assert.match(
+  source,
+  /else if \(existing\) \{[\s\S]*Array\.isArray\(existing\.images\)[\s\S]*existing\.image_url/,
+  'bulk Bling imports must preserve stored images when product detail has no media',
 );
 
 assert.match(

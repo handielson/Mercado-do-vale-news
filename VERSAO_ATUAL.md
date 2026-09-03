@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.324-catalogo-rail-atalhos
+version: v1.2.325-bling-imagens-seguras
 date: 2026-09-02
 status: ready
-release_vps: /var/www/mdv-site/releases/20260903-015929-catalogo-rail-atalhos
+release_vps: /var/www/mdv-site/releases/20260902-233100-v12325-bling-imagens-seguras
 branch: main
-summary: Limpa o rastreamento das URLs do catálogo, consolida o produto RAIL e remove atalhos duplicados.
+summary: Impede que falhas do Bling apaguem imagens existentes e recupera as mídias ainda disponíveis na origem.
 ```

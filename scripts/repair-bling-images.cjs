@@ -39,12 +39,38 @@ function hasTemporaryBlingImage(product) {
     typeof url === 'string' && /^https:\/\/orgbling\.s3\.amazonaws\.com\//i.test(url));
 }
 
-function imageUrls(detail) {
-  const images = detail?.midia?.imagens?.internas || detail?.imagens || [];
-  return images
-    .map((image) => image?.link || image?.url || (typeof image === 'string' ? image : ''))
-    .filter((url) => /^https?:\/\//i.test(url))
-    .slice(0, 5);
+function hasStoredProductImage(product) {
+  return [
+    ...(Array.isArray(product.images) ? product.images : []),
+    product.image_url,
+  ].some((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+}
+
+function needsBlingImageRepair(product) {
+  return Boolean(product?.bling_id && product?.sku) &&
+    (hasTemporaryBlingImage(product) || !hasStoredProductImage(product));
+}
+
+function imageCandidates(detail) {
+  const internal = detail?.midia?.imagens?.internas || [];
+  const external = detail?.midia?.imagens?.externas || detail?.midia?.imagens?.imagensURL || [];
+  const images = [...internal, ...external, ...(Array.isArray(detail?.imagens) ? detail.imagens : [])];
+  const seen = new Set();
+  const candidates = [];
+  for (const image of images) {
+    const urls = [
+      image?.link,
+      image?.url,
+      image?.linkMiniatura,
+      typeof image === 'string' ? image : '',
+    ].filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+    const unique = [...new Set(urls)];
+    if (!unique.length || seen.has(unique[0])) continue;
+    seen.add(unique[0]);
+    candidates.push(unique);
+    if (candidates.length >= 5) break;
+  }
+  return candidates;
 }
 
 function extension(contentType, sourceUrl) {
@@ -76,18 +102,27 @@ async function fetchJson(url, options = {}, retries = 3) {
 async function loadProducts() {
   const products = [];
   for (let offset = 0; ; offset += 2000) {
-    const batch = await fetchJson(`${API_BASE}/products?limit=2000&offset=${offset}`);
+    const batch = await fetchJson(`${API_BASE}/products?status=all&compact=true&limit=2000&offset=${offset}&_t=repair-bling-images`);
     products.push(...batch);
     if (batch.length < 2000) return products;
   }
 }
 
-async function uploadImage(sourceUrl, product, index, syncKey) {
-  const proxyUrl = `${SITE_BASE}/api/bling?resource=image-proxy&url=${encodeURIComponent(sourceUrl)}`;
-  const source = await fetch(proxyUrl, { cache: 'no-store' });
-  if (!source.ok) throw new Error(`download da imagem ${index + 1}: HTTP ${source.status}`);
-  const blob = await source.blob();
-  const ext = extension(blob.type, sourceUrl);
+async function uploadImage(sourceUrls, product, index, syncKey) {
+  let blob = null;
+  let selectedUrl = '';
+  let lastStatus = 0;
+  for (const sourceUrl of sourceUrls) {
+    const proxyUrl = `${SITE_BASE}/api/bling?resource=image-proxy&url=${encodeURIComponent(sourceUrl)}`;
+    const source = await fetch(proxyUrl, { cache: 'no-store' });
+    lastStatus = source.status;
+    if (!source.ok) continue;
+    blob = await source.blob();
+    selectedUrl = sourceUrl;
+    break;
+  }
+  if (!blob) throw new Error(`download da imagem ${index + 1}: HTTP ${lastStatus || 'indisponivel'}`);
+  const ext = extension(blob.type, selectedUrl);
   const sku = safeSku(product.sku, product.bling_id);
   const filename = `bling-${product.bling_id}-${String(index + 1).padStart(2, '0')}.${ext}`;
   const form = new FormData();
@@ -109,7 +144,7 @@ async function main() {
   const syncKey = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || process.env.SYNC_SECRET || '';
   const products = await loadProducts();
   const targets = products.filter((product) =>
-    product.bling_id && hasTemporaryBlingImage(product) && (!requestedSku || String(product.sku).toUpperCase() === requestedSku));
+    needsBlingImageRepair(product) && (!requestedSku || String(product.sku).toUpperCase() === requestedSku));
 
   console.log(JSON.stringify({ mode: execute ? 'execute' : 'dry-run', targets: targets.length, skus: targets.map((p) => p.sku) }, null, 2));
   if (!execute) return;
@@ -119,17 +154,25 @@ async function main() {
   for (const product of targets) {
     try {
       const detail = await fetchJson(`${SITE_BASE}/api/bling?resource=product-detail&id=${encodeURIComponent(product.bling_id)}`);
-      const sources = imageUrls(detail);
+      const sources = imageCandidates(detail);
       if (!sources.length) throw new Error('Bling nao retornou imagens atuais');
       const uploaded = [];
       for (let index = 0; index < sources.length; index++) {
-        uploaded.push(await uploadImage(sources[index], product, index, syncKey));
+        try {
+          uploaded.push(await uploadImage(sources[index], product, index, syncKey));
+        } catch (error) {
+          console.warn(`AVISO ${product.sku}: ${error.message}`);
+        }
       }
-      await fetchJson(`${API_BASE}/products/images`, {
+      if (!uploaded.length) throw new Error('Bling nao retornou nenhuma imagem acessivel');
+      const update = await fetchJson(`${API_BASE}/products/images`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json', 'x-sync-key': syncKey },
         body: JSON.stringify({ sku: product.sku, images: uploaded }),
       });
+      if (!update?.ok || Number(update?.affectedRows || 0) < 1) {
+        throw new Error('VPS nao confirmou a atualizacao das imagens');
+      }
       result.repaired.push({ sku: product.sku, images: uploaded.length });
       console.log(`OK ${product.sku}: ${uploaded.length} imagem(ns)`);
     } catch (error) {

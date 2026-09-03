@@ -1742,11 +1742,24 @@ export async function importBlingProducts(
             row.model_id = finalModelId || null;
             // Materializa as imagens do Bling na VPS. Se falhar, o item deve falhar
             // explicitamente para nunca persistir uma URL temporaria do Bling.
-            row.images = await materializeBlingImagesToVps(Array.isArray(row.images) ? row.images : [], {
-                sku: row.sku || item.codigo,
-                blingId: item.id,
-            });
-            row.image_url = row.images[0] || row.image_url || null;
+            const blingImages = Array.isArray(row.images) ? row.images : [];
+            if (blingImages.length > 0) {
+                row.images = await materializeBlingImagesToVps(blingImages, {
+                    sku: row.sku || item.codigo,
+                    blingId: item.id,
+                });
+                row.image_url = row.images[0] || null;
+            } else if (existing) {
+                // A listagem do Bling normalmente nao traz midia e a consulta de detalhe
+                // pode falhar/ser limitada. Nesses casos, uma importacao de produto
+                // existente nunca deve interpretar a ausencia como pedido de exclusao.
+                row.images = Array.from(new Set([
+                    ...(Array.isArray(existing.images) ? existing.images : []),
+                    existing.image_url,
+                ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0)))
+                    .slice(0, 5);
+                row.image_url = row.images[0] || null;
+            }
 
             // Extrai _color_id auxiliar antes de enviar para o banco
             const { _color_id: resolvedColorId, ...dbRow } = row;
