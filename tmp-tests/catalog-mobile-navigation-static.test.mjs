@@ -26,10 +26,10 @@ assert.match(
   /aria-label="Escolher categoria"[\s\S]*fixed left-3 right-3 bottom-3/,
   'category chooser must follow the mobile filter panel pattern and stay inside the viewport',
 );
-assert.match(
+assert.doesNotMatch(
   catalogPage,
-  /aria-label="Colecoes de produtos"[\s\S]*className="mt-4 hidden gap-2 sm:flex/,
-  'collection shortcuts must stay hidden on mobile to avoid repeating the page heading',
+  /aria-label="Colecoes de produtos"/,
+  'duplicated collection shortcuts must not be rendered above the catalog sections',
 );
 assert.match(
   catalogFilters,

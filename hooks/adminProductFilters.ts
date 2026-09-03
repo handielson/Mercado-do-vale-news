@@ -49,12 +49,40 @@ function getSerializedCommercialKey(product: Product): string | null {
     return [modelId, sku, ram, storage, color, version, eans, blingId].join('|');
 }
 
+function getSerializedAggregateCandidateKey(product: Product): string | null {
+    const modelId = normalizeCommercialValue(product.model_id);
+    const sku = normalizeCommercialValue(product.sku);
+    const name = normalizeCommercialValue(product.name);
+    const categoryId = normalizeCommercialValue(product.category_id);
+
+    if (!modelId || !sku || !name) return null;
+    return [modelId, sku, categoryId, name].join('|');
+}
+
+function isCurrentSerializedAggregate(product: Product): boolean {
+    if (collectSerializedSearchValues(product).length > 0) return false;
+    const status = normalizeCommercialValue(product.status);
+    return status === 'active' || status === 'out_of_stock';
+}
+
+function compareSerializedAggregateRecency(a: Product, b: Product): number {
+    const createdDelta = new Date(b.created || 0).getTime() - new Date(a.created || 0).getTime();
+    if (createdDelta !== 0) return createdDelta;
+    return new Date(b.updated || 0).getTime() - new Date(a.updated || 0).getTime();
+}
+
 export function groupEquivalentSerializedProducts(products: Product[]): Product[] {
     const groups = new Map<string, Product[]>();
     const standalone: Product[] = [];
 
     for (const product of products) {
-        const key = getSerializedCommercialKey(product);
+        const variationKey = getSerializedCommercialKey(product);
+        const aggregateKey = variationKey ? null : getSerializedAggregateCandidateKey(product);
+        const key = variationKey
+            ? `variation:${variationKey}`
+            : aggregateKey
+                ? `aggregate:${aggregateKey}`
+                : null;
         if (!key) {
             standalone.push(product);
             continue;
@@ -64,10 +92,22 @@ export function groupEquivalentSerializedProducts(products: Product[]): Product[
         groups.set(key, group);
     }
 
-    const grouped = [...groups.values()].map(group => {
+    const grouped = [...groups.entries()].flatMap(([key, group]) => {
         if (group.length === 1) return group[0];
 
-        const canonical = [...group].sort((a, b) => {
+        const isAggregateGroup = key.startsWith('aggregate:');
+        const canonicalAggregate = isAggregateGroup
+            ? group.filter(isCurrentSerializedAggregate).sort(compareSerializedAggregateRecency)[0]
+            : undefined;
+        const hasSerializedRecord = isAggregateGroup
+            ? group.some(product => collectSerializedSearchValues(product).length > 0)
+            : true;
+
+        // Produtos sem a matriz RAM/armazenamento/cor só podem ser unidos quando
+        // houver seriais históricos e um registro agregador atual sem identificador.
+        if (isAggregateGroup && (!canonicalAggregate || !hasSerializedRecord)) return group;
+
+        const canonical = canonicalAggregate || [...group].sort((a, b) => {
             const unitDelta = Number(b.stock_quantity || 0) - Number(a.stock_quantity || 0);
             if (unitDelta !== 0) return unitDelta;
             return new Date(a.created || 0).getTime() - new Date(b.created || 0).getTime();
@@ -78,7 +118,9 @@ export function groupEquivalentSerializedProducts(products: Product[]): Product[
         return {
             ...canonical,
             images: images.length > 0 ? images : canonical.images,
-            stock_quantity: group.reduce((total, product) => total + Number(product.stock_quantity || 0), 0),
+            stock_quantity: isAggregateGroup
+                ? Number(canonical.stock_quantity || 0)
+                : group.reduce((total, product) => total + Number(product.stock_quantity || 0), 0),
             equivalent_product_ids: group.map(product => product.id),
             ...(availableUnits.length > 0 ? { available_units: availableUnits } : {}),
         };

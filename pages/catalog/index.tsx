@@ -45,7 +45,7 @@ import {
     getCatalogCollectionByPathname,
     getCatalogCollectionFilters,
     getCatalogSeoConfig,
-    getEnabledCatalogCollections,
+    sanitizeCatalogSearchParams,
 } from './catalogCollections.js';
 
 const CatalogSectionsLoadingSkeleton = () => (
@@ -197,10 +197,12 @@ function CatalogContent() {
     // e resetar a paginação quando o termo muda.
     useEffect(() => {
         setSearchParams(prevParams => {
-            const newParams = new URLSearchParams(prevParams);
+            // O Google Merchant Center adiciona srsltid ao clique de entrada. Depois
+            // do carregamento, mantenha na barra apenas os parâmetros funcionais.
+            const newParams = sanitizeCatalogSearchParams(prevParams);
             const currentSearch = newParams.get('search') ?? '';
             const newSearch = searchQuery.trim();
-            let changed = false;
+            let changed = newParams.toString() !== prevParams.toString();
             
             if (currentSearch !== newSearch) {
                if (newSearch) {
@@ -893,35 +895,6 @@ function CatalogContent() {
                         <ShareCatalogButton categoryId={filters.categories[0] || undefined} />
                         <CartIcon />
                     </div>
-
-                    <nav
-                        aria-label="Colecoes de produtos"
-                        className="mt-4 hidden gap-2 sm:flex sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0"
-                    >
-                        <Link
-                            to="/produtos"
-                            className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
-                                !isCollectionPage && isAllProductsPage
-                                    ? 'border-slate-900 bg-slate-900 text-white'
-                                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                            }`}
-                        >
-                            Todos os Produtos
-                        </Link>
-                        {getEnabledCatalogCollections().map((collection) => (
-                            <Link
-                                key={collection.key}
-                                to={collection.path}
-                                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
-                                    activeCollection?.key === collection.key
-                                        ? 'border-slate-900 bg-slate-900 text-white'
-                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                                }`}
-                            >
-                                {collection.label}
-                            </Link>
-                        ))}
-                    </nav>
 
                     {/* Chips de Filtros Ativos Renderizados na Raiz */}
                     {(filters.brands.length > 0 || (filters.sortBy && filters.sortBy !== 'recent') || filters.priceRange || filters.favoritesOnly || autoDetectedBrand) && (

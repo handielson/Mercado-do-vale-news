@@ -1,5 +1,19 @@
 const SITE_ORIGIN = 'https://www.mercadodovale.com.br';
 
+const TRANSIENT_CATALOG_QUERY_PARAMS = new Set(['srsltid']);
+
+export function sanitizeCatalogSearchParams(searchParams) {
+  const sanitizedParams = new URLSearchParams(searchParams);
+
+  for (const key of Array.from(sanitizedParams.keys())) {
+    if (TRANSIENT_CATALOG_QUERY_PARAMS.has(key.toLowerCase())) {
+      sanitizedParams.delete(key);
+    }
+  }
+
+  return sanitizedParams;
+}
+
 export const DEFAULT_CATALOG_SEO = {
   title: 'Mercado do Vale | Smartphones e Eletronicos em Petrolina-PE',
   description: 'Compre smartphones Xiaomi, Samsung, iPhones, tablets e eletronicos com os melhores precos em Petrolina-PE. Entrega rapida e garantia.',

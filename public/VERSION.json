@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.323-bling-api-oficial",
+  "version": "v1.2.324-catalogo-rail-atalhos",
   "date": "2026-09-02",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260902-135935-bling-api-oficial",
+  "release_vps": "/var/www/mdv-site/releases/20260903-015929-catalogo-rail-atalhos",
   "branch": "main",
-  "summary": "Migra a integração Bling para o host oficial da API v3 e restaura a consulta e reconciliação de estoques."
+  "summary": "Limpa o rastreamento das URLs do catálogo, consolida o produto RAIL e remove atalhos duplicados."
 }
