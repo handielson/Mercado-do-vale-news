@@ -5,6 +5,7 @@ const {
   PHOTO_INTAKE_STATUS,
   buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
+  getBlockingPhotoIntakeErrors,
   filterSmartphonesByFeatures,
   getSmartphoneSaleConfigurationKey,
   isValidGtin,
@@ -70,6 +71,34 @@ assert.notEqual(
 assert.equal(resolvePhotoIntakeStatus({ matchedModelId: null }), PHOTO_INTAKE_STATUS.WAITING_MODEL_REGISTRATION);
 assert.equal(resolvePhotoIntakeStatus({ matchedModelId: 'model-1' }), PHOTO_INTAKE_STATUS.WAITING_PRICE_CONFIRMATION);
 assert.equal(resolvePhotoIntakeStatus({ matchedModelId: 'model-1', pricesConfirmed: true }), PHOTO_INTAKE_STATUS.READY_TO_FINALIZE);
+assert.equal(resolvePhotoIntakeStatus({
+  validationErrors: [{ code: 'invalid', message: 'IMEI inválido' }],
+  matchedModelId: 'model-1',
+  pricesConfirmed: true,
+}), PHOTO_INTAKE_STATUS.REVIEW_REQUIRED);
+assert.equal(resolvePhotoIntakeStatus({
+  validationErrors: [{ code: 'invalid', message: 'IMEI inválido' }],
+  validationWarnings: [{ code: 'invalid', message: 'EAN precisa ser conferido' }],
+  reviewConfirmed: true,
+  matchedModelId: 'model-1',
+  pricesConfirmed: true,
+}), PHOTO_INTAKE_STATUS.READY_TO_FINALIZE, 'conferência manual deve liberar alertas confirmáveis');
+assert.equal(resolvePhotoIntakeStatus({
+  validationErrors: [{ code: 'already_registered', message: 'IMEI já cadastrado' }],
+  reviewConfirmed: true,
+  matchedModelId: 'model-1',
+  pricesConfirmed: true,
+}), PHOTO_INTAKE_STATUS.REVIEW_REQUIRED, 'duplicidade não pode ser liberada manualmente');
+assert.equal(getBlockingPhotoIntakeErrors([
+  { code: 'invalid', message: 'IMEI inválido' },
+  { code: 'duplicate', message: 'IMEIs iguais' },
+], true).length, 1);
+assert.equal(resolvePhotoIntakeStatus({
+  validationErrors: validatePhotoExtraction({ brand: 'Redmi', model: 'Note 14', serial: 'ABC123' }).errors,
+  reviewConfirmed: true,
+  matchedModelId: 'model-1',
+  pricesConfirmed: true,
+}), PHOTO_INTAKE_STATUS.REVIEW_REQUIRED, 'IMEI 1 ausente deve continuar bloqueando mesmo após confirmação manual');
 
 const filtered = filterSmartphonesByFeatures([
   { status: 'active', stock_quantity: 2, brand: 'Xiaomi', price_retail: 107000, specs: { nfc: 'Sim', ram: '4GB', storage: '256GB' } },

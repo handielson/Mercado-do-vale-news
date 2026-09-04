@@ -3,11 +3,12 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { inheritSmartphonePrices, loadModel: loadPriceModel } = require('./smartphonePriceGroupsServer.cjs');
 const {
   PHOTO_INTAKE_STATUS,
   buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
-  getSmartphoneSaleConfigurationKey,
+  getBlockingPhotoIntakeErrors,
   normalizeMemory,
   resolvePhotoIntakeStatus,
   translateColorToPtBr,
@@ -79,6 +80,7 @@ function parseIntakeRow(row) {
     validation_errors: safeJson(row.validation_errors, []),
     validation_warnings: safeJson(row.validation_warnings, []),
     prices_confirmed: Number(row.prices_confirmed || 0) === 1,
+    review_confirmed: Number(row.review_confirmed || 0) === 1,
   };
 }
 
@@ -97,26 +99,6 @@ function productMatchesIntakeConfiguration(product, intake) {
     && productRam === wantedRam
     && productStorage === wantedStorage
     && colorMatches;
-}
-
-function productMatchesIntakeSaleConfiguration(product, intake) {
-  const specs = safeJson(product?.specs, {});
-  return getSmartphoneSaleConfigurationKey({ ...product, specs }) === getSmartphoneSaleConfigurationKey({
-    model_id: intake?.matched_model_id,
-    specs: { ram: intake?.detected_ram, storage: intake?.detected_storage },
-  });
-}
-
-async function lockSmartphoneSaleConfiguration(connection, intake) {
-  const [products] = await connection.query(
-    `SELECT id,price_retail,price_reseller,price_wholesale,specs FROM products
-      WHERE model_id=? AND status='active' AND stock_quantity > 0
-        AND COALESCE(hide_from_catalog,0)=0 AND COALESCE(is_parent,0)=0
-        AND (? IS NULL OR company_id=? OR company_id IS NULL)
-      FOR UPDATE`,
-    [intake.matched_model_id, intake.company_id || null, intake.company_id || null]
-  );
-  return products.filter((product) => productMatchesIntakeSaleConfiguration(product, intake));
 }
 
 async function findExactIntakeProduct(connection, intake) {
@@ -203,6 +185,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         detected_product_code VARCHAR(120) NULL, matched_brand_id CHAR(36) NULL, matched_model_id CHAR(36) NULL,
         matched_product_id CHAR(36) NULL, price_cost INT NULL, price_retail INT NULL,
         price_reseller INT NULL, price_wholesale INT NULL, prices_confirmed TINYINT(1) NOT NULL DEFAULT 0,
+        review_confirmed TINYINT(1) NOT NULL DEFAULT 0, review_confirmed_at DATETIME NULL,
         extracted_data JSON NULL, validation_errors JSON NULL, validation_warnings JSON NULL,
         ai_input_tokens INT NOT NULL DEFAULT 0, ai_output_tokens INT NOT NULL DEFAULT 0,
         ai_cost_usd DECIMAL(14,8) NOT NULL DEFAULT 0,
@@ -229,6 +212,12 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       const intakeColumnNames = new Set(intakeColumns.map((column) => column.Field));
       if (!intakeColumnNames.has('matched_color_id')) {
         await pool.query('ALTER TABLE smartphone_photo_intakes ADD COLUMN matched_color_id CHAR(36) NULL AFTER matched_model_id');
+      }
+      if (!intakeColumnNames.has('review_confirmed')) {
+        await pool.query('ALTER TABLE smartphone_photo_intakes ADD COLUMN review_confirmed TINYINT(1) NOT NULL DEFAULT 0 AFTER prices_confirmed');
+      }
+      if (!intakeColumnNames.has('review_confirmed_at')) {
+        await pool.query('ALTER TABLE smartphone_photo_intakes ADD COLUMN review_confirmed_at DATETIME NULL AFTER review_confirmed');
       }
       await pool.query(`CREATE TABLE IF NOT EXISTS ai_usage_events (
         id CHAR(36) PRIMARY KEY, company_id CHAR(36) NULL, feature VARCHAR(80) NOT NULL,
@@ -338,6 +327,8 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       }, companyId);
       const status = resolvePhotoIntakeStatus({
         validationErrors: intake.validation_errors || [],
+        validationWarnings: intake.validation_warnings || [],
+        reviewConfirmed: Boolean(intake.review_confirmed),
         matchedModelId: catalog.model?.id || intake.matched_model_id,
         pricesConfirmed: Boolean(intake.prices_confirmed),
       });
@@ -418,14 +409,20 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     const inputTokens = Number(usage.input_tokens || 0);
     const outputTokens = Number(usage.output_tokens || 0);
     const cost = (inputTokens * inputRate + outputTokens * outputRate) / 1_000_000;
-    const status = resolvePhotoIntakeStatus({ validationErrors: validation.errors, matchedModelId: catalog.model?.id });
+    const status = resolvePhotoIntakeStatus({
+      validationErrors: validation.errors,
+      validationWarnings: validation.warnings,
+      reviewConfirmed: false,
+      matchedModelId: catalog.model?.id,
+    });
     await pool.query(
       `UPDATE smartphone_photo_intakes SET status=?, ai_model=?, detected_brand=?, detected_model=?, detected_color=?,
        detected_ram=?, detected_storage=?, detected_serial=?, detected_imei_1=?, detected_imei_2=?, detected_ean=?,
        detected_product_code=?, matched_brand_id=?, matched_model_id=?, matched_color_id=?, matched_product_id=?,
        price_cost=?, price_retail=?, price_reseller=?, price_wholesale=?, extracted_data=?, validation_errors=?,
        validation_warnings=?, ai_input_tokens=?, ai_output_tokens=?, ai_cost_usd=?, ai_input_rate_usd_per_1m=?,
-       ai_output_rate_usd_per_1m=?, retry_count=retry_count+1, error_message=NULL WHERE id=?`,
+       ai_output_rate_usd_per_1m=?, review_confirmed=0, review_confirmed_at=NULL,
+       retry_count=retry_count+1, error_message=NULL WHERE id=?`,
       [status, model, validation.value.brand, validation.value.model, validation.value.color, validation.value.ram,
         validation.value.storage, validation.value.serial, validation.value.imei1, validation.value.imei2,
         validation.value.ean, validation.value.product_code, catalog.model?.brand_id || null, catalog.model?.id || null,
@@ -592,8 +589,27 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     }
     sets.push('extracted_data=?', 'validation_errors=?', 'validation_warnings=?');
     values.push(JSON.stringify(validation.value), JSON.stringify(validation.errors), JSON.stringify(validation.warnings));
-    const status = resolvePhotoIntakeStatus({ validationErrors: validation.errors, matchedModelId: body.matched_model_id ?? intake.matched_model_id,
-      pricesConfirmed: Boolean(body.prices_confirmed ?? intake.prices_confirmed) });
+    const validationFields = ['detected_brand', 'detected_model', 'detected_color', 'detected_ram', 'detected_storage',
+      'detected_serial', 'detected_imei_1', 'detected_imei_2', 'detected_ean', 'detected_product_code',
+      'matched_model_id', 'matched_color_id'];
+    const validationDataChanged = validationFields.some((field) => field in body
+      && String(body[field] ?? '') !== String(intake[field] ?? ''));
+    const requestedReviewConfirmation = 'review_confirmed' in body
+      ? Boolean(body.review_confirmed)
+      : (validationDataChanged ? false : Boolean(intake.review_confirmed));
+    const blockingErrors = getBlockingPhotoIntakeErrors(validation.errors, requestedReviewConfirmation);
+    if (requestedReviewConfirmation && blockingErrors.length > 0) {
+      return reply.code(409).send({ error: 'Corrija os campos obrigatórios ou identificadores duplicados antes de confirmar a conferência' });
+    }
+    sets.push('review_confirmed=?', 'review_confirmed_at=?');
+    values.push(requestedReviewConfirmation ? 1 : 0, requestedReviewConfirmation ? new Date() : null);
+    const status = resolvePhotoIntakeStatus({
+      validationErrors: validation.errors,
+      validationWarnings: validation.warnings,
+      reviewConfirmed: requestedReviewConfirmation,
+      matchedModelId: body.matched_model_id ?? intake.matched_model_id,
+      pricesConfirmed: Boolean(body.prices_confirmed ?? intake.prices_confirmed),
+    });
     sets.push('status=?'); values.push(status); values.push(intake.id);
     await pool.query(`UPDATE smartphone_photo_intakes SET ${sets.join(', ')} WHERE id=?`, values);
     return toPublicIntake(await loadIntake(intake.id));
@@ -619,7 +635,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     try {
       await connection.beginTransaction();
       const [groupRows] = await connection.query(
-        `SELECT id,matched_model_id,validation_errors FROM smartphone_photo_intakes
+        `SELECT id,matched_model_id,price_cost,validation_errors,validation_warnings,review_confirmed FROM smartphone_photo_intakes
           WHERE company_id <=> ? AND matched_model_id=? AND matched_color_id=?
             AND UPPER(REPLACE(COALESCE(detected_ram,''),' ',''))=?
             AND UPPER(REPLACE(COALESCE(detected_storage,''),' ',''))=?
@@ -632,15 +648,18 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         return reply.code(409).send({ error: 'Nenhum aparelho disponível neste grupo' });
       }
       for (const row of groupRows) {
+        const hasConfirmedCost = Number(row.id === intake.id ? prices.price_cost : row.price_cost) > 0;
         const status = resolvePhotoIntakeStatus({
           validationErrors: safeJson(row.validation_errors, []),
+          validationWarnings: safeJson(row.validation_warnings, []),
+          reviewConfirmed: Boolean(row.review_confirmed),
           matchedModelId: row.matched_model_id,
-          pricesConfirmed: true,
+          pricesConfirmed: hasConfirmedCost,
         });
         await connection.query(
-          `UPDATE smartphone_photo_intakes SET price_cost=?,price_retail=?,price_reseller=?,price_wholesale=?,
-           prices_confirmed=1,status=? WHERE id=?`,
-          [prices.price_cost, prices.price_retail, prices.price_reseller, prices.price_wholesale, status, row.id]
+          `UPDATE smartphone_photo_intakes SET price_cost=CASE WHEN id=? THEN ? ELSE price_cost END,price_retail=?,price_reseller=?,price_wholesale=?,
+           prices_confirmed=?,status=? WHERE id=?`,
+          [intake.id, prices.price_cost, prices.price_retail, prices.price_reseller, prices.price_wholesale, hasConfirmedCost ? 1 : 0, status, row.id]
         );
       }
       await connection.commit();
@@ -779,7 +798,11 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         await connection.rollback();
         return reply.code(409).send({ error: 'Preencha e confirme todos os valores antes de salvar' });
       }
-      if ((intake.validation_errors || []).length > 0) { await connection.rollback(); return reply.code(409).send({ error: 'Corrija os dados marcados para revisão' }); }
+      if (getBlockingPhotoIntakeErrors(intake.validation_errors || [], Boolean(intake.review_confirmed)).length > 0
+        || (!intake.review_confirmed && ((intake.validation_errors || []).length > 0 || (intake.validation_warnings || []).length > 0))) {
+        await connection.rollback();
+        return reply.code(409).send({ error: 'Confira e confirme os dados marcados para revisão antes de salvar' });
+      }
       const identifiers = [intake.detected_imei_1, intake.detected_imei_2, intake.detected_serial].filter(Boolean);
       if (identifiers.length) {
         const placeholders = identifiers.map(() => '?').join(',');
@@ -808,7 +831,17 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         try { await verifyBlingChild(request, family, blingChild); }
         catch (error) { await connection.rollback(); return reply.code(409).send({ error: error.message }); }
       }
-      const saleConfigurationProducts = await lockSmartphoneSaleConfiguration(connection, intake);
+      const priceModel = await loadPriceModel(connection, intake.matched_model_id, true);
+      const inherited = await inheritSmartphonePrices(connection, {
+        model_id: intake.matched_model_id, company_id: intake.company_id,
+        specs: { ram: intake.detected_ram, storage: intake.detected_storage },
+        price_retail: intake.price_retail, price_reseller: intake.price_reseller, price_wholesale: intake.price_wholesale,
+      }, priceModel);
+      Object.assign(intake, {
+        price_retail: inherited.product.price_retail,
+        price_reseller: inherited.product.price_reseller,
+        price_wholesale: inherited.product.price_wholesale,
+      });
       let productId = String(request.body?.product_id || intake.matched_product_id || '').trim();
       if (productId) {
         const [products] = await connection.query('SELECT id,model_id,specs,is_parent,company_id FROM products WHERE id=? LIMIT 1 FOR UPDATE', [productId]);
@@ -900,15 +933,6 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
          stock_quantity=(SELECT COUNT(*) FROM units WHERE product_id=? AND status='available'),updated_at=CURRENT_TIMESTAMP WHERE id=?`,
         [intake.price_cost, intake.price_retail, intake.price_reseller, intake.price_wholesale, productId, productId]
       );
-      if (saleConfigurationProducts.length > 0) {
-        const saleProductIds = saleConfigurationProducts.map((product) => product.id);
-        const salePlaceholders = saleProductIds.map(() => '?').join(',');
-        await connection.query(
-          `UPDATE products SET price_retail=?,price_reseller=?,price_wholesale=?,updated_at=CURRENT_TIMESTAMP
-            WHERE id IN (${salePlaceholders})`,
-          [intake.price_retail, intake.price_reseller, intake.price_wholesale, ...saleProductIds]
-        );
-      }
       await connection.query(
         `UPDATE smartphone_photo_intakes SET status=?,matched_product_id=?,unit_id=?,price_retail=?,price_reseller=?,price_wholesale=?,completed_at=NOW() WHERE id=?`,
         [PHOTO_INTAKE_STATUS.COMPLETED, productId, unitId, intake.price_retail, intake.price_reseller, intake.price_wholesale, intake.id]

@@ -13,6 +13,8 @@ import { blingService } from '../../../services/blingService';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
 import { toast } from 'sonner';
 import { MODEL_SEO_BATCH_SIZE, selectFirstModelIds } from './modelBulkSelection.js';
+import { ModelPricesPanel } from '../../../components/settings/ModelPricesPanel';
+import { smartphonePriceGroups } from '../../../services/smartphonePriceGroups';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -73,6 +75,8 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
     const [pullingBling, setPullingBling] = useState(false);
     const [reimporting, setReimporting] = useState(false);
     const [expanded, setExpanded] = useState(false);
+    const [phoneModel, setPhoneModel] = useState<boolean | null>(null);
+    const [groupAudit, setGroupAudit] = useState({ divergent: 0, unresolved: 0 });
     const [prices, setPrices] = useState<PriceState>({
         price_cost: 0, price_retail: 0, price_reseller: 0, price_wholesale: 0,
     });
@@ -83,6 +87,13 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
     const loadPrices = useCallback(async () => {
         setLoadingPrices(true);
         try {
+            const groupedPrices = await smartphonePriceGroups.list(model.id);
+            setPhoneModel(groupedPrices.enabled);
+            setGroupAudit({ divergent: groupedPrices.groups.filter(g => g.divergent).length, unresolved: groupedPrices.unresolved.length });
+            if (groupedPrices.enabled) {
+                setProducts(groupedPrices.groups.flatMap(g => g.products.map(p => ({ ...p, specs: { ram: g.ram, storage: g.storage, color: p.color } }))) as ProductRow[]);
+                return;
+            }
             const data = await vpsApiService.getProducts({
                 model_id: model.id,
                 status: 'active',
@@ -119,6 +130,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
     useEffect(() => { loadPrices(); }, [loadPrices]);
 
     async function handleSave() {
+        if (phoneModel !== false) { setExpanded(true); return; }
         if (products.length === 0) return;
         setSaving(true);
         try {
@@ -250,6 +262,11 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                     <td colSpan={4} className="px-4 py-2.5">
                         <Loader2 size={14} className="animate-spin text-slate-400" />
                     </td>
+                ) : phoneModel !== false ? (
+                    <td colSpan={4} className="px-4 py-2.5"><button type="button" onClick={() => setExpanded(true)} className="text-blue-700 underline">Preços por configuração · todas as cores</button>
+                        {groupAudit.divergent > 0 && <span className="ml-2 text-xs text-amber-700">{groupAudit.divergent} grupo(s) divergente(s)</span>}
+                        {groupAudit.unresolved > 0 && <span className="ml-2 text-xs text-red-700">{groupAudit.unresolved} cadastro(s) incompleto(s)</span>}
+                    </td>
                 ) : (
                     PRICE_KEYS.map(key => (
                         <td key={key} className="px-2 py-2.5">
@@ -270,7 +287,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                     <button
                         onClick={handleSave}
                         disabled={saving || loadingPrices || products.length === 0}
-                        title="Salvar preços"
+                        title={phoneModel ? 'Abrir preços por configuração' : 'Salvar preços'}
                         className={`p-1.5 rounded-lg transition-all duration-200 disabled:opacity-40 ${
                             saved
                                 ? 'text-green-600 bg-green-50 scale-110'
@@ -375,6 +392,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                         </div>
 
                         {/* Variações */}
+                        {phoneModel ? <ModelPricesPanel modelId={model.id} modelName={model.name} inline onClose={() => setExpanded(false)} onSaved={() => void loadPrices()} /> : (
                         <div className="w-full mt-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                             <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
                                 <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide">Composição de Preços (Variações)</h4>
@@ -422,6 +440,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                                 )}
                             </div>
                         </div>
+                        )}
                     </td>
                 </tr>
             )}

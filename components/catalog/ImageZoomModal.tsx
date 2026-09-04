@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 interface ImageZoomModalProps {
     imageUrl: string;
     title?: string;
+    imageOverlayLabel?: string;
     onClose: () => void;
 }
 
@@ -13,6 +14,7 @@ interface ImageZoomModalProps {
 export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
     imageUrl,
     title,
+    imageOverlayLabel,
     onClose
 }) => {
     const modalRef = useRef<HTMLDivElement>(null);
@@ -71,6 +73,11 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
                     className="w-full h-full object-contain cursor-zoom-out animate-scaleIn"
                     onClick={onClose}
                 />
+                {imageOverlayLabel && (
+                    <span className="pointer-events-none absolute left-0 top-0 flex h-[5.2%] w-[31%] items-center bg-[#050c12] px-[2%] pt-[0.5%] text-[clamp(10px,1.25vw,19px)] font-black uppercase tracking-[0.18em] text-white">
+                        / {imageOverlayLabel}
+                    </span>
+                )}
             </div>
 
             {/* Dica de navegação */}

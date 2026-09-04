@@ -5,6 +5,7 @@ import { CurrencyInput } from '../../ui/CurrencyInput';
 import { DollarSign, ShoppingCart, Users, Package, BarChart2 } from 'lucide-react';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { matchesMemorySpecs } from '../../../utils/productSpecUtils';
+import { smartphonePriceGroups, SmartphonePriceReference } from '../../../services/smartphonePriceGroups';
 
 interface ProductPricingProps {
     watch: UseFormWatch<ProductInput>;
@@ -60,6 +61,30 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
     const categoryId = watch('category_id');
     const selectedRam = watch('specs.ram') || '';
     const selectedStorage = watch('specs.storage') || '';
+    const [groupReference, setGroupReference] = useState<SmartphonePriceReference | null>(null);
+    const [groupError, setGroupError] = useState('');
+    const [loadingGroup, setLoadingGroup] = useState(false);
+    const groupSpecs = JSON.stringify({ ram: selectedRam, storage: selectedStorage,
+        ram_fisica: watch('specs.ram_fisica'), version: watch('specs.version'), versao: watch('specs.versao'),
+        rede_operadora: watch('specs.rede_operadora'), network: watch('specs.network'), condition: watch('specs.condition'), condicao: watch('specs.condicao') });
+    useEffect(() => {
+        if (!modelId) { setGroupReference(null); setGroupError(''); setLoadingGroup(false); return; }
+        let cancelled = false;
+        setLoadingGroup(true); setGroupError('');
+        smartphonePriceGroups.reference(modelId, { specs: JSON.parse(groupSpecs) }).then(result => {
+            if (!cancelled) setGroupReference(result);
+        }).catch(error => { if (!cancelled) { setGroupReference(null); setGroupError(error.message); } })
+            .finally(() => { if (!cancelled) setLoadingGroup(false); });
+        return () => { cancelled = true; };
+    }, [modelId, groupSpecs]);
+    const groupLocked = loadingGroup || !!groupError || Boolean(groupReference?.controlled && (groupReference.established || groupReference.incomplete));
+    useEffect(() => {
+        const prices = groupReference?.prices;
+        if (!prices || loadingGroup) return;
+        if (priceRetail !== prices.price_retail) setValue('price_retail', prices.price_retail);
+        if (priceReseller !== prices.price_reseller) setValue('price_reseller', prices.price_reseller);
+        if (priceWholesale !== prices.price_wholesale) setValue('price_wholesale', prices.price_wholesale);
+    }, [groupReference, loadingGroup, priceRetail, priceReseller, priceWholesale, setValue]);
 
     // --- Margens automáticas da categoria ---
     const [marginWholesale, setMarginWholesale] = useState<number>(0);
@@ -87,7 +112,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
     useEffect(() => {
         if (priceRetail !== prevRetailRef.current) {
             prevRetailRef.current = priceRetail;
-            if (priceRetail > 0) {
+            if (priceRetail > 0 && !groupReference?.controlled && !loadingGroup) {
                 if (marginWholesale > 0) {
                     setValue('price_wholesale', Math.round(priceRetail * (1 - (marginWholesale / 100))));
                 }
@@ -96,7 +121,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                 }
             }
         }
-    }, [priceRetail, marginWholesale, marginReseller, setValue]);
+    }, [priceRetail, marginWholesale, marginReseller, setValue, groupReference, loadingGroup]);
 
     // --- Médias do estoque atual ---
     const [stockAverages, setStockAverages] = useState<StockAverages | null>(null);
@@ -137,7 +162,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
     // --- fim médias ---
 
     const applyStockAveragesToPrices = () => {
-        if (!stockAverages) return;
+        if (!stockAverages || groupReference?.controlled || groupLocked) return;
         setValue('price_cost', stockAverages.avg_cost, { shouldDirty: true, shouldValidate: true });
         setValue('price_retail', stockAverages.avg_retail, { shouldDirty: true, shouldValidate: true });
         setValue('price_reseller', stockAverages.avg_reseller, { shouldDirty: true, shouldValidate: true });
@@ -196,7 +221,12 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                 <h3 className="font-semibold text-slate-800">Precificação</h3>
             </div>
 
-            {(marginWholesale > 0 || marginReseller > 0) && (
+            {groupReference?.controlled && <div className="bg-blue-50 text-blue-900 p-3 rounded-lg text-sm">
+                {groupReference.divergent ? 'Este grupo tem preços divergentes. Revise em Configurações → Modelos → Preços por configuração.' : groupReference.prices ? 'Preço de venda herdado do grupo. Para alterar todas as cores, use Configurações → Modelos → Preços por configuração.' : groupReference.incomplete ? 'Preencha RAM e armazenamento para consultar o preço do grupo.' : 'Primeira entrada desta configuração: os preços confirmados serão usados pelas próximas cores e entradas.'}
+                <p>O custo de entrada continua individual por aparelho.</p>
+            </div>}
+            {groupError && <p role="alert" className="text-red-700 text-sm">Não foi possível consultar o preço do grupo. Recarregue a página. {groupError}</p>}
+            {!groupReference?.controlled && !loadingGroup && (marginWholesale > 0 || marginReseller > 0) && (
                 <div className="bg-blue-50 text-blue-800 text-sm px-4 py-2 rounded-lg border border-blue-200">
                     💡 <strong>Auto-Preços ativado:</strong> Esta categoria possui margem automática. Ao preencher o Preço de Varejo, os preços abaixo serão calculados sozinhos.
                     <div className="mt-1 flex gap-4 text-xs mt-1 text-blue-600">
@@ -207,7 +237,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
             )}
 
             {/* Painel de Médias do Estoque Atual */}
-            {modelId && selectedRam && selectedStorage && (
+            {!groupReference?.controlled && !loadingGroup && !groupError && modelId && selectedRam && selectedStorage && (
                 <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
                     <div className="flex items-center gap-2 mb-3">
                         <BarChart2 size={15} className="text-amber-600" />
@@ -295,6 +325,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                                     </label>
                                     <CurrencyInput
                                         value={price}
+                                        disabled={groupLocked}
                                         onChange={(val) => setValue(row.key, val)}
                                     />
                                     {errors?.[row.key] && (
@@ -310,7 +341,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                                     <CurrencyInput
                                         value={desiredProfit}
                                         onChange={(val) => setValue(row.key, cost + val)}
-                                        disabled={cost === 0}
+                                        disabled={cost === 0 || groupLocked}
                                     />
                                     <p className="text-[11px] text-slate-500 mt-1">Direto ou por lucro</p>
                                 </div>
@@ -346,7 +377,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                                         <button
                                             key={pct}
                                             type="button"
-                                            disabled={cost === 0}
+                                            disabled={cost === 0 || groupLocked}
                                             onClick={() => setValue(row.key, Math.round(cost * (1 + pct / 100)))}
                                             className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors
                                                 ${cost === 0

@@ -13,6 +13,7 @@ import { FloatingCartButton } from '@/components/catalog/FloatingCartButton';
 import { SearchBar } from '@/components/catalog/SearchBar';
 import { CatalogProduct } from '@/types/catalog';
 import { ModernProductCard } from '@/components/catalog/ModernProductCard';
+import { ImageZoomModal } from '@/components/catalog/ImageZoomModal';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { getCashbackSettings } from '@/services/cashbackService';
 import type { CashbackSettings } from '@/types/cashback';
@@ -34,6 +35,7 @@ import { colorService } from '@/services/colors';
 import { buildProductVideoPlaylist, isMp4VideoUrl, isSafeProductVideoSibling, orderProductVideoSiblings, resolveProductVideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
 import { getPublicProductDisambiguatedRouteTarget, getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
+import { buildCategoryBreadcrumb } from './categoryBreadcrumb.js';
 import { customFieldsService } from '@/services/custom-fields';
 /**
  * PublicProductPage
@@ -63,6 +65,8 @@ export const PublicProductPage: React.FC = () => {
     const [companySettings, setCompanySettings] = useState<PublicCompanySettings | null>(null);
     const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
     const [catalogTheme, setCatalogTheme] = useState<Pick<CatalogSettings, 'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'card_background' | 'text_primary' | 'text_secondary'> | null>(null);
+    const [categoryBreadcrumb, setCategoryBreadcrumb] = useState<Array<{ id: string; name: string; parent_id?: string | null }>>([]);
+    const [isTechnicalSheetOpen, setIsTechnicalSheetOpen] = useState(false);
     const [comboChildren, setComboChildren] = useState<any[]>([]);
     const [selectedComboOptions, setSelectedComboOptions] = useState<Record<string, any>>({});
     const [selectedKitQuantity, setSelectedKitQuantity] = useState<number>(1);
@@ -339,6 +343,7 @@ export const PublicProductPage: React.FC = () => {
 
         const fetchProduct = async () => {
             setLoading(true);
+            setCategoryBreadcrumb([]);
             let criticalProductLoaded = false;
             try {
                 const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(slug);
@@ -499,6 +504,7 @@ export const PublicProductPage: React.FC = () => {
                     vpsApiService.getCategories()
                         .then((vpsCategories) => {
                             const vpscat = vpsCategories?.find((c: any) => String(c.id) === String(data.category_id));
+                            setCategoryBreadcrumb(buildCategoryBreadcrumb(vpsCategories, data.category_id));
                             if (vpscat?.config) setCategoryConfig(vpscat.config);
                             if (vpscat?.name) {
                                 setProduct((current) => current && String(current.id) === String(data.id)
@@ -1272,25 +1278,25 @@ export const PublicProductPage: React.FC = () => {
                 {/* Breadcrumbs */}
                 <nav
                     aria-label="Navegação estrutural"
-                    className="mb-4 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 shadow-sm sm:mb-8 sm:gap-2 sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm sm:shadow-none"
+                    className="mb-4 flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 shadow-sm sm:mb-8 sm:gap-2 sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:text-sm sm:shadow-none"
                 >
                     <button onClick={() => navigate('/')} className="shrink-0 hover:text-blue-600 transition-colors">
                         Início
                     </button>
-                    {product.category && (
-                        <>
+                    {categoryBreadcrumb.map(category => (
+                        <React.Fragment key={category.id}>
                             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300" aria-hidden="true" />
                             <a
-                                href={`/?categoria=${encodeURIComponent(typeof product.category === 'string' ? product.category : 'Categoria')}`}
-                                className="min-w-0 max-w-[38%] truncate hover:text-blue-600 transition-colors sm:max-w-xs"
-                                title="Ver produtos desta categoria"
+                                href={`/?categoria=${encodeURIComponent(category.name)}`}
+                                className="shrink-0 hover:text-blue-600 transition-colors"
+                                title={`Ver produtos de ${category.name}`}
                             >
-                                {typeof product.category === 'string' ? product.category : 'Categoria'}
+                                {category.name}
                             </a>
-                        </>
-                    )}
+                        </React.Fragment>
+                    ))}
                     <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300" aria-hidden="true" />
-                    <span className="min-w-0 flex-1 truncate font-medium text-slate-900" title={publicProductTitle}>
+                    <span className="shrink-0 font-medium text-slate-900" title={publicProductTitle}>
                         {publicProductTitle}
                     </span>
                 </nav>
@@ -1939,28 +1945,44 @@ export const PublicProductPage: React.FC = () => {
                         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <h2 id="product-blueprint-title" className="flex items-center gap-2 text-xl font-bold text-slate-900">
-                                    <FileImage className="h-5 w-5 text-blue-600" /> Blueprint do modelo
+                                    <FileImage className="h-5 w-5 text-blue-600" /> Ficha técnica
                                 </h2>
-                                <p className="mt-1 text-sm text-slate-500">Ficha técnica ilustrada oficial do modelo, com marca d’água Mercado do Vale.</p>
+                                <p className="mt-1 text-sm text-slate-500">Veja as principais especificações e características do modelo.</p>
                             </div>
-                            <a
-                                href={blueprintImageUrl}
-                                target="_blank"
-                                rel="noreferrer"
+                            <button
+                                type="button"
+                                onClick={() => setIsTechnicalSheetOpen(true)}
                                 className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-blue-600 hover:border-blue-300 hover:bg-blue-50"
                             >
                                 Abrir em tamanho completo
-                            </a>
+                            </button>
                         </div>
-                        <a href={blueprintImageUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl bg-[#050c12]">
+                        <button
+                            type="button"
+                            onClick={() => setIsTechnicalSheetOpen(true)}
+                            className="relative block w-full overflow-hidden rounded-xl bg-[#050c12] text-left"
+                            aria-label={`Ampliar ficha técnica de ${publicProductTitle}`}
+                        >
                             <img
                                 src={blueprintImageUrl}
-                                alt={`Blueprint e ficha técnica de ${publicProductTitle}`}
+                                alt={`Ficha técnica de ${publicProductTitle}`}
                                 loading="lazy"
                                 className="h-auto w-full object-contain"
                             />
-                        </a>
+                            <span className="pointer-events-none absolute left-0 top-0 flex h-[5.2%] w-[31%] items-center bg-[#050c12] px-[2%] pt-[0.5%] text-[clamp(9px,1.25vw,19px)] font-black uppercase tracking-[0.18em] text-white">
+                                / Ficha técnica
+                            </span>
+                        </button>
                     </section>
+                )}
+
+                {isTechnicalSheetOpen && blueprintImageUrl && (
+                    <ImageZoomModal
+                        imageUrl={blueprintImageUrl}
+                        title={`Ficha técnica de ${publicProductTitle}`}
+                        imageOverlayLabel="Ficha técnica"
+                        onClose={() => setIsTechnicalSheetOpen(false)}
+                    />
                 )}
 
                 {/* ── Seção full-width: Descrição + Especificações ── */}

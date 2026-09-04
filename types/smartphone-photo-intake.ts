@@ -53,6 +53,8 @@ export interface SmartphonePhotoIntake {
   price_reseller?: number | null;
   price_wholesale?: number | null;
   prices_confirmed?: boolean | number;
+  review_confirmed?: boolean | number;
+  review_confirmed_at?: string | null;
   extracted_data?: Record<string, unknown> | null;
   validation_errors?: SmartphonePhotoIntakeIssue[] | null;
   validation_warnings?: SmartphonePhotoIntakeIssue[] | null;
@@ -99,6 +101,7 @@ export interface SmartphonePhotoIntakeUpdate {
   price_reseller?: number | null;
   price_wholesale?: number | null;
   prices_confirmed?: boolean;
+  review_confirmed?: boolean;
 }
 
 export interface SmartphonePhotoIntakePriceConfirmation {

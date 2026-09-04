@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS smartphone_photo_intakes (
   price_reseller INT NULL,
   price_wholesale INT NULL,
   prices_confirmed TINYINT(1) NOT NULL DEFAULT 0,
+  review_confirmed TINYINT(1) NOT NULL DEFAULT 0,
+  review_confirmed_at DATETIME NULL,
   extracted_data JSON NULL,
   validation_errors JSON NULL,
   validation_warnings JSON NULL,

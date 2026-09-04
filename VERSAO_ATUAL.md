@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.330-impressao-reenvio
+version: v1.2.331-celulares-controle
 date: 2026-09-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260904-150500-impressao-reenvio
+release_vps: /var/www/mdv-site/releases/20260904-170948-v12331-celulares-controle
 branch: main
-summary: Impressao central com orientacao do PDF e reimpressao preservando configuracoes armazenadas no MySQL.
-tag: v1.2.330-impressao-reenvio
+summary: Precos de venda unificados por configuracao de celular, conferencia manual no cadastro por foto e navegacao publica completa do produto.
+tag: v1.2.331-celulares-controle
 ```

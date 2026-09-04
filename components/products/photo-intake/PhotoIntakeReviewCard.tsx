@@ -13,6 +13,7 @@ import type {
   SmartphonePhotoIntakeUpdate,
 } from '../../../types/smartphone-photo-intake';
 import { SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS } from '../../../types/smartphone-photo-intake';
+import { smartphonePriceGroups, SmartphonePriceReference } from '../../../services/smartphonePriceGroups';
 
 interface PhotoIntakeReviewCardProps {
   intake: SmartphonePhotoIntake;
@@ -60,6 +61,7 @@ function buildDraft(intake: SmartphonePhotoIntake): SmartphonePhotoIntakeUpdate 
     price_reseller: intake.price_reseller || 0,
     price_wholesale: intake.price_wholesale || 0,
     prices_confirmed: Boolean(intake.prices_confirmed),
+    review_confirmed: Boolean(intake.review_confirmed),
   };
 }
 
@@ -81,6 +83,28 @@ export function PhotoIntakeReviewCard({
   const [selectedModelId, setSelectedModelId] = useState(intake.matched_model_id || '');
   const [sku, setSku] = useState('');
   const [applyPricesToGroup, setApplyPricesToGroup] = useState(true);
+  const [priceReference, setPriceReference] = useState<SmartphonePriceReference | null>(null);
+  const [priceReferenceError, setPriceReferenceError] = useState('');
+  const [loadingPriceReference, setLoadingPriceReference] = useState(false);
+  useEffect(() => {
+    if (!intake.matched_model_id) { setPriceReference(null); setPriceReferenceError(''); setLoadingPriceReference(false); return; }
+    let cancelled = false;
+    setLoadingPriceReference(true); setPriceReferenceError('');
+    smartphonePriceGroups.reference(intake.matched_model_id, { company_id: intake.company_id,
+      specs: { ram: draft.detected_ram, storage: draft.detected_storage } }).then(result => {
+      if (!cancelled) setPriceReference(result);
+    }).catch(error => { if (!cancelled) { setPriceReference(null); setPriceReferenceError(error.message); } })
+      .finally(() => { if (!cancelled) setLoadingPriceReference(false); });
+    return () => { cancelled = true; };
+  }, [intake.id, intake.matched_model_id, intake.company_id, draft.detected_ram, draft.detected_storage]);
+  useEffect(() => {
+    const prices = priceReference?.prices;
+    if (!prices || loadingPriceReference) return;
+    if (draft.price_retail !== prices.price_retail || draft.price_reseller !== prices.price_reseller || draft.price_wholesale !== prices.price_wholesale) {
+      setDraft(current => ({ ...current, ...prices }));
+    }
+  }, [priceReference, loadingPriceReference, draft.price_retail, draft.price_reseller, draft.price_wholesale]);
+  const groupPriceLocked = loadingPriceReference || !!priceReferenceError || Boolean(priceReference?.established || priceReference?.incomplete);
 
   useEffect(() => {
     setDraft(buildDraft(intake));
@@ -94,7 +118,7 @@ export function PhotoIntakeReviewCard({
   );
 
   const updateCost = (cost: number) => {
-    const activeMargin = margin && Boolean(margin.active) ? margin : null;
+    const activeMargin = !groupPriceLocked && margin && Boolean(margin.active) ? margin : null;
     setDraft(current => ({
       ...current,
       price_cost: cost,
@@ -123,7 +147,13 @@ export function PhotoIntakeReviewCard({
     ...(intake.validation_errors || []),
     ...(intake.validation_warnings || []),
   ];
-  const canFinalize = intake.status === 'ready_to_finalize' && Boolean(intake.matched_color_id);
+  const hasNonConfirmableIssues = (intake.validation_errors || [])
+    .some(issue => ['required', 'duplicate', 'already_registered'].includes(String(issue.code || '')));
+  const confirmReview = async () => {
+    await onUpdate({ ...draft, review_confirmed: true });
+  };
+  const canFinalize = intake.status === 'ready_to_finalize' && Boolean(intake.matched_color_id)
+    && !loadingPriceReference && !priceReferenceError && !priceReference?.divergent;
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -146,11 +176,29 @@ export function PhotoIntakeReviewCard({
             Esta etiqueta é carregada por uma rota autenticada e não fica exposta como imagem pública.
           </div>
           {issues.length > 0 && (
-            <div className="rounded-xl border border-orange-200 bg-orange-50 p-3">
-              <p className="text-xs font-bold text-orange-800">Pontos para conferir</p>
-              <ul className="mt-2 space-y-1 text-xs text-orange-700">
+            <div className={`rounded-xl border p-3 ${intake.review_confirmed ? 'border-emerald-200 bg-emerald-50' : 'border-orange-200 bg-orange-50'}`}>
+              <p className={`text-xs font-bold ${intake.review_confirmed ? 'text-emerald-800' : 'text-orange-800'}`}>
+                {intake.review_confirmed ? 'Conferência confirmada' : 'Pontos para conferir'}
+              </p>
+              <ul className={`mt-2 space-y-1 text-xs ${intake.review_confirmed ? 'text-emerald-700' : 'text-orange-700'}`}>
                 {issues.map((issue, index) => <li key={`${issue.field || 'issue'}-${index}`}>• {issue.message}</li>)}
               </ul>
+              {!intake.review_confirmed && !hasNonConfirmableIssues && (
+                <button
+                  type="button"
+                  onClick={() => void confirmReview()}
+                  disabled={busy}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {busy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                  Conferi os dados, estão corretos
+                </button>
+              )}
+              {!intake.review_confirmed && hasNonConfirmableIssues && (
+                <p className="mt-3 text-xs font-semibold text-red-700">
+                  Corrija os campos obrigatórios ou identificadores duplicados antes de continuar.
+                </p>
+              )}
             </div>
           )}
           {intake.error_message && (
@@ -186,7 +234,7 @@ export function PhotoIntakeReviewCard({
                   <span className="mb-1 block text-xs font-medium text-slate-500">{field.label}</span>
                   <input
                     value={String(draft[field.key] ?? '')}
-                    onChange={event => setDraft(current => ({ ...current, [field.key]: event.target.value }))}
+                    onChange={event => setDraft(current => ({ ...current, [field.key]: event.target.value, review_confirmed: false }))}
                     className={`h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 ${field.mono ? 'font-mono' : ''}`}
                   />
                 </label>
@@ -201,6 +249,7 @@ export function PhotoIntakeReviewCard({
                       ...current,
                       matched_color_id: selectedColor?.id || null,
                       detected_color: selectedColor?.name || current.detected_color || '',
+                      review_confirmed: false,
                     }));
                   }}
                   className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -271,13 +320,16 @@ export function PhotoIntakeReviewCard({
               <p className="text-xs text-amber-800">
                 Os valores atuais encontrados ficam preenchidos. Ao alterar o custo, as margens ativas da marca são aplicadas automaticamente.
               </p>
-              {!margin && <p className="mt-1 text-xs font-semibold text-red-700">Cadastre a margem desta marca antes de confirmar.</p>}
+              {!margin && !priceReference?.prices && <p className="mt-1 text-xs font-semibold text-red-700">Cadastre a margem desta marca antes de confirmar.</p>}
+              {priceReference?.prices && <p className="mt-1 text-sm text-blue-800">Preço de venda do grupo: todas as cores usam os mesmos valores. Alterar a compra mantém estes preços.</p>}
+              {priceReference?.divergent && <p role="alert" className="mt-1 text-sm text-red-700">Preços divergentes. Revise em Configurações → Modelos → Preços por configuração antes de concluir.</p>}
+              {priceReferenceError && <p role="alert" className="text-red-700">Falha ao consultar o preço do grupo. Recarregue a página.</p>}
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <CurrencyInput label="Compra" value={draft.price_cost || 0} onChange={updateCost} />
-              <CurrencyInput label="Varejo" value={draft.price_retail || 0} onChange={value => setDraft(current => ({ ...current, price_retail: value }))} />
-              <CurrencyInput label="Revenda" value={draft.price_reseller || 0} onChange={value => setDraft(current => ({ ...current, price_reseller: value }))} />
-              <CurrencyInput label="Atacado" value={draft.price_wholesale || 0} onChange={value => setDraft(current => ({ ...current, price_wholesale: value }))} />
+              <CurrencyInput label="Varejo" disabled={groupPriceLocked} value={draft.price_retail || 0} onChange={value => setDraft(current => ({ ...current, price_retail: value }))} />
+              <CurrencyInput label="Revenda" disabled={groupPriceLocked} value={draft.price_reseller || 0} onChange={value => setDraft(current => ({ ...current, price_reseller: value }))} />
+              <CurrencyInput label="Atacado" disabled={groupPriceLocked} value={draft.price_wholesale || 0} onChange={value => setDraft(current => ({ ...current, price_wholesale: value }))} />
             </div>
             {matchingGroupCount > 1 && (
               <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300 bg-white/80 p-3">
@@ -289,14 +341,14 @@ export function PhotoIntakeReviewCard({
                 />
                 <span>
                   <span className="block text-sm font-bold text-amber-950">Aplicar aos {matchingGroupCount} aparelhos iguais</span>
-                  <span className="block text-xs text-amber-800">Mesmo modelo, RAM, armazenamento e cor. IMEIs e seriais permanecem individuais.</span>
+                  <span className="block text-xs text-amber-800">Confirma os preços de venda dos aparelhos iguais. Confira a compra de cada aparelho separadamente; custos, IMEIs e seriais permanecem individuais.</span>
                 </span>
               </label>
             )}
             <button
               type="button"
               onClick={() => void confirmPrices()}
-              disabled={busy || !intake.matched_model_id || !margin || !Boolean(margin.active) || !(draft.price_cost && draft.price_retail && draft.price_reseller && draft.price_wholesale)}
+              disabled={busy || loadingPriceReference || !!priceReferenceError || priceReference?.divergent || !intake.matched_model_id || (!priceReference?.prices && (!margin || !Boolean(margin.active))) || !(draft.price_cost && draft.price_retail && draft.price_reseller && draft.price_wholesale)}
               className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <CheckCircle2 size={16} /> Confirmar preços

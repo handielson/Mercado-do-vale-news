@@ -26,6 +26,8 @@ const smartphonePhotoIntakeServiceFiles = [
   'services/physicalRamCore.cjs',
   'services/smartphonePhotoIntakeCore.cjs',
   'services/smartphonePhotoIntakeServer.cjs',
+  'services/smartphonePriceGroupsCore.cjs',
+  'services/smartphonePriceGroupsServer.cjs',
   'services/modelBlingMapping.mjs',
 ];
 const mercadoLivreServicePath = 'services/mercadoLivreServer.cjs';

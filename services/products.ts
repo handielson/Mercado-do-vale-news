@@ -158,6 +158,11 @@ function salePricesDiffer(product: Product, source: Product): boolean {
 }
 
 async function syncVariationPrices(source: Product): Promise<VariationPriceAdjustment | null> {
+    // Smartphone prices belong to the server-side configuration group, never to the last edited color.
+    if (source.model_id) {
+        const { smartphonePriceGroups } = await import('./smartphonePriceGroups');
+        if ((await smartphonePriceGroups.reference(source.model_id, source)).controlled) return null;
+    }
     const modelId = String(source.model_id || '').trim();
     const ram = normalizeVariationSpec(source.specs?.ram);
     const storage = normalizeVariationSpec(source.specs?.storage);
@@ -457,9 +462,8 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
     // logo depois pelo ProductForm; manter o UUID solicitado gera uma unidade orfa.
     const resolved = result.resolved?.find((row) => row.requested_id === id) || result.resolved?.[0];
     const resolvedId = resolved?.id || id;
-    const persistedRow = resolvedId !== id
-        ? await vpsApiService.getProductById(resolvedId, true)
-        : null;
+    const persistedRow = await vpsApiService.getProductById(resolvedId, true);
+    if (!persistedRow) throw new Error('Produto salvo, mas não foi possível reler os preços. Recarregue antes de continuar.');
     const savedProduct = transformFromDB(persistedRow || { ...payload, id: resolvedId }) as ProductWithPriceAdjustment;
     const priceAdjustment = await syncVariationPrices(savedProduct);
     if (priceAdjustment) {
@@ -595,21 +599,24 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
 
     const ok = await vpsApiService.updateProduct(id, payload);
     if (!ok) throw new Error(`Failed to update product in VPS`);
+    const persistedRow = await vpsApiService.getProductById(id, true);
+    if (!persistedRow) throw new Error('Produto salvo, mas não foi possível reler os preços. Recarregue antes de continuar.');
+    const savedProduct = transformFromDB(persistedRow) as ProductWithPriceAdjustment;
 
     // Log price change (usa VPS — tabela price_history não está na VPS)
     try {
         if (oldProduct) {
             const pricesChanged =
-                oldProduct.price_cost !== input.price_cost ||
-                oldProduct.price_retail !== input.price_retail ||
-                oldProduct.price_reseller !== input.price_reseller ||
-                oldProduct.price_wholesale !== input.price_wholesale;
+                oldProduct.price_cost !== savedProduct.price_cost ||
+                oldProduct.price_retail !== savedProduct.price_retail ||
+                oldProduct.price_reseller !== savedProduct.price_reseller ||
+                oldProduct.price_wholesale !== savedProduct.price_wholesale;
             if (pricesChanged) {
                 await logPriceChange(id, {
-                    price_cost: input.price_cost,
-                    price_retail: input.price_retail,
-                    price_reseller: input.price_reseller,
-                    price_wholesale: input.price_wholesale,
+                    price_cost: savedProduct.price_cost,
+                    price_retail: savedProduct.price_retail,
+                    price_reseller: savedProduct.price_reseller,
+                    price_wholesale: savedProduct.price_wholesale,
                 });
             }
         }
@@ -620,8 +627,8 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
     // Shopee Sync Automático
     if (payload.shopee_item_id && oldProduct) {
         import('./shopeeService').then(({ shopeeService }) => {
-            if (oldProduct.price_retail !== input.price_retail) {
-                shopeeService.updatePrice(id, input.price_retail).catch(e => console.error("Shopee Price Sync Error:", e));
+            if (oldProduct.price_retail !== savedProduct.price_retail) {
+                shopeeService.updatePrice(id, savedProduct.price_retail).catch(e => console.error("Shopee Price Sync Error:", e));
             }
             if (input.track_inventory && oldProduct.stock_quantity !== input.stock_quantity) {
                 shopeeService.updateStock(id, input.stock_quantity || 0).catch(e => console.error("Shopee Stock Sync Error:", e));
@@ -629,7 +636,6 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
         });
     }
 
-    const savedProduct = transformFromDB(payload) as ProductWithPriceAdjustment;
     const priceAdjustment = await syncVariationPrices(savedProduct);
     if (priceAdjustment) {
         savedProduct.priceAdjustment = priceAdjustment;

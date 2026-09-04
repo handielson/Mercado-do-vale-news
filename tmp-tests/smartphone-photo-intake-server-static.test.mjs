@@ -5,6 +5,7 @@ const source = fs.readFileSync(new URL('../services/smartphonePhotoIntakeServer.
 const frontendService = fs.readFileSync(new URL('../services/smartphonePhotoIntakeService.ts', import.meta.url), 'utf8');
 const capturePanel = fs.readFileSync(new URL('../components/products/photo-intake/PhotoCapturePanel.tsx', import.meta.url), 'utf8');
 const reviewCard = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeReviewCard.tsx', import.meta.url), 'utf8');
+const core = fs.readFileSync(new URL('../services/smartphonePhotoIntakeCore.cjs', import.meta.url), 'utf8');
 const queue = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeQueue.tsx', import.meta.url), 'utf8');
 
 assert.match(source, /const DEFAULT_MODEL = 'gpt-5\.6-luna'/, 'deve usar o modelo de leitura definido');
@@ -38,9 +39,12 @@ assert.doesNotMatch(source, /const name = String\(request\.body\?\.name \|\| \[m
 assert.match(source, /findExactIntakeProduct\(connection, intake\)/, 'deve vincular automaticamente uma configuracao identica');
 assert.match(reviewCard, /Produto encontrado\.[\s\S]*O produto já existe[\s\S]*Falta concluir este aparelho[\s\S]*não será criado outro produto/, 'a conferência deve explicar que o produto existe, mas o aparelho ainda precisa ser concluído');
 assert.match(queue, /Produto encontrado/, 'a fila deve identificar variações já cadastradas com texto simples');
+assert.match(source, /review_confirmed=0, review_confirmed_at=NULL/, 'nova leitura deve invalidar a confirmação manual anterior');
+assert.match(source, /getBlockingPhotoIntakeErrors\(intake\.validation_errors[\s\S]*review_confirmed/, 'finalização deve aceitar apenas alertas manualmente confirmáveis');
+assert.match(core, /already_registered[\s\S]*getBlockingPhotoIntakeErrors/, 'erros de duplicidade devem continuar bloqueando o cadastro');
 assert.match(source, /reserveAvailableSku\(connection, request\.body\?\.sku, intake, model\)/, 'deve gerar outro SKU quando o informado ja estiver ocupado');
-assert.match(source, /lockSmartphoneSaleConfiguration\(connection, intake\)/, 'deve obter todos os produtos da mesma combinação de modelo, RAM e armazenamento');
-assert.match(source, /UPDATE products SET price_retail=\?,price_reseller=\?,price_wholesale=\?[\s\S]*saleProductIds/, 'deve propagar os preços de venda para todas as cores da configuração');
+assert.match(source, /inheritSmartphonePrices\(connection,/, 'a entrada deve herdar os preços da fonte canônica dentro da transação');
+assert.doesNotMatch(source, /saleProductIds/, 'a entrada não pode substituir os preços das outras cores');
 assert.match(source, /No campo RAM, informe somente a memória física; não some nem inclua expansão ou RAM virtual/, 'IA deve extrair apenas a RAM física da etiqueta');
 assert.match(capturePanel, /function isDuplicateQueuePhotoError[\s\S]*\[VPS\\\]\\s\*409[\s\S]*Esta foto já está na fila/, 'frontend deve reconhecer especificamente a duplicidade informada pela API');
 assert.match(capturePanel, /smartphonePhotoIntakeService\.upload\(file, batchId\)[\s\S]*catch \(error\)[\s\S]*duplicateCount \+= 1[\s\S]*continue;/, 'uma foto duplicada não deve interromper o restante do lote');

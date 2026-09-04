@@ -24,6 +24,8 @@ assert.match(intakePage, /hasSamePriceGroup[\s\S]*matched_model_id[\s\S]*matched
 assert.match(reviewCard, /Aplicar aos \{matchingGroupCount\} aparelhos iguais[\s\S]*IMEIs e seriais permanecem individuais/, 'conferência deve oferecer aplicação dos preços ao grupo sem unir identificadores');
 assert.match(intakeService, /confirm-group-prices/, 'frontend deve usar a confirmação transacional do grupo');
 assert.match(reviewCard, /const confirmPrices = async \(\) => \{[\s\S]*await onUpdate\(\{ \.\.\.draft, prices_confirmed: false \}\);[\s\S]*await onConfirmPrices/, 'alteracoes de cor/modelo devem ser persistidas antes da confirmacao de precos');
+assert.match(reviewCard, /Conferi os dados, estão corretos[\s\S]*hasNonConfirmableIssues/, 'alertas confirmáveis devem oferecer confirmação manual explícita');
+assert.match(reviewCard, /review_confirmed: false/, 'alterar um dado conferido deve invalidar a confirmação anterior');
 
 assert.match(protectedPhoto, /onClick=\{\(\) => setZoomed\(true\)\}[\s\S]*Abrir foto da etiqueta em tamanho ampliado[\s\S]*ImageZoomModal[\s\S]*imageUrl=\{objectUrl\}/, 'foto protegida deve abrir em visualizacao ampliada sem expor uma URL publica');
 assert.match(intakePage, /Agrupar iguais[\s\S]*groupedQueue\.items[\s\S]*groupSizeById/, 'fila deve oferecer agrupamento visual explicito');

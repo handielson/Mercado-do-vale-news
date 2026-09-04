@@ -12,6 +12,8 @@
     "test:android-admin-contract": "node tmp-tests/android-admin-vps-contract-static.test.mjs",
     "test:customer-delivery": "node tmp-tests/customer-delivery-ledger-static.test.mjs",
     "test:money": "node tmp-tests/money-normalization.test.mjs",
+    "test:smartphone-price-groups": "node --test tmp-tests/smartphone-price-groups.test.cjs && node tmp-tests/smartphone-price-groups-wiring-static.test.mjs && node tmp-tests/smartphone-price-groups-ui.test.mjs",
+    "test:public-product-breadcrumb": "node --test tmp-tests/public-product-breadcrumb.test.mjs",
     "test:pdv-product-search": "node tmp-tests/pdv-product-search-autocomplete-static.test.mjs",
     "test:pdv-legacy-serialized": "node tmp-tests/pdv-legacy-serialized-product-fallback-static.test.mjs",
     "test:pdv-sale-finalization-log": "node tmp-tests/pdv-sale-finalization-log-static.test.mjs",

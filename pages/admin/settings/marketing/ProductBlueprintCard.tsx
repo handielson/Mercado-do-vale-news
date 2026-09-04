@@ -61,7 +61,7 @@ export default function ProductBlueprintCard({ data, imageUrls, watermarkUrl }: 
       <div className="relative z-20 flex h-full flex-col p-[30px]">
         <header className="flex h-[105px] items-center justify-between border-b pb-5" style={{ borderColor: `${data.theme.accent}70` }}>
           <div>
-            <div className="text-[19px] font-black uppercase tracking-[0.24em]" style={{ color: data.theme.accent }}>/ blueprint oficial</div>
+            <div className="text-[19px] font-black uppercase tracking-[0.24em]" style={{ color: data.theme.accent }}>/ ficha técnica</div>
             <h1 className="mt-1 text-[58px] font-black uppercase italic leading-none tracking-tight">{data.name}</h1>
             {data.subtitle && <p className="mt-1 text-[23px] font-black uppercase tracking-[0.12em] text-white/75">{data.subtitle}</p>}
           </div>

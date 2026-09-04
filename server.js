@@ -8,6 +8,7 @@ const { spawn } = require('child_process');
 const ffmpegStaticPath = require('ffmpeg-static');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
 const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
+const { registerSmartphonePriceGroupRoutes, withSmartphonePriceWrite, patchProductWithGroupPrices, insertProductRecordsWithGroupPrices } = require('./services/smartphonePriceGroupsServer.cjs');
 const {
   ensureMercadoLivreTables,
   registerMercadoLivreRoutes,
@@ -2357,6 +2358,13 @@ async function vpsDbSelect(table, query) {
 }
 
 async function vpsDbPatch(table, query, payload) {
+  if (table === 'products') {
+    const selection = new URLSearchParams(String(query || ''));
+    selection.set('select', '*');
+    const rows = await vpsDbSelect(table, selection.toString());
+    for (const row of rows) await patchProductWithGroupPrices(pool, row.id, payload);
+    return vpsDbSelect(table, query);
+  }
   const normalized = normalizeDbPayload(payload);
   const entries = Object.entries(normalized);
   if (!entries.length) return vpsDbSelect(table, query);
@@ -2370,6 +2378,10 @@ async function vpsDbPatch(table, query, payload) {
 }
 
 async function vpsDbInsert(table, payload) {
+  if (table === 'products') {
+    const [id] = await insertProductRecordsWithGroupPrices(pool, [payload]);
+    return vpsDbSelect(table, `select=*&id=eq.${encodeURIComponent(String(id))}&limit=1`);
+  }
   const normalized = normalizeDbPayload(payload);
   const entries = Object.entries(normalized);
   if (!entries.length) throw new Error('Insert payload is empty');
@@ -2392,6 +2404,10 @@ async function vpsDbDelete(table, query) {
 async function vpsDbUpsert(table, query, payload) {
   const params = new URLSearchParams(String(query || ''));
   const conflictColumn = params.get('on_conflict') || 'id';
+  if (table === 'products') {
+    const [id] = await insertProductRecordsWithGroupPrices(pool, [payload], true, conflictColumn);
+    return vpsDbSelect(table, `select=*&id=eq.${encodeURIComponent(String(id))}&limit=1`);
+  }
   const normalized = normalizeDbPayload(payload);
   const entries = Object.entries(normalized);
   const columns = entries.map(([key]) => quoteSqlIdentifier(key)).join(', ');
@@ -19627,7 +19643,9 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
 
   for (const p of products) {
     try {
-      await pool.query(
+      await withSmartphonePriceWrite(pool, p, async (priceDb, controlledProduct) => {
+      Object.assign(p, controlledProduct);
+      await priceDb.query(
         `INSERT INTO products (
           id, name, slug, sku, ean, alternative_eans, description,
           price_retail, price_wholesale, price_cost, price_reseller,
@@ -19709,6 +19727,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.meta_title || null, p.meta_description || null, p.keywords || null,
         ]
       );
+      });
       results.upserted++;
     } catch (err) {
       results.errors.push({ id: p.id, name: p.name, error: err.message });
@@ -19768,27 +19787,30 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
 
   for (const p of products) {
     try {
+      const result = await withSmartphonePriceWrite(pool, p, async (priceDb, controlledProduct) => {
       const sets = [];
       const params = [];
       for (const field of allowedFields) {
-        if (p[field] !== undefined) {
+        if (controlledProduct[field] !== undefined && (p[field] !== undefined || ['price_retail', 'price_reseller', 'price_wholesale'].includes(field))) {
           sets.push(`${field}=?`);
-          params.push(field === 'track_inventory' ? (p[field] ? 1 : 0) : p[field]);
+          params.push(field === 'track_inventory' ? (controlledProduct[field] ? 1 : 0) : controlledProduct[field]);
         }
       }
 
       if (sets.length === 0 || (!p.id && !p.sku)) {
         results.skipped++;
-        continue;
+        return { affectedRows: 0 };
       }
 
       sets.push('updated_at=CURRENT_TIMESTAMP');
       const where = p.id ? 'id=?' : 'sku=?';
       params.push(p.id || p.sku);
-      const [result] = await pool.query(
+      const [result] = await priceDb.query(
         `UPDATE products SET ${sets.join(', ')} WHERE ${where}`,
         params
       );
+      return result;
+      });
       results.updated += result.affectedRows || 0;
       if (result.affectedRows && p.stock_quantity !== undefined) {
         const lookupWhere = p.id ? 'id=?' : 'sku=?';
@@ -19806,8 +19828,8 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
 
 // Single product update
 fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) => {
-  const p = req.body;
-  await pool.query(
+  await withSmartphonePriceWrite(pool, { ...req.body, id: req.params.id }, async (priceDb, p) => {
+  await priceDb.query(
     `UPDATE products SET
       name=?, slug=?, sku=?, ean=?, alternative_eans=?,
       description=?, technical_specifications=?,
@@ -19826,8 +19848,8 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.name, p.slug || null, p.sku || null,
       p.ean || null, jsonStr(p.alternative_eans),
       sanitizeDescription(p.description), sanitizeDescription(p.technical_specifications),
-      p.price_retail || null, p.price_wholesale || null,
-      p.price_cost || null, p.price_reseller || null,
+      p.price_retail ?? null, p.price_wholesale ?? null,
+      p.price_cost ?? null, p.price_reseller ?? null,
       p.price_promo || null, p.promo_start || null, p.promo_end || null,
       p.stock_quantity || 0, p.status || 'active',
       p.category_id || null, p.brand || null, p.model_id || null,
@@ -19843,6 +19865,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       req.params.id,
     ]
   );
+  });
   return { ok: true };
 });
 
@@ -20860,6 +20883,12 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
     return reply.code(400).send({ error: 'Body must be a JSON object' });
   }
 
+  if (name === 'products') {
+    const [id] = await insertProductRecordsWithGroupPrices(pool, [body]);
+    const [rows] = await pool.query('SELECT * FROM products WHERE id=?', [id]);
+    reply.code(201);
+    return rows[0];
+  }
   const cols = Object.keys(body);
   const vals = Object.values(body);
   const placeholders = cols.map(() => '?').join(', ');
@@ -20890,6 +20919,10 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
     return reply.code(400).send({ error: 'Body must be a non-empty array' });
   }
 
+  if (name === 'products') {
+    const ids = await insertProductRecordsWithGroupPrices(pool, rows);
+    return { inserted: ids.length };
+  }
   const cols = Object.keys(rows[0]);
   const colList = cols.map(c => `\`${c}\``).join(', ');
   const placeholders = `(${cols.map(() => '?').join(', ')})`;
@@ -20915,6 +20948,12 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
     return reply.code(400).send({ error: 'Body must be a JSON object' });
   }
 
+  if (name === 'products') {
+    if (pkCol !== 'id') return reply.code(400).send({ error: 'Atualize produtos pelo ID.' });
+    await patchProductWithGroupPrices(pool, pkValue, body);
+    const [rows] = await pool.query('SELECT * FROM products WHERE id=?', [pkValue]);
+    return rows[0] || reply.code(404).send({ error: 'Not found' });
+  }
   const entries = Object.entries(body).filter(([k]) => k !== pkCol);
   if (!entries.length) return reply.code(400).send({ error: 'No fields to update' });
 
@@ -24109,6 +24148,7 @@ async function syncProductStock(productId) {
 
 // Start
 registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname });
+registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey });
 registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin });
 require('./services/centralPrintingServer.cjs').registerCentralPrintingRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 scheduleNextSystemBackup();

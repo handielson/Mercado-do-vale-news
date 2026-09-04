@@ -167,7 +167,8 @@ function validatePhotoExtraction(raw = {}) {
   if (!value.ram) warnings.push({ field: 'ram', code: 'missing', message: 'Memória RAM precisa ser conferida' });
   if (!value.storage) warnings.push({ field: 'storage', code: 'missing', message: 'Armazenamento precisa ser conferido' });
   if (!value.serial) errors.push({ field: 'serial', code: 'required', message: 'Número de série não identificado' });
-  if (!isValidImei(value.imei1)) errors.push({ field: 'imei1', code: 'invalid', message: 'IMEI 1 inválido' });
+  if (!value.imei1) errors.push({ field: 'imei1', code: 'required', message: 'IMEI 1 não identificado' });
+  else if (!isValidImei(value.imei1)) errors.push({ field: 'imei1', code: 'invalid', message: 'IMEI 1 inválido' });
   if (value.imei2 && !isValidImei(value.imei2)) errors.push({ field: 'imei2', code: 'invalid', message: 'IMEI 2 inválido' });
   if (value.ean && !isValidGtin(value.ean)) warnings.push({ field: 'ean', code: 'invalid', message: 'EAN precisa ser conferido' });
   if (value.imei1 && value.imei2 && value.imei1 === value.imei2) {
@@ -176,8 +177,19 @@ function validatePhotoExtraction(raw = {}) {
   return { value, errors, warnings, valid: errors.length === 0 };
 }
 
-function resolvePhotoIntakeStatus({ validationErrors = [], matchedModelId = null, pricesConfirmed = false } = {}) {
-  if (validationErrors.length > 0) return PHOTO_INTAKE_STATUS.REVIEW_REQUIRED;
+function isManuallyConfirmablePhotoIntakeIssue(issue = {}) {
+  return !['required', 'duplicate', 'already_registered'].includes(String(issue.code || '').trim());
+}
+
+function getBlockingPhotoIntakeErrors(validationErrors = [], reviewConfirmed = false) {
+  const errors = Array.isArray(validationErrors) ? validationErrors : [];
+  if (!reviewConfirmed) return errors;
+  return errors.filter((issue) => !isManuallyConfirmablePhotoIntakeIssue(issue));
+}
+
+function resolvePhotoIntakeStatus({ validationErrors = [], validationWarnings = [], reviewConfirmed = false, matchedModelId = null, pricesConfirmed = false } = {}) {
+  if (getBlockingPhotoIntakeErrors(validationErrors, reviewConfirmed).length > 0) return PHOTO_INTAKE_STATUS.REVIEW_REQUIRED;
+  if (!reviewConfirmed && (validationErrors.length > 0 || validationWarnings.length > 0)) return PHOTO_INTAKE_STATUS.REVIEW_REQUIRED;
   if (!matchedModelId) return PHOTO_INTAKE_STATUS.WAITING_MODEL_REGISTRATION;
   if (!pricesConfirmed) return PHOTO_INTAKE_STATUS.WAITING_PRICE_CONFIRMATION;
   return PHOTO_INTAKE_STATUS.READY_TO_FINALIZE;
@@ -266,12 +278,14 @@ module.exports = {
   PHOTO_INTAKE_STATUS_LABEL,
   buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
+  getBlockingPhotoIntakeErrors,
   filterSmartphonesByFeatures,
   findConflictingNfcConfigurations,
   getSmartphoneSaleConfigurationKey,
   isAffirmativeFeature,
   isValidGtin,
   isValidImei,
+  isManuallyConfirmablePhotoIntakeIssue,
   normalizeMemory,
   normalizePhotoExtraction,
   resolvePhotoIntakeStatus,
