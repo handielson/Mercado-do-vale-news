@@ -1,6 +1,6 @@
 # Impressão central: instalação e validação
 
-Estado: publicado e ativado no Lenovo em 04/09/2026, versão `v1.2.328-impressao-central-pdf` (commit `c44f4113`). API, migration 018 e agente ativos; teste pelo navegador chegou ao Windows, aguardando conferência visual do papel.
+Estado: publicado e ativado no Lenovo em 04/09/2026, versão `v1.2.330-impressao-reenvio` (commit `66cf10a3`). API, migration 018 e agente ativos. Primeiro teste físico confirmou orientação incorreta; correção aplicada e nova etiqueta enviada para conferência.
 
 ## Entrega implementada
 
@@ -79,3 +79,11 @@ Desabilitar novas solicitações antes de parar o agente central; conferir traba
 - API publicada pelo comando oficial `node deploy-vps-server-only.cjs --central-printing-only`, preservando conteúdo atual das demais rotas. Backups: `/var/www/mdv-api/backups/central-printing-1788533282627` e `central-printing-1788533565594`.
 - Lenovo: backup anterior em `.restore-points/central-printing-20260904`; script antigo recebeu somente a inicialização da central. Automação Shopee continuou ativa em 127.0.0.1:8081.
 - Lenovo precisa permanecer ligado, sem suspensão, com a sessão Lenovo iniciada. Esta implantação não transforma o processo interativo em serviço anterior ao login.
+
+## Correção após conferência física
+
+O operador confirmou que o primeiro trabalho saiu vertical. A versão 1.2.329 passou a definir `orientation=landscape` quando o PDF é mais largo que alto, impedindo que a orientação portrait do driver controle a rotação do conteúdo no Sumatra 3.4.6. Os bytes e as dimensões do PDF permanecem intactos.
+
+A versão 1.2.330 corrigiu também a serialização das configurações JSON ao reimprimir: mysql2 pode retornar a coluna como objeto. A tentativa anterior retornou ER_INVALID_JSON_TEXT e rollback, sem impressão. Reimpressão explícita `5b748fc7-a91b-491e-8ab0-57b9bfdfac57`, do trabalho original, enviada uma vez após a correção; diário local submitted e fila Windows vazia. Conferência visual da segunda etiqueta pendente neste registro.
+
+Release final: `/var/www/mdv-site/releases/20260904-150500-impressao-reenvio`. API saudável, mysql.ok=true, VERSION público validado, 18 testes aprovados. Core do Lenovo verificado por SHA256 contra fonte local. Backup da última API: `/var/www/mdv-api/backups/central-printing-1788533993018`.
