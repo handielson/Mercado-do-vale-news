@@ -117,6 +117,27 @@ async function api(t, query, auth = { isAdmin: true, userId: 'admin-test' }) {
   registerCentralPrintingRoutes(app, { pool, getBearerAuthContext: async () => auth, enabled: true });
   await app.ready(); t.after(() => app.close()); return app;
 }
+test('reprint preserves MySQL JSON settings returned as object or serialized text', async t => {
+  const settings = { widthMm: 30, heightMm: 20, pages: 1, labelName: 'Etiqueta' };
+  for (const stored of [settings, JSON.stringify(settings)]) {
+    const original = { id: crypto.randomUUID(), device_id: crypto.randomUUID(), printer_name: destination,
+      title: 'Etiqueta', status: 'submitted', pdf_data: await pdf(1), pdf_hash: 'hash', width_mm: 30, height_mm: 20, pages: 1, settings_json: stored };
+    let inserted;
+    const app = await api(t, async (sql, params) => {
+      if (sql.includes('SELECT * FROM central_print_jobs')) return [[original]];
+      if (sql.includes('SELECT id,reprint_of')) return [[]];
+      if (sql.includes('SELECT id FROM central_print_devices')) return [[{ id: original.device_id }]];
+      if (sql.includes('INSERT INTO central_print_jobs')) inserted = params;
+      return [{ affectedRows: 1 }];
+    });
+    const result = await app.inject({ method: 'POST', url: `/admin/printing/jobs/${original.id}/reprint`,
+      payload: { reason: 'Orientacao corrigida', idempotencyKey: crypto.randomUUID() } });
+    assert.equal(result.statusCode, 200);
+    assert.equal(typeof inserted[12], 'string');
+    assert.deepEqual(JSON.parse(inserted[12]), settings);
+    assert.deepEqual(inserted[8], original.pdf_data);
+  }
+});
 test('API rejects sync keys and non-admin sessions on every administration route', async t => {
   const app = await api(t, async () => { throw new Error('must not query'); }, { isAdmin: false });
   for (const [method, url] of [['GET', '/admin/printing/devices'], ['POST', '/admin/printing/devices'], ['GET', '/admin/printing/jobs'], ['POST', '/admin/printing/jobs'], ['POST', '/admin/printing/jobs/x/reprint'], ['POST', '/admin/printing/jobs/x/cancel']]) {

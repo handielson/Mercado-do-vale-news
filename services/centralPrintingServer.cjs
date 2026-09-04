@@ -127,7 +127,7 @@ function registerCentralPrintingRoutes(app, { pool, getBearerAuthContext, enable
     await db.query(`INSERT INTO central_print_jobs
       (id,device_id,printer_name,title,requested_by,idempotency_key,request_hash,pdf_hash,pdf_data,width_mm,height_mm,pages,settings_json,reprint_of)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [id, old.device_id, old.printer_name, old.title, req.printActor, key,
-      hash(`${old.id}:${reason}`), old.pdf_hash, old.pdf_data, old.width_mm, old.height_mm, old.pages, old.settings_json, old.id]);
+      hash(`${old.id}:${reason}`), old.pdf_hash, old.pdf_data, old.width_mm, old.height_mm, old.pages, JSON.stringify(json(old.settings_json, {})), old.id]);
     await event(db, id, req.printActor, 'queued', `Reimpressão: ${reason}`);
     return { id, status: 'queued' };
   }));
