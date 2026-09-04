@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.328-impressao-central-pdf",
+  "version": "v1.2.329-etiqueta-horizontal",
   "date": "2026-09-04",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260904-145500-impressao-central-pdf",
+  "release_vps": "/var/www/mdv-site/releases/20260904-150000-etiqueta-horizontal",
   "branch": "main",
-  "summary": "Impressao central pelo Lenovo validada com PDF jsPDF, preservando tamanho, conteudo e copias configurados no sistema."
+  "summary": "Orientacao horizontal ou vertical da impressao central definida pelas dimensoes do PDF do sistema."
 }

@@ -76,6 +76,9 @@ function printOptions(job, inventory) {
   if (!printer || printer.status === 'offline') throw problem('Impressora não disponível.');
   const paper = matchPaper(printer, Number(job.width_mm), Number(job.height_mm));
   if (!paper) throw problem('O driver não oferece o tamanho solicitado. Configure esse papel no Lenovo.');
-  return { printer: printer.name, ...(paper.kind ? { paperKind: paper.kind } : {}), scale: 'noscale', copies: 1, side: 'simplex' };
+  // Sumatra otherwise auto-rotates wide PDFs according to the driver's portrait
+  // flag, even when a custom paper already has the exact landscape dimensions.
+  const orientation = Number(job.width_mm) > Number(job.height_mm) ? 'landscape' : 'portrait';
+  return { printer: printer.name, ...(paper.kind ? { paperKind: paper.kind } : {}), orientation, scale: 'noscale', copies: 1, side: 'simplex' };
 }
 module.exports = { MAX_PDF_BYTES, MAX_PAGES, problem, hash, text, json, matchPaper, normalizeInventory, validatePdf, printOptions };

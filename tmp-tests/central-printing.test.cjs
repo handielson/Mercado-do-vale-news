@@ -45,7 +45,8 @@ test('PDF: reject scripts, mixed page sizes and encrypted/broken data', async ()
 });
 test('printer mapping preserves scale and never multiplies already expanded copies', () => {
   const options = printOptions({ printer_name: destination, width_mm: 30, height_mm: 20, pages: 50 }, inventory);
-  assert.deepEqual(options, { printer: destination, paperKind: 257, scale: 'noscale', copies: 1, side: 'simplex' });
+  assert.deepEqual(options, { printer: destination, paperKind: 257, orientation: 'landscape', scale: 'noscale', copies: 1, side: 'simplex' });
+  assert.equal(printOptions({ printer_name: destination, width_mm: 20, height_mm: 30 }, inventory).orientation, 'portrait');
   assert.throws(() => printOptions({ printer_name: destination, width_mm: 40, height_mm: 30 }, inventory), /tamanho/);
   assert.throws(() => printOptions({ printer_name: 'wrong', width_mm: 30, height_mm: 20 }, inventory), /disponível/);
   assert.throws(() => printOptions({ printer_name: destination, width_mm: 30, height_mm: 20 }, [{ ...inventory[0], status: 'offline' }]), /disponível/);
@@ -102,6 +103,7 @@ test('custom paper requires prepared isolated queue with matching dimensions', a
   let received;
   f.options.print = async (_, options) => { received = options; };
   await executeJob(f.options); assert.equal(received.printer, 'MDV Central ABC'); assert.equal(received.scale, 'noscale');
+  assert.equal(received.orientation, 'landscape');
   const bad = await fixture(t, { inventory: customInventory, preparePaper: async () => ({ printer: 'MDV Central ABC', widthMm: 50, heightMm: 20 }) });
   await executeJob(bad.options); assert.ok(bad.calls.includes('failed')); assert.ok(!bad.calls.includes('physical'));
 });
