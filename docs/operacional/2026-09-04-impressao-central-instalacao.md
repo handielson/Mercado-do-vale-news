@@ -1,6 +1,6 @@
 # Impressão central: instalação e validação
 
-Estado: implementação local da fila de PDFs e etiquetas, sem publicação. Seguir o plano em `2026-09-04-plano-impressao-central-lenovo.md` e o fluxo obrigatório de publicação antes de aplicar em produção.
+Estado: publicado e ativado no Lenovo em 04/09/2026, versão `v1.2.328-impressao-central-pdf` (commit `c44f4113`). API, migration 018 e agente ativos; teste pelo navegador chegou ao Windows, aguardando conferência visual do papel.
 
 ## Entrega implementada
 
@@ -69,3 +69,13 @@ Ainda exigem ambiente publicado/teste autorizado: migração real e comportament
 ## Rollback
 
 Desabilitar novas solicitações antes de parar o agente central; conferir trabalhos reservados/enviados e manter o diário. Retirar as duas variáveis do agente desativa somente a central, preservando a Shopee. Desativar `MDV_CENTRAL_PRINT_ENABLED` pela publicação oficial remove rotas/worker; conservar tabelas e eventos para auditoria. Não reenfileirar automaticamente resultados incertos e não apagar marcadores antigos da Shopee.
+
+## Validação da ativação em produção
+
+- Site: `/var/www/mdv-site/releases/20260904-145500-impressao-central-pdf`; homepage HTTP 200, VERSION correto e painel administrativo renderizado. API `/status` com `mysql.ok=true`; acesso anônimo à administração HTTP 401.
+- Lenovo conectado; P50/USB005, Zebra/USB002 e Comprovante/USB003 normais. Credencial exclusiva instalada em `.env.local` com ACL restrita; processo PM2 salvo.
+- Etiqueta real do modal, SKU FDH01, 30 × 20 mm, uma página: trabalho `9db4e45d-e2a0-42c4-bad5-5ef566a49fba`, estado `submitted`, uma tentativa, diário sincronizado e fila Windows vazia. Sem confirmação visual da saída física até este registro.
+- O primeiro envio foi recusado antes de criar trabalho: jsPDF inclui `/OpenAction` com destino de visualização. Corrigido para permitir somente destinos locais explícitos; ações de impressão e scripts seguem bloqueados. Coberto por teste com jsPDF real. Total: 17 testes aprovados.
+- API publicada pelo comando oficial `node deploy-vps-server-only.cjs --central-printing-only`, preservando conteúdo atual das demais rotas. Backups: `/var/www/mdv-api/backups/central-printing-1788533282627` e `central-printing-1788533565594`.
+- Lenovo: backup anterior em `.restore-points/central-printing-20260904`; script antigo recebeu somente a inicialização da central. Automação Shopee continuou ativa em 127.0.0.1:8081.
+- Lenovo precisa permanecer ligado, sem suspensão, com a sessão Lenovo iniciada. Esta implantação não transforma o processo interativo em serviço anterior ao login.

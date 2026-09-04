@@ -1,6 +1,6 @@
 # Plano de impressão central no Lenovo
 
-Data: 04/09/2026. Estado atualizado: implementação local da fila de PDFs/etiquetas concluída; publicação, validação física e etapas posteriores pendentes. Ver `2026-09-04-impressao-central-instalacao.md` para escopo implementado e instalação. As anotações abaixo preservam o histórico do levantamento.
+Data: 04/09/2026. Estado atualizado: fila de PDFs/etiquetas publicada e ativada no Lenovo; teste de envio ao Windows aprovado, conferência visual e etapas posteriores pendentes. Ver `2026-09-04-impressao-central-instalacao.md` para escopo implementado e instalação. As anotações abaixo preservam o histórico do levantamento.
 
 ## Resultado esperado
 
