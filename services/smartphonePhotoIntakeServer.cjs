@@ -123,6 +123,7 @@ async function findExactIntakeProduct(connection, intake) {
   const [products] = await connection.query(
     `SELECT id,sku,specs FROM products
       WHERE model_id=? AND (? IS NULL OR company_id=? OR company_id IS NULL)
+        AND COALESCE(is_parent,0)=0
       ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'out_of_stock' THEN 1 WHEN 'inactive' THEN 2 ELSE 3 END,
         updated_at DESC FOR UPDATE`,
     [intake.matched_model_id, intake.company_id || null, intake.company_id || null]
@@ -709,6 +710,55 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     return toPublicIntake(await loadIntake(intake.id));
   });
 
+  // Reuse the authenticated Bling proxy; never trust a child/parent ID supplied by the browser.
+  async function verifyBlingChild(request, family, child) {
+    const headers = Object.fromEntries(Object.entries(request.headers || {}).filter(([key]) =>
+      !['authorization', 'cookie', 'content-length', 'content-type', 'host', 'transfer-encoding'].includes(key.toLowerCase())));
+    const response = await fastify.inject({ method: 'GET', url: `/api/bling?resource=product-detail&id=${child.id}`, headers });
+    if (response.statusCode !== 200) throw new Error('Não foi possível validar o filho no Bling. Tente novamente antes de salvar.');
+    const raw = response.json();
+    const product = raw.data || raw;
+    if (String(product.id) !== String(child.id) || String(product.variacao?.produtoPai?.id) !== String(family.parent_id)
+        || String(product.codigo || '').trim() !== child.sku || (product.situacao && product.situacao !== 'A')) {
+      throw new Error('O filho mudou ou não pertence mais ao pai. Atualize o SKU pai no modelo e confira o mapeamento.');
+    }
+  }
+
+  fastify.get('/smartphone-photo-intakes/:id/bling-mapping', { preHandler: requireSyncKey }, async (request, reply) => {
+    await ensureSchema();
+    const intake = await loadIntake(request.params.id);
+    if (!intake) return reply.code(404).send({ error: 'Pré-cadastro não encontrado' });
+    const [rows] = await pool.query('SELECT template_values FROM models WHERE id=? LIMIT 1', [intake.matched_model_id || null]);
+    const family = safeJson(rows[0]?.template_values, {}).bling_family || null;
+    const { getIntakeBlingChild, intakeMappingKey } = await import('./modelBlingMapping.mjs');
+    return { family, child: getIntakeBlingChild(family, intake), configuration_key: intakeMappingKey(intake) };
+  });
+
+  fastify.put('/smartphone-photo-intakes/:id/bling-mapping', { preHandler: requireSyncKey }, async (request, reply) => {
+    await ensureSchema();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query('SELECT * FROM smartphone_photo_intakes WHERE id=? FOR UPDATE', [request.params.id]);
+      const intake = parseIntakeRow(rows[0]);
+      if (!intake || ['completed', 'cancelled'].includes(intake.status)) throw new Error('Selecione um aparelho pendente.');
+      const [models] = await connection.query('SELECT template_values FROM models WHERE id=? FOR UPDATE', [intake.matched_model_id]);
+      if (!models[0]) throw new Error('Associe o modelo antes de mapear.');
+      const template = safeJson(models[0].template_values, {});
+      const { saveIntakeBlingMapping, getIntakeBlingChild, intakeMappingKey } = await import('./modelBlingMapping.mjs');
+      if (request.body?.configuration_key !== intakeMappingKey(intake)) throw new Error('A conferência mudou. Atualize o vínculo antes de mapear.');
+      const family = saveIntakeBlingMapping(template.bling_family, intake, request.body?.child_id);
+      const child = getIntakeBlingChild(family, intake);
+      await verifyBlingChild(request, family, child);
+      await connection.query('UPDATE models SET template_values=? WHERE id=?', [JSON.stringify({ ...template, bling_family: family }), intake.matched_model_id]);
+      await connection.commit();
+      return { family, child, configuration_key: intakeMappingKey(intake) };
+    } catch (error) {
+      await connection.rollback();
+      return reply.code(409).send({ error: error.message });
+    } finally { connection.release(); }
+  });
+
   fastify.post('/smartphone-photo-intakes/:id/finalize', { preHandler: requireSyncKey }, async (request, reply) => {
     await ensureSchema();
     const connection = await pool.getConnection();
@@ -742,27 +792,49 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       }
       const [modelRows] = await connection.query(
         `SELECT m.id,m.name,m.category_id,m.template_values,b.name AS brand_name,b.id AS brand_id
-         FROM models m LEFT JOIN brands b ON b.id=m.brand_id WHERE m.id=? LIMIT 1`, [intake.matched_model_id]
+         FROM models m LEFT JOIN brands b ON b.id=m.brand_id WHERE m.id=? LIMIT 1 FOR UPDATE`, [intake.matched_model_id]
       );
       const model = modelRows[0];
       if (!model) { await connection.rollback(); return reply.code(409).send({ error: 'Modelo vinculado não existe mais' }); }
       const template = safeJson(model.template_values, {});
+      const { getIntakeBlingChild } = await import('./modelBlingMapping.mjs');
+      const family = template.bling_family;
+      const blingChild = getIntakeBlingChild(family, intake);
+      if (family && !blingChild) {
+        await connection.rollback();
+        return reply.code(409).send({ error: 'Confirme o SKU filho no vínculo com Bling para esta memória e cor.' });
+      }
+      if (blingChild) {
+        try { await verifyBlingChild(request, family, blingChild); }
+        catch (error) { await connection.rollback(); return reply.code(409).send({ error: error.message }); }
+      }
       const saleConfigurationProducts = await lockSmartphoneSaleConfiguration(connection, intake);
       let productId = String(request.body?.product_id || intake.matched_product_id || '').trim();
       if (productId) {
-        const [products] = await connection.query('SELECT id,model_id FROM products WHERE id=? LIMIT 1', [productId]);
+        const [products] = await connection.query('SELECT id,model_id,specs,is_parent,company_id FROM products WHERE id=? LIMIT 1 FOR UPDATE', [productId]);
         if (!products[0]) productId = '';
-        else if (products[0].model_id !== intake.matched_model_id) {
+        else if (products[0].model_id !== intake.matched_model_id || products[0].is_parent
+          || (products[0].company_id && products[0].company_id !== intake.company_id)
+          || !productMatchesIntakeConfiguration(products[0], intake)) {
           await connection.rollback();
-          return reply.code(409).send({ error: 'O produto selecionado não pertence ao modelo conferido' });
+          return reply.code(409).send({ error: 'O produto selecionado não corresponde ao modelo, memória, cor ou empresa conferidos.' });
         }
       }
       if (!productId) {
         const exactProduct = await findExactIntakeProduct(connection, intake);
         if (exactProduct) productId = exactProduct.id;
       }
+      if (blingChild) {
+        const [linked] = await connection.query('SELECT id,model_id,specs,company_id,is_parent FROM products WHERE bling_id=? OR sku=? FOR UPDATE', [blingChild.id, blingChild.sku]);
+        if (linked.some(row => (productId && row.id !== productId) || row.model_id !== intake.matched_model_id || row.is_parent
+          || (row.company_id && row.company_id !== intake.company_id) || !productMatchesIntakeConfiguration(row, intake))) {
+          await connection.rollback();
+          return reply.code(409).send({ error: 'Esse SKU filho já pertence a outro produto. Confira o modelo, memória e cor antes de vincular.' });
+        }
+        if (!productId && linked.length === 1) productId = linked[0].id;
+      }
       if (!productId) {
-        const sku = await reserveAvailableSku(connection, request.body?.sku, intake, model);
+        const sku = blingChild?.sku || await reserveAvailableSku(connection, request.body?.sku, intake, model);
         if (!sku) { await connection.rollback(); return reply.code(409).send({ error: 'Informe o SKU para criar esta variação' }); }
         const [skuRows] = await connection.query('SELECT id FROM products WHERE sku=? LIMIT 1 FOR UPDATE', [sku]);
         if (skuRows[0]) {
@@ -777,6 +849,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
             ram: intake.detected_ram || undefined,
             storage: intake.detected_storage || undefined,
           };
+          delete specs.bling_family;
           let images = [];
           if (intake.detected_color) {
             const [imageRows] = await connection.query(
@@ -802,6 +875,17 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
               intake.company_id || null]
           );
         }
+      }
+      if (blingChild) {
+        const [existing] = await connection.query('SELECT bling_id,bling_parent_id FROM products WHERE id=? FOR UPDATE', [productId]);
+        if ((existing[0]?.bling_id && String(existing[0].bling_id) !== String(blingChild.id))
+          || (existing[0]?.bling_parent_id && String(existing[0].bling_parent_id) !== String(family.parent_id))) {
+          await connection.rollback();
+          return reply.code(409).send({ error: 'O produto já possui outro vínculo Bling. Corrija o vínculo na edição do produto.' });
+        }
+        const [parents] = await connection.query('SELECT id FROM products WHERE bling_id=? AND COALESCE(is_parent,0)=1 AND (company_id=? OR company_id IS NULL) LIMIT 1', [family.parent_id, intake.company_id || null]);
+        await connection.query('UPDATE products SET bling_id=?,bling_parent_id=?,parent_id=COALESCE(?,parent_id) WHERE id=?',
+          [blingChild.id, family.parent_id, parents[0]?.id || null, productId]);
       }
       const unitId = crypto.randomUUID();
       await connection.query(

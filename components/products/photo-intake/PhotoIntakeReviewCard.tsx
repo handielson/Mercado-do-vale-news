@@ -3,6 +3,7 @@ import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Save, Sparkles } from '
 import { Link } from 'react-router-dom';
 import { CurrencyInput } from '../../ui/CurrencyInput';
 import { ProtectedIntakePhoto } from './ProtectedIntakePhoto';
+import { PhotoIntakeBlingMapping } from './PhotoIntakeBlingMapping';
 import type { Color } from '../../../types/color';
 import type { Model } from '../../../types/model';
 import type {
@@ -302,7 +303,8 @@ export function PhotoIntakeReviewCard({
             </button>
           </div>
 
-          {!intake.matched_product_id && (
+          <PhotoIntakeBlingMapping key={intake.id} intake={intake} busy={busy} />
+          {!intake.matched_product_id && !models.find(model => model.id === intake.matched_model_id)?.template_values?.bling_family && (
             <label className="block rounded-xl border border-slate-200 bg-slate-50 p-4">
               <span className="mb-1 block text-xs font-bold text-slate-700">SKU da nova variação (opcional)</span>
               <input

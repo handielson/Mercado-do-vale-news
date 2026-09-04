@@ -29,7 +29,7 @@ export async function saveAsModelTemplate(
         if (productData.specs) {
             Object.entries(productData.specs).forEach(([key, value]) => {
                 // Pular campos únicos
-                if (UNIQUE_FIELDS.includes(key)) {
+                if (key === 'bling_family' || UNIQUE_FIELDS.includes(key)) {
                     console.log(`⏭️ Skipping unique field from template: ${key}`);
                     return;
                 }
@@ -58,7 +58,7 @@ export async function saveAsModelTemplate(
             active: model.active,
             category_id: productData.category_id || model.category_id,
             description: productData.description || model.description,
-            template_values: templateValues
+            template_values: { ...templateValues, ...(model.template_values?.bling_family ? { bling_family: model.template_values.bling_family } : {}) }
         });
 
         console.log('✅ Template saved successfully:', templateValues);

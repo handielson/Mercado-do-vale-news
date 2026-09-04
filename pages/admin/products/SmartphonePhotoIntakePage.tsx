@@ -20,9 +20,10 @@ import type {
   SmartphonePhotoIntakeUpdate,
 } from '../../../types/smartphone-photo-intake';
 
+import { photoQueueGroupKey } from '../../../services/modelBlingMapping.mjs';
+
 type ViewMode = 'queue' | 'margins';
 const GROUPABLE_STATUSES = new Set(['waiting_price_confirmation', 'review_required', 'ready_to_finalize']);
-const QUEUE_GROUPABLE_STATUSES = new Set(['waiting_price_confirmation', 'review_required']);
 const normalizeGroupValue = (value?: string | null) => String(value || '').replace(/\s+/g, '').toUpperCase();
 
 function sortPhotoIntakeQueue(items: SmartphonePhotoIntake[]): SmartphonePhotoIntake[] {
@@ -43,15 +44,7 @@ function hasSamePriceGroup(left: SmartphonePhotoIntake, right: SmartphonePhotoIn
 }
 
 function getQueueGroupKey(item: SmartphonePhotoIntake): string {
-  if (!item.matched_model_id || !item.matched_color_id || !QUEUE_GROUPABLE_STATUSES.has(item.status)) {
-    return `item:${item.id}`;
-  }
-  return [
-    item.matched_model_id,
-    normalizeGroupValue(item.detected_ram),
-    normalizeGroupValue(item.detected_storage),
-    item.matched_color_id,
-  ].join('|');
+  return photoQueueGroupKey(item);
 }
 
 export function SmartphonePhotoIntakePage() {
@@ -148,6 +141,12 @@ export function SmartphonePhotoIntakePage() {
       const representative = representativeByKey.get(key);
       if (representative) {
         groupSizeById[representative.id] = (groupSizeById[representative.id] || 1) + 1;
+        if (item.id === selectedId) {
+          representatives[representatives.indexOf(representative)] = item;
+          representativeByKey.set(key, item);
+          groupSizeById[item.id] = groupSizeById[representative.id];
+          delete groupSizeById[representative.id];
+        }
         continue;
       }
       representativeByKey.set(key, item);
@@ -156,7 +155,7 @@ export function SmartphonePhotoIntakePage() {
     }
 
     return { items: representatives, groupSizeById };
-  }, [groupQueue, visibleItems]);
+  }, [groupQueue, visibleItems, selectedId]);
 
   const toggleQueueGrouping = () => {
     const next = !groupQueue;

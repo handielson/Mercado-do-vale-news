@@ -32,7 +32,7 @@ assert.match(intakePage, /function sortPhotoIntakeQueue[\s\S]*left\.status === '
 assert.match(intakePage, /sortPhotoIntakeQueue\(\[item, \.\.\.without\]\)[\s\S]*sortPhotoIntakeQueue\(rows\)/, 'a prioridade dos pendentes deve valer ao atualizar e ao carregar a fila');
 assert.match(intakePage, /const finalizeSelected = async \(sku\?: string\)[\s\S]*status !== 'completed'[\s\S]*setSelectedId\(nextPending\?\.id \|\| updated\.id\)/, 'ao salvar deve avançar para o próximo aparelho pendente');
 assert.match(intakePage, /sortPhotoIntakeQueue\(\[[\s\S]*updated,[\s\S]*items\.filter\(item => item\.id !== updated\.id\)/, 'aparelhos salvos devem permanecer no final da fila');
-assert.match(intakePage, /getQueueGroupKey[\s\S]*matched_model_id[\s\S]*detected_ram[\s\S]*detected_storage[\s\S]*matched_color_id/, 'fila deve agrupar por modelo, RAM, armazenamento e cor');
+assert.match(intakePage, /function getQueueGroupKey[\s\S]*return photoQueueGroupKey\(item\)/, 'fila deve usar a regra de agrupamento testada com configurações reais');
 assert.match(queue, /groupSize > 1[\s\S]*\{groupSize\} aparelhos/, 'fila deve mostrar a quantidade de aparelhos do grupo');
 assert.match(queue, /Produto encontrado/, 'fila deve distinguir produto encontrado de aparelho concluído');
 assert.doesNotMatch(queue, /truncate text-sm font-bold|mt-0\.5 truncate text-xs/, 'fila nao deve truncar modelo, memoria ou cor');

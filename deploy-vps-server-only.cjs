@@ -26,6 +26,7 @@ const smartphonePhotoIntakeServiceFiles = [
   'services/physicalRamCore.cjs',
   'services/smartphonePhotoIntakeCore.cjs',
   'services/smartphonePhotoIntakeServer.cjs',
+  'services/modelBlingMapping.mjs',
 ];
 const mercadoLivreServicePath = 'services/mercadoLivreServer.cjs';
 const autoresponderEngineFiles = [
@@ -319,6 +320,20 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--photo-intake-only')) {
+    if (apiProc.name !== 'mdv-api' || !/^\/var\/www\/[a-zA-Z0-9_-]+$/.test(appDir)) throw new Error('Unexpected API target');
+    const backupDir = `${appDir}/backups/photo-intake-${Date.now()}`;
+    await exec(`mkdir -p ${backupDir}`);
+    for (const file of smartphonePhotoIntakeServiceFiles) {
+      await exec(`if test -f ${appDir}/${file}; then cp ${appDir}/${file} ${backupDir}/${path.basename(file)}; fi`);
+    }
+    await uploadSmartphonePhotoIntakeFiles(appDir);
+    await exec(`node --check ${appDir}/services/smartphonePhotoIntakeServer.cjs && node --check ${appDir}/services/modelBlingMapping.mjs`);
+    console.log((await exec('pm2 restart mdv-api')).trim());
+    console.log(`Photo intake backup: ${backupDir}`);
+    conn.end();
+    return;
+  }
   console.log(`Uploading server to ${appDir}`);
   await upload(localServer, `${appDir}/vps_server.js`);
   await upload(localServerCjs, `${appDir}/vps_server.cjs`);

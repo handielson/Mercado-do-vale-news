@@ -10,7 +10,7 @@ import { categoryService } from '../../services/categories';
 import { customFieldsService, type CustomField } from '../../services/custom-fields';
 import { crossSellTagsService, type CrossSellTag } from '../../services/cross-sell-tags';
 import { vpsApiService } from '../../services/vpsApiService';
-import { blingService, findBlingProductByExactSku } from '../../services/blingService';
+import { blingService, fetchBlingModelFamily } from '../../services/blingService';
 import { applyFieldFormat, getFieldDefinition } from '../../config/field-dictionary';
 import { UNIQUE_FIELDS } from '../../config/product-fields';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -204,6 +204,7 @@ const formatModelNameTitleCase = (value: string) => value.replace(
 );
 
 const NON_TEMPLATE_CATEGORY_KEYS = new Set([
+    'bling_family',
     'auto_name_enabled',
     'auto_name_fields',
     'auto_name_template',
@@ -759,7 +760,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
         setFetchingBlingData(true);
         try {
-            const product = await findBlingProductByExactSku(sku);
+            const { parent: product, family } = await fetchBlingModelFamily(sku, templateValues.bling_family);
             if (!product) {
                 toast.error(`Produto com o SKU "${sku}" não foi encontrado no Bling.`);
                 return;
@@ -787,28 +788,21 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
             // Dimensões & Peso
             const newTemplateValues = { ...templateValues };
-            let hasDimensions = false;
 
             if (product.pesoBruto && !isNaN(Number(product.pesoBruto))) {
                 newTemplateValues['weight_kg'] = Number(product.pesoBruto);
-                hasDimensions = true;
             }
             if (product.largura && !isNaN(Number(product.largura))) {
                 newTemplateValues['dimensions.width_cm'] = Number(product.largura);
-                hasDimensions = true;
             }
             if (product.altura && !isNaN(Number(product.altura))) {
                 newTemplateValues['dimensions.height_cm'] = Number(product.altura);
-                hasDimensions = true;
             }
             if (product.profundidade && !isNaN(Number(product.profundidade))) {
                 newTemplateValues['dimensions.depth_cm'] = Number(product.profundidade);
-                hasDimensions = true;
             }
 
-            if (hasDimensions) {
-                setTemplateValues(newTemplateValues);
-            }
+            setTemplateValues({ ...newTemplateValues, bling_family: family });
 
             toast.success(`Informações do SKU "${sku}" importadas com sucesso!`);
         } catch (err) {
@@ -1223,6 +1217,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 }
             }
             setTemplateValues(tv);
+            setBlingSkuInput(tv.bling_family?.parent_sku || '');
             setEans(model.eans || []);
             // Load Shopee fields from template_values
             setShopeeAutoPublishEnabled(Boolean(tv['shopee_auto_publish_enabled']));
@@ -1234,6 +1229,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             setShopeeAttributeDefaultsError('');
         } else {
             setName('');
+            setBlingSkuInput('');
             setBrandId('');
             setBrandSearch('');
             setActive(true);
@@ -1861,12 +1857,12 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                             {/* Buscar do Bling por SKU */}
                             <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
                                 <label className="block text-sm font-semibold text-blue-900 mb-2">
-                                    Preencher Dados via Bling (Opcional)
+                                    Vincular modelo pelo SKU pai do Bling (opcional)
                                 </label>
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
-                                        placeholder="Digite o SKU do Bling (Ex: 12345)"
+                                        placeholder="Digite o SKU do pai no Bling"
                                         value={blingSkuInput}
                                         onChange={(e) => setBlingSkuInput(e.target.value)}
                                         onKeyDown={(e) => {
@@ -1887,8 +1883,36 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     </button>
                                 </div>
                                 <p className="text-xs text-blue-700 mt-1">
-                                    Pesquisa o SKU no Bling e preenche automaticamente a Descrição, Dimensões, Peso e código GTIN/EAN.
+                                    Busca os dados do pai e seus filhos. Salve o modelo para usar essa associação no cadastro por foto.
                                 </p>
+                                {templateValues.bling_family && (
+                                    <div className="mt-3 space-y-2 text-sm text-blue-950">
+                                        <p className="font-bold">Pai: {templateValues.bling_family.parent_sku} · {templateValues.bling_family.parent_name}</p>
+                                        <ul className="max-h-40 overflow-y-auto rounded border border-blue-200 bg-white p-3">
+                                            {templateValues.bling_family.children.map((child: any) => (
+                                                <li key={child.id}>{child.sku} — {child.name}{child.active === false ? ' (inativo)' : ''}</li>
+                                            ))}
+                                        </ul>
+                                        <p>Mapeamentos confirmados por foto</p>
+                                        {(templateValues.bling_family.mappings || []).map((mapping: any) => (
+                                            <div key={mapping.key} className="flex flex-wrap items-center gap-2">
+                                                <span>{mapping.ram} · {mapping.storage} · {mapping.color}</span>
+                                                <select value={mapping.child_id} onChange={event => setTemplateValues(current => ({
+                                                    ...current, bling_family: { ...current.bling_family, mappings: current.bling_family.mappings.map((row: any) =>
+                                                        row.key === mapping.key ? { ...row, child_id: Number(event.target.value) } : row) },
+                                                }))} className="min-w-0 max-w-full rounded border p-1">
+                                                    {templateValues.bling_family.children.filter((child: any) => child.active !== false).map((child: any) => (
+                                                        <option key={child.id} value={child.id}>{child.sku} — {child.name}</option>
+                                                    ))}
+                                                </select>
+                                                <button type="button" className="text-red-700 underline" onClick={() => setTemplateValues(current => ({
+                                                    ...current, bling_family: { ...current.bling_family, mappings: current.bling_family.mappings.filter((row: any) => row.key !== mapping.key) },
+                                                }))}>Remover mapeamento</button>
+                                            </div>
+                                        ))}
+                                        <p className="text-xs">Alterações nos mapeamentos valem para os próximos cadastros. Use Salvar para confirmar.</p>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Brand Select */}

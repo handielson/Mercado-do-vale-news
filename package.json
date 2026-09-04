@@ -24,7 +24,8 @@
     "test:marketing-calendar": "node tmp-tests/marketing-calendar-data-loading-static.test.mjs && node tmp-tests/instagram-schedule-service-vps-static.test.mjs",
     "publish:vps-plan": "node scripts/publish-vps-plan.cjs",
     "deploy:vps-site": "node scripts/deploy-vps-site.cjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:smartphone-photo-intake-bling": "node --test tmp-tests/model-bling-mapping.test.mjs tmp-tests/photo-intake-bling-routes.test.mjs"
   },
   "dependencies": {
     "@fastify/compress": "^8.3.1",

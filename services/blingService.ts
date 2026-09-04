@@ -1101,6 +1101,20 @@ export async function findBlingProductByExactSku(sku: string): Promise<BlingProd
     return detailedProduct || exactProduct;
 }
 
+/** Read the complete family without importing products or changing stock. */
+export async function fetchBlingModelFamily(sku: string, previous?: any) {
+    const { buildBlingFamily } = await import('./modelBlingMapping.mjs');
+    const parent = await findBlingProductByExactSku(sku);
+    if (!parent) throw new Error('SKU pai não encontrado no Bling.');
+    if (parent.variacao?.produtoPai?.id) throw new Error('Esse SKU é de um filho. Informe o SKU do pai.');
+    const accessToken = await getValidToken();
+    const response = await fetch(`/api/bling?resource=product-detail&id=${parent.id}&variacoes=1`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) throw new Error(`Não foi possível consultar os filhos no Bling (${response.status}). Tente novamente.`);
+    return { parent: parent as BlingProductDetail, family: buildBlingFamily(parent, await response.json(), previous) };
+}
+
 
 /** Traduz erros técnicos do persistência para mensagens amigáveis em português */
 function humanizeImportError(operation: string, rawMessage: string): string {

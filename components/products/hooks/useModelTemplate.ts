@@ -68,6 +68,7 @@ export function useModelTemplate(
             // 4. Preencher valores do template (se existirem)
             if (selectedModel.template_values && Object.keys(selectedModel.template_values).length > 0) {
                 Object.entries(selectedModel.template_values).forEach(([key, value]) => {
+                    if (key === 'bling_family') return;
                     // Pular campos únicos
                     if (UNIQUE_FIELDS.includes(key)) {
                         console.log(`⏭️ Skipping unique field: ${key}`);
