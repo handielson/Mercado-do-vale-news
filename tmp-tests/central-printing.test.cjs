@@ -25,6 +25,16 @@ test('PDF: exact dimensions and pages; settings cannot replace actual document',
   await assert.rejects(validatePdf(bytes.toString('base64'), { widthMm: 50 }), /diverge/);
   await assert.rejects(validatePdf('YXNk'), /PDF/);
 });
+test('PDF: real jsPDF label keeps initial page view but rejects autoPrint action', async () => {
+  const { jsPDF } = require('jspdf');
+  const doc = new jsPDF({ unit: 'mm', format: [30, 20], orientation: 'landscape' });
+  doc.text('Teste P50', 2, 5);
+  const bytes = Buffer.from(doc.output('arraybuffer'));
+  const valid = await validatePdf(bytes.toString('base64'), { widthMm: 30, heightMm: 20, pages: 1 });
+  assert.deepEqual(valid.buffer, bytes);
+  doc.autoPrint();
+  await assert.rejects(validatePdf(Buffer.from(doc.output('arraybuffer')).toString('base64')), /scripts|automática/);
+});
 test('PDF: reject scripts, mixed page sizes and encrypted/broken data', async () => {
   const doc = await PDFDocument.load(await pdf(1));
   doc.catalog.set(PDFName.of('OpenAction'), doc.context.obj({ S: 'JavaScript', JS: 'print()' }));

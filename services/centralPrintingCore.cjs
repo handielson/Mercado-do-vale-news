@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { PDFDocument, PDFName } = require('pdf-lib');
+const { PDFDocument, PDFName, PDFArray, PDFNumber, PDFNull } = require('pdf-lib');
 
 const MAX_PDF_BYTES = 8 * 1024 * 1024;
 const MAX_PAGES = 500;
@@ -41,16 +41,24 @@ async function validatePdf(base64, expected = {}) {
   try { doc = await PDFDocument.load(buffer); } catch { throw problem('PDF ilegível ou protegido.'); }
   const pages = doc.getPages();
   if (!pages.length || pages.length > MAX_PAGES) throw problem('O PDF deve ter de 1 a 500 páginas.');
+  // jsPDF writes a harmless initial page view. Accept only an explicit local
+  // page destination; action dictionaries (including Print/JavaScript) stay blocked.
+  const openAction = doc.catalog.lookup(PDFName.of('OpenAction'));
+  const destinationLengths = { '/XYZ': 5, '/Fit': 2, '/FitH': 3, '/FitV': 3, '/FitR': 6, '/FitB': 2, '/FitBH': 3, '/FitBV': 3 };
+  const safeView = openAction instanceof PDFArray && pages.some(p => p.ref.toString() === openAction.get(0)?.toString()) &&
+    destinationLengths[openAction.get(1)?.toString()] === openAction.size() &&
+    openAction.asArray().slice(2).every(v => v instanceof PDFNumber || v === PDFNull);
   // Uploads are printable documents, never interactive PDFs or attachments.
   for (const [, object] of doc.context.enumerateIndirectObjects()) {
     if (typeof object?.keys !== 'function') continue;
     for (const key of object.keys()) {
+      if (key.toString() === '/OpenAction' && object === doc.catalog && safeView) continue;
       if (['/JS', '/JavaScript', '/OpenAction', '/AA', '/EmbeddedFiles', '/Launch', '/RichMediaContent'].includes(key.toString())) {
         throw problem('Use um PDF sem scripts, ações automáticas ou anexos.');
       }
     }
   }
-  if (doc.catalog.has(PDFName.of('OpenAction'))) throw problem('Use um PDF sem impressão automática embutida.');
+  if (openAction && !safeView) throw problem('Use um PDF sem impressão automática embutida.');
   const widthMm = pages[0].getWidth() * 25.4 / 72;
   const heightMm = pages[0].getHeight() * 25.4 / 72;
   if (widthMm < 10 || heightMm < 10 || widthMm > 1000 || heightMm > 2000) throw problem('Dimensões inválidas.');

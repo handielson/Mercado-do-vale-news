@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.327-impressao-central
+version: v1.2.328-impressao-central-pdf
 date: 2026-09-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260904-144502-impressao-central
+release_vps: /var/www/mdv-site/releases/20260904-145500-impressao-central-pdf
 branch: main
-summary: Impressao central pelo Lenovo com P50, Zebra e Comprovante, preservando tamanho, conteudo e copias do PDF do sistema.
-tag: v1.2.327-impressao-central
+summary: Impressao central pelo Lenovo validada com PDF jsPDF, preservando tamanho, conteudo e copias configurados no sistema.
+tag: v1.2.328-impressao-central-pdf
 ```

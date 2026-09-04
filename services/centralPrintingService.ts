@@ -15,7 +15,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}), cache: 'no-store', signal: AbortSignal.timeout(30000),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Impressão central indisponível (${response.status}).`);
+  if (!response.ok) throw new Error(data.message || data.error || `Impressão central indisponível (${response.status}).`);
   return data;
 }
 export const centralPrintingService = {

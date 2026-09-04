@@ -601,7 +601,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                                 ))}
                             </select>
                             <p className="text-xs text-slate-500 mt-1">
-                                Selecione o mesmo tamanho de papel na janela da impressora.
+                                {printDestination === 'local' ? 'Selecione o mesmo tamanho de papel na janela da impressora.' : 'O Lenovo aplicará o tamanho selecionado, sem redimensionar a etiqueta.'}
                             </p>
                             {labelSizesError && <p className="text-xs text-red-600 mt-1">{labelSizesError}</p>}
                         </div>
