@@ -14,7 +14,7 @@ const {
   translateColorToPtBr,
   validatePhotoExtraction,
 } = require('../services/smartphonePhotoIntakeCore.cjs');
-const { scoreCatalogModel } = require('../services/smartphonePhotoIntakeServer.cjs');
+const { productCompanyMatchesIntakeScope, scoreCatalogModel } = require('../services/smartphonePhotoIntakeServer.cjs');
 
 assert.equal(isValidImei('861260086190905'), true);
 assert.equal(isValidImei('861260086190906'), false);
@@ -69,6 +69,11 @@ assert.notEqual(
   'RAM e armazenamento diferentes precisam manter preços independentes'
 );
 assert.equal(resolvePhotoIntakeStatus({ matchedModelId: null }), PHOTO_INTAKE_STATUS.WAITING_MODEL_REGISTRATION);
+assert.equal(productCompanyMatchesIntakeScope('default', 'company-default-id', 'company-default-id'), true);
+assert.equal(productCompanyMatchesIntakeScope('company-default-id', 'default', 'company-default-id'), true);
+assert.equal(productCompanyMatchesIntakeScope(null, 'another-company-id', 'company-default-id'), true);
+assert.equal(productCompanyMatchesIntakeScope('default', 'another-company-id', 'company-default-id'), false);
+assert.equal(productCompanyMatchesIntakeScope('another-company-id', 'company-default-id', 'company-default-id'), false);
 assert.equal(resolvePhotoIntakeStatus({ matchedModelId: 'model-1' }), PHOTO_INTAKE_STATUS.WAITING_PRICE_CONFIRMATION);
 assert.equal(resolvePhotoIntakeStatus({ matchedModelId: 'model-1', pricesConfirmed: true }), PHOTO_INTAKE_STATUS.READY_TO_FINALIZE);
 assert.equal(resolvePhotoIntakeStatus({

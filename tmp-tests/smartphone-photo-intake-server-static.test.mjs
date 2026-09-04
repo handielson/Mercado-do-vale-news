@@ -36,7 +36,9 @@ assert.match(frontendService, /async function upload[\s\S]*getCompanyId\(\)[\s\S
 assert.match(source, /SELECT company_id FROM brands WHERE id=\?[\s\S]*brandRows\?\.\[0\]\?\.company_id/, 'API deve usar a empresa da marca quando companies nao tiver a empresa padrao');
 assert.match(source, /const name = String\(model\.name \|\| ''\)\.trim\(\)/, 'produto criado por foto deve usar apenas o nome canonico do modelo');
 assert.doesNotMatch(source, /const name = String\(request\.body\?\.name \|\| \[model\.name/, 'nome do produto nao deve incorporar RAM, armazenamento ou cor');
-assert.match(source, /findExactIntakeProduct\(connection, intake\)/, 'deve vincular automaticamente uma configuracao identica');
+assert.match(source, /findExactIntakeProduct\(connection, intake, defaultCompanyId\)/, 'deve vincular automaticamente uma configuracao identica no escopo canônico da empresa');
+assert.match(source, /productCompanyMatchesIntakeScope\(products\[0\]\.company_id, intake\.company_id, defaultCompanyId\)/, 'produto legado da empresa default deve ser comparado com o UUID canônico');
+assert.match(source, /productCompanyMatchesIntakeScope\(row\.company_id, intake\.company_id, defaultCompanyId\)/, 'vínculo Bling deve usar o mesmo escopo canônico de empresa');
 assert.match(reviewCard, /Produto encontrado\.[\s\S]*O produto já existe[\s\S]*Falta concluir este aparelho[\s\S]*não será criado outro produto/, 'a conferência deve explicar que o produto existe, mas o aparelho ainda precisa ser concluído');
 assert.match(queue, /Produto encontrado/, 'a fila deve identificar variações já cadastradas com texto simples');
 assert.match(source, /review_confirmed=0, review_confirmed_at=NULL/, 'nova leitura deve invalidar a confirmação manual anterior');

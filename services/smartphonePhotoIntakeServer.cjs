@@ -101,16 +101,28 @@ function productMatchesIntakeConfiguration(product, intake) {
     && colorMatches;
 }
 
-async function findExactIntakeProduct(connection, intake) {
+function normalizeCompanyScopeId(companyId, defaultCompanyId) {
+  const value = String(companyId || '').trim();
+  if (value === 'default') return String(defaultCompanyId || '').trim();
+  return value;
+}
+
+function productCompanyMatchesIntakeScope(productCompanyId, intakeCompanyId, defaultCompanyId) {
+  const productScope = normalizeCompanyScopeId(productCompanyId, defaultCompanyId);
+  const intakeScope = normalizeCompanyScopeId(intakeCompanyId, defaultCompanyId);
+  return !productScope || productScope === intakeScope;
+}
+
+async function findExactIntakeProduct(connection, intake, defaultCompanyId) {
   const [products] = await connection.query(
-    `SELECT id,sku,specs FROM products
-      WHERE model_id=? AND (? IS NULL OR company_id=? OR company_id IS NULL)
-        AND COALESCE(is_parent,0)=0
+    `SELECT id,sku,specs,company_id FROM products
+      WHERE model_id=? AND COALESCE(is_parent,0)=0
       ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'out_of_stock' THEN 1 WHEN 'inactive' THEN 2 ELSE 3 END,
         updated_at DESC FOR UPDATE`,
-    [intake.matched_model_id, intake.company_id || null, intake.company_id || null]
+    [intake.matched_model_id]
   );
-  return products.find((product) => productMatchesIntakeConfiguration(product, intake)) || null;
+  return products.find((product) => productCompanyMatchesIntakeScope(product.company_id, intake.company_id, defaultCompanyId)
+    && productMatchesIntakeConfiguration(product, intake)) || null;
 }
 
 async function reserveAvailableSku(connection, requestedSku, intake, model) {
@@ -243,12 +255,12 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     return parseIntakeRow(rows[0]);
   }
 
-  async function resolvePhotoIntakeCompanyId(companyId) {
+  async function resolvePhotoIntakeCompanyId(companyId, db = pool) {
     const requested = String(companyId || '').trim();
     if (requested && requested !== 'default') return requested;
-    const [preferred] = await pool.query("SELECT id FROM companies WHERE slug='mercado-do-vale' LIMIT 1").catch(() => [[]]);
+    const [preferred] = await db.query("SELECT id FROM companies WHERE slug='mercado-do-vale' LIMIT 1").catch(() => [[]]);
     if (preferred?.[0]?.id) return preferred[0].id;
-    const [fallback] = await pool.query('SELECT id FROM companies ORDER BY created_at ASC LIMIT 1').catch(() => [[]]);
+    const [fallback] = await db.query('SELECT id FROM companies ORDER BY created_at ASC LIMIT 1').catch(() => [[]]);
     return fallback?.[0]?.id || null;
   }
 
@@ -791,6 +803,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         return { intake: toPublicIntake(intake), product_id: intake.matched_product_id, unit_id: intake.unit_id, idempotent: true };
       }
       if (!intake.matched_model_id) { await connection.rollback(); return reply.code(409).send({ error: 'Cadastre ou vincule o modelo primeiro' }); }
+      const defaultCompanyId = await resolvePhotoIntakeCompanyId('default', connection);
       if (!intake.matched_color_id) { await connection.rollback(); return reply.code(409).send({ error: 'Selecione ou cadastre a cor antes de salvar' }); }
       if (!intake.prices_confirmed) { await connection.rollback(); return reply.code(409).send({ error: 'Confirme os preços antes de salvar' }); }
       const requiredPrices = ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale'];
@@ -847,20 +860,21 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         const [products] = await connection.query('SELECT id,model_id,specs,is_parent,company_id FROM products WHERE id=? LIMIT 1 FOR UPDATE', [productId]);
         if (!products[0]) productId = '';
         else if (products[0].model_id !== intake.matched_model_id || products[0].is_parent
-          || (products[0].company_id && products[0].company_id !== intake.company_id)
+          || !productCompanyMatchesIntakeScope(products[0].company_id, intake.company_id, defaultCompanyId)
           || !productMatchesIntakeConfiguration(products[0], intake)) {
           await connection.rollback();
           return reply.code(409).send({ error: 'O produto selecionado não corresponde ao modelo, memória, cor ou empresa conferidos.' });
         }
       }
       if (!productId) {
-        const exactProduct = await findExactIntakeProduct(connection, intake);
+        const exactProduct = await findExactIntakeProduct(connection, intake, defaultCompanyId);
         if (exactProduct) productId = exactProduct.id;
       }
       if (blingChild) {
         const [linked] = await connection.query('SELECT id,model_id,specs,company_id,is_parent FROM products WHERE bling_id=? OR sku=? FOR UPDATE', [blingChild.id, blingChild.sku]);
         if (linked.some(row => (productId && row.id !== productId) || row.model_id !== intake.matched_model_id || row.is_parent
-          || (row.company_id && row.company_id !== intake.company_id) || !productMatchesIntakeConfiguration(row, intake))) {
+          || !productCompanyMatchesIntakeScope(row.company_id, intake.company_id, defaultCompanyId)
+          || !productMatchesIntakeConfiguration(row, intake))) {
           await connection.rollback();
           return reply.code(409).send({ error: 'Esse SKU filho já pertence a outro produto. Confira o modelo, memória e cor antes de vincular.' });
         }
@@ -950,4 +964,4 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
   return { ensureSchema };
 }
 
-module.exports = { registerSmartphonePhotoIntakeRoutes, scoreCatalogModel };
+module.exports = { registerSmartphonePhotoIntakeRoutes, scoreCatalogModel, productCompanyMatchesIntakeScope };

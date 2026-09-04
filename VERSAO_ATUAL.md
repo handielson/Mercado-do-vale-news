@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.331-celulares-controle
+version: v1.2.332-foto-celular-empresa
 date: 2026-09-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260904-170948-v12331-celulares-controle
+release_vps: /var/www/mdv-site/releases/20260904-203446-v12332-foto-celular-empresa
 branch: main
-summary: Precos de venda unificados por configuracao de celular, conferencia manual no cadastro por foto e navegacao publica completa do produto.
-tag: v1.2.331-celulares-controle
+summary: Corrige a finalizacao do cadastro por foto para reconhecer o identificador legado da empresa padrao como o UUID canonico.
+tag: v1.2.332-foto-celular-empresa
 ```
