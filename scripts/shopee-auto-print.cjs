@@ -1170,6 +1170,13 @@ async function runLoop() {
     }
 }
 
+if (process.env.MDV_PRINT_DEVICE_TOKEN && process.env.MDV_PRINT_API_URL) {
+    try {
+        require('./central-print-agent.cjs').startCentralPrintAgent();
+    } catch (error) {
+        console.error('[Impressão central] Inicialização falhou:', error.message);
+    }
+}
 startLocalServer();
 void runLoop();
 void runMercadoLivreLoop();

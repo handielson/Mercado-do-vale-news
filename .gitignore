@@ -89,3 +89,7 @@ reports/bling-reconcile-review.md
 tmp-tests/archive-self-test-output/
 reports/autoresponder-archive-vps-package/
 tmp-tests/vps-bling-reconcile-dry-run-details-output.json
+
+# Central printing: generated Windows helper and private device journals/PDFs
+scripts/central-print-runtime/
+scripts/central-print-journal/

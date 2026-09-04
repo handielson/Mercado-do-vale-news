@@ -3,6 +3,7 @@ import { getCompanyData, saveCompanyData } from '../../../../services/companySer
 import { Company } from '../../../../types/company';
 import { Printer, Save, Loader2, Info, RefreshCw, Trash2, Play, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import { CentralPrintingPanel } from '../../../../components/admin/CentralPrintingPanel';
 
 // O serviço local escuta explicitamente em IPv4 para não expor a porta na rede.
 // `localhost` pode resolver primeiro para ::1 no Chrome e não alcançar o serviço.
@@ -199,6 +200,7 @@ export default function ShopeePrintersTab() {
                 </div>
 
                 <div className="p-6 space-y-6">
+                    <CentralPrintingPanel />
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-blue-800 text-sm">
                         <Info className="w-5 h-5 shrink-0 text-blue-500 mt-0.5" />
                         <div>

@@ -320,6 +320,11 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--central-printing-only')) {
+    await require('./scripts/deploy-central-printing.cjs')({ appDir, apiProc, exec, upload, root: __dirname });
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--photo-intake-only')) {
     if (apiProc.name !== 'mdv-api' || !/^\/var\/www\/[a-zA-Z0-9_-]+$/.test(appDir)) throw new Error('Unexpected API target');
     const backupDir = `${appDir}/backups/photo-intake-${Date.now()}`;

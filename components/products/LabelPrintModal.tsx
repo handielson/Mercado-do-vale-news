@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { centralPrintingService, destinationKey, printStatusLabels, supportsPrintSize, PrintDestination, PrintJob } from '../../services/centralPrintingService';
 import { X, Printer, Settings, Package } from 'lucide-react';
 import Barcode from 'react-barcode';
 import { jsPDF } from 'jspdf';
@@ -401,6 +402,37 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     const [labelSizes, setLabelSizes] = useState<LabelSize[]>([]);
     const [labelSizesError, setLabelSizesError] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
+    const [destinations, setDestinations] = useState<PrintDestination[]>([]);
+    const [printDestination, setPrintDestination] = useState('local');
+    const [centralError, setCentralError] = useState('');
+    const [centralJob, setCentralJob] = useState<PrintJob | null>(null);
+    const printLock = React.useRef(false);
+    const pendingPrint = React.useRef<{ fingerprint: string; key: string; pdf: Blob } | null>(null);
+
+    React.useEffect(() => {
+        if (!isOpen) return;
+        let cancelled = false;
+        centralPrintingService.destinations().then(items => {
+            if (cancelled) return;
+            setDestinations(items);
+            const preferred = items.find(d => d.name === 'P50 Printer');
+            if (preferred) setPrintDestination(destinationKey(preferred));
+        }).catch(() => { /* The current browser path remains available before central deployment. */ });
+        return () => { cancelled = true; };
+    }, [isOpen]);
+
+    React.useEffect(() => {
+        setCentralJob(null); setCentralError(''); pendingPrint.current = null;
+    }, [product?.id, labelName, labelPrice, showPrice, barcodeValue, copies, sizeId, labelSizes, printDestination]);
+
+    React.useEffect(() => {
+        if (!centralJob?.id || !['queued', 'reserved', 'sending'].includes(centralJob.status)) return;
+        let cancelled = false;
+        const timer = setInterval(() => {
+            void centralPrintingService.job(centralJob.id).then(job => { if (!cancelled) setCentralJob(job); }).catch(() => {});
+        }, 5000);
+        return () => { cancelled = true; clearInterval(timer); };
+    }, [centralJob?.id, centralJob?.status]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -470,10 +502,27 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     };
 
     const handlePrint = async () => {
-        if (isGenerating) return;
+        if (isGenerating || printLock.current || centralJob) return;
         if (!size) return;
+        printLock.current = true;
         setIsGenerating(true);
         try {
+            if (printDestination !== 'local') {
+                const destination = destinations.find(d => destinationKey(d) === printDestination);
+                if (!destination) throw new Error('Selecione uma impressora disponível na central.');
+                if (!supportsPrintSize(destination, size.width, size.height)) throw new Error('O driver no Lenovo não oferece este tamanho. Configure o papel correspondente antes de enviar.');
+                const settings = { ...size, widthMm: size.width, heightMm: size.height, pages: safeCopies, labelName, labelPrice, showPrice, barcodeValue, sku: product.sku };
+                const fingerprint = JSON.stringify([printDestination, settings]);
+                if (!pendingPrint.current || pendingPrint.current.fingerprint !== fingerprint) {
+                    const pdf = buildPdf({ size, copies: safeCopies, labelName, sku: product.sku, showPrice, labelPrice, barcodeValue }).output('blob');
+                    pendingPrint.current = { fingerprint, key: crypto.randomUUID(), pdf };
+                }
+                const pending = pendingPrint.current;
+                const job = await centralPrintingService.submit(pending.pdf, destination, labelName || product.name, settings, pending.key);
+                if (pendingPrint.current?.key === pending.key) setCentralJob(job);
+                setCentralError('');
+                return;
+            }
             const doc = buildPdf({
                 size,
                 copies: safeCopies,
@@ -492,8 +541,9 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
             }
         } catch (err) {
             console.error('[LabelPrint] erro ao gerar PDF:', err);
-            alert('Não foi possível gerar a etiqueta. Veja o console para detalhes.');
+            setCentralError(err instanceof Error ? err.message : 'Não foi possível gerar a etiqueta.');
         } finally {
+            printLock.current = false;
             setIsGenerating(false);
         }
     };
@@ -523,6 +573,14 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                 <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
 
                     <div className="w-full md:w-1/2 p-6 border-r border-slate-100 overflow-y-auto space-y-4 bg-slate-50/50">
+                        <label className="block text-sm font-medium text-slate-700">Impressora
+                            <select value={printDestination} disabled={isGenerating} onChange={e => setPrintDestination(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2">
+                                <option value="local">Imprimir neste computador</option>
+                                {destinations.map(d => <option key={destinationKey(d)} value={destinationKey(d)}>{d.deviceName} — {d.name}{!d.online ? ' (aguardará conexão)' : ''}</option>)}
+                            </select>
+                        </label>
+                        {centralError && <p role="alert" className="text-sm text-red-700">{centralError}</p>}
+                        {centralJob && <p role="status" className="text-sm text-green-800">{printStatusLabels[centralJob.status] || centralJob.status}. Consulte a fila em Configurações da Shopee → Impressoras para acompanhar ou reimprimir.</p>}
                         <div className="flex items-center gap-2 mb-2 text-slate-700 font-semibold">
                             <Settings className="w-4 h-4" />
                             <span>Configurações da Etiqueta</span>
@@ -691,11 +749,11 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                     </button>
                     <button
                         onClick={handlePrint}
-                        disabled={isGenerating || !size}
+                        disabled={isGenerating || !size || Boolean(centralJob)}
                         className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed font-medium transition-colors flex items-center gap-2"
                     >
                         <Printer size={18} />
-                        {isGenerating ? 'Gerando...' : 'Imprimir Agora'}
+                        {isGenerating ? 'Enviando...' : centralJob ? 'Solicitação registrada' : 'Imprimir Agora'}
                     </button>
                 </div>
             </div>

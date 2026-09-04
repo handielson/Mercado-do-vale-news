@@ -40988,6 +40988,7 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 // Start
 registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname });
 registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin });
+require('./services/centralPrintingServer.cjs').registerCentralPrintingRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {
