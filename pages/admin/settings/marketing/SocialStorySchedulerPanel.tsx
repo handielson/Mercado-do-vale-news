@@ -12,6 +12,8 @@ import {
   type SocialStoryDestination,
   type SocialStoryDraftItem,
   type SocialStorySchedule,
+  type PhonePriceListBrand,
+  type PhonePriceListPreview,
 } from '../../../../services/socialStoryScheduleService';
 import { prepareSocialStoryScheduleDates } from '../../../../services/socialStoryScheduleTime.js';
 import MultiDateCalendar from './MultiDateCalendar';
@@ -68,7 +70,10 @@ interface SocialStorySchedulerPanelProps {
 }
 
 export default function SocialStorySchedulerPanel({ defaultDestinations = ['instagram'] }: SocialStorySchedulerPanelProps) {
-  const [mode, setMode] = useState<'catalog' | 'standalone' | 'whatsapp_campaign'>('catalog');
+  const [mode, setMode] = useState<'catalog' | 'standalone' | 'whatsapp_campaign' | 'phone_price_list'>('catalog');
+  const [phoneBrands, setPhoneBrands] = useState<PhonePriceListBrand[]>(['Xiaomi', 'POCO', 'realme']);
+  const [phonePreview, setPhonePreview] = useState<PhonePriceListPreview | null>(null);
+  const previewRequestRef = useRef(0);
   const [title, setTitle] = useState('Stories de produtos');
   const [scheduledAt, setScheduledAt] = useState(defaultDateTime);
   const [selectedDates, setSelectedDates] = useState<string[]>(() => [defaultDateTime().slice(0, 10)]);
@@ -112,6 +117,35 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
   };
 
   useEffect(() => { void load(); }, []);
+  useEffect(() => () => { previewRequestRef.current += 1; }, []);
+
+  const changeMode = (nextMode: typeof mode) => {
+    previewRequestRef.current += 1;
+    setMode(nextMode);
+    setItems([]);
+    setPhonePreview(null);
+    unavailableMediaRef.current.clear();
+    setTitle(nextMode === 'phone_price_list' ? 'Tabela de celulares' : nextMode === 'standalone' ? 'Story avulso' : 'Stories de produtos');
+  };
+
+  const previewPhonePriceList = async () => {
+    if (busy || !phoneBrands.length) return;
+    const requestId = ++previewRequestRef.current;
+    setBusy(true);
+    setItems([]);
+    setPhonePreview(null);
+    try {
+      const preview = await socialStoryScheduleService.previewPhonePriceList(phoneBrands);
+      if (requestId !== previewRequestRef.current) return;
+      unavailableMediaRef.current.clear();
+      setItems(preview.items);
+      setPhonePreview(preview);
+      if (!preview.items.length) toast.info('Nenhum celular disponível para as marcas selecionadas.');
+      else toast.success(`${preview.items.length} arte(s) gerada(s) com ${preview.productCount} aparelho(s).`);
+    } catch (error) {
+      if (requestId === previewRequestRef.current) toast.error(error instanceof Error ? error.message : 'Falha ao gerar tabela de celulares');
+    } finally { setBusy(false); }
+  };
 
   useEffect(() => {
     if (mode !== 'catalog') return;
@@ -140,9 +174,11 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
 
   const previewCampaign = async () => {
     if (!campaignId) return;
+    const requestId = ++previewRequestRef.current;
     setBusy(true);
     try {
       const preview = await socialStoryScheduleService.previewWhatsApp(campaignId, includePrice);
+      if (requestId !== previewRequestRef.current) return;
       setItems(preview);
       const campaign = campaigns.find((row) => row.id === campaignId);
       if (campaign) setTitle(`Stories - ${campaign.title}`);
@@ -199,10 +235,12 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return;
+    const requestId = ++previewRequestRef.current;
     setBusy(true);
     try {
       const uploaded: SocialStoryDraftItem[] = [];
       for (const file of Array.from(files)) uploaded.push({ ...(await uploadStoryFile(file)), caption: caption.trim() });
+      if (requestId !== previewRequestRef.current) return;
       setItems((current) => [...current, ...uploaded]);
       toast.success(`${uploaded.length} mídia(s) enviada(s)`);
     } catch (error) {
@@ -261,10 +299,11 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
 
       <div className="p-5 grid xl:grid-cols-[1.15fr_.85fr] gap-6">
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-2 p-1 bg-slate-100 rounded-xl">
-            <button onClick={() => { setMode('catalog'); setItems([]); setTitle('Stories de produtos'); }} className={`py-2 rounded-lg text-xs sm:text-sm font-bold ${mode === 'catalog' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Catálogo</button>
-            <button onClick={() => { setMode('standalone'); setItems([]); setTitle('Story avulso'); }} className={`py-2 rounded-lg text-xs sm:text-sm font-bold ${mode === 'standalone' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Mídia avulsa</button>
-            <button onClick={() => { setMode('whatsapp_campaign'); setItems([]); }} className={`py-2 rounded-lg text-xs sm:text-sm font-bold ${mode === 'whatsapp_campaign' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Importar do WhatsApp</button>
+          <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+            <button disabled={busy} onClick={() => changeMode('catalog')} className={`py-2 rounded-lg text-xs sm:text-sm font-bold disabled:opacity-50 ${mode === 'catalog' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Catálogo</button>
+            <button disabled={busy} onClick={() => changeMode('phone_price_list')} className={`py-2 rounded-lg text-xs sm:text-sm font-bold disabled:opacity-50 ${mode === 'phone_price_list' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Tabela de celulares</button>
+            <button disabled={busy} onClick={() => changeMode('standalone')} className={`py-2 rounded-lg text-xs sm:text-sm font-bold disabled:opacity-50 ${mode === 'standalone' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Mídia avulsa</button>
+            <button disabled={busy} onClick={() => changeMode('whatsapp_campaign')} className={`py-2 rounded-lg text-xs sm:text-sm font-bold disabled:opacity-50 ${mode === 'whatsapp_campaign' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Importar do WhatsApp</button>
           </div>
 
           <div className="grid md:grid-cols-2 gap-3">
@@ -294,7 +333,28 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
             </div>
           </div>
 
-          {mode === 'catalog' ? (
+          {mode === 'phone_price_list' ? (
+            <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+              <p className="text-sm font-black text-slate-800">Tabela de preços por marca</p>
+              <p className="text-xs text-slate-600">Até 6 aparelhos por página, com fotos em destaque, logo pequena e WhatsApp da loja. Artes em retrato 1080 × 1920, prontas para Status e Stories.</p>
+              <div className="flex flex-wrap gap-2">
+                {(['Xiaomi', 'POCO', 'realme'] as PhonePriceListBrand[]).map((brand) => (
+                  <button key={brand} type="button" disabled={busy} aria-pressed={phoneBrands.includes(brand)} onClick={() => {
+                    previewRequestRef.current += 1;
+                    setPhoneBrands((current) => current.includes(brand) ? current.filter((item) => item !== brand) : [...current, brand]);
+                    setItems([]);
+                    setPhonePreview(null);
+                  }} className={`rounded-lg border px-4 py-2 text-sm font-bold disabled:opacity-50 ${phoneBrands.includes(brand) ? 'border-violet-400 bg-violet-100 text-violet-800' : 'border-slate-200 bg-white text-slate-500'}`}>{brand}</button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-600">O estoque e os preços são consultados ao gerar. O agendamento usa essas imagens: para atualizar valores antes de solicitar aprovação, gere novamente.</p>
+              <button type="button" onClick={() => void previewPhonePriceList()} disabled={busy || !phoneBrands.length} className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy && <Loader2 className="h-4 w-4 animate-spin" />}{busy ? 'Gerando artes...' : 'Gerar prévia com estoque atual'}</button>
+              {phonePreview && <div className="space-y-1 text-xs text-slate-600" role="status">
+                <p>{phonePreview.productCount} aparelho(s) · {items.length} arte(s) · Gerado em {new Date(phonePreview.generatedAt).toLocaleString('pt-BR')}</p>
+                {phonePreview.warnings.map((warning, index) => <p key={index} className="text-amber-800">{warning}</p>)}
+              </div>}
+            </div>
+          ) : mode === 'catalog' ? (
             <div className="space-y-3 rounded-xl border border-slate-200 p-4">
               <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
                 <button type="button" onClick={() => { setCatalogSource('category'); setItems([]); }} className={`rounded-lg py-2 text-sm font-bold ${catalogSource === 'category' ? 'bg-white text-emerald-700 shadow' : 'text-slate-500'}`}>Categoria</button>
@@ -403,7 +463,15 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
           )}
 
           <div className="space-y-2">
-            {items.map((item, index) => (
+            {mode === 'phone_price_list' ? items.map((item, index) => (
+              <figure key={`${item.mediaUrl}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <img src={toBrowserSafeMediaUrl(item.mediaUrl)} alt={item.label || `Tabela de celulares ${index + 1}`} loading="lazy" onError={() => removeUnavailableMedia(item)} className="mx-auto w-full max-w-[432px] rounded-lg object-contain" />
+                <figcaption className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="font-bold text-slate-700">{index + 1}. {item.label || 'Tabela de celulares'}</span>
+                  <a href={toBrowserSafeMediaUrl(item.mediaUrl)} target="_blank" rel="noopener noreferrer" className="font-bold text-violet-700 underline">Abrir arte para baixar</a>
+                </figcaption>
+              </figure>
+            )) : items.map((item, index) => (
               <div key={`${item.mediaUrl}-${index}`} className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50">
                 <div className="h-16 w-12 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
                   {item.mediaType === 'video' ? (

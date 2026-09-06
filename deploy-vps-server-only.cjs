@@ -18,6 +18,10 @@ const localServerCjs = path.join(__dirname, 'vps_server.cjs');
 const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim();
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
+const phonePriceListServicePaths = [
+  'services/phonePriceListArtwork.cjs',
+  'services/phonePriceListServer.cjs',
+];
 const n8nBotConversationContextPath = 'services/n8nBotConversationContext.cjs';
 const customerSelfServicePath = 'services/customerSelfServiceServer.cjs';
 const customerGoogleAuthPath = 'services/customerGoogleAuthServer.cjs';
@@ -147,11 +151,10 @@ async function uploadMobileSalesPushFiles(appDir) {
 
 async function uploadMarketingCampaignFiles(appDir) {
   await exec(`mkdir -p ${appDir}/services`);
-  await upload(
-    path.join(__dirname, marketingCampaignServicePath),
-    remotePathJoin(appDir, marketingCampaignServicePath),
-  );
-  console.log(`Uploaded ${marketingCampaignServicePath}`);
+  for (const relativePath of [marketingCampaignServicePath, ...phonePriceListServicePaths]) {
+    await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
+    console.log(`Uploaded ${relativePath}`);
+  }
 }
 
 async function uploadSmartphonePhotoIntakeFiles(appDir) {

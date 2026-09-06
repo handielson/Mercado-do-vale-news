@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
+const { registerPhonePriceListRoutes } = require('./phonePriceListServer.cjs');
 
 const APPROVAL_STATUSES = new Set([
   'pending', 'approved', 'rejected', 'executing', 'succeeded', 'failed', 'cancelled', 'expired',
@@ -3635,6 +3636,7 @@ function registerSocialStoryRoutes(fastify, dependencies) {
 }
 
 function registerMarketingCampaignRoutes(fastify, dependencies) {
+  registerPhonePriceListRoutes(fastify, dependencies);
   registerApprovalRoutes(fastify, dependencies);
   registerMetaRoutes(fastify, dependencies);
   registerSocialStoryRoutes(fastify, dependencies);

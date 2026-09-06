@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.332-foto-celular-empresa
-date: 2026-09-04
+version: v1.2.333-tabela-dinamica-celulares
+date: 2026-09-06
 status: ready
-release_vps: /var/www/mdv-site/releases/20260904-203446-v12332-foto-celular-empresa
+release_vps: /var/www/mdv-site/releases/20260906-033000-v12333-tabela-dinamica-celulares
 branch: main
-summary: Corrige a finalizacao do cadastro por foto para reconhecer o identificador legado da empresa padrao como o UUID canonico.
-tag: v1.2.332-foto-celular-empresa
+summary: Adiciona tabelas dinamicas de celulares por marca para Stories, Status do WhatsApp e acompanhamento da lista enviada pelo bot.
+tag: v1.2.333-tabela-dinamica-celulares
 ```

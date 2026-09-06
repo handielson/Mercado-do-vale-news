@@ -2,6 +2,15 @@ import { vpsClient } from './vpsClient';
 
 export type SocialStoryDestination = 'instagram' | 'whatsapp';
 export type SocialStoryMediaType = 'image' | 'video';
+export type PhonePriceListBrand = 'Xiaomi' | 'POCO' | 'realme';
+
+export interface PhonePriceListPreview {
+  ok: true;
+  items: SocialStoryDraftItem[];
+  generatedAt: string;
+  productCount: number;
+  warnings: string[];
+}
 
 export interface SocialStoryDraftItem {
   mediaType: SocialStoryMediaType;
@@ -60,6 +69,10 @@ export interface CreateSocialStoryScheduleInput {
 }
 
 export const socialStoryScheduleService = {
+  async previewPhonePriceList(brands: PhonePriceListBrand[]): Promise<PhonePriceListPreview> {
+    return await vpsClient.post('/admin/marketing/phone-price-list/preview', { brands });
+  },
+
   async list(): Promise<SocialStorySchedule[]> {
     return (await vpsClient.get<{ ok: true; items: SocialStorySchedule[] }>('/admin/marketing/stories')).items;
   },

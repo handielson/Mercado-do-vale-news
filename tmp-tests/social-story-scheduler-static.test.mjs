@@ -8,6 +8,20 @@ const serverJs = await readFile(new URL('../vps_server.js', import.meta.url), 'u
 const panel = await readFile(new URL('../pages/admin/settings/marketing/SocialStorySchedulerPanel.tsx', import.meta.url), 'utf8');
 const calendar = await readFile(new URL('../pages/admin/settings/marketing/MultiDateCalendar.tsx', import.meta.url), 'utf8');
 const marketingPage = await readFile(new URL('../pages/admin/settings/MarketingPage.tsx', import.meta.url), 'utf8');
+const client = await readFile(new URL('../services/socialStoryScheduleService.ts', import.meta.url), 'utf8');
+
+test('Phone price lists use server snapshots and the existing approval schedule', () => {
+  assert.match(client, /post\('\/admin\/marketing\/phone-price-list\/preview', \{ brands \}\)/);
+  assert.match(panel, /previewPhonePriceList\(phoneBrands\)/);
+  assert.match(panel, /requestId !== previewRequestRef\.current/);
+  assert.match(panel, /setPhonePreview\(null\)/);
+  assert.match(panel, /Gerado em/);
+  assert.match(panel, /O estoque e os preços são consultados ao gerar/);
+  assert.match(panel, /Abrir arte para baixar/);
+  assert.match(panel, /max-w-\[432px\]/);
+  assert.match(panel, /sourceType: mode === 'whatsapp_campaign' \? 'whatsapp_campaign' : 'standalone'/);
+  assert.match(panel, /items: mode !== 'whatsapp_campaign' \? items : undefined/);
+});
 
 test('Story scheduling requires approval and creates idempotent deliveries', () => {
   assert.match(api, /SOCIAL_STORY_SCHEDULE_ACTION/);
