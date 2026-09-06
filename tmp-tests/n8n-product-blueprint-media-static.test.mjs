@@ -65,7 +65,13 @@ const options = products.map((product) => ({
             url: variant.url || product.url || '',
             images: Array.isArray(variant.images) ? variant.images : [],
           })),
-}));`;
+}));
+const requestedDeviceModelQuery = 'realme c71';
+const unavailableRequestedDevice = false;
+const deterministicCatalogOutputV322 = finalQuoteMessages.filter(Boolean).join('[[MSG]]');
+return [{ json: {
+    productsInStock: products,
+} }];`;
 
 const postListCode = `const normalized = 'foto';
 const source = $json;
@@ -109,6 +115,7 @@ const classifierPrompt = `Acoes de fluxo_venda:
 - pedir_foto: cliente pediu foto/imagem de item, produto, cor ou do item ja selecionado.`;
 
 const splitterCode = `const normalizeOutboundPayload = (rawMessage) => rawMessage;
+const suffix = [];
 const toItem = (rawMessage, index, all) => {
   const message = normalizeOutboundPayload(rawMessage);
   return { json: { message: message.text || message.caption || message, caption: message.caption || message.text || message, messageType: message.type === 'image' ? 'image' : 'text' } };
@@ -133,6 +140,9 @@ const patchedPrompt = patched.nodes[3].parameters.options.systemMessage;
 assert.match(patchedContext, /blueprintImageUrl:[\s\S]*product\.blueprint_image_url/);
 assert.match(patchedContext, /variants:[\s\S]*blueprintImageUrl: product\.blueprintImageUrl/);
 assert.match(patchedContext, /blueprintImageUrl: variant\.blueprintImageUrl \|\| product\.blueprintImageUrl/);
+assert.match(patchedContext, /specific-model-blueprint-v336-context/);
+assert.match(patchedContext, /requestedDeviceModelQuery && products\.length === 1/);
+assert.match(patchedContext, /specificProductBlueprintMedia: specificModelBlueprintMediaV336/);
 assert.match(patchedPostList, /wantsBlueprintOnlyV309/);
 assert.match(patchedPostList, /blueprintImageUrlV309[\s\S]*realImagesV309\.slice\(0, 1\)/);
 assert.match(patchedPostList, /selectedMediaV309\.slice\(0, 3\)/);
@@ -153,6 +163,8 @@ const patchedSplitter = patchSplitter(splitterCode);
 assert.match(patchedSplitter, /safeMessageTextV320/);
 assert.match(patchedSplitter, /safeCaptionV320/);
 assert.doesNotMatch(patchedSplitter, /caption: message\.caption \|\| message\.text \|\| message/);
+assert.match(patched.nodes[2].parameters.jsCode, /specific-model-blueprint-v336-splitter/);
+assert.match(patched.nodes[2].parameters.jsCode, /suffix\.push\(specificModelBlueprintV336\)/);
 const splitterFactory = new Function(`${patchedSplitter}; return toItem;`);
 const toItem = splitterFactory();
 const emptyCaptionImage = toItem({ type: 'image', mediaUrl: photo1, text: '', caption: '' }, 0, [{}]);

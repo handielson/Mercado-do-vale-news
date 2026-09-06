@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.335-lista-celulares-estoque-imei",
+  "version": "v1.2.336-blueprint-modelo-especifico-bot",
   "date": "2026-09-06",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260906-005611-v12335-lista-celulares-estoque-imei",
+  "release_vps": "/var/www/mdv-site/releases/20260906-144543-v12336-blueprint-modelo-especifico-bot",
   "branch": "main",
-  "summary": "Impede que celulares sem unidade serializada disponível apareçam na tabela dinâmica."
+  "summary": "Envia automaticamente o blueprint oficial quando o bot confirma um modelo específico."
 }

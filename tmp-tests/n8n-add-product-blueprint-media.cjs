@@ -6,6 +6,7 @@ const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
 
 const MARKER = 'blueprint-product-media-v309';
 const STATE_MARKER = 'blueprint-state-caption-v320';
+const SPECIFIC_MODEL_MARKER = 'specific-model-blueprint-v336';
 const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const DRY_RUN = process.argv.includes('--dry-run');
 const MEDIA_PREFIXES = [
@@ -314,15 +315,57 @@ function patchSplitter(code) {
   return { json: { message: safeMessageTextV320, caption: safeCaptionV320, messageType:`);
 }
 
+function patchSpecificModelBlueprintContext(code) {
+  let next = String(code || '');
+  if (next.includes(`// ${SPECIFIC_MODEL_MARKER}-context`)) return next;
+  const anchor = `const deterministicCatalogOutputV322 = finalQuoteMessages.filter(Boolean).join('[[MSG]]');`;
+  assert.ok(next.includes(anchor), 'specific-model blueprint context anchor not found');
+  const addition = `${anchor}
+// ${SPECIFIC_MODEL_MARKER}-context
+const specificModelBlueprintCandidateV336 = String(products[0]?.blueprintImageUrl || products[0]?.variants?.find((variant) => variant?.blueprintImageUrl)?.blueprintImageUrl || '').trim();
+const specificModelBlueprintUrlV336 = requestedDeviceModelQuery && products.length === 1 && !unavailableRequestedDevice
+  && ${JSON.stringify(MEDIA_PREFIXES)}.some((prefix) => specificModelBlueprintCandidateV336.startsWith(prefix))
+  ? specificModelBlueprintCandidateV336 : '';
+const specificModelBlueprintMediaV336 = specificModelBlueprintUrlV336 ? {
+  type: 'image',
+  mediaUrl: specificModelBlueprintUrlV336,
+  mimetype: specificModelBlueprintUrlV336.split(/[?#]/, 1)[0].toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+  fileName: 'blueprint-modelo.' + (specificModelBlueprintUrlV336.split(/[?#]/, 1)[0].toLowerCase().endsWith('.png') ? 'png' : 'jpg'),
+  caption: 'Ficha técnica • ' + String(products[0]?.name || 'Modelo selecionado'),
+  delayMs: 4500,
+} : null;`;
+  next = next.replace(anchor, addition);
+  const returnAnchor = `    productsInStock: products,`;
+  assert.ok(next.includes(returnAnchor), 'specific-model blueprint return anchor not found');
+  return next.replace(returnAnchor, `${returnAnchor}
+    specificProductBlueprintMedia: specificModelBlueprintMediaV336,`);
+}
+
+function patchSpecificModelBlueprintSplitter(code) {
+  let next = String(code || '');
+  if (next.includes(`// ${SPECIFIC_MODEL_MARKER}-splitter`)) return next;
+  const suffixAnchor = `const suffix = [];`;
+  assert.ok(next.includes(suffixAnchor), 'specific-model blueprint splitter anchor not found');
+  return next.replace(suffixAnchor, `${suffixAnchor}
+// ${SPECIFIC_MODEL_MARKER}-splitter
+const specificModelBlueprintV336 = $json.specificProductBlueprintMedia;
+if (specificModelBlueprintV336?.type === 'image'
+  && /^https:\\/\\/(?:api\\.xiaomipetrolina\\.com\\.br\\/images\\/|imagens\\.xiaomipetrolina\\.com\\.br\\/)/i.test(String(specificModelBlueprintV336.mediaUrl || ''))) {
+  suffix.push(specificModelBlueprintV336);
+}`);
+}
+
 function patchWorkflow(workflow) {
   assert.ok(workflow && Array.isArray(workflow.nodes), 'workflow.nodes must be an array');
   const cloned = JSON.parse(JSON.stringify(workflow));
   const context = findNode(cloned.nodes, 'Vendas - Contexto Produtos');
   context.parameters.jsCode = patchProductContext(String(context.parameters?.jsCode || ''));
+  context.parameters.jsCode = patchSpecificModelBlueprintContext(String(context.parameters?.jsCode || ''));
   const postList = findNode(cloned.nodes, 'Vendas - Verificar Pos Lista');
   postList.parameters.jsCode = patchPostList(String(postList.parameters?.jsCode || ''));
   const splitter = findNode(cloned.nodes, 'Dividir mensagens');
   splitter.parameters.jsCode = patchSplitter(String(splitter.parameters?.jsCode || ''));
+  splitter.parameters.jsCode = patchSpecificModelBlueprintSplitter(String(splitter.parameters?.jsCode || ''));
 
   const classifier = cloned.nodes.find((node) => String(node?.parameters?.options?.systemMessage || '').includes('- pedir_foto:'));
   assert.ok(classifier, 'sales classifier system prompt not found');
@@ -405,7 +448,7 @@ COPY (
     'active', we.active,
     'versionAligned', we."versionId"=we."activeVersionId",
     'entityHistoryEqual', we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb,
-    'markerPresent', we.nodes::text LIKE '%${MARKER}%' AND we.nodes::text LIKE '%${STATE_MARKER}%'
+    'markerPresent', we.nodes::text LIKE '%${MARKER}%' AND we.nodes::text LIKE '%${STATE_MARKER}%' AND we.nodes::text LIKE '%${SPECIFIC_MODEL_MARKER}%'
   )::text
   FROM workflow_entity we
   JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId"
@@ -435,6 +478,7 @@ module.exports = {
   MEDIA_PREFIXES,
   MARKER,
   STATE_MARKER,
+  SPECIFIC_MODEL_MARKER,
   imageMediaMetadata,
   isAllowedMediaUrl,
   normalizeBlueprintUrl,
@@ -442,6 +486,8 @@ module.exports = {
   patchPostList,
   patchProductContext,
   patchSplitter,
+  patchSpecificModelBlueprintContext,
+  patchSpecificModelBlueprintSplitter,
   patchWorkflow,
   selectBlueprintMedia,
 };
