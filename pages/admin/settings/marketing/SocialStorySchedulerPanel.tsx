@@ -148,6 +148,14 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
   };
 
   useEffect(() => {
+    if (mode !== 'phone_price_list' || !phoneBrands.length) return;
+    const timer = window.setTimeout(() => { void previewPhonePriceList(); }, 400);
+    return () => window.clearTimeout(timer);
+  // The selected brands are the source of this automatic preview.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, phoneBrands]);
+
+  useEffect(() => {
     if (mode !== 'catalog') return;
     let mounted = true;
     const timer = window.setTimeout(() => {
@@ -249,10 +257,10 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
   };
 
   const schedule = async () => {
-    if (!title.trim() || !scheduledAt || !selectedDates.length || !destinations.length || !items.length) {
+    if (!title.trim() || !scheduledAt || !selectedDates.length || !destinations.length || (mode !== 'phone_price_list' && !items.length)) {
       return toast.error('Preencha título, dias, horário, canal e ao menos uma mídia');
     }
-    if (items.some((item) => !/^https:\/\//i.test(String(item.mediaUrl || '')))) {
+    if (mode !== 'phone_price_list' && items.some((item) => !/^https:\/\//i.test(String(item.mediaUrl || '')))) {
       return toast.error('Há mídias sem URL HTTPS pública. Recarregue as mídias do catálogo antes de agendar.');
     }
     const time = scheduledAt.slice(11, 16) || '08:00';
@@ -265,13 +273,17 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
     }
     setBusy(true);
     try {
+      const currentItems = mode === 'phone_price_list'
+        ? (await socialStoryScheduleService.previewPhonePriceList(phoneBrands)).items
+        : items;
+      if (!currentItems.length) throw new Error('Nenhum celular disponível para as marcas selecionadas.');
       const scheduledDates = schedulePlan.entries.flatMap(({ instant }) => instant ? [instant.toISOString()] : []);
       const result = await socialStoryScheduleService.create({
         title: title.trim(),
         sourceType: mode === 'whatsapp_campaign' ? 'whatsapp_campaign' : 'standalone', sourceId: mode === 'whatsapp_campaign' ? campaignId : null,
         scheduledAt: scheduledDates[0], scheduledDates, destinations,
         includePrice: mode === 'whatsapp_campaign' ? includePrice : undefined,
-        items: mode !== 'whatsapp_campaign' ? items : undefined,
+        items: mode !== 'whatsapp_campaign' ? currentItems : undefined,
       });
       toast.success(`1 aprovação criada para ${result.dayCount} dia(s), com ${result.itemCount} Stories.`);
       setItems([]);
@@ -347,8 +359,8 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
                   }} className={`rounded-lg border px-4 py-2 text-sm font-bold disabled:opacity-50 ${phoneBrands.includes(brand) ? 'border-violet-400 bg-violet-100 text-violet-800' : 'border-slate-200 bg-white text-slate-500'}`}>{brand}</button>
                 ))}
               </div>
-              <p className="text-xs text-slate-600">O estoque e os preços são consultados ao gerar. O agendamento usa essas imagens: para atualizar valores antes de solicitar aprovação, gere novamente.</p>
-              <button type="button" onClick={() => void previewPhonePriceList()} disabled={busy || !phoneBrands.length} className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy && <Loader2 className="h-4 w-4 animate-spin" />}{busy ? 'Gerando artes...' : 'Gerar prévia com estoque atual'}</button>
+              <p className="text-xs text-slate-600">A lista é atualizada automaticamente ao selecionar as marcas e novamente ao solicitar o agendamento. Preços alterados e aparelhos sem estoque saem na próxima atualização, sem precisar gerar manualmente.</p>
+              {busy && <p className="flex items-center gap-2 text-xs font-bold text-violet-700"><Loader2 className="h-4 w-4 animate-spin" /> Atualizando lista automaticamente...</p>}
               {phonePreview && <div className="space-y-1 text-xs text-slate-600" role="status">
                 <p>{phonePreview.productCount} aparelho(s) · {items.length} arte(s) · Gerado em {new Date(phonePreview.generatedAt).toLocaleString('pt-BR')}</p>
                 {phonePreview.warnings.map((warning, index) => <p key={index} className="text-amber-800">{warning}</p>)}
@@ -503,7 +515,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
             <p className="mt-1">{selectedDates.length} dia(s) × {items.length} mídia(s) × {destinations.length} canal(is) = <strong>{expectedDeliveries} entregas</strong>.</p>
             <p className="mt-1 text-xs text-violet-700">Será criada apenas 1 solicitação na Central de Aprovações para todo o lote.</p>
           </div>
-          <button onClick={() => void schedule()} disabled={busy || !items.length || !destinations.length} className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black flex items-center justify-center gap-2 disabled:opacity-50"><Send className="w-4 h-4" /> Solicitar 1 aprovação ({expectedDeliveries} entregas)</button>
+          <button onClick={() => void schedule()} disabled={busy || (mode === 'phone_price_list' ? !phoneBrands.length : !items.length) || !destinations.length} className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black flex items-center justify-center gap-2 disabled:opacity-50"><Send className="w-4 h-4" /> Solicitar 1 aprovação ({expectedDeliveries} entregas)</button>
         </div>
 
         <div>

@@ -16,11 +16,13 @@ test('Phone price lists use server snapshots and the existing approval schedule'
   assert.match(panel, /requestId !== previewRequestRef\.current/);
   assert.match(panel, /setPhonePreview\(null\)/);
   assert.match(panel, /Gerado em/);
-  assert.match(panel, /O estoque e os preços são consultados ao gerar/);
+  assert.match(panel, /A lista é atualizada automaticamente ao selecionar as marcas/);
+  assert.match(panel, /Atualizando lista automaticamente/);
+  assert.doesNotMatch(panel, /Gerar lista agora/);
   assert.match(panel, /Abrir arte para baixar/);
   assert.match(panel, /max-w-\[432px\]/);
   assert.match(panel, /sourceType: mode === 'whatsapp_campaign' \? 'whatsapp_campaign' : 'standalone'/);
-  assert.match(panel, /items: mode !== 'whatsapp_campaign' \? items : undefined/);
+  assert.match(panel, /items: mode !== 'whatsapp_campaign' \? currentItems : undefined/);
 });
 
 test('Story scheduling requires approval and creates idempotent deliveries', () => {
