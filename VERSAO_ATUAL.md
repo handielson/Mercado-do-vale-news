@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.333-tabela-dinamica-celulares
+version: v1.2.337-entrega-bot
 date: 2026-09-06
 status: ready
-release_vps: /var/www/mdv-site/releases/20260906-033000-v12333-tabela-dinamica-celulares
+release_vps: /var/www/mdv-site/releases/20260906-180000-v12337-entrega-bot
 branch: main
-summary: Adiciona tabelas dinamicas de celulares por marca para Stories, Status do WhatsApp e acompanhamento da lista enviada pelo bot.
-tag: v1.2.333-tabela-dinamica-celulares
+summary: Corrige o roteamento de perguntas sobre entrega, frete, envio e retirada no bot do WhatsApp.
+tag: v1.2.337-entrega-bot
 ```

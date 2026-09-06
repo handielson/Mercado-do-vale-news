@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.336-blueprint-modelo-especifico-bot",
+  "version": "v1.2.337-entrega-bot",
   "date": "2026-09-06",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260906-144543-v12336-blueprint-modelo-especifico-bot",
+  "release_vps": "/var/www/mdv-site/releases/20260906-180000-v12337-entrega-bot",
   "branch": "main",
-  "summary": "Envia automaticamente o blueprint oficial quando o bot confirma um modelo específico."
+  "summary": "Corrige o roteamento de perguntas sobre entrega, frete, envio e retirada no bot do WhatsApp."
 }
