@@ -25,6 +25,18 @@ test('excludes unavailable/hidden/accessory/parent and invalid prices', () => {
     assert.deepEqual(buildPriceListGroups([phone(overrides)]), []);
   }
 });
+test('serialized inventory overrides a stale positive product balance', () => {
+  assert.deepEqual(buildPriceListGroups([phone({
+    stock_quantity: 2,
+    serialized_unit_count: 2,
+    available_serialized_units: 0,
+  })]), []);
+  assert.equal(buildPriceListGroups([phone({
+    stock_quantity: 0,
+    serialized_unit_count: 2,
+    available_serialized_units: 1,
+  })]).length, 1);
+});
 test('bot selection retains only requested variants; stale price or stock fails closed', () => {
   const groups = [{ productIds: ['a'], name: 'POCO X7', memory: '8GB/256GB', priceCents: 159900 }];
   assert.equal(buildPriceListGroups([phone(), phone({ id: 'outside', price_retail: 999900 })], groups)[0].priceCents, 159900);

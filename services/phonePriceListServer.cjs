@@ -28,7 +28,10 @@ function resolveBrand(product) {
 }
 
 function isEligible(product) {
-  return product.status === 'active' && Number(product.stock_quantity) > 0
+  const availableStock = Number(product.serialized_unit_count) > 0
+    ? Number(product.available_serialized_units)
+    : Number(product.stock_quantity);
+  return product.status === 'active' && availableStock > 0
     && ![true, 1, '1'].includes(product.hide_from_catalog)
     && product.offer_visibility !== 'hidden' && !Number(product.is_parent) && !Number(product.is_combo)
     && /^(?:celulares?|smartphones?)(?:\b|$)/.test(normalize(product.category_name))
@@ -140,9 +143,11 @@ function registerPhonePriceListRoutes(fastify, dependencies) {
       CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(p.images,'$[0]')) LIKE 'https://%'
       THEN JSON_ARRAY(JSON_UNQUOTE(JSON_EXTRACT(p.images,'$[0]'))) ELSE JSON_ARRAY() END AS images,
       p.price_retail,p.stock_quantity,p.status,p.hide_from_catalog,p.offer_visibility,p.is_parent,p.is_combo,
+      (SELECT COUNT(*) FROM units phone_units WHERE phone_units.product_id=p.id) AS serialized_unit_count,
+      (SELECT COUNT(*) FROM units available_phone_units WHERE available_phone_units.product_id=p.id AND available_phone_units.status='available') AS available_serialized_units,
       c.name AS category_name,b.name AS brand_name FROM products p
       LEFT JOIN categories c ON c.id=p.category_id LEFT JOIN brands b ON b.id=p.brand
-      WHERE p.status='active' AND p.stock_quantity>0 ${ids ? 'AND p.id IN (?)' : ''} ORDER BY p.name,p.id`, ids ? [ids] : []);
+      WHERE p.status='active' ${ids ? 'AND p.id IN (?)' : ''} ORDER BY p.name,p.id`, ids ? [ids] : []);
     const groups = buildPriceListGroups(rows, selection.groups, selection.brands);
     if (!groups.length) return { ok: true, items: [], productCount: 0, generatedAt: new Date().toISOString(), warnings: ['Nenhum celular disponível para as marcas selecionadas.'] };
     const [[company]] = await pool.query('SELECT phone,logo,watermark_url,social_website FROM company_settings LIMIT 1');
