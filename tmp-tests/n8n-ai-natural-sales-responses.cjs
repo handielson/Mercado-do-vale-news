@@ -17,8 +17,10 @@ const ROUTER_NODE = 'Vendas - Produto encontrado?';
 const COMPOSER_NODE = 'Vendas - Compor Resposta IA';
 const HANDOFF_PREPARE_NODE = 'Vendas - Preparar Handoff Especialista';
 const SPLIT_NODE = 'Dividir mensagens';
+const PRICE_LIST_CARD_GATE_NODE = 'Vendas - Lista precisa de cards?';
 const MARKER = 'sales-ai-natural-response-v322';
-const REPEAT_CATALOG_MARKER = 'sales-ai-no-repeat-catalog-v340';
+const REPEAT_CATALOG_MARKER = 'sales-ai-no-repeat-catalog-v342';
+const SINGLE_QUOTE_QUESTION_MARKER = 'sales-single-quote-no-choice-question-v341';
 const APPLY = process.argv.includes('--apply');
 
 const shQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -91,6 +93,28 @@ function replaceRegexOnce(source, expression, replacement, label) {
   return source.replace(expression, replacement);
 }
 
+function explicitlyRequestsCatalog(message) {
+  const normalized = String(message || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const rejectsCatalog = /\b(?:nao|nunca)\b.{0,35}\b(?:quero|gostei|interesse|lista|catalogo|aparelhos|modelos|celulares)\b/.test(normalized);
+  return !rejectsCatalog && (
+    /\b(?:lista|catalogo)\b/.test(normalized)
+    || /\b(?:quais|mostrar|mostra|ver|consultar|precos|valores)\b.{0,45}\b(?:celulares|smartphones|aparelhos|modelos|opcoes)\b/.test(normalized)
+    || /\b(?:celulares|smartphones|aparelhos|modelos|opcoes)\b.{0,35}\b(?:disponiveis|estoque|tem|precos|valores)\b/.test(normalized)
+  );
+}
+
+function shouldSuppressRepeatedCatalog(input) {
+  return Boolean(input.catalogAlreadyPresented && (
+    input.unavailableRequestedDevice
+    || (input.isCompleteCategoryRequest
+      && input.prefersSmartphones
+      && !input.specificDeviceModelRequest
+      && !input.hasStructuredPreference
+      && !input.explicitCatalogRequest)
+  ));
+}
+
 function patchPrepareSearch(node) {
   let code = String(node.parameters?.jsCode || '');
   if (code.includes(`${MARKER}:budget`)) return;
@@ -134,12 +158,14 @@ if (specificDeviceModelRequest && !budgetAmountV322) mergedSalesFiltersV288.maxP
 function patchNoRepeatCatalogAfterUnavailableLookup(code) {
   if (code.includes(REPEAT_CATALOG_MARKER)) return code;
 
-  const finalQuoteMessages = `const finalQuoteMessages = isDirectPriceQuestion && products.length === 1 && !unavailableRequestedDevice
+  const legacyFinalQuoteMessages = `const finalQuoteMessages = isDirectPriceQuestion && products.length === 1 && !unavailableRequestedDevice
   ? [buildDirectPriceAnswer(products[0])]
   : quoteMessages;`;
-  const finalQuoteMessagesReplacement = `// ${REPEAT_CATALOG_MARKER}
-// If this customer is already choosing from the live catalog, an unavailable
-// model must not cause the same full list (or its image cards) to be resent.
+  const previousRepeatBlock = /\/\/ sales-ai-no-repeat-catalog-v340[\s\S]*?const finalQuoteMessages = suppressRepeatedCatalogV340[\s\S]*?\n\s*: quoteMessages\);/;
+  const repeatBlockReplacement = `// ${REPEAT_CATALOG_MARKER}
+// A lista completa so pode ser repetida quando o cliente pedir novamente.
+// Respostas de continuidade ou rejeicao continuam com a IA, sem anexar o
+// catalogo textual, os cards de imagem ou um novo follow-up automatico.
 const catalogAlreadyPresentedV340 = (() => {
   try {
     const staticData = $getWorkflowStaticData('global');
@@ -154,40 +180,85 @@ const catalogAlreadyPresentedV340 = (() => {
     return false;
   }
 })();
-const suppressRepeatedCatalogV340 = Boolean(unavailableRequestedDevice && catalogAlreadyPresentedV340);
-const finalQuoteMessages = suppressRepeatedCatalogV340
+const explicitlyRequestsCatalogV342 = (${explicitlyRequestsCatalog.toString()})(base.conversation || base.classificacaoMensagem || '');
+const suppressRepeatedCatalogV342 = (${shouldSuppressRepeatedCatalog.toString()})({
+  catalogAlreadyPresented: catalogAlreadyPresentedV340,
+  unavailableRequestedDevice,
+  isCompleteCategoryRequest,
+  prefersSmartphones,
+  specificDeviceModelRequest,
+  hasStructuredPreference: hasStructuredPreferenceV288,
+  explicitCatalogRequest: explicitlyRequestsCatalogV342,
+});
+const finalQuoteMessages = suppressRepeatedCatalogV342
   ? []
   : (isDirectPriceQuestion && products.length === 1 && !unavailableRequestedDevice
     ? [buildDirectPriceAnswer(products[0])]
     : quoteMessages);`;
-  code = replaceOnce(code, finalQuoteMessages, finalQuoteMessagesReplacement, 'catalog repeat suppression state');
+  if (previousRepeatBlock.test(code)) {
+    code = replaceRegexOnce(code, previousRepeatBlock, repeatBlockReplacement, 'catalog repeat suppression upgrade');
+  } else {
+    code = replaceOnce(code, legacyFinalQuoteMessages, repeatBlockReplacement, 'catalog repeat suppression state');
+  }
 
-  code = replaceOnce(
-    code,
-    'phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 ?',
-    'phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 && !suppressRepeatedCatalogV340 ?',
-    'catalog card repeat suppression',
-  );
-  code = replaceOnce(
-    code,
-    'const phoneCatalogFollowupEligibleV289 = Boolean(isCompleteCategoryRequest && prefersSmartphones && products.length > 0);',
-    'const phoneCatalogFollowupEligibleV289 = Boolean(isCompleteCategoryRequest && prefersSmartphones && products.length > 0 && !suppressRepeatedCatalogV340);',
-    'catalog follow-up repeat suppression',
-  );
-  code = replaceOnce(
-    code,
-    "? 'requested_model_not_confirmed_with_alternatives'",
-    "? (suppressRepeatedCatalogV340 ? 'requested_model_not_confirmed_after_catalog' : 'requested_model_not_confirmed_with_alternatives')",
-    'catalog availability status after a prior list',
-  );
+  code = code.replaceAll('suppressRepeatedCatalogV340', 'suppressRepeatedCatalogV342');
+
+  const guardedCardOutput = 'phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 && !suppressRepeatedCatalogV342 ?';
+  if (!code.includes(guardedCardOutput)) {
+    code = replaceOnce(
+      code,
+      'phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 ?',
+      guardedCardOutput,
+      'catalog card repeat suppression',
+    );
+  }
+  const guardedFollowup = 'const phoneCatalogFollowupEligibleV289 = Boolean(isCompleteCategoryRequest && prefersSmartphones && products.length > 0 && !suppressRepeatedCatalogV342);';
+  if (!code.includes(guardedFollowup)) {
+    code = replaceOnce(
+      code,
+      'const phoneCatalogFollowupEligibleV289 = Boolean(isCompleteCategoryRequest && prefersSmartphones && products.length > 0);',
+      guardedFollowup,
+      'catalog follow-up repeat suppression',
+    );
+  }
+  const guardedAvailability = "? (suppressRepeatedCatalogV342 ? 'requested_model_not_confirmed_after_catalog' : 'requested_model_not_confirmed_with_alternatives')";
+  if (!code.includes(guardedAvailability)) {
+    code = replaceOnce(
+      code,
+      "? 'requested_model_not_confirmed_with_alternatives'",
+      guardedAvailability,
+      'catalog availability status after a prior list',
+    );
+  }
   return code;
+}
+
+function patchSingleQuoteChoiceQuestion(code) {
+  if (code.includes(SINGLE_QUOTE_QUESTION_MARKER)) return code;
+  const groupedQuoteAnchor = "if (!hasDeviceAndAccessoryResults) return buildChunkedQuoteMessages(products, 0, true, true, '');";
+  if (code.includes(groupedQuoteAnchor)) {
+    return replaceOnce(
+      code,
+      groupedQuoteAnchor,
+      `// ${SINGLE_QUOTE_QUESTION_MARKER}\n  // Com um unico resultado nao existe outra opcao numerada para escolher.\n  if (!hasDeviceAndAccessoryResults) return buildChunkedQuoteMessages(products, 0, true, products.length > 1, '');`,
+      'single grouped-product choice question',
+    );
+  }
+  const legacyQuoteAnchor = 'return buildQuoteMessageForProducts(chunk, offset, chunkIndex === 0, last);';
+  if (!code.includes(legacyQuoteAnchor)) return code;
+  return replaceOnce(
+    code,
+    legacyQuoteAnchor,
+    `// ${SINGLE_QUOTE_QUESTION_MARKER}\n      // A pergunta pelo numero so faz sentido quando existem opcoes para escolher.\n      return buildQuoteMessageForProducts(chunk, offset, chunkIndex === 0, last && products.length > 1);`,
+    'single-product choice question',
+  );
 }
 
 function patchProductContext(node) {
   let code = String(node.parameters?.jsCode || '');
-  if (code.includes(REPEAT_CATALOG_MARKER)) return;
   if (code.includes(`${MARKER}:facts`)) {
     code = patchNoRepeatCatalogAfterUnavailableLookup(code);
+    code = patchSingleQuoteChoiceQuestion(code);
     new Function('$json', '$input', '$getWorkflowStaticData', '$', code);
     node.parameters.jsCode = code;
     return;
@@ -266,6 +337,7 @@ const deterministicCatalogOutputV322 = finalQuoteMessages.filter(Boolean).join('
     assert.equal(code.includes(stale), false, `Stale canned response remains: ${stale}`);
   }
   code = patchNoRepeatCatalogAfterUnavailableLookup(code);
+  code = patchSingleQuoteChoiceQuestion(code);
   new Function('$json', '$input', '$getWorkflowStaticData', '$', code);
   node.parameters.jsCode = code;
 }
@@ -364,10 +436,13 @@ function patchGraph(nodes, connections) {
   connections[CONTEXT_NODE] = { main: [[{ node: AGENT_NODE, type: 'main', index: 0 }]] };
   connections[AGENT_NODE] = { main: [[{ node: COMPOSER_NODE, type: 'main', index: 0 }]] };
   connections[COMPOSER_NODE] = { main: [[{ node: router.name, type: 'main', index: 0 }]] };
+  const normalSalesTarget = nodes.some((node) => node.name === PRICE_LIST_CARD_GATE_NODE)
+    ? PRICE_LIST_CARD_GATE_NODE
+    : SPLIT_NODE;
   connections[router.name] = {
     main: [
       [{ node: HANDOFF_PREPARE_NODE, type: 'main', index: 0 }],
-      [{ node: SPLIT_NODE, type: 'main', index: 0 }],
+      [{ node: normalSalesTarget, type: 'main', index: 0 }],
     ],
   };
 
@@ -405,6 +480,7 @@ function summarize(workflow) {
     exactModelClearsStaleBudget: prepare.includes(`${MARKER}:exact-model-budget`),
     structuredFacts: context.includes(`${MARKER}:facts`),
     catalogRepeatSuppressed: context.includes(REPEAT_CATALOG_MARKER),
+    singleQuoteChoiceQuestionSuppressed: context.includes(SINGLE_QUOTE_QUESTION_MARKER),
     noCannedStockClaim: !/acabou no momento|acabou todo estoque|nao temos disponivel/i.test(context),
     noFixedCatalogIntro: !context.includes('Vou atualizar as opções disponíveis para você'),
     agentOwnsConversation: agent.parameters.options.systemMessage.includes(`${MARKER}:agent`),
@@ -414,7 +490,9 @@ function summarize(workflow) {
     agentFeedsComposer: workflow.connections[AGENT_NODE]?.main?.[0]?.[0]?.node === COMPOSER_NODE,
     composerFeedsRouter: workflow.connections[COMPOSER_NODE]?.main?.[0]?.[0]?.node === router.name,
     handoffTrueBranch: workflow.connections[router.name]?.main?.[0]?.[0]?.node === HANDOFF_PREPARE_NODE,
-    normalFalseBranch: workflow.connections[router.name]?.main?.[1]?.[0]?.node === SPLIT_NODE,
+    normalFalseBranch: workflow.connections[router.name]?.main?.[1]?.[0]?.node === (
+      nodes.some((node) => node.name === PRICE_LIST_CARD_GATE_NODE) ? PRICE_LIST_CARD_GATE_NODE : SPLIT_NODE
+    ),
     modelRetries: findNode(nodes, MODEL_NODE).retryOnFail === true
       && findNode(nodes, MODEL_NODE).maxTries === 3
       && findNode(nodes, MODEL_NODE).waitBetweenTries === 5000,
@@ -568,8 +646,12 @@ if (require.main === module) {
 module.exports = {
   MARKER,
   REPEAT_CATALOG_MARKER,
+  SINGLE_QUOTE_QUESTION_MARKER,
+  explicitlyRequestsCatalog,
+  shouldSuppressRepeatedCatalog,
   patchPrepareSearch,
   patchProductContext,
+  patchSingleQuoteChoiceQuestion,
   patchSalesAgent,
   patchGraph,
   patchWorkflow,

@@ -44,6 +44,10 @@ const SITE_PATTERNS = [
   /\.(?:tsx|jsx|css|scss|html)$/,
 ];
 
+const N8N_WORKFLOW_PATTERNS = [
+  /^tmp-tests\/n8n-(?!.*(?:readonly|\.test\.cjs$)).*\.cjs$/,
+];
+
 const VERSION_FILES = [
   'public/VERSION.json',
   'VERSAO_ATUAL.md',
@@ -123,26 +127,42 @@ function classifyFiles(files) {
   const normalized = unique(files.map(normalizeFile));
   const siteFiles = normalized.filter((file) => matchesAny(file, SITE_PATTERNS));
   const apiFiles = normalized.filter((file) => matchesAny(file, API_PATTERNS));
+  const n8nFiles = normalized.filter((file) => matchesAny(file, N8N_WORKFLOW_PATTERNS));
   const versionFiles = normalized.filter((file) => (
     file === 'public/VERSION.json' ||
     file === 'VERSAO_ATUAL.md' ||
     file.startsWith('docs/versoes/')
   ));
-  const docsOnly = normalized.length > 0 && normalized.every((file) => matchesAny(file, DOC_PATTERNS));
+  const docsOnly = normalized.length > 0
+    && n8nFiles.length === 0
+    && normalized.every((file) => matchesAny(file, DOC_PATTERNS));
 
   const needs = {
     site: siteFiles.length > 0 || versionFiles.includes('public/VERSION.json'),
     api: apiFiles.length > 0,
+    n8n: n8nFiles.length > 0,
     version: !docsOnly || versionFiles.length > 0,
   };
 
   let target = 'none';
-  if (needs.site && needs.api) target = 'both';
+  if ([needs.site, needs.api, needs.n8n].filter(Boolean).length > 1) target = 'multiple';
   else if (needs.site) target = 'site';
   else if (needs.api) target = 'api';
+  else if (needs.n8n) target = 'n8n';
   else if (docsOnly) target = 'docs-only';
 
-  return { normalized, siteFiles, apiFiles, versionFiles, docsOnly, needs, target };
+  return { normalized, siteFiles, apiFiles, n8nFiles, versionFiles, docsOnly, needs, target };
+}
+
+function n8nDeployCommands(files) {
+  return files.flatMap((file) => {
+    const absolute = path.join(process.cwd(), file);
+    if (!existsSync(absolute)) return [];
+    const source = require('node:fs').readFileSync(absolute, 'utf8');
+    if (source.includes('--apply-production')) return [`node ${file} --apply-production`];
+    if (source.includes('--apply')) return [`node ${file} --apply`];
+    return [`Revisar e aplicar manualmente o mutador n8n: ${file}`];
+  });
 }
 
 function buildReleaseName(options, now = new Date()) {
@@ -203,6 +223,7 @@ function buildPlan(options) {
   if (classification.needs.api) {
     deployCommands.push('node deploy-vps-server-only.cjs');
   }
+  deployCommands.push(...n8nDeployCommands(classification.n8nFiles));
 
   const publicValidations = [];
   if (classification.needs.api) {
@@ -211,6 +232,9 @@ function buildPlan(options) {
   if (classification.needs.site) {
     publicValidations.push('curl.exe -L -s -o NUL -w "%{http_code} %{url_effective}\\n" https://www.mercadodovale.com.br/');
     publicValidations.push('curl.exe -s https://www.mercadodovale.com.br/VERSION.json');
+  }
+  if (classification.needs.n8n) {
+    publicValidations.push('curl.exe -s -i https://n8n.mercadodovale.com.br/healthz');
   }
 
   return {
@@ -227,6 +251,7 @@ function buildPlan(options) {
     needs: classification.needs,
     siteFiles: classification.siteFiles,
     apiFiles: classification.apiFiles,
+    n8nFiles: classification.n8nFiles,
     versionFiles: VERSION_FILES,
     releaseName,
     tagSuggestion: options.version ? `v${options.version.replace(/^v/i, '')}` : `vNEXT-${options.slug}`,
@@ -296,13 +321,19 @@ function runSelfTest() {
   assert(apiNginx.needs.api === true, 'API Nginx deploy need failed');
 
   const both = classifyFiles(['pages/Home.tsx', 'vps_server.cjs']);
-  assert(both.target === 'both', 'both classification failed');
+  assert(both.target === 'multiple', 'multiple classification failed');
 
   const marketingApi = classifyFiles(['pages/admin/settings/marketing/MarketingCampaignMetricsPanel.tsx', 'services/marketingCampaignApi.cjs']);
-  assert(marketingApi.target === 'both', 'marketing campaign API module must deploy site and API');
+  assert(marketingApi.target === 'multiple', 'marketing campaign API module must deploy site and API');
 
   const serviceServer = classifyFiles(['pages/admin/products/SmartphonePhotoIntakePage.tsx', 'services/smartphonePhotoIntakeServer.cjs']);
-  assert(serviceServer.target === 'both', 'server modules inside services must deploy site and API');
+  assert(serviceServer.target === 'multiple', 'server modules inside services must deploy site and API');
+
+  const n8n = classifyFiles(['tmp-tests/n8n-ai-natural-sales-responses.cjs']);
+  assert(n8n.target === 'n8n', 'n8n workflow mutator classification failed');
+  assert(n8n.needs.n8n === true, 'n8n workflow publication need failed');
+  const n8nTest = classifyFiles(['tmp-tests/n8n-phone-price-list-cards.test.cjs']);
+  assert(n8nTest.target === 'docs-only', 'n8n regression test must not be treated as a workflow deploy');
 
   const serverChecks = existingChecks(['vps_server.js']);
   assert(

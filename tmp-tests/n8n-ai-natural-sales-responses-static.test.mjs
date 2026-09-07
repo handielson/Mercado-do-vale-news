@@ -10,12 +10,57 @@ assert.match(applyScriptSource, /docker cp/);
 const {
   MARKER,
   REPEAT_CATALOG_MARKER,
+  SINGLE_QUOTE_QUESTION_MARKER,
+  explicitlyRequestsCatalog,
+  shouldSuppressRepeatedCatalog,
   patchPrepareSearch,
   patchProductContext,
+  patchSingleQuoteChoiceQuestion,
   patchSalesAgent,
   patchGraph,
   composerCode,
 } = require('./n8n-ai-natural-sales-responses.cjs');
+
+for (const message of [
+  'Não tenho interesse nesses aparelhos',
+  'Tô avaliando aqui',
+  'Vou na loja física dar uma olhada',
+  'Não tenho dúvidas',
+]) {
+  assert.equal(explicitlyRequestsCatalog(message), false, `${message} is not a request to resend the catalog`);
+}
+for (const message of [
+  'Envie a lista de celulares novamente',
+  'Quais celulares estão disponíveis?',
+  'Pode mostrar o catálogo?',
+  'Quais são os preços dos celulares?',
+]) {
+  assert.equal(explicitlyRequestsCatalog(message), true, `${message} explicitly requests the catalog`);
+}
+const repeatedCategory = {
+  catalogAlreadyPresented: true,
+  unavailableRequestedDevice: false,
+  isCompleteCategoryRequest: true,
+  prefersSmartphones: true,
+  specificDeviceModelRequest: false,
+  hasStructuredPreference: false,
+};
+assert.equal(shouldSuppressRepeatedCatalog({ ...repeatedCategory, explicitCatalogRequest: false }), true);
+assert.equal(shouldSuppressRepeatedCatalog({ ...repeatedCategory, explicitCatalogRequest: true }), false);
+assert.equal(shouldSuppressRepeatedCatalog({ ...repeatedCategory, catalogAlreadyPresented: false, explicitCatalogRequest: false }), false);
+
+const quoteChoiceFixture = `
+const products = $json.products;
+const hasDeviceAndAccessoryResults = false;
+const buildChunkedQuoteMessages = (items, start, includeHeader, includeQuestion) => includeQuestion;
+if (!hasDeviceAndAccessoryResults) return buildChunkedQuoteMessages(products, 0, true, true, '');
+`;
+const patchedQuoteChoice = patchSingleQuoteChoiceQuestion(quoteChoiceFixture);
+const runQuoteChoice = (products) => new Function('$json', patchedQuoteChoice)({ products });
+assert.equal(runQuoteChoice([{ name: 'Poco C71' }]), false, 'one result must not ask the customer to choose a number');
+assert.equal(runQuoteChoice([{ name: 'Poco C71' }, { name: 'Poco C85' }]), true, 'multiple results must keep the numbered-choice question');
+assert.match(patchedQuoteChoice, new RegExp(SINGLE_QUOTE_QUESTION_MARKER));
+assert.equal(patchSingleQuoteChoiceQuestion(patchedQuoteChoice), patchedQuoteChoice, 'single-quote patch must be idempotent');
 
 const oldBudgetBlock = `const priceContextV288 = /\\b(?:ate|maximo|limite|orcamento|investir|gastar|faixa|valor|preco)\\b|r\\$/i.test(rawFilterTextV288);
 const bareBudgetContinuationV288 = /^\\s*(?:r\\$\\s*)?\\d{2,6}(?:[.,]\\d{1,2})?\\s*$/i.test(rawFilterTextV288)
@@ -150,9 +195,11 @@ for (const stale of [
 assert.match(contextNode.parameters.jsCode, /salesAvailabilityStatusV322/);
 assert.match(contextNode.parameters.jsCode, /deterministicCatalogOutputV322/);
 assert.match(contextNode.parameters.jsCode, new RegExp(REPEAT_CATALOG_MARKER));
-assert.match(contextNode.parameters.jsCode, /suppressRepeatedCatalogV340/);
+assert.match(contextNode.parameters.jsCode, /suppressRepeatedCatalogV342/);
+assert.match(contextNode.parameters.jsCode, /explicitlyRequestsCatalogV342/);
+assert.match(contextNode.parameters.jsCode, /rejectsCatalog/);
 assert.match(contextNode.parameters.jsCode, /requested_model_not_confirmed_after_catalog/);
-assert.match(contextNode.parameters.jsCode, /phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 && !suppressRepeatedCatalogV340/);
+assert.match(contextNode.parameters.jsCode, /phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 && !suppressRepeatedCatalogV342/);
 
 const agentNode = { parameters: { options: {} } };
 patchSalesAgent(agentNode);
@@ -171,6 +218,7 @@ const nodes = [
     typeVersion: 2.2, parameters: {},
   },
   { name: 'Vendas - Preparar Handoff Especialista', parameters: {} },
+  { name: 'Vendas - Lista precisa de cards?', parameters: {} },
   { name: 'Dividir mensagens', parameters: {} },
 ];
 const connections = {
@@ -184,7 +232,7 @@ assert.equal(connections['Vendas - Contexto Produtos'].main[0][0].node, 'Especia
 assert.equal(connections['Especialista - Vendas'].main[0][0].node, 'Vendas - Compor Resposta IA');
 assert.equal(connections['Vendas - Compor Resposta IA'].main[0][0].node, 'Vendas - Precisa Handoff?');
 assert.equal(connections['Vendas - Precisa Handoff?'].main[0][0].node, 'Vendas - Preparar Handoff Especialista');
-assert.equal(connections['Vendas - Precisa Handoff?'].main[1][0].node, 'Dividir mensagens');
+assert.equal(connections['Vendas - Precisa Handoff?'].main[1][0].node, 'Vendas - Lista precisa de cards?');
 
 const compose = new Function('$json', '$', composerCode());
 const source = {
