@@ -9,6 +9,30 @@ export function getBlingParentId(product: BlingVariationListItem): number | null
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+export async function expandBlingSearchFamilies<T extends BlingVariationListItem>(
+  products: T[],
+  loadFamily: (parentId: number) => Promise<any>,
+): Promise<T[]> {
+  const byId = new Map(products.map(product => [Number(product.id), product]));
+  for (const parent of products.filter(product => String(product.formato).toUpperCase() === 'V' && !getBlingParentId(product))) {
+    const payload = await loadFamily(Number(parent.id));
+    const data = payload?.data || payload;
+    const rows = Array.isArray(data) ? data : data?.variacoes;
+    if (!Array.isArray(rows)) throw new Error('Não foi possível carregar todas as variações do Bling. Atualize a pesquisa.');
+    for (const entry of rows) {
+      const child = entry.produto || entry;
+      if (!Number.isSafeInteger(Number(child.id)) || Number(child.id) <= 0 || Number(child.id) === Number(parent.id)) {
+        throw new Error('O Bling retornou uma variação inválida. Atualize a pesquisa.');
+      }
+      byId.set(Number(child.id), {
+        ...child,
+        variacao: { ...child.variacao, produtoPai: { ...child.variacao?.produtoPai, id: Number(parent.id) } },
+      });
+    }
+  }
+  return Array.from(byId.values());
+}
+
 export function isBlingStructureProduct(product: BlingVariationListItem): boolean {
   const format = String(product?.formato || '').trim().toUpperCase();
   return format === 'E' || format === 'V';

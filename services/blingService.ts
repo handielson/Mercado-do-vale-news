@@ -4,7 +4,7 @@ import { modelService } from './models';
 import { brandService } from './brands';
 import { crossSellTagsService } from './cross-sell-tags';
 import { vpsApiService } from './vpsApiService';
-import { buildBlingImportSelection, getBlingParentId, isBlingStructureProduct } from './blingVariationImport';
+import { buildBlingImportSelection, expandBlingSearchFamilies, getBlingParentId, isBlingStructureProduct } from './blingVariationImport';
 import { buildVpsUrl, getVpsSyncHeaders, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
 import { companySettingsService } from './companySettingsService';
 import { getCompanyId } from './companyContext';
@@ -1062,6 +1062,15 @@ export async function searchBlingProducts(query: string, onProgress?: (p: FetchP
         if (items.length < 100) break;
         page++;
     } while (true);
+
+    const expanded = await expandBlingSearchFamilies(all, async (parentId) => {
+        const response = await fetchWith429Retry(`/api/bling?resource=product-detail&id=${parentId}&variacoes=1`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!response.ok) throw new Error(`Não foi possível carregar as variações do Bling (${response.status}). Atualize a pesquisa.`);
+        return response.json();
+    });
+    all.splice(0, all.length, ...expanded);
 
     // Busca os estoques (Bling v3 exige passar idsProdutos[])
     onProgress?.({ phase: 'fetching_stock', totalSoFar: all.length });

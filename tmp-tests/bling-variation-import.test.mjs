@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildBlingImportSelection,
+  expandBlingSearchFamilies,
   expandBlingSelectionIds,
   toggleBlingSelectionGroup,
 } from '../services/blingVariationImport.ts';
@@ -29,5 +30,17 @@ assert.deepEqual([...toggleBlingSelectionGroup([], 10, products)], [10]);
 assert.deepEqual([...toggleBlingSelectionGroup([], 11, products)], [10, 11, 12]);
 assert.deepEqual([...toggleBlingSelectionGroup([10, 11, 12], 11, products)], [10]);
 assert.deepEqual([...toggleBlingSelectionGroup([10, 11, 12], 10, products)], []);
+
+const searchedFamily = await expandBlingSearchFamilies([products[0]], async id => {
+  assert.equal(id, 10);
+  return { id: 10, variacoes: [products[1], products[2]] };
+});
+assert.deepEqual(searchedFamily.map(p => p.id), [10, 11, 12]);
+assert.deepEqual([...expandBlingSelectionIds([11], searchedFamily)], [10, 11, 12]);
+const deduped = await expandBlingSearchFamilies([products[0], products[1]], async () => ({ data: { variacoes: [products[1], products[2]] } }));
+assert.equal(deduped.length, 3);
+await assert.rejects(expandBlingSearchFamilies([products[0]], async () => ({})), /variações/);
+await assert.rejects(expandBlingSearchFamilies([products[0]], async () => { throw new Error('429'); }), /429/);
+assert.deepEqual(await expandBlingSearchFamilies([products[3]], async () => { throw new Error('Não deve consultar produto simples'); }), [products[3]]);
 
 console.log('bling variation import tests passed');

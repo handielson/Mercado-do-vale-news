@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.342-catalogo-visual-sem-repeticao",
+  "version": "v1.2.343-bling-variacoes-busca",
   "date": "2026-09-07",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260907-191134-v12342-catalogo-visual-sem-repeticao",
+  "release_vps": "/var/www/mdv-site/releases/20260907-204423-v12343-bling-variacoes-busca",
   "branch": "main",
-  "summary": "Restaura os cards de imagem do catalogo, evita repetir a lista em continuacoes e remove a pergunta de escolha em orcamentos com um unico item."
+  "summary": "Carrega o produto pai e todas as suas variacoes ao pesquisar um SKU de estrutura no Bling."
 }
