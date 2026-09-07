@@ -11,6 +11,7 @@ const {
   MARKER,
   REPEAT_CATALOG_MARKER,
   SINGLE_QUOTE_QUESTION_MARKER,
+  SPECIFIC_MODEL_INPUT_MARKER,
   explicitlyRequestsCatalog,
   shouldSuppressRepeatedCatalog,
   patchPrepareSearch,
@@ -199,6 +200,9 @@ assert.match(contextNode.parameters.jsCode, /suppressRepeatedCatalogV342/);
 assert.match(contextNode.parameters.jsCode, /explicitlyRequestsCatalogV342/);
 assert.match(contextNode.parameters.jsCode, /rejectsCatalog/);
 assert.match(contextNode.parameters.jsCode, /requested_model_not_confirmed_after_catalog/);
+assert.match(contextNode.parameters.jsCode, new RegExp(SPECIFIC_MODEL_INPUT_MARKER));
+assert.match(contextNode.parameters.jsCode, /specificDeviceModelRequest: base\.specificDeviceModelRequest === true/);
+assert.doesNotMatch(contextNode.parameters.jsCode, /^\s*specificDeviceModelRequest,\s*$/m);
 assert.match(contextNode.parameters.jsCode, /phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 && !suppressRepeatedCatalogV342/);
 
 const agentNode = { parameters: { options: {} } };

@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.345-bling-selecionar-familia
+version: v1.2.346-n8n-catalog-runtime
 date: 2026-09-07
 status: ready
-release_vps: /var/www/mdv-site/releases/20260907-205927-v12345-bling-selecionar-familia
+release_vps: /var/www/mdv-site/releases/20260907-212219-v12346-n8n-catalog-runtime
 branch: main
-summary: Seleciona o pai e todas as suas variacoes para importar ou sincronizar a familia completa do Bling.
-tag: v1.2.345-bling-selecionar-familia
+summary: Corrige a falha do catálogo de smartphones causada por referência indefinida no workflow n8n.
+tag: v1.2.346-n8n-catalog-runtime
 ```

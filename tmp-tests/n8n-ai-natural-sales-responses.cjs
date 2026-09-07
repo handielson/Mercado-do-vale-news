@@ -21,6 +21,7 @@ const PRICE_LIST_CARD_GATE_NODE = 'Vendas - Lista precisa de cards?';
 const MARKER = 'sales-ai-natural-response-v322';
 const REPEAT_CATALOG_MARKER = 'sales-ai-no-repeat-catalog-v342';
 const SINGLE_QUOTE_QUESTION_MARKER = 'sales-single-quote-no-choice-question-v341';
+const SPECIFIC_MODEL_INPUT_MARKER = 'sales-specific-model-input-v343';
 const APPLY = process.argv.includes('--apply');
 
 const shQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -156,6 +157,17 @@ if (specificDeviceModelRequest && !budgetAmountV322) mergedSalesFiltersV288.maxP
 }
 
 function patchNoRepeatCatalogAfterUnavailableLookup(code) {
+  const repairSpecificModelInput = (source) => {
+    const unsafeSpecificModelProperty = /^\s*specificDeviceModelRequest,\s*$/m;
+    if (!unsafeSpecificModelProperty.test(source)) return source;
+    return replaceRegexOnce(
+      source,
+      unsafeSpecificModelProperty,
+      `  // ${SPECIFIC_MODEL_INPUT_MARKER}\n  specificDeviceModelRequest: base.specificDeviceModelRequest === true,`,
+      'specific model request input',
+    );
+  };
+  code = repairSpecificModelInput(code);
   if (code.includes(REPEAT_CATALOG_MARKER)) return code;
 
   const legacyFinalQuoteMessages = `const finalQuoteMessages = isDirectPriceQuestion && products.length === 1 && !unavailableRequestedDevice
@@ -230,7 +242,7 @@ const finalQuoteMessages = suppressRepeatedCatalogV342
       'catalog availability status after a prior list',
     );
   }
-  return code;
+  return repairSpecificModelInput(code);
 }
 
 function patchSingleQuoteChoiceQuestion(code) {
@@ -480,6 +492,8 @@ function summarize(workflow) {
     exactModelClearsStaleBudget: prepare.includes(`${MARKER}:exact-model-budget`),
     structuredFacts: context.includes(`${MARKER}:facts`),
     catalogRepeatSuppressed: context.includes(REPEAT_CATALOG_MARKER),
+    specificModelInputSafe: context.includes(SPECIFIC_MODEL_INPUT_MARKER)
+      && !/^\s*specificDeviceModelRequest,\s*$/m.test(context),
     singleQuoteChoiceQuestionSuppressed: context.includes(SINGLE_QUOTE_QUESTION_MARKER),
     noCannedStockClaim: !/acabou no momento|acabou todo estoque|nao temos disponivel/i.test(context),
     noFixedCatalogIntro: !context.includes('Vou atualizar as opções disponíveis para você'),
@@ -647,6 +661,7 @@ module.exports = {
   MARKER,
   REPEAT_CATALOG_MARKER,
   SINGLE_QUOTE_QUESTION_MARKER,
+  SPECIFIC_MODEL_INPUT_MARKER,
   explicitlyRequestsCatalog,
   shouldSuppressRepeatedCatalog,
   patchPrepareSearch,
