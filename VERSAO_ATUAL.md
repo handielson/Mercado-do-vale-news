@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.337-entrega-bot
-date: 2026-09-06
+version: v1.2.338-aniversario-contexto-audio
+date: 2026-09-07
 status: ready
-release_vps: /var/www/mdv-site/releases/20260906-180000-v12337-entrega-bot
+release_vps: pendente
 branch: main
-summary: Corrige o roteamento de perguntas sobre entrega, frete, envio e retirada no bot do WhatsApp.
-tag: v1.2.337-entrega-bot
+summary: Preserva o contexto do aniversario no atendimento WhatsApp e envia a musica preparada como audio.
+tag: v1.2.338-aniversario-contexto-audio
 ```

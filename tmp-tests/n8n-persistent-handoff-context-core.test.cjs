@@ -24,9 +24,11 @@ assert.equal(nodes.some((node) => node.name === 'Handoff - Persistir manual'), t
 assert.deepEqual(connections['Controle Bot - Bloqueado?'].main[1][0].node, 'Contato - Preparar');
 assert.deepEqual(connections['Handoff - Registrar manual'].main[0][0].node, 'Handoff - Persistir manual');
 assert.match(nodes.find((node) => node.name === 'Controle Bot - Aplicar Controle').parameters.jsCode, /control\.blocked \|\| baseOutput\.humanHandoffPaused/);
+assert.match(nodes.find((node) => node.name === 'Controle Bot - Aplicar Controle').parameters.jsCode, /birthdayGreetingActive/);
 assert.match(nodes.find((node) => node.name === 'Dividir mensagens').parameters.jsCode, /alreadyInvitedInHistory/);
 for (const name of ['Agente Inicial - Classificador', 'Agente Geral - Atendimento', 'Especialista - Vendas']) {
   assert.match(nodes.find((node) => node.name === name).parameters.text, /Historico recente da conversa/);
+  assert.match(nodes.find((node) => node.name === name).parameters.text, /CONTEXTO DE ANIVERSARIO ATIVO/);
 }
 
 console.log('n8n persistent handoff and context graph checks passed');

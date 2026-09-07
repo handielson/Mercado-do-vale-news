@@ -2816,6 +2816,32 @@ async function getN8nBotClientControl(identity) {
     const text = String(row.message_text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
     return { role, text, direction, source_node: sourceNode, created_at: row.created_at || null };
   }).filter((row) => row.text);
+  // Automacoes enviadas fora do n8n tambem precisam fazer parte do contexto do
+  // atendimento. Sem isto, uma resposta ao parabens era tratada como conversa nova.
+  const [birthdayRows] = await pool.query(
+    `SELECT rendered_text, created_at
+       FROM whatsapp_automation_logs
+      WHERE template_key = 'birthday_greeting'
+        AND phone = ?
+        AND status = 'sent'
+        AND (entity_type IS NULL OR entity_type <> 'customer_birthday_audio')
+        AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 30 HOUR)
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [identity.phone]
+  );
+  const birthdayGreeting = birthdayRows?.[0] || null;
+  const birthdayGreetingText = String(birthdayGreeting?.rendered_text || '').trim();
+  const hasBirthdayGreetingInHistory = recentMessages.some((row) => row.source_node === 'automation-birthday-greeting');
+  const messagesWithBirthdayContext = birthdayGreetingText && !hasBirthdayGreetingInHistory
+    ? [{
+      role: 'Loja',
+      text: birthdayGreetingText.replace(/\s+/g, ' ').slice(0, 500),
+      direction: 'outbound',
+      source_node: 'automation-birthday-greeting',
+      created_at: birthdayGreeting?.created_at || null,
+    }, ...recentMessages]
+    : recentMessages;
   return {
     ...result,
     memorySessionKey: buildN8nBotContextMemorySessionKey(
@@ -2825,8 +2851,11 @@ async function getN8nBotClientControl(identity) {
     ),
     conversationContextIdle: context.isIdle,
     humanHandoffPaused: Boolean(result.control.human_handoff_active),
-    recentMessages,
-    conversationHistory: recentMessages.map((row) => `${row.role}: ${row.text}`).join('\n'),
+    birthdayGreetingActive: Boolean(birthdayGreeting),
+    birthdayGreetingSentAt: birthdayGreeting?.created_at || null,
+    birthdayGreetingText,
+    recentMessages: messagesWithBirthdayContext,
+    conversationHistory: messagesWithBirthdayContext.map((row) => `${row.role}: ${row.text}`).join('\n'),
   };
 }
 
@@ -3625,7 +3654,7 @@ async function sendWhatsAppAutomationMessageVps(input) {
       throw new Error(`WhatsApp API retornou HTTP ${result?.status || 'desconhecido'}`);
     }
     await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'sent', renderedText, message: 'automation_whatsapp_sent' });
-    return { status: 'sent', result };
+    return { status: 'sent', result, renderedText };
   } catch (err) {
     const errorMessage = err?.message || 'Falha ao enviar WhatsApp automatico';
     const isTimeout = /timeout|etimedout|econnreset|socket|eai_again|gateway|502|503|504/i.test(errorMessage) || err?.code === 'ETIMEDOUT';
@@ -3929,6 +3958,82 @@ async function notifySaleCompletedWhatsApp(saleId) {
     },
   };
 }
+async function sendBirthdayWhatsappAudio(phone) {
+  const number = normalizeDeliveryWhatsAppNumber(phone);
+  if (!number) return { ok: false, reason: 'invalid_phone' };
+
+  const settings = await getN8nBotEvolutionSettings();
+  const baseUrl = String(settings.baseUrl || '').replace(/\/+$/, '');
+  const apiKey = String(settings.apiKey || '');
+  const instanceName = String(settings.instanceName || '');
+  if (!baseUrl || !apiKey || !instanceName) return { ok: false, reason: 'evolution_not_configured' };
+
+  // Intervalo para a mensagem de texto ser entregue primeiro
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  const audioUrl = 'https://api.xiaomipetrolina.com.br/images/audio/parabens_xuxa.ogg';
+
+  const send = async (path, payload) => {
+    const response = await fetch(`${baseUrl}${path}/${encodeURIComponent(instanceName)}`, {
+      method: 'POST',
+      headers: {
+        apikey: apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30000),
+    });
+    const body = await response.text();
+    let parsed = body;
+    try { parsed = JSON.parse(body); } catch {}
+    return { ok: response.ok, status: response.status, body: parsed };
+  };
+
+  try {
+    // sendMedia e o endpoint padrao da Evolution para arquivo de audio. O endpoint
+    // legado fica apenas como contingencia para instalacoes antigas.
+    const primary = await send('/message/sendMedia', {
+        number,
+        mediatype: 'audio',
+        mimetype: 'audio/ogg; codecs=opus',
+        media: audioUrl,
+        fileName: 'parabens_xuxa.ogg',
+        delay: 1200,
+    });
+    if (primary.ok) return { ...primary, endpoint: 'sendMedia' };
+
+    const fallback = await send('/message/sendWhatsAppAudio', {
+      number,
+      audio: audioUrl,
+      delay: 1200,
+      encoding: true,
+    });
+    return { ...fallback, endpoint: 'sendWhatsAppAudio', primaryFailure: primary };
+  } catch (err) {
+    console.error('[birthday-audio] Falha ao enviar audio de aniversario:', err?.message || err);
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+async function recordBirthdayGreetingN8nContext(phone, message) {
+  const text = String(message || '').trim();
+  if (!text) return { ok: false, skipped: true, reason: 'empty_message' };
+  try {
+    await insertN8nBotMessage({
+      phone,
+      direction: 'outbound',
+      message: text,
+      messageType: 'text',
+      sourceNode: 'automation-birthday-greeting',
+      payload: { automation: 'birthday_greeting' },
+    });
+    return { ok: true };
+  } catch (err) {
+    console.warn('[birthday-context] Falha ao registrar mensagem no contexto do bot:', err?.message || err);
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
 async function sendBirthdayGreetingsForToday(options = {}) {
   const now = new Date();
   const parts = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }).formatToParts(now);
@@ -3978,8 +4083,22 @@ async function sendBirthdayGreetingsForToday(options = {}) {
       },
     });
 
-    if (result.status === 'sent') summary.sent += 1;
-    else if (result.status === 'skipped') summary.skipped += 1;
+    if (result.status === 'sent') {
+      summary.sent += 1;
+      await recordBirthdayGreetingN8nContext(customer.phone, result.renderedText);
+      const audioResult = await sendBirthdayWhatsappAudio(customer.phone);
+      await logWhatsAppAutomationEventVps({
+        templateKey: 'birthday_greeting',
+        phone: normalizeDeliveryWhatsAppNumber(customer.phone),
+        entityType: 'customer_birthday_audio',
+        entityId: `${customer.id}:${month}-${day}:audio`,
+        customerId: customer.id,
+        status: audioResult?.ok ? 'sent' : 'failed',
+        message: audioResult?.ok ? 'birthday_audio_sent' : 'birthday_audio_failed',
+        renderedText: 'Musica de aniversario: parabens_xuxa.ogg',
+        errorMessage: audioResult?.ok ? null : (audioResult?.error || `WhatsApp API retornou HTTP ${audioResult?.status || 'desconhecido'}`),
+      });
+    } else if (result.status === 'skipped') summary.skipped += 1;
     else summary.failed += 1;
   }
 
@@ -12838,7 +12957,16 @@ async function handleCronDispatcherVps(request, reply) {
 
   try {
     const now = new Date();
-    const birthdaySummary = await sendBirthdayGreetingsForToday({ birthdaySummary: true }).catch((err) => ({ birthdaySummary: true, error: err.message || String(err) }));
+    const timeParts = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).formatToParts(now);
+    const hour = timeParts.find((part) => part.type === 'hour')?.value || '00';
+    const currentHourPrefix = `${hour}:`;
+    const forceTemplateId = request.query?.forceTemplateId || request.body?.forceTemplateId;
+    const forceBirthday = Boolean(request.query?.forceBirthday || request.body?.forceBirthday || forceTemplateId);
+    const isBirthdayHour = hour === '08' || forceBirthday;
+
+    const birthdaySummary = isBirthdayHour
+      ? await sendBirthdayGreetingsForToday({ birthdaySummary: true }).catch((err) => ({ birthdaySummary: true, error: err.message || String(err) }))
+      : { birthdaySummary: true, skipped: true, reason: `scheduled_for_08h_brasilia_current_${hour}h` };
     const whatsappStatusSummary = await runDueWhatsAppStatusCampaigns().catch((err) => ({
       ok: false,
       error: err.message || String(err),
@@ -12883,11 +13011,6 @@ async function handleCronDispatcherVps(request, reply) {
         }),
       });
     }
-
-    const timeParts = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).formatToParts(now);
-    const hour = timeParts.find((part) => part.type === 'hour')?.value || '00';
-    const currentHourPrefix = `${hour}:`;
-    const forceTemplateId = request.query?.forceTemplateId || request.body?.forceTemplateId;
 
     let facebookMarketplaceRemindersSent = 0;
     try {

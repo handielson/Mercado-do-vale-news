@@ -1,4 +1,3 @@
-const { Client } = require('ssh2');
 const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
 
 const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
@@ -72,6 +71,9 @@ const baseOutput = {
   memorySessionKey: payload.memorySessionKey || remoteJid,
   conversationHistory: String(payload.conversationHistory || ''),
   recentMessages: Array.isArray(payload.recentMessages) ? payload.recentMessages : [],
+  birthdayGreetingActive: Boolean(payload.birthdayGreetingActive),
+  birthdayGreetingSentAt: payload.birthdayGreetingSentAt || null,
+  birthdayGreetingText: String(payload.birthdayGreetingText || ''),
   humanHandoffPaused: Boolean(payload.humanHandoffPaused || control.human_handoff_active),
 };
 
@@ -124,9 +126,15 @@ return [{ json: {
 
 function wrapPromptWithHistory(text) {
   const raw = String(text || '');
-  if (!raw.startsWith('={{') || !raw.endsWith('}}') || raw.includes('Historico recente da conversa')) return raw;
-  const expression = raw.slice(3, -2);
-  return `={{($json.conversationHistory ? 'Historico recente da conversa (use apenas como contexto; priorize a mensagem atual):\\n' + $json.conversationHistory + '\\n\\n' : '') + (${expression})}}`;
+  if (!raw.startsWith('={{') || !raw.endsWith('}}')) return raw;
+  let expression = raw.slice(3, -2);
+  if (!raw.includes('Historico recente da conversa')) {
+    expression = `($json.conversationHistory ? 'Historico recente da conversa (use apenas como contexto; priorize a mensagem atual):\\n' + $json.conversationHistory + '\\n\\n' : '') + (${expression})`;
+  }
+  if (!raw.includes('birthdayGreetingActive')) {
+    expression = `($json.birthdayGreetingActive ? 'CONTEXTO DE ANIVERSARIO ATIVO: a loja acabou de enviar uma mensagem de feliz aniversario a este cliente. Se ele agradecer, reagir ou responder a ela, responda com carinho e de forma breve, sem nova saudacao, apresentacao ou reinicio do atendimento. Se pedir informacoes, responda ao pedido normalmente mantendo este contexto.\\n\\n' : '') + (${expression})`;
+  }
+  return `={{${expression}}}`;
 }
 
 function patchWorkflow(nodes, connections) {
@@ -202,6 +210,7 @@ function patchWorkflow(nodes, connections) {
 }
 
 async function main() {
+  const { Client } = require('ssh2');
   const conn = new Client();
   await new Promise((resolve, reject) => conn.on('ready', resolve).on('error', reject).connect(getVpsSshConfig()));
   let servicesStopped = false;
@@ -282,4 +291,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { patchWorkflow, wrapPromptWithHistory };
+module.exports = { patchWorkflow, wrapPromptWithHistory, main };
