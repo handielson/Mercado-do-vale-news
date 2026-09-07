@@ -16,6 +16,19 @@ import { markBlingNameManaged, stripBlingNameFieldsWhenLocalManaged } from './bl
 const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
 const parentDetailCache = new Map<number, any>();
 
+async function fetchWith429Retry(url: string, init: RequestInit, maxAttempts = 4): Promise<Response> {
+    let lastResponse: Response | null = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const response = await fetch(url, init);
+        if (response.status !== 429) return response;
+        lastResponse = response;
+        const retryAfterSeconds = Number(response.headers.get('retry-after') || 0);
+        const waitMs = retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : 500 * attempt;
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+    }
+    return lastResponse as Response;
+}
+
 function normalizeSlug(value: string): string {
     return value
         .toLowerCase()
@@ -173,20 +186,6 @@ export interface BlingProductDetail extends BlingProduct {
 export async function fetchBlingProductDetail(productId: number): Promise<BlingProductDetail | null> {
     try {
         const accessToken = await getValidToken();
-        const fetchWith429Retry = async (url: string, init: RequestInit, maxAttempts = 4): Promise<Response> => {
-            let lastRes: Response | null = null;
-            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                const res = await fetch(url, init);
-                if (res.status !== 429) return res;
-                lastRes = res;
-                // Exponential backoff leve para respeitar limite do Bling
-                const retryAfterHeader = Number(res.headers.get('retry-after') || 0);
-                const waitMs = retryAfterHeader > 0 ? retryAfterHeader * 1000 : 500 * attempt;
-                await new Promise(resolve => setTimeout(resolve, waitMs));
-            }
-            return lastRes as Response;
-        };
-
         const res = await fetchWith429Retry(`/api/bling?resource=product-detail&id=${productId}`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         });

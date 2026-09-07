@@ -5,8 +5,14 @@ const source = readFileSync('services/blingService.ts', 'utf8');
 const searchStart = source.indexOf('export async function searchBlingProducts');
 const searchEnd = source.indexOf('export async function findBlingProductByExactSku', searchStart);
 const searchBody = source.slice(searchStart, searchEnd);
+const retryHelperStart = source.indexOf('async function fetchWith429Retry');
 
 assert.ok(searchStart > -1 && searchEnd > searchStart, 'searchBlingProducts must exist');
+assert.ok(
+  retryHelperStart > -1 && retryHelperStart < source.indexOf('export async function fetchBlingProductDetail'),
+  '429 retry helper must be declared at service scope so detail and family search can both use it',
+);
+assert.match(searchBody, /await fetchWith429Retry\(/, 'family search must use the shared 429 retry helper');
 assert.match(
   source,
   /function isBlingAuthFailure\(/,

@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.343-bling-variacoes-busca
+version: v1.2.344-bling-busca-retry
 date: 2026-09-07
 status: ready
-release_vps: /var/www/mdv-site/releases/20260907-204423-v12343-bling-variacoes-busca
+release_vps: /var/www/mdv-site/releases/20260907-205249-v12344-bling-busca-retry
 branch: main
-summary: Carrega o produto pai e todas as suas variacoes ao pesquisar um SKU de estrutura no Bling.
-tag: v1.2.343-bling-variacoes-busca
+summary: Corrige o carregamento das variacoes do Bling disponibilizando a repeticao para limite de requisicoes no escopo correto.
+tag: v1.2.344-bling-busca-retry
 ```
