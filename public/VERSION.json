@@ -2,7 +2,7 @@
   "version": "v1.2.338-aniversario-contexto-audio",
   "date": "2026-09-07",
   "status": "ready",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20260907-150600-v12338-aniversario-contexto-audio",
   "branch": "main",
   "summary": "Preserva o contexto do aniversario no atendimento WhatsApp e envia a musica preparada como audio."
 }
