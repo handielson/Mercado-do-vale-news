@@ -46,9 +46,14 @@ export function buildBlingImportSelection<T extends BlingVariationListItem>(
   for (const product of [...availableProducts, ...selectedProducts]) byId.set(Number(product.id), product);
 
   const includedIds = new Set(selectedProducts.map((product) => Number(product.id)));
-  const selectedGroupParentIds = new Set(
+  const selectedGroupParentIds = new Set<number>(
     selectedProducts.map(getBlingParentId).filter((id): id is number => id !== null)
   );
+  for (const product of selectedProducts) {
+    if (isBlingStructureProduct(product) && !getBlingParentId(product)) {
+      selectedGroupParentIds.add(Number(product.id));
+    }
+  }
 
   // Uma variacao selecionada representa o grupo inteiro: pai + todos os filhos.
   for (const parentId of selectedGroupParentIds) {
@@ -101,20 +106,10 @@ export function toggleBlingSelectionGroup<T extends BlingVariationListItem>(
     .filter((item) => getBlingParentId(item) === parentId)
     .map((item) => Number(item.id));
 
-  if (!directParentId) {
-    if (next.has(parentId)) {
-      next.delete(parentId);
-      childIds.forEach((id) => next.delete(id));
-    } else {
-      next.add(parentId); // pai sozinho
-    }
-    return next;
-  }
-
   const wholeGroupSelected = next.has(parentId) && childIds.every((id) => next.has(id));
   if (wholeGroupSelected) {
+    next.delete(parentId);
     childIds.forEach((id) => next.delete(id));
-    next.add(parentId); // segundo clique reduz de "todos" para "somente pai"
   } else {
     next.add(parentId);
     childIds.forEach((id) => next.add(id));

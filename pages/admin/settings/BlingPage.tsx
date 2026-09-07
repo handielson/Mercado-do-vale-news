@@ -1823,7 +1823,7 @@ export default function BlingPage() {
                                                                         type="checkbox"
                                                                         checked={selectedIds.has(p.id)}
                                                                         onChange={() => toggleSelect(p.id)}
-                                                                        title={isBlingStructureProduct(p) ? 'Selecionar somente o produto pai' : 'Selecionar o pai e todas as variações'}
+                                                                        title="Selecionar o produto pai e todas as variações"
                                                                         className="w-4 h-4 accent-green-600 flex-shrink-0"
                                                                     />
                                                                     <div className="flex-1 min-w-0">
