@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.338-aniversario-contexto-audio
+version: v1.2.339-memoria-contexto-persistente
 date: 2026-09-07
 status: ready
-release_vps: /var/www/mdv-site/releases/20260907-150600-v12338-aniversario-contexto-audio
+release_vps: /var/www/mdv-site/releases/20260907-122942-v12339-memoria-contexto-persistente
 branch: main
-summary: Preserva o contexto do aniversario no atendimento WhatsApp e envia a musica preparada como audio.
-tag: v1.2.338-aniversario-contexto-audio
+summary: Mantem a memoria de contexto do atendimento WhatsApp por cliente, sem expiracao por tempo.
+tag: v1.2.339-memoria-contexto-persistente
 ```
