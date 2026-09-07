@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.339-memoria-contexto-persistente
+version: v1.2.340-catalogo-sem-legenda
 date: 2026-09-07
 status: ready
-release_vps: /var/www/mdv-site/releases/20260907-122942-v12339-memoria-contexto-persistente
+release_vps: /var/www/mdv-site/releases/20260907-124956-v12340-catalogo-sem-legenda
 branch: main
-summary: Mantem a memoria de contexto do atendimento WhatsApp por cliente, sem expiracao por tempo.
-tag: v1.2.339-memoria-contexto-persistente
+summary: Remove legendas dos cards do catalogo e evita reenviar a lista quando um modelo indisponivel e consultado apos ela.
+tag: v1.2.340-catalogo-sem-legenda
 ```

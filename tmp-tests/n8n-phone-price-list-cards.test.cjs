@@ -17,14 +17,22 @@ test('keeps filtered variant IDs, canonical cents and each memory configuration'
 test('invalid prices and unavailable product IDs do not become image requests', () => {
   assert.deepEqual(buildGroups([{name:'A',productIds:[],priceCents:100}, {name:'B',id:'b',priceCents:NaN}, {name:'C',id:'c',priceCents:0}]), []);
 });
-test('generation success preserves text first, image order, reply and followup context', () => {
+test('generation success preserves text first and image order without WhatsApp captions', () => {
   const source = { output: 'Olá[[MSG]]Lista[[BR]]1. POCO', remoteJid: 'customer', phoneCatalogFollowupToken: 'token' };
-  const result = appendCards(source, { ok: true, items: [1,2].map(n => ({ mediaType: 'image', mediaUrl: `https://api.xiaomipetrolina.com.br/images/list-${n}.png`, caption: `Página ${n}` })) });
+  const result = appendCards(source, { ok: true, items: [1,2].map(n => ({ mediaType: 'image', mediaUrl: `https://api.xiaomipetrolina.com.br/images/list-${n}.png`, label: `Tabela ${n}`, caption: `Página ${n}` })) });
   assert.deepEqual(result.messages.slice(0,2), [{text:'Olá'}, {text:'Lista[[BR]]1. POCO'}]);
-  assert.deepEqual(result.messages.slice(2).map(m=>m.caption), ['Página 1','Página 2']);
+  assert.deepEqual(result.messages.slice(2).map(m=>m.caption), ['', '']);
+  assert.deepEqual(result.messages.slice(2).map(m=>m.text), ['', '']);
   assert.equal(result.remoteJid, source.remoteJid);
   assert.equal(result.phoneCatalogFollowupToken, 'token');
   assert.equal(result.phonePriceListCardsStatus, 'ready');
+});
+test('preview route deliberately keeps catalog card captions blank', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../services/phonePriceListServer.cjs'), 'utf8');
+  const cardResponse = source.match(/items\.push\(\{ mediaType: 'image',[\s\S]*?offsetSeconds: items\.length \* 10 \}\);/);
+  assert.ok(cardResponse, 'phone-price-list preview image response was not found');
+  assert.match(cardResponse[0], /caption:\s*''/);
+  assert.doesNotMatch(cardResponse[0], /Lista de celulares/);
 });
 test('timeout, 409, malformed and unsafe preview preserve original text without images', () => {
   const source = { output:'Lista original', remoteJid:'customer' };

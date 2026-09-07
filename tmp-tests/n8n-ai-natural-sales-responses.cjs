@@ -18,6 +18,7 @@ const COMPOSER_NODE = 'Vendas - Compor Resposta IA';
 const HANDOFF_PREPARE_NODE = 'Vendas - Preparar Handoff Especialista';
 const SPLIT_NODE = 'Dividir mensagens';
 const MARKER = 'sales-ai-natural-response-v322';
+const REPEAT_CATALOG_MARKER = 'sales-ai-no-repeat-catalog-v340';
 const APPLY = process.argv.includes('--apply');
 
 const shQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -130,9 +131,67 @@ if (specificDeviceModelRequest && !budgetAmountV322) mergedSalesFiltersV288.maxP
   node.parameters.jsCode = code;
 }
 
+function patchNoRepeatCatalogAfterUnavailableLookup(code) {
+  if (code.includes(REPEAT_CATALOG_MARKER)) return code;
+
+  const finalQuoteMessages = `const finalQuoteMessages = isDirectPriceQuestion && products.length === 1 && !unavailableRequestedDevice
+  ? [buildDirectPriceAnswer(products[0])]
+  : quoteMessages;`;
+  const finalQuoteMessagesReplacement = `// ${REPEAT_CATALOG_MARKER}
+// If this customer is already choosing from the live catalog, an unavailable
+// model must not cause the same full list (or its image cards) to be resent.
+const catalogAlreadyPresentedV340 = (() => {
+  try {
+    const staticData = $getWorkflowStaticData('global');
+    let remoteJid = String(base.remoteJid || '');
+    try { remoteJid = remoteJid || String($('switc Mensagens').first().json.remoteJid || ''); } catch (error) {}
+    const state = remoteJid ? staticData?.salesPostList?.[remoteJid] : null;
+    return Boolean(state
+      && state.flow === 'sales_post_list'
+      && state.step === 'awaiting_product_choice'
+      && new Date(state.expiresAt || 0).getTime() > Date.now());
+  } catch (error) {
+    return false;
+  }
+})();
+const suppressRepeatedCatalogV340 = Boolean(unavailableRequestedDevice && catalogAlreadyPresentedV340);
+const finalQuoteMessages = suppressRepeatedCatalogV340
+  ? []
+  : (isDirectPriceQuestion && products.length === 1 && !unavailableRequestedDevice
+    ? [buildDirectPriceAnswer(products[0])]
+    : quoteMessages);`;
+  code = replaceOnce(code, finalQuoteMessages, finalQuoteMessagesReplacement, 'catalog repeat suppression state');
+
+  code = replaceOnce(
+    code,
+    'phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 ?',
+    'phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 && !suppressRepeatedCatalogV340 ?',
+    'catalog card repeat suppression',
+  );
+  code = replaceOnce(
+    code,
+    'const phoneCatalogFollowupEligibleV289 = Boolean(isCompleteCategoryRequest && prefersSmartphones && products.length > 0);',
+    'const phoneCatalogFollowupEligibleV289 = Boolean(isCompleteCategoryRequest && prefersSmartphones && products.length > 0 && !suppressRepeatedCatalogV340);',
+    'catalog follow-up repeat suppression',
+  );
+  code = replaceOnce(
+    code,
+    "? 'requested_model_not_confirmed_with_alternatives'",
+    "? (suppressRepeatedCatalogV340 ? 'requested_model_not_confirmed_after_catalog' : 'requested_model_not_confirmed_with_alternatives')",
+    'catalog availability status after a prior list',
+  );
+  return code;
+}
+
 function patchProductContext(node) {
   let code = String(node.parameters?.jsCode || '');
-  if (code.includes(`${MARKER}:facts`)) return;
+  if (code.includes(REPEAT_CATALOG_MARKER)) return;
+  if (code.includes(`${MARKER}:facts`)) {
+    code = patchNoRepeatCatalogAfterUnavailableLookup(code);
+    new Function('$json', '$input', '$getWorkflowStaticData', '$', code);
+    node.parameters.jsCode = code;
+    return;
+  }
 
   const clarificationOutput = `      productInStock: [],
       output: 'O senhor esta falando de celulares ' + brandLabel + '?',`;
@@ -206,6 +265,7 @@ const deterministicCatalogOutputV322 = finalQuoteMessages.filter(Boolean).join('
   ]) {
     assert.equal(code.includes(stale), false, `Stale canned response remains: ${stale}`);
   }
+  code = patchNoRepeatCatalogAfterUnavailableLookup(code);
   new Function('$json', '$input', '$getWorkflowStaticData', '$', code);
   node.parameters.jsCode = code;
 }
@@ -231,6 +291,7 @@ function patchSalesAgent(node) {
 O campo "Status deterministico da consulta" e a fonte de verdade:
 - confirmed_products_available: ha produtos confirmados. Responda naturalmente a pergunta e introduza brevemente as opcoes. Nao repita a lista, precos, links, cores ou memorias; a lista oficial sera anexada depois.
 - requested_model_not_confirmed_with_alternatives: o modelo exato nao foi confirmado entre os itens disponiveis, mas existem alternativas. Explique isso com naturalidade, sem dizer que acabou, sem estoque ou que a loja nao possui definitivamente. Avise que as opcoes confirmadas aparecerao em seguida.
+- requested_model_not_confirmed_after_catalog: o modelo exato nao foi confirmado e a cliente ja recebeu a lista atual nesta conversa. Explique isso com naturalidade, sem reenviar a lista, sem dizer que ela aparecera em seguida e sem prometer estoque. Convide a cliente a dizer uma preferencia para eu indicar uma opcao da lista que ela ja recebeu.
 - search_inconclusive: a automacao nao conseguiu confirmar uma opcao. Nao conclua que o produto acabou. Explique naturalmente que um atendente fara a conferencia. Nao ofereca lista nem faca outra pergunta.
 - needs_device_clarification: faca uma pergunta curta e natural para confirmar se o cliente procura o aparelho/celular da marca mencionada.
 
@@ -343,6 +404,7 @@ function summarize(workflow) {
     budgetParserSafe: prepare.includes(`${MARKER}:budget`),
     exactModelClearsStaleBudget: prepare.includes(`${MARKER}:exact-model-budget`),
     structuredFacts: context.includes(`${MARKER}:facts`),
+    catalogRepeatSuppressed: context.includes(REPEAT_CATALOG_MARKER),
     noCannedStockClaim: !/acabou no momento|acabou todo estoque|nao temos disponivel/i.test(context),
     noFixedCatalogIntro: !context.includes('Vou atualizar as opções disponíveis para você'),
     agentOwnsConversation: agent.parameters.options.systemMessage.includes(`${MARKER}:agent`),
@@ -505,6 +567,7 @@ if (require.main === module) {
 
 module.exports = {
   MARKER,
+  REPEAT_CATALOG_MARKER,
   patchPrepareSearch,
   patchProductContext,
   patchSalesAgent,

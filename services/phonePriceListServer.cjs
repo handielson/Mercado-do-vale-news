@@ -206,7 +206,10 @@ function registerPhonePriceListRoutes(fastify, dependencies) {
           }
           items.push({ mediaType: 'image', mediaUrl: `${publicApiUrl}/images/phone-price-lists/${filename}`,
             label: `Tabela ${page.brand} • ${page.pageNumber}/${page.totalPages}`,
-            caption: `${page.brand} • Lista de celulares • ${generatedAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}. Consulte condições e disponibilidade.`,
+            // The rendered card already contains the useful catalog context. Sending a
+            // WhatsApp caption below it only duplicates that context and makes the list
+            // visually noisy. Keep the field for the preview contract, deliberately blank.
+            caption: '',
             offsetSeconds: items.length * 10 });
         }
         return { ok: true, items, generatedAt: generatedAt.toISOString(), productCount: groups.length, warnings };

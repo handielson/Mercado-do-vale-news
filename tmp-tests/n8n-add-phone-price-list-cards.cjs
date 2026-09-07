@@ -31,11 +31,16 @@ function appendCards(source, response) {
   const textMessages = Array.isArray(source.messages) ? source.messages : String(source.output || '')
     .split(/\[\[MSG\]\]|\|\|\|/).map(text => text.trim()).filter(Boolean).map(text => ({ text }));
   const images = response.items.map((item, index) => ({
-    type: 'image', mediaUrl: item.mediaUrl, text: String(item.caption || item.label || ''),
-    caption: String(item.caption || item.label || ''),
+    // A list card is self-contained. `label` is internal preview metadata and must
+    // never fall back into an Evolution/WhatsApp caption.
+    type: 'image', mediaUrl: item.mediaUrl, text: '', caption: '',
     mimetype: 'image/png', fileName: `lista-celulares-${index + 1}.png`,
   }));
   return { ...source, messages: [...textMessages, ...images], phonePriceListCardsStatus: 'ready' };
+}
+
+function buildAppendCode() {
+  return `// ${MARKER}: combine API result with deterministic reply; existing sender owns ordering.\nconst source = $('Vendas - Compor Resposta IA').first().json;\nreturn [{json: (${appendCards.toString()})(source, $json)}];`;
 }
 
 function patchWorkflow(input) {
@@ -43,7 +48,12 @@ function patchWorkflow(input) {
   const get = name => { const node = workflow.nodes.find(n => n.name === name); assert.ok(node, `Missing node: ${name}`); return node; };
   const context = get('Vendas - Contexto Produtos');
   if (context.parameters.jsCode.includes(MARKER)) {
-    for (const name of [CHECK, GENERATE, APPEND]) get(name);
+    for (const name of [CHECK, GENERATE]) get(name);
+    const append = get(APPEND);
+    // Existing production workflows already have the marker. Refresh this node so
+    // an upstream caption cannot survive because of an older label fallback.
+    append.parameters.jsCode = buildAppendCode();
+    new Function('$json', '$', append.parameters.jsCode);
     assert.equal(workflow.connections['Vendas - Precisa Handoff?'].main[1][0].node, CHECK);
     return workflow;
   }
@@ -69,7 +79,7 @@ function patchWorkflow(input) {
   http.notes = 'Gera imagens a partir dos mesmos grupos da lista. Reutiliza autenticação interna existente; falha mantém a resposta textual e fica registrada na execução.';
   const append = {
     id: 'phone-price-list-cards-append-v1', name: APPEND, type: 'n8n-nodes-base.code', typeVersion: 2, position: [1570, 800],
-    parameters: { jsCode: `// ${MARKER}: combine API result with deterministic reply; existing sender owns ordering.\nconst source = $('Vendas - Compor Resposta IA').first().json;\nreturn [{json: (${appendCards.toString()})(source, $json)}];` },
+    parameters: { jsCode: buildAppendCode() },
   };
   const edge = name => ({ node: name, type: 'main', index: 0 });
   const handoff = workflow.connections['Vendas - Precisa Handoff?'].main;

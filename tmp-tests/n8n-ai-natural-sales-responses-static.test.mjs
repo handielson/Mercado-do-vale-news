@@ -9,6 +9,7 @@ assert.match(applyScriptSource, /pg_read_file\('\$\{nodesPath\}'\)::json/);
 assert.match(applyScriptSource, /docker cp/);
 const {
   MARKER,
+  REPEAT_CATALOG_MARKER,
   patchPrepareSearch,
   patchProductContext,
   patchSalesAgent,
@@ -82,7 +83,12 @@ const contextFixture = `
 const base = {};
 const brandLabel = 'Xiaomi';
 const products = [];
-const finalQuoteMessages = [];
+const isDirectPriceQuestion = false;
+const quoteMessages = [];
+const buildDirectPriceAnswer = () => '';
+const finalQuoteMessages = isDirectPriceQuestion && products.length === 1 && !unavailableRequestedDevice
+  ? [buildDirectPriceAnswer(products[0])]
+  : quoteMessages;
 const prefersSmartphones = true;
 const hasStructuredPreferenceV288 = false;
 const phoneNfcFilterRequestV228 = false;
@@ -121,6 +127,7 @@ const structuredFilterGuidanceV288 = structuredFilterNeedsHandoffV288
   : '';
 const phoneCatalogFollowupEligibleV289 = Boolean(isCompleteCategoryRequest && prefersSmartphones && products.length > 0);
 return [{ json: {
+    phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 ? [] : [],
     productsContext: '',
     stockAssistantContext: structuredFilterGuidanceV288 || unavailablePhoneGuidanceV165 || String(base.stockAssistantContext || ''),
     aiResponseGuidance: structuredFilterGuidanceV288 || unavailablePhoneGuidanceV165 || String(base.aiResponseGuidance || ''),
@@ -142,6 +149,10 @@ for (const stale of [
 }
 assert.match(contextNode.parameters.jsCode, /salesAvailabilityStatusV322/);
 assert.match(contextNode.parameters.jsCode, /deterministicCatalogOutputV322/);
+assert.match(contextNode.parameters.jsCode, new RegExp(REPEAT_CATALOG_MARKER));
+assert.match(contextNode.parameters.jsCode, /suppressRepeatedCatalogV340/);
+assert.match(contextNode.parameters.jsCode, /requested_model_not_confirmed_after_catalog/);
+assert.match(contextNode.parameters.jsCode, /phonePriceListGroups: isCompleteCategoryRequest && prefersSmartphones && products.length > 0 && !suppressRepeatedCatalogV340/);
 
 const agentNode = { parameters: { options: {} } };
 patchSalesAgent(agentNode);
