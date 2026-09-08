@@ -31544,16 +31544,19 @@ fastify.get('/delivery/settings', { preHandler: requireSyncKey }, async () => ge
 fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
   const access = req.customerAccess || {};
   const customerId = String(access.customerId || '').trim();
-  if (access.isSync || access.isAdmin || !customerId) {
+  if (access.isSync || !customerId) {
     return reply.code(403).send({ error: 'Acesso exclusivo do entregador' });
   }
-  const [customers] = await pool.query(
-    'SELECT id, name, is_delivery_worker FROM customers WHERE id = ? LIMIT 1',
-    [customerId]
-  );
-  const deliveryWorker = customers?.[0] || null;
-  if (!deliveryWorker || Number(deliveryWorker.is_delivery_worker) !== 1) {
-    return reply.code(403).send({ error: 'Perfil de entregador nao habilitado' });
+  let deliveryWorker = null;
+  if (!access.isAdmin) {
+    const [customers] = await pool.query(
+      'SELECT id, name, is_delivery_worker FROM customers WHERE id = ? LIMIT 1',
+      [customerId]
+    );
+    deliveryWorker = customers?.[0] || null;
+    if (!deliveryWorker || Number(deliveryWorker.is_delivery_worker) !== 1) {
+      return reply.code(403).send({ error: 'Perfil de entregador nao habilitado' });
+    }
   }
   const requestedStatus = String(req.query?.status || 'open').trim().toLowerCase();
   const statusClause = requestedStatus === 'all'
@@ -31563,15 +31566,17 @@ fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, asyn
       : "AND delivery_status NOT IN ('delivered', 'cancelled')";
   const [rows] = await pool.query(
     `SELECT * FROM customer_delivery_jobs
-      WHERE delivery_person_customer_id = ?
+      WHERE ${access.isAdmin ? '1 = 1' : 'delivery_person_customer_id = ?'}
       ${statusClause}
       ORDER BY CASE delivery_status WHEN 'in_route' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
                created_at DESC
       LIMIT 200`,
-    [customerId]
+    access.isAdmin ? [] : [customerId]
   );
   return {
-    profile: { id: deliveryWorker.id, name: deliveryWorker.name || 'Entregador' },
+    profile: access.isAdmin
+      ? { id: customerId, name: 'Loja Mercado do Vale', type: 'store' }
+      : { id: deliveryWorker.id, name: deliveryWorker.name || 'Entregador', type: 'delivery_worker' },
     jobs: (rows || []).map(mapCustomerDeliveryJob),
   };
 });

@@ -18,6 +18,9 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -94,7 +97,7 @@ class MainActivity : Activity() {
                 }
             }
         }
-        setContentView(root)
+        setSafeContentView(root)
     }
 
     private fun showDashboard(status: String = "open") {
@@ -128,7 +131,7 @@ class MainActivity : Activity() {
         val content = verticalLayout(16)
         content.addView(ProgressBar(this).apply { isIndeterminate = true })
         root.addView(ScrollView(this).apply { addView(content) }, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
+        setSafeContentView(root)
         loadJobs(status, content)
     }
 
@@ -210,7 +213,7 @@ class MainActivity : Activity() {
             }
         }
         webView.loadUrl("${BuildConfig.WEB_BASE_URL}/delivery/${Uri.encode(token)}")
-        setContentView(webView)
+        setSafeContentView(webView)
     }
 
     @Deprecated("Deprecated in Android")
@@ -264,8 +267,28 @@ class MainActivity : Activity() {
         showLogin(message)
     }
 
+    private fun setSafeContentView(view: View) {
+        val initialLeft = view.paddingLeft
+        val initialTop = view.paddingTop
+        val initialRight = view.paddingRight
+        val initialBottom = view.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(view) { target, windowInsets ->
+            val bars: Insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            target.setPadding(
+                initialLeft + bars.left,
+                initialTop + bars.top,
+                initialRight + bars.right,
+                initialBottom + bars.bottom
+            )
+            windowInsets
+        }
+        setContentView(view)
+        ViewCompat.requestApplyInsets(view)
+    }
+
     private fun friendlyError(error: Throwable): String = when {
         error.message?.contains("Perfil de entregador", true) == true -> "Seu cadastro ainda não está habilitado como entregador. Fale com a loja."
+        error.message?.contains("Acesso exclusivo", true) == true -> "Este perfil não tem acesso às entregas."
         error.message?.contains("401") == true -> "CPF/e-mail ou senha inválidos."
         else -> "Não foi possível conectar. Confira a internet e tente novamente."
     }

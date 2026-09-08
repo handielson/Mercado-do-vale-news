@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.348-entregas-android",
+  "version": "v1.2.349-entregas-perfil-loja",
   "date": "2026-09-08",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260908-155653-v12348-entregas-android",
+  "release_vps": "/var/www/mdv-site/releases/20260908-190927-v12349-entregas-perfil-loja",
   "branch": "main",
-  "summary": "Adiciona o aplicativo Mercado do Vale Entregas e envia a confirmação da compra somente após a entrega."
+  "summary": "Corrige o acesso da loja no aplicativo de entregas e respeita as barras do sistema Android."
 }
