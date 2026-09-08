@@ -24,6 +24,12 @@ interface SynologyUploadResponse {
 
 const DELIVERY_PAYMENT_POLL_INTERVAL_MS = 10_000;
 
+declare global {
+    interface Window {
+        MdvDelivery?: { startTracking(jobId: string): void; stopTracking(): void };
+    }
+}
+
 export function buildDeliveryProofFileName(orderNumber: string, jobId: string, originalName: string): string {
     const safeOrder = String(orderNumber || 'pedido').replace(/[^a-zA-Z0-9-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
     const safeJob = String(jobId || '').replace(/[^a-zA-Z0-9-]+/g, '').slice(0, 8);
@@ -100,6 +106,12 @@ const DeliveryOperationPage: React.FC = () => {
     };
 
     useEffect(() => { void load(); }, [token]);
+
+    useEffect(() => {
+        if (!job?.id) return;
+        if (job.delivery_status === 'in_route') window.MdvDelivery?.startTracking(job.id);
+        if (job.delivery_status === 'delivered' || job.delivery_status === 'cancelled') window.MdvDelivery?.stopTracking();
+    }, [job?.id, job?.delivery_status]);
 
     useEffect(() => {
         if (!token || !job || job.payment_status !== 'pending') return;
@@ -184,6 +196,7 @@ const DeliveryOperationPage: React.FC = () => {
         try {
             const updated = await startDeliveryRoute(token);
             setJob(updated);
+            window.MdvDelivery?.startTracking(updated.id);
             toast.success('Pedido saiu para entrega');
         } catch (error) {
             const message = getDeliveryErrorMessage(error, 'Erro ao marcar saida para entrega.');
@@ -199,6 +212,7 @@ const DeliveryOperationPage: React.FC = () => {
         setErrorMessage('');
         try {
             setJob(await completeDeliveryJob(token, { delivery_person_note: note.trim() || undefined }));
+            window.MdvDelivery?.stopTracking();
             toast.success('Entrega realizada com sucesso');
         } catch (error) {
             const message = getDeliveryErrorMessage(error, 'Erro ao finalizar entrega.');

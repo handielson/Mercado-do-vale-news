@@ -105,6 +105,10 @@ function isPublicReadPath(pathname) {
     return true;
   }
 
+  if (/^\/delivery\/tracking\/[^/]+$/u.test(pathname)) {
+    return true;
+  }
+
   return isPublicProductReadPath(pathname);
 }
 

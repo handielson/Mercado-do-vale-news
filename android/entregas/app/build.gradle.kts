@@ -18,8 +18,8 @@ android {
         applicationId = "br.com.mercadodovale.entregas"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.1.0"
         buildConfigField("String", "VPS_BASE_URL", "\"${vpsBaseUrl.trimEnd('/')}\"")
         buildConfigField("String", "WEB_BASE_URL", "\"${webBaseUrl.trimEnd('/')}\"")
     }
@@ -33,4 +33,5 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }

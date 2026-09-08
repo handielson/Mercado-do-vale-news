@@ -83,6 +83,20 @@ export interface CustomerDeliveryJob {
     completion_whatsapp_error?: string | null;
     route_whatsapp_sent_at?: string | null;
     route_whatsapp_error?: string | null;
+    tracking_token?: string | null;
+    current_latitude?: number | string | null;
+    current_longitude?: number | string | null;
+    current_location_accuracy?: number | string | null;
+    current_location_at?: string | null;
+}
+
+export interface PublicDeliveryTracking {
+    order_number: string;
+    delivery_status: CustomerDeliveryJob['delivery_status'];
+    delivery_address_text: string;
+    location?: { latitude: number; longitude: number; accuracy?: number | null; recorded_at?: string | null } | null;
+    delivered_at?: string | null;
+    updated_at?: string | null;
 }
 
 export interface CustomerDeliverySettings {
@@ -191,6 +205,10 @@ export async function offsetCustomerDeliveryBalance(customerId: string, input: {
 
 export async function getDeliveryJob(token: string): Promise<{ job: CustomerDeliveryJob; proof?: CustomerDeliveryProof | null; proofs?: CustomerDeliveryProof[] }> {
     return vpsClient.get(`/delivery/jobs/${encodeURIComponent(token)}`);
+}
+
+export async function getPublicDeliveryTracking(token: string): Promise<PublicDeliveryTracking> {
+    return vpsClient.get(`/delivery/tracking/${encodeURIComponent(token)}`);
 }
 
 export async function createDeliveryPixIntent(token: string): Promise<CustomerDeliveryJob> {

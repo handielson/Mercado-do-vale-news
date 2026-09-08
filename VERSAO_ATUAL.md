@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.351-entregas-token-403
+version: v1.2.352-entregas-gps-tempo-real
 date: 2026-09-08
 status: ready
-release_vps: /var/www/mdv-site/releases/20260908-203112-entregas-token-403
+release_vps: /var/www/mdv-site/releases/20260908-205948-entregas-gps-tempo-real
 branch: main
-summary: Corrige o erro 403 ao retornar da rota no aplicativo de entregas.
-tag: v1.2.351-entregas-token-403
+summary: Adiciona rastreamento GPS da entrega em tempo real para o cliente.
+tag: v1.2.352-entregas-gps-tempo-real
 ```

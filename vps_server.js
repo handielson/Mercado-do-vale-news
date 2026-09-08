@@ -2081,6 +2081,7 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
   if (pathname.startsWith('/video/')) return true;
   if (/^\/public\/products\/[^/]+\/reviews$/u.test(pathname)) return true;
   if (/^\/delivery\/jobs\/[^/]+$/u.test(pathname)) return true;
+  if (/^\/delivery\/tracking\/[^/]+$/u.test(pathname)) return true;
   if (/^\/versions\/[^/]+$/u.test(pathname)) return true;
   if (isVpsProxyPublicTableDataReadPath(pathname)) return true;
 
@@ -3431,6 +3432,9 @@ const WHATSAPP_AUTOMATION_TEMPLATE_DEFAULTS_VPS = {
       '{endereco_entrega}',
       '{maps_link}',
       '',
+      '\uD83D\uDCCD Acompanhe a entrega em tempo real:',
+      '{tracking_link}',
+      '',
       'Fique de olho no telefone. \uD83D\uDC9A',
     ].join('\n'),
   },
@@ -4140,6 +4144,7 @@ async function notifyCustomerDeliveryOutForDelivery(job) {
       entregador: deliveryPersonName,
       endereco_entrega: job.delivery_address_text || '',
       maps_link: job.delivery_route_url || '',
+      tracking_link: job.tracking_token ? `https://www.mercadodovale.com.br/acompanhar-entrega/${encodeURIComponent(job.tracking_token)}` : '',
     },
   });
 
@@ -4216,16 +4221,18 @@ async function createCustomerDeliveryJobForSale(connection, sale) {
 
   const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
   const token = crypto.randomBytes(32).toString('hex');
+  const trackingToken = crypto.randomBytes(32).toString('hex');
 
   await connection.query(
     `INSERT INTO customer_delivery_jobs
-      (id, token, sale_id, order_number, buyer_customer_id, buyer_name, buyer_phone,
+      (id, token, tracking_token, sale_id, order_number, buyer_customer_id, buyer_name, buyer_phone,
        delivery_person_customer_id, delivery_amount, payment_amount, delivery_address_text,
        delivery_route_url, receipt_snapshot_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       token,
+      trackingToken,
       saleId,
       jobData.orderNumber,
       jobData.buyerCustomerId,
@@ -31604,6 +31611,49 @@ fastify.patch('/delivery/settings', { preHandler: requireSyncKey }, async (req) 
   return getCustomerDeliverySettings();
 });
 
+fastify.get('/delivery/tracking/:token', { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const token = String(req.params.token || '').trim();
+  const [rows] = await pool.query(
+    `SELECT sale_id, order_number, delivery_status, delivery_address_text,
+            current_latitude, current_longitude, current_location_accuracy, current_location_at,
+            delivered_at, updated_at
+       FROM customer_delivery_jobs WHERE tracking_token = ? LIMIT 1`,
+    [token]
+  );
+  const job = rows?.[0];
+  if (!job) return reply.code(404).send({ error: 'Acompanhamento nao encontrado' });
+  const inRoute = job.delivery_status === 'in_route';
+  return {
+    order_number: job.order_number || String(job.sale_id || '').slice(0, 8).toUpperCase(),
+    delivery_status: job.delivery_status,
+    delivery_address_text: job.delivery_address_text,
+    location: inRoute && job.current_latitude != null && job.current_longitude != null ? {
+      latitude: Number(job.current_latitude),
+      longitude: Number(job.current_longitude),
+      accuracy: job.current_location_accuracy == null ? null : Number(job.current_location_accuracy),
+      recorded_at: job.current_location_at,
+    } : null,
+    delivered_at: job.delivered_at || null,
+    updated_at: job.updated_at || null,
+  };
+});
+
+fastify.post('/delivery/app/jobs/:jobId/location', { preHandler: requireSyncKeyOrCustomer, config: { rateLimit: { max: 180, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const access = req.customerAccess || {};
+  const jobId = String(req.params.jobId || '').trim();
+  const latitude = Number(req.body?.latitude);
+  const longitude = Number(req.body?.longitude);
+  const accuracy = req.body?.accuracy == null ? null : Number(req.body.accuracy);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) return reply.code(400).send({ error: 'Localizacao invalida' });
+  const [rows] = await pool.query('SELECT id, delivery_person_customer_id, delivery_status FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [jobId]);
+  const job = rows?.[0];
+  if (!job) return reply.code(404).send({ error: 'Entrega nao encontrada' });
+  if (!access.isSync && !access.isAdmin && String(job.delivery_person_customer_id) !== String(access.customerId || '')) return reply.code(403).send({ error: 'Entrega nao pertence a este entregador' });
+  if (job.delivery_status !== 'in_route') return reply.code(409).send({ error: 'Rastreamento disponivel somente durante a rota' });
+  await pool.query(`UPDATE customer_delivery_jobs SET current_latitude = ?, current_longitude = ?, current_location_accuracy = ?, current_location_at = CURRENT_TIMESTAMP WHERE id = ?`, [latitude, longitude, Number.isFinite(accuracy) ? Math.max(0, accuracy) : null, jobId]);
+  return { ok: true, recorded_at: formatDateTimeSql(new Date()) };
+});
+
 fastify.get('/delivery/jobs/:token', { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async (req, reply) => {
   const token = String(req.params.token || '').trim();
   const [rows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE token = ? LIMIT 1', [token]);
@@ -31723,12 +31773,14 @@ fastify.post('/delivery/jobs/:token/start-route', { config: { rateLimit: { max: 
       throw Object.assign(new Error('Entrega nao pode entrar em rota neste status'), { statusCode: 409 });
     }
     if (job.delivery_status !== 'in_route') {
+      const trackingToken = job.tracking_token || crypto.randomBytes(32).toString('hex');
       await connection.query(
         `UPDATE customer_delivery_jobs
             SET delivery_status = 'in_route',
+                tracking_token = ?,
                 updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`,
-        [job.id]
+        [trackingToken, job.id]
       );
       await logCustomerDeliveryJobEvent(job.id, 'info', 'delivery_in_route', 'Entregador marcou saida para entrega.');
     }
@@ -39700,6 +39752,7 @@ async function runMigrations() {
     CREATE TABLE IF NOT EXISTS customer_delivery_jobs (
       id CHAR(36) PRIMARY KEY,
       token VARCHAR(96) NOT NULL,
+      tracking_token VARCHAR(96) NULL,
       sale_id VARCHAR(36) NOT NULL,
       order_number VARCHAR(80) NULL,
       buyer_customer_id VARCHAR(255) NULL,
@@ -39738,6 +39791,13 @@ async function runMigrations() {
   await addColumnIfMissing('customer_delivery_jobs', 'completion_whatsapp_error', 'TEXT NULL');
   await addColumnIfMissing('customer_delivery_jobs', 'route_whatsapp_sent_at', 'DATETIME NULL');
   await addColumnIfMissing('customer_delivery_jobs', 'route_whatsapp_error', 'TEXT NULL');
+  await addColumnIfMissing('customer_delivery_jobs', 'tracking_token', 'VARCHAR(96) NULL');
+  await addColumnIfMissing('customer_delivery_jobs', 'current_latitude', 'DECIMAL(10,7) NULL');
+  await addColumnIfMissing('customer_delivery_jobs', 'current_longitude', 'DECIMAL(10,7) NULL');
+  await addColumnIfMissing('customer_delivery_jobs', 'current_location_accuracy', 'DECIMAL(10,2) NULL');
+  await addColumnIfMissing('customer_delivery_jobs', 'current_location_at', 'DATETIME NULL');
+  await pool.query("UPDATE customer_delivery_jobs SET tracking_token = SHA2(CONCAT(UUID(), RAND()), 256) WHERE delivery_status NOT IN ('delivered','cancelled') AND (tracking_token IS NULL OR tracking_token = '')");
+  await addUniqueIndexIfMissing('customer_delivery_jobs', 'uniq_customer_delivery_jobs_tracking_token', 'tracking_token');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_delivery_settings (
@@ -39776,6 +39836,9 @@ async function runMigrations() {
   await addColumnIfMissing('whatsapp_automation_templates', 'category', "VARCHAR(40) NOT NULL DEFAULT 'future'");
   await addColumnIfMissing('whatsapp_automation_templates', 'enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('whatsapp_automation_templates', 'variables_json', 'JSON NULL');
+  await pool.query(`UPDATE whatsapp_automation_templates
+    SET content = CONCAT(content, '\n\n\uD83D\uDCCD Acompanhe a entrega em tempo real:\n{tracking_link}')
+    WHERE template_key = 'delivery_out_for_delivery' AND content NOT LIKE '%{tracking_link}%'`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS whatsapp_status_campaigns (

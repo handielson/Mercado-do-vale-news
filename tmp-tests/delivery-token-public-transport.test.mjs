@@ -5,6 +5,7 @@ const transport = await import('../services/vpsTransport.js');
 const publicCases = [
   ['GET', '/delivery/jobs/token-123'],
   ['HEAD', '/delivery/jobs/token-123'],
+  ['GET', '/delivery/tracking/tracking-token-123'],
   ['POST', '/delivery/jobs/token-123/pix-intent'],
   ['POST', '/delivery/jobs/token-123/payment-status'],
   ['POST', '/delivery/jobs/token-123/start-route'],

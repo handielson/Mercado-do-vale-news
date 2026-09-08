@@ -97,6 +97,7 @@ const CartPage = lazy(() => import('../pages/store/CartPage'));
 const OrderConfirmationPage = lazy(() => import('../pages/store/OrderConfirmationPage'));
 const OrderTrackingPage = lazy(() => import('../pages/store/OrderTrackingPage'));
 const DeliveryOperationPage = lazy(() => import('../pages/delivery/DeliveryOperationPage'));
+const DeliveryTrackingPage = lazy(() => import('../pages/delivery/DeliveryTrackingPage'));
 const OnlineOrdersPage = lazy(() => import('../pages/admin/orders/OnlineOrdersPage'));
 const SerializedUnitsPage = lazy(() => import('../pages/admin/inventory/SerializedUnitsPage'));
 const SEODashboardPage = lazy(() => import('../pages/admin/settings/SEODashboardPage').then(module => ({ default: module.SEODashboardPage })));
@@ -1124,6 +1125,10 @@ export const router = createBrowserRouter([
   {
     path: "/delivery/:token",
     element: <DeliveryOperationPage />
+  },
+  {
+    path: "/acompanhar-entrega/:token",
+    element: <DeliveryTrackingPage />
   },
   // ─── Admin — Pedidos Online ────────────────────────────────────────────────
   {

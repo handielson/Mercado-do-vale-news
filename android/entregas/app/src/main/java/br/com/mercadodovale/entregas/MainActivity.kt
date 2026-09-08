@@ -1,13 +1,17 @@
 package br.com.mercadodovale.entregas
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.view.Gravity
 import android.view.View
 import android.webkit.ValueCallback
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -19,6 +23,7 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.graphics.Insets
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import org.json.JSONArray
@@ -33,6 +38,7 @@ class MainActivity : Activity() {
     private var sessionToken: String = ""
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     private var operationWebView: WebView? = null
+    private var pendingTrackingJobId: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -196,6 +202,7 @@ class MainActivity : Activity() {
         webView.settings.domStorageEnabled = true
         webView.settings.allowFileAccess = false
         webView.settings.allowContentAccess = true
+        webView.addJavascriptInterface(DeliveryBridge(), "MdvDelivery")
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
@@ -264,9 +271,67 @@ class MainActivity : Activity() {
     }
 
     private fun logout(message: String = "") {
+        stopLocationTracking()
         sessionToken = ""
         preferences.edit().remove("access_token").apply()
         showLogin(message)
+    }
+
+    private inner class DeliveryBridge {
+        @JavascriptInterface
+        fun startTracking(jobId: String) {
+            val safeJobId = jobId.trim()
+            if (!safeJobId.matches(Regex("^[a-zA-Z0-9-]{8,80}$"))) return
+            runOnUiThread { ensureLocationPermissionAndStart(safeJobId) }
+        }
+
+        @JavascriptInterface
+        fun stopTracking() { runOnUiThread { stopLocationTracking() } }
+    }
+
+    private fun ensureLocationPermissionAndStart(jobId: String) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            ensureNotificationPermissionAndStart(jobId)
+            return
+        }
+        pendingTrackingJobId = jobId
+        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), LOCATION_PERMISSION_REQUEST)
+    }
+
+    private fun startLocationTracking(jobId: String) {
+        ContextCompat.startForegroundService(this, Intent(this, LocationTrackingService::class.java).putExtra(LocationTrackingService.EXTRA_JOB_ID, jobId))
+    }
+
+    private fun ensureNotificationPermissionAndStart(jobId: String) {
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            pendingTrackingJobId = jobId
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
+            return
+        }
+        startLocationTracking(jobId)
+    }
+
+    private fun stopLocationTracking() {
+        startService(Intent(this, LocationTrackingService::class.java).setAction(LocationTrackingService.ACTION_STOP))
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NOTIFICATION_PERMISSION_REQUEST) {
+            val jobId = pendingTrackingJobId
+            pendingTrackingJobId = ""
+            if (jobId.isNotBlank()) startLocationTracking(jobId)
+            return
+        }
+        if (requestCode != LOCATION_PERMISSION_REQUEST) return
+        val jobId = pendingTrackingJobId
+        pendingTrackingJobId = ""
+        if (grantResults.any { it == PackageManager.PERMISSION_GRANTED } && jobId.isNotBlank()) {
+            ensureNotificationPermissionAndStart(jobId)
+        } else {
+            android.widget.Toast.makeText(this, "O GPS e necessario para o cliente acompanhar a entrega.", android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun setSafeContentView(view: View) {
@@ -312,5 +377,9 @@ class MainActivity : Activity() {
     private fun layoutParams(match: Boolean = false, height: Int = LinearLayout.LayoutParams.WRAP_CONTENT) = LinearLayout.LayoutParams(if (match) -1 else -2, height)
     private fun spacedParams() = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 12, 0, 0) }
 
-    companion object { private const val FILE_CHOOSER_REQUEST = 8101 }
+    companion object {
+        private const val FILE_CHOOSER_REQUEST = 8101
+        private const val LOCATION_PERMISSION_REQUEST = 8102
+        private const val NOTIFICATION_PERMISSION_REQUEST = 8103
+    }
 }
