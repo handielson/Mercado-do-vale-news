@@ -168,7 +168,9 @@ class MainActivity : Activity() {
 
     private fun addJobCard(parent: LinearLayout, job: JSONObject) {
         val token = job.optString("token")
-        val rawOrder = job.optString("order_number").ifBlank { job.optString("sale_id").take(8).uppercase() }
+        val rawOrder = job.optString("sale_id").take(8).uppercase().ifBlank {
+            job.optString("order_number").take(8).uppercase()
+        }
         val card = verticalLayout(16).apply {
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(Color.WHITE); cornerRadius = 24f; setStroke(1, Color.rgb(226, 232, 240))

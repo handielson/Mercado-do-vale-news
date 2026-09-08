@@ -15,7 +15,7 @@ for (const file of ['vps_server.cjs', 'vps_server.js']) {
 }
 
 assert.match(gradle, /applicationId = "br\.com\.mercadodovale\.entregas"/);
-assert.match(gradle, /versionCode = 2/);
+assert.match(gradle, /versionCode = 3/);
 assert.match(manifest, /Mercado do Vale Entregas/);
 assert.doesNotMatch(activity + gradle, /x-sync-key|SYNC_SECRET|VITE_VPS_SYNC_KEY/);
 assert.match(activity, /\/auth\/login/);
@@ -24,5 +24,6 @@ assert.match(activity, /\/delivery\/\$\{Uri\.encode\(token\)\}/);
 assert.match(activity, /onShowFileChooser/);
 assert.match(activity, /WindowInsetsCompat\.Type\.systemBars\(\)/);
 assert.match(activity, /setSafeContentView\(root\)/);
+assert.match(activity, /optString\("sale_id"\)\.take\(8\)\.uppercase\(\)/);
 
 console.log('android delivery app contract checks passed');
