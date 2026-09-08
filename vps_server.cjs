@@ -2046,6 +2046,10 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
     return true;
   }
 
+  if (normalizedMethod === 'POST' && /^\/delivery\/jobs\/[^/]+\/(?:pix-intent|payment-status|start-route|proof|complete)$/u.test(pathname)) {
+    return true;
+  }
+
   if (normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD') return false;
 
   if (
@@ -2076,6 +2080,7 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
   if (pathname.startsWith('/coupons/validate/')) return true;
   if (pathname.startsWith('/video/')) return true;
   if (/^\/public\/products\/[^/]+\/reviews$/u.test(pathname)) return true;
+  if (/^\/delivery\/jobs\/[^/]+$/u.test(pathname)) return true;
   if (/^\/versions\/[^/]+$/u.test(pathname)) return true;
   if (isVpsProxyPublicTableDataReadPath(pathname)) return true;
 

@@ -101,6 +101,10 @@ function isPublicReadPath(pathname) {
     return true;
   }
 
+  if (/^\/delivery\/jobs\/[^/]+$/u.test(pathname)) {
+    return true;
+  }
+
   return isPublicProductReadPath(pathname);
 }
 
@@ -114,6 +118,10 @@ function isPublicWritePath(pathname, method) {
   }
 
   if (method === 'POST' && /^\/banners\/[^/]+\/(?:click|view)$/u.test(pathname)) {
+    return true;
+  }
+
+  if (method === 'POST' && /^\/delivery\/jobs\/[^/]+\/(?:pix-intent|payment-status|start-route|proof|complete)$/u.test(pathname)) {
     return true;
   }
 

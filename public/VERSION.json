@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.350-entregas-numero-venda",
+  "version": "v1.2.351-entregas-token-403",
   "date": "2026-09-08",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260908-202005-v12350-entregas-numero-venda",
+  "release_vps": "/var/www/mdv-site/releases/20260908-203112-entregas-token-403",
   "branch": "main",
-  "summary": "Exibe o numero curto da venda no aplicativo de entregas."
+  "summary": "Corrige o erro 403 ao retornar da rota no aplicativo de entregas."
 }
