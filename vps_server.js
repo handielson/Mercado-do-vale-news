@@ -3899,6 +3899,39 @@ async function notifySaleCompletedWhatsApp(saleId) {
   const googleContactSync = customer
     ? await syncCustomerGoogleContactRecord(customer, 'sale-completed')
     : { ok: false, skipped: true, reason: 'customer_not_found' };
+  const deliveryType = String(sale.delivery_type || '').trim().toLowerCase();
+  const requiresDeliveryConfirmation = ['delivery', 'store_delivery', 'hybrid', 'hybrid_delivery'].includes(deliveryType);
+  if (requiresDeliveryConfirmation) {
+    const [deliveryJobs] = await pool.query(
+      `SELECT delivery_status
+         FROM customer_delivery_jobs
+        WHERE sale_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [sale.id]
+    );
+    if (deliveryJobs?.[0]?.delivery_status !== 'delivered') {
+      return {
+        status: 'deferred',
+        reason: 'awaiting_delivery_confirmation',
+        google_contact_sync: {
+          ok: googleContactSync?.ok === true,
+          skipped: googleContactSync?.skipped === true,
+          reason: googleContactSync?.reason || null,
+        },
+      };
+    }
+  }
+  const [sentRows] = await pool.query(
+    `SELECT id FROM whatsapp_automation_logs
+      WHERE template_key = 'sale_completed'
+        AND entity_type = 'sale'
+        AND entity_id = ?
+        AND status = 'sent'
+      LIMIT 1`,
+    [sale.id]
+  );
+  if (sentRows?.length) return { status: 'already_sent' };
   const [items] = await pool.query('SELECT * FROM sale_items WHERE sale_id = ? ORDER BY created_at ASC LIMIT 200', [saleId]);
   const addressText = buildAutomationAddressText(parseAutomationJson(customer?.address, null));
   const itemLines = (items || []).map((item) => `- ${item.product_name || 'Item'} x${item.quantity || 1} - ${formatAutomationMoney(item.total || item.subtotal || item.unit_price || 0)}`).join('\n') || 'Itens registrados no recibo';
@@ -31508,6 +31541,41 @@ fastify.post('/delivery/jobs/from-sale', { preHandler: requireSyncKey }, async (
 
 fastify.get('/delivery/settings', { preHandler: requireSyncKey }, async () => getCustomerDeliverySettings());
 
+fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  const access = req.customerAccess || {};
+  const customerId = String(access.customerId || '').trim();
+  if (access.isSync || access.isAdmin || !customerId) {
+    return reply.code(403).send({ error: 'Acesso exclusivo do entregador' });
+  }
+  const [customers] = await pool.query(
+    'SELECT id, name, is_delivery_worker FROM customers WHERE id = ? LIMIT 1',
+    [customerId]
+  );
+  const deliveryWorker = customers?.[0] || null;
+  if (!deliveryWorker || Number(deliveryWorker.is_delivery_worker) !== 1) {
+    return reply.code(403).send({ error: 'Perfil de entregador nao habilitado' });
+  }
+  const requestedStatus = String(req.query?.status || 'open').trim().toLowerCase();
+  const statusClause = requestedStatus === 'all'
+    ? ''
+    : requestedStatus === 'delivered'
+      ? "AND delivery_status = 'delivered'"
+      : "AND delivery_status NOT IN ('delivered', 'cancelled')";
+  const [rows] = await pool.query(
+    `SELECT * FROM customer_delivery_jobs
+      WHERE delivery_person_customer_id = ?
+      ${statusClause}
+      ORDER BY CASE delivery_status WHEN 'in_route' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
+               created_at DESC
+      LIMIT 200`,
+    [customerId]
+  );
+  return {
+    profile: { id: deliveryWorker.id, name: deliveryWorker.name || 'Entregador' },
+    jobs: (rows || []).map(mapCustomerDeliveryJob),
+  };
+});
+
 fastify.patch('/delivery/settings', { preHandler: requireSyncKey }, async (req) => {
   const enabled = req.body?.completion_whatsapp_enabled === undefined
     ? true
@@ -31710,6 +31778,9 @@ fastify.post('/delivery/jobs/:token/complete', { config: { rateLimit: { max: 20,
     if (!job) throw Object.assign(new Error('Entrega nao encontrada'), { statusCode: 404 });
     const updated = await completeCustomerDeliveryJob(connection, job, String(req.body?.delivery_person_note || '').trim());
     await connection.commit();
+    await notifySaleCompletedWhatsApp(updated.sale_id).catch((error) => {
+      console.warn('[customer-delivery] deferred sale whatsapp notification failed:', error.message);
+    });
     await notifyCustomerDeliveryCompleted(updated).catch((error) => {
       console.warn('[customer-delivery] completion whatsapp notification failed:', error.message);
     });
@@ -31737,6 +31808,9 @@ fastify.post('/delivery/jobs/:token/admin-complete', { preHandler: requireSyncKe
       adminReason: reason,
     });
     await connection.commit();
+    await notifySaleCompletedWhatsApp(updated.sale_id).catch((error) => {
+      console.warn('[customer-delivery] deferred sale whatsapp notification failed:', error.message);
+    });
     await notifyCustomerDeliveryCompleted(updated).catch((error) => {
       console.warn('[customer-delivery] completion whatsapp notification failed:', error.message);
     });

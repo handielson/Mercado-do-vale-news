@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.347-bling-oauth-auto-refresh",
+  "version": "v1.2.348-entregas-android",
   "date": "2026-09-08",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260908-145844-v12347-bling-oauth-auto-refresh",
+  "release_vps": "/var/www/mdv-site/releases/20260908-155653-v12348-entregas-android",
   "branch": "main",
-  "summary": "Renova preventivamente o OAuth do Bling e evita confundir o token administrativo com o token da integração."
+  "summary": "Adiciona o aplicativo Mercado do Vale Entregas e envia a confirmação da compra somente após a entrega."
 }

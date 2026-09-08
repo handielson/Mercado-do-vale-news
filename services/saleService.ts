@@ -823,7 +823,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         if (saleWhatsAppNotification) {
             try {
                 const notification = await saleWhatsAppNotification;
-                if (notification?.status !== 'sent') {
+                if (!['sent', 'deferred', 'already_sent'].includes(notification?.status)) {
                     recordFinalizationWarning(
                         'sale_whatsapp',
                         'A venda foi registrada, mas a confirmacao do WhatsApp nao foi enviada.',
