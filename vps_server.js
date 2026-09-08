@@ -9396,16 +9396,33 @@ async function refreshBlingStoredAccessTokenVps(settings) {
   return data.access_token;
 }
 
+const BLING_TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
+function shouldRefreshBlingAccessTokenVps(settings, now = Date.now()) {
+  if (!settings?.bling_access_token) return true;
+  const expiresAt = settings?.bling_token_expires_at
+    ? new Date(settings.bling_token_expires_at).getTime()
+    : 0;
+  return !Number.isFinite(expiresAt) || expiresAt <= now + BLING_TOKEN_REFRESH_BUFFER_MS;
+}
+
+function isLikelyApplicationJwtVps(authorization = '') {
+  const token = String(authorization).replace(/^Bearer\s+/i, '').trim();
+  return token.split('.').length === 3;
+}
+
 async function getBlingProductDetailAuthHeaderVps(request) {
-  if (request.headers.authorization) return request.headers.authorization;
+  if (request.headers.authorization && !isLikelyApplicationJwtVps(request.headers.authorization)) {
+    return request.headers.authorization;
+  }
 
   const settingsRows = await vpsDbSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
   const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
   if (!settings?.bling_access_token) return '';
 
-  const expiresAt = settings.bling_token_expires_at ? new Date(settings.bling_token_expires_at).getTime() : 0;
-  const shouldRefresh = expiresAt && expiresAt <= Date.now();
-  const accessToken = shouldRefresh ? await refreshBlingStoredAccessTokenVps(settings) : settings.bling_access_token;
+  const accessToken = shouldRefreshBlingAccessTokenVps(settings)
+    ? await refreshBlingStoredAccessTokenVps(settings)
+    : settings.bling_access_token;
   return accessToken ? `Bearer ${accessToken}` : '';
 }
 
@@ -9473,8 +9490,7 @@ async function getValidBlingAccessTokenForReconcileVps() {
   const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
   if (!settings?.bling_access_token) throw new Error('Bling not connected');
 
-  const expiresAt = settings.bling_token_expires_at ? new Date(settings.bling_token_expires_at).getTime() : 0;
-  if (!expiresAt || expiresAt > Date.now()) return settings.bling_access_token;
+  if (!shouldRefreshBlingAccessTokenVps(settings)) return settings.bling_access_token;
   return refreshBlingStoredAccessTokenVps(settings);
 }
 
@@ -10406,7 +10422,7 @@ async function handleBlingWebhookVps(request, reply) {
     const settingsRows = await vpsDbSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
     const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
     let accessToken = settings?.bling_access_token || null;
-    if (settings?.bling_token_expires_at && new Date(settings.bling_token_expires_at).getTime() < Date.now()) {
+    if (settings && shouldRefreshBlingAccessTokenVps(settings)) {
       accessToken = await refreshBlingStoredAccessTokenVps(settings);
     }
 
