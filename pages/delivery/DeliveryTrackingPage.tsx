@@ -1,9 +1,57 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Bike, CheckCircle2, Clock3, MapPin } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { getPublicDeliveryTracking, type PublicDeliveryTracking } from '../../services/customerDeliveryService';
 
 const POLL_INTERVAL_MS = 10_000;
+
+type DeliveryTrackingPoint = NonNullable<PublicDeliveryTracking['trajectory']>[number];
+
+function DeliveryRouteMap({ trajectory }: { trajectory: DeliveryTrackingPoint[] }) {
+    const mapElementRef = useRef<HTMLDivElement | null>(null);
+    const mapRef = useRef<L.Map | null>(null);
+    const routeRef = useRef<L.Polyline | null>(null);
+    const markerRef = useRef<L.CircleMarker | null>(null);
+
+    useEffect(() => {
+        if (!mapElementRef.current || mapRef.current) return;
+        const map = L.map(mapElementRef.current, { zoomControl: false });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        mapRef.current = map;
+
+        return () => {
+            map.remove();
+            mapRef.current = null;
+        };
+    }, []);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || trajectory.length === 0) return;
+        const coordinates = trajectory.map(point => L.latLng(point.latitude, point.longitude));
+
+        if (routeRef.current) routeRef.current.setLatLngs(coordinates);
+        else routeRef.current = L.polyline(coordinates, { color: '#2563eb', weight: 5, opacity: 0.9 }).addTo(map);
+
+        const current = coordinates[coordinates.length - 1];
+        if (markerRef.current) markerRef.current.setLatLng(current);
+        else markerRef.current = L.circleMarker(current, {
+            radius: 9,
+            color: '#ffffff',
+            weight: 3,
+            fillColor: '#16a34a',
+            fillOpacity: 1,
+        }).addTo(map);
+
+        if (coordinates.length === 1) map.setView(current, 16);
+        else map.fitBounds(L.latLngBounds(coordinates), { padding: [32, 32], maxZoom: 16 });
+    }, [trajectory]);
+
+    return <div ref={mapElementRef} className="h-80 w-full" aria-label="Trajeto percorrido pelo entregador" />;
+}
 
 function formatOrderNumber(value: string): string {
     const clean = String(value || '').replace(/^#/, '');
@@ -34,13 +82,11 @@ const DeliveryTrackingPage: React.FC = () => {
     const locationAgeSeconds = useMemo(() => tracking?.location?.recorded_at
         ? Math.max(0, Math.floor((Date.now() - new Date(tracking.location.recorded_at).getTime()) / 1000))
         : null, [tracking]);
-    const mapUrl = tracking?.location
-        ? `https://maps.google.com/maps?q=${tracking.location.latitude},${tracking.location.longitude}&z=16&output=embed`
-        : '';
     const mapsLink = tracking?.location
         ? `https://www.google.com/maps/search/?api=1&query=${tracking.location.latitude},${tracking.location.longitude}`
         : '';
     const delivered = tracking?.delivery_status === 'delivered';
+    const trajectory = tracking?.trajectory || [];
 
     return <main className="min-h-screen bg-slate-50 px-4 py-8">
         <div className="mx-auto max-w-2xl">
@@ -60,8 +106,14 @@ const DeliveryTrackingPage: React.FC = () => {
                     </div>
                 </section>
                 {tracking.location && !delivered ? <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <iframe title="Localizacao atual do entregador" src={mapUrl} className="h-80 w-full border-0" loading="eager" referrerPolicy="no-referrer-when-downgrade" />
+                    <DeliveryRouteMap trajectory={trajectory.length > 0 ? trajectory : [{
+                        latitude: tracking.location.latitude,
+                        longitude: tracking.location.longitude,
+                        accuracy: tracking.location.accuracy,
+                        recorded_at: tracking.location.recorded_at,
+                    }]} />
                     <div className="p-4">
+                        <p className="text-sm font-semibold text-slate-800">Trajeto percorrido em tempo real</p>
                         <p className="flex items-center gap-2 text-sm text-slate-600"><Clock3 className="h-4 w-4" />Ultima posicao: {locationAgeSeconds != null && locationAgeSeconds < 60 ? `ha ${locationAgeSeconds}s` : tracking.location.recorded_at ? new Date(tracking.location.recorded_at).toLocaleString('pt-BR') : 'agora'}</p>
                         {locationAgeSeconds != null && locationAgeSeconds > 60 && <p className="mt-2 rounded-xl bg-amber-50 p-3 text-sm font-medium text-amber-800">O sinal do entregador esta temporariamente desatualizado.</p>}
                         <a href={mapsLink} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white"><MapPin className="h-4 w-4" />Abrir no mapa</a>

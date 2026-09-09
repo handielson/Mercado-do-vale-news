@@ -12,6 +12,11 @@ for (const file of ['vps_server.cjs', 'vps_server.js']) {
   assert.match(server, /addUniqueIndexIfMissing\('customer_delivery_jobs', 'uniq_customer_delivery_jobs_tracking_token'/);
   assert.match(server, /fastify\.get\('\/delivery\/tracking\/:token'/);
   assert.match(server, /fastify\.post\('\/delivery\/app\/jobs\/:jobId\/location', \{ preHandler: requireSyncKeyOrCustomer/);
+  assert.match(server, /CREATE TABLE IF NOT EXISTS customer_delivery_tracking_points/);
+  assert.match(server, /INSERT INTO customer_delivery_tracking_points/);
+  assert.match(server, /FROM customer_delivery_tracking_points/);
+  assert.match(server, /SELECT id, sale_id, order_number, delivery_status/);
+  assert.match(server, /trajectory,/);
   assert.match(server, /job\.delivery_status !== 'in_route'/);
   assert.match(server, /String\(job\.delivery_person_customer_id\) !== String\(access\.customerId/);
   assert.match(server, /tracking_link: job\.tracking_token/);
@@ -21,7 +26,9 @@ for (const file of ['vps_server.cjs', 'vps_server.js']) {
 assert.match(routes, /path: "\/acompanhar-entrega\/:token"/);
 assert.match(service, /getPublicDeliveryTracking/);
 assert.match(page, /Atualizacao automatica a cada 10 segundos/);
-assert.match(page, /maps\.google\.com\/maps\?q=/);
+assert.match(page, /DeliveryRouteMap/);
+assert.match(page, /leaflet/);
+assert.match(page, /Trajeto percorrido em tempo real/);
 assert.match(operation, /window\.MdvDelivery\?\.startTracking\(updated\.id\)/);
 assert.match(operation, /window\.MdvDelivery\?\.stopTracking\(\)/);
 

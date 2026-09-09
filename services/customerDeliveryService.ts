@@ -107,6 +107,7 @@ export interface PublicDeliveryTracking {
     delivery_status: CustomerDeliveryJob['delivery_status'];
     delivery_address_text: string;
     location?: { latitude: number; longitude: number; accuracy?: number | null; recorded_at?: string | null } | null;
+    trajectory?: Array<{ latitude: number; longitude: number; accuracy?: number | null; recorded_at?: string | null }>;
     delivered_at?: string | null;
     updated_at?: string | null;
 }

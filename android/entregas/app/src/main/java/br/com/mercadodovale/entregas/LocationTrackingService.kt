@@ -30,10 +30,7 @@ class LocationTrackingService : Service() {
     private val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val location = result.lastLocation ?: return
-            val now = System.currentTimeMillis()
-            if (now - lastUploadAt < 8_000) return
-            lastUploadAt = now
-            executor.execute { upload(location.latitude, location.longitude, location.accuracy.toDouble()) }
+            queueLocationUpload(location.latitude, location.longitude, location.accuracy.toDouble())
         }
     }
 
@@ -70,7 +67,17 @@ class LocationTrackingService : Service() {
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10_000)
             .setMinUpdateIntervalMillis(5_000).setMinUpdateDistanceMeters(10f).build()
         client.removeLocationUpdates(callback)
+        client.lastLocation.addOnSuccessListener { location ->
+            if (location != null) queueLocationUpload(location.latitude, location.longitude, location.accuracy.toDouble())
+        }
         client.requestLocationUpdates(request, callback, mainLooper)
+    }
+
+    private fun queueLocationUpload(latitude: Double, longitude: Double, accuracy: Double) {
+        val now = System.currentTimeMillis()
+        if (now - lastUploadAt < 8_000) return
+        lastUploadAt = now
+        executor.execute { upload(latitude, longitude, accuracy) }
     }
 
     private fun upload(latitude: Double, longitude: Double, accuracy: Double) {

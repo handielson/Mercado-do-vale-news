@@ -31616,7 +31616,7 @@ fastify.patch('/delivery/settings', { preHandler: requireSyncKey }, async (req) 
 fastify.get('/delivery/tracking/:token', { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async (req, reply) => {
   const token = String(req.params.token || '').trim();
   const [rows] = await pool.query(
-    `SELECT sale_id, order_number, delivery_status, delivery_address_text,
+    `SELECT id, sale_id, order_number, delivery_status, delivery_address_text,
             current_latitude, current_longitude, current_location_accuracy, current_location_at,
             delivered_at, updated_at
        FROM customer_delivery_jobs WHERE tracking_token = ? LIMIT 1`,
@@ -31625,6 +31625,20 @@ fastify.get('/delivery/tracking/:token', { config: { rateLimit: { max: 120, time
   const job = rows?.[0];
   if (!job) return reply.code(404).send({ error: 'Acompanhamento nao encontrado' });
   const inRoute = job.delivery_status === 'in_route';
+  const [trajectoryRows] = inRoute ? await pool.query(
+    `SELECT latitude, longitude, accuracy, recorded_at
+       FROM customer_delivery_tracking_points
+      WHERE job_id = ?
+      ORDER BY recorded_at DESC
+      LIMIT 360`,
+    [job.id],
+  ) : [[]];
+  const trajectory = trajectoryRows.reverse().map((point) => ({
+    latitude: Number(point.latitude),
+    longitude: Number(point.longitude),
+    accuracy: point.accuracy == null ? null : Number(point.accuracy),
+    recorded_at: point.recorded_at,
+  }));
   return {
     order_number: job.order_number || String(job.sale_id || '').slice(0, 8).toUpperCase(),
     delivery_status: job.delivery_status,
@@ -31635,6 +31649,7 @@ fastify.get('/delivery/tracking/:token', { config: { rateLimit: { max: 120, time
       accuracy: job.current_location_accuracy == null ? null : Number(job.current_location_accuracy),
       recorded_at: job.current_location_at,
     } : null,
+    trajectory,
     delivered_at: job.delivered_at || null,
     updated_at: job.updated_at || null,
   };
@@ -31652,7 +31667,13 @@ fastify.post('/delivery/app/jobs/:jobId/location', { preHandler: requireSyncKeyO
   if (!job) return reply.code(404).send({ error: 'Entrega nao encontrada' });
   if (!access.isSync && !access.isAdmin && String(job.delivery_person_customer_id) !== String(access.customerId || '')) return reply.code(403).send({ error: 'Entrega nao pertence a este entregador' });
   if (job.delivery_status !== 'in_route') return reply.code(409).send({ error: 'Rastreamento disponivel somente durante a rota' });
-  await pool.query(`UPDATE customer_delivery_jobs SET current_latitude = ?, current_longitude = ?, current_location_accuracy = ?, current_location_at = CURRENT_TIMESTAMP WHERE id = ?`, [latitude, longitude, Number.isFinite(accuracy) ? Math.max(0, accuracy) : null, jobId]);
+  const normalizedAccuracy = Number.isFinite(accuracy) ? Math.max(0, accuracy) : null;
+  await pool.query(`UPDATE customer_delivery_jobs SET current_latitude = ?, current_longitude = ?, current_location_accuracy = ?, current_location_at = CURRENT_TIMESTAMP WHERE id = ?`, [latitude, longitude, normalizedAccuracy, jobId]);
+  await pool.query(
+    `INSERT INTO customer_delivery_tracking_points (id, job_id, latitude, longitude, accuracy)
+     VALUES (?, ?, ?, ?, ?)`,
+    [crypto.randomUUID(), jobId, latitude, longitude, normalizedAccuracy],
+  );
   return { ok: true, recorded_at: formatDateTimeSql(new Date()) };
 });
 
@@ -39798,6 +39819,17 @@ async function runMigrations() {
   await addColumnIfMissing('customer_delivery_jobs', 'current_longitude', 'DECIMAL(10,7) NULL');
   await addColumnIfMissing('customer_delivery_jobs', 'current_location_accuracy', 'DECIMAL(10,2) NULL');
   await addColumnIfMissing('customer_delivery_jobs', 'current_location_at', 'DATETIME NULL');
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_delivery_tracking_points (
+      id CHAR(36) PRIMARY KEY,
+      job_id CHAR(36) NOT NULL,
+      latitude DECIMAL(10,7) NOT NULL,
+      longitude DECIMAL(10,7) NOT NULL,
+      accuracy DECIMAL(10,2) NULL,
+      recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_customer_delivery_tracking_points_job_time (job_id, recorded_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
   await pool.query("UPDATE customer_delivery_jobs SET tracking_token = SHA2(CONCAT(UUID(), RAND()), 256) WHERE delivery_status NOT IN ('delivered','cancelled') AND (tracking_token IS NULL OR tracking_token = '')");
   await addUniqueIndexIfMissing('customer_delivery_jobs', 'uniq_customer_delivery_jobs_tracking_token', 'tracking_token');
 
