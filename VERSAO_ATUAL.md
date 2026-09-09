@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.358-confirmar-pagamento-entrega
+version: v1.2.359-numero-pedido-entrega
 date: 2026-09-09
 status: ready
-release_vps: /var/www/mdv-site/releases/20260909-155439-confirmar-pagamento-entrega-loja
+release_vps: /var/www/mdv-site/releases/20260909-161342-numero-pedido-entrega
 branch: main
-summary: Entrega ja nasce quitada pela venda e repassa apenas entregas externas ao entregador.
-tag: v1.2.358-confirmar-pagamento-entrega
+summary: Mensagens de entrega usam o numero curto exibido no comprovante, sem expor o UUID interno.
+tag: v1.2.359-numero-pedido-entrega
 ```

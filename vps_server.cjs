@@ -2614,11 +2614,17 @@ const DEFAULT_DELIVERY_COMPLETION_WHATSAPP_TEMPLATE = [
   'Qualquer duvida, estamos a disposicao.',
 ].join('\n');
 
+function getCustomerDeliveryReceiptOrderNumber(job) {
+  const saleId = String(job?.sale_id || '').trim();
+  if (saleId) return saleId.slice(0, 8).toUpperCase();
+  return String(job?.order_number || '').trim();
+}
+
 function renderCustomerDeliveryTemplate(template, job) {
   const value = String(template || DEFAULT_DELIVERY_COMPLETION_WHATSAPP_TEMPLATE);
   const replacements = {
     cliente: job?.buyer_name || 'cliente',
-    pedido: job?.order_number || job?.sale_id || '',
+    pedido: getCustomerDeliveryReceiptOrderNumber(job),
     entregador: job?.delivery_person_name || '',
     valor_entrega: ((normalizeDeliveryLedgerAmount(job?.delivery_amount) || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
     data_entrega: job?.delivered_at ? String(job.delivered_at).slice(0, 19) : formatDateTimeSql(new Date()),
@@ -4140,7 +4146,7 @@ async function notifyCustomerDeliveryOutForDelivery(job) {
     variables: {
       nome: job.buyer_name || 'Cliente',
       data: new Date().toLocaleString('pt-BR'),
-      pedido: job.order_number || job.sale_id || '',
+      pedido: getCustomerDeliveryReceiptOrderNumber(job),
       entregador: deliveryPersonName,
       endereco_entrega: job.delivery_address_text || '',
       maps_link: job.delivery_route_url || '',
