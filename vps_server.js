@@ -9586,34 +9586,44 @@ function sleepBlingReconcileVps(ms) {
 async function fetchAllBlingStocksForReconcileVps(accessToken, productIds = []) {
   const remoteStocks = [];
   for (let page = 1; ; page += 1) {
-    const response = await fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`, {
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(15000),
-    });
+    if (page > 1) await sleepBlingReconcileVps(450);
+    let response;
+    let body;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      response = await fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(15000),
+      });
+      body = await readBlingProxyResponse(response);
+      if (response.status === 429 && attempt < 3) {
+        await sleepBlingReconcileVps(1500 * (attempt + 1));
+        continue;
+      }
+      break;
+    }
     if (response.status === 400) break;
-    const body = await readBlingProxyResponse(response);
     if (!response.ok) throw new Error(`Bling stock fetch failed (${response.status}): ${body.text}`);
     const pageItems = Array.isArray(body.json?.data) ? body.json.data : [];
     remoteStocks.push(...pageItems);
     if (pageItems.length < 100) break;
   }
-  if (remoteStocks.length > 0) return remoteStocks;
-
   const mappedIds = [...new Set(productIds.map((id) => String(id || '').trim()).filter(Boolean))];
-  for (let i = 0; i < mappedIds.length; i += 50) {
+  const receivedIds = new Set(remoteStocks.map(getRemoteStockProductIdVps).filter(Boolean).map(String));
+  const missingIds = mappedIds.filter((id) => !receivedIds.has(id));
+  for (let i = 0; i < missingIds.length; i += 50) {
     if (i > 0) await sleepBlingReconcileVps(450);
-    const chunk = mappedIds.slice(i, i + 50);
+    const chunk = missingIds.slice(i, i + 50);
     const idsQuery = chunk.map((id) => `idsProdutos[]=${encodeURIComponent(id)}`).join('&');
     let response;
     let body;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       response = await fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=100&${idsQuery}`, {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
         signal: AbortSignal.timeout(15000),
       });
       body = await readBlingProxyResponse(response);
-      if (response.status === 429 && attempt < 2) {
-        await sleepBlingReconcileVps(1200);
+      if (response.status === 429 && attempt < 3) {
+        await sleepBlingReconcileVps(1500 * (attempt + 1));
         continue;
       }
       break;
@@ -13512,9 +13522,12 @@ async function loadSeoProductBySlug(slug) {
        LIMIT 200`,
       [slug]
     );
-    const matchedRoute = routeCandidates.find((product) => (
-      getPublicProductVariantRouteTargetVps(product, routeCandidates).toLowerCase() === slug.toLowerCase()
-    ));
+    const matchedRoute = routeCandidates.find((product) => {
+      const variantTarget = getPublicProductVariantRouteTargetVps(product, routeCandidates).toLowerCase();
+      const disambiguatedTarget = getPublicProductDisambiguatedRouteTargetVps(product).toLowerCase();
+      const currentSlug = slug.toLowerCase();
+      return variantTarget === currentSlug || disambiguatedTarget === currentSlug;
+    });
     if (matchedRoute) rows = [{ ...matchedRoute, seo_route_target: slug }];
   }
 
@@ -28361,9 +28374,25 @@ fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => 
   if (conflict) return reply.code(409).send(serializedIdentifierConflictPayload(conflict));
 
   vals.push(req.params.id);
-  await pool.query(`UPDATE units SET ${sets.join(', ')} WHERE id = ?`, vals);
+  const soldTransitionGuard = u.status === 'sold'
+    ? (u.order_id ? " AND status IN ('available', 'reserved')" : " AND status = 'available'")
+    : '';
+  const [updateResult] = await pool.query(
+    `UPDATE units SET ${sets.join(', ')} WHERE id = ?${soldTransitionGuard}`,
+    vals,
+  );
   const [rows] = await pool.query('SELECT * FROM units WHERE id = ?', [req.params.id]);
   if (!rows[0]) return reply.code(404).send({ error: 'Not found' });
+  if (u.status === 'sold' && updateResult.affectedRows === 0) {
+    const isSameSaleRetry = String(rows[0].status) === 'sold'
+      && String(rows[0].sale_id || '') === String(u.sale_id || '');
+    if (!isSameSaleRetry) {
+      return reply.code(409).send({
+        error: 'serialized_unit_unavailable',
+        message: 'A unidade selecionada nao esta mais disponivel. Confira o IMEI e escolha outra unidade.',
+      });
+    }
+  }
   await syncProductStock(rows[0].product_id);
   return rows[0];
 });
@@ -31789,7 +31818,6 @@ fastify.post('/delivery/jobs/:token/payment-status', { config: { rateLimit: { ma
   const [updated] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
   return mapCustomerDeliveryJob(updated?.[0] || null);
 });
-
 
 fastify.post('/delivery/jobs/:token/start-route', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
   const token = String(req.params.token || '').trim();
