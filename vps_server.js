@@ -9586,34 +9586,44 @@ function sleepBlingReconcileVps(ms) {
 async function fetchAllBlingStocksForReconcileVps(accessToken, productIds = []) {
   const remoteStocks = [];
   for (let page = 1; ; page += 1) {
-    const response = await fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`, {
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(15000),
-    });
+    if (page > 1) await sleepBlingReconcileVps(450);
+    let response;
+    let body;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      response = await fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(15000),
+      });
+      body = await readBlingProxyResponse(response);
+      if (response.status === 429 && attempt < 3) {
+        await sleepBlingReconcileVps(1500 * (attempt + 1));
+        continue;
+      }
+      break;
+    }
     if (response.status === 400) break;
-    const body = await readBlingProxyResponse(response);
     if (!response.ok) throw new Error(`Bling stock fetch failed (${response.status}): ${body.text}`);
     const pageItems = Array.isArray(body.json?.data) ? body.json.data : [];
     remoteStocks.push(...pageItems);
     if (pageItems.length < 100) break;
   }
-  if (remoteStocks.length > 0) return remoteStocks;
-
   const mappedIds = [...new Set(productIds.map((id) => String(id || '').trim()).filter(Boolean))];
-  for (let i = 0; i < mappedIds.length; i += 50) {
+  const receivedIds = new Set(remoteStocks.map(getRemoteStockProductIdVps).filter(Boolean).map(String));
+  const missingIds = mappedIds.filter((id) => !receivedIds.has(id));
+  for (let i = 0; i < missingIds.length; i += 50) {
     if (i > 0) await sleepBlingReconcileVps(450);
-    const chunk = mappedIds.slice(i, i + 50);
+    const chunk = missingIds.slice(i, i + 50);
     const idsQuery = chunk.map((id) => `idsProdutos[]=${encodeURIComponent(id)}`).join('&');
     let response;
     let body;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       response = await fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=100&${idsQuery}`, {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
         signal: AbortSignal.timeout(15000),
       });
       body = await readBlingProxyResponse(response);
-      if (response.status === 429 && attempt < 2) {
-        await sleepBlingReconcileVps(1200);
+      if (response.status === 429 && attempt < 3) {
+        await sleepBlingReconcileVps(1500 * (attempt + 1));
         continue;
       }
       break;

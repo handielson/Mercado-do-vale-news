@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.359-numero-pedido-entrega
+version: v1.2.360-bling-stock-fallback
 date: 2026-09-09
 status: ready
-release_vps: /var/www/mdv-site/releases/20260909-161342-numero-pedido-entrega
+release_vps: /var/www/mdv-site/releases/20260909-163753-bling-stock-fallback
 branch: main
-summary: Mensagens de entrega usam o numero curto exibido no comprovante, sem expor o UUID interno.
-tag: v1.2.359-numero-pedido-entrega
+summary: Reconciliação recupera saldos de produtos omitidos pela listagem geral de estoque do Bling.
+tag: v1.2.360-bling-stock-fallback
 ```

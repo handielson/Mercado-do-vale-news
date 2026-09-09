@@ -26,8 +26,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   );
   assert.match(
     source,
-    /for \(let i = 0; i < mappedIds\.length; i \+= 50\)/,
-    `${file} must fetch mapped stock IDs in bounded chunks`,
+    /const missingIds = mappedIds\.filter\(\(id\) => !receivedIds\.has\(id\)\)[\s\S]*for \(let i = 0; i < missingIds\.length; i \+= 50\)/,
+    `${file} must fetch mapped stock IDs omitted from a partial stock listing`,
   );
   assert.match(
     source,
@@ -36,8 +36,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   );
   assert.match(
     source,
-    /response\.status === 429[\s\S]*await sleepBlingReconcileVps\(1200\)/,
-    `${file} must retry stock chunks after Bling rate-limit responses`,
+    /response\.status === 429[\s\S]*await sleepBlingReconcileVps\(1500 \* \(attempt \+ 1\)\)/,
+    `${file} must retry stock requests with progressive waits after Bling rate limits`,
   );
   assert.match(
     source,

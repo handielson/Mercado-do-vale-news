@@ -8,9 +8,9 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /Product ID required/, `${file} must validate product-detail id`);
   assert.match(source, /select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret/, `${file} must load stored Bling tokens for product-detail fallback auth`);
   assert.match(source, /refreshBlingStoredAccessTokenVps\(/, `${file} must refresh expired stored Bling tokens`);
-  assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/produtos\/\$\{id\}/, `${file} must fetch Bling product detail by id`);
-  assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/estoques\/saldos\?pagina=1&limite=100&idsProdutos\[\]=\$\{id\}/, `${file} must fetch Bling stock balance for product detail`);
-  assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/produtos\/variacoes\/\$\{id\}/, `${file} must support product variation detail`);
+  assert.match(source, /https:\/\/api\.bling\.com\.br\/Api\/v3\/produtos\/\$\{id\}/, `${file} must fetch Bling product detail by id`);
+  assert.match(source, /https:\/\/api\.bling\.com\.br\/Api\/v3\/estoques\/saldos\?pagina=1&limite=100&idsProdutos\[\]=\$\{id\}/, `${file} must fetch Bling stock balance for product detail`);
+  assert.match(source, /https:\/\/api\.bling\.com\.br\/Api\/v3\/produtos\/variacoes\/\$\{id\}/, `${file} must support product variation detail`);
   assert.match(source, /stock_quantity:\s*Number\(stockQuantity\)/, `${file} must return normalized stock_quantity`);
   assert.match(source, /saldoFisicoTotal[\s\S]*saldoFisico[\s\S]*saldoVirtualTotal[\s\S]*saldoVirtual/, `${file} must preserve Bling stock field fallback order`);
   assert.match(source, /buildCopyableDebug\('bling-product-detail'/, `${file} must return copyable debug details for product-detail failures`);
