@@ -1,5 +1,6 @@
 import { vpsClient } from './vpsClient';
 import { toCents } from './customerDebtService';
+import type { PaymentMethod } from '../types/sale';
 
 export interface CustomerDeliveryLedgerEntry {
     id: string;
@@ -68,7 +69,18 @@ export interface CustomerDeliveryJob {
     delivery_address_text: string;
     delivery_route_url?: string | null;
     receipt_snapshot_json?: {
-        sale?: Record<string, unknown>;
+        sale?: {
+            id?: string;
+            order_number?: string;
+            total?: number | string;
+            subtotal?: number | string;
+            discount_total?: number | string;
+            payment_method?: string | null;
+            payment_methods?: PaymentMethod[] | string | null;
+            payment_status?: string | null;
+            created_at?: string;
+            [key: string]: unknown;
+        };
         items?: Array<Record<string, unknown>>;
     };
     mercado_pago_payment_id?: string | null;

@@ -15,6 +15,8 @@ import {
     type CustomerDeliveryProof,
 } from '../../services/customerDeliveryService';
 import { compressImage } from '../../utils/image-compression';
+import { buildPaymentPresentation, getPaymentLabel } from '../../utils/salePresentation';
+import type { PaymentMethod } from '../../types/sale';
 
 interface SynologyUploadResponse {
     url?: string;
@@ -67,6 +69,23 @@ function getDeliveryJobOrderNumber(job: CustomerDeliveryJob): string {
     return formatDeliveryOrderNumber(job.order_number || receiptOrderNumber || job.sale_id);
 }
 
+function getDeliverySalePaymentMethods(job: CustomerDeliveryJob): PaymentMethod[] {
+    const raw = job.receipt_snapshot_json?.sale?.payment_methods;
+    let parsed: unknown = raw;
+    if (typeof raw === 'string') {
+        try { parsed = JSON.parse(raw); } catch { parsed = []; }
+    }
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed as PaymentMethod[];
+
+    const fallback = String(job.receipt_snapshot_json?.sale?.payment_method || '').trim();
+    if (!fallback) return [];
+    return [{
+        method: fallback as PaymentMethod['method'],
+        amount: toCents(job.receipt_snapshot_json?.sale?.total),
+        total_with_fee: toCents(job.receipt_snapshot_json?.sale?.total),
+    }];
+}
+
 const DeliveryOperationPage: React.FC = () => {
     const { token = '' } = useParams();
     const [job, setJob] = useState<CustomerDeliveryJob | null>(null);
@@ -81,6 +100,8 @@ const DeliveryOperationPage: React.FC = () => {
     const whatsappUrl = buyerPhone ? `https://wa.me/55${buyerPhone}` : '';
     const callUrl = buyerPhone ? `tel:${buyerPhone}` : '';
     const items = Array.isArray(job?.receipt_snapshot_json?.items) ? job.receipt_snapshot_json.items : [];
+    const saleTotal = toCents(job?.receipt_snapshot_json?.sale?.total);
+    const salePaymentMethods = job ? getDeliverySalePaymentMethods(job) : [];
     const pixApproved = job?.payment_status === 'approved' || job?.payment_status === 'not_required';
     const canStartRoute = Boolean(job && job.delivery_status !== 'in_route' && job.delivery_status !== 'delivered' && job.delivery_status !== 'cancelled');
     const canComplete = Boolean(job && pixApproved && proofs.length > 0 && job.delivery_status !== 'delivered');
@@ -272,6 +293,11 @@ const DeliveryOperationPage: React.FC = () => {
 
                 <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h2 className="text-base font-semibold text-slate-900">Resumo da compra</h2>
+                    <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Valor do pedido</p>
+                        <p className="mt-1 text-3xl font-black text-emerald-950">{formatCurrencyCents(saleTotal)}</p>
+                        <p className="mt-1 text-sm font-semibold text-emerald-800">Confira este valor e a forma combinada antes de cobrar o cliente.</p>
+                    </div>
                     <div className="mt-3 divide-y divide-slate-100">
                         {items.length === 0 ? <p className="py-3 text-sm text-slate-500">Itens nao carregados no comprovante.</p> : items.map((item, index) => (
                             <div key={index} className="flex justify-between gap-3 py-3 text-sm">
@@ -283,6 +309,24 @@ const DeliveryOperationPage: React.FC = () => {
                     <div className="mt-3 flex justify-between border-t border-slate-200 pt-3 font-semibold">
                         <span>Valor da entrega</span>
                         <span>{formatCurrencyCents(job.delivery_amount)}</span>
+                    </div>
+                    <div className="mt-4 border-t border-slate-200 pt-4">
+                        <p className="text-sm font-bold text-slate-900">Forma de pagamento</p>
+                        {salePaymentMethods.length === 0 ? (
+                            <p className="mt-2 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">Forma de pagamento nao informada. Confirme com a loja antes da cobranca.</p>
+                        ) : (
+                            <div className="mt-2 space-y-2">
+                                {salePaymentMethods.map((payment, index) => {
+                                    const presentation = buildPaymentPresentation(payment);
+                                    return (
+                                        <div key={`${payment.method}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-3 text-sm">
+                                            <span className="font-semibold text-slate-700">{presentation.labelWithInstallments || getPaymentLabel(payment.method)}</span>
+                                            <span className="font-black text-slate-950">{formatCurrencyCents(presentation.totalWithFee)}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 </section>
 
