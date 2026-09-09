@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.360-bling-stock-fallback
+version: v1.2.361-pdp-seo-variacao-slug
 date: 2026-09-09
 status: ready
-release_vps: /var/www/mdv-site/releases/20260909-163753-bling-stock-fallback
+release_vps: pendente
 branch: main
-summary: Reconciliação recupera saldos de produtos omitidos pela listagem geral de estoque do Bling.
-tag: v1.2.360-bling-stock-fallback
+summary: Resolucao de slug estendido de variacao de produto no SEO e OpenGraph para previews corretos com foto.
+tag: v1.2.361-pdp-seo-variacao-slug
 ```

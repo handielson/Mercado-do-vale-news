@@ -13522,9 +13522,12 @@ async function loadSeoProductBySlug(slug) {
        LIMIT 200`,
       [slug]
     );
-    const matchedRoute = routeCandidates.find((product) => (
-      getPublicProductVariantRouteTargetVps(product, routeCandidates).toLowerCase() === slug.toLowerCase()
-    ));
+    const matchedRoute = routeCandidates.find((product) => {
+      const variantTarget = getPublicProductVariantRouteTargetVps(product, routeCandidates).toLowerCase();
+      const disambiguatedTarget = getPublicProductDisambiguatedRouteTargetVps(product).toLowerCase();
+      const currentSlug = slug.toLowerCase();
+      return variantTarget === currentSlug || disambiguatedTarget === currentSlug;
+    });
     if (matchedRoute) rows = [{ ...matchedRoute, seo_route_target: slug }];
   }
 
@@ -28371,9 +28374,25 @@ fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => 
   if (conflict) return reply.code(409).send(serializedIdentifierConflictPayload(conflict));
 
   vals.push(req.params.id);
-  await pool.query(`UPDATE units SET ${sets.join(', ')} WHERE id = ?`, vals);
+  const soldTransitionGuard = u.status === 'sold'
+    ? (u.order_id ? " AND status IN ('available', 'reserved')" : " AND status = 'available'")
+    : '';
+  const [updateResult] = await pool.query(
+    `UPDATE units SET ${sets.join(', ')} WHERE id = ?${soldTransitionGuard}`,
+    vals,
+  );
   const [rows] = await pool.query('SELECT * FROM units WHERE id = ?', [req.params.id]);
   if (!rows[0]) return reply.code(404).send({ error: 'Not found' });
+  if (u.status === 'sold' && updateResult.affectedRows === 0) {
+    const isSameSaleRetry = String(rows[0].status) === 'sold'
+      && String(rows[0].sale_id || '') === String(u.sale_id || '');
+    if (!isSameSaleRetry) {
+      return reply.code(409).send({
+        error: 'serialized_unit_unavailable',
+        message: 'A unidade selecionada nao esta mais disponivel. Confira o IMEI e escolha outra unidade.',
+      });
+    }
+  }
   await syncProductStock(rows[0].product_id);
   return rows[0];
 });
@@ -31799,7 +31818,6 @@ fastify.post('/delivery/jobs/:token/payment-status', { config: { rateLimit: { ma
   const [updated] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
   return mapCustomerDeliveryJob(updated?.[0] || null);
 });
-
 
 fastify.post('/delivery/jobs/:token/start-route', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
   const token = String(req.params.token || '').trim();
