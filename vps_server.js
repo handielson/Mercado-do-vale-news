@@ -9724,7 +9724,8 @@ async function patchVpsForReconcileVps(pathname, body, request) {
   const syncKey = getVpsSyncKeyForBlingSyncPrices();
   if (!syncKey) return false;
   try {
-    const response = await fetch(`${getVpsBatchBaseUrl(request)}${pathname}`, {
+    const internalBaseUrl = `http://127.0.0.1:${Number(process.env.PORT) || 4000}`;
+    const response = await fetch(`${internalBaseUrl}${pathname}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'x-sync-key': syncKey },
       body: JSON.stringify(body),
@@ -9741,8 +9742,8 @@ async function applyReconcileStockChangesVps(changes, request) {
   const failed = [];
   for (const change of changes) {
     try {
-      await vpsDbPatch('products', `id=eq.${encodeURIComponent(change.productId)}`, { stock_quantity: change.nextStock });
       const vpsUpdated = await patchVpsForReconcileVps('/products/stock', change.blingId ? { bling_id: change.blingId, stock_quantity: change.nextStock } : { sku: change.sku, stock_quantity: change.nextStock }, request);
+      if (!vpsUpdated) throw new Error('VPS stock endpoint rejected reconcile update');
       applied.push({ ...change, vpsUpdated });
     } catch (err) {
       failed.push({ type: 'stock', sku: change.sku, blingId: change.blingId, reason: err.message });
