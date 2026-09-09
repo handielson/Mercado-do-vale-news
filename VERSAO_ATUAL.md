@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.352-entregas-gps-tempo-real
-date: 2026-09-08
+version: v1.2.353-bot-lista-5g-marcas
+date: 2026-09-09
 status: ready
-release_vps: /var/www/mdv-site/releases/20260908-205948-entregas-gps-tempo-real
+release_vps: /var/www/mdv-site/releases/20260909-125837-bot-lista-5g-marcas
 branch: main
-summary: Adiciona rastreamento GPS da entrega em tempo real para o cliente.
-tag: v1.2.352-entregas-gps-tempo-real
+summary: Limita listas de celulares a tres itens por mensagem, separa marcas e corrige o filtro de aparelhos 5G.
+tag: v1.2.353-bot-lista-5g-marcas
 ```
