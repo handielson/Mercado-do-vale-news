@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bike, Camera, CheckCircle2, Loader2, MapPin, Phone, QrCode, RefreshCw, Upload, MessageCircle } from 'lucide-react';
+import { Bike, Camera, CheckCircle2, Loader2, MapPin, Phone, QrCode, RefreshCw, MessageCircle } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { vpsClient } from '../../services/vpsClient';
@@ -48,7 +48,7 @@ function getDeliveryErrorMessage(error: unknown, fallback: string): string {
     const message = error instanceof Error ? error.message : String((error as any)?.error || (error as any)?.message || '');
     if (!message) return fallback;
     if (/pix/i.test(message) && /aprov/i.test(message)) return 'O Pix da entrega ainda nao foi aprovado. Consulte o pagamento novamente antes de finalizar.';
-    if (/foto|comprov/i.test(message)) return 'A foto de comprovacao e obrigatoria. Envie a foto da entrega e tente finalizar novamente.';
+    if (/foto|comprov/i.test(message)) return 'Nao foi possivel registrar a foto de comprovacao. A entrega pode ser finalizada sem foto.';
     if (/mercado pago/i.test(message)) return 'Nao foi possivel comunicar com o Mercado Pago agora. Tente novamente em alguns segundos.';
     if (/synology|upload/i.test(message)) return 'Nao foi possivel enviar a foto para o Synology. Confira a conexao e tente novamente.';
     if (/entrega nao encontrada/i.test(message)) return 'Entrega nao encontrada. Confira se o link recebido esta correto.';
@@ -104,7 +104,7 @@ const DeliveryOperationPage: React.FC = () => {
     const salePaymentMethods = job ? getDeliverySalePaymentMethods(job) : [];
     const pixApproved = job?.payment_status === 'approved' || job?.payment_status === 'not_required';
     const canStartRoute = Boolean(job && job.delivery_status !== 'in_route' && job.delivery_status !== 'delivered' && job.delivery_status !== 'cancelled');
-    const canComplete = Boolean(job && pixApproved && proofs.length > 0 && job.delivery_status !== 'delivered');
+    const canComplete = Boolean(job && pixApproved && job.delivery_status !== 'delivered');
     const pixExpired = useMemo(() => {
         if (!job?.pix_expires_at || job.payment_status === 'approved') return false;
         return new Date(job.pix_expires_at).getTime() <= Date.now();
@@ -346,7 +346,8 @@ const DeliveryOperationPage: React.FC = () => {
                 </section>
 
                 <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900"><Camera className="h-5 w-5" />Foto de comprovacao</h2>
+                    <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900"><Camera className="h-5 w-5" />Foto de comprovacao opcional</h2>
+                    <p className="mt-1 text-sm text-slate-500">Use a camera para registrar a entrega no local. A falta ou falha no envio da foto nao impede a conclusao.</p>
                     {proofs.length > 0 && (
                         <div className="mt-4 grid gap-3 sm:grid-cols-2">
                             {proofs.map((proof) => (
@@ -359,8 +360,8 @@ const DeliveryOperationPage: React.FC = () => {
                     )}
                     <textarea className="mt-4 w-full rounded-xl border border-slate-200 p-3 text-sm" value={proofDescription} onChange={(e) => setProofDescription(e.target.value)} placeholder="Descricao interna da foto" />
                     <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700">
-                        <Upload className="h-4 w-4" />Enviar foto
-                        <input className="hidden" type="file" accept="image/*" onChange={handleProofUpload} disabled={busy} />
+                        <Camera className="h-4 w-4" />Tirar foto
+                        <input className="hidden" type="file" accept="image/*" capture="environment" onChange={handleProofUpload} disabled={busy} />
                     </label>
                 </section>
 

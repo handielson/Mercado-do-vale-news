@@ -4318,7 +4318,6 @@ function getCustomerDeliveryCompletionBlockers(job, proof, options = {}) {
   if (!addressText || addressText === 'Endereco de entrega nao informado') blockers.push('Endereco da entrega pendente');
   if (!routeUrl) blockers.push('Rota da entrega pendente');
   if (!options?.adminOverride && job?.payment_status !== 'approved' && job?.payment_status !== 'not_required') blockers.push('Pix da entrega ainda nao aprovado');
-  if (!options?.adminOverride && !proof?.image_url) blockers.push('Foto de comprovacao obrigatoria');
   return blockers;
 }
 

@@ -16,7 +16,7 @@ for (const file of ['vps_server.cjs', 'vps_server.js']) {
 }
 
 assert.match(gradle, /applicationId = "br\.com\.mercadodovale\.entregas"/);
-assert.match(gradle, /versionCode = 5/);
+assert.match(gradle, /versionCode = 6/);
 assert.match(manifest, /Mercado do Vale Entregas/);
 assert.doesNotMatch(activity + gradle, /x-sync-key|SYNC_SECRET|VITE_VPS_SYNC_KEY/);
 assert.match(activity, /\/auth\/login/);
@@ -35,5 +35,9 @@ assert.match(locationService, /delivery\/app\/jobs\/\$jobId\/location/);
 assert.match(locationService, /startForeground\(NOTIFICATION_ID, notification\)/);
 assert.match(locationService, /client\.lastLocation\.addOnSuccessListener/, 'delivery tracking must send the available position immediately when a route starts');
 assert.match(locationService, /queueLocationUpload\(location\.latitude, location\.longitude, location\.accuracy\.toDouble\(\)\)/, 'cached and live locations must use the same throttled upload path');
+assert.match(activity, /MediaStore\.ACTION_IMAGE_CAPTURE/, 'delivery proof must open the device camera');
+assert.match(activity, /FileProvider\.getUriForFile/, 'delivery proof camera output must use a safe content URI');
+assert.doesNotMatch(activity, /Intent\.ACTION_GET_CONTENT/, 'delivery proof must not offer gallery file selection');
+assert.match(manifest, /androidx\.core\.content\.FileProvider/, 'delivery app must expose a FileProvider for camera output');
 
 console.log('android delivery app contract checks passed');

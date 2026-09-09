@@ -36,10 +36,10 @@ for (const file of serverFiles) {
     /if \(!options\?\.adminOverride && job\?\.payment_status !== 'approved'/,
     `${file} must not require approved delivery Pix for administrative completion`
   );
-  assert.match(
+  assert.doesNotMatch(
     source,
-    /if \(!options\?\.adminOverride && !proof\?\.image_url\)/,
-    `${file} must not require proof photo for administrative completion`
+    /Foto de comprovacao obrigatoria|!proof\?\.image_url\) blockers\.push/,
+    `${file} must allow delivery completion without a proof photo`
   );
   assert.match(
     source,
@@ -79,6 +79,8 @@ assert.match(modal, /Pendencias para concluir/, 'sale modal must explain what st
 
 assert.match(deliveryPage, /const \[proofs, setProofs\]/, 'delivery page must keep proof gallery state');
 assert.match(deliveryPage, /proofs\.map/, 'delivery page must render all uploaded proof photos');
-assert.match(deliveryPage, /proofs\.length > 0/, 'delivery completion must allow any uploaded proof');
+assert.match(deliveryPage, /const canComplete = Boolean\(job && pixApproved && job\.delivery_status !== 'delivered'\)/, 'delivery completion must not require a proof photo');
+assert.match(deliveryPage, /capture="environment"/, 'proof input must request the rear camera');
+assert.match(deliveryPage, /Foto de comprovacao opcional/, 'delivery page must describe proof photo as optional');
 
 console.log('delivery ops status gallery static checks passed');

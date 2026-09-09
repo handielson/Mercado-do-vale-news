@@ -16,7 +16,7 @@ Aplicativo Android próprio para entregadores vinculados à loja.
 
 - Nome: Mercado do Vale Entregas
 - Pacote: `br.com.mercadodovale.entregas`
-- Versão atual: `1.1.1` (`versionCode 5`)
+- Versão atual: `1.1.2` (`versionCode 6`)
 
 ## Build
 

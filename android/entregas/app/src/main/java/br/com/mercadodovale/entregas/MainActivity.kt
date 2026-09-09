@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.os.Build
 import android.view.Gravity
 import android.view.View
@@ -24,6 +25,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.graphics.Insets
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import org.json.JSONArray
@@ -31,12 +33,14 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.io.File
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
     private val preferences by lazy { getSharedPreferences("delivery_session", MODE_PRIVATE) }
     private var sessionToken: String = ""
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingCameraPhotoUri: Uri? = null
     private var operationWebView: WebView? = null
     private var pendingTrackingJobId: String = ""
 
@@ -216,8 +220,20 @@ class MainActivity : Activity() {
             override fun onShowFileChooser(webView: WebView?, callback: ValueCallback<Array<Uri>>?, params: FileChooserParams?): Boolean {
                 fileChooserCallback?.onReceiveValue(null)
                 fileChooserCallback = callback
-                val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*"; addCategory(Intent.CATEGORY_OPENABLE) }
-                startActivityForResult(Intent.createChooser(intent, "Foto da entrega"), FILE_CHOOSER_REQUEST)
+                val photoFile = File.createTempFile("delivery-proof-", ".jpg", cacheDir)
+                val photoUri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", photoFile)
+                pendingCameraPhotoUri = photoUri
+                val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                    putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                }
+                try {
+                    startActivityForResult(intent, FILE_CHOOSER_REQUEST)
+                } catch (_: Exception) {
+                    pendingCameraPhotoUri = null
+                    fileChooserCallback?.onReceiveValue(null)
+                    fileChooserCallback = null
+                }
                 return true
             }
         }
@@ -228,9 +244,10 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Android")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == FILE_CHOOSER_REQUEST) {
-            val result = if (resultCode == RESULT_OK) data?.data?.let { arrayOf(it) } else null
+            val result = if (resultCode == RESULT_OK) pendingCameraPhotoUri?.let { arrayOf(it) } else null
             fileChooserCallback?.onReceiveValue(result)
             fileChooserCallback = null
+            pendingCameraPhotoUri = null
             return
         }
         super.onActivityResult(requestCode, resultCode, data)
