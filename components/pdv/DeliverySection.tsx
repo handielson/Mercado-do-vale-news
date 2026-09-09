@@ -75,8 +75,8 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
             // Retirada: sem custo, sem entregador
             onDeliveryChange(selectedType, undefined, 0, 0);
         } else if (selectedType === 'store_delivery') {
-            // Entrega loja: custo da loja pode ser ajustado no PDV, cliente nao paga entrega.
-            onDeliveryChange(selectedType, selectedPerson, costStore, 0);
+            // Entrega feita pela própria loja: custo interno, sem repasse.
+            onDeliveryChange(selectedType, undefined, costStore, 0);
         } else if (selectedType === 'hybrid_delivery') {
             // Híbrida: valores customizados
             onDeliveryChange(selectedType, selectedPerson, costStore, costCustomer);
@@ -95,6 +95,7 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
             setCostStore(0);
             setCostCustomer(0);
         } else if (type === 'store_delivery') {
+            setSelectedPerson(undefined);
             setCostStore(DELIVERY_COST_DEFAULT);
             setCostCustomer(0);
         } else if (type === 'hybrid_delivery') {
@@ -210,7 +211,7 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
         }).format(cents / 100);
     };
 
-    const needsDeliveryPerson = selectedType === 'store_delivery' || selectedType === 'hybrid_delivery';
+    const needsDeliveryPerson = selectedType === 'hybrid_delivery';
     const deliveryCardClass = (type: DeliveryType, selectedClass: string) => [
         'relative flex min-h-[112px] cursor-pointer flex-col gap-2 rounded-lg border p-3 transition-colors',
         selectedType === type ? selectedClass : 'border-slate-200 bg-white hover:bg-slate-50'
@@ -260,8 +261,8 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
                     <Truck className="h-5 w-5 text-emerald-600" />
                     <div className="pr-6">
                         <div className="text-sm font-semibold text-slate-900">Loja entrega</div>
-                        <div className="mt-1 text-xs leading-4 text-slate-600">Repasse para entregador</div>
-                        <div className="mt-2 text-xs font-semibold text-emerald-700">{formatCurrency(costStore)}</div>
+                        <div className="mt-1 text-xs leading-4 text-slate-600">Entrega própria, sem repasse</div>
+                        <div className="mt-2 text-xs font-semibold text-emerald-700">Custo interno: {formatCurrency(costStore)}</div>
                     </div>
                 </label>
 

@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.357-entrega-foto-opcional-camera",
+  "version": "v1.2.358-confirmar-pagamento-entrega",
   "date": "2026-09-09",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260909-153756-entrega-foto-opcional-camera",
+  "release_vps": "/var/www/mdv-site/releases/20260909-155439-confirmar-pagamento-entrega-loja",
   "branch": "main",
-  "summary": "Libera a conclusao da entrega sem foto e usa somente a camera para comprovantes."
+  "summary": "Entrega ja nasce quitada pela venda e repassa apenas entregas externas ao entregador."
 }

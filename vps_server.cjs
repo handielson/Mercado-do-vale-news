@@ -4179,7 +4179,7 @@ async function createCustomerDeliveryJobForSale(connection, sale) {
   const customerId = String(sale.delivery_person_customer_id || '').trim();
   const amount = normalizeDeliveryLedgerAmount(sale.delivery_total || sale.delivery_cost_store || 0);
   const deliveryType = String(sale.delivery_type || '').trim();
-  if (!customerId || amount <= 0 || (deliveryType !== 'store_delivery' && deliveryType !== 'hybrid_delivery')) return null;
+  if (!customerId || amount <= 0 || deliveryType !== 'hybrid_delivery') return null;
 
   const saleId = String(sale.id || '').trim();
   if (!saleId) return null;
@@ -4195,7 +4195,8 @@ async function createCustomerDeliveryJobForSale(connection, sale) {
               buyer_phone = ?,
               delivery_person_customer_id = ?,
               delivery_amount = ?,
-              payment_amount = ?,
+              payment_amount = 0,
+              payment_status = 'not_required',
               delivery_address_text = ?,
               delivery_route_url = ?,
               receipt_snapshot_json = ?,
@@ -4207,7 +4208,6 @@ async function createCustomerDeliveryJobForSale(connection, sale) {
         jobData.buyerName,
         jobData.buyerPhone,
         customerId,
-        amount,
         amount,
         jobData.addressText,
         jobData.routeUrl,
@@ -4226,9 +4226,9 @@ async function createCustomerDeliveryJobForSale(connection, sale) {
   await connection.query(
     `INSERT INTO customer_delivery_jobs
       (id, token, tracking_token, sale_id, order_number, buyer_customer_id, buyer_name, buyer_phone,
-       delivery_person_customer_id, delivery_amount, payment_amount, delivery_address_text,
+       delivery_person_customer_id, delivery_amount, payment_amount, payment_status, delivery_address_text,
        delivery_route_url, receipt_snapshot_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_required', ?, ?, ?)`,
     [
       id,
       token,
@@ -4240,7 +4240,7 @@ async function createCustomerDeliveryJobForSale(connection, sale) {
       jobData.buyerPhone,
       customerId,
       amount,
-      amount,
+      0,
       jobData.addressText,
       jobData.routeUrl,
       JSON.stringify(jobData.snapshot),
@@ -4299,7 +4299,7 @@ async function processCustomerDeliveryMercadoPagoPayment(payment) {
   await pool.query(
     `UPDATE customer_delivery_jobs
         SET payment_status = ?, mercado_pago_payment_id = COALESCE(mercado_pago_payment_id, ?), updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?`,
+      WHERE id = ? AND payment_status <> 'not_required'`,
     [mappedStatus, gatewayPaymentId, jobId]
   );
   return { status: 200, body: { message: 'success', flow: 'delivery_job', job_id: jobId, payment_status: mappedStatus } };
@@ -4317,7 +4317,7 @@ function getCustomerDeliveryCompletionBlockers(job, proof, options = {}) {
   if (deliveryAmount <= 0) blockers.push('Valor da entrega pendente');
   if (!addressText || addressText === 'Endereco de entrega nao informado') blockers.push('Endereco da entrega pendente');
   if (!routeUrl) blockers.push('Rota da entrega pendente');
-  if (!options?.adminOverride && job?.payment_status !== 'approved' && job?.payment_status !== 'not_required') blockers.push('Pix da entrega ainda nao aprovado');
+  if (!options?.adminOverride && job?.payment_status !== 'approved' && job?.payment_status !== 'not_required') blockers.push('Pagamento da entrega ainda nao confirmado');
   return blockers;
 }
 
@@ -31702,6 +31702,7 @@ fastify.post('/delivery/jobs/:token/pix-intent', { config: { rateLimit: { max: 2
   const [rows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE token = ? LIMIT 1', [token]);
   const job = rows?.[0];
   if (!job) return reply.code(404).send({ error: 'Entrega nao encontrada' });
+  if (job.payment_status === 'not_required') return mapCustomerDeliveryJob(job);
   if (job.payment_status === 'approved') return mapCustomerDeliveryJob(job);
   if (job.pix_expires_at && new Date(job.pix_expires_at).getTime() > Date.now() && job.qr_code) {
     return mapCustomerDeliveryJob(job);
@@ -31764,6 +31765,7 @@ fastify.post('/delivery/jobs/:token/payment-status', { config: { rateLimit: { ma
   const [rows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE token = ? LIMIT 1', [token]);
   const job = rows?.[0];
   if (!job) return reply.code(404).send({ error: 'Entrega nao encontrada' });
+  if (job.payment_status === 'not_required') return mapCustomerDeliveryJob(job);
   if (!job.mercado_pago_payment_id) return mapCustomerDeliveryJob(job);
   if (['approved', 'failed', 'cancelled'].includes(job.payment_status)) return mapCustomerDeliveryJob(job);
 
@@ -39813,6 +39815,19 @@ async function runMigrations() {
   await addColumnIfMissing('customer_delivery_jobs', 'completion_whatsapp_error', 'TEXT NULL');
   await addColumnIfMissing('customer_delivery_jobs', 'route_whatsapp_sent_at', 'DATETIME NULL');
   await addColumnIfMissing('customer_delivery_jobs', 'route_whatsapp_error', 'TEXT NULL');
+  await pool.query(`
+    UPDATE customer_delivery_jobs jobs
+    INNER JOIN sales sale ON sale.id = jobs.sale_id
+       SET jobs.payment_status = 'not_required',
+           jobs.payment_amount = 0,
+           jobs.qr_code = NULL,
+           jobs.qr_code_base64 = NULL,
+           jobs.ticket_url = NULL,
+           jobs.pix_expires_at = NULL,
+           jobs.updated_at = CURRENT_TIMESTAMP
+     WHERE jobs.payment_status = 'pending'
+       AND COALESCE(sale.payment_status, 'paid') = 'paid'
+  `);
   await addColumnIfMissing('customer_delivery_jobs', 'tracking_token', 'VARCHAR(96) NULL');
   await addColumnIfMissing('customer_delivery_jobs', 'current_latitude', 'DECIMAL(10,7) NULL');
   await addColumnIfMissing('customer_delivery_jobs', 'current_longitude', 'DECIMAL(10,7) NULL');

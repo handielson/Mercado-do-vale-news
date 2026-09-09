@@ -35,6 +35,8 @@ assert.match(vps, /fastify\.get\('\/delivery\/jobs\/:token'/, 'VPS must expose a
 assert.match(vps, /fastify\.post\('\/delivery\/jobs\/:token\/pix-intent'/, 'VPS must generate Pix for delivery operation');
 assert.match(vps, /metadata\.flow === 'delivery_job'|flow: 'delivery_job'/, 'Mercado Pago webhook must support delivery job payments');
 assert.match(vps, /fastify\.post\('\/delivery\/jobs\/:token\/payment-status'/, 'VPS must expose delivery payment status refresh endpoint');
+assert.match(vps, /payment_status = 'not_required'/, 'VPS must not require a second customer payment for delivery');
+assert.match(vps, /deliveryType !== 'hybrid_delivery'/, 'VPS must create delivery jobs only when there is an external delivery worker to receive the repasse');
 assert.match(vps, /fastify\.post\('\/delivery\/jobs\/:token\/proof'/, 'VPS must accept delivery proof photo');
 assert.match(vps, /fastify\.post\('\/delivery\/jobs\/:token\/complete'/, 'VPS must complete successful delivery');
 assert.match(vps, /fastify\.post\('\/delivery\/jobs\/:token\/admin-complete'/, 'VPS must expose admin forced delivery completion endpoint');
@@ -82,8 +84,8 @@ assert.match(deliveryTab, /Motivo da baixa administrativa/, 'Admin delivery tab 
 assert.match(deliveryTab, /Baixar como entregue/, 'Admin delivery tab must expose forced completion action');
 assert.match(deliveryPage, /compressImage/, 'Delivery operation page must compress proof photos before upload');
 assert.match(deliveryPage, /buildDeliveryProofFileName/, 'Delivery operation page must rename proof photo with order number before upload');
-assert.match(deliveryPage, /Consultar pagamento/, 'Delivery operation page must expose manual payment status refresh');
-assert.match(deliveryPage, /setInterval\([^)]*10000|10_000/, 'Delivery operation page must poll pending payment every 10 seconds');
+assert.match(deliveryPage, /O valor da entrega ja esta incluido e quitado na venda/, 'Delivery operation page must not request a second delivery payment');
+assert.doesNotMatch(deliveryPage, /Gerar Pix|Consultar pagamento/, 'Delivery operation page must not collect delivery payment separately');
 assert.match(deliveryPage, /Abrir rota/, 'Delivery operation page must show a route hyperlink');
 assert.match(deliveryPage, /Falar no WhatsApp/, 'Delivery operation page must let delivery person contact buyer by WhatsApp');
 assert.match(deliveryPage, /getDeliveryErrorMessage/, 'Delivery operation page must translate operational errors for the delivery person');

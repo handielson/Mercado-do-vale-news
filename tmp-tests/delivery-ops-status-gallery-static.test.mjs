@@ -51,6 +51,16 @@ for (const file of serverFiles) {
     /Rota da entrega pendente/,
     `${file} must require a generated delivery route before completion`
   );
+  assert.match(
+    source,
+    /payment_status = 'not_required'/,
+    `${file} must create delivery jobs without a second customer charge`
+  );
+  assert.match(
+    source,
+    /INNER JOIN sales sale ON sale\.id = jobs\.sale_id[\s\S]*jobs\.payment_status = 'not_required'/,
+    `${file} must release pending legacy delivery jobs when the sale was already paid`
+  );
 }
 
 assert.match(saleTypes, /interface SaleDeliveryJobSummary/, 'sale types must define delivery job summary');
@@ -82,5 +92,7 @@ assert.match(deliveryPage, /proofs\.map/, 'delivery page must render all uploade
 assert.match(deliveryPage, /const canComplete = Boolean\(job && pixApproved && job\.delivery_status !== 'delivered'\)/, 'delivery completion must not require a proof photo');
 assert.match(deliveryPage, /capture="environment"/, 'proof input must request the rear camera');
 assert.match(deliveryPage, /Foto de comprovacao opcional/, 'delivery page must describe proof photo as optional');
+assert.match(deliveryPage, /O valor da entrega ja esta incluido e quitado na venda/, 'delivery page must state that delivery is already paid within the sale');
+assert.doesNotMatch(deliveryPage, /Gerar Pix|Consultar pagamento/, 'delivery page must not expose a second customer charge for delivery');
 
 console.log('delivery ops status gallery static checks passed');
