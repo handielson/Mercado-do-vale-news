@@ -69,7 +69,13 @@ export const catalogService = {
 
             // Busca por texto → VPS server-side search (sem limite de 1000)
             const [vpsRaw, vpsCats, settings] = await Promise.all([
-                vpsApiService.getProducts({ search: searchTerm, status: 'active', limit: 500, noCache: true }),
+                vpsApiService.getProducts({
+                    search: searchTerm,
+                    category: filters?.categories?.join(',') || undefined,
+                    status: 'active',
+                    limit: 500,
+                    noCache: true,
+                }),
                 vpsApiService.getCategories(),
                 settingsOverride ? Promise.resolve(settingsOverride) : catalogConfigService.getSettings(),
             ]);
