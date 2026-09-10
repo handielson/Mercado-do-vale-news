@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.363-pdv-entregas-bot-vendas
+version: v1.2.364-n8n-horario-dinamico
 date: 2026-09-10
 status: ready
-release_vps: /var/www/mdv-site/releases/20260910-063358-pdv-entregas-bot-vendas
+release_vps: /var/www/mdv-site/releases/20260910-150157-n8n-horario-dinamico
 branch: main
-summary: PDV preserva o IMEI bipado e permite escolher entregador; entregas da loja mantêm histórico; bot responde múltiplas fotos e vendas com ficha técnica real.
-tag: v1.2.363-pdv-entregas-bot-vendas
+summary: Bot consulta dinamicamente o horário cadastrado da loja e não inventa intervalos de almoço.
+tag: v1.2.364-n8n-horario-dinamico
 ```
