@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.365-n8n-2385",
+  "version": "v1.2.366-n8n-bot-hardening",
   "date": "2026-09-10",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260910-121818-v12365-n8n-2385",
+  "release_vps": "/var/www/mdv-site/releases/20260910-125021-v12366-n8n-bot-hardening",
   "branch": "main",
-  "summary": "n8n e Task Runner atualizados com segurança para 2.38.5."
+  "summary": "Bot n8n protegido com workflow de erro, alertas administrativos e acesso MCP desativado."
 }
