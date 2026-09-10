@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.362-bling-reconcile-stock",
-  "date": "2026-09-09",
+  "version": "v1.2.363-pdv-entregas-bot-vendas",
+  "date": "2026-09-10",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260909-175838-v12362-bling-reconcile-stock",
+  "release_vps": "/var/www/mdv-site/releases/20260910-063358-pdv-entregas-bot-vendas",
   "branch": "main",
-  "summary": "Reconciliacao Bling aplica estoque pela rota interna canonica e so confirma itens realmente sincronizados."
+  "summary": "PDV preserva o IMEI bipado e permite escolher entregador; entregas da loja mantêm histórico; bot responde múltiplas fotos e vendas com ficha técnica real."
 }

@@ -36,7 +36,8 @@ assert.match(vps, /fastify\.post\('\/delivery\/jobs\/:token\/pix-intent'/, 'VPS 
 assert.match(vps, /metadata\.flow === 'delivery_job'|flow: 'delivery_job'/, 'Mercado Pago webhook must support delivery job payments');
 assert.match(vps, /fastify\.post\('\/delivery\/jobs\/:token\/payment-status'/, 'VPS must expose delivery payment status refresh endpoint');
 assert.match(vps, /payment_status = 'not_required'/, 'VPS must not require a second customer payment for delivery');
-assert.match(vps, /deliveryType !== 'hybrid_delivery'/, 'VPS must create delivery jobs only when there is an external delivery worker to receive the repasse');
+assert.match(vps, /\['store_delivery', 'hybrid_delivery'\]\.includes\(deliveryType\)/, 'VPS must keep operational history for store and hybrid deliveries');
+assert.match(vps, /isCustomerDeliveryWorkerJob\(job\)/, 'Only customer delivery workers may generate customer payable ledger entries');
 assert.match(vps, /fastify\.post\('\/delivery\/jobs\/:token\/proof'/, 'VPS must accept delivery proof photo');
 assert.match(vps, /fastify\.post\('\/delivery\/jobs\/:token\/complete'/, 'VPS must complete successful delivery');
 assert.match(vps, /fastify\.post\('\/delivery\/jobs\/:token\/admin-complete'/, 'VPS must expose admin forced delivery completion endpoint');

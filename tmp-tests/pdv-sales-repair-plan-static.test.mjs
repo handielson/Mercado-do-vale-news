@@ -16,7 +16,7 @@ assert.match(pdvPage, /finally \{[\s\S]*isFinalizingRef\.current = false[\s\S]*s
 assert.match(productSearch, /fromHydratedPdvSearchPayload/, 'PDV product search must normalize hydrated product/unit payloads before rendering');
 assert.match(productSearch, /buildPdvSearchCards/, 'PDV product search must keep a fallback card builder for local product search results');
 assert.match(productSearch, /unitService\.listByProduct/, 'PDV fallback product search must read units by product before rendering serialized identifiers');
-assert.match(productSearch, /unit\.status !== UnitStatus\.AVAILABLE/, 'PDV IMEI search must reject unavailable serialized units');
+assert.match(productSearch, /units\.filter\(unit => unit\.status === UnitStatus\.AVAILABLE\)/, 'PDV IMEI search must reject unavailable serialized units');
 assert.doesNotMatch(productSearch, /\(product as any\)\.specs\?\.imei1[\s\S]*IMEI 1:/, 'PDV result row must not render legacy specs IMEI directly');
 
 assert.match(saleService, /export const updateSaleCostsAndProfit/, 'saleService must expose a sale-wide cost/profit recalculation action');

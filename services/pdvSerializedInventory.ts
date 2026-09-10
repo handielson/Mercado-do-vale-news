@@ -51,6 +51,10 @@ function cleanText(value: unknown): string {
     return String(value || '').trim();
 }
 
+function normalizeSerializedIdentifier(value: unknown): string {
+    return cleanText(value).replace(/\s+/g, '').toUpperCase();
+}
+
 function normalizeKeyText(value: unknown): string {
     return cleanText(value)
         .normalize('NFD')
@@ -234,4 +238,18 @@ export function fromHydratedPdvSearchPayload(payload: HydratedPdvProduct[]): Pdv
         if (groupHasLegacySerializedIdentifier) return [];
         return [buildStockProductCard(canonical.product)];
     });
+}
+
+export function findPdvUnitOptionByIdentifier(
+    unitOptions: PdvSerializedUnitOption[],
+    identifier: unknown,
+): PdvSerializedUnitOption | undefined {
+    const normalizedIdentifier = normalizeSerializedIdentifier(identifier);
+    if (!normalizedIdentifier) return undefined;
+
+    return unitOptions.find(option => [
+        option.unitData.imei1,
+        option.unitData.imei2,
+        option.unitData.serial,
+    ].some(value => normalizeSerializedIdentifier(value) === normalizedIdentifier));
 }

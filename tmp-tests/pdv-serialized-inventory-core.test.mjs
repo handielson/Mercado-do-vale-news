@@ -100,6 +100,25 @@ assert.equal(exactOption.unitData.imei1, '860000000000001');
 assert.equal(exactOption.unitData.imei2, '860000000000002');
 assert.equal(exactOption.unitData.serial, 'AT2209901885');
 
+const scannedSecondOption = mod.findPdvUnitOptionByIdentifier([
+  mod.buildPdvUnitOption({
+    id: 'unit-first', product_id: 'prod-phone', status: 'available',
+    imei_1: '860000000000010', imei_2: '', serial_number: 'SERIAL-FIRST',
+    condition: 'new', created: '', updated: '',
+  }),
+  mod.buildPdvUnitOption({
+    id: 'unit-scanned', product_id: 'prod-phone', status: 'available',
+    imei_1: '860000000000020', imei_2: '', serial_number: 'SERIAL-SCANNED',
+    condition: 'new', created: '', updated: '',
+  }),
+], ' serial-scanned ');
+
+assert.equal(
+  scannedSecondOption?.unitData.unitId,
+  'unit-scanned',
+  'a scanned serial must resolve its exact physical unit instead of the first option',
+);
+
 const hydratedCards = mod.fromHydratedPdvSearchPayload([
   {
     product: {

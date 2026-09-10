@@ -11,12 +11,13 @@ for (const file of ['vps_server.cjs', 'vps_server.js']) {
   assert.match(server, /fastify\.get\('\/delivery\/app\/jobs', \{ preHandler: requireSyncKeyOrCustomer \}/);
   assert.match(server, /delivery_person_customer_id = \?/);
   assert.match(server, /is_delivery_worker/);
-  assert.match(server, /access\.isAdmin \? '1 = 1' : 'delivery_person_customer_id = \?'/);
+  assert.match(server, /access\.isAdmin \? '1 = 1' : 'jobs\.delivery_person_customer_id = \?'/);
   assert.match(server, /name: 'Loja Mercado do Vale', type: 'store'/);
 }
 
 assert.match(gradle, /applicationId = "br\.com\.mercadodovale\.entregas"/);
-assert.match(gradle, /versionCode = 6/);
+assert.match(gradle, /versionCode = 7/);
+assert.match(gradle, /versionName = "1\.1\.3"/);
 assert.match(manifest, /Mercado do Vale Entregas/);
 assert.doesNotMatch(activity + gradle, /x-sync-key|SYNC_SECRET|VITE_VPS_SYNC_KEY/);
 assert.match(activity, /\/auth\/login/);

@@ -4135,7 +4135,10 @@ async function sendBirthdayGreetingsForToday(options = {}) {
 }
 async function notifyCustomerDeliveryOutForDelivery(job) {
   if (!job?.id) return { status: 'failed', error: 'missing_job' };
-  const [deliveryPeople] = await pool.query('SELECT name FROM customers WHERE id = ? LIMIT 1', [job.delivery_person_customer_id]);
+  const assigneeId = String(job.delivery_person_customer_id || '').trim();
+  const [deliveryPeople] = assigneeId.startsWith('team:')
+    ? await pool.query('SELECT name FROM team_members WHERE id = ? LIMIT 1', [assigneeId.slice('team:'.length)])
+    : await pool.query('SELECT name FROM customers WHERE id = ? LIMIT 1', [assigneeId]);
   const deliveryPersonName = deliveryPeople?.[0]?.name || 'Entregador Mercado do Vale';
   const result = await sendWhatsAppAutomationMessageVps({
     templateKey: 'delivery_out_for_delivery',
@@ -4181,11 +4184,31 @@ async function notifyCustomerDeliveryOutForDelivery(job) {
   );
   return result;
 }
-async function createCustomerDeliveryJobForSale(connection, sale) {
+const STORE_UNASSIGNED_DELIVERY_PERSON_ID = 'store:unassigned';
+
+function resolveDeliveryJobAssigneeId(sale, deliveryType) {
   const customerId = String(sale.delivery_person_customer_id || '').trim();
+  if (customerId) return customerId;
+  const teamMemberId = String(sale.delivery_person_id || '').trim();
+  if (teamMemberId) return `team:${teamMemberId}`;
+  return deliveryType === 'store_delivery' ? STORE_UNASSIGNED_DELIVERY_PERSON_ID : '';
+}
+
+function isUnassignedStoreDeliveryJob(job) {
+  return String(job?.delivery_person_customer_id || '').trim() === STORE_UNASSIGNED_DELIVERY_PERSON_ID;
+}
+
+function isCustomerDeliveryWorkerJob(job) {
+  const assigneeId = String(job?.delivery_person_customer_id || '').trim();
+  return Boolean(assigneeId) && !assigneeId.startsWith('team:') && assigneeId !== STORE_UNASSIGNED_DELIVERY_PERSON_ID;
+}
+
+async function createCustomerDeliveryJobForSale(connection, sale) {
   const amount = normalizeDeliveryLedgerAmount(sale.delivery_total || sale.delivery_cost_store || 0);
   const deliveryType = String(sale.delivery_type || '').trim();
-  if (!customerId || amount <= 0 || deliveryType !== 'hybrid_delivery') return null;
+  if (amount <= 0 || !['store_delivery', 'hybrid_delivery'].includes(deliveryType)) return null;
+  const customerId = resolveDeliveryJobAssigneeId(sale, deliveryType);
+  if (!customerId || (deliveryType === 'hybrid_delivery' && customerId === STORE_UNASSIGNED_DELIVERY_PERSON_ID)) return null;
 
   const saleId = String(sale.id || '').trim();
   if (!saleId) return null;
@@ -4312,6 +4335,7 @@ async function processCustomerDeliveryMercadoPagoPayment(payment) {
 }
 
 function getCustomerDeliveryCompletionBlockers(job, proof, options = {}) {
+  if (isUnassignedStoreDeliveryJob(job)) return ['Entrega da loja exige identificar quem realizou a entrega'];
   if (options?.adminOverride) return [];
   const blockers = [];
   const addressText = String(job?.delivery_address_text || '').trim();
@@ -4352,8 +4376,9 @@ async function completeCustomerDeliveryJob(connection, job, note, options = {}) 
       WHERE id = ?`,
     [deliveredAt, adminReason || null, isAdminCompletion ? 1 : 0, isAdminCompletion ? deliveredAt : null, job.id]
   );
-  await connection.query(
-    `INSERT INTO customer_delivery_ledger
+  if (isCustomerDeliveryWorkerJob(job)) {
+    await connection.query(
+      `INSERT INTO customer_delivery_ledger
       (id, customer_id, job_id, sale_id, order_number, buyer_name, delivery_address_text,
        proof_image_url, delivery_person_note, amount, description, status, delivered_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)
@@ -4361,21 +4386,22 @@ async function completeCustomerDeliveryJob(connection, job, note, options = {}) 
        proof_image_url = VALUES(proof_image_url),
        delivery_person_note = VALUES(delivery_person_note),
        delivered_at = VALUES(delivered_at)`,
-    [
-      crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID(),
-      job.delivery_person_customer_id,
-      job.id,
-      job.sale_id,
-      job.order_number,
-      job.buyer_name,
-      job.delivery_address_text,
-      proof?.image_url || null,
-      [note, adminReason ? `Baixa admin: ${adminReason}` : ''].filter(Boolean).join('\n') || null,
-      normalizeDeliveryLedgerAmount(job.delivery_amount),
-      isAdminCompletion ? `Entrega baixada pelo admin - Pedido ${job.order_number || job.sale_id}` : `Entrega realizada - Pedido ${job.order_number || job.sale_id}`,
-      deliveredAt,
-    ]
-  );
+      [
+        crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID(),
+        job.delivery_person_customer_id,
+        job.id,
+        job.sale_id,
+        job.order_number,
+        job.buyer_name,
+        job.delivery_address_text,
+        proof?.image_url || null,
+        [note, adminReason ? `Baixa admin: ${adminReason}` : ''].filter(Boolean).join('\n') || null,
+        normalizeDeliveryLedgerAmount(job.delivery_amount),
+        isAdminCompletion ? `Entrega baixada pelo admin - Pedido ${job.order_number || job.sale_id}` : `Entrega realizada - Pedido ${job.order_number || job.sale_id}`,
+        deliveredAt,
+      ]
+    );
+  }
 
   const [rows] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
   return mapCustomerDeliveryJob(rows?.[0] || null);
@@ -31611,23 +31637,110 @@ fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, asyn
   const statusClause = requestedStatus === 'all'
     ? ''
     : requestedStatus === 'delivered'
-      ? "AND delivery_status = 'delivered'"
-      : "AND delivery_status NOT IN ('delivered', 'cancelled')";
+      ? "AND jobs.delivery_status = 'delivered'"
+      : "AND jobs.delivery_status NOT IN ('delivered', 'cancelled')";
   const [rows] = await pool.query(
-    `SELECT * FROM customer_delivery_jobs
-      WHERE ${access.isAdmin ? '1 = 1' : 'delivery_person_customer_id = ?'}
+    `SELECT jobs.*,
+            CASE
+              WHEN jobs.delivery_person_customer_id = ? THEN NULL
+              WHEN jobs.delivery_person_customer_id LIKE 'team:%' THEN team_person.name
+              ELSE customer_person.name
+            END AS delivery_person_name
+       FROM customer_delivery_jobs jobs
+       LEFT JOIN customers customer_person
+         ON customer_person.id = jobs.delivery_person_customer_id
+       LEFT JOIN team_members team_person
+         ON team_person.id = SUBSTRING(jobs.delivery_person_customer_id, 6)
+        AND jobs.delivery_person_customer_id LIKE 'team:%'
+      WHERE ${access.isAdmin ? '1 = 1' : 'jobs.delivery_person_customer_id = ?'}
       ${statusClause}
-      ORDER BY CASE delivery_status WHEN 'in_route' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
-               created_at DESC
+      ORDER BY CASE jobs.delivery_status WHEN 'in_route' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
+               jobs.created_at DESC
       LIMIT 200`,
-    access.isAdmin ? [] : [customerId]
+    access.isAdmin ? [STORE_UNASSIGNED_DELIVERY_PERSON_ID] : [STORE_UNASSIGNED_DELIVERY_PERSON_ID, customerId]
   );
+  let deliveryPeople = [];
+  if (access.isAdmin) {
+    const [customerPeople] = await pool.query(
+      `SELECT id, name FROM customers
+        WHERE is_delivery_worker = 1 AND is_active = 1
+        ORDER BY name ASC`
+    );
+    const [teamPeople] = await pool.query(
+      `SELECT id, name FROM team_members
+        WHERE role = 'delivery' AND is_active = 1
+        ORDER BY name ASC`
+    );
+    deliveryPeople = [
+      ...(customerPeople || []).map((person) => ({ id: String(person.id), name: person.name, type: 'delivery_worker' })),
+      ...(teamPeople || []).map((person) => ({ id: `team:${person.id}`, name: person.name, type: 'team_member' })),
+    ];
+  }
+  const jobs = (rows || []).map(mapCustomerDeliveryJob);
+  const deliveryCostByPerson = new Map();
+  for (const job of jobs) {
+    const key = String(job.delivery_person_customer_id || STORE_UNASSIGNED_DELIVERY_PERSON_ID);
+    const current = deliveryCostByPerson.get(key) || {
+      delivery_person_id: key,
+      delivery_person_name: job.delivery_person_name || (key === STORE_UNASSIGNED_DELIVERY_PERSON_ID ? 'A definir pela loja' : 'Entregador'),
+      jobs: 0,
+      cost_cents: 0,
+    };
+    current.jobs += 1;
+    current.cost_cents += normalizeDeliveryLedgerAmount(job.delivery_amount);
+    deliveryCostByPerson.set(key, current);
+  }
   return {
     profile: access.isAdmin
       ? { id: customerId, name: 'Loja Mercado do Vale', type: 'store' }
       : { id: deliveryWorker.id, name: deliveryWorker.name || 'Entregador', type: 'delivery_worker' },
-    jobs: (rows || []).map(mapCustomerDeliveryJob),
+    jobs,
+    delivery_people: deliveryPeople,
+    delivery_summary: {
+      jobs: jobs.length,
+      cost_cents: jobs.reduce((sum, job) => sum + normalizeDeliveryLedgerAmount(job.delivery_amount), 0),
+      by_person: [...deliveryCostByPerson.values()].sort((left, right) => right.cost_cents - left.cost_cents),
+    },
   };
+});
+
+fastify.post('/delivery/app/jobs/:jobId/assign', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  const access = req.customerAccess || {};
+  if (!access.isAdmin) return reply.code(403).send({ error: 'Apenas a loja pode atribuir entregas' });
+  const jobId = String(req.params?.jobId || '').trim();
+  const assigneeId = String(req.body?.delivery_person_id || '').trim();
+  if (!jobId || !assigneeId || assigneeId === STORE_UNASSIGNED_DELIVERY_PERSON_ID) {
+    return reply.code(400).send({ error: 'Entregador cadastrado obrigatorio' });
+  }
+
+  let deliveryPersonName = '';
+  if (assigneeId.startsWith('team:')) {
+    const teamMemberId = assigneeId.slice('team:'.length);
+    const [[person]] = await pool.query(
+      `SELECT id, name FROM team_members
+        WHERE id = ? AND role = 'delivery' AND is_active = 1 LIMIT 1`,
+      [teamMemberId]
+    );
+    deliveryPersonName = String(person?.name || '').trim();
+  } else {
+    const [[person]] = await pool.query(
+      `SELECT id, name FROM customers
+        WHERE id = ? AND is_delivery_worker = 1 AND is_active = 1 LIMIT 1`,
+      [assigneeId]
+    );
+    deliveryPersonName = String(person?.name || '').trim();
+  }
+  if (!deliveryPersonName) return reply.code(404).send({ error: 'Entregador ativo nao encontrado' });
+
+  const [result] = await pool.query(
+    `UPDATE customer_delivery_jobs
+        SET delivery_person_customer_id = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND delivery_status NOT IN ('delivered', 'cancelled')`,
+    [assigneeId, jobId]
+  );
+  if (!result.affectedRows) return reply.code(409).send({ error: 'Entrega inexistente ou ja encerrada' });
+  const [[job]] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [jobId]);
+  return { ...mapCustomerDeliveryJob(job), delivery_person_name: deliveryPersonName };
 });
 
 fastify.patch('/delivery/settings', { preHandler: requireSyncKey }, async (req) => {
@@ -31828,6 +31941,9 @@ fastify.post('/delivery/jobs/:token/start-route', { config: { rateLimit: { max: 
     const [rows] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE token = ? FOR UPDATE', [token]);
     const job = rows?.[0];
     if (!job) throw Object.assign(new Error('Entrega nao encontrada'), { statusCode: 404 });
+    if (isUnassignedStoreDeliveryJob(job)) {
+      throw Object.assign(new Error('Entrega da loja exige identificar quem realizou a entrega'), { statusCode: 409 });
+    }
     if (job.delivery_status === 'delivered' || job.delivery_status === 'cancelled') {
       throw Object.assign(new Error('Entrega nao pode entrar em rota neste status'), { statusCode: 409 });
     }

@@ -7,11 +7,13 @@ import { UnitStatus } from '../../utils/field-standards';
 import {
     buildPdvSearchCards,
     buildPdvUnitOption,
+    findPdvUnitOptionByIdentifier,
     fromHydratedPdvSearchPayload,
     type PdvSearchCard,
     type PdvSerializedUnitOption,
 } from '../../services/pdvSerializedInventory';
 import { vpsApiService } from '../../services/vpsApiService';
+import { formatReferenceNumber } from '../../utils/referenceNumber';
 
 interface ProductSearchSectionProps {
     customer?: unknown;
@@ -20,6 +22,18 @@ interface ProductSearchSectionProps {
 
 type SearchMode = 'product' | 'imei';
 type ProductSearchOptions = { autoAddSingle?: boolean };
+type PendingSerializedConfirmation = {
+    product: Product;
+    unitOptions: PdvSerializedUnitOption[];
+    selectedOptionId: string;
+    source: SearchMode;
+};
+type SoldUnitNotice = {
+    unitId: string;
+    productName?: string;
+    identifierLabel: string;
+    saleId?: string;
+};
 
 function formatPrice(cents: number): string {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(cents || 0) / 100);
@@ -56,6 +70,8 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
     const [imeiQuery, setImeiQuery] = useState('');
     const [isImeiSearching, setIsImeiSearching] = useState(false);
     const imeiInputRef = useRef<HTMLInputElement>(null);
+    const [pendingSerializedConfirmation, setPendingSerializedConfirmation] = useState<PendingSerializedConfirmation | null>(null);
+    const [soldUnitNotices, setSoldUnitNotices] = useState<SoldUnitNotice[]>([]);
 
     useEffect(() => {
         if (mode === 'imei') {
@@ -79,23 +95,48 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
         return card.unitOptions.find(option => option.id === selectedId) || card.unitOptions[0];
     };
 
-    const addCardToCart = async (card: PdvSearchCard) => {
+    const openSerializedConfirmation = (
+        product: Product,
+        unitOptions: PdvSerializedUnitOption[],
+        selectedOptionId: string,
+        source: SearchMode,
+    ) => {
+        setPendingSerializedConfirmation({ product, unitOptions, selectedOptionId, source });
+    };
+
+    const confirmSerializedUnit = () => {
+        if (!pendingSerializedConfirmation) return;
+        const selectedUnit = pendingSerializedConfirmation.unitOptions.find(
+            option => option.id === pendingSerializedConfirmation.selectedOptionId,
+        );
+        if (!selectedUnit) {
+            toast.error('Selecione o IMEI que sera vendido');
+            return;
+        }
+
+        onAddToCart(pendingSerializedConfirmation.product, 1, selectedUnit.unitData);
+        toast.success(`${pendingSerializedConfirmation.product.name} adicionado com o IMEI confirmado`);
+        const source = pendingSerializedConfirmation.source;
+        setPendingSerializedConfirmation(null);
+        setImeiQuery('');
+        setSearchCards([]);
+        setSearchTerm('');
+        setTimeout(() => {
+            const input = source === 'imei' ? imeiInputRef.current : searchInputRef.current;
+            input?.focus();
+            input?.select();
+        }, 50);
+    };
+
+    const addCardToCart = async (card: PdvSearchCard, preferredUnit?: PdvSerializedUnitOption) => {
         if (card.kind === 'serialized-product') {
-            const selectedUnit = getSelectedUnit(card);
+            const selectedUnit = preferredUnit || getSelectedUnit(card);
             if (!selectedUnit) {
                 toast.error('Selecione uma unidade disponivel');
                 return;
             }
 
-            onAddToCart(card.product, 1, selectedUnit.unitData);
-            toast.success(`${card.product.name} adicionado ao carrinho`);
-            setImeiQuery('');
-            setSearchCards([]);
-            setSearchTerm('');
-            setTimeout(() => {
-                searchInputRef.current?.focus();
-                searchInputRef.current?.select();
-            }, 50);
+            openSerializedConfirmation(card.product, card.unitOptions, selectedUnit.id, 'product');
             return;
         }
 
@@ -139,13 +180,18 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
             const firstSelections: Record<string, string> = {};
             for (const card of cards) {
                 if (card.kind === 'serialized-product' && card.unitOptions[0]) {
-                    firstSelections[card.id] = card.unitOptions[0].id;
+                    firstSelections[card.id] = (
+                        findPdvUnitOptionByIdentifier(card.unitOptions, term) || card.unitOptions[0]
+                    ).id;
                 }
             }
             setSelectedUnitByCardId(firstSelections);
 
             if (cards.length === 1 && options.autoAddSingle === true) {
-                await addCardToCart(cards[0]);
+                const exactUnit = cards[0].kind === 'serialized-product'
+                    ? findPdvUnitOptionByIdentifier(cards[0].unitOptions, term)
+                    : undefined;
+                await addCardToCart(cards[0], exactUnit);
             }
         } catch (error) {
             console.error('Erro ao buscar produtos:', error);
@@ -176,6 +222,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
         }
 
         setIsImeiSearching(true);
+        setSoldUnitNotices([]);
         try {
             const units = await unitService.searchByIdentifier(query);
 
@@ -184,12 +231,30 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                 return;
             }
 
-            const unit = units[0];
+            const soldUnits = units.filter(unit => unit.status === UnitStatus.SOLD);
+            if (soldUnits.length > 0) {
+                setSoldUnitNotices(soldUnits.map(unit => ({
+                    unitId: unit.id,
+                    productName: unit.product_name,
+                    identifierLabel: buildPdvUnitOption(unit).label,
+                    saleId: unit.sale_id || undefined,
+                })));
+                return;
+            }
 
-            if (unit.status !== UnitStatus.AVAILABLE) {
+            const availableUnits = units.filter(unit => unit.status === UnitStatus.AVAILABLE);
+            if (availableUnits.length === 0) {
                 toast.error('Esta unidade nao esta disponivel para venda');
                 return;
             }
+
+            const productIds = new Set(availableUnits.map(unit => unit.product_id));
+            if (availableUnits.length > 1 || productIds.size > 1) {
+                toast.error('IMEI/serial duplicado no estoque. Corrija o cadastro antes de vender.');
+                return;
+            }
+
+            const unit = availableUnits[0];
 
             const { getProductById } = await import('../../services/productService');
             const product = await getProductById(unit.product_id);
@@ -199,11 +264,12 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                 return;
             }
 
+            const productUnits = await unitService.listByProduct(unit.product_id);
+            const unitOptions = productUnits
+                .filter(candidate => candidate.status === UnitStatus.AVAILABLE)
+                .map(buildPdvUnitOption);
             const selectedUnit = buildPdvUnitOption(unit);
-            onAddToCart(product, 1, selectedUnit.unitData);
-            toast.success(`${product.name} adicionado ao carrinho`);
-            setImeiQuery('');
-            setTimeout(() => imeiInputRef.current?.focus(), 100);
+            openSerializedConfirmation(product, unitOptions, selectedUnit.id, 'imei');
         } catch (error: any) {
             console.error('Erro na busca por IMEI:', error);
             toast.error(error.message || 'Erro ao buscar unidade');
@@ -402,7 +468,10 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                             ref={imeiInputRef}
                             type="text"
                             value={imeiQuery}
-                            onChange={(e) => setImeiQuery(e.target.value.toUpperCase())}
+                            onChange={(e) => {
+                                setImeiQuery(e.target.value.toUpperCase());
+                                setSoldUnitNotices([]);
+                            }}
                             onKeyPress={handleImeiKeyPress}
                             placeholder="Bipe ou digite o IMEI / Serial..."
                             className="w-full px-4 py-3 pl-10 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base font-mono uppercase"
@@ -429,13 +498,105 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                         Buscar Unidade
                     </button>
 
+                    {soldUnitNotices.length > 0 && (
+                        <div className="mt-4 rounded-xl border-2 border-red-300 bg-red-50 p-4" role="alert">
+                            <div className="flex items-center gap-2 text-lg font-bold text-red-800">
+                                <Smartphone size={20} />
+                                Aparelho já vendido
+                            </div>
+                            <div className="mt-3 space-y-3">
+                                {soldUnitNotices.map(notice => (
+                                    <div key={notice.unitId} className="rounded-lg border border-red-200 bg-white p-3">
+                                        {notice.productName && (
+                                            <p className="font-semibold text-slate-900">{notice.productName}</p>
+                                        )}
+                                        <p className="mt-1 break-words font-mono text-sm font-semibold text-slate-700">
+                                            {notice.identifierLabel}
+                                        </p>
+                                        {notice.saleId ? (
+                                            <a
+                                                href={`/admin/sales?sale=${encodeURIComponent(notice.saleId)}`}
+                                                className="mt-3 inline-flex items-center rounded-lg bg-red-700 px-4 py-2 font-semibold text-white hover:bg-red-800"
+                                            >
+                                                Acessar venda #{formatReferenceNumber(notice.saleId)}
+                                            </a>
+                                        ) : (
+                                            <p className="mt-2 text-sm font-semibold text-red-700">
+                                                Venda não vinculada no cadastro da unidade
+                                            </p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
                         <p className="text-xs text-blue-700 font-medium mb-1">Como usar:</p>
                         <ul className="text-xs text-blue-600 space-y-0.5">
                             <li>Bipe o codigo de barras do IMEI 1, IMEI 2 ou Serial</li>
-                            <li>O aparelho sera adicionado automaticamente ao carrinho</li>
+                            <li>Confirme o IMEI antes de adicionar o aparelho ao carrinho</li>
+                            <li>Se necessario, escolha outro IMEI disponivel na confirmacao</li>
                             <li>Quantidade travada em 1 unidade por aparelho</li>
                         </ul>
+                    </div>
+                </div>
+            )}
+
+            {pendingSerializedConfirmation && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-imei-title">
+                    <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+                        <div className="border-b border-slate-200 px-6 py-5">
+                            <h4 id="confirm-imei-title" className="text-xl font-bold text-slate-900">Confirme o IMEI</h4>
+                            <p className="mt-1 text-sm text-slate-600">{pendingSerializedConfirmation.product.name}</p>
+                        </div>
+
+                        <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
+                            <p className="mb-3 text-sm font-semibold text-slate-800">
+                                Confira com a etiqueta do aparelho. Para trocar, selecione outro IMEI disponível:
+                            </p>
+                            <div className="space-y-2">
+                                {pendingSerializedConfirmation.unitOptions.map(option => (
+                                    <label
+                                        key={option.id}
+                                        className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
+                                            pendingSerializedConfirmation.selectedOptionId === option.id
+                                                ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100'
+                                                : 'border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="confirmed-serialized-unit"
+                                            checked={pendingSerializedConfirmation.selectedOptionId === option.id}
+                                            onChange={() => setPendingSerializedConfirmation(current => current ? {
+                                                ...current,
+                                                selectedOptionId: option.id,
+                                            } : current)}
+                                            className="mt-1 h-5 w-5 shrink-0"
+                                        />
+                                        <span className="min-w-0 break-words font-mono text-lg font-bold text-slate-900">{option.label}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 px-6 py-4 sm:flex-row sm:justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setPendingSerializedConfirmation(null)}
+                                className="rounded-lg border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmSerializedUnit}
+                                className="rounded-lg bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700"
+                            >
+                                Confirmar este IMEI
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

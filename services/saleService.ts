@@ -686,7 +686,11 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             await vpsClient.post('/table-data/sale_items/bulk', saleItems);
             saleItemsPersisted = true;
             saleWhatsAppNotification = vpsClient.post('/whatsapp/automation/sale-completed', { sale_id: sale.id });
-            if (deliveryPersonCustomerId && saleInput.delivery_total && saleInput.delivery_total > 0) {
+            if (
+                (deliveryPersonCustomerId || saleInput.delivery_person_id || saleInput.delivery_type === 'store_delivery')
+                && saleInput.delivery_total
+                && saleInput.delivery_total > 0
+            ) {
                 await vpsClient.post('/delivery/jobs/from-sale', { sale_id: sale.id });
             }
         } catch (itemsError) {

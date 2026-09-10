@@ -18,10 +18,12 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 import androidx.core.graphics.Insets
 import androidx.core.content.ContextCompat
@@ -153,11 +155,16 @@ class MainActivity : Activity() {
                         content.removeAllViews()
                         val profile = response.optJSONObject("profile")
                         content.addView(title("Olá, ${profile?.optString("name", "Entregador") ?: "Entregador"}", 20f))
+                        val summary = response.optJSONObject("delivery_summary")
+                        if (summary != null) {
+                            content.addView(body("${summary.optInt("jobs")} entregas · Custo ${formatCents(summary.optLong("cost_cents"))}"), spacedParams())
+                        }
                         val jobs = response.optJSONArray("jobs") ?: JSONArray()
+                        val deliveryPeople = response.optJSONArray("delivery_people") ?: JSONArray()
                         if (jobs.length() == 0) {
                             content.addView(body("Nenhuma entrega nesta categoria."), spacedParams())
                         } else {
-                            for (index in 0 until jobs.length()) addJobCard(content, jobs.getJSONObject(index))
+                            for (index in 0 until jobs.length()) addJobCard(content, jobs.getJSONObject(index), deliveryPeople)
                         }
                         content.addView(primaryButton("Atualizar").apply { setOnClickListener { showDashboard(status) } }, spacedParams())
                     }
@@ -176,8 +183,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun addJobCard(parent: LinearLayout, job: JSONObject) {
+    private fun addJobCard(parent: LinearLayout, job: JSONObject, deliveryPeople: JSONArray) {
         val token = job.optString("token")
+        val jobId = job.optString("id")
+        val assigneeId = job.optString("delivery_person_customer_id")
+        val assigneeName = job.optString("delivery_person_name")
         val rawOrder = job.optString("sale_id").take(8).uppercase().ifBlank {
             job.optString("order_number").take(8).uppercase()
         }
@@ -192,8 +202,49 @@ class MainActivity : Activity() {
         card.addView(body(job.optString("delivery_address_text", "Endereço não informado")))
         card.addView(body("Situação: ${statusLabel(job.optString("delivery_status"))}"))
         card.addView(body("Valor da entrega: ${formatCents(job.optLong("delivery_amount"))}"))
+        card.addView(body("Entregador: ${assigneeName.ifBlank { "A definir pela loja" }}"))
+        if (assigneeId == "store:unassigned" && deliveryPeople.length() > 0 && job.optString("delivery_status") !in listOf("delivered", "cancelled")) {
+            val people = (0 until deliveryPeople.length()).map { deliveryPeople.getJSONObject(it) }
+            val selector = Spinner(this).apply {
+                adapter = ArrayAdapter(
+                    this@MainActivity,
+                    android.R.layout.simple_spinner_dropdown_item,
+                    listOf("Selecione quem fará a entrega") + people.map { it.optString("name", "Entregador") }
+                )
+            }
+            card.addView(selector, spacedParams())
+            val assignmentFeedback = body("").apply { setTextColor(Color.rgb(185, 28, 28)) }
+            card.addView(assignmentFeedback, spacedParams())
+            card.addView(primaryButton("Definir quem entregou").apply {
+                setOnClickListener {
+                    if (selector.selectedItemPosition <= 0) {
+                        assignmentFeedback.text = "Selecione quem fará a entrega."
+                        return@setOnClickListener
+                    }
+                    val selected = people[selector.selectedItemPosition - 1]
+                    isEnabled = false
+                    assignmentFeedback.text = "Salvando responsável..."
+                    thread {
+                        runCatching {
+                            apiRequest(
+                                "/delivery/app/jobs/$jobId/assign",
+                                "POST",
+                                JSONObject().put("delivery_person_id", selected.getString("id")),
+                                bearer = sessionToken
+                            )
+                        }.onSuccess { runOnUiThread { showDashboard() } }
+                            .onFailure { error ->
+                                runOnUiThread {
+                                    isEnabled = true
+                                    assignmentFeedback.text = friendlyError(error)
+                                }
+                            }
+                    }
+                }
+            }, spacedParams())
+        }
         card.addView(primaryButton(if (job.optString("delivery_status") == "delivered") "Ver entrega" else "Abrir entrega").apply {
-            isEnabled = token.isNotBlank()
+            isEnabled = token.isNotBlank() && assigneeId != "store:unassigned"
             setOnClickListener { openOperation(token) }
         }, spacedParams())
         parent.addView(card, spacedParams())

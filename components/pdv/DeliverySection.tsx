@@ -75,8 +75,8 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
             // Retirada: sem custo, sem entregador
             onDeliveryChange(selectedType, undefined, 0, 0);
         } else if (selectedType === 'store_delivery') {
-            // Entrega feita pela própria loja: custo interno, sem repasse.
-            onDeliveryChange(selectedType, undefined, costStore, 0);
+            // Loja permanece como padrão (sem pessoa), mas permite atribuir um entregador cadastrado.
+            onDeliveryChange(selectedType, selectedPerson, costStore, 0);
         } else if (selectedType === 'hybrid_delivery') {
             // Híbrida: valores customizados
             onDeliveryChange(selectedType, selectedPerson, costStore, costCustomer);
@@ -211,7 +211,7 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
         }).format(cents / 100);
     };
 
-    const needsDeliveryPerson = selectedType === 'hybrid_delivery';
+    const needsDeliveryPerson = selectedType === 'store_delivery' || selectedType === 'hybrid_delivery';
     const deliveryCardClass = (type: DeliveryType, selectedClass: string) => [
         'relative flex min-h-[112px] cursor-pointer flex-col gap-2 rounded-lg border p-3 transition-colors',
         selectedType === type ? selectedClass : 'border-slate-200 bg-white hover:bg-slate-50'
@@ -292,16 +292,16 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
                 <div className="mb-4 space-y-3">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Entregador *
+                            Entregador {selectedType === 'hybrid_delivery' ? '*' : ''}
                         </label>
                         <div className="flex gap-2">
                             <select
                                 value={selectedPerson || ''}
                                 onChange={(e) => setSelectedPerson(e.target.value || undefined)}
                                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                required
+                                required={selectedType === 'hybrid_delivery'}
                             >
-                                <option value="">Selecione um entregador</option>
+                                <option value="">Loja</option>
                                 {deliveryPersons.map(person => (
                                     <option key={person.id} value={person.id}>
                                         {person.name}
