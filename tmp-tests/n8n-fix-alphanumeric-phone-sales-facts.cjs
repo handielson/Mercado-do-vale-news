@@ -6,6 +6,7 @@ const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
 const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const SMARTPHONES_CATEGORY_ID = '8b7c4852-c195-4527-8fd7-c3cc2debda42';
 const MARKER = 'sales-alphanumeric-model-grounded-facts-v1';
+const NUMBERED_SELECTION_MARKER = 'sales-ambiguous-model-numbered-selection-v1';
 const APPLY = process.argv.includes('--apply');
 const shQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
@@ -144,21 +145,30 @@ function patchContext(node) {
 function patchAgent(node) {
   const options = node.parameters.options || (node.parameters.options = {});
   let prompt = String(options.systemMessage || '');
-  if (prompt.includes(`${MARKER}:agent`)) return;
-  prompt = replaceOnce(
-    prompt,
-    'Os fatos de produto, estoque, preco, memoria, cor e link sao calculados pelo sistema e nao podem ser alterados.',
-    `Os fatos de produto, estoque, preco, memoria, cor, link e caracteristicas tecnicas sao calculados pelo sistema e nao podem ser alterados. // ${MARKER}:agent`,
-    'agent source-of-truth rule',
-  );
-  prompt = replaceOnce(
-    prompt,
-    '- Use somente os fatos recebidos. Nao invente nem deduza estoque, preco, produto, cor, memoria, link, prazo ou disponibilidade.',
-    `- Use somente os fatos recebidos. Nao invente nem deduza estoque, preco, produto, cor, memoria, link, prazo, disponibilidade ou caracteristica tecnica.
+  if (!prompt.includes(`${MARKER}:agent`)) {
+    prompt = replaceOnce(
+      prompt,
+      'Os fatos de produto, estoque, preco, memoria, cor e link sao calculados pelo sistema e nao podem ser alterados.',
+      `Os fatos de produto, estoque, preco, memoria, cor, link e caracteristicas tecnicas sao calculados pelo sistema e nao podem ser alterados. // ${MARKER}:agent`,
+      'agent source-of-truth rule',
+    );
+    prompt = replaceOnce(
+      prompt,
+      '- Use somente os fatos recebidos. Nao invente nem deduza estoque, preco, produto, cor, memoria, link, prazo ou disponibilidade.',
+      `- Use somente os fatos recebidos. Nao invente nem deduza estoque, preco, produto, cor, memoria, link, prazo, disponibilidade ou caracteristica tecnica.
 - Quando o cliente perguntar se um aparelho e bom, responda diretamente como consultor de vendas e destaque de 2 a 4 vantagens sustentadas pelas Caracteristicas confirmadas. Traduza bateria, tela, memoria, camera e carregamento em beneficios claros, sem superlativos ou promessas nao comprovadas.
 - Se o mesmo codigo curto corresponder a modelos de marcas diferentes, nunca misture as fichas. Diga que existem as duas opcoes, apresente no maximo um diferencial confirmado de cada uma e pergunte qual delas o cliente quis dizer.`,
-    'grounded sales behavior',
-  );
+      'grounded sales behavior',
+    );
+  }
+  if (!prompt.includes(NUMBERED_SELECTION_MARKER)) {
+    prompt = replaceOnce(
+      prompt,
+      '- Se o mesmo codigo curto corresponder a modelos de marcas diferentes, nunca misture as fichas. Diga que existem as duas opcoes, apresente no maximo um diferencial confirmado de cada uma e pergunte qual delas o cliente quis dizer.',
+      `- Se o mesmo codigo curto corresponder a modelos de marcas diferentes, nunca misture as fichas. Apresente obrigatoriamente cada modelo em uma opcao numerada, com uma opcao por linha, seguindo exatamente a ordem em que os produtos aparecem no contexto: 1., 2. e assim por diante. Mostre no maximo um diferencial confirmado de cada modelo e termine pedindo para o cliente responder com o numero ou o nome da opcao. // ${NUMBERED_SELECTION_MARKER}`,
+      'numbered ambiguous-model selection',
+    );
+  }
   options.systemMessage = prompt;
 }
 
@@ -218,9 +228,10 @@ async function validate(workflow) {
     'Vendas - Buscar Produtos': { all: () => products.map((json) => ({ json })) },
     'switc Mensagens': { first: () => ({ json: c71 }) },
   };
+  const staticData = {};
   const result = vm.runInNewContext(`(function(){${contextCode}})()`, {
     $input: { all: () => fees.map((json) => ({ json })) },
-    $getWorkflowStaticData: () => ({}),
+    $getWorkflowStaticData: () => staticData,
     $: (name) => selectors[name],
     Date,
     Intl,
@@ -235,16 +246,70 @@ async function validate(workflow) {
   assert.match(result.productsContext, /Bateria: (5200|6300)mAh/);
   assert.match(result.productsContext, /Taxa da tela: 120Hz/);
   assert.doesNotMatch(result.productsContext, /imei|serial|battery_health|[0-9a-f]{8}-[0-9a-f-]{27,}/i);
+  const selectionOptions = staticData.salesPostList?.[c71.remoteJid]?.options || [];
+  assert.ok(selectionOptions.length >= 2);
+  assert.equal(selectionOptions[0].number, 1);
+  assert.equal(selectionOptions[1].number, 2);
+  assert.ok(selectionOptions.some((option) => option.name === 'Poco C71'));
+  assert.ok(selectionOptions.some((option) => option.name === 'Realme C71'));
+  const postListCode = findNode(workflow.nodes, 'Vendas - Verificar Pos Lista').parameters.jsCode;
+  const validateNumberChoice = async (number, expectedName) => {
+    const choiceSource = {
+      remoteJid: c71.remoteJid,
+      Instancia: c71.Instancia,
+      conversation: String(number),
+      classificacaoMensagem: String(number),
+      intencao: 'vendas_produtos',
+      salesRequestKind: '',
+      salesSearchQuery: '',
+      salesCategoryName: '',
+      salesCategoryId: '',
+      salesFlowAction: 'selecionar_item_lista',
+      salesFlowItemNumber: number,
+      salesFlowItemNumbers: [number],
+    };
+    const choiceState = JSON.parse(JSON.stringify(staticData));
+    const choiceSelectors = {
+      'switc Mensagens': { first: () => ({ json: choiceSource }) },
+      'Vendas - Preparar Contexto IA': { first: () => ({ json: choiceSource }) },
+    };
+    const choiceResult = await vm.runInNewContext(`(async function(){${postListCode}})()`, {
+      $json: choiceSource,
+      $input: { all: () => [] },
+      $getWorkflowStaticData: () => choiceState,
+      $: (name) => choiceSelectors[name] || { first: () => ({ json: {} }), all: () => [] },
+      helpers: { httpRequest: async () => [] },
+      Date,
+      Intl,
+    });
+    assert.equal(choiceResult[0].json.salesPostListHandled, true, JSON.stringify({
+      result: choiceResult[0].json,
+      state: choiceState.salesPostList?.[c71.remoteJid] || null,
+    }));
+    assert.equal(choiceState.salesPostList[c71.remoteJid].selectedOptionNumber, number);
+    assert.match(String(choiceResult[0].json.output || ''), new RegExp(expectedName, 'i'));
+    return expectedName;
+  };
+  const numericChoices = [
+    await validateNumberChoice(1, 'Poco C71'),
+    await validateNumberChoice(2, 'Realme C71'),
+  ];
   const prompt = findNode(workflow.nodes, 'Especialista - Vendas').parameters.options.systemMessage;
   assert.ok(prompt.includes(`${MARKER}:agent`));
+  assert.ok(prompt.includes(NUMBERED_SELECTION_MARKER));
+  assert.match(prompt, /seguindo exatamente a ordem em que os produtos aparecem no contexto/);
+  assert.match(prompt, /responder com o numero ou o nome da opcao/);
   return {
     modelQuery: c71.requestedDeviceModelQuery,
     smartphoneCategory: c71.productCategoryId === SMARTPHONES_CATEGORY_ID,
     regressionScenarios: ['C71', 'A15', 'Note 15 Pro+', 'acessorio C71', 'celular generico'],
     matchedModels: names.filter((name) => /c71/i.test(name)),
+    selectionOptions: selectionOptions.slice(0, 2).map((option) => ({ number: option.number, name: option.name })),
+    numericChoices,
     groundedFactsPresent: /Caracteristicas confirmadas:/.test(result.productsContext),
     sensitiveFieldsAbsent: !/imei|serial|battery_health/i.test(result.productsContext),
     specialistPromptGrounded: prompt.includes('destaque de 2 a 4 vantagens'),
+    numberedSelectionPrompt: prompt.includes(NUMBERED_SELECTION_MARKER),
   };
 }
 
@@ -269,10 +334,11 @@ async function main() {
     const workflow = JSON.parse(Buffer.from(hex, 'hex').toString('utf8'));
     assert.equal(workflow.active, true, 'workflow must be active');
     assert.equal(workflow.versionId, workflow.activeVersionId, 'active workflow version must be aligned');
+    const numberedSelectionAlreadyActive = JSON.stringify(workflow.nodes).includes(NUMBERED_SELECTION_MARKER);
     patchWorkflow(workflow);
     const validation = await validate(workflow);
     if (!APPLY) {
-      console.log(JSON.stringify({ apply: false, workflowId: WORKFLOW_ID, marker: MARKER, validation }, null, 2));
+      console.log(JSON.stringify({ apply: false, workflowId: WORKFLOW_ID, marker: MARKER, numberedSelectionAlreadyActive, validation }, null, 2));
       return;
     }
 
@@ -360,7 +426,8 @@ async function main() {
         'entityHistoryEqual', workflow.nodes::jsonb=history.nodes::jsonb AND workflow.connections::jsonb=history.connections::jsonb,
         'prepareMarker', workflow.nodes::text LIKE '%${MARKER}:prepare%',
         'contextMarker', workflow.nodes::text LIKE '%${MARKER}:context%',
-        'agentMarker', workflow.nodes::text LIKE '%${MARKER}:agent%'
+        'agentMarker', workflow.nodes::text LIKE '%${MARKER}:agent%',
+        'numberedSelectionMarker', workflow.nodes::text LIKE '%${NUMBERED_SELECTION_MARKER}%'
       )::text
       FROM workflow_entity workflow
       JOIN workflow_history history
@@ -375,6 +442,7 @@ async function main() {
       prepareMarker: true,
       contextMarker: true,
       agentMarker: true,
+      numberedSelectionMarker: true,
     });
     console.log(JSON.stringify({ apply: true, workflowId: WORKFLOW_ID, marker: MARKER, backupPath, validation, verification }, null, 2));
   } finally {

@@ -2749,6 +2749,60 @@ function buildN8nBotMemorySessionKey(remoteJid, resetCount) {
   return count > 0 ? `${remoteJid}:r${count}` : remoteJid;
 }
 
+const N8N_BOT_CONVERSATION_STATE_KEYS = new Set([
+  'salesPostList',
+  'pendingDeviceClarification',
+  'optionalCustomerName',
+]);
+const N8N_BOT_CONVERSATION_STATE_MAX_BYTES = 512 * 1024;
+
+function normalizeN8nBotConversationState(value, { strict = false } = {}) {
+  let parsed = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch (error) {
+      if (strict) throw Object.assign(new Error('conversationState deve conter JSON valido'), { statusCode: 400 });
+      return {};
+    }
+  }
+  if (parsed == null) return {};
+  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+    if (strict) throw Object.assign(new Error('conversationState deve ser um objeto'), { statusCode: 400 });
+    return {};
+  }
+
+  const unknownKeys = Object.keys(parsed).filter((key) => !N8N_BOT_CONVERSATION_STATE_KEYS.has(key));
+  if (strict && unknownKeys.length) {
+    throw Object.assign(new Error(`conversationState contem campos nao permitidos: ${unknownKeys.join(', ')}`), { statusCode: 400 });
+  }
+
+  const now = Date.now();
+  const normalized = {};
+  for (const key of N8N_BOT_CONVERSATION_STATE_KEYS) {
+    const entry = parsed[key];
+    if (entry == null) continue;
+    if (typeof entry !== 'object' || Array.isArray(entry)) {
+      if (strict) throw Object.assign(new Error(`conversationState.${key} deve ser um objeto`), { statusCode: 400 });
+      continue;
+    }
+    const expiresAt = Number(entry.expiresAt || 0);
+    if (expiresAt > 0 && expiresAt <= now) continue;
+    normalized[key] = entry;
+  }
+
+  let serialized;
+  try {
+    serialized = JSON.stringify(normalized);
+  } catch (error) {
+    throw Object.assign(new Error('conversationState nao pode ser serializado'), { statusCode: 400 });
+  }
+  if (Buffer.byteLength(serialized, 'utf8') > N8N_BOT_CONVERSATION_STATE_MAX_BYTES) {
+    throw Object.assign(new Error('conversationState excede o limite de 512 KB'), { statusCode: 413 });
+  }
+  return JSON.parse(serialized);
+}
+
 function mapN8nBotControlRow(row, identity) {
   const resetCount = Number(row?.reset_count || 0);
   const remoteJid = row?.remote_jid || identity?.remoteJid || '';
@@ -2774,6 +2828,9 @@ function mapN8nBotControlRow(row, identity) {
       human_handoff_by: row?.human_handoff_by || null,
       human_handoff_active: Number(row?.human_handoff_active || 0) === 1,
       sales_preferences: normalizePreferenceState(parsePublicJson(row?.sales_preferences, {})),
+      conversation_state: normalizeN8nBotConversationState(row?.conversation_state),
+      conversation_state_revision: Number(row?.conversation_state_revision || 0),
+      conversation_state_updated_at: row?.conversation_state_updated_at || null,
       updated_at: row?.updated_at || null,
     },
     memorySessionKey: remoteJid ? buildN8nBotMemorySessionKey(remoteJid, resetCount) : '',
@@ -25330,6 +25387,10 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
   const favoritesOnly = req.query.favoritesOnly === 'true';
   const customerId = req.query.customerId;
   const compact  = req.query.compact === 'true'; // sem images (evita 90+ MB de base64)
+  const includeModelSpecs = req.query.include_model_specs === 'true';
+  const modelSpecsCol = includeModelSpecs
+    ? `(SELECT m.template_values FROM models m WHERE m.id = products.model_id LIMIT 1) AS model_template_values,`
+    : '';
 
   // Colunas — compact exclui base64 mas inclui primeira URL de imagem (thumbnail)
   const imgCol = compact
@@ -25353,6 +25414,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        ${imgCol},
        status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        ${modelBlueprintSelectSql('products')},
+       ${modelSpecsCol}
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -25366,6 +25428,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        warranty_type, warranty_template_id,
        images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        ${modelBlueprintSelectSql('products')},
+       ${modelSpecsCol}
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -25446,6 +25509,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
     ...r,
     images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
     specs:            normalizeProductSpecsRam(r.specs),
+    ...(includeModelSpecs ? { model_template_values: parsePublicJson(r.model_template_values, {}) } : {}),
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
@@ -30993,6 +31057,70 @@ fastify.post('/n8n-bot/client-control/handoff', { preHandler: requireSyncKey }, 
   return getN8nBotClientControl(identity);
 });
 
+fastify.post('/n8n-bot/client-control/conversation-state', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const identity = normalizeN8nBotClientIdentity(body);
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  if (!Object.prototype.hasOwnProperty.call(body, 'conversationState')) {
+    return reply.code(400).send({ error: 'conversationState obrigatorio' });
+  }
+  const expectedRevision = Number(body.expectedRevision);
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+    return reply.code(400).send({ error: 'expectedRevision deve ser um inteiro maior ou igual a zero' });
+  }
+
+  let conversationState;
+  try {
+    conversationState = normalizeN8nBotConversationState(body.conversationState, { strict: true });
+  } catch (error) {
+    return reply.code(error.statusCode || 400).send({ error: error.message || 'conversationState invalido' });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      'SELECT conversation_state_revision FROM n8n_bot_client_controls WHERE remote_jid = ? LIMIT 1 FOR UPDATE',
+      [identity.remoteJid]
+    );
+    const existing = rows?.[0] || null;
+    const currentRevision = Number(existing?.conversation_state_revision || 0);
+    if (currentRevision !== expectedRevision) {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'conversation_state_revision_conflict', currentRevision });
+    }
+
+    const nextRevision = currentRevision + 1;
+    const serializedState = Object.keys(conversationState).length ? jsonStr(conversationState) : null;
+    if (existing) {
+      await connection.query(
+        `UPDATE n8n_bot_client_controls
+            SET phone = ?, conversation_state = ?, conversation_state_revision = ?,
+                conversation_state_updated_at = CURRENT_TIMESTAMP, last_seen_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE remote_jid = ?`,
+        [identity.phone, serializedState, nextRevision, identity.remoteJid]
+      );
+    } else {
+      await connection.query(
+        `INSERT INTO n8n_bot_client_controls
+          (id, remote_jid, phone, conversation_state, conversation_state_revision,
+           conversation_state_updated_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [crypto.randomUUID(), identity.remoteJid, identity.phone, serializedState, nextRevision]
+      );
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  return getN8nBotClientControl(identity);
+});
+
 fastify.post('/n8n-bot/client-control/reset', { preHandler: requireSyncKey }, async (req, reply) => {
   const identity = normalizeN8nBotClientIdentity(req.body || {});
   if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
@@ -31010,7 +31138,13 @@ fastify.post('/n8n-bot/client-control/reset', { preHandler: requireSyncKey }, as
     reset_count: Number(existing.reset_count || 0) + 1,
   });
   await pool.query(
-    'UPDATE n8n_bot_client_controls SET sales_preferences=NULL WHERE remote_jid=?',
+    `UPDATE n8n_bot_client_controls
+        SET sales_preferences = NULL,
+            conversation_state = NULL,
+            conversation_state_revision = conversation_state_revision + 1,
+            conversation_state_updated_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE remote_jid = ?`,
     [identity.remoteJid]
   );
   await pool.query(
@@ -40248,6 +40382,9 @@ async function runMigrations() {
   await addColumnIfMissing('n8n_bot_client_controls', 'human_handoff_until', 'DATETIME NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'human_handoff_by', 'VARCHAR(120) NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'sales_preferences', 'JSON NULL');
+  await addColumnIfMissing('n8n_bot_client_controls', 'conversation_state', 'JSON NULL');
+  await addColumnIfMissing('n8n_bot_client_controls', 'conversation_state_revision', 'BIGINT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('n8n_bot_client_controls', 'conversation_state_updated_at', 'DATETIME NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS n8n_bot_messages (
