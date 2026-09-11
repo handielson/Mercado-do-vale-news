@@ -3,6 +3,8 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { patchResolver, attendantCode } = require('./n8n-fix-birthday-correction-handoff-wording.cjs');
+const fs = require('node:fs');
+const deploySource = fs.readFileSync(new URL('./n8n-fix-birthday-correction-handoff-wording.cjs', import.meta.url), 'utf8');
 
 const resolverFixture = `
 const source = $('switc Mensagens').first().json || {};
@@ -49,5 +51,8 @@ assert.match(attendantCode, /Desculpe por termos enviado os parabens na data err
 assert.doesNotMatch(attendantCode, /Mesmo assim, a qualquer momento/);
 assert.doesNotMatch(attendantCode, /Vou chamar um atendente/);
 assert.equal(patchResolver(patched), patched, 'patch must be idempotent');
+assert.match(deploySource, /COPY \(SELECT json_build_object\(/, 'backup must be generated inside Postgres');
+assert.match(deploySource, /ON_ERROR_STOP=1/, 'psql failures must abort the publication');
+assert.doesNotMatch(deploySource, /printf '%s'.*nodesHex/, 'workflow JSON must not be embedded in an SSH command');
 
 console.log('n8n birthday correction and handoff wording static checks passed');

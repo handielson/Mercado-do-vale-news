@@ -30,7 +30,7 @@ function runRemote(connection, command) {
 
 function psql(connection, container, sql) {
   return new Promise((resolve, reject) => {
-    connection.exec(`docker exec -i ${quote(container)} psql -U postgres -d n8n -X -q -t -A`, (error, stream) => {
+    connection.exec(`docker exec -i ${quote(container)} psql -U postgres -d n8n -X -q -t -A -v ON_ERROR_STOP=1`, (error, stream) => {
       if (error) return reject(error);
       let stdout = '';
       let stderr = '';
@@ -182,7 +182,13 @@ async function main() {
     if (activeExecutions !== 0) throw new Error(`Workflow has ${activeExecutions} active executions`);
 
     const backupName = `/root/n8n-backups/${WORKFLOW_ID}-before-${MARKER}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-    await runRemote(connection, `mkdir -p /root/n8n-backups && printf '%s' ${quote(JSON.stringify({ workflowId: WORKFLOW_ID, activeVersionId: raw.activeVersionId, nodesHex: raw.nodesHex, connectionsHex: raw.connectionsHex }))} > ${quote(backupName)}`);
+    const backupSql = `COPY (SELECT json_build_object(
+      'workflowId', id,
+      'activeVersionId', "activeVersionId",
+      'nodes', nodes::jsonb,
+      'connections', connections::jsonb
+    )::text FROM workflow_entity WHERE id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
+    await runRemote(connection, `mkdir -p /root/n8n-backups && docker exec ${quote(container)} psql -U postgres -d n8n -X -q -t -A -v ON_ERROR_STOP=1 -c ${quote(backupSql)} > ${quote(backupName)}`);
     await runRemote(connection, 'docker service scale n8n_n8n-runner=0 >/dev/null');
     await waitService(connection, 'n8n_n8n-runner', 0);
     await runRemote(connection, 'docker service scale n8n_n8n=0 >/dev/null');
