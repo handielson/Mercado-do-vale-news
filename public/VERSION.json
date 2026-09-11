@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.374-n8n-admin-relay-pickup",
+  "version": "v1.2.375-n8n-generic-purchase-guard",
   "date": "2026-09-11",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260911-184100-v12374-n8n-admin-relay-pickup",
+  "release_vps": "/var/www/mdv-site/releases/20260911-202227-n8n-generic-purchase-guard",
   "branch": "main",
-  "summary": "Corrige a retirada após a atualização do runner e adiciona respostas administrativas numeradas com código de atendimento."
+  "summary": "Evita handoff indevido para pedidos genéricos de compra e pergunta se o cliente quer lista de celulares ou produto específico."
 }
