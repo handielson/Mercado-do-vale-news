@@ -67,6 +67,11 @@ function validateSpecialistFallback(workflow) {
   };
 }
 
+function assertChangeScope(changedNodes, alreadyConfigured) {
+  assert.deepEqual(changedNodes, alreadyConfigured ? [] : [SWITCH_NAME],
+    'Only the specialist Switch node may change, unless the fallback is already configured');
+}
+
 function run(connection, command) {
   return new Promise((resolve, reject) => connection.exec(command, (error, stream) => {
     if (error) return reject(error);
@@ -130,10 +135,10 @@ async function main() {
     assert.deepEqual(workflow.connections[SWITCH_NAME].main.slice(0, RULE_COUNT), originalRuleOutputs,
       'Existing specialist routes must remain unchanged');
     const changedNodes = workflow.nodes.filter((node, index) => JSON.stringify(node) !== JSON.stringify(originalNodes[index])).map((node) => node.name);
-    assert.deepEqual(changedNodes, [SWITCH_NAME], 'Only the specialist Switch node may change');
+    assertChangeScope(changedNodes, patchResult.alreadyConfigured);
 
-    if (!APPLY) {
-      console.log(JSON.stringify({ apply: false, workflowId: WORKFLOW_ID, ...patchResult, changedNodes, validation }, null, 2));
+    if (!APPLY || patchResult.alreadyConfigured) {
+      console.log(JSON.stringify({ apply: APPLY && patchResult.alreadyConfigured ? 'noop' : false, workflowId: WORKFLOW_ID, ...patchResult, changedNodes, validation }, null, 2));
       return;
     }
 
@@ -212,6 +217,7 @@ module.exports = {
   FALLBACK_LABEL,
   patchSpecialistFallback,
   validateSpecialistFallback,
+  assertChangeScope,
 };
 
 if (require.main === module) main().catch((error) => {

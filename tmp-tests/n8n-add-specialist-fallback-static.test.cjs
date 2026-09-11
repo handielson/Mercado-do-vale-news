@@ -7,6 +7,7 @@ const {
   FALLBACK_LABEL,
   patchSpecialistFallback,
   validateSpecialistFallback,
+  assertChangeScope,
 } = require('./n8n-add-specialist-fallback.cjs');
 
 function fixture() {
@@ -64,4 +65,9 @@ test('refuses an unexpected route count', () => {
   const workflow = fixture();
   workflow.nodes[0].parameters.rules.values.pop();
   assert.throws(() => patchSpecialistFallback(workflow), /13/);
+});
+
+test('accepts no changed node when production already has the fallback', () => {
+  assert.doesNotThrow(() => assertChangeScope([], true));
+  assert.throws(() => assertChangeScope([SWITCH_NAME], true), /unless the fallback is already configured/);
 });
