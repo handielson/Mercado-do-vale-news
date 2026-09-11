@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.371-n8n-fallback-especialistas
-date: 2026-09-10
+version: v1.2.372-n8n-aniversario-handoff
+date: 2026-09-11
 status: ready
-release_vps: /var/www/mdv-site/releases/20260910-222100-v12371-n8n-fallback-especialistas
+release_vps: /var/www/mdv-site/releases/20260911-130532-v12372-n8n-aniversario-handoff
 branch: main
-summary: Classificacoes inesperadas do bot n8n seguem para o atendimento geral em vez de encerrar a conversa silenciosamente.
-tag: v1.2.371-n8n-fallback-especialistas
+summary: O bot reconhece correcoes de data apos parabens e encaminha atendimentos humanos com uma mensagem curta, clara e coerente.
+tag: v1.2.372-n8n-aniversario-handoff
 ```
