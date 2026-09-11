@@ -4,6 +4,7 @@ const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
 
 const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const MARKER = 'birthday-correction-handoff-wording-v372';
+const ADMIN_RELAY_MARKER = 'admin-handoff-relay-commands-v373';
 const APPLY = process.argv.includes('--apply');
 
 function quote(value) {
@@ -93,7 +94,7 @@ const lineBreak = '[[BR]]';
 const correctionDate = String(source.birthdayCorrectionDate || '').trim();
 const output = source.birthdayCorrectionActive && correctionDate
   ? 'Voce tem razao — seu aniversario e em ' + correctionDate + '. Desculpe por termos enviado os parabens na data errada, e obrigado por avisar.' + lineBreak + 'Vou encaminhar a correcao do cadastro para nossa equipe conferir.'
-  : 'Certo. Vou encaminhar sua conversa para nossa equipe.' + lineBreak + 'Um atendente continuara por aqui no horario de atendimento.';
+  : 'Prontinho 😊 Vou encaminhar sua conversa para nossa equipe.' + lineBreak + '💬 Um atendente continua por aqui no nosso horário de atendimento.';
 return [{ json: { ...source, output } }];`;
 
 function patchWorkflow(nodes) {
@@ -101,7 +102,21 @@ function patchWorkflow(nodes) {
   const attendant = findNode(nodes, 'Atendente - Horario');
   resolver.parameters.jsCode = patchResolver(resolver.parameters.jsCode);
   attendant.parameters.jsCode = attendantCode;
+  const adminCommand = findNode(nodes, 'Controle Bot - Comando Admin');
+  let adminCode = String(adminCommand.parameters.jsCode || '');
+  if (!adminCode.includes(ADMIN_RELAY_MARKER)) {
+    const matchAnchor = "const match = text.match(/^(pausar|continuar|status)(?:\\s+(.+))?$/);";
+    if (!adminCode.includes(matchAnchor)) throw new Error('Admin command match anchor not found');
+    adminCode = adminCode.replace(matchAnchor, `${matchAnchor}\n// ${ADMIN_RELAY_MARKER}\nconst relayMatchV373 = String(source.conversation || source.text || '').trim().match(/^(?:responder\\s+[a-z0-9]{4,8}\\s+[\\s\\S]+|liberar\\s+[a-z0-9]{4,8}|encerrar\\s+[a-z0-9]{4,8})$/i);`);
+    adminCode = adminCode.replace(
+      "n8nBotAdminCommand: Boolean(isAdmin && match && (!match[2] || target.remoteJid)),",
+      "n8nBotAdminCommand: Boolean(isAdmin && ((match && (!match[2] || target.remoteJid)) || relayMatchV373)),"
+    );
+    if (!adminCode.includes('|| relayMatchV373')) throw new Error('Admin relay command output anchor not found');
+  }
+  adminCommand.parameters.jsCode = adminCode;
   new Function(attendant.parameters.jsCode);
+  new Function(adminCommand.parameters.jsCode);
   return nodes;
 }
 
@@ -144,7 +159,9 @@ function validate(nodes) {
   if (result.correctionAction !== 'chamar_atendente') throw new Error('Birthday correction did not route to handoff');
   if (result.correctionDate !== '11/10') throw new Error('Birthday date was not preserved');
   if (!/desculpe/i.test(result.correctionReply) || !/11\/10/.test(result.correctionReply)) throw new Error('Correction reply is not contextual');
-  if (!/encaminhar sua conversa/i.test(result.genericReply)) throw new Error('Generic handoff wording was not updated');
+  if (!/Prontinho 😊/.test(result.genericReply) || !/💬 Um atendente continua/i.test(result.genericReply)) {
+    throw new Error('Generic handoff wording was not updated with the approved friendly emojis');
+  }
   return result;
 }
 

@@ -23,6 +23,7 @@ const phonePriceListServicePaths = [
   'services/phonePriceListServer.cjs',
 ];
 const n8nBotConversationContextPath = 'services/n8nBotConversationContext.cjs';
+const n8nAdminHandoffRelayPath = 'services/n8nAdminHandoffRelay.cjs';
 const customerSelfServicePath = 'services/customerSelfServiceServer.cjs';
 const customerGoogleAuthPath = 'services/customerGoogleAuthServer.cjs';
 const autoresponderCatalogPreferencesPath = 'services/autoresponderCatalogPreferences.cjs';
@@ -354,6 +355,8 @@ async function main() {
   await uploadMarketingCampaignFiles(appDir);
   await upload(path.join(__dirname, n8nBotConversationContextPath), remotePathJoin(appDir, n8nBotConversationContextPath));
   console.log(`Uploaded ${n8nBotConversationContextPath}`);
+  await upload(path.join(__dirname, n8nAdminHandoffRelayPath), remotePathJoin(appDir, n8nAdminHandoffRelayPath));
+  console.log(`Uploaded ${n8nAdminHandoffRelayPath}`);
   await upload(path.join(__dirname, customerSelfServicePath), remotePathJoin(appDir, customerSelfServicePath));
   console.log(`Uploaded ${customerSelfServicePath}`);
   await upload(path.join(__dirname, customerGoogleAuthPath), remotePathJoin(appDir, customerGoogleAuthPath));

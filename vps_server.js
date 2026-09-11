@@ -17,6 +17,7 @@ const {
 } = require('./services/mercadoLivreServer.cjs');
 const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
 const { registerCustomerGoogleAuthRoutes } = require('./services/customerGoogleAuthServer.cjs');
+const { normalizeRelayCommand, ensureSchema: ensureN8nAdminHandoffSchema, notifyAdmins: notifyN8nHandoffAdmins, handleRelayCommand } = require('./services/n8nAdminHandoffRelay.cjs');
 const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
 const {
   CATALOG_PREFERENCE_HANDOFF_MESSAGE,
@@ -30930,10 +30931,12 @@ fastify.post('/n8n-bot/whatsapp-switch/keep-paused', { preHandler: requireSyncKe
 fastify.post('/n8n-bot/admin-command', { preHandler: requireSyncKey }, async (req) => {
   const identity = normalizeN8nBotAdminIdentity(req.body || {});
   const command = normalizeN8nBotAdminCommand(req.body?.message || req.body?.command || '');
-  if (!identity || !command.valid) return { handled: false, reply: '' };
+  const relayCommand = normalizeRelayCommand(req.body?.message || req.body?.command || '');
+  if (!identity || (!command.valid && !relayCommand)) return { handled: false, reply: '' };
 
   const admin = await findN8nBotAdminByIdentity(identity);
   if (!admin) return { handled: false, reply: '' };
+  if (relayCommand) return handleRelayCommand({ pool, command: relayCommand, admin, sendText: sendN8nBotEvolutionTextMessage, logMessage: insertN8nBotMessage });
 
   if (!command.remoteJid) {
     if (command.action === 'pausar' || command.action === 'continuar') {
@@ -31075,7 +31078,16 @@ fastify.post('/n8n-bot/client-control/handoff', { preHandler: requireSyncKey }, 
     }
   }
 
-  return getN8nBotClientControl(identity);
+  let adminNotification = null;
+  if (handoffBy === 'bot-handoff-request') {
+    try {
+      adminNotification = await notifyN8nHandoffAdmins({ pool, identity, sendText: sendN8nBotEvolutionTextMessage });
+    } catch (error) {
+      console.error('[n8n-admin-handoff] notification failed:', error?.message || error);
+      adminNotification = { notified: false, error: true };
+    }
+  }
+  return { ...(await getN8nBotClientControl(identity)), adminNotification };
 });
 
 fastify.post('/n8n-bot/client-control/conversation-state', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -40392,6 +40404,7 @@ async function runMigrations() {
       INDEX idx_n8n_bot_admin_numbers_active (active)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await ensureN8nAdminHandoffSchema(pool);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS n8n_bot_global_control (

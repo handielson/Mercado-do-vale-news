@@ -47,6 +47,8 @@ assert.match(patched, /const decision = birthdayCorrectionV372 \|\|/);
 assert.match(patched, /birthdayCorrectionDate/);
 assert.doesNotThrow(() => new Function(patched));
 assert.match(attendantCode, /Vou encaminhar sua conversa para nossa equipe/);
+assert.match(attendantCode, /Prontinho 😊/);
+assert.match(attendantCode, /💬 Um atendente continua/);
 assert.match(attendantCode, /Desculpe por termos enviado os parabens na data errada/);
 assert.doesNotMatch(attendantCode, /Mesmo assim, a qualquer momento/);
 assert.doesNotMatch(attendantCode, /Vou chamar um atendente/);

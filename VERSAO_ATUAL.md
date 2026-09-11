@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.372-n8n-aniversario-handoff
+version: v1.2.373-n8n-admin-handoff-relay
 date: 2026-09-11
 status: ready
-release_vps: /var/www/mdv-site/releases/20260911-130532-v12372-n8n-aniversario-handoff
+release_vps: /var/www/mdv-site/releases/20260911-104913-v12373-n8n-admin-handoff-relay
 branch: main
-summary: O bot reconhece correcoes de data apos parabens e encaminha atendimentos humanos com uma mensagem curta, clara e coerente.
-tag: v1.2.372-n8n-aniversario-handoff
+summary: O bot avisa administradores cadastrados sobre handoffs e encaminha respostas humanas ao cliente com comandos seguros para liberar ou encerrar.
+tag: v1.2.373-n8n-admin-handoff-relay
 ```
