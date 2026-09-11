@@ -2803,6 +2803,26 @@ function normalizeN8nBotConversationState(value, { strict = false } = {}) {
   return JSON.parse(serialized);
 }
 
+function decideN8nBotConversationStateWrite({
+  currentRevision,
+  currentEventVersion,
+  expectedRevision,
+  eventVersionProvided,
+  eventVersion,
+}) {
+  if (currentRevision !== expectedRevision && !eventVersionProvided) {
+    return { action: 'conflict', currentRevision };
+  }
+  if (eventVersionProvided && currentEventVersion > 0 && eventVersion <= currentEventVersion) {
+    return { action: 'ignore', currentRevision, currentEventVersion };
+  }
+  return {
+    action: 'apply',
+    nextRevision: currentRevision + 1,
+    nextEventVersion: eventVersionProvided ? eventVersion : currentEventVersion,
+  };
+}
+
 function mapN8nBotControlRow(row, identity) {
   const resetCount = Number(row?.reset_count || 0);
   const remoteJid = row?.remote_jid || identity?.remoteJid || '';
@@ -2830,6 +2850,7 @@ function mapN8nBotControlRow(row, identity) {
       sales_preferences: normalizePreferenceState(parsePublicJson(row?.sales_preferences, {})),
       conversation_state: normalizeN8nBotConversationState(row?.conversation_state),
       conversation_state_revision: Number(row?.conversation_state_revision || 0),
+      conversation_state_event_version: Number(row?.conversation_state_event_version || 0),
       conversation_state_updated_at: row?.conversation_state_updated_at || null,
       updated_at: row?.updated_at || null,
     },
@@ -31068,6 +31089,11 @@ fastify.post('/n8n-bot/client-control/conversation-state', { preHandler: require
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
     return reply.code(400).send({ error: 'expectedRevision deve ser um inteiro maior ou igual a zero' });
   }
+  const eventVersionProvided = Object.prototype.hasOwnProperty.call(body, 'eventVersion');
+  const eventVersion = Number(body.eventVersion);
+  if (eventVersionProvided && (!Number.isSafeInteger(eventVersion) || eventVersion <= 0)) {
+    return reply.code(400).send({ error: 'eventVersion deve ser um inteiro positivo' });
+  }
 
   let conversationState;
   try {
@@ -31077,40 +31103,62 @@ fastify.post('/n8n-bot/client-control/conversation-state', { preHandler: require
   }
 
   const connection = await pool.getConnection();
+  let writeResult = null;
   try {
     await connection.beginTransaction();
     const [rows] = await connection.query(
-      'SELECT conversation_state_revision FROM n8n_bot_client_controls WHERE remote_jid = ? LIMIT 1 FOR UPDATE',
+      `SELECT conversation_state_revision, conversation_state_event_version
+         FROM n8n_bot_client_controls
+        WHERE remote_jid = ?
+        LIMIT 1 FOR UPDATE`,
       [identity.remoteJid]
     );
     const existing = rows?.[0] || null;
     const currentRevision = Number(existing?.conversation_state_revision || 0);
-    if (currentRevision !== expectedRevision) {
+    const currentEventVersion = Number(existing?.conversation_state_event_version || 0);
+    const decision = decideN8nBotConversationStateWrite({
+      currentRevision,
+      currentEventVersion,
+      expectedRevision,
+      eventVersionProvided,
+      eventVersion,
+    });
+    if (decision.action === 'conflict') {
       await connection.rollback();
       return reply.code(409).send({ error: 'conversation_state_revision_conflict', currentRevision });
     }
-
-    const nextRevision = currentRevision + 1;
-    const serializedState = Object.keys(conversationState).length ? jsonStr(conversationState) : null;
-    if (existing) {
-      await connection.query(
-        `UPDATE n8n_bot_client_controls
-            SET phone = ?, conversation_state = ?, conversation_state_revision = ?,
-                conversation_state_updated_at = CURRENT_TIMESTAMP, last_seen_at = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP
-          WHERE remote_jid = ?`,
-        [identity.phone, serializedState, nextRevision, identity.remoteJid]
-      );
+    if (decision.action === 'ignore') {
+      await connection.rollback();
+      writeResult = {
+        applied: false,
+        reason: 'stale_or_duplicate_event',
+        currentRevision,
+        currentEventVersion,
+      };
     } else {
-      await connection.query(
-        `INSERT INTO n8n_bot_client_controls
-          (id, remote_jid, phone, conversation_state, conversation_state_revision,
-           conversation_state_updated_at, last_seen_at)
-         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [crypto.randomUUID(), identity.remoteJid, identity.phone, serializedState, nextRevision]
-      );
+      const { nextRevision, nextEventVersion } = decision;
+      const serializedState = Object.keys(conversationState).length ? jsonStr(conversationState) : null;
+      if (existing) {
+        await connection.query(
+          `UPDATE n8n_bot_client_controls
+              SET phone = ?, conversation_state = ?, conversation_state_revision = ?,
+                  conversation_state_event_version = ?, conversation_state_updated_at = CURRENT_TIMESTAMP,
+                  last_seen_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE remote_jid = ?`,
+          [identity.phone, serializedState, nextRevision, nextEventVersion, identity.remoteJid]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO n8n_bot_client_controls
+            (id, remote_jid, phone, conversation_state, conversation_state_revision,
+             conversation_state_event_version, conversation_state_updated_at, last_seen_at)
+           VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [crypto.randomUUID(), identity.remoteJid, identity.phone, serializedState, nextRevision, nextEventVersion]
+        );
+      }
+      await connection.commit();
+      writeResult = { applied: true, revision: nextRevision, eventVersion: nextEventVersion };
     }
-    await connection.commit();
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -31118,7 +31166,8 @@ fastify.post('/n8n-bot/client-control/conversation-state', { preHandler: require
     connection.release();
   }
 
-  return getN8nBotClientControl(identity);
+  const result = await getN8nBotClientControl(identity);
+  return { ...result, conversationStateWrite: writeResult };
 });
 
 fastify.post('/n8n-bot/client-control/reset', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -31142,6 +31191,7 @@ fastify.post('/n8n-bot/client-control/reset', { preHandler: requireSyncKey }, as
         SET sales_preferences = NULL,
             conversation_state = NULL,
             conversation_state_revision = conversation_state_revision + 1,
+            conversation_state_event_version = CAST(UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000000 AS UNSIGNED),
             conversation_state_updated_at = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
       WHERE remote_jid = ?`,
@@ -40384,6 +40434,7 @@ async function runMigrations() {
   await addColumnIfMissing('n8n_bot_client_controls', 'sales_preferences', 'JSON NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'conversation_state', 'JSON NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'conversation_state_revision', 'BIGINT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('n8n_bot_client_controls', 'conversation_state_event_version', 'BIGINT NOT NULL DEFAULT 0');
   await addColumnIfMissing('n8n_bot_client_controls', 'conversation_state_updated_at', 'DATETIME NULL');
 
   await pool.query(`

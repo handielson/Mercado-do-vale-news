@@ -6,6 +6,7 @@ const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
 const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const API_URL = 'https://api.xiaomipetrolina.com.br';
 const MARKER = 'persistent-conversation-state-v1';
+const ORDER_MARKER = 'persistent-conversation-event-order-v2';
 const APPLY = process.argv.includes('--apply');
 const shQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
@@ -54,12 +55,27 @@ function findNode(nodes, name) {
   return node;
 }
 
+function patchEventSource(workflow) {
+  const node = findNode(workflow.nodes, 'Dados');
+  let code = String(node.parameters?.jsCode || '');
+  if (code.includes(`${ORDER_MARKER}:source`)) return;
+  assert.match(code, /const eventTimestampMsV226\s*=/, 'Inbound event timestamp anchor not found');
+  const anchor = 'const base = {';
+  assert.ok(code.includes(anchor), 'Inbound base payload anchor not found');
+  code = code.replace(anchor, `${anchor}
+  // ${ORDER_MARKER}:source
+  conversationEventVersion: (Math.max(eventTimestampMsV226, Date.now()) * 1000)
+    + (Number(String(typeof $execution !== 'undefined' ? $execution.id : '').replace(/\\D/g, '')) % 1000 || 0),`);
+  new Function(code);
+  node.parameters.jsCode = code;
+}
+
 function patchHydration(node) {
   let code = String(node.parameters?.jsCode || '');
-  if (code.includes(`${MARKER}:hydrate`)) return;
-  const anchor = 'baseOutput.n8nBotBlocked = Boolean(control.blocked || baseOutput.humanHandoffPaused);';
-  assert.ok(code.includes(anchor), 'Client-control hydration anchor not found');
-  const hydration = `// ${MARKER}:hydrate
+  if (!code.includes(`${MARKER}:hydrate`)) {
+    const anchor = 'baseOutput.n8nBotBlocked = Boolean(control.blocked || baseOutput.humanHandoffPaused);';
+    assert.ok(code.includes(anchor), 'Client-control hydration anchor not found');
+    const hydration = `// ${MARKER}:hydrate
 const persistedConversationState = control.conversation_state && typeof control.conversation_state === 'object'
   ? control.conversation_state : {};
 const persistedConversationRevision = Number(control.conversation_state_revision || 0);
@@ -76,7 +92,29 @@ for (const key of ['salesPostList', 'pendingDeviceClarification']) {
 }
 
 ${anchor}`;
-  code = code.replace(anchor, hydration);
+    code = code.replace(anchor, hydration);
+  }
+  if (!code.includes(`${ORDER_MARKER}:event`)) {
+    const eventAnchor = 'baseOutput.conversationStateRevision = persistedConversationRevision;';
+    assert.ok(code.includes(eventAnchor), 'Conversation-state event ordering anchor not found');
+    code = code.replace(eventAnchor, `${eventAnchor}
+// ${ORDER_MARKER}:event
+const directConversationEventVersion = Number(source.conversationEventVersion || 0);
+const rawConversationEventTimestamp = source.messageTimestamp
+  ?? source.message_timestamp
+  ?? source.message?.messageTimestamp
+  ?? source.timestamp
+  ?? null;
+const numericConversationEventTimestamp = Number(rawConversationEventTimestamp);
+const parsedConversationEventTimestampMs = Number.isFinite(numericConversationEventTimestamp) && numericConversationEventTimestamp > 0
+  ? (numericConversationEventTimestamp < 1000000000000 ? numericConversationEventTimestamp * 1000 : numericConversationEventTimestamp)
+  : Date.parse(String(rawConversationEventTimestamp || ''));
+const conversationExecutionOrder = Number(String(typeof $execution !== 'undefined' ? $execution.id : '').replace(/\D/g, '')) % 1000 || 0;
+baseOutput.conversationStateEventVersion = Number.isSafeInteger(directConversationEventVersion) && directConversationEventVersion > 0
+  ? directConversationEventVersion
+  : ((Number.isFinite(parsedConversationEventTimestampMs) && parsedConversationEventTimestampMs > 0
+    ? Math.trunc(parsedConversationEventTimestampMs) : Date.now()) * 1000) + conversationExecutionOrder;`);
+  }
   new Function('$json', '$', '$getWorkflowStaticData', code);
   node.parameters.jsCode = code;
 }
@@ -103,9 +141,10 @@ return [{ json: {
     remoteJid,
     phone,
     expectedRevision: Number(source.conversationStateRevision ?? controlSource.conversationStateRevision ?? controlSource.n8nBotControl?.conversation_state_revision ?? 0),
+    eventVersion: Number(source.conversationStateEventVersion ?? controlSource.conversationStateEventVersion ?? Date.now()),
     conversationState,
   },
-} }]; // ${MARKER}:prepare`;
+} }]; // ${MARKER}:prepare // ${ORDER_MARKER}:prepare`;
 
 const restorePersistenceCode = `const persisted = $json || {};
 const prepared = $('Estado Conversa - Preparar').first().json || {};
@@ -148,6 +187,7 @@ function buildPersistenceNodes(nodes) {
           { name: 'remoteJid', value: '={{$json.conversationStatePersistRequest.remoteJid}}' },
           { name: 'phone', value: '={{$json.conversationStatePersistRequest.phone}}' },
           { name: 'expectedRevision', value: '={{$json.conversationStatePersistRequest.expectedRevision}}' },
+          { name: 'eventVersion', value: '={{$json.conversationStatePersistRequest.eventVersion}}' },
           { name: 'conversationState', value: '={{JSON.stringify($json.conversationStatePersistRequest.conversationState)}}' },
         ] },
       },
@@ -163,11 +203,20 @@ function buildPersistenceNodes(nodes) {
 }
 
 function patchWorkflow(workflow) {
+  patchEventSource(workflow);
   patchHydration(findNode(workflow.nodes, 'Controle Bot - Aplicar Controle'));
   const names = new Set(workflow.nodes.map((node) => node.name));
   const stateNodes = buildPersistenceNodes(workflow.nodes);
   for (const node of stateNodes) {
-    if (!names.has(node.name)) workflow.nodes.push(node);
+    if (!names.has(node.name)) {
+      workflow.nodes.push(node);
+      names.add(node.name);
+    } else {
+      const existing = findNode(workflow.nodes, node.name);
+      const currentPosition = existing.position;
+      Object.assign(existing, node);
+      if (currentPosition) existing.position = currentPosition;
+    }
   }
 
   for (const [sourceName, connectionGroups] of Object.entries(workflow.connections)) {
@@ -188,7 +237,12 @@ function patchWorkflow(workflow) {
 
 function validate(workflow) {
   const applyCode = findNode(workflow.nodes, 'Controle Bot - Aplicar Controle').parameters.jsCode;
+  const inboundCode = findNode(workflow.nodes, 'Dados').parameters.jsCode;
+  assert.match(inboundCode, /persistent-conversation-event-order-v2:source/);
+  assert.match(inboundCode, /conversationEventVersion/);
   assert.match(applyCode, /persistent-conversation-state-v1:hydrate/);
+  assert.match(applyCode, /persistent-conversation-event-order-v2:event/);
+  assert.match(applyCode, /messageTimestamp/);
   assert.match(applyCode, /persistedConversationRevision > 0/);
   const prepare = findNode(workflow.nodes, 'Estado Conversa - Preparar');
   const persist = findNode(workflow.nodes, 'Estado Conversa - Persistir');
@@ -196,6 +250,7 @@ function validate(workflow) {
   new Function('$json', '$', '$getWorkflowStaticData', prepare.parameters.jsCode);
   new Function('$json', '$', restore.parameters.jsCode);
   assert.equal(persist.parameters.url, `${API_URL}/n8n-bot/client-control/conversation-state`);
+  assert.ok(persist.parameters.bodyParameters.parameters.some((parameter) => parameter.name === 'eventVersion'));
   assert.equal(persist.onError, 'continueRegularOutput');
   assert.equal(persist.retryOnFail, false, '409 conflicts must not retry the same stale revision');
   assert.deepEqual(workflow.connections['Estado Conversa - Preparar'].main[0][0], { node: 'Estado Conversa - Persistir', type: 'main', index: 0 });
@@ -231,7 +286,7 @@ async function main() {
     const workflow = JSON.parse(Buffer.from(hex, 'hex').toString('utf8'));
     assert.equal(workflow.active, true);
     assert.equal(workflow.versionId, workflow.activeVersionId);
-    const alreadyActive = JSON.stringify(workflow.nodes).includes(MARKER);
+    const alreadyActive = JSON.stringify(workflow.nodes).includes(ORDER_MARKER);
     patchWorkflow(workflow);
     const validation = validate(workflow);
     if (!APPLY) {
@@ -286,9 +341,9 @@ async function main() {
     await run(connection, 'docker service scale n8n_n8n-runner=1 >/dev/null');
     await waitService(connection, 'n8n_n8n-runner', 1);
     servicesStopped = false;
-    const verifySql = `COPY (SELECT json_build_object('active', workflow.active, 'versionAligned', workflow."versionId"=workflow."activeVersionId", 'entityHistoryEqual', workflow.nodes::jsonb=history.nodes::jsonb AND workflow.connections::jsonb=history.connections::jsonb, 'marker', workflow.nodes::text LIKE '%${MARKER}%')::text FROM workflow_entity workflow JOIN workflow_history history ON history."workflowId"=workflow.id AND history."versionId"=workflow."activeVersionId" WHERE workflow.id=${shQuote(WORKFLOW_ID)}) TO STDOUT;`;
+    const verifySql = `COPY (SELECT json_build_object('active', workflow.active, 'versionAligned', workflow."versionId"=workflow."activeVersionId", 'entityHistoryEqual', workflow.nodes::jsonb=history.nodes::jsonb AND workflow.connections::jsonb=history.connections::jsonb, 'marker', workflow.nodes::text LIKE '%${MARKER}%', 'eventOrderMarker', workflow.nodes::text LIKE '%${ORDER_MARKER}%')::text FROM workflow_entity workflow JOIN workflow_history history ON history."workflowId"=workflow.id AND history."versionId"=workflow."activeVersionId" WHERE workflow.id=${shQuote(WORKFLOW_ID)}) TO STDOUT;`;
     const verification = JSON.parse((await psql(connection, dbContainer, verifySql)).trim());
-    assert.deepEqual(verification, { active: true, versionAligned: true, entityHistoryEqual: true, marker: true });
+    assert.deepEqual(verification, { active: true, versionAligned: true, entityHistoryEqual: true, marker: true, eventOrderMarker: true });
     console.log(JSON.stringify({ apply: true, workflowId: WORKFLOW_ID, marker: MARKER, backupPath, validation, verification }, null, 2));
   } finally {
     if (servicesStopped) {
@@ -301,7 +356,7 @@ async function main() {
   }
 }
 
-module.exports = { MARKER, patchHydration, patchWorkflow, validate, preparePersistenceCode, restorePersistenceCode };
+module.exports = { MARKER, ORDER_MARKER, patchEventSource, patchHydration, patchWorkflow, validate, preparePersistenceCode, restorePersistenceCode };
 if (require.main === module) main().catch((error) => {
   console.error(error.stack || error.message);
   process.exit(1);
