@@ -83,6 +83,7 @@ async function main() {
     }
     await run(conn, `docker service update --image ${quote(n8nImage)} --detach=true ${N8N_SERVICE} >/dev/null`);
     await run(conn, `docker service update --image ${quote(runnerImage)} --detach=true ${RUNNER_SERVICE} >/dev/null`);
+    await run(conn, `docker service update --env-add N8N_BLOCK_ENV_ACCESS_IN_NODE=false --detach=true ${RUNNER_SERVICE} >/dev/null`);
     databaseMayHaveMigrated = true;
     await run(conn, `docker service scale ${N8N_SERVICE}=1 >/dev/null`);
     await waitReplicas(conn, N8N_SERVICE, 1);

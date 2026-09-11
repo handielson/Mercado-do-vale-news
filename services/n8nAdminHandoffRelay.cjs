@@ -4,7 +4,17 @@ const CODE_PATTERN = '[A-Z0-9]{4,8}';
 
 function normalizeRelayCommand(value) {
   const text = String(value || '').trim();
-  let match = text.match(new RegExp(`^RESPONDER\\s+(${CODE_PATTERN})\\s+([\\s\\S]+)$`, 'i'));
+  let match = text.match(new RegExp(`^([12])[.)]?\\s+(${CODE_PATTERN})(?:\\s+([\\s\\S]+))?$`, 'i'));
+  if (match) {
+    const release = match[1] === '1';
+    const message = String(match[3] || '').trim();
+    return {
+      action: message ? (release ? 'responder_liberar' : 'responder_encerrar') : (release ? 'liberar' : 'encerrar'),
+      code: match[2].toUpperCase(),
+      message,
+    };
+  }
+  match = text.match(new RegExp(`^RESPONDER\\s+(${CODE_PATTERN})\\s+([\\s\\S]+)$`, 'i'));
   if (match) return { action: 'responder', code: match[1].toUpperCase(), message: match[2].trim() };
   match = text.match(new RegExp(`^(LIBERAR|ENCERRAR)\\s+(${CODE_PATTERN})$`, 'i'));
   if (match) return { action: match[1].toLowerCase(), code: match[2].toUpperCase(), message: '' };
@@ -13,10 +23,12 @@ function normalizeRelayCommand(value) {
 
 function buildAdminLegend(code) {
   return [
-    `✍️ Para responder: RESPONDER ${code} sua mensagem`,
+    `1. ${code} sua resposta — responde e devolve o atendimento para a IA.`,
+    `2. ${code} sua resposta — responde e encerra o atendimento humano.`,
     '',
-    `1. LIBERAR ${code} — devolve o atendimento para a IA.`,
-    `2. ENCERRAR ${code} — encerra o atendimento humano.`,
+    `✍️ RESPONDER ${code} sua mensagem — responde e mantém o atendimento pausado.`,
+    `🤖 LIBERAR ${code} — devolve para a IA sem enviar mensagem.`,
+    `✅ ENCERRAR ${code} — encerra sem enviar mensagem.`,
   ].join('\n');
 }
 
@@ -106,14 +118,26 @@ async function handleRelayCommand({ pool, command, admin, sendText, logMessage }
   const [rows] = await pool.query(`SELECT * FROM n8n_bot_handoffs WHERE code=? AND status='open' AND expires_at > CURRENT_TIMESTAMP LIMIT 1`, [command.code]);
   const handoff = rows?.[0];
   if (!handoff) return { handled: true, action: command.action, reply: `⚠️ Atendimento ${command.code} não encontrado ou expirado.` };
-  if (command.action === 'responder') {
+  if (['responder', 'responder_liberar', 'responder_encerrar'].includes(command.action)) {
     const identity = { remoteJid: handoff.remote_jid, phone: handoff.phone };
     const result = await sendText(identity, command.message);
     if (!result?.ok || result?.body?.error === true) return { handled: true, action: command.action, reply: `❌ Não consegui enviar ao cliente ${command.code}. Tente novamente.` };
     const waMessageId = String(result.body?.key?.id || result.body?.messageId || '').slice(0, 160) || null;
     await logMessage({ ...identity, direction: 'outbound', message: command.message, messageType: 'text', sourceNode: 'admin-whatsapp-relay', waMessageId, payload: { handoffCode: command.code, adminPhone: admin.phone } });
-    await pool.query(`UPDATE n8n_bot_client_controls SET human_handoff_until=DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 24 HOUR), human_handoff_by='admin-whatsapp-relay', updated_at=CURRENT_TIMESTAMP WHERE remote_jid=?`, [handoff.remote_jid]);
     await pool.query(`UPDATE n8n_bot_handoffs SET last_admin_phone=?, last_admin_response_at=CURRENT_TIMESTAMP WHERE remote_jid=?`, [admin.phone, handoff.remote_jid]);
+    if (command.action === 'responder_liberar' || command.action === 'responder_encerrar') {
+      const status = command.action === 'responder_liberar' ? 'released' : 'closed';
+      await pool.query(`UPDATE n8n_bot_handoffs SET status=?, last_admin_phone=? WHERE remote_jid=?`, [status, admin.phone, handoff.remote_jid]);
+      await pool.query(`UPDATE n8n_bot_client_controls SET human_handoff_until=NULL, human_handoff_by=NULL, updated_at=CURRENT_TIMESTAMP WHERE remote_jid=?`, [handoff.remote_jid]);
+      return {
+        handled: true,
+        action: command.action,
+        reply: command.action === 'responder_liberar'
+          ? `✅ Mensagem enviada ao cliente ${command.code}. Atendimento devolvido para a IA.`
+          : `✅ Mensagem enviada ao cliente ${command.code}. Atendimento humano encerrado.`,
+      };
+    }
+    await pool.query(`UPDATE n8n_bot_client_controls SET human_handoff_until=DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 24 HOUR), human_handoff_by='admin-whatsapp-relay', updated_at=CURRENT_TIMESTAMP WHERE remote_jid=?`, [handoff.remote_jid]);
     return { handled: true, action: command.action, reply: `✅ Mensagem enviada ao cliente ${command.code}.\n\n${buildAdminLegend(command.code)}` };
   }
   const status = command.action === 'liberar' ? 'released' : 'closed';

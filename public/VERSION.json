@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.373-n8n-admin-handoff-relay",
+  "version": "v1.2.374-n8n-admin-relay-pickup",
   "date": "2026-09-11",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260911-104913-v12373-n8n-admin-handoff-relay",
+  "release_vps": "/var/www/mdv-site/releases/20260911-184100-v12374-n8n-admin-relay-pickup",
   "branch": "main",
-  "summary": "O bot avisa administradores cadastrados sobre handoffs e encaminha respostas humanas ao cliente com comandos seguros para liberar ou encerrar."
+  "summary": "Corrige a retirada após a atualização do runner e adiciona respostas administrativas numeradas com código de atendimento."
 }
