@@ -23,7 +23,7 @@ export const AuthCallbackPage: React.FC = () => {
                 const requestedNext = hash.get('next') || sessionStorage.getItem('auth_next') || '/';
                 const safeNext = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/';
                 sessionStorage.removeItem('auth_next');
-                const destination = !session.customer.phone || !session.customer.cpf_cnpj
+                const destination = !session.customer.phone || !session.customer.cpf_cnpj || session.customer.custom_data?.whatsapp_verification_required === true
                     ? '/completar-cadastro'
                     : safeNext;
                 window.location.replace(destination);
@@ -70,7 +70,7 @@ export const AuthCallbackPage: React.FC = () => {
             });
 
             // Verificar se dados estão completos
-            const needsCompletion = !customer.phone || !customer.cpf_cnpj;
+            const needsCompletion = !customer.phone || !customer.cpf_cnpj || customer.custom_data?.whatsapp_verification_required === true;
 
             if (needsCompletion) {
                 console.log('[AuthCallback] Customer needs completion');

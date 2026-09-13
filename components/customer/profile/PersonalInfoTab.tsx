@@ -18,7 +18,8 @@ import {
 import { toast } from 'sonner';
 import { useVpsAuth } from '../../../hooks/useVpsAuth';
 import { uploadService } from '../../../services/uploadService';
-import { normalizeBrazilianPhone } from '../../../utils/cpfCnpjValidation';
+import { formatPhone as formatCustomerPhone, normalizeBrazilianPhone } from '../../../utils/cpfCnpjValidation';
+import { WhatsAppVerification } from '../../auth/WhatsAppVerification';
 
 interface AddressData {
     zipCode: string;
@@ -73,6 +74,9 @@ export const PersonalInfoTab: React.FC = () => {
     });
 
     const [loading, setLoading] = useState(false);
+    const [phoneProof, setPhoneProof] = useState('');
+    const phoneChanged = normalizeBrazilianPhone(personalData.phone) !== normalizeBrazilianPhone(customer?.phone)
+        || customer?.custom_data?.whatsapp_verification_required === true;
     const [passwordLoading, setPasswordLoading] = useState(false);
     const [cepLoading, setCepLoading] = useState(false);
     const [avatarLoading, setAvatarLoading] = useState(false);
@@ -118,11 +122,7 @@ export const PersonalInfoTab: React.FC = () => {
     }, [addressData, personalData]);
 
     const formatPhone = (value: string) => {
-        const numbers = value.replace(/\D/g, '').slice(0, 11);
-        if (numbers.length <= 10) {
-            return numbers.replace(/(\d{2})(\d{4})(\d{0,4})/, (_, a, b, c) => c ? `(${a}) ${b}-${c}` : `(${a}) ${b}`);
-        }
-        return numbers.replace(/(\d{2})(\d{5})(\d{0,4})/, (_, a, b, c) => c ? `(${a}) ${b}-${c}` : `(${a}) ${b}`);
+        return formatCustomerPhone(value);
     };
 
     const formatCPF = (value: string) => {
@@ -136,6 +136,7 @@ export const PersonalInfoTab: React.FC = () => {
     const handlePersonalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         if (name === 'phone') {
+            setPhoneProof('');
             setPersonalData((prev) => ({ ...prev, [name]: formatPhone(value) }));
             return;
         }
@@ -253,6 +254,10 @@ export const PersonalInfoTab: React.FC = () => {
     };
 
     const validateForm = (): boolean => {
+        if (phoneChanged && (!personalData.phone || !phoneProof)) {
+            toast.error('Confirme o novo número pelo código enviado no WhatsApp');
+            return false;
+        }
         if (!personalData.name) {
             toast.error('Nome obrigatorio');
             return false;
@@ -293,6 +298,7 @@ export const PersonalInfoTab: React.FC = () => {
             await updateProfile({
                 name: personalData.name,
                 phone: personalData.phone ? personalData.phone.replace(/\D/g, '') : null,
+                phone_verification_token: phoneProof || undefined,
                 birth_date: personalData.birth_date || null,
                 avatar_url: personalData.avatar_url,
                 address: {
@@ -428,6 +434,8 @@ export const PersonalInfoTab: React.FC = () => {
                             />
                         </span>
                     </label>
+
+                    {phoneChanged && <WhatsAppVerification phone={personalData.phone} purpose="profile" onVerified={setPhoneProof} />}
 
                     <label className="space-y-2">
                         <span className="text-sm font-bold text-slate-700">Data de nascimento</span>

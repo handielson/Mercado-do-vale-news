@@ -209,8 +209,8 @@ function registerCustomerGoogleAuthRoutes(fastify, {
         const referralCode = `MV-${id.replace(/-/g, '').slice(0, 5).toUpperCase()}`;
         await pool.query(
           `INSERT INTO customers
-           (id, user_id, company_id, name, email, customer_type, is_active, account_status, referral_code, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, 'active', ?, NOW(), NOW())`,
+           (id, user_id, company_id, name, email, customer_type, is_active, account_status, referral_code, custom_data, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, 'active', ?, '{"whatsapp_verification_required":true}', NOW(), NOW())`,
           [id, id, companyId, sanitizeGoogleName(identity.name, email), email, normalizeAuthCustomerType('customer'), referralCode]
         );
         const [createdRows] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [id]);

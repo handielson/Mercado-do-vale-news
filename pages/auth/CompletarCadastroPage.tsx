@@ -1,16 +1,28 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Phone, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthLayout } from '../../components/auth/AuthLayout';
+import { WhatsAppVerification } from '../../components/auth/WhatsAppVerification';
+import { formatPhone, normalizeBrazilianPhone } from '../../utils/cpfCnpjValidation';
 import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 
 export const CompletarCadastroPage: React.FC = () => {
-    const [cpf, setCpf] = useState('');
-    const [phone, setPhone] = useState('');
+    const { user, customer, updateProfile, isLoading } = useAuth();
+    const [name, setName] = useState(customer?.name || '');
+    const [phoneProof, setPhoneProof] = useState('');
+    const [cpf, setCpf] = useState(customer?.cpf_cnpj || '');
+    const [phone, setPhone] = useState(customer?.phone || '');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
-    const { user, updateProfile } = useAuth();
+    useEffect(() => {
+        if (customer) {
+            setName(customer.name || '');
+            setCpf(customer.cpf_cnpj || '');
+            setPhone(customer.phone || '');
+        }
+    }, [customer?.id]);
+
 
     const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         let value = e.target.value.replace(/\D/g, '');
@@ -37,17 +49,8 @@ export const CompletarCadastroPage: React.FC = () => {
     };
 
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        let value = e.target.value.replace(/\D/g, '');
-        if (value.length > 11) value = value.slice(0, 11);
-        // Mask: (00) 00000-0000
-        if (value.length > 10) {
-            value = value.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-        } else if (value.length > 6) {
-            value = value.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
-        } else if (value.length > 2) {
-            value = value.replace(/(\d{2})(\d{0,5})/, '($1) $2');
-        }
-        setPhone(value);
+        setPhoneProof('');
+        setPhone(formatPhone(e.target.value));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -61,19 +64,24 @@ export const CompletarCadastroPage: React.FC = () => {
             return;
         }
 
-        if (cleanPhone.length < 10) {
+        if (!normalizeBrazilianPhone(phone)) {
             toast.error('Telefone inválido');
+            return;
+        }
+
+        if (!name.trim() || !phoneProof) {
+            toast.error('Informe seu nome completo e confirme o WhatsApp');
             return;
         }
 
         setLoading(true);
         try {
-            console.log('[CompletarCadastro] Updating profile with:', { cpf: cleanCpf, phone: cleanPhone });
 
             await updateProfile({
                 cpf_cnpj: cleanCpf,
                 phone: cleanPhone,
-                name: user?.user_metadata?.full_name || user?.email || 'Usuário',
+                name: name.replace(/\s+/g, ' ').trim(),
+                phone_verification_token: phoneProof,
                 email: user?.email || ''
             });
 
@@ -89,6 +97,7 @@ export const CompletarCadastroPage: React.FC = () => {
         }
     };
 
+    if (isLoading) return <p>Carregando cadastro...</p>;
     if (!user) {
         navigate('/cliente/login');
         return null;
@@ -139,6 +148,13 @@ export const CompletarCadastroPage: React.FC = () => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    <label className="block space-y-2 text-sm font-semibold text-slate-700">
+                        Nome completo *
+                        <input type="text" autoComplete="name" value={name} required
+                            onChange={event => setName(event.target.value)}
+                            placeholder="Confira e informe seu nome completo"
+                            className="w-full rounded-xl border border-slate-300 px-4 py-3" />
+                    </label>
                     {/* CPF/CNPJ */}
                     <div className="space-y-2">
                         <label className="text-sm font-semibold text-slate-700">
@@ -160,7 +176,7 @@ export const CompletarCadastroPage: React.FC = () => {
                     {/* Phone */}
                     <div className="space-y-2">
                         <label className="text-sm font-semibold text-slate-700">
-                            Telefone
+                            WhatsApp *
                         </label>
                         <div className="relative">
                             <Phone className="absolute left-3 top-3 text-slate-400" size={18} />
@@ -175,10 +191,12 @@ export const CompletarCadastroPage: React.FC = () => {
                         </div>
                     </div>
 
+                    <WhatsAppVerification phone={phone} purpose="profile" onVerified={setPhoneProof} />
+
                     {/* Submit Button */}
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || !phoneProof}
                         className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                         {loading ? (

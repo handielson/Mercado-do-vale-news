@@ -4,6 +4,8 @@ import { User, Mail, Lock, CreditCard, Loader2, MessageCircle } from 'lucide-rea
 import { toast } from 'sonner';
 import { AuthLayout } from '../../components/auth/AuthLayout';
 import { GoogleButton } from '../../components/auth/GoogleButton';
+import { WhatsAppVerification } from '../../components/auth/WhatsAppVerification';
+import { formatPhone, normalizeBrazilianPhone } from '../../utils/cpfCnpjValidation';
 import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 
 export const ClienteRegisterPage: React.FC = () => {
@@ -16,6 +18,7 @@ export const ClienteRegisterPage: React.FC = () => {
         cpf_cnpj: ''
     });
     const [loading, setLoading] = useState(false);
+    const [phoneProof, setPhoneProof] = useState('');
     const [googleLoading, setGoogleLoading] = useState(false);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -57,11 +60,8 @@ export const ClienteRegisterPage: React.FC = () => {
     };
 
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
-        let phone = digits;
-        if (digits.length > 10) phone = digits.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
-        else if (digits.length > 6) phone = digits.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
-        else if (digits.length > 2) phone = digits.replace(/(\d{2})(\d{0,5})/, '($1) $2');
+        const phone = formatPhone(e.target.value);
+        setPhoneProof('');
         setFormData(prev => ({ ...prev, phone }));
     };
 
@@ -71,13 +71,12 @@ export const ClienteRegisterPage: React.FC = () => {
             return false;
         }
 
-        const phoneDigits = formData.phone.replace(/\D/g, '');
-        if (!formData.email.trim() && !phoneDigits) {
-            toast.error('Informe pelo menos um e-mail ou WhatsApp para recuperar sua senha');
+        if (!normalizeBrazilianPhone(formData.phone)) {
+            toast.error('Informe um WhatsApp válido com DDD');
             return false;
         }
-        if (phoneDigits && phoneDigits.length < 10) {
-            toast.error('Informe um WhatsApp válido com DDD');
+        if (!phoneProof) {
+            toast.error('Confirme o número com o código enviado no WhatsApp');
             return false;
         }
 
@@ -108,9 +107,10 @@ export const ClienteRegisterPage: React.FC = () => {
         setLoading(true);
         try {
             await createAccount({
-                name: formData.name,
+                name: formData.name.replace(/\s+/g, ' ').trim(),
                 email: formData.email.trim() || undefined,
                 phone: formData.phone.replace(/\D/g, '') || undefined,
+                phone_verification_token: phoneProof,
                 password: formData.password,
                 cpf_cnpj: formData.cpf_cnpj.replace(/\D/g, ''),
                 customer_type: 'retail' // Always retail on self-registration
@@ -176,6 +176,7 @@ export const ClienteRegisterPage: React.FC = () => {
                                 value={formData.name}
                                 onChange={handleChange}
                                 placeholder="Seu nome completo"
+                                autoComplete="name"
                                 className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                                 required
                             />
@@ -202,7 +203,7 @@ export const ClienteRegisterPage: React.FC = () => {
 
                     {/* WhatsApp */}
                     <div className="space-y-2">
-                        <label className="text-sm font-semibold text-slate-700">WhatsApp (opcional)</label>
+                        <label className="text-sm font-semibold text-slate-700">WhatsApp *</label>
                         <div className="relative">
                             <MessageCircle className="absolute left-3 top-3 text-slate-400" size={18} />
                             <input
@@ -212,10 +213,13 @@ export const ClienteRegisterPage: React.FC = () => {
                                 onChange={handlePhoneChange}
                                 placeholder="(00) 00000-0000"
                                 autoComplete="tel"
+                                required
                                 className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                             />
                         </div>
                     </div>
+
+                    <WhatsAppVerification phone={formData.phone} onVerified={setPhoneProof} />
 
                     {/* CPF/CNPJ */}
                     <div className="space-y-2">
@@ -277,7 +281,7 @@ export const ClienteRegisterPage: React.FC = () => {
                     {/* Info Message */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                         <p className="text-sm text-blue-800">
-                            🔐 Informe pelo menos um dos dois: e-mail ou WhatsApp. Esse contato será usado para recuperar sua senha. Sem e-mail, o acesso continua disponível pelo CPF/CNPJ.
+                            🔐 O WhatsApp é obrigatório e deve ser confirmado pelo código enviado. O e-mail é opcional; o acesso também está disponível pelo CPF/CNPJ.
                         </p>
                     </div>
 
@@ -301,7 +305,7 @@ export const ClienteRegisterPage: React.FC = () => {
                     {/* Submit Button */}
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || !phoneProof}
                         className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? (

@@ -86,7 +86,7 @@ async function requestAuth(path: string, options: RequestInit = {}): Promise<Vps
     },
   });
   const json = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(json.error || `Erro ${response.status}`);
+  if (!response.ok) throw new Error(json.message || json.error || `Erro ${response.status}`);
   const responseSession = json as VpsAuthSession;
   const normalizedSession = {
     ...responseSession,
@@ -105,11 +105,26 @@ async function requestAuthJson(path: string, options: RequestInit = {}): Promise
     },
   });
   const json = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(json.error || `Erro ${response.status}`);
+  if (!response.ok) throw new Error(json.message || json.error || `Erro ${response.status}`);
   return json;
 }
 
 export const vpsAuthService = {
+  async requestPhoneCode(phone: string, purpose: 'registration' | 'profile') {
+    return requestAuthJson('/auth/phone/request', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + (readStoredSession()?.token || '') },
+      body: JSON.stringify({ phone, purpose }),
+    }) as Promise<{ challenge_id: string; retry_after: number; expires_in: number }>;
+  },
+
+  async verifyPhoneCode(challenge_id: string, code: string, purpose: 'registration' | 'profile') {
+    return requestAuthJson('/auth/phone/verify', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + (readStoredSession()?.token || '') },
+      body: JSON.stringify({ challenge_id, code, purpose }),
+    }) as Promise<{ phone_verification_token: string; expires_in: number }>;
+  },
   getStoredSession(): StoredVpsAuthSession | null {
     return readStoredSession();
   },
@@ -204,7 +219,7 @@ export const vpsAuthService = {
     return session;
   },
 
-  async updateProfile(data: Partial<Customer>): Promise<Customer> {
+  async updateProfile(data: Partial<Customer> & { phone_verification_token?: string }): Promise<Customer> {
     const session = readStoredSession();
     if (!session?.token) throw new Error('Sessao expirada');
     const updatedSession = await requestAuth('/auth/profile', {

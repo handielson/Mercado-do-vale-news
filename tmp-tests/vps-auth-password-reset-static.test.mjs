@@ -45,7 +45,7 @@ assert.match(requestPage, /Solicitação recebida/, 'request page must use an an
 assert.doesNotMatch(requestPage, /E-mail enviado!/, 'request page must not falsely claim email delivery');
 
 const registerPage = fs.readFileSync('pages/auth/ClienteRegisterPage.tsx', 'utf8');
-assert.match(registerPage, /pelo menos um e-mail ou WhatsApp/, 'registration must explain the contact requirement');
+assert.match(registerPage, /WhatsApp.*obrigatório/, 'registration must explain the mandatory WhatsApp requirement');
 assert.match(registerPage, /phone: formData\.phone/, 'registration must send WhatsApp when supplied');
 
 const envExample = fs.readFileSync('.env.vps.example', 'utf8');

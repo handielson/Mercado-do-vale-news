@@ -361,6 +361,7 @@ async function main() {
   console.log(`Uploaded ${customerSelfServicePath}`);
   await upload(path.join(__dirname, customerGoogleAuthPath), remotePathJoin(appDir, customerGoogleAuthPath));
   console.log(`Uploaded ${customerGoogleAuthPath}`);
+  await upload(path.join(__dirname, 'services/customerPhoneVerificationServer.cjs'), remotePathJoin(appDir, 'services/customerPhoneVerificationServer.cjs'));
   await upload(path.join(__dirname, autoresponderCatalogPreferencesPath), remotePathJoin(appDir, autoresponderCatalogPreferencesPath));
   console.log(`Uploaded ${autoresponderCatalogPreferencesPath}`);
   await uploadSmartphonePhotoIntakeFiles(appDir);

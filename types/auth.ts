@@ -39,7 +39,7 @@ export interface AuthContextType {
 
     // Other
     signOut: () => Promise<void>
-    updateProfile: (data: Partial<Customer>) => Promise<void>
+    updateProfile: (data: Partial<Customer> & { phone_verification_token?: string }) => Promise<void>
 
     // Type upgrade requests
     requestTypeUpgrade: (requestedType: 'wholesale' | 'resale') => Promise<any>
@@ -59,6 +59,7 @@ export interface ActivateAccountData {
 
 // Data for creating new customer account
 export interface CreateAccountData {
+    phone_verification_token?: string
     name: string
     cpf_cnpj: string
     email?: string

@@ -291,6 +291,16 @@ function normalizeAuthEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+const { createCustomerPhoneVerification, normalizeVerificationPhone, pendingPhoneVerification } = require('./services/customerPhoneVerificationServer.cjs');
+
+function normalizeAuthCustomerName(value) {
+  return String(value || '')
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 255);
+}
+
 function isValidAuthEmail(value) {
   const email = normalizeAuthEmail(value);
   return email.length <= 254 && !/[\r\n]/.test(email) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -713,7 +723,7 @@ async function ensureDefaultAdminAccount() {
   return customer;
 }
 
-async function findCustomerForAuth({ email, cpfCnpj, customerId }) {
+async function findCustomerForAuth({ email, cpfCnpj, customerId }, database = pool) {
   const where = [];
   const params = [];
   if (customerId) {
@@ -729,7 +739,7 @@ async function findCustomerForAuth({ email, cpfCnpj, customerId }) {
     params.push(normalizeAuthDocument(cpfCnpj));
   }
   if (!where.length) return null;
-  const [rows] = await pool.query(`SELECT * FROM customers WHERE ${where.join(' OR ')} LIMIT 1`, params);
+  const [rows] = await database.query(`SELECT * FROM customers WHERE ${where.join(' OR ')} LIMIT 1`, params);
   return rows?.[0] || null;
 }
 
@@ -760,8 +770,12 @@ async function getVpsBearerAuthContext(request) {
   try {
     const payload = verifyVpsAuthToken(token);
     if (!payload?.customerId) return { userId: null, customerId: null, isAdmin: false };
-    const [rows] = await pool.query('SELECT id, user_id, customer_type FROM customers WHERE id = ? LIMIT 1', [payload.customerId]);
+    const [rows] = await pool.query('SELECT id, user_id, customer_type, custom_data FROM customers WHERE id = ? LIMIT 1', [payload.customerId]);
     const customer = rows?.[0] || null;
+    const completionPaths = ['/auth/me', '/auth/profile', '/auth/phone/request', '/auth/phone/verify'];
+    if (pendingPhoneVerification(customer) && !completionPaths.includes(String(request.url || '').split('?')[0])) {
+      return { userId: null, customerId: null, isAdmin: false };
+    }
     return {
       userId: payload.userId || customer?.user_id || customer?.id || null,
       customerId: customer?.id || null,
@@ -830,16 +844,33 @@ fastify.post('/auth/login', async (request, reply) => {
   return authResponseForCustomer(row);
 });
 
+const customerPhoneVerification = createCustomerPhoneVerification({
+  pool, secret: VPS_AUTH_SECRET,
+  send: async (phone, text) => {
+    const baseUrl = String(process.env.EVOLUTION_SERVER_URL || '').replace(/\/+$/, '');
+    const apiKey = String(process.env.EVOLUTION_API_KEY || '');
+    const instance = String(process.env.N8N_BOT_EVOLUTION_INSTANCE_NAME || 'botmercadodovale');
+    if (!baseUrl || !apiKey) return { ok: false };
+    const response = await fetch(baseUrl + '/message/sendText/' + encodeURIComponent(instance), {
+      method: 'POST', headers: { apikey: apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number: phone, text }), signal: AbortSignal.timeout(20000),
+    });
+    return { ok: response.ok };
+  },
+  getAuth: (request) => getVpsBearerAuthContext(request),
+});
+customerPhoneVerification.register(fastify);
+
 fastify.post('/auth/register', async (request, reply) => {
   await ensureCustomerAuthTable();
   const body = request.body || {};
   const email = normalizeAuthEmail(body.email);
-  const phone = normalizeAuthWhatsApp(body.phone);
+  const phone = normalizeVerificationPhone(body.phone);
   const cpfCnpj = normalizeAuthDocument(body.cpf_cnpj);
   const password = String(body.password || '');
-  const name = String(body.name || '').trim();
-  if (!cpfCnpj || !password || !name || (!email && !phone)) {
-    return reply.code(400).send({ error: 'Nome, CPF/CNPJ, senha e pelo menos email ou WhatsApp sao obrigatorios' });
+  const name = normalizeAuthCustomerName(body.name);
+  if (!cpfCnpj || !password || !name || !phone) {
+    return reply.code(400).send({ error: 'Nome, CPF/CNPJ, senha e WhatsApp válido são obrigatórios' });
   }
   if (email && !isValidAuthEmail(email)) {
     return reply.code(400).send({ error: 'Informe um email valido' });
@@ -851,66 +882,92 @@ fastify.post('/auth/register', async (request, reply) => {
     return reply.code(400).send({ error: 'A senha deve ter pelo menos 6 caracteres' });
   }
 
-  let customer = await findCustomerForAuth({ email, cpfCnpj });
-  const authClauses = ['cpf_cnpj = ?'];
-  const authParams = [cpfCnpj];
-  if (email) {
-    authClauses.push('email = ?');
-    authParams.push(email);
-  }
-  const [existingAuth] = await pool.query(`SELECT customer_id FROM customer_auth WHERE ${authClauses.join(' OR ')} LIMIT 1`, authParams);
-  if (existingAuth?.[0]) {
-    return reply.code(409).send({ error: 'Este email ou CPF/CNPJ ja possui login' });
-  }
-  if (phone) {
-    const localPhone = phone.slice(2);
-    const [phoneAuth] = await pool.query(
-      `SELECT ca.customer_id FROM customer_auth ca JOIN customers c ON c.id = ca.customer_id
-       WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(c.phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+', '') IN (?, ?) LIMIT 1`,
-      [phone, localPhone]
-    );
-    if (phoneAuth?.[0]) return reply.code(409).send({ error: 'Este WhatsApp ja esta vinculado a outra conta' });
-  }
+  await customerPhoneVerification.ensure();
+  const registrationConnection = await pool.getConnection();
+  let customer;
+  let registrationCommitted = false;
+  try {
+    await registrationConnection.beginTransaction();
+    await customerPhoneVerification.consume(registrationConnection, body.phone_verification_token, phone, 'registration');
+    customer = await findCustomerForAuth({ email, cpfCnpj }, registrationConnection);
+    if (customer && (
+      (customer.phone && normalizeAuthWhatsApp(customer.phone) !== phone)
+      || (customer.cpf_cnpj && normalizeAuthDocument(customer.cpf_cnpj) !== cpfCnpj)
+    )) {
+      return reply.code(409).send({ error: 'Dados já vinculados a outro cadastro. Entre na conta ou fale com a loja.' });
+    }
+    const authClauses = ['cpf_cnpj = ?'];
+    const authParams = [cpfCnpj];
+    if (email) {
+      authClauses.push('email = ?');
+      authParams.push(email);
+    }
+    const [existingAuth] = await registrationConnection.query(`SELECT customer_id FROM customer_auth WHERE ${authClauses.join(' OR ')} LIMIT 1`, authParams);
+    if (existingAuth?.[0]) {
+      return reply.code(409).send({ error: 'Este email ou CPF/CNPJ ja possui login' });
+    }
+    if (phone) {
+      const localPhone = phone.slice(2);
+      const [phoneAuth] = await registrationConnection.query(
+        `SELECT ca.customer_id FROM customer_auth ca JOIN customers c ON c.id = ca.customer_id
+         WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(c.phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+', '') IN (?, ?) LIMIT 1`,
+        [phone, localPhone]
+      );
+      if (phoneAuth?.[0]) return reply.code(409).send({ error: 'Este WhatsApp ja esta vinculado a outra conta' });
+    }
 
-  const companyId = String(body.company_id || process.env.COMPANY_ID || process.env.VITE_COMPANY_ID || '9717131e-7b14-4aec-84a4-4317c0489985');
-  if (!customer) {
-    const id = crypto.randomUUID();
-    const referralCode = `MV-${id.replace(/-/g, '').slice(0, 5).toUpperCase()}`;
-    await pool.query(
-      `INSERT INTO customers
-       (id, user_id, company_id, name, cpf_cnpj, email, phone, birth_date, customer_type, is_active, account_status, address, referral_code, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, NOW(), NOW())`,
-      [
-        id,
-        id,
-        companyId,
-        name,
-        cpfCnpj,
-        email || null,
-        phone || null,
-        body.birth_date || null,
-        normalizeAuthCustomerType(body.customer_type),
-        body.address ? JSON.stringify(body.address) : null,
-        referralCode,
-      ]
-    );
-    customer = await findCustomerForAuth({ customerId: id });
-  } else {
-    await pool.query(
-      `UPDATE customers
-       SET user_id = COALESCE(user_id, id), email = COALESCE(NULLIF(email, ''), ?), phone = COALESCE(NULLIF(phone, ''), ?), account_status = 'active', updated_at = NOW()
-       WHERE id = ?`,
-      [email || null, phone || null, customer.id]
-    );
-    customer = await findCustomerForAuth({ customerId: customer.id });
-  }
+    const companyId = String(body.company_id || process.env.COMPANY_ID || process.env.VITE_COMPANY_ID || '9717131e-7b14-4aec-84a4-4317c0489985');
+    if (!customer) {
+      const id = crypto.randomUUID();
+      const referralCode = `MV-${id.replace(/-/g, '').slice(0, 5).toUpperCase()}`;
+      await registrationConnection.query(
+        `INSERT INTO customers
+         (id, user_id, company_id, name, cpf_cnpj, email, phone, birth_date, customer_type, is_active, account_status, address, referral_code, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, NOW(), NOW())`,
+        [
+          id,
+          id,
+          companyId,
+          name,
+          cpfCnpj,
+          email || null,
+          phone || null,
+          body.birth_date || null,
+          'CUSTOMER', // Cadastro público nunca escolhe privilégios administrativos.
+          body.address ? JSON.stringify(body.address) : null,
+          referralCode,
+        ]
+      );
+      customer = await findCustomerForAuth({ customerId: id }, registrationConnection);
+    } else {
+      await registrationConnection.query(
+        `UPDATE customers
+         SET user_id = COALESCE(user_id, id), name = ?, email = COALESCE(NULLIF(email, ''), ?), phone = COALESCE(NULLIF(phone, ''), ?), account_status = 'active', updated_at = NOW()
+         WHERE id = ?`,
+        [name, email || null, phone || null, customer.id]
+      );
+      customer = await findCustomerForAuth({ customerId: customer.id }, registrationConnection);
+    }
 
-  const { salt, hash } = await hashVpsPassword(password);
-  await pool.query(
-    `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
-     VALUES (?, ?, ?, ?, ?)`,
-    [customer.id, email || null, cpfCnpj, hash, salt]
-  );
+    const { salt, hash } = await hashVpsPassword(password);
+    await registrationConnection.query(
+      `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
+       VALUES (?, ?, ?, ?, ?)`,
+      [customer.id, email || null, cpfCnpj, hash, salt]
+    );
+
+    await registrationConnection.query(
+      "UPDATE customers SET custom_data = JSON_REMOVE(JSON_SET(COALESCE(NULLIF(custom_data, ''), '{}'), '$.whatsapp_verified_phone', ?), '$.whatsapp_verification_required') WHERE id = ?",
+      [phone, customer.id]
+    );
+    customer = await findCustomerForAuth({ customerId: customer.id }, registrationConnection);
+    await registrationConnection.commit();
+    registrationCommitted = true;
+  } finally {
+    try {
+      if (!registrationCommitted) await registrationConnection.rollback();
+    } finally { registrationConnection.release(); }
+  }
 
   return reply.code(201).send(authResponseForCustomer(customer));
 });
@@ -20870,6 +20927,7 @@ async function getPrimaryKey(pool, tableName) {
 
 // Validação de nome de tabela
 function isValidTable(name) {
+  if (['customer_phone_verifications', 'customer_phone_verification_limits'].includes(String(name).toLowerCase())) return false;
   return /^[a-zA-Z0-9_]+$/.test(name);
 }
 

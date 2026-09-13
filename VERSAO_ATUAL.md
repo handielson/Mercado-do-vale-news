@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.378-calendar-delete
+version: v1.2.379-cadastro-whatsapp
 date: 2026-09-13
 status: ready
-release_vps: /var/www/mdv-site/releases/20260913-143952-v12378-calendar-delete
+release_vps: /var/www/mdv-site/releases/20260913-171800-v12379-cadastro-whatsapp
 branch: main
-summary: Calendário editorial permite excluir programações diretamente pelo cartão do dia.
-tag: v1.2.378-calendar-delete
+summary: Cadastro com nome informado pelo cliente e WhatsApp obrigatório confirmado por código.
+tag: v1.2.379-cadastro-whatsapp
 ```
