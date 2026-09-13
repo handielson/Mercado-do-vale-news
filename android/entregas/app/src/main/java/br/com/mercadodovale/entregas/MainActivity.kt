@@ -355,6 +355,18 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun stopTracking() { runOnUiThread { stopLocationTracking() } }
+
+        @JavascriptInterface
+        fun openExternalUrl(rawUrl: String) { openTrustedExternalUrl(rawUrl) }
+    }
+
+    private fun openTrustedExternalUrl(rawUrl: String) {
+        val uri = runCatching { Uri.parse(rawUrl.trim()) }.getOrNull() ?: return
+        val host = uri.host.orEmpty().lowercase()
+        val isGoogleMaps = host == "google.com" || host.endsWith(".google.com") || host == "maps.app.goo.gl"
+        val isWhatsApp = host == "wa.me" || host == "api.whatsapp.com" || host.endsWith(".whatsapp.com")
+        if (uri.scheme != "https" || (!isGoogleMaps && !isWhatsApp)) return
+        runOnUiThread { runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) } }
     }
 
     private fun ensureLocationPermissionAndStart(jobId: String) {

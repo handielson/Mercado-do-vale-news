@@ -4279,10 +4279,14 @@ async function sendBirthdayGreetingsForToday(options = {}) {
 async function notifyCustomerDeliveryOutForDelivery(job) {
   if (!job?.id) return { status: 'failed', error: 'missing_job' };
   const assigneeId = String(job.delivery_person_customer_id || '').trim();
-  const [deliveryPeople] = assigneeId.startsWith('team:')
-    ? await pool.query('SELECT name FROM team_members WHERE id = ? LIMIT 1', [assigneeId.slice('team:'.length)])
-    : await pool.query('SELECT name FROM customers WHERE id = ? LIMIT 1', [assigneeId]);
-  const deliveryPersonName = deliveryPeople?.[0]?.name || 'Entregador Mercado do Vale';
+  const [deliveryPeople] = assigneeId === STORE_DELIVERY_PERSON_ID
+    ? [[]]
+    : assigneeId.startsWith('team:')
+      ? await pool.query('SELECT name FROM team_members WHERE id = ? LIMIT 1', [assigneeId.slice('team:'.length)])
+      : await pool.query('SELECT name FROM customers WHERE id = ? LIMIT 1', [assigneeId]);
+  const deliveryPersonName = assigneeId === STORE_DELIVERY_PERSON_ID
+    ? 'Loja Mercado do Vale'
+    : deliveryPeople?.[0]?.name || 'Entregador Mercado do Vale';
   const result = await sendWhatsAppAutomationMessageVps({
     templateKey: 'delivery_out_for_delivery',
     phone: job.buyer_phone,
@@ -4328,6 +4332,7 @@ async function notifyCustomerDeliveryOutForDelivery(job) {
   return result;
 }
 const STORE_UNASSIGNED_DELIVERY_PERSON_ID = 'store:unassigned';
+const STORE_DELIVERY_PERSON_ID = 'store:delivery';
 
 function resolveDeliveryJobAssigneeId(sale, deliveryType) {
   const customerId = String(sale.delivery_person_customer_id || '').trim();
@@ -4343,7 +4348,10 @@ function isUnassignedStoreDeliveryJob(job) {
 
 function isCustomerDeliveryWorkerJob(job) {
   const assigneeId = String(job?.delivery_person_customer_id || '').trim();
-  return Boolean(assigneeId) && !assigneeId.startsWith('team:') && assigneeId !== STORE_UNASSIGNED_DELIVERY_PERSON_ID;
+  return Boolean(assigneeId)
+    && !assigneeId.startsWith('team:')
+    && assigneeId !== STORE_UNASSIGNED_DELIVERY_PERSON_ID
+    && assigneeId !== STORE_DELIVERY_PERSON_ID;
 }
 
 async function createCustomerDeliveryJobForSale(connection, sale) {
@@ -31904,6 +31912,7 @@ fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, asyn
   const [rows] = await pool.query(
     `SELECT jobs.*,
             CASE
+              WHEN jobs.delivery_person_customer_id = ? THEN 'Loja Mercado do Vale'
               WHEN jobs.delivery_person_customer_id = ? THEN NULL
               WHEN jobs.delivery_person_customer_id LIKE 'team:%' THEN team_person.name
               ELSE customer_person.name
@@ -31919,7 +31928,9 @@ fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, asyn
       ORDER BY CASE jobs.delivery_status WHEN 'in_route' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
                jobs.created_at DESC
       LIMIT 200`,
-    access.isAdmin ? [STORE_UNASSIGNED_DELIVERY_PERSON_ID] : [STORE_UNASSIGNED_DELIVERY_PERSON_ID, customerId]
+    access.isAdmin
+      ? [STORE_DELIVERY_PERSON_ID, STORE_UNASSIGNED_DELIVERY_PERSON_ID]
+      : [STORE_DELIVERY_PERSON_ID, STORE_UNASSIGNED_DELIVERY_PERSON_ID, customerId]
   );
   let deliveryPeople = [];
   if (access.isAdmin) {
@@ -31934,6 +31945,7 @@ fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, asyn
         ORDER BY name ASC`
     );
     deliveryPeople = [
+      { id: STORE_DELIVERY_PERSON_ID, name: 'Loja Mercado do Vale', type: 'store' },
       ...(customerPeople || []).map((person) => ({ id: String(person.id), name: person.name, type: 'delivery_worker' })),
       ...(teamPeople || []).map((person) => ({ id: `team:${person.id}`, name: person.name, type: 'team_member' })),
     ];
@@ -31976,7 +31988,9 @@ fastify.post('/delivery/app/jobs/:jobId/assign', { preHandler: requireSyncKeyOrC
   }
 
   let deliveryPersonName = '';
-  if (assigneeId.startsWith('team:')) {
+  if (assigneeId === STORE_DELIVERY_PERSON_ID) {
+    deliveryPersonName = 'Loja Mercado do Vale';
+  } else if (assigneeId.startsWith('team:')) {
     const teamMemberId = assigneeId.slice('team:'.length);
     const [[person]] = await pool.query(
       `SELECT id, name FROM team_members

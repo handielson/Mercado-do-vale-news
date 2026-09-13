@@ -24,7 +24,11 @@ interface SynologyUploadResponse {
 
 declare global {
     interface Window {
-        MdvDelivery?: { startTracking(jobId: string): void; stopTracking(): void };
+        MdvDelivery?: {
+            startTracking(jobId: string): void;
+            stopTracking(): void;
+            openExternalUrl(url: string): void;
+        };
     }
 }
 
@@ -101,6 +105,11 @@ const DeliveryOperationPage: React.FC = () => {
     const pixApproved = job?.payment_status === 'approved' || job?.payment_status === 'not_required';
     const canStartRoute = Boolean(job && job.delivery_status !== 'in_route' && job.delivery_status !== 'delivered' && job.delivery_status !== 'cancelled');
     const canComplete = Boolean(job && pixApproved && job.delivery_status !== 'delivered');
+    const openExternalUrl = (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {
+        if (!window.MdvDelivery?.openExternalUrl) return;
+        event.preventDefault();
+        window.MdvDelivery.openExternalUrl(url);
+    };
     const load = async () => {
         if (!token) return;
         setLoading(true);
@@ -227,7 +236,7 @@ const DeliveryOperationPage: React.FC = () => {
                             <p className="text-sm font-semibold text-slate-800">Endereco completo da entrega</p>
                             <p className="mt-1 text-sm text-slate-600">{job.delivery_address_text}</p>
                             {job.delivery_route_url ? (
-                                <a className="mt-3 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white" href={job.delivery_route_url} target="_blank" rel="noreferrer">Abrir rota</a>
+                                <a className="mt-3 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white" href={job.delivery_route_url} target="_blank" rel="noreferrer" onClick={(event) => openExternalUrl(event, job.delivery_route_url!)}>Abrir rota</a>
                             ) : (
                                 <p className="mt-3 text-sm font-semibold text-red-600">Endereco incompleto para rota.</p>
                             )}
@@ -235,7 +244,7 @@ const DeliveryOperationPage: React.FC = () => {
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                        {whatsappUrl ? <a className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700" href={whatsappUrl} target="_blank" rel="noreferrer"><MessageCircle className="h-4 w-4" />Falar no WhatsApp</a> : null}
+                        {whatsappUrl ? <a className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700" href={whatsappUrl} target="_blank" rel="noreferrer" onClick={(event) => openExternalUrl(event, whatsappUrl)}><MessageCircle className="h-4 w-4" />Falar no WhatsApp</a> : null}
                         {callUrl ? <a className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700" href={callUrl}><Phone className="h-4 w-4" />Ligar para cliente</a> : null}
                         {!buyerPhone && <p className="text-sm font-semibold text-amber-700">Contato do cliente indisponivel para revisao admin.</p>}
                     </div>

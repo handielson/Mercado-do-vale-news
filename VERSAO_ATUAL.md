@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.379-cadastro-whatsapp
+version: v1.2.380-entrega-loja-rota
 date: 2026-09-13
 status: ready
-release_vps: /var/www/mdv-site/releases/20260913-171800-v12379-cadastro-whatsapp
+release_vps: /var/www/mdv-site/releases/20260913-215814-v12380-entrega-loja-rota
 branch: main
-summary: Cadastro com nome informado pelo cliente e WhatsApp obrigatório confirmado por código.
-tag: v1.2.379-cadastro-whatsapp
+summary: Atribuição da entrega para a loja e abertura externa da rota no app de entregas.
+tag: v1.2.380-entrega-loja-rota
 ```
