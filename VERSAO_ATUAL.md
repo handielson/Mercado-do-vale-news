@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.377-n8n-admin-command-route
-date: 2026-09-12
+version: v1.2.378-calendar-delete
+date: 2026-09-13
 status: ready
-release_vps: /var/www/mdv-site/releases/20260912-130637-n8n-admin-command-route
+release_vps: /var/www/mdv-site/releases/20260913-143952-v12378-calendar-delete
 branch: main
-summary: Comandos do admin passam pela verificação antes da pausa do cliente.
-tag: v1.2.377-n8n-admin-command-route
+summary: Calendário editorial permite excluir programações diretamente pelo cartão do dia.
+tag: v1.2.378-calendar-delete
 ```

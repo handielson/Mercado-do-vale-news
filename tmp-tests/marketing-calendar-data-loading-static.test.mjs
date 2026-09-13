@@ -76,5 +76,40 @@ assert.match(
   /if \(event\.status === 'failed'\) return false;/,
   'Cancelled or rejected records must not look like active publications in the calendar',
 );
+assert.match(
+  calendar,
+  /title="Excluir programação"/,
+  'Calendar day details must expose a direct delete action',
+);
+assert.match(
+  calendar,
+  /window\.confirm\(confirmation\)/,
+  'Deleting a calendar schedule must require explicit confirmation',
+);
+assert.match(
+  calendar,
+  /socialStoryScheduleService\.cancel\(targetId\)/,
+  'Story schedules must use the canonical cancellation endpoint',
+);
+assert.match(
+  calendar,
+  /instagramScheduleService\.delete\(targetId\)/,
+  'Weekly Instagram slots must use the canonical delete service',
+);
+assert.match(
+  calendar,
+  /whatsappStatusCampaignService\.delete\(targetId\)/,
+  'WhatsApp campaigns must use the canonical delete service',
+);
+assert.match(
+  calendar,
+  /facebookMarketplaceScheduleService\.delete\(targetId\)/,
+  'Facebook schedules must use the canonical delete service',
+);
+assert.match(
+  calendar,
+  /Todos os Stories ainda pendentes deste lote, inclusive em outros dias/,
+  'Multi-day Story deletion must disclose that the whole batch is cancelled',
+);
 
 console.log('marketing calendar data-loading static checks passed');

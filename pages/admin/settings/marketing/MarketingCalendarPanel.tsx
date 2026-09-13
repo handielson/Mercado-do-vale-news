@@ -18,6 +18,7 @@ import {
   X,
   CalendarDays,
   ExternalLink,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -209,6 +210,7 @@ export default function MarketingCalendarPanel({
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(() => parseDateKey(new Date()));
   const [channelFilter, setChannelFilter] = useState<'all' | 'instagram' | 'whatsapp' | 'facebook'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'completed'>('all');
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -308,6 +310,58 @@ export default function MarketingCalendarPanel({
     const today = new Date();
     setCurrentDate(today);
     setSelectedDayKey(parseDateKey(today));
+  };
+
+  const canDeleteEvent = (event: CalendarEvent): boolean => {
+    if (event.type === 'approval_request') return false;
+    if (event.type === 'story_schedule') return ['pending', 'approved', 'executing'].includes(event.status);
+    if (event.type === 'facebook_schedule') return event.rawPayload?.schedule?.status !== 'published';
+    return true;
+  };
+
+  const handleDeleteEvent = async (event: CalendarEvent) => {
+    if (!canDeleteEvent(event) || deletingEventId) return;
+
+    const targetId = event.type === 'weekly_slot'
+      ? event.rawPayload?.slot?.id
+      : event.type === 'whatsapp_campaign'
+      ? event.rawPayload?.campaign?.id
+      : event.rawPayload?.schedule?.id;
+    if (!targetId) {
+      toast.error('Não foi possível identificar esta programação. Atualize o calendário e tente novamente.');
+      return;
+    }
+
+    const confirmation = event.type === 'story_schedule'
+      ? 'Excluir esta programação? Todos os Stories ainda pendentes deste lote, inclusive em outros dias, serão cancelados.'
+      : event.type === 'weekly_slot'
+      ? 'Excluir esta programação semanal? Ela será removida de todos os dias em que se repete.'
+      : event.type === 'whatsapp_campaign'
+      ? 'Excluir esta programação do WhatsApp? Todas as próximas ocorrências desta campanha serão removidas.'
+      : 'Excluir esta programação do Facebook Marketplace?';
+
+    if (!window.confirm(confirmation)) return;
+
+    setDeletingEventId(event.id);
+    try {
+      if (event.type === 'story_schedule') {
+        await socialStoryScheduleService.cancel(targetId);
+      } else if (event.type === 'weekly_slot') {
+        await instagramScheduleService.delete(targetId);
+      } else if (event.type === 'whatsapp_campaign') {
+        await whatsappStatusCampaignService.delete(targetId);
+      } else if (event.type === 'facebook_schedule') {
+        await facebookMarketplaceScheduleService.delete(targetId);
+      }
+
+      await loadData();
+      toast.success('Programação excluída do calendário.');
+    } catch (error) {
+      console.error('Erro ao excluir programação pelo calendário:', error);
+      toast.error(error instanceof Error ? error.message : 'Não foi possível excluir a programação.');
+    } finally {
+      setDeletingEventId(null);
+    }
   };
 
   const allEvents = useMemo(() => {
@@ -998,6 +1052,20 @@ export default function MarketingCalendarPanel({
                           <span className="p-1 bg-blue-50 text-blue-600 rounded" title="Facebook Marketplace">
                             <Facebook className="w-3.5 h-3.5" />
                           </span>
+                        )}
+                        {canDeleteEvent(event) && (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteEvent(event)}
+                            disabled={deletingEventId !== null}
+                            className="p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 rounded transition-colors disabled:cursor-wait disabled:opacity-50"
+                            title="Excluir programação"
+                            aria-label={`Excluir programação ${event.title}`}
+                          >
+                            {deletingEventId === event.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Trash2 className="w-3.5 h-3.5" />}
+                          </button>
                         )}
                       </div>
                     </div>
