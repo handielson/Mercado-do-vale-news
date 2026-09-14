@@ -640,6 +640,8 @@ export default function MarketingPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
+    // Evita que a seleção editorial automática reponha imediatamente o produto removido pelo usuário.
+    const selectionClearedRef = useRef(false);
     const [categories, setCategories] = useState<{ id: string, name: string }[]>([]);
     const [commercialCopyDraft, setCommercialCopyDraft] = useState<{ productId: string; copy: ProductCommercialCopy } | null>(null);
     const [generatedCopy, setGeneratedCopy] = useState('');
@@ -1087,7 +1089,7 @@ export default function MarketingPage() {
     }, [format, marketingKit.caption, marketingKit.cta, marketingKit.hashtags, marketingKit.summary, studioPrimaryProduct]);
 
     useEffect(() => {
-        if (selectedProduct || !editorialSelection.primary) return;
+        if (selectedProduct || selectionClearedRef.current || !editorialSelection.primary) return;
         setSelectedProduct(editorialSelection.primary);
     }, [editorialSelection.primary, selectedProduct]);
 
@@ -2154,7 +2156,13 @@ export default function MarketingPage() {
                                             {selectedProduct && (
                                                 <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 relative group mb-4">
                                                     <button
-                                                        onClick={() => setSelectedProduct(null)}
+                                                        onClick={() => {
+                                                            selectionClearedRef.current = true;
+                                                            setSelectedProduct(null);
+                                                            setCommercialCopyDraft(null);
+                                                            setExportImageOverride(undefined);
+                                                            setCarouselSlideIndex(0);
+                                                        }}
                                                         className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow hover:bg-red-600 transition-colors z-10"
                                                     >
                                                         <X className="w-3 h-3" />
@@ -2202,6 +2210,7 @@ export default function MarketingPage() {
                                                                     const product = getGroupProducts(selectedProductGroup).find((item) => item.id === event.target.value);
                                                                     if (!product) return;
                                                                     saveMarketingPrimaryProduct(selectedProductGroup.groupKey, product.id);
+                                                                    selectionClearedRef.current = false;
                                                                     setSelectedProduct(product);
                                                                     toast.success('Variante principal salva para este modelo');
                                                                 }}
@@ -2329,7 +2338,10 @@ export default function MarketingPage() {
                                                                         className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer ml-1"
                                                                     />
                                                                     <div
-                                                                        onClick={() => setSelectedProduct(p)}
+                                                                        onClick={() => {
+                                                                            selectionClearedRef.current = false;
+                                                                            setSelectedProduct(p);
+                                                                        }}
                                                                         className="flex-1 flex items-center gap-3 text-left cursor-pointer"
                                                                         title="Clique para enviar este modelo para o Palco de Preview"
                                                                     >
