@@ -1,11 +1,11 @@
 # Versão Atual
 
-```text
-version: v1.2.393-beneficios-gatilhos
+``text
+version: v1.2.394-arte-tipografia-imagem-icones
 date: 2026-09-14
-status: published
-release_vps: /var/www/mdv-site/releases/20260914-203329-beneficios-gatilhos
+status: pending
+release_vps: pendente
 branch: main
-summary: Amplia benefícios e adiciona gatilhos comerciais ao gerador de artes.
-tag: v1.2.393-beneficios-gatilhos
-```
+summary: Controles individuais de tipografia, escala do produto e ícones comerciais.
+tag: v1.2.394-arte-tipografia-imagem-icones
+``

@@ -37,7 +37,7 @@ import MarketingApprovalCenterPanel from './marketing/MarketingApprovalCenterPan
 import MarketingCampaignAgentPanel from './marketing/MarketingCampaignAgentPanel';
 import SocialStorySchedulerPanel from './marketing/SocialStorySchedulerPanel';
 import MarketingCalendarPanel from './marketing/MarketingCalendarPanel';
-import ProductMarketingCard, { type ProductMarketingTemplate } from './marketing/ProductMarketingCard';
+import ProductMarketingCard, { type ProductMarketingBenefitIcon, type ProductMarketingTemplate, type ProductMarketingTypographyKey, type ProductMarketingTypographyScales } from './marketing/ProductMarketingCard';
 import MarketingScenePanel from './marketing/MarketingScenePanel';
 import { marketingScenes, downloadSceneReport, type SceneChoice, type SceneJob } from '../../../services/marketingSceneService';
 import { runSceneBatch } from '../../../services/marketingSceneBatch.mjs';
@@ -492,7 +492,10 @@ export default function MarketingPage() {
     const [showArtworkPrice, setShowArtworkPrice] = useState(true);
     const [productArtworkTemplate, setProductArtworkTemplate] = useState<ProductMarketingTemplate>('showcase');
     const [artworkTypographyScale, setArtworkTypographyScale] = useState(100);
+    const [artworkTypographyScales, setArtworkTypographyScales] = useState<ProductMarketingTypographyScales>({});
     const [sceneOverlayOpacity, setSceneOverlayOpacity] = useState(60);
+    const [productImageScale, setProductImageScale] = useState(120);
+    const [benefitIcon, setBenefitIcon] = useState<ProductMarketingBenefitIcon>('sparkles');
     const [marketingPaymentFees, setMarketingPaymentFees] = useState<PaymentFee[]>([]);
     const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
     const [activeTab, setActiveTab] = useState<'studio' | 'calendar' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'>(() => {
@@ -2001,6 +2004,17 @@ export default function MarketingPage() {
                                             <div className="flex gap-2"><button type="button" onClick={() => setArtworkTypographyScale(90)} className="rounded border px-2 py-1 text-[10px] font-bold">Compacta</button><button type="button" onClick={() => setArtworkTypographyScale(100)} className="rounded border px-2 py-1 text-[10px] font-bold">Padrão</button><button type="button" onClick={() => setArtworkTypographyScale(112)} className="rounded border px-2 py-1 text-[10px] font-bold">Destaque</button></div>
                                             <div className="flex items-center justify-between gap-3"><label htmlFor="artwork-background-opacity" className="text-[11px] font-black uppercase tracking-wide text-slate-600">Opacidade do fundo</label><output className="rounded bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-700">{sceneOverlayOpacity}%</output></div>
                                             <input id="artwork-background-opacity" aria-label="Opacidade do fundo" type="range" min="15" max="90" step="1" value={sceneOverlayOpacity} onChange={(event) => setSceneOverlayOpacity(Number(event.target.value))} className="w-full accent-orange-500" />
+                                            <div className="rounded-lg bg-slate-50 p-3">
+                                                <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-600">Escala individual dos textos</p>
+                                                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                                                    {([['title', 'Título'], ['subtitle', 'Subtítulo'], ['badge', 'Selo'], ['benefit', 'Benefícios'], ['trigger', 'Gatilhos'], ['technicalName', 'Nome técnico'], ['cta', 'CTA'], ['contact', 'Contato']] as const).map(([key, label]) => <label key={key} className="block"><span className="mb-0.5 flex justify-between text-[9px] font-bold uppercase text-slate-500"><span>{label}</span><output>{artworkTypographyScales[key] || 100}%</output></span><input aria-label={`Escala ${label}`} type="range" min="80" max="135" step="1" value={artworkTypographyScales[key] || 100} onChange={(event) => setArtworkTypographyScales((old) => ({ ...old, [key as ProductMarketingTypographyKey]: Number(event.target.value) }))} className="w-full accent-orange-500" /></label>)}
+                                                </div>
+                                                <button type="button" onClick={() => setArtworkTypographyScales({})} className="mt-2 rounded border border-slate-200 bg-white px-2 py-1 text-[9px] font-bold uppercase text-slate-500">Redefinir textos</button>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <label className="block"><span className="mb-1 flex justify-between text-[10px] font-bold uppercase text-slate-500"><span>Escala da imagem</span><output>{productImageScale}%</output></span><input aria-label="Escala da imagem do produto" type="range" min="80" max="150" step="1" value={productImageScale} onChange={(event) => setProductImageScale(Number(event.target.value))} className="w-full accent-orange-500" /></label>
+                                                <label className="block"><span className="mb-1 block text-[10px] font-bold uppercase text-slate-500">Ícones dos benefícios</span><select aria-label="Ícones dos benefícios" value={benefitIcon} onChange={(event) => setBenefitIcon(event.target.value as ProductMarketingBenefitIcon)} className="w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-800"><option value="sparkles">Brilho comercial</option><option value="waves">Linhas e fluxo</option><option value="cog">Engrenagem técnica</option><option value="list">Checklist</option><option value="check">Verificação</option></select></label>
+                                            </div>
                                             <p className="text-[10px] leading-tight text-slate-400">Reduza para destacar a fotografia; aumente para dar mais contraste aos textos.</p>
                                         </div>}
                                         {productArtworkTemplate === 'showcase' && activeCommercialCopy && <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
@@ -2683,7 +2697,10 @@ export default function MarketingPage() {
                                                         showPrice={effectiveShowArtworkPrice}
                                                         template={productArtworkTemplate}
                                                         typographyScale={artworkTypographyScale / 100}
+                                                        typographyScales={artworkTypographyScales}
                                                         backgroundOverlayOpacity={sceneOverlayOpacity / 100}
+                                                        productImageScale={productImageScale / 100}
+                                                        benefitIcon={benefitIcon}
                                                         carouselLabel={showCarouselPreview ? `Slide ${activeCarouselSlide?.slideNumber ?? 1} de ${activeCarouselSlide?.totalSlides ?? 1}` : undefined}
                                                     />
                                                 )}

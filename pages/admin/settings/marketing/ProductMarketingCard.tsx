@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   BatteryCharging, Camera, CheckCircle2, Cpu, Database, Gauge, HardDrive,
-  Cable, Circle, Gamepad2, Headphones, MessageCircle, Monitor, Network, PackageCheck, PlugZap, Server, ShieldCheck, Smartphone, Truck, UserRound,
+  Cable, Circle, Cog, Gamepad2, Headphones, ListChecks, MessageCircle, Monitor, Network, PackageCheck, PlugZap, Server, ShieldCheck, Smartphone, Sparkles, Truck, UserRound, Waves,
 } from 'lucide-react';
 import type { MarketingAssetFormat } from '../../../../utils/marketing-sticker';
 import type { ProductMarketingArtworkData, ProductMarketingSpec } from './productMarketingArtwork';
@@ -19,10 +19,16 @@ interface Props {
   carouselLabel?: string;
   template?: ProductMarketingTemplate;
   typographyScale?: number;
+  typographyScales?: ProductMarketingTypographyScales;
   backgroundOverlayOpacity?: number;
+  productImageScale?: number;
+  benefitIcon?: ProductMarketingBenefitIcon;
 }
 
 export type ProductMarketingTemplate = 'technical' | 'showcase';
+export type ProductMarketingTypographyKey = 'brand' | 'badge' | 'title' | 'subtitle' | 'benefit' | 'trigger' | 'technicalName' | 'cta' | 'contact';
+export type ProductMarketingTypographyScales = Partial<Record<ProductMarketingTypographyKey, number>>;
+export type ProductMarketingBenefitIcon = 'check' | 'sparkles' | 'waves' | 'cog' | 'list';
 
 const icons: Record<ProductMarketingSpec['key'], React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
   rearCamera: Camera,
@@ -145,12 +151,14 @@ function useProductCutout(sourceUrl: string | null) {
   return { renderedUrl, ready };
 }
 
-function ProductMarketingShowcase({ data, format, imageUrl, backgroundUrl, logoUrl, whatsapp, website, showPrice, typographyScale = 1, backgroundOverlayOpacity = 0.6 }: Props) {
+function ProductMarketingShowcase({ data, format, imageUrl, backgroundUrl, logoUrl, whatsapp, website, showPrice, typographyScale = 1, typographyScales = {}, backgroundOverlayOpacity = 0.6, productImageScale = 1, benefitIcon = 'check' }: Props) {
   const story = format === 'status';
   const hasPrice = showPrice && data.price > 0;
   const fontScale = Math.max(0.85, Math.min(1.2, typographyScale));
   const overlay = Math.max(0.15, Math.min(0.9, backgroundOverlayOpacity));
-  const scaled = (pixels: number) => `${Math.round(pixels * fontScale)}px`;
+  const scaled = (pixels: number, key: ProductMarketingTypographyKey = 'title') => `${Math.round(pixels * fontScale * Math.max(0.8, Math.min(1.35, (typographyScales[key] || 100) / 100)))}px`;
+  const imageScale = Math.max(0.8, Math.min(1.5, productImageScale));
+  const BenefitIcon = benefitIcon === 'sparkles' ? Sparkles : benefitIcon === 'waves' ? Waves : benefitIcon === 'cog' ? Cog : benefitIcon === 'list' ? ListChecks : CheckCircle2;
   const visibleBenefits = data.commercial.benefits.filter(Boolean).slice(0, 5);
   const benefitsUseTwoRows = visibleBenefits.length > 3;
   const benefitColumns = visibleBenefits.length === 4 ? 2 : Math.min(3, visibleBenefits.length);
@@ -183,13 +191,13 @@ function ProductMarketingShowcase({ data, format, imageUrl, backgroundUrl, logoU
       <div className={`relative z-10 flex h-full flex-col ${story ? 'px-9 py-8' : 'px-8 py-7'}`}>
         <header className="flex shrink-0 items-center justify-between">
           <div data-marketing-brand-logo="true" className={`${story ? 'h-[88px] max-w-[270px] px-3 py-2' : 'h-[62px] max-w-[195px] px-2 py-1.5'} flex items-center rounded-xl bg-white shadow-[0_10px_24px_rgba(0,0,0,.3)]`}><img src={logoUrl || '/brand/mercado-do-vale-logo.png'} crossOrigin="anonymous" alt="Logomarca Mercado do Vale" className="max-h-full max-w-full object-contain object-left" /></div>
-          <span className={`${story ? 'px-6 py-3' : 'px-4 py-2'} rounded-full font-black uppercase tracking-wide`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText, fontSize: scaled(story ? 32 : 20) }}>{data.brand}</span>
+          <span className={`${story ? 'px-6 py-3' : 'px-4 py-2'} rounded-full font-black uppercase tracking-wide`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText, fontSize: scaled(story ? 32 : 20, 'brand') }}>{data.brand}</span>
         </header>
 
         <div className={`${story ? 'mt-5' : 'mt-4'} shrink-0 text-left`}>
-          <span className={`${story ? 'mb-5 px-6 py-2.5' : 'mb-3 px-4 py-1.5'} inline-block rounded-full border font-black uppercase tracking-[0.15em]`} style={{ borderColor: data.theme.accent, color: data.theme.accent, fontSize: scaled(story ? 26 : 14) }}>{data.commercial.badge}</span>
-          <h1 className="max-w-[94%] font-black uppercase leading-[0.84] tracking-[-0.04em]" style={{ fontSize: scaled(story ? 82 : 56) }}><span className="block text-white">{data.commercial.title.split(/\s+/).slice(0, Math.max(1, Math.ceil(data.commercial.title.split(/\s+/).length / 2))).join(' ')}</span><span className="block" style={{ color: data.theme.accent }}>{data.commercial.title.split(/\s+/).slice(Math.max(1, Math.ceil(data.commercial.title.split(/\s+/).length / 2))).join(' ')}</span></h1>
-          <p className={`${story ? 'mt-5' : 'mt-3'} font-bold leading-tight text-white/82`} style={{ fontSize: scaled(story ? 30 : 20) }}>{data.commercial.subtitle}</p>
+          <span className={`${story ? 'mb-5 px-6 py-2.5' : 'mb-3 px-4 py-1.5'} inline-block rounded-full border font-black uppercase tracking-[0.15em]`} style={{ borderColor: data.theme.accent, color: data.theme.accent, fontSize: scaled(story ? 26 : 14, 'badge') }}>{data.commercial.badge}</span>
+          <h1 className="max-w-[94%] font-black uppercase leading-[0.84] tracking-[-0.04em]" style={{ fontSize: scaled(story ? 82 : 56, 'title') }}><span className="block text-white">{data.commercial.title.split(/\s+/).slice(0, Math.max(1, Math.ceil(data.commercial.title.split(/\s+/).length / 2))).join(' ')}</span><span className="block" style={{ color: data.theme.accent }}>{data.commercial.title.split(/\s+/).slice(Math.max(1, Math.ceil(data.commercial.title.split(/\s+/).length / 2))).join(' ')}</span></h1>
+          <p className={`${story ? 'mt-5' : 'mt-3'} font-bold leading-tight text-white/82`} style={{ fontSize: scaled(story ? 30 : 20, 'subtitle') }}>{data.commercial.subtitle}</p>
         </div>
 
         <section className={`relative flex min-h-0 flex-1 items-center justify-center ${story ? 'my-1' : 'my-0'}`}>
@@ -203,23 +211,24 @@ function ProductMarketingShowcase({ data, format, imageUrl, backgroundUrl, logoU
               src={renderedUrl}
               crossOrigin="anonymous"
               alt={data.name}
-              className={`${story ? 'max-h-[700px] max-w-[80%]' : 'max-h-[420px] max-w-[74%]'} relative z-10 object-contain drop-shadow-[0_42px_32px_rgba(0,0,0,0.95)]`}
+              className={`${story ? 'max-h-[700px] max-w-[80%]' : 'max-h-[520px] max-w-[84%]'} relative z-10 object-contain drop-shadow-[0_42px_32px_rgba(0,0,0,0.95)]`}
+              style={{ transform: `scale(${imageScale})` }}
             />
           ) : <Smartphone className="h-56 w-56 text-white/20" />}
         </section>
 
         {visibleBenefits.length > 0 && <div className={`${story ? (benefitsUseTwoRows ? 'mb-3 min-h-[142px]' : 'mb-3 min-h-[92px]') : (benefitsUseTwoRows ? 'mb-2 min-h-[96px]' : 'mb-2 min-h-[64px]')} grid shrink-0 gap-y-2`} style={{ gridTemplateColumns: `repeat(${benefitColumns}, minmax(0, 1fr))` }}>
-          {visibleBenefits.map((benefit, index) => <div key={benefit} className="flex items-center justify-center gap-2 border-r border-white/20 px-3 text-center last:border-r-0"><span className="flex items-center justify-center rounded-full border-2 p-2" style={{ borderColor: data.theme.accent }}><CheckCircle2 className={`${story ? 'h-6 w-6' : 'h-4 w-4'}`} style={{ color: data.theme.accent }} /></span><span className="font-black uppercase leading-tight" style={{ fontSize: scaled(story ? (benefitsUseTwoRows ? 15 : 18) : (benefitsUseTwoRows ? 11 : 14)) }}>{benefit}</span></div>)}
+          {visibleBenefits.map((benefit) => <div key={benefit} className="flex items-center justify-center gap-2 border-r border-white/20 px-3 text-center last:border-r-0"><span className="flex items-center justify-center rounded-full border-2 p-2" style={{ borderColor: data.theme.accent }}><BenefitIcon className={`${story ? 'h-6 w-6' : 'h-4 w-4'}`} style={{ color: data.theme.accent }} /></span><span className="font-black uppercase leading-tight" style={{ fontSize: scaled(story ? (benefitsUseTwoRows ? 15 : 18) : (benefitsUseTwoRows ? 11 : 14), 'benefit') }}>{benefit}</span></div>)}
         </div>}
 
         {visibleTriggers.length > 0 && <div data-marketing-sales-triggers="true" className={`${story ? 'mb-3 min-h-[42px]' : 'mb-2 min-h-[32px]'} flex shrink-0 flex-wrap items-center justify-center gap-2`}>
-          {visibleTriggers.map((trigger) => <span key={trigger} className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1 font-black uppercase leading-tight" style={{ borderColor: `${data.theme.accent}cc`, backgroundColor: '#02070cb8', color: data.theme.accent, fontSize: scaled(story ? 15 : 10) }}><Circle className={`${story ? 'h-2.5 w-2.5' : 'h-2 w-2'} shrink-0 fill-current`} />{trigger}</span>)}
+          {visibleTriggers.map((trigger) => <span key={trigger} className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1 font-black uppercase leading-tight" style={{ borderColor: `${data.theme.accent}cc`, backgroundColor: '#02070cb8', color: data.theme.accent, fontSize: scaled(story ? 15 : 10, 'trigger') }}><Circle className={`${story ? 'h-2.5 w-2.5' : 'h-2 w-2'} shrink-0 fill-current`} />{trigger}</span>)}
         </div>}
 
-        <div className="mb-2 flex shrink-0 items-center justify-between gap-3 rounded-lg border border-white/15 bg-black/35 px-4 py-2"><span className="min-w-0 truncate font-bold uppercase tracking-wide text-white/70" style={{ fontSize: scaled(story ? 16 : 12) }}>{data.commercial.technicalName}</span>{hasPrice && <strong className="shrink-0" style={{ color: data.theme.accent, fontSize: scaled(story ? 24 : 18) }}>{formatProductMarketingPrice(data.price)}</strong>}</div>
+        <div className="mb-2 flex shrink-0 items-center justify-between gap-3 rounded-lg border border-white/15 bg-black/35 px-4 py-2"><span className="min-w-0 truncate font-bold uppercase tracking-wide text-white/70" style={{ fontSize: scaled(story ? 16 : 12, 'technicalName') }}>{data.commercial.technicalName}</span>{hasPrice && <strong className="shrink-0" style={{ color: data.theme.accent, fontSize: scaled(story ? 24 : 18, 'technicalName') }}>{formatProductMarketingPrice(data.price)}</strong>}</div>
 
-        <footer className={`${story ? 'min-h-[72px]' : 'min-h-[54px]'} flex shrink-0 items-center justify-center gap-3 rounded-xl px-5 font-black uppercase shadow-[0_8px_25px_rgba(249,115,22,.3)]`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText, fontSize: scaled(story ? 24 : 18) }}><MessageCircle className="h-7 w-7" />{data.commercial.cta || 'PEÇA AGORA NO WHATSAPP'}</footer>
-        <div className={`${story ? 'mt-2' : 'mt-1'} shrink-0 text-center font-bold text-white/85`} style={{ fontSize: scaled(story ? 18 : 14) }}>{whatsapp} <span className="mx-2 text-white/45">•</span> {website}</div>
+        <footer className={`${story ? 'min-h-[72px]' : 'min-h-[54px]'} flex shrink-0 items-center justify-center gap-3 rounded-xl px-5 font-black uppercase shadow-[0_8px_25px_rgba(249,115,22,.3)]`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText, fontSize: scaled(story ? 24 : 18, 'cta') }}><MessageCircle className="h-7 w-7" />{data.commercial.cta || 'PEÇA AGORA NO WHATSAPP'}</footer>
+        <div className={`${story ? 'mt-2' : 'mt-1'} shrink-0 text-center font-bold text-white/85`} style={{ fontSize: scaled(story ? 18 : 14, 'contact') }}>{whatsapp} <span className="mx-2 text-white/45">•</span> {website}</div>
       </div>
     </div>
   );
