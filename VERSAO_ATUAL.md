@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.390-pexels-cenarios
+version: v1.2.391-pexels-selecao
 date: 2026-09-14
 status: published
-release_vps: /var/www/mdv-site/releases/20260914-193035-pexels-cenarios
+release_vps: /var/www/mdv-site/releases/20260914-195717-pexels-selecao
 branch: main
-summary: Integra cenários fotográficos Pexels ao gerador de artes comerciais.
-tag: v1.2.390-pexels-cenarios
+summary: Aplica o cenário Pexels aprovado diretamente à prévia da arte comercial.
+tag: v1.2.391-pexels-selecao
 ```

@@ -312,6 +312,47 @@ async function ensureRemoteMobileSalesDependencies(appDir) {
   await exec(`cd ${appDir} && npm install firebase-admin@13.10.0 --omit=dev`);
 }
 
+async function applyMarketingScenesMigration({ appDir, apiProc, exec, upload, root }) {
+  if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') {
+    throw new Error('Unexpected API target');
+  }
+
+  const migrationPath = 'migrations/20260914_marketing_scene_library.sql';
+  await exec(`mkdir -p ${appDir}/migrations`);
+  await upload(path.join(root, migrationPath), remotePathJoin(appDir, migrationPath));
+
+  const source = `
+    const fs = require('fs');
+    require('dotenv').config();
+    (async () => {
+      const db = await require('mysql2/promise').createConnection({
+        host: process.env.DB_HOST,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASS,
+        database: process.env.DB_NAME,
+      });
+      const sql = fs.readFileSync('${migrationPath}', 'utf8');
+      for (const statement of sql.split(';').map((item) => item.trim()).filter(Boolean)) {
+        await db.query(statement);
+      }
+      const expected = [
+        'marketing_scene_backgrounds',
+        'marketing_scene_cache',
+        'marketing_scene_selections',
+        'marketing_scene_jobs',
+      ];
+      const [rows] = await db.query("SHOW TABLES LIKE 'marketing_scene_%'");
+      const names = new Set(rows.map((row) => Object.values(row)[0]));
+      const missing = expected.filter((name) => !names.has(name));
+      if (missing.length) throw new Error('Migration table validation failed: ' + missing.join(', '));
+      console.log('Marketing scenes migration applied; tables=' + expected.length);
+      await db.end();
+    })().catch((error) => { console.error(error.message); process.exit(1); });
+  `;
+  const encoded = Buffer.from(source).toString('base64');
+  console.log((await exec(`cd ${appDir} && node -e "eval(Buffer.from('${encoded}','base64').toString())"`)).trim());
+}
+
 async function main() {
   await new Promise((resolve, reject) => {
     conn.on('ready', resolve);
@@ -331,6 +372,11 @@ async function main() {
   const appDir = apiProc.pm2_env.pm_cwd;
   if (process.argv.includes('--central-printing-only')) {
     await require('./scripts/deploy-central-printing.cjs')({ appDir, apiProc, exec, upload, root: __dirname });
+    conn.end();
+    return;
+  }
+  if (process.argv.includes('--marketing-scenes-migration-only')) {
+    await applyMarketingScenesMigration({ appDir, apiProc, exec, upload, root: __dirname });
     conn.end();
     return;
   }

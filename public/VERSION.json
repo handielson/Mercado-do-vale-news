@@ -1,31 +1,22 @@
 {
-  "version": "v1.2.390-pexels-cenarios",
+  "version": "v1.2.391-pexels-selecao",
   "date": "2026-09-14",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260914-193035-pexels-cenarios",
+  "release_vps": "/var/www/mdv-site/releases/20260914-195717-pexels-selecao",
   "branch": "main",
-  "summary": "Integra cenários fotográficos Pexels ao gerador de artes comerciais.",
-  "tag": "v1.2.390-pexels-cenarios",
+  "summary": "Aplica o cenário Pexels aprovado diretamente à prévia da arte comercial.",
+  "tag": "v1.2.391-pexels-selecao",
   "changed_files": [
-    "pages/admin/settings/MarketingPage.tsx",
     "pages/admin/settings/marketing/MarketingScenePanel.tsx",
-    "pages/admin/settings/marketing/ProductMarketingCard.tsx",
-    "services/marketingSceneCore.mjs",
-    "services/marketingScenesServer.cjs",
-    "services/marketingSceneService.ts",
-    "services/marketingSceneBatch.mjs",
-    "migrations/20260914_marketing_scene_library.sql",
-    "tmp-tests/marketing-scenes.test.mjs",
-    "tmp-tests/marketing-scenes-render.test.mjs",
+    "deploy-vps-server-only.cjs",
+    "tmp-tests/marketing-scene-selection-flow-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-14-v1.2.389-preview-checkbox.md"
+    "docs/versoes/2026-09-14-v1.2.391-pexels-selecao.md",
+    "docs/marketing-pexels-local.md"
   ],
   "validations": [
-    "node --test tmp-tests/marketing-scenes.test.mjs",
-    "node tmp-tests/product-commercial-copy.test.ts",
-    "node tmp-tests/product-marketing-artwork-static.test.mjs",
-    "node tmp-tests/marketing-scenes-render.test.mjs",
+    "node --test tmp-tests/marketing-scene-selection-flow-static.test.mjs",
     "npm.cmd run build"
   ]
 }

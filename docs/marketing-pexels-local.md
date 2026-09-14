@@ -95,4 +95,8 @@ Preço de teste: cadastro público com 3590 centavos, exibido como R$ 35,90, sem
 
 `tmp-tests/marketing-scenes-render-report.json`: evidência separada do teste visual real da balança, preservação do cenário ao alterar texto/preço e funcionamento do modelo técnico.
 
-Nenhum commit, push, deploy, alteração de segredo ou escrita em produção foi realizado.
+## Atualização operacional — 14/09/2026
+
+A migração foi aplicada explicitamente no MySQL de produção, criando somente `marketing_scene_backgrounds`, `marketing_scene_cache`, `marketing_scene_selections` e `marketing_scene_jobs`. A chave `PEXELS_API_KEY` foi configurada apenas no ambiente da API e uma busca real pelo painel retornou fotografias do Pexels com créditos e links de origem.
+
+O fluxo agora exige a confirmação de revisão antes de importar uma fotografia encontrada no Pexels. Ao confirmar, a primeira foto aprovada é importada e vinculada automaticamente à prévia atual, liberando a exportação sem exigir uma segunda seleção na biblioteca.
