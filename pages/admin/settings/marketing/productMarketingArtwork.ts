@@ -69,6 +69,18 @@ function isEnabled(value: unknown): boolean {
   return ['sim', 'yes', 'true', '1', 'ativo', 'possui'].includes(clean(value).toLowerCase());
 }
 
+function resolveSellingBadge(product: CatalogProduct, identity: string): string {
+  const explicit = readSpec(product, ['sellingBadge', 'selling_badge', 'destaque_venda']);
+  if (explicit) return explicit;
+  if (product.is_new) return 'LANÇAMENTO';
+  if (/keystone|rj45|conector|tomada de rede/.test(identity)) return 'IDEAL PARA SUA INSTALAÇÃO';
+  if (/cabo|cat\d|patch cord|rede/.test(identity)) return 'CONEXÃO ORGANIZADA';
+  if (/carregador|fonte|cabo usb|adaptador/.test(identity)) return 'PRONTO PARA USAR';
+  if (/película|pelicula|capa|case|proteção|protecao/.test(identity)) return 'PROTEÇÃO NO DIA A DIA';
+  if (/fone|headset|earbud|caixa de som/.test(identity)) return 'SOM PARA CURTIR';
+  return '';
+}
+
 export function resolveProductMarketingTheme(product: CatalogProduct): ProductMarketingTheme {
   const identity = `${product.brand || ''} ${product.model || ''} ${product.name || ''}`.toLowerCase();
   if (identity.includes('poco')) return { accent: '#facc15', accentSoft: '#f59e0b', accentText: '#080b0f' };
@@ -142,7 +154,7 @@ export function buildProductMarketingArtworkData(product: CatalogProduct, paymen
     installmentCount: plan.installments,
     specs,
     features,
-    sellingBadge: readSpec(product, ['sellingBadge', 'selling_badge', 'destaque_venda']) || (product.is_new ? 'LANÇAMENTO' : ''),
+    sellingBadge: resolveSellingBadge(product, identity),
     theme: resolveProductMarketingTheme(product),
   };
 }

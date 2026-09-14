@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.381-modelo-vitrine-comercial
+version: v1.2.382-gatilhos-comerciais
 date: 2026-09-14
 status: ready
-release_vps: /var/www/mdv-site/releases/20260914-125300-modelo-vitrine-comercial
+release_vps: pendente
 branch: main
-summary: Modelo alternativo Vitrine comercial para o Gerador de Artes.
-tag: v1.2.381-modelo-vitrine-comercial
+summary: Gatilhos comerciais por categoria no modelo Vitrine.
+tag: v1.2.382-gatilhos-comerciais
 ```

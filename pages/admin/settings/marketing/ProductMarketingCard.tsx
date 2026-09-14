@@ -208,8 +208,8 @@ function ProductMarketingShowcase({ data, format, imageUrl, whatsapp, website, s
           </div>
         ) : (
           <div className={`${story ? 'min-h-[174px]' : 'min-h-[112px]'} flex shrink-0 flex-col items-center justify-center rounded-[1.8rem] border-2 bg-black/60 text-center`} style={{ borderColor: data.theme.accent }}>
-            <strong className={`${story ? 'text-3xl' : 'text-2xl'} uppercase`} style={{ color: data.theme.accent }}>Consulte condições e disponibilidade</strong>
-            <span className="mt-2 text-lg font-bold">Fale com nossa equipe</span>
+            <strong className={`${story ? 'text-3xl' : 'text-2xl'} uppercase`} style={{ color: data.theme.accent }}>{data.sellingBadge || 'GARANTA O SEU HOJE'}</strong>
+            <span className="mt-2 text-lg font-bold">Consulte condições e disponibilidade</span>
           </div>
         )}
 
