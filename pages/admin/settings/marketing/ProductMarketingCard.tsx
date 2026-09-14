@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   BatteryCharging, Camera, CheckCircle2, Cpu, Database, Gauge, HardDrive,
-  MessageCircle, Network, PackageCheck, Server, ShieldCheck, Smartphone, Truck, UserRound,
+  Cable, Circle, Gamepad2, Headphones, MessageCircle, Monitor, Network, PackageCheck, PlugZap, Server, ShieldCheck, Smartphone, Truck, UserRound,
 } from 'lucide-react';
 import type { MarketingAssetFormat } from '../../../../utils/marketing-sticker';
 import type { ProductMarketingArtworkData, ProductMarketingSpec } from './productMarketingArtwork';
@@ -147,18 +147,26 @@ function ProductMarketingShowcase({ data, format, imageUrl, logoUrl, whatsapp, w
   const hasPrice = showPrice && data.price > 0;
   const { renderedUrl, ready } = useProductCutout(imageUrl);
   const commercialIdentity = `${data.commercial.badge} ${data.commercial.technicalName}`.toLowerCase();
-  const ContextIcon = /rack|patch panel/.test(commercialIdentity)
+  const categoryIdentity = `${data.categoryName} ${data.name}`.toLowerCase();
+  const scenarioKind = /rack|patch panel|rede|rj45|cat\d|keystone/.test(`${commercialIdentity} ${categoryIdentity}`) ? 'network-rack'
+    : /carregador|bateria|power bank|cabo usb/.test(categoryIdentity) ? 'charging-station'
+      : /fone|headset|áudio|audio|caixa de som/.test(categoryIdentity) ? 'entertainment'
+        : /gamer|gaming/.test(categoryIdentity) ? 'gaming-setup'
+          : /câmera|camera|segurança|monitoramento/.test(categoryIdentity) ? 'security-monitoring' : 'neutral-tech';
+  const ContextIcon = scenarioKind === 'network-rack'
     ? Server
-    : /rede|rj45|cat\d|keystone|cabo/.test(commercialIdentity)
+    : /rede|rj45|cat\d|keystone|cabo/.test(`${commercialIdentity} ${categoryIdentity}`)
     ? Network
     : /carregador|bateria|power bank/.test(commercialIdentity)
     ? BatteryCharging
     : PackageCheck;
 
   return (
-    <div className="absolute inset-0 overflow-hidden bg-[#050b11] text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-      <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 48%, ${data.theme.accent}4a 0, transparent 42%), linear-gradient(155deg, #111d2a 0%, #050b11 55%, #020508 100%)` }} />
+    <div data-marketing-scenario={scenarioKind} className="absolute inset-0 overflow-hidden bg-[#050b11] text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div className="absolute inset-0" style={{ background: scenarioKind === 'network-rack' ? `radial-gradient(ellipse at 55% 58%, ${data.theme.accent}55 0, transparent 38%), radial-gradient(ellipse at 12% 28%, #0ea5e944 0, transparent 34%), linear-gradient(155deg, #17283a 0%, #07111b 52%, #020508 100%)` : `radial-gradient(ellipse at 55% 58%, ${data.theme.accent}55 0, transparent 38%), linear-gradient(155deg, #182635 0%, #07111b 52%, #020508 100%)` }} />
       <div className="absolute inset-x-0 top-0 h-[34%] opacity-20" style={{ backgroundImage: 'linear-gradient(90deg, transparent 49%, #fff 50%, transparent 51%), linear-gradient(0deg, transparent 49%, #fff 50%, transparent 51%)', backgroundSize: '58px 58px' }} />
+      <div className={`absolute inset-x-[8%] top-[25%] bottom-[18%] rounded-[3rem] border border-sky-200/10 bg-[#0b1723]/60 shadow-[inset_0_0_80px_rgba(14,165,233,.12)] ${scenarioKind === 'network-rack' ? '' : 'opacity-40'}`} />
+      <div className={`absolute left-[12%] right-[12%] top-[30%] bottom-[22%] opacity-45 ${scenarioKind === 'network-rack' ? '' : 'opacity-20'}`} style={{ background: 'repeating-linear-gradient(0deg,transparent 0 46px,#365064 47px 50px),linear-gradient(90deg,transparent 0 7%,#1c2c39 7% 9%,transparent 9% 91%,#1c2c39 91% 93%,transparent 93%)' }} />
 
       <div className={`relative z-10 flex h-full flex-col ${story ? 'px-9 py-8' : 'px-8 py-7'}`}>
         <header className="flex shrink-0 items-center justify-between">
@@ -166,9 +174,9 @@ function ProductMarketingShowcase({ data, format, imageUrl, logoUrl, whatsapp, w
           <span className={`${story ? 'px-6 py-3 text-2xl' : 'px-4 py-2 text-lg'} rounded-full font-black uppercase tracking-wide`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText }}>{data.brand}</span>
         </header>
 
-        <div className={`${story ? 'mt-8' : 'mt-5'} shrink-0 text-center`}>
+        <div className={`${story ? 'mt-5' : 'mt-4'} shrink-0 text-left`}>
           <span className={`${story ? 'mb-5 px-6 py-2.5 text-xl' : 'mb-3 px-4 py-1.5 text-sm'} inline-block rounded-full border font-black uppercase tracking-[0.15em]`} style={{ borderColor: data.theme.accent, color: data.theme.accent }}>{data.commercial.badge}</span>
-          <h1 className={`${story ? 'text-[78px]' : 'text-[50px]'} mx-auto max-w-[94%] font-black uppercase leading-[0.9] tracking-tight`}>{data.commercial.title}</h1>
+          <h1 className={`${story ? 'text-[82px]' : 'text-[56px]'} max-w-[94%] font-black uppercase leading-[0.84] tracking-[-0.04em]`}><span className="block text-white">{data.commercial.title.split(/\s+/).slice(0, Math.max(1, Math.ceil(data.commercial.title.split(/\s+/).length / 2))).join(' ')}</span><span className="block" style={{ color: data.theme.accent }}>{data.commercial.title.split(/\s+/).slice(Math.max(1, Math.ceil(data.commercial.title.split(/\s+/).length / 2))).join(' ')}</span></h1>
           <p className={`${story ? 'mt-5 text-[30px]' : 'mt-3 text-xl'} font-bold leading-tight text-white/82`}>{data.commercial.subtitle}</p>
         </div>
 
@@ -176,46 +184,26 @@ function ProductMarketingShowcase({ data, format, imageUrl, logoUrl, whatsapp, w
           <div className="absolute bottom-[12%] h-[42%] w-[82%] rounded-full blur-3xl" style={{ backgroundColor: `${data.theme.accent}63` }} />
           <ContextIcon className={`${story ? 'h-[560px] w-[560px]' : 'h-[300px] w-[300px]'} absolute text-white/[0.045]`} strokeWidth={0.7} />
           {renderedUrl ? (
-            <img
+          <img
               data-marketing-product-image="true"
               data-marketing-source-url={imageUrl || ''}
               data-marketing-image-ready={ready ? 'true' : 'false'}
               src={renderedUrl}
               crossOrigin="anonymous"
               alt={data.name}
-              className={`${story ? 'max-h-[900px] max-w-[96%]' : 'max-h-[475px] max-w-[82%]'} relative z-10 object-contain drop-shadow-[0_42px_32px_rgba(0,0,0,0.9)]`}
+              className={`${story ? 'max-h-[700px] max-w-[80%]' : 'max-h-[420px] max-w-[74%]'} relative z-10 object-contain drop-shadow-[0_42px_32px_rgba(0,0,0,0.95)]`}
             />
           ) : <Smartphone className="h-56 w-56 text-white/20" />}
         </section>
 
-        {data.commercial.benefits.length > 0 && <div className={`${story ? 'mb-4 gap-3' : 'mb-3 gap-2'} grid shrink-0`} style={{ gridTemplateColumns: `repeat(${data.commercial.benefits.length}, minmax(0, 1fr))` }}>
-          {data.commercial.benefits.map((benefit) => <div key={benefit} className={`${story ? 'min-h-[76px] px-4 py-3 text-lg' : 'min-h-[48px] px-3 py-2 text-sm'} flex items-center justify-center gap-2 rounded-2xl border bg-black/55 text-center font-black uppercase`} style={{ borderColor: `${data.theme.accent}80` }}><CheckCircle2 className={`${story ? 'h-7 w-7' : 'h-5 w-5'} shrink-0`} style={{ color: data.theme.accent }} />{benefit}</div>)}
+        {data.commercial.benefits.length > 0 && <div className={`${story ? 'mb-3 min-h-[92px]' : 'mb-2 min-h-[64px]'} grid shrink-0`} style={{ gridTemplateColumns: `repeat(${Math.min(3, data.commercial.benefits.length)}, minmax(0, 1fr))` }}>
+          {data.commercial.benefits.slice(0, 3).map((benefit, index) => <div key={benefit} className="flex items-center justify-center gap-2 border-r border-white/20 px-3 text-center last:border-r-0"><span className="flex items-center justify-center rounded-full border-2 p-2" style={{ borderColor: data.theme.accent }}><CheckCircle2 className={`${story ? 'h-6 w-6' : 'h-4 w-4'}`} style={{ color: data.theme.accent }} /></span><span className={`${story ? 'text-lg' : 'text-sm'} font-black uppercase leading-tight`}>{benefit}</span></div>)}
         </div>}
 
-        <p className={`${story ? 'mb-4 min-h-[42px] text-base' : 'mb-2 min-h-[30px] text-xs'} shrink-0 overflow-hidden text-center font-bold uppercase leading-tight tracking-[0.08em] text-white/52`} style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 }}>{data.commercial.technicalName}</p>
+        <div className="mb-2 flex shrink-0 items-center justify-between gap-3 rounded-lg border border-white/15 bg-black/35 px-4 py-2"><span className={`${story ? 'text-base' : 'text-xs'} min-w-0 truncate font-bold uppercase tracking-wide text-white/70`}>{data.commercial.technicalName}</span>{hasPrice && <strong className={`${story ? 'text-2xl' : 'text-lg'} shrink-0`} style={{ color: data.theme.accent }}>{formatProductMarketingPrice(data.price)}</strong>}</div>
 
-        {hasPrice ? (
-          <div className={`${story ? 'min-h-[174px]' : 'min-h-[112px]'} grid shrink-0 grid-cols-2 overflow-hidden rounded-[1.8rem] border-2`} style={{ borderColor: data.theme.accent }}>
-            <div className="flex flex-col items-center justify-center" style={{ background: `linear-gradient(135deg, ${data.theme.accent}, ${data.theme.accentSoft})`, color: data.theme.accentText }}>
-              <span className={`${story ? 'text-xl' : 'text-base'} font-black uppercase`}>À vista no PIX</span>
-              <strong className={`${story ? 'text-[58px]' : 'text-[40px]'} leading-none`}>{formatProductMarketingPrice(data.price)}</strong>
-            </div>
-            <div className="flex flex-col items-center justify-center bg-black/70">
-              <span className={`${story ? 'text-xl' : 'text-base'} font-bold uppercase`}>Em até {data.installmentCount}x</span>
-              <strong className={`${story ? 'text-[48px]' : 'text-[34px]'} leading-none`}>{formatProductMarketingPrice(data.installmentValue)}</strong>
-              <span className="mt-1 text-xs text-white/55">Total: {formatProductMarketingPrice(data.installmentTotal)}</span>
-            </div>
-          </div>
-        ) : (
-          <div className={`${story ? 'min-h-[174px]' : 'min-h-[112px]'} flex shrink-0 flex-col items-center justify-center rounded-[1.8rem] border-2 bg-black/60 text-center`} style={{ borderColor: data.theme.accent }}>
-            <strong className={`${story ? 'text-4xl' : 'text-3xl'} uppercase`} style={{ color: data.theme.accent }}>CONSULTE CONDIÇÕES</strong>
-            <span className={`${story ? 'mt-3 text-xl' : 'mt-2 text-base'} font-bold`}>Consulte condições com nossa equipe</span>
-          </div>
-        )}
-
-        <footer className={`${story ? 'mt-5 min-h-[56px] text-lg' : 'mt-3 min-h-[44px] text-sm'} flex shrink-0 items-center justify-between rounded-xl px-5 font-black`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText }}>
-          <span>{data.commercial.cta}</span><span>{whatsapp}</span><span>{website}</span>
-        </footer>
+        <footer className={`${story ? 'min-h-[72px] text-2xl' : 'min-h-[54px] text-lg'} flex shrink-0 items-center justify-center gap-3 rounded-xl px-5 font-black uppercase shadow-[0_8px_25px_rgba(249,115,22,.3)]`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText }}><MessageCircle className="h-7 w-7" />{data.commercial.cta || 'PEÇA AGORA NO WHATSAPP'}</footer>
+        <div className={`${story ? 'mt-2 text-lg' : 'mt-1 text-sm'} shrink-0 text-center font-bold text-white/85`}>{whatsapp} <span className="mx-2 text-white/45">•</span> {website}</div>
       </div>
     </div>
   );

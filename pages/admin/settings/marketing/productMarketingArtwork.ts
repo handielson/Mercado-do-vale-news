@@ -17,6 +17,7 @@ export interface ProductMarketingSpec {
 }
 
 export interface ProductMarketingArtworkData {
+  categoryName: string;
   brand: string;
   name: string;
   version: string;
@@ -144,6 +145,7 @@ export function buildProductMarketingArtworkData(product: CatalogProduct, paymen
   ].filter(Boolean);
 
   return {
+    categoryName: clean(categoryName),
     brand: marketingBrand,
     name: displayName,
     version,

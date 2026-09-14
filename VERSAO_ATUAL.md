@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.386-modo-comercial-padronizado
+version: v1.2.387-template-comercial-contextual
 date: 2026-09-14
-status: published
-release_vps: /var/www/mdv-site/releases/20260914-145013-modo-comercial-padronizado
+status: pending
+release_vps: pendente
 branch: main
-summary: Modo comercial padronizado no gerador de artes com textos validados, composição fiel e alternância com o modelo legado.
-tag: v1.2.386-modo-comercial-padronizado
+summary: Template comercial contextual com cenário por categoria, produto em destaque, benefícios visuais e CTA único.
+tag: v1.2.387-template-comercial-contextual
 ```

@@ -44,6 +44,10 @@ assert.match(card, /mercado-do-vale-logo\.png/);
 assert.match(card, /Consulte condições e disponibilidade/);
 assert.match(card, /ProductMarketingTemplate = 'technical' \| 'showcase'/);
 assert.match(card, /ProductMarketingShowcase/);
+assert.match(card, /data-marketing-scenario/);
+assert.match(card, /network-rack/);
+assert.match(card, /PEÇA AGORA NO WHATSAPP/);
+assert.match(card, /border-r.*border-white\/20/);
 assert.doesNotMatch(card, /CELULARES E ACESSÓRIOS/i);
 
 assert.match(resolver, /calculateInstallmentFromFees\(retailPrice, paymentFees, 12\)/);
@@ -54,6 +58,7 @@ assert.match(resolver, /identity\.includes\('poco'\)/);
 assert.match(resolver, /identity\.includes\('redmi'\)/);
 assert.match(resolver, /normalizeBrazilianWhatsapp/);
 assert.match(resolver, /resolveSellingBadge/);
+assert.match(resolver, /categoryName: clean\(categoryName\)/);
 assert.match(resolver, /IDEAL PARA SUA INSTALAÇÃO/);
 assert.match(resolver, /CONEXÃO ORGANIZADA/);
 assert.match(card, /data\.commercial\.title/);
