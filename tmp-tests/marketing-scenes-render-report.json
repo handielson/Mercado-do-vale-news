@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "renderer": "Actual ProductMarketingCard + html-to-image",
+  "image": "marketing-scenes-fixture/balanca-contextual.png",
+  "size": [
+    1080,
+    1920
+  ],
+  "tests": [
+    "original product source preserved",
+    "photo retained on title/price edits",
+    "price 3590 cents = R$35,90",
+    "legacy template renders",
+    "all assets local; no production mutations"
+  ],
+  "livePexelsApi": false
+}

@@ -38,6 +38,9 @@ import MarketingCampaignAgentPanel from './marketing/MarketingCampaignAgentPanel
 import SocialStorySchedulerPanel from './marketing/SocialStorySchedulerPanel';
 import MarketingCalendarPanel from './marketing/MarketingCalendarPanel';
 import ProductMarketingCard, { type ProductMarketingTemplate } from './marketing/ProductMarketingCard';
+import MarketingScenePanel from './marketing/MarketingScenePanel';
+import { marketingScenes, downloadSceneReport, type SceneChoice, type SceneJob } from '../../../services/marketingSceneService';
+import { runSceneBatch } from '../../../services/marketingSceneBatch.mjs';
 import { buildProductMarketingArtworkData, normalizeBrazilianWhatsapp } from './marketing/productMarketingArtwork';
 import {
     COMMERCIAL_COPY_LIMITS,
@@ -322,11 +325,11 @@ const waitForPreviewAssets = async (
         timeoutId = window.setTimeout(finish, 5000);
     })));
 
-    const inaccessibleImage = images.find((img) => img.complete && img.naturalWidth === 0);
+    const inaccessibleImage = images.find((img) => !img.complete || img.naturalWidth === 0);
     if (inaccessibleImage) {
         const label = inaccessibleImage.alt.toLowerCase().includes('logomarca')
             ? 'A logomarca oficial não pôde ser carregada.'
-            : 'A imagem oficial do produto não pôde ser carregada.';
+            : inaccessibleImage.hasAttribute('data-marketing-scene-image') ? 'A fotografia do cenário não pôde ser carregada.' : 'A imagem oficial do produto não pôde ser carregada.';
         throw new Error(`${label} Confira o arquivo e tente novamente.`);
     }
 
@@ -648,6 +651,15 @@ export default function MarketingPage() {
     const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
     const [carouselSlideIndex, setCarouselSlideIndex] = useState(0);
     const [exportImageOverride, setExportImageOverride] = useState<string | null | undefined>(undefined);
+    const [sceneMode, setSceneMode] = useState<'automatic' | 'neutral' | 'upload'>('automatic');
+    const [sceneChoices, setSceneChoices] = useState<Record<string, SceneChoice>>({});
+    const [exportSceneOverride, setExportSceneOverride] = useState<string | undefined>();
+    const [sceneJobs, setSceneJobs] = useState<SceneJob[]>([]);
+    const [activeSceneJob, setActiveSceneJob] = useState<SceneJob | null>(null);
+    const sceneCancelRef = useRef(false);
+    const contextualMode = !isStickerFormat && !isBlueprintFormat && productArtworkTemplate === 'showcase' && sceneMode === 'automatic';
+    const selectedScene = selectedProduct ? sceneChoices[selectedProduct.id] : undefined;
+    const sceneBackgroundUrl = exportSceneOverride ?? (sceneMode === 'upload' ? customBgUrl : sceneMode === 'automatic' ? selectedScene?.dataUrl : null);
     const selectedProductImages = getRenderableProductImages(selectedProduct);
     const carouselSlides = getMarketingExportSlides(selectedProductImages, format);
     const activeCarouselSlide = carouselSlides[Math.min(carouselSlideIndex, Math.max(carouselSlides.length - 1, 0))] ?? carouselSlides[0];
@@ -1320,6 +1332,11 @@ export default function MarketingPage() {
 
     // Export to Image Logic
     const handleDownload = async (stickerExportMode?: MarketingStickerExportMode) => {
+        if (contextualMode && selectedProduct) {
+            if (!selectedScene?.background.approved) { toast.error('Escolha e aprove uma fotografia para gerar a arte contextual, ou selecione Fundo neutro.'); return; }
+            await handleContextualDownload([selectedProduct], undefined, true);
+            return;
+        }
         if (!canvasRef.current) return;
         if (!isBlueprintFormat && selectedProduct && selectedProductImages.length === 0) {
             toast.error('Cadastre uma foto para este modelo e esta cor na galeria antes de gerar a arte.');
@@ -1401,6 +1418,72 @@ export default function MarketingPage() {
             setIsGenerating(false);
         }
     };
+    const handleContextualDownload = async (products: CatalogProduct[], resume?: SceneJob, single = false) => {
+        if (isGenerating || isGeneratingBulk) return;
+        const previousProduct = selectedProduct, previousSlide = carouselSlideIndex, previousCopy = commercialCopyDraft;
+        const exportFormat = resume?.format || (format === 'feed' ? 'feed' : 'status');
+        const exportPrice = resume?.showPrice ?? showArtworkPrice;
+        if (resume && (format !== resume.format || showArtworkPrice !== resume.showPrice || productArtworkTemplate !== 'showcase')) {
+            flushSync(() => { setFormat(resume.format); setShowArtworkPrice(resume.showPrice); setProductArtworkTemplate('showcase'); });
+            toast('Formato e preço ajustados conforme o histórico. Clique em Retomar para continuar.'); return;
+        }
+        setIsGeneratingBulk(true); sceneCancelRef.current = false;
+        const byId = new Map(products.map(p => [p.id, p]));
+        let claimedJob: string | undefined;
+        const remember = (job: SceneJob) => { setActiveSceneJob(job); setSceneJobs(old => [job, ...old.filter(j => j.id !== job.id)]); setBulkProgress({ current: job.items.filter(i => ['completed', 'completed_with_warning', 'failed', 'review_required'].includes(i.status)).length, total: job.items.length }); };
+        try {
+            // Retain creation identity if the server response is lost; history also survives browser reloads.
+            const requestKey = JSON.stringify([products.map(p => p.id).sort(), exportFormat, exportPrice]);
+            const pending = JSON.parse(sessionStorage.getItem('marketing-scene-pending') || 'null');
+            const idempotencyKey = pending?.requestKey === requestKey ? pending.id : crypto.randomUUID();
+            sessionStorage.setItem('marketing-scene-pending', JSON.stringify({ requestKey, id: idempotencyKey }));
+            let job = resume || await marketingScenes.job(products.map(p => p.id), exportFormat, exportPrice, idempotencyKey);
+            sessionStorage.removeItem('marketing-scene-pending'); remember(job);
+            await marketingScenes.claim(job.id); claimedJob = job.id;
+            if (resume) { job = await marketingScenes.replan(job.id); remember(job); }
+            const result = await runSceneBatch(job, {
+                progress: marketingScenes.progress, onJob: remember, cancelled: () => sceneCancelRef.current,
+                validate: item => {
+                    const product = byId.get(item.productId);
+                    if (!product) throw Object.assign(new Error('Produto indisponível no catálogo atual.'), { reviewRequired: true });
+                    if (!getRenderableProductImages(product).length) throw Object.assign(new Error('Cadastre a fotografia oficial deste modelo e cor.'), { reviewRequired: true });
+                },
+                prepare: async item => {
+                    if (!item.background?.approved) throw Object.assign(new Error('Fundo pendente de aprovação.'), { reviewRequired: true });
+                    return marketingScenes.image(item.background.id);
+                },
+                compose: async (item, backgroundUrl, checkpoint) => {
+                    const product = byId.get(item.productId)!;
+                    const categoryName = categories.find(c => c.id === product.category_id)?.name || '';
+                    const data = buildProductMarketingArtworkData(product, marketingPaymentFees, companyInfo?.pixDiscountPercentage || 0, categoryName);
+                    const copy = single && previousCopy?.productId === product.id ? previousCopy.copy : data.commercial;
+                    const validation = validateProductCommercialArtwork({ copy, imageUrl: getRenderableProductImages(product)[0], logoUrl: artworkLogo, showPrice: exportPrice, price: data.price, supportedBenefits: data.commercial.benefits, evidenceText: buildProductCommercialEvidenceText(product, categoryName) });
+                    if (!validation.valid) throw Object.assign(new Error(validation.errors.join(' ')), { reviewRequired: true });
+                    if (single && exportPrice && selectedPriceAnomaly) throw Object.assign(new Error('Confira o preço deste SKU antes de gerar a arte.'), { reviewRequired: true });
+                    flushSync(() => setExportSceneOverride(backgroundUrl));
+                    let outputUrl = item.outputUrl || '';
+                    for (const slide of getMarketingExportSlides(getRenderableProductImages(product), exportFormat)) {
+                        if (item.completedSlides?.includes(slide.slideNumber)) continue;
+                        await stageMarketingCanvasForExport(product, slide.slideNumber - 1, slide.imageUrl);
+                        flushSync(() => setCommercialCopyDraft({ productId: product.id, copy }));
+                        const dataUrl = await exportCurrentCanvasPng(slide.imageUrl);
+                        if (exportFormat === 'status' && slide.slideNumber === 1) outputUrl = await saveMarketingArtworkForWhatsappStatus(product, dataUrl, exportPrice && data.price > 0);
+                        triggerImageDownload(dataUrl, buildMarketingDownloadName(product.name, slide.slideNumber, slide.totalSlides));
+                        await checkpoint(slide.slideNumber);
+                    }
+                    recordCooldownForProduct(product);
+                    return { outputUrl, copy, warning: [item.message, ...validation.warnings].filter(Boolean).join(' ') };
+                },
+            });
+            const completed = result.items.filter(i => ['completed', 'completed_with_warning'].includes(i.status)).length;
+            toast(`${completed} de ${result.items.length} produtos concluídos. Confira o relatório do lote.`);
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Falha no lote. O histórico permite retomar os itens pendentes.'); }
+        finally {
+            if (claimedJob) await marketingScenes.release(claimedJob).catch(() => {});
+            flushSync(() => { setSelectedProduct(previousProduct); setCarouselSlideIndex(previousSlide); setExportImageOverride(undefined); setExportSceneOverride(undefined); setCommercialCopyDraft(previousCopy); });
+            setIsGeneratingBulk(false);
+        }
+    };
     const handleBulkDownload = async (stickerExportMode?: MarketingStickerExportMode) => {
         if (!canvasRef.current || bulkSelectedIds.size === 0) return;
         const currentStickerExportMode = stickerExportMode ?? 'png';
@@ -1410,6 +1493,7 @@ export default function MarketingPage() {
             .filter(p => bulkSelectedIds.has(p.id));
 
         if (productsToGenerate.length === 0) return;
+        if (contextualMode) { await handleContextualDownload(productsToGenerate); return; }
         const productsWithoutGalleryImage = productsToGenerate.filter((product) => getRenderableProductImages(product).length === 0);
         if (!isBlueprintFormat && productsWithoutGalleryImage.length > 0) {
             toast.error(`${productsWithoutGalleryImage.length} produto(s) não têm foto na galeria para o modelo e a cor selecionados.`);
@@ -1939,6 +2023,20 @@ export default function MarketingPage() {
                                         </div>}
                                     </div>}
 
+                                    {!isStickerFormat && !isBlueprintFormat && productArtworkTemplate === 'showcase' && <>
+                                        <MarketingScenePanel productId={selectedProduct?.id} choice={selectedScene} disabled={isGenerating || isGeneratingBulk} mode={sceneMode} onMode={setSceneMode} onChoose={(id, choice) => setSceneChoices(old => ({ ...old, [id]: choice }))} onUpload={handleCustomBgUpload} />
+                                        <section className="space-y-2 rounded-xl border bg-white p-5 text-xs">
+                                            <div className="flex items-center justify-between"><h3 className="font-bold">Histórico de cenários e lotes</h3><button type="button" disabled={isGeneratingBulk} onClick={() => void marketingScenes.jobs().then(r => setSceneJobs(r.items)).catch(e => toast.error(e.message))} className="text-blue-700">Atualizar</button></div>
+                                            {isGeneratingBulk && <button type="button" onClick={() => { sceneCancelRef.current = true; }} className="rounded border border-red-300 p-2 text-red-700">Cancelar após o produto atual</button>}
+                                            {activeSceneJob && <p role="status">{activeSceneJob.items.filter(i => i.status.startsWith('completed')).length}/{activeSceneJob.items.length} concluídos · {activeSceneJob.queries} consultas Pexels</p>}
+                                            <div className="max-h-80 space-y-3 overflow-y-auto">{sceneJobs.map(job => <div key={job.id} className="rounded border p-2">
+                                                <p>{new Date(job.createdAt).toLocaleString('pt-BR')} · {job.items.length} produtos{job.cancelled ? ' · Cancelado' : ''}</p>
+                                                <p>{job.contexts} contextos · {job.reused} fundos reutilizados · {job.newBackgrounds} descobertos</p>
+                                                <div className="my-2 flex gap-3"><button type="button" onClick={() => downloadSceneReport(job, 'json')} className="text-blue-700">JSON</button><button type="button" onClick={() => downloadSceneReport(job, 'csv')} className="text-blue-700">CSV</button><button type="button" disabled={isGeneratingBulk || job.items.every(i => i.status.startsWith('completed'))} onClick={() => void loadAllMarketingProducts({}).then(products => handleContextualDownload(products.filter(p => job.items.some(i => i.productId === p.id)), job)).catch(e => toast.error(e.message))} className="text-blue-700">Retomar pendentes</button></div>
+                                                <details><summary>Produtos e créditos</summary>{job.items.map(item => <p key={item.productId} className="mt-2">{item.productName} · {item.status} {item.message}{item.background?.photoPage && <> · <a href={item.background.photoPage} target="_blank" rel="noreferrer" className="text-blue-700">{item.background.photographer} / Pexels</a></>}</p>)}</details>
+                                            </div>)}</div>
+                                        </section>
+                                    </>}
                                     {/* Bloco 1: Seleção de Fundo */}
                                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
                                         <h2 className="text-sm font-bold flex items-center gap-2 mb-4 text-slate-800">
@@ -2556,6 +2654,7 @@ export default function MarketingPage() {
                                                         data={productArtworkData}
                                                         format={format}
                                                         imageUrl={selectedProductImage}
+                                                        backgroundUrl={sceneBackgroundUrl}
                                                         logoUrl={artworkLogo}
                                                         whatsapp={artworkWhatsapp}
                                                         website={artworkWebsite}

@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.389-preview-checkbox
+version: v1.2.390-pexels-cenarios
 date: 2026-09-14
-status: published
-release_vps: /var/www/mdv-site/releases/20260914-183230-preview-checkbox
+status: pending
+release_vps: pendente
 branch: main
-summary: Atualiza o preview ao marcar produto na seleção em lote.
-tag: v1.2.389-preview-checkbox
+summary: Integra cenários fotográficos Pexels ao gerador de artes comerciais.
+tag: v1.2.390-pexels-cenarios
 ```

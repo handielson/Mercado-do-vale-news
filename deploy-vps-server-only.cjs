@@ -152,7 +152,7 @@ async function uploadMobileSalesPushFiles(appDir) {
 
 async function uploadMarketingCampaignFiles(appDir) {
   await exec(`mkdir -p ${appDir}/services`);
-  for (const relativePath of [marketingCampaignServicePath, ...phonePriceListServicePaths]) {
+  for (const relativePath of [marketingCampaignServicePath, 'services/marketingScenesServer.cjs', 'services/marketingSceneCore.mjs', ...phonePriceListServicePaths]) {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }

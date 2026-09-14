@@ -1,0 +1,20 @@
+-- Apply explicitly after review. Never run automatically during API startup.
+CREATE TABLE IF NOT EXISTS marketing_scene_backgrounds (
+ id VARCHAR(80) PRIMARY KEY, data JSON NOT NULL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS marketing_scene_cache (
+ id VARCHAR(80) PRIMARY KEY, data JSON NOT NULL, expires_at BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS marketing_scene_selections (
+ product_id VARCHAR(80) PRIMARY KEY, data JSON NOT NULL,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS marketing_scene_jobs (
+ id CHAR(36) PRIMARY KEY, owner_id VARCHAR(100) NOT NULL,
+ idempotency_key VARCHAR(100) NOT NULL, data JSON NOT NULL,
+ lease_token VARCHAR(64) NULL, lease_expires_at BIGINT NOT NULL DEFAULT 0,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE KEY scene_job_request (owner_id, idempotency_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

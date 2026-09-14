@@ -11,6 +11,7 @@ interface Props {
   data: ProductMarketingArtworkData;
   format: Exclude<MarketingAssetFormat, 'sticker'>;
   imageUrl: string | null;
+  backgroundUrl?: string | null;
   logoUrl?: string | null;
   whatsapp: string;
   website: string;
@@ -142,7 +143,7 @@ function useProductCutout(sourceUrl: string | null) {
   return { renderedUrl, ready };
 }
 
-function ProductMarketingShowcase({ data, format, imageUrl, logoUrl, whatsapp, website, showPrice }: Props) {
+function ProductMarketingShowcase({ data, format, imageUrl, backgroundUrl, logoUrl, whatsapp, website, showPrice }: Props) {
   const story = format === 'status';
   const hasPrice = showPrice && data.price > 0;
   const { renderedUrl, ready } = useProductCutout(imageUrl);
@@ -162,11 +163,13 @@ function ProductMarketingShowcase({ data, format, imageUrl, logoUrl, whatsapp, w
     : PackageCheck;
 
   return (
-    <div data-marketing-scenario={scenarioKind} className="absolute inset-0 overflow-hidden bg-[#050b11] text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+    <div data-marketing-scenario={backgroundUrl ? 'photographic' : 'neutral'} className="absolute inset-0 overflow-hidden bg-[#050b11] text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      {backgroundUrl ? <>
+        <img data-marketing-scene-image="true" src={backgroundUrl} alt="Fotografia do cenário contextual" crossOrigin="anonymous" className="absolute inset-0 h-full w-full object-cover" style={{ filter: 'blur(1.2px) saturate(.8)', transform: 'scale(1.01)' }} />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(4,13,24,.80) 0%,rgba(4,13,24,.42) 28%,rgba(4,13,24,.14) 52%,rgba(4,13,24,.45) 75%,rgba(4,13,24,.92) 100%)' }} />
+      </> : <>
       <div className="absolute inset-0" style={{ background: scenarioKind === 'network-rack' ? `radial-gradient(ellipse at 55% 58%, ${data.theme.accent}55 0, transparent 38%), radial-gradient(ellipse at 12% 28%, #0ea5e944 0, transparent 34%), linear-gradient(155deg, #17283a 0%, #07111b 52%, #020508 100%)` : `radial-gradient(ellipse at 55% 58%, ${data.theme.accent}55 0, transparent 38%), linear-gradient(155deg, #182635 0%, #07111b 52%, #020508 100%)` }} />
-      <div className="absolute inset-x-0 top-0 h-[34%] opacity-20" style={{ backgroundImage: 'linear-gradient(90deg, transparent 49%, #fff 50%, transparent 51%), linear-gradient(0deg, transparent 49%, #fff 50%, transparent 51%)', backgroundSize: '58px 58px' }} />
-      <div className={`absolute inset-x-[8%] top-[25%] bottom-[18%] rounded-[3rem] border border-sky-200/10 bg-[#0b1723]/60 shadow-[inset_0_0_80px_rgba(14,165,233,.12)] ${scenarioKind === 'network-rack' ? '' : 'opacity-40'}`} />
-      <div className={`absolute left-[12%] right-[12%] top-[30%] bottom-[22%] opacity-45 ${scenarioKind === 'network-rack' ? '' : 'opacity-20'}`} style={{ background: 'repeating-linear-gradient(0deg,transparent 0 46px,#365064 47px 50px),linear-gradient(90deg,transparent 0 7%,#1c2c39 7% 9%,transparent 9% 91%,#1c2c39 91% 93%,transparent 93%)' }} />
+      </>}
 
       <div className={`relative z-10 flex h-full flex-col ${story ? 'px-9 py-8' : 'px-8 py-7'}`}>
         <header className="flex shrink-0 items-center justify-between">
@@ -181,8 +184,8 @@ function ProductMarketingShowcase({ data, format, imageUrl, logoUrl, whatsapp, w
         </div>
 
         <section className={`relative flex min-h-0 flex-1 items-center justify-center ${story ? 'my-1' : 'my-0'}`}>
-          <div className="absolute bottom-[12%] h-[42%] w-[82%] rounded-full blur-3xl" style={{ backgroundColor: `${data.theme.accent}63` }} />
-          <ContextIcon className={`${story ? 'h-[560px] w-[560px]' : 'h-[300px] w-[300px]'} absolute text-white/[0.045]`} strokeWidth={0.7} />
+          <div className="absolute bottom-[12%] h-[24%] w-[70%] rounded-full blur-3xl" style={{ backgroundColor: `${data.theme.accent}28` }} />
+          {!backgroundUrl && <ContextIcon className={`${story ? 'h-[560px] w-[560px]' : 'h-[300px] w-[300px]'} absolute text-white/[0.045]`} strokeWidth={0.7} />}
           {renderedUrl ? (
           <img
               data-marketing-product-image="true"
@@ -209,10 +212,11 @@ function ProductMarketingShowcase({ data, format, imageUrl, logoUrl, whatsapp, w
   );
 }
 
-export default function ProductMarketingCard({ data, format, imageUrl, logoUrl, whatsapp, website, showPrice, template = 'technical' }: Props) {
-  if (template === 'showcase') {
-    return <ProductMarketingShowcase data={data} format={format} imageUrl={imageUrl} logoUrl={logoUrl} whatsapp={whatsapp} website={website} showPrice={showPrice} />;
-  }
+export default function ProductMarketingCard(props: Props) {
+  return props.template === 'showcase' ? <ProductMarketingShowcase {...props} /> : <ProductMarketingTechnical {...props} />;
+}
+
+function ProductMarketingTechnical({ data, format, imageUrl, whatsapp, website, showPrice }: Props) {
   const story = format === 'status';
   const visibleSpecs = data.specs.slice(0, story ? 8 : 4);
   const subtitle = [data.version, data.technology].filter(Boolean).join('  |  ');

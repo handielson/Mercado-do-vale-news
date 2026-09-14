@@ -1,0 +1,5663 @@
+{
+  "test": "mocked API + in-memory repository; no production writes",
+  "products": 100,
+  "contexts": 8,
+  "firstQueries": 8,
+  "secondQueries": 0,
+  "newPhotos": 24,
+  "reusedProducts": 100,
+  "maxConcurrentSearches": 3,
+  "elapsedMs": 56,
+  "items": [
+    {
+      "productId": "p0",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-10",
+        "pexelsPhotoId": 10,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/10/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/10/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/10/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p1",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-22",
+        "pexelsPhotoId": 22,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/22/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/22/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/22/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p2",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-31",
+        "pexelsPhotoId": 31,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/31/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/31/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/31/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p3",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-41",
+        "pexelsPhotoId": 41,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/41/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/41/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/41/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p4",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-50",
+        "pexelsPhotoId": 50,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/50/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/50/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/50/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p5",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-62",
+        "pexelsPhotoId": 62,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/62/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/62/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/62/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p6",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-72",
+        "pexelsPhotoId": 72,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/72/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/72/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/72/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p7",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-81",
+        "pexelsPhotoId": 81,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/81/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/81/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/81/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p8",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-10",
+        "pexelsPhotoId": 10,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/10/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/10/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/10/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p9",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-21",
+        "pexelsPhotoId": 21,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/21/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/21/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/21/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p10",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-31",
+        "pexelsPhotoId": 31,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/31/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/31/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/31/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p11",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-42",
+        "pexelsPhotoId": 42,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/42/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/42/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/42/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p12",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-50",
+        "pexelsPhotoId": 50,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/50/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/50/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/50/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p13",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-61",
+        "pexelsPhotoId": 61,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/61/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/61/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/61/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p14",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-72",
+        "pexelsPhotoId": 72,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/72/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/72/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/72/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p15",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-82",
+        "pexelsPhotoId": 82,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/82/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/82/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/82/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p16",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-11",
+        "pexelsPhotoId": 11,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/11/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/11/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/11/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p17",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-20",
+        "pexelsPhotoId": 20,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/20/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/20/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/20/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p18",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-30",
+        "pexelsPhotoId": 30,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/30/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/30/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/30/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p19",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-42",
+        "pexelsPhotoId": 42,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/42/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/42/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/42/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p20",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-52",
+        "pexelsPhotoId": 52,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/52/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/52/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/52/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p21",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-60",
+        "pexelsPhotoId": 60,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/60/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/60/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/60/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p22",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-72",
+        "pexelsPhotoId": 72,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/72/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/72/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/72/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p23",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-80",
+        "pexelsPhotoId": 80,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/80/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/80/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/80/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p24",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-11",
+        "pexelsPhotoId": 11,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/11/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/11/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/11/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p25",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-20",
+        "pexelsPhotoId": 20,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/20/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/20/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/20/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p26",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-31",
+        "pexelsPhotoId": 31,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/31/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/31/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/31/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p27",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-42",
+        "pexelsPhotoId": 42,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/42/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/42/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/42/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p28",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-52",
+        "pexelsPhotoId": 52,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/52/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/52/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/52/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p29",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-60",
+        "pexelsPhotoId": 60,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/60/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/60/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/60/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p30",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-72",
+        "pexelsPhotoId": 72,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/72/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/72/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/72/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p31",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-81",
+        "pexelsPhotoId": 81,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/81/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/81/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/81/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p32",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-10",
+        "pexelsPhotoId": 10,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/10/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/10/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/10/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p33",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-20",
+        "pexelsPhotoId": 20,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/20/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/20/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/20/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p34",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-32",
+        "pexelsPhotoId": 32,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/32/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/32/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/32/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p35",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-40",
+        "pexelsPhotoId": 40,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/40/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/40/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/40/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p36",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-52",
+        "pexelsPhotoId": 52,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/52/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/52/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/52/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p37",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-62",
+        "pexelsPhotoId": 62,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/62/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/62/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/62/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p38",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-70",
+        "pexelsPhotoId": 70,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/70/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/70/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/70/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p39",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-81",
+        "pexelsPhotoId": 81,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/81/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/81/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/81/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p40",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-10",
+        "pexelsPhotoId": 10,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/10/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/10/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/10/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p41",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-21",
+        "pexelsPhotoId": 21,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/21/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/21/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/21/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p42",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-31",
+        "pexelsPhotoId": 31,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/31/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/31/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/31/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p43",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-40",
+        "pexelsPhotoId": 40,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/40/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/40/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/40/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p44",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-50",
+        "pexelsPhotoId": 50,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/50/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/50/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/50/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p45",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-61",
+        "pexelsPhotoId": 61,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/61/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/61/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/61/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p46",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-72",
+        "pexelsPhotoId": 72,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/72/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/72/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/72/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p47",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-81",
+        "pexelsPhotoId": 81,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/81/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/81/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/81/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p48",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-12",
+        "pexelsPhotoId": 12,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/12/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/12/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/12/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p49",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-22",
+        "pexelsPhotoId": 22,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/22/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/22/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/22/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p50",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-31",
+        "pexelsPhotoId": 31,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/31/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/31/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/31/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p51",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-42",
+        "pexelsPhotoId": 42,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/42/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/42/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/42/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p52",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-50",
+        "pexelsPhotoId": 50,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/50/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/50/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/50/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p53",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-60",
+        "pexelsPhotoId": 60,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/60/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/60/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/60/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p54",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-72",
+        "pexelsPhotoId": 72,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/72/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/72/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/72/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p55",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-81",
+        "pexelsPhotoId": 81,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/81/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/81/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/81/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p56",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-12",
+        "pexelsPhotoId": 12,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/12/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/12/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/12/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p57",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-21",
+        "pexelsPhotoId": 21,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/21/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/21/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/21/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p58",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-30",
+        "pexelsPhotoId": 30,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/30/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/30/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/30/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p59",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-40",
+        "pexelsPhotoId": 40,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/40/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/40/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/40/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p60",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-51",
+        "pexelsPhotoId": 51,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/51/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/51/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/51/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p61",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-60",
+        "pexelsPhotoId": 60,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/60/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/60/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/60/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p62",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-71",
+        "pexelsPhotoId": 71,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/71/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/71/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/71/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p63",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-82",
+        "pexelsPhotoId": 82,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/82/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/82/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/82/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p64",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-12",
+        "pexelsPhotoId": 12,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/12/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/12/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/12/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p65",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-21",
+        "pexelsPhotoId": 21,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/21/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/21/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/21/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p66",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-31",
+        "pexelsPhotoId": 31,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/31/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/31/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/31/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p67",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-41",
+        "pexelsPhotoId": 41,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/41/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/41/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/41/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p68",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-52",
+        "pexelsPhotoId": 52,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/52/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/52/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/52/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p69",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-61",
+        "pexelsPhotoId": 61,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/61/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/61/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/61/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p70",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-70",
+        "pexelsPhotoId": 70,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/70/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/70/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/70/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p71",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-82",
+        "pexelsPhotoId": 82,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/82/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/82/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/82/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p72",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-10",
+        "pexelsPhotoId": 10,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/10/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/10/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/10/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p73",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-20",
+        "pexelsPhotoId": 20,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/20/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/20/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/20/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p74",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-31",
+        "pexelsPhotoId": 31,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/31/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/31/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/31/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p75",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-40",
+        "pexelsPhotoId": 40,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/40/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/40/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/40/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p76",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-52",
+        "pexelsPhotoId": 52,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/52/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/52/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/52/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p77",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-62",
+        "pexelsPhotoId": 62,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/62/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/62/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/62/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p78",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-70",
+        "pexelsPhotoId": 70,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/70/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/70/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/70/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p79",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-80",
+        "pexelsPhotoId": 80,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/80/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/80/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/80/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p80",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-11",
+        "pexelsPhotoId": 11,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/11/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/11/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/11/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p81",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-21",
+        "pexelsPhotoId": 21,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/21/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/21/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/21/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p82",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-31",
+        "pexelsPhotoId": 31,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/31/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/31/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/31/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p83",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-42",
+        "pexelsPhotoId": 42,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/42/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/42/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/42/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p84",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-52",
+        "pexelsPhotoId": 52,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/52/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/52/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/52/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p85",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-62",
+        "pexelsPhotoId": 62,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/62/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/62/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/62/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p86",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-72",
+        "pexelsPhotoId": 72,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/72/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/72/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/72/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p87",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-82",
+        "pexelsPhotoId": 82,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/82/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/82/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/82/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p88",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-10",
+        "pexelsPhotoId": 10,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/10/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/10/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/10/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p89",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-20",
+        "pexelsPhotoId": 20,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/20/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/20/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/20/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p90",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-32",
+        "pexelsPhotoId": 32,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/32/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/32/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/32/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p91",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-41",
+        "pexelsPhotoId": 41,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/41/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/41/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/41/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p92",
+      "productName": "Fone bluetooth",
+      "background": {
+        "id": "pexels-50",
+        "pexelsPhotoId": 50,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/50/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/50/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/50/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern living room entertainment",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c4",
+        "subcategoryId": null,
+        "contextKey": "audio",
+        "context": "entretenimento",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ]
+      },
+      "context": {
+        "key": "audio",
+        "context": "entretenimento",
+        "primaryQuery": "modern living room entertainment",
+        "alternativeQuery": "sala moderna entretenimento",
+        "orientation": "portrait",
+        "tags": [
+          "sala",
+          "entretenimento",
+          "som"
+        ],
+        "excludedTerms": [
+          "speaker",
+          "headphones"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p93",
+      "productName": "Controle gamer",
+      "background": {
+        "id": "pexels-62",
+        "pexelsPhotoId": 62,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/62/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/62/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/62/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "gaming setup desk rgb",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c5",
+        "subcategoryId": null,
+        "contextKey": "gaming",
+        "context": "setup gamer",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ]
+      },
+      "context": {
+        "key": "gaming",
+        "context": "setup gamer",
+        "primaryQuery": "gaming setup desk rgb",
+        "alternativeQuery": "mesa setup gamer iluminacao",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "gamer",
+          "jogos"
+        ],
+        "excludedTerms": [
+          "controller",
+          "gamepad"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p94",
+      "productName": "Alicate",
+      "background": {
+        "id": "pexels-70",
+        "pexelsPhotoId": 70,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/70/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/70/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/70/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized workshop workbench",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c6",
+        "subcategoryId": null,
+        "contextKey": "tools",
+        "context": "bancada de oficina",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ]
+      },
+      "context": {
+        "key": "tools",
+        "context": "bancada de oficina",
+        "primaryQuery": "organized workshop workbench",
+        "alternativeQuery": "oficina bancada organizada",
+        "orientation": "portrait",
+        "tags": [
+          "oficina",
+          "bancada",
+          "ferramentas"
+        ],
+        "excludedTerms": [
+          "pliers",
+          "drill"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p95",
+      "productName": "Smartphone",
+      "background": {
+        "id": "pexels-80",
+        "pexelsPhotoId": 80,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/80/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/80/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/80/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern technology desk premium workspace",
+        "discoveredAt": "2026-09-14T19:31:48.430Z",
+        "categoryId": "c7",
+        "subcategoryId": null,
+        "contextKey": "phone",
+        "context": "ambiente tecnológico premium",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "phone",
+        "context": "ambiente tecnológico premium",
+        "primaryQuery": "modern technology desk premium workspace",
+        "alternativeQuery": "mesa tecnologia ambiente premium",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "smartphone",
+          "phone"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p96",
+      "productName": "Balança de cozinha",
+      "background": {
+        "id": "pexels-10",
+        "pexelsPhotoId": 10,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/10/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/10/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/10/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern kitchen countertop cooking ingredients",
+        "discoveredAt": "2026-09-14T19:31:48.398Z",
+        "categoryId": "c0",
+        "subcategoryId": null,
+        "contextKey": "kitchen",
+        "context": "cozinha moderna",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ]
+      },
+      "context": {
+        "key": "kitchen",
+        "context": "cozinha moderna",
+        "primaryQuery": "modern kitchen countertop cooking ingredients",
+        "alternativeQuery": "cozinha moderna bancada ingredientes",
+        "orientation": "portrait",
+        "tags": [
+          "cozinha",
+          "bancada",
+          "culinaria"
+        ],
+        "excludedTerms": [
+          "scale",
+          "kitchen scale"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p97",
+      "productName": "Patch panel CAT6",
+      "background": {
+        "id": "pexels-22",
+        "pexelsPhotoId": 22,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/22/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/22/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/22/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "professional network rack data center",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c1",
+        "subcategoryId": null,
+        "contextKey": "patch-panel",
+        "context": "rack profissional",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ]
+      },
+      "context": {
+        "key": "patch-panel",
+        "context": "rack profissional",
+        "primaryQuery": "professional network rack data center",
+        "alternativeQuery": "rack profissional sala de servidores",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "servidores"
+        ],
+        "excludedTerms": [
+          "patch panel"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p98",
+      "productName": "Organizador de cabos",
+      "background": {
+        "id": "pexels-32",
+        "pexelsPhotoId": 32,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/32/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/32/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/32/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "organized network rack server room",
+        "discoveredAt": "2026-09-14T19:31:48.399Z",
+        "categoryId": "c2",
+        "subcategoryId": null,
+        "contextKey": "cable-organizer",
+        "context": "cabeamento organizado",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ]
+      },
+      "context": {
+        "key": "cable-organizer",
+        "context": "cabeamento organizado",
+        "primaryQuery": "organized network rack server room",
+        "alternativeQuery": "sala tecnica rack organizado",
+        "orientation": "portrait",
+        "tags": [
+          "rede",
+          "rack",
+          "cabos"
+        ],
+        "excludedTerms": [
+          "cable organizer"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    },
+    {
+      "productId": "p99",
+      "productName": "Carregador USB",
+      "background": {
+        "id": "pexels-40",
+        "pexelsPhotoId": 40,
+        "origin": "pexels",
+        "url": "https://images.pexels.com/photos/40/test.jpg",
+        "thumbnail": "https://images.pexels.com/photos/40/small.jpg",
+        "photoPage": "https://www.pexels.com/photo/40/",
+        "photographer": "Fixture author",
+        "photographerPage": "https://www.pexels.com/@fixture/",
+        "width": 2500,
+        "height": 4000,
+        "averageColor": "#172333",
+        "alt": "Reviewed room",
+        "orientation": "portrait",
+        "approved": true,
+        "active": true,
+        "imported": false,
+        "uses": 0,
+        "importedAt": null,
+        "lastUsedAt": null,
+        "query": "modern desk charging station",
+        "discoveredAt": "2026-09-14T19:31:48.414Z",
+        "categoryId": "c3",
+        "subcategoryId": null,
+        "contextKey": "charging",
+        "context": "estação de trabalho",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ]
+      },
+      "context": {
+        "key": "charging",
+        "context": "estação de trabalho",
+        "primaryQuery": "modern desk charging station",
+        "alternativeQuery": "mesa moderna estacao de trabalho",
+        "orientation": "portrait",
+        "tags": [
+          "mesa",
+          "trabalho",
+          "tecnologia"
+        ],
+        "excludedTerms": [
+          "charger",
+          "power bank"
+        ],
+        "confidence": 90
+      },
+      "confidence": 100,
+      "status": "pending",
+      "attempts": 0,
+      "message": ""
+    }
+  ]
+}

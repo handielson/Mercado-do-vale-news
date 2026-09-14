@@ -1,21 +1,31 @@
 {
-  "version": "v1.2.389-preview-checkbox",
+  "version": "v1.2.390-pexels-cenarios",
   "date": "2026-09-14",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260914-183230-preview-checkbox",
+  "status": "pending",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Atualiza o preview ao marcar produto na seleção em lote.",
-  "tag": "v1.2.389-preview-checkbox",
+  "summary": "Integra cenários fotográficos Pexels ao gerador de artes comerciais.",
+  "tag": "v1.2.390-pexels-cenarios",
   "changed_files": [
     "pages/admin/settings/MarketingPage.tsx",
-    "tmp-tests/product-marketing-artwork-static.test.mjs",
+    "pages/admin/settings/marketing/MarketingScenePanel.tsx",
+    "pages/admin/settings/marketing/ProductMarketingCard.tsx",
+    "services/marketingSceneCore.mjs",
+    "services/marketingScenesServer.cjs",
+    "services/marketingSceneService.ts",
+    "services/marketingSceneBatch.mjs",
+    "migrations/20260914_marketing_scene_library.sql",
+    "tmp-tests/marketing-scenes.test.mjs",
+    "tmp-tests/marketing-scenes-render.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
     "docs/versoes/2026-09-14-v1.2.389-preview-checkbox.md"
   ],
   "validations": [
-    "node --experimental-strip-types tmp-tests/product-commercial-copy.test.ts",
+    "node --test tmp-tests/marketing-scenes.test.mjs",
+    "node tmp-tests/product-commercial-copy.test.ts",
     "node tmp-tests/product-marketing-artwork-static.test.mjs",
+    "node tmp-tests/marketing-scenes-render.test.mjs",
     "npm.cmd run build"
   ]
 }

@@ -75,7 +75,14 @@ export function buildProductCommercialCopy(product: CatalogProduct, categoryName
   let cta = 'PEÇA AGORA NO WHATSAPP';
   const benefits: string[] = [];
 
-  if (/guia organizador|organizador de cabo/.test(source)) {
+  if (/balanca.*cozinha|cozinha.*balanca/.test(source)) {
+    title = 'PRATICIDADE EM CADA RECEITA';
+    subtitle = 'Facilite o preparo dos seus ingredientes';
+    badge = 'PARA SUA COZINHA';
+    if (/10\s*kg/.test(source)) benefits.push('Capacidade de 10 kg');
+    if (/digital/.test(source)) benefits.push('Leitura digital');
+    if (/tara/.test(source)) benefits.push('Função tara');
+  } else if (/guia organizador|organizador de cabo/.test(source)) {
     title = 'ADEUS, CABOS BAGUNÇADOS';
     subtitle = /rack/.test(source) ? 'Organização profissional para seu rack' : 'Organize e direcione seus cabos';
     benefits.push('Visual mais limpo', 'Cabos bem direcionados', 'Instalação profissional');

@@ -3636,6 +3636,7 @@ function registerSocialStoryRoutes(fastify, dependencies) {
 }
 
 function registerMarketingCampaignRoutes(fastify, dependencies) {
+  require('./marketingScenesServer.cjs').registerMarketingSceneRoutes(fastify, dependencies);
   registerPhonePriceListRoutes(fastify, dependencies);
   registerApprovalRoutes(fastify, dependencies);
   registerMetaRoutes(fastify, dependencies);
