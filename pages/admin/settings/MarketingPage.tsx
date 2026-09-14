@@ -473,7 +473,7 @@ export default function MarketingPage() {
     const [companyInfo, setCompanyInfo] = useState<Company | null>(null);
     const [format, setFormat] = useState<MarketingAssetFormat>('status');
     const [showArtworkPrice, setShowArtworkPrice] = useState(true);
-    const [productArtworkTemplate, setProductArtworkTemplate] = useState<ProductMarketingTemplate>('technical');
+    const [productArtworkTemplate, setProductArtworkTemplate] = useState<ProductMarketingTemplate>('showcase');
     const [marketingPaymentFees, setMarketingPaymentFees] = useState<PaymentFee[]>([]);
     const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
     const [activeTab, setActiveTab] = useState<'studio' | 'calendar' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'>(() => {

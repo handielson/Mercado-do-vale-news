@@ -11,6 +11,7 @@ assert.match(page, /useState<MarketingAssetFormat>\('status'\)/);
 assert.match(page, /Gerador de Artes/);
 assert.match(page, /META SEM PREÇO/);
 assert.match(page, /productArtworkTemplate/);
+assert.match(page, /useState<ProductMarketingTemplate>\('showcase'\)/);
 assert.match(page, /Vitrine comercial/);
 assert.match(page, /template=\{productArtworkTemplate\}/);
 assert.match(page, /Foto\/variante principal da arte/);
