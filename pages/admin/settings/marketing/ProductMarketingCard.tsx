@@ -15,7 +15,10 @@ interface Props {
   website: string;
   showPrice: boolean;
   carouselLabel?: string;
+  template?: ProductMarketingTemplate;
 }
+
+export type ProductMarketingTemplate = 'technical' | 'showcase';
 
 const icons: Record<ProductMarketingSpec['key'], React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
   rearCamera: Camera,
@@ -142,7 +145,86 @@ function useProductCutout(sourceUrl: string | null) {
   return { renderedUrl, ready };
 }
 
-export default function ProductMarketingCard({ data, format, imageUrl, whatsapp, website, showPrice }: Props) {
+function ProductMarketingShowcase({ data, format, imageUrl, whatsapp, website, showPrice }: Props) {
+  const story = format === 'status';
+  const visibleSpecs = data.specs.slice(0, story ? 3 : 2);
+  const subtitle = [data.version, data.technology].filter(Boolean).join('  |  ');
+  const { renderedUrl, ready } = useProductCutout(imageUrl);
+
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-[#050b11] text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 48%, ${data.theme.accent}4a 0, transparent 42%), linear-gradient(155deg, #111d2a 0%, #050b11 55%, #020508 100%)` }} />
+      <div className="absolute inset-x-0 top-0 h-[34%] opacity-20" style={{ backgroundImage: 'linear-gradient(90deg, transparent 49%, #fff 50%, transparent 51%), linear-gradient(0deg, transparent 49%, #fff 50%, transparent 51%)', backgroundSize: '58px 58px' }} />
+
+      <div className={`relative z-10 flex h-full flex-col ${story ? 'px-9 py-8' : 'px-8 py-7'}`}>
+        <header className="flex shrink-0 items-center justify-between">
+          <img src="/brand/mercado-do-vale-logo.png" crossOrigin="anonymous" alt="Mercado do Vale" className={`${story ? 'h-[76px] max-w-[250px]' : 'h-[52px] max-w-[180px]'} object-contain object-left`} />
+          <span className={`${story ? 'px-6 py-3 text-2xl' : 'px-4 py-2 text-lg'} rounded-full font-black uppercase tracking-wide`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText }}>{data.brand}</span>
+        </header>
+
+        <div className={`${story ? 'mt-8' : 'mt-5'} shrink-0 text-center`}>
+          {data.sellingBadge && <span className={`${story ? 'mb-4 px-5 py-2 text-lg' : 'mb-3 px-4 py-1.5 text-sm'} inline-block rounded-full border font-black uppercase tracking-[0.15em]`} style={{ borderColor: data.theme.accent, color: data.theme.accent }}>{data.sellingBadge}</span>}
+          <h1 className={`${story ? 'text-[66px]' : 'text-[45px]'} mx-auto max-w-[92%] font-black uppercase leading-[0.95] tracking-tight`}>{data.name}</h1>
+          {subtitle && <p className={`${story ? 'mt-4 text-2xl' : 'mt-2 text-lg'} font-bold uppercase tracking-[0.12em] text-white/70`}>{subtitle}</p>}
+        </div>
+
+        <section className={`relative flex min-h-0 flex-1 items-center justify-center ${story ? 'my-1' : 'my-0'}`}>
+          <div className="absolute bottom-[12%] h-[42%] w-[82%] rounded-full blur-3xl" style={{ backgroundColor: `${data.theme.accent}63` }} />
+          {renderedUrl ? (
+            <img
+              data-marketing-product-image="true"
+              data-marketing-source-url={imageUrl || ''}
+              data-marketing-image-ready={ready ? 'true' : 'false'}
+              src={renderedUrl}
+              crossOrigin="anonymous"
+              alt={data.name}
+              className={`${story ? 'max-h-[900px] max-w-[96%]' : 'max-h-[475px] max-w-[82%]'} relative z-10 object-contain drop-shadow-[0_42px_32px_rgba(0,0,0,0.9)]`}
+            />
+          ) : <Smartphone className="h-56 w-56 text-white/20" />}
+        </section>
+
+        {(visibleSpecs.length > 0 || data.features.length > 0) && <div className={`${story ? 'mb-5 gap-3' : 'mb-3 gap-2'} grid shrink-0 ${visibleSpecs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {visibleSpecs.map((spec) => {
+            const Icon = icons[spec.key];
+            return <div key={spec.key} className={`${story ? 'px-5 py-3' : 'px-4 py-2'} flex items-center gap-3 rounded-2xl border bg-black/55`} style={{ borderColor: `${data.theme.accent}80` }}>
+              <Icon className={`${story ? 'h-9 w-9' : 'h-6 w-6'} shrink-0`} style={{ color: data.theme.accent }} />
+              <span className={`${story ? 'text-lg' : 'text-sm'} min-w-0 truncate font-black uppercase`}>{spec.value}</span>
+            </div>;
+          })}
+          {data.features.map((feature) => <div key={feature} className={`${story ? 'px-5 py-3 text-lg' : 'px-4 py-2 text-sm'} flex items-center justify-center gap-2 rounded-2xl bg-white/10 font-black uppercase`}><CheckCircle2 className="h-5 w-5" style={{ color: data.theme.accent }} />{feature}</div>)}
+        </div>}
+
+        {showPrice ? (
+          <div className={`${story ? 'min-h-[174px]' : 'min-h-[112px]'} grid shrink-0 grid-cols-2 overflow-hidden rounded-[1.8rem] border-2`} style={{ borderColor: data.theme.accent }}>
+            <div className="flex flex-col items-center justify-center" style={{ background: `linear-gradient(135deg, ${data.theme.accent}, ${data.theme.accentSoft})`, color: data.theme.accentText }}>
+              <span className={`${story ? 'text-xl' : 'text-base'} font-black uppercase`}>À vista no PIX</span>
+              <strong className={`${story ? 'text-[58px]' : 'text-[40px]'} leading-none`}>{money(data.price)}</strong>
+            </div>
+            <div className="flex flex-col items-center justify-center bg-black/70">
+              <span className={`${story ? 'text-xl' : 'text-base'} font-bold uppercase`}>Em até {data.installmentCount}x</span>
+              <strong className={`${story ? 'text-[48px]' : 'text-[34px]'} leading-none`}>{money(data.installmentValue)}</strong>
+              <span className="mt-1 text-xs text-white/55">Total: {money(data.installmentTotal)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className={`${story ? 'min-h-[174px]' : 'min-h-[112px]'} flex shrink-0 flex-col items-center justify-center rounded-[1.8rem] border-2 bg-black/60 text-center`} style={{ borderColor: data.theme.accent }}>
+            <strong className={`${story ? 'text-3xl' : 'text-2xl'} uppercase`} style={{ color: data.theme.accent }}>Consulte condições e disponibilidade</strong>
+            <span className="mt-2 text-lg font-bold">Fale com nossa equipe</span>
+          </div>
+        )}
+
+        <footer className={`${story ? 'mt-5 min-h-[56px] text-lg' : 'mt-3 min-h-[44px] text-sm'} flex shrink-0 items-center justify-between rounded-xl px-5 font-black`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText }}>
+          <span>CHAME NO WHATSAPP</span><span>{whatsapp}</span><span>{website}</span>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+export default function ProductMarketingCard({ data, format, imageUrl, whatsapp, website, showPrice, template = 'technical' }: Props) {
+  if (template === 'showcase') {
+    return <ProductMarketingShowcase data={data} format={format} imageUrl={imageUrl} whatsapp={whatsapp} website={website} showPrice={showPrice} />;
+  }
   const story = format === 'status';
   const visibleSpecs = data.specs.slice(0, story ? 8 : 4);
   const subtitle = [data.version, data.technology].filter(Boolean).join('  |  ');

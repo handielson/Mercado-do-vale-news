@@ -37,7 +37,7 @@ import MarketingApprovalCenterPanel from './marketing/MarketingApprovalCenterPan
 import MarketingCampaignAgentPanel from './marketing/MarketingCampaignAgentPanel';
 import SocialStorySchedulerPanel from './marketing/SocialStorySchedulerPanel';
 import MarketingCalendarPanel from './marketing/MarketingCalendarPanel';
-import ProductMarketingCard from './marketing/ProductMarketingCard';
+import ProductMarketingCard, { type ProductMarketingTemplate } from './marketing/ProductMarketingCard';
 import { buildProductMarketingArtworkData, normalizeBrazilianWhatsapp } from './marketing/productMarketingArtwork';
 import ProductBlueprintCard from './marketing/ProductBlueprintCard';
 import { buildProductBlueprintArtworkData, buildProductBlueprintSourcePayload } from './marketing/productBlueprintArtwork';
@@ -473,6 +473,7 @@ export default function MarketingPage() {
     const [companyInfo, setCompanyInfo] = useState<Company | null>(null);
     const [format, setFormat] = useState<MarketingAssetFormat>('status');
     const [showArtworkPrice, setShowArtworkPrice] = useState(true);
+    const [productArtworkTemplate, setProductArtworkTemplate] = useState<ProductMarketingTemplate>('technical');
     const [marketingPaymentFees, setMarketingPaymentFees] = useState<PaymentFee[]>([]);
     const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
     const [activeTab, setActiveTab] = useState<'studio' | 'calendar' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'>(() => {
@@ -1713,7 +1714,7 @@ export default function MarketingPage() {
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                                 {[
                                     ['1', 'Busque o aparelho'],
-                                    ['2', 'Escolha Story ou Feed'],
+                                    ['2', 'Escolha formato e modelo'],
                                     ['3', 'Confira e baixe'],
                                 ].map(([step, label]) => (
                                     <div key={step} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm">
@@ -1823,6 +1824,21 @@ export default function MarketingPage() {
 
                                 {/* LADO ESQUERDO: Controles (4 Colunas) */}
                                 <div className="lg:col-span-4 space-y-6">
+
+                                    {!isStickerFormat && !isBlueprintFormat && <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                                        <h2 className="mb-1 text-sm font-bold text-slate-800">Modelo da arte</h2>
+                                        <p className="mb-3 text-xs leading-relaxed text-slate-500">Alterne antes de baixar. O modelo Vitrine amplia o produto e usa apenas os destaques que ajudam na venda.</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button type="button" onClick={() => setProductArtworkTemplate('technical')} className={`rounded-lg border px-3 py-3 text-left transition-colors ${productArtworkTemplate === 'technical' ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                                                <span className="block text-xs font-black uppercase">Técnico</span>
+                                                <span className="mt-1 block text-[11px] leading-tight">Especificações em destaque</span>
+                                            </button>
+                                            <button type="button" onClick={() => setProductArtworkTemplate('showcase')} className={`rounded-lg border px-3 py-3 text-left transition-colors ${productArtworkTemplate === 'showcase' ? 'border-orange-500 bg-orange-50 text-orange-800 ring-1 ring-orange-500' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                                                <span className="block text-xs font-black uppercase">Vitrine comercial</span>
+                                                <span className="mt-1 block text-[11px] leading-tight">Produto grande e poucos argumentos</span>
+                                            </button>
+                                        </div>
+                                    </div>}
 
                                     {/* Bloco 1: Seleção de Fundo */}
                                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
@@ -2428,6 +2444,7 @@ export default function MarketingPage() {
                                                         whatsapp={artworkWhatsapp}
                                                         website={artworkWebsite}
                                                         showPrice={showArtworkPrice}
+                                                        template={productArtworkTemplate}
                                                         carouselLabel={showCarouselPreview ? `Slide ${activeCarouselSlide?.slideNumber ?? 1} de ${activeCarouselSlide?.totalSlides ?? 1}` : undefined}
                                                     />
                                                 )}

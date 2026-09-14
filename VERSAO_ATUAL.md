@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.380-entrega-loja-rota
-date: 2026-09-13
+version: v1.2.381-modelo-vitrine-comercial
+date: 2026-09-14
 status: ready
-release_vps: /var/www/mdv-site/releases/20260913-215814-v12380-entrega-loja-rota
+release_vps: pendente
 branch: main
-summary: Atribuição da entrega para a loja e abertura externa da rota no app de entregas.
-tag: v1.2.380-entrega-loja-rota
+summary: Modelo alternativo Vitrine comercial para o Gerador de Artes.
+tag: v1.2.381-modelo-vitrine-comercial
 ```
