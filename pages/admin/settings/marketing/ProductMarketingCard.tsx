@@ -46,7 +46,7 @@ const isNearWhite = (pixels: Uint8ClampedArray, offset: number) => (
 );
 
 /** Remove somente o fundo branco conectado às bordas da foto oficial. */
-function useProductCutout(sourceUrl: string | null) {
+function useProductCutout(sourceUrl: string | null, preserveWhiteProduct = false) {
   const [renderedUrl, setRenderedUrl] = useState(sourceUrl);
   const [ready, setReady] = useState(!sourceUrl);
 
@@ -146,7 +146,7 @@ function useProductCutout(sourceUrl: string | null) {
     };
     source.src = sourceUrl;
     return () => { cancelled = true; };
-  }, [sourceUrl]);
+  }, [sourceUrl, preserveWhiteProduct]);
 
   return { renderedUrl, ready };
 }
@@ -163,7 +163,8 @@ function ProductMarketingShowcase({ data, format, imageUrl, backgroundUrl, logoU
   const benefitsUseTwoRows = visibleBenefits.length > 3;
   const benefitColumns = visibleBenefits.length === 4 ? 2 : Math.min(3, visibleBenefits.length);
   const visibleTriggers = (data.commercial.triggers || []).filter(Boolean).slice(0, 3);
-  const { renderedUrl, ready } = useProductCutout(imageUrl);
+  const preserveWhiteProduct = /\b(branco|branca|white|off[- ]?white)\b/i.test(`${data.name} ${data.categoryName} ${data.commercial.technicalName}`);
+  const { renderedUrl, ready } = useProductCutout(imageUrl, preserveWhiteProduct);
   const commercialIdentity = `${data.commercial.badge} ${data.commercial.technicalName}`.toLowerCase();
   const categoryIdentity = `${data.categoryName} ${data.name}`.toLowerCase();
   const scenarioKind = /rack|patch panel|rede|rj45|cat\d|keystone/.test(`${commercialIdentity} ${categoryIdentity}`) ? 'network-rack'
@@ -242,7 +243,8 @@ function ProductMarketingTechnical({ data, format, imageUrl, logoUrl, whatsapp, 
   const story = format === 'status';
   const visibleSpecs = data.specs.slice(0, story ? 8 : 4);
   const subtitle = [data.version, data.technology].filter(Boolean).join('  |  ');
-  const { renderedUrl, ready } = useProductCutout(imageUrl);
+  const preserveWhiteProduct = /\b(branco|branca|white|off[- ]?white)\b/i.test(`${data.name} ${data.categoryName} ${data.commercial.technicalName}`);
+  const { renderedUrl, ready } = useProductCutout(imageUrl, preserveWhiteProduct);
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#071017] text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
@@ -332,3 +334,4 @@ function ProductMarketingTechnical({ data, format, imageUrl, logoUrl, whatsapp, 
     </div>
   );
 }
+

@@ -1,21 +1,19 @@
 {
-  "version": "v1.2.394-arte-tipografia-imagem-icones",
+  "version": "v1.2.395-preservar-produtos-brancos",
   "date": "2026-09-14",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260914-204925-arte-tipografia-imagem-icones",
+  "status": "pending",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Controles individuais de tipografia, escala do produto e ícones comerciais.",
-  "tag": "v1.2.394-arte-tipografia-imagem-icones",
+  "summary": "Preserva produtos brancos durante o recorte automático do gerador de artes.",
+  "tag": "v1.2.395-preservar-produtos-brancos",
   "changed_files": [
-    "pages/admin/settings/MarketingPage.tsx",
     "pages/admin/settings/marketing/ProductMarketingCard.tsx",
-    "tmp-tests/product-marketing-artwork-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-14-v1.2.394-arte-tipografia-imagem-icones.md"
+    "docs/versoes/2026-09-14-v1.2.395-preservar-produtos-brancos.md"
   ],
   "validations": [
-    "npx.cmd tsx tmp-tests/product-commercial-copy.test.ts",
+    "npx.cmd tsc --noEmit --pretty false",
     "node tmp-tests/product-marketing-artwork-static.test.mjs",
     "npm.cmd run build"
   ]
