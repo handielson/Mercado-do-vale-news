@@ -243,7 +243,10 @@ async function ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath = null)
       META_GRAPH_API_VERSION: process.env.META_GRAPH_API_VERSION || readEnvValue(current, 'META_GRAPH_API_VERSION') || 'v25.0',
       META_OAUTH_REDIRECT_URI: process.env.META_OAUTH_REDIRECT_URI || readEnvValue(current, 'META_OAUTH_REDIRECT_URI') || 'https://api.xiaomipetrolina.com.br/integrations/meta/oauth/callback',
       META_TOKEN_ENCRYPTION_KEY: process.env.META_TOKEN_ENCRYPTION_KEY || currentMetaEncryptionKey || crypto.randomBytes(32).toString('hex'),
+      BULK_IMAGE_CONCURRENCY: process.env.BULK_IMAGE_CONCURRENCY || readEnvValue(current, 'BULK_IMAGE_CONCURRENCY') || '3',
     };
+    const pexelsKey = process.env.PEXELS_API_KEY || readEnvValue(current, 'PEXELS_API_KEY');
+    if (pexelsKey) entries.PEXELS_API_KEY = pexelsKey;
     if (process.env.META_APP_ID) entries.META_APP_ID = process.env.META_APP_ID;
     if (process.env.META_APP_SECRET) entries.META_APP_SECRET = process.env.META_APP_SECRET;
     const googleLoginClientId = process.env.GOOGLE_LOGIN_CLIENT_ID || readEnvValue(current, 'GOOGLE_LOGIN_CLIENT_ID');
