@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.388-fix-selecao-produto-palco
+version: v1.2.389-preview-checkbox
 date: 2026-09-14
 status: published
-release_vps: /var/www/mdv-site/releases/20260914-182440-fix-selecao-produto-palco
+release_vps: /var/www/mdv-site/releases/20260914-183230-preview-checkbox
 branch: main
-summary: Corrige remoção e troca do produto no palco de preview sem re seleção automática indevida.
-tag: v1.2.388-fix-selecao-produto-palco
+summary: Atualiza o preview ao marcar produto na seleção em lote.
+tag: v1.2.389-preview-checkbox
 ```

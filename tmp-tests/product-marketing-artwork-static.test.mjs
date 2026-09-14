@@ -19,6 +19,7 @@ assert.match(page, /template=\{productArtworkTemplate\}/);
 assert.match(page, /selectionClearedRef/);
 assert.match(page, /setCommercialCopyDraft\(null\)/);
 assert.match(page, /setExportImageOverride\(undefined\)/);
+assert.match(page, /if \(e\.target\.checked\).*setSelectedProduct\(p\)/s);
 assert.match(page, /Textos do criativo/);
 assert.match(page, /Gerar novamente/);
 assert.match(page, /supportedBenefits/);

@@ -2334,6 +2334,13 @@ export default function MarketingPage() {
                                                                             if (e.target.checked) newSet.add(p.id);
                                                                             else newSet.delete(p.id);
                                                                             setBulkSelectedIds(newSet);
+                                                                            if (e.target.checked) {
+                                                                                selectionClearedRef.current = false;
+                                                                                setSelectedProduct(p);
+                                                                            } else if (selectedProduct?.id === p.id) {
+                                                                                selectionClearedRef.current = true;
+                                                                                setSelectedProduct(null);
+                                                                            }
                                                                         }}
                                                                         className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer ml-1"
                                                                     />
