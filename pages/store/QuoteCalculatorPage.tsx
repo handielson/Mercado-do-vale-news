@@ -88,6 +88,7 @@ export default function QuoteCalculatorPage() {
   const initialTotal = centsFromParam(searchParams.get('t') || searchParams.get('total'));
   const initialEntry = Math.min(initialTotal, centsFromParam(searchParams.get('e') || searchParams.get('entrada')));
   const initialInstallment = Number(searchParams.get('n') || searchParams.get('parcela')) || null;
+  const initialCardCharge = centsFromParam(searchParams.get('l') || searchParams.get('limite'));
   const initialProductName = (searchParams.get('p') || searchParams.get('produto') || '').trim();
   const initialProductVariation = (searchParams.get('v') || searchParams.get('variacao') || '').trim();
   const quoteItems = React.useMemo(() => parseQuoteItems(searchParams.get('itens'), searchParams.get('q'), {
@@ -100,6 +101,7 @@ export default function QuoteCalculatorPage() {
   const [totalInput, setTotalInput] = React.useState(formatInput(initialTotal));
   const [entryInput, setEntryInput] = React.useState(formatInput(initialEntry));
   const [selectedInstallment, setSelectedInstallment] = React.useState<number | null>(initialInstallment);
+  const [cardChargeInput, setCardChargeInput] = React.useState(formatInput(initialCardCharge));
   const [selectedItemIndex, setSelectedItemIndex] = React.useState(() => Math.max(0, quoteItems.findIndex((item) => (
     item.total === initialTotal
     && item.entrada === initialEntry
@@ -122,6 +124,7 @@ export default function QuoteCalculatorPage() {
   const totalCents = parseMoneyInput(totalInput);
   const entryCents = Math.min(totalCents, parseMoneyInput(entryInput));
   const cardCents = Math.max(0, totalCents - entryCents);
+  const requestedCardChargeCents = parseMoneyInput(cardChargeInput);
 
   const options = React.useMemo(() => {
     const creditFees = fees
@@ -134,14 +137,20 @@ export default function QuoteCalculatorPage() {
       : Array.from({ length: 12 }, (_, index) => ({ installments: index + 1, applied_fee: 0, applied_fee_pct: 0 }) as PaymentFee);
 
     return feeRows.map((fee) => {
-      const totalWithFee = Math.round(cardCents * (1 + getFeePercent(fee) / 100));
+      const feeMultiplier = 1 + getFeePercent(fee) / 100;
+      const maximumCardCharge = Math.round(totalCents * feeMultiplier);
+      const totalWithFee = requestedCardChargeCents > 0
+        ? Math.min(requestedCardChargeCents, maximumCardCharge)
+        : Math.round(cardCents * feeMultiplier);
+      const cardValueWithoutFee = Math.min(totalCents, Math.round(totalWithFee / feeMultiplier));
       return {
         installments: fee.installments,
         monthlyValue: Math.round(totalWithFee / fee.installments),
         totalWithFee,
+        cardValueWithoutFee,
       };
     });
-  }, [cardCents, fees]);
+  }, [cardCents, fees, requestedCardChargeCents, totalCents]);
 
   React.useEffect(() => {
     if (selectedInstallment && !options.some((option) => option.installments === selectedInstallment)) {
@@ -150,7 +159,12 @@ export default function QuoteCalculatorPage() {
   }, [options, selectedInstallment]);
 
   const selectedOption = options.find((option) => option.installments === selectedInstallment) || null;
-  const grandTotal = entryCents + (selectedOption?.totalWithFee || cardCents);
+  const usingCardLimit = requestedCardChargeCents > 0 && Boolean(selectedOption);
+  const effectiveCardCents = selectedOption?.cardValueWithoutFee || cardCents;
+  const effectiveEntryCents = usingCardLimit
+    ? Math.max(0, totalCents - effectiveCardCents)
+    : entryCents;
+  const grandTotal = effectiveEntryCents + (selectedOption?.totalWithFee || effectiveCardCents);
   const productLabel = [productName, productVariation].filter(Boolean).join(' - ');
   const selectQuoteItem = (item: QuoteCalculatorItem, index: number) => {
     setSelectedItemIndex(index);
@@ -165,25 +179,27 @@ export default function QuoteCalculatorPage() {
       e: String(entryCents),
     });
     if (selectedInstallment) params.set('n', String(selectedInstallment));
+    if (requestedCardChargeCents > 0) params.set('l', String(requestedCardChargeCents));
     if (productName) params.set('p', productName);
     if (productVariation) params.set('v', productVariation);
     if (quoteItems.length > 0) params.set('q', encodeCompactQuoteItems(quoteItems));
     return `https://mercadodovale.com.br/c?${params.toString()}`;
-  }, [entryCents, productName, productVariation, quoteItems, selectedInstallment, totalCents]);
+  }, [entryCents, productName, productVariation, quoteItems, requestedCardChargeCents, selectedInstallment, totalCents]);
 
   const shareMessage = React.useMemo(() => {
     let text = 'Olá! Fiz uma simulação de orçamento.\n\n';
     if (productLabel) text += `Produto: ${productLabel}\n`;
     text += `Valor do orçamento: ${formatPrice(totalCents)}\n`;
-    text += `Entrada Pix/Dinheiro: ${formatPrice(entryCents)}\n`;
-    text += `Restante no cartão: ${formatPrice(cardCents)}\n`;
+    text += `Entrada Pix/Dinheiro: ${formatPrice(effectiveEntryCents)}\n`;
+    text += `Restante no cartão sem taxa: ${formatPrice(effectiveCardCents)}\n`;
     if (selectedOption) {
       text += `Opção escolhida: ${selectedOption.installments}x de ${formatPrice(selectedOption.monthlyValue)} = ${formatPrice(selectedOption.totalWithFee)}\n`;
-      text += `Total geral: ${formatPrice(entryCents + selectedOption.totalWithFee)}\n`;
+      if (usingCardLimit) text += `Valor que será passado no cartão (com taxa): ${formatPrice(selectedOption.totalWithFee)}\n`;
+      text += `Total geral: ${formatPrice(grandTotal)}\n`;
     }
     text += `\nLink da simulação: ${currentCalculatorUrl}`;
     return text;
-  }, [cardCents, currentCalculatorUrl, entryCents, productLabel, selectedOption, totalCents]);
+  }, [currentCalculatorUrl, effectiveCardCents, effectiveEntryCents, grandTotal, productLabel, selectedOption, totalCents, usingCardLimit]);
 
   const handleCopySimulation = async () => {
     await navigator.clipboard.writeText(shareMessage);
@@ -265,26 +281,33 @@ export default function QuoteCalculatorPage() {
             </label>
             <label className="block">
               <span className="mb-1 flex items-center gap-1 text-xs font-bold uppercase text-slate-500">
-                <Smartphone className="h-3.5 w-3.5" /> Entrada Pix/Dinheiro
+                <Smartphone className="h-3.5 w-3.5" /> {usingCardLimit ? 'Falta pagar no Pix/Dinheiro' : 'Entrada Pix/Dinheiro'}
               </span>
               <input
-                value={entryInput}
+                value={usingCardLimit ? formatInput(effectiveEntryCents) : entryInput}
                 onChange={(event) => setEntryInput(event.target.value.replace(/[^0-9,.]/g, ''))}
                 inputMode="decimal"
-                className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-lg font-bold outline-none focus:border-blue-500"
+                readOnly={usingCardLimit}
+                className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-lg font-bold outline-none focus:border-blue-500 read-only:bg-slate-100"
               />
             </label>
           </div>
 
           <div className="mt-4 grid gap-2 rounded-lg bg-slate-50 p-3 text-sm">
             <div className="flex justify-between">
-              <span>Entrada</span>
-              <strong>{formatPrice(entryCents)}</strong>
+              <span>{usingCardLimit ? 'Falta pagar no Pix/Dinheiro' : 'Entrada'}</span>
+              <strong>{formatPrice(effectiveEntryCents)}</strong>
             </div>
             <div className="flex justify-between">
-              <span>Restante no cartão</span>
-              <strong>{formatPrice(cardCents)}</strong>
+              <span>Valor no cartão sem taxa</span>
+              <strong>{formatPrice(effectiveCardCents)}</strong>
             </div>
+            {usingCardLimit && selectedOption && (
+              <div className="flex justify-between text-blue-800">
+                <span>Valor que será passado no cartão, com taxa</span>
+                <strong>{formatPrice(selectedOption.totalWithFee)}</strong>
+              </div>
+            )}
             <div className="flex justify-between border-t border-slate-200 pt-2">
               <span>Total estimado</span>
               <strong>{formatPrice(grandTotal)}</strong>
@@ -313,6 +336,23 @@ export default function QuoteCalculatorPage() {
                 );
               })}
             </div>
+            {selectedOption && (
+              <label className="mt-4 block rounded-lg border border-blue-100 bg-blue-50 p-3">
+                <span className="mb-1 block text-xs font-bold uppercase text-blue-800">
+                  Valor que o cliente vai passar no cartão (já com a taxa)
+                </span>
+                <input
+                  value={cardChargeInput}
+                  onChange={(event) => setCardChargeInput(event.target.value.replace(/[^0-9,.]/g, ''))}
+                  inputMode="decimal"
+                  placeholder="Ex.: 1200,00"
+                  className="w-full rounded-lg border-2 border-blue-200 bg-white px-3 py-3 text-lg font-bold outline-none focus:border-blue-500"
+                />
+                <span className="mt-2 block text-xs text-blue-800">
+                  Informe o limite disponível. Mostraremos o valor sem taxa e quanto faltará no Pix.
+                </span>
+              </label>
+            )}
           </section>
         ) : (
           <section className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm font-bold text-green-800">

@@ -1,19 +1,20 @@
 {
-  "version": "v1.2.383-vitrine-padrao",
+  "version": "v1.2.384-calculadora-limite-cartao",
   "date": "2026-09-14",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260914-130142-vitrine-padrao",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Definir Vitrine comercial como modelo padrão.",
-  "tag": "v1.2.383-vitrine-padrao",
+  "summary": "Calcular limite final do cartão com taxa e restante no Pix.",
+  "tag": "v1.2.384-calculadora-limite-cartao",
   "changed_files": [
-    "pages/admin/settings/MarketingPage.tsx",
-    "pages/admin/settings/marketing/ProductMarketingCard.tsx",
-    "pages/admin/settings/marketing/productMarketingArtwork.ts",
-    "tmp-tests/product-marketing-artwork-static.test.mjs"
+    "pages/store/QuoteCalculatorPage.tsx",
+    "tmp-tests/quote-calculator-static.test.mjs",
+    "public/VERSION.json",
+    "VERSAO_ATUAL.md",
+    "docs/versoes/2026-09-14-v1.2.384-calculadora-limite-cartao.md"
   ],
   "validations": [
-    "node tmp-tests/product-marketing-artwork-static.test.mjs",
+    "node tmp-tests/quote-calculator-static.test.mjs",
     "npm.cmd run build"
   ]
 }

@@ -76,5 +76,9 @@ assert.match(calculatorPage, /Escolha o aparelho/, 'public calculator must show 
 assert.match(calculatorPage, /setTotalInput\(formatInput\(item\.total\)\)/, 'public calculator item cards must update the calculator total');
 assert.match(calculatorPage, /Compartilhar com a loja/, 'public calculator must let the customer share the selected option with the store');
 assert.match(calculatorPage, /Opção escolhida:/, 'public calculator share message must include the selected installment option');
+assert.match(calculatorPage, /Valor que o cliente vai passar no cartão \(já com a taxa\)/, 'public calculator must accept the final card charge including the fee');
+assert.match(calculatorPage, /cardValueWithoutFee/, 'public calculator must derive the product amount covered by a card charge with fee');
+assert.match(calculatorPage, /Falta pagar no Pix\/Dinheiro/, 'public calculator must show the Pix remainder derived from the card limit');
+assert.match(calculatorPage, /params\.set\('l', String\(requestedCardChargeCents\)\)/, 'public calculator must retain the card charge in shared links');
 
 console.log('Quote calculator static checks passed');
