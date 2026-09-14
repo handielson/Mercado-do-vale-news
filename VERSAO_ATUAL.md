@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.384-calculadora-limite-cartao
+version: v1.2.385-ocultar-valor-sem-taxa
 date: 2026-09-14
 status: published
-release_vps: /var/www/mdv-site/releases/20260914-112035-calculadora-limite-cartao
+release_vps: pendente
 branch: main
-summary: Calcular limite final do cartão com taxa e restante no Pix.
-tag: v1.2.384-calculadora-limite-cartao
+summary: Ocultar linha do valor do cartão sem taxa na calculadora.
+tag: v1.2.385-ocultar-valor-sem-taxa
 ```

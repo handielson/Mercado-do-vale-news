@@ -298,10 +298,6 @@ export default function QuoteCalculatorPage() {
               <span>{usingCardLimit ? 'Falta pagar no Pix/Dinheiro' : 'Entrada'}</span>
               <strong>{formatPrice(effectiveEntryCents)}</strong>
             </div>
-            <div className="flex justify-between">
-              <span>Valor no cartão sem taxa</span>
-              <strong>{formatPrice(effectiveCardCents)}</strong>
-            </div>
             {usingCardLimit && selectedOption && (
               <div className="flex justify-between text-blue-800">
                 <span>Valor que será passado no cartão, com taxa</span>

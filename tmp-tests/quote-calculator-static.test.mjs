@@ -80,5 +80,6 @@ assert.match(calculatorPage, /Valor que o cliente vai passar no cartão \(já co
 assert.match(calculatorPage, /cardValueWithoutFee/, 'public calculator must derive the product amount covered by a card charge with fee');
 assert.match(calculatorPage, /Falta pagar no Pix\/Dinheiro/, 'public calculator must show the Pix remainder derived from the card limit');
 assert.match(calculatorPage, /params\.set\('l', String\(requestedCardChargeCents\)\)/, 'public calculator must retain the card charge in shared links');
+assert.doesNotMatch(calculatorPage, /<span>Valor no cartão sem taxa<\/span>/, 'public calculator must hide the internal no-fee card amount row');
 
 console.log('Quote calculator static checks passed');
