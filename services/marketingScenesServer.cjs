@@ -89,6 +89,26 @@ function createSceneService({ repository, fetchImpl = fetch, apiKey = () => proc
       return await sharp(Buffer.concat(chunks), { limitInputPixels: 40000000 }).rotate().resize(1440,2560,{fit:'inside',withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
     } catch { throw fail('Imagem do cenário inacessível, muito grande ou inválida.', 502); }
   }
+  async function thumbnail(id) {
+    const record = await repository.get(id);
+    if (!record?.active) throw fail('Fundo indisponível.', 404);
+    let bytes;
+    if (record.imported) {
+      try { bytes = await fs.readFile(path.join(uploadsDir, 'marketing-scenes', `${digest(id)}.jpg`)); } catch { throw fail('Arquivo do fundo indisponível. Importe novamente.', 404); }
+    } else {
+      const url = safePexelsUrl(record.thumbnail || record.url, true);
+      if (!url) throw fail('Origem de imagem não permitida.');
+      try {
+        const response = await fetchImpl(url, { signal: AbortSignal.timeout(12000), redirect: 'error' });
+        if (!response.ok || !response.headers.get('content-type')?.startsWith('image/')) throw Error();
+        const chunks = []; let size = 0;
+        for await (const chunk of response.body) { size += chunk.length; if (size > 4000000) throw Error(); chunks.push(chunk); }
+        bytes = Buffer.concat(chunks);
+      } catch { throw fail('Prévia do cenário inacessível ou inválida.', 502); }
+    }
+    try { return await sharp(bytes, { limitInputPixels: 40000000 }).rotate().resize(320,480,{fit:'inside',withoutEnlargement:true}).jpeg({quality:72}).toBuffer(); }
+    catch { throw fail('Prévia do cenário inválida.', 502); }
+  }
   async function importBackground(id, approved) {
     const record = await repository.get(id); if (!record) throw fail('Fundo não encontrado.',404);
     const bytes = await image(id);
@@ -133,7 +153,7 @@ function createSceneService({ repository, fetchImpl = fetch, apiKey = () => proc
     }, concurrency);
     return { items, queries, warnings: [...new Set(warnings)], contexts: new Set(products.map(p => resolveProductSceneContext(p).key)).size, reused: items.filter(i=>i.background).length, newBackgrounds: library.filter(b=>!initialIds.has(b.id)).length };
   }
-  return { search, prepare, image, importBackground, upload, repository };
+  return { search, prepare, image, thumbnail, importBackground, upload, repository };
 }
 
 function registerMarketingSceneRoutes(app, deps) {
@@ -159,6 +179,7 @@ function registerMarketingSceneRoutes(app, deps) {
   route('GET','/library',async()=>({items:await service.repository.list()}));
   route('POST','/search',async req=>{ const [product] = await products([req.body?.productId]); if(!product) throw fail('Produto não encontrado.',404); return service.search(product,req.body); });
   route('POST','/image',async req=>({dataUrl:`data:image/jpeg;base64,${(await service.image(short(req.body?.id))).toString('base64')}`}));
+  route('POST','/thumbnail',async req=>({dataUrl:`data:image/jpeg;base64,${(await service.thumbnail(short(req.body?.id))).toString('base64')}`}));
   route('POST','/upload',async req=>{const [product]=await products([req.body?.productId]); if(!product) throw fail('Produto não encontrado.',404);return service.upload(product,req.body.dataUrl);});
   route('POST','/import',async req=>{
     const ids = req.body?.ids;

@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.391-pexels-selecao
+version: v1.2.392-pexels-miniaturas
 date: 2026-09-14
 status: published
-release_vps: /var/www/mdv-site/releases/20260914-195717-pexels-selecao
+release_vps: /var/www/mdv-site/releases/20260914-202700-pexels-miniaturas
 branch: main
-summary: Aplica o cenário Pexels aprovado diretamente à prévia da arte comercial.
-tag: v1.2.391-pexels-selecao
+summary: Exibe miniaturas Pexels pelo backend para que não quebrem no navegador.
+tag: v1.2.392-pexels-miniaturas
 ```

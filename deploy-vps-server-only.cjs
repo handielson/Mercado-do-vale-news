@@ -380,6 +380,21 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--marketing-scenes-only')) {
+    if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+    const backupDir = `${appDir}/backups/marketing-scenes-${Date.now()}`;
+    await exec(`mkdir -p ${backupDir} ${appDir}/services`);
+    for (const file of [marketingCampaignServicePath, 'services/marketingScenesServer.cjs', 'services/marketingSceneCore.mjs']) {
+      await exec(`if test -f ${appDir}/${file}; then cp ${appDir}/${file} ${backupDir}/${path.basename(file)}; fi`);
+      await upload(path.join(__dirname, file), remotePathJoin(appDir, file));
+      console.log(`Uploaded ${file}`);
+    }
+    await exec(`node --check ${appDir}/services/marketingScenesServer.cjs`);
+    console.log((await exec('pm2 restart mdv-api')).trim());
+    console.log(`Marketing scenes backup: ${backupDir}`);
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--photo-intake-only')) {
     if (apiProc.name !== 'mdv-api' || !/^\/var\/www\/[a-zA-Z0-9_-]+$/.test(appDir)) throw new Error('Unexpected API target');
     const backupDir = `${appDir}/backups/photo-intake-${Date.now()}`;

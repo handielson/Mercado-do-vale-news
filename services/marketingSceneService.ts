@@ -18,6 +18,7 @@ export interface ScenePlan { items: SceneItem[]; queries: number; contexts: numb
 export interface SceneJob extends ScenePlan { id: string; createdAt: string; updatedAt?: string; cancelled: boolean; format: 'status' | 'feed'; showPrice: boolean }
 const base = '/admin/marketing/scenes';
 const images = new Map<string, Promise<string>>();
+const thumbnails = new Map<string, Promise<string>>();
 const executions = new Map<string, string>();
 export const marketingScenes = {
   status: () => vpsClient.get<{ configured: boolean; limits?: { remaining: number; reset: number } }>(base + '/status'),
@@ -34,6 +35,13 @@ export const marketingScenes = {
       images.set(id, vpsClient.post<{ dataUrl: string }>(base + '/image', { id }).then(r => r.dataUrl).catch(error => { images.delete(id); throw error; }));
     }
     return images.get(id)!;
+  },
+  thumbnail: (id: string) => {
+    if (!thumbnails.has(id)) {
+      if (thumbnails.size >= 48) thumbnails.delete(thumbnails.keys().next().value!);
+      thumbnails.set(id, vpsClient.post<{ dataUrl: string }>(base + '/thumbnail', { id }).then(r => r.dataUrl).catch(error => { thumbnails.delete(id); throw error; }));
+    }
+    return thumbnails.get(id)!;
   },
   jobs: () => vpsClient.get<{ items: SceneJob[] }>(base + '/jobs'),
   job: (productIds: string[], format: string, showPrice: boolean, idempotencyKey: string) => vpsClient.post<SceneJob>(base + '/jobs', { productIds, format, showPrice, idempotencyKey }),

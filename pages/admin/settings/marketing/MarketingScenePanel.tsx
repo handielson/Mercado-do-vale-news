@@ -58,7 +58,7 @@ export default function MarketingScenePanel({ productId, choice, disabled, mode,
         </div>
         {source === 'pexels' && <div className="space-y-2"><input aria-label="Pesquisa de cenário" value={query} onChange={e => setQuery(e.target.value)} placeholder="Automático pelo contexto do produto" className="w-full rounded border p-2 text-sm" /><select aria-label="Idioma da pesquisa" value={locale} onChange={e => setLocale(e.target.value)} className="rounded border p-2 text-sm"><option value="en-US">Inglês (recomendado)</option><option value="pt-BR">Português</option></select><button type="button" disabled={!productId} onClick={() => void run(() => search())} className="ml-2 rounded bg-blue-600 p-2 text-sm text-white">Pesquisar</button></div>}
         {items.length > 0 && <><div className="grid max-h-96 grid-cols-2 gap-2 overflow-y-auto">{items.map(b => <article key={b.id} className="min-w-0 rounded border p-2">
-          <img src={b.thumbnail || b.url} referrerPolicy="no-referrer" alt={b.context} className="h-24 w-full rounded object-cover" />
+          <SceneThumbnail background={b} />
           <label className="my-1 flex gap-1 text-xs"><input type="checkbox" checked={selected.includes(b.id)} onChange={e => setSelected(s => e.target.checked ? [...s, b.id] : s.filter(id => id !== b.id))} />Selecionar</label>
           <p className="text-xs">{b.context} · {b.orientation} · {b.width}×{b.height}</p><p className="text-xs">{b.approved ? 'Aprovado' : 'Revisar'} · {b.uses} usos</p><Credits background={b} />
           <button type="button" disabled={!productId || !b.approved} onClick={() => void run(() => choose(b))} className="mt-1 rounded border px-2 py-1 text-xs">Usar</button>
@@ -72,5 +72,17 @@ export default function MarketingScenePanel({ productId, choice, disabled, mode,
     {message && <p role="status" className="rounded bg-amber-50 p-2 text-xs text-amber-900">{message}</p>}
     <a href="https://www.pexels.com" target="_blank" rel="noreferrer" className="text-xs text-blue-700 underline">Fotografias fornecidas pelo Pexels</a>
   </section>;
+}
+function SceneThumbnail({ background }: { background: SceneBackground }) {
+  const [dataUrl, setDataUrl] = useState('');
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setDataUrl(''); setFailed(false);
+    void marketingScenes.thumbnail(background.id).then(url => { if (active) setDataUrl(url); }).catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [background.id]);
+  if (dataUrl) return <img src={dataUrl} alt={background.context} className="h-24 w-full rounded object-cover" />;
+  return <div role="status" className="flex h-24 w-full items-center justify-center rounded bg-slate-100 px-2 text-center text-xs text-slate-500">{failed ? 'Prévia indisponível' : 'Carregando prévia…'}</div>;
 }
 function Credits({ background: b }: { background: SceneBackground }) { return b.origin === 'pexels' ? <p className="text-xs text-blue-700"><a href={b.photographerPage || b.photoPage} target="_blank" rel="noreferrer">{b.photographer}</a> / <a href={b.photoPage} target="_blank" rel="noreferrer">Pexels</a></p> : <p className="text-xs">Fotografia enviada</p>; }

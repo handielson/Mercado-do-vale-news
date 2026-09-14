@@ -70,7 +70,8 @@ test('image host validation, inaccessible image, local upload/import',async()=>{
  const dir=await mkdtemp(path.join(tmpdir(),'mdv-scene-test-'));const repo=memory();
  try {const api=service(repo,async()=>new Response('',{status:404}),{uploadsDir:dir});await repo.put({id:'bad',url:'https://images.pexels.com/bad',active:true});await assert.rejects(api.image('bad'),/inacessível/);
  const bytes=await sharp({create:{width:1100,height:2000,channels:3,background:'#345678'}}).png().toBuffer();
- const uploaded=await api.upload(sample,'data:image/png;base64,'+bytes.toString('base64'));assert.equal(uploaded.origin,'upload');assert.equal(uploaded.approved,true);assert.ok((await api.image(uploaded.id)).length>0);
+ let requested='';const previews=service(repo,async url=>{requested=String(url);return new Response(bytes,{headers:{'content-type':'image/png'}})},{uploadsDir:dir});await repo.put({id:'remote-preview',url:'https://images.pexels.com/photos/10/original.jpg',thumbnail:'https://images.pexels.com/photos/10/medium.jpg',active:true});assert.ok((await previews.thumbnail('remote-preview')).length>0);assert.match(requested,/medium\.jpg$/);
+ const uploaded=await api.upload(sample,'data:image/png;base64,'+bytes.toString('base64'));assert.equal(uploaded.origin,'upload');assert.equal(uploaded.approved,true);assert.ok((await api.image(uploaded.id)).length>0);assert.ok((await api.thumbnail(uploaded.id)).length>0);
  assert.equal((await api.importBackground(uploaded.id,true)).id,uploaded.id);
  } finally {await rm(dir,{recursive:true,force:true})}
 });

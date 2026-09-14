@@ -9,4 +9,6 @@ test('Pexels selection requires review and applies an approved photo to the curr
   assert.match(source, /marketingScenes\.import\(selected, true\)/);
   assert.match(source, /await choose\(approved\[0\], productId\)/);
   assert.match(source, /Cenário aprovado e aplicado à prévia/);
+  assert.match(source, /marketingScenes\.thumbnail\(background\.id\)/);
+  assert.doesNotMatch(source, /src=\{b\.thumbnail \|\| b\.url\}/);
 });
