@@ -1,6 +1,7 @@
 import type { CatalogProduct } from '../../../../types/catalog';
 import type { PaymentFee } from '../../../../types/payment-fees';
 import { calculateInstallmentFromFees, calculatePixPrice } from '../../../../services/installmentCalculator';
+import { buildProductCommercialCopy, type ProductCommercialCopy } from './productCommercialCopy';
 
 export interface ProductMarketingTheme {
   accent: string;
@@ -29,6 +30,7 @@ export interface ProductMarketingArtworkData {
   specs: ProductMarketingSpec[];
   features: string[];
   sellingBadge: string;
+  commercial: ProductCommercialCopy;
   theme: ProductMarketingTheme;
 }
 
@@ -102,7 +104,7 @@ export function resolveCurrentMarketingPrice(product: CatalogProduct, now = new 
   return promo;
 }
 
-export function buildProductMarketingArtworkData(product: CatalogProduct, paymentFees: PaymentFee[], pixDiscountPercentage = 0): ProductMarketingArtworkData {
+export function buildProductMarketingArtworkData(product: CatalogProduct, paymentFees: PaymentFee[], pixDiscountPercentage = 0, categoryName = ''): ProductMarketingArtworkData {
   const retailPrice = resolveCurrentMarketingPrice(product);
   const price = calculatePixPrice(retailPrice, pixDiscountPercentage);
   const plan = calculateInstallmentFromFees(retailPrice, paymentFees, 12);
@@ -155,6 +157,7 @@ export function buildProductMarketingArtworkData(product: CatalogProduct, paymen
     specs,
     features,
     sellingBadge: resolveSellingBadge(product, identity),
+    commercial: buildProductCommercialCopy(product, categoryName),
     theme: resolveProductMarketingTheme(product),
   };
 }

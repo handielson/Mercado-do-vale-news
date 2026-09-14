@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   BatteryCharging, Camera, CheckCircle2, Cpu, Database, Gauge, HardDrive,
-  MessageCircle, PackageCheck, ShieldCheck, Smartphone, Truck, UserRound,
+  MessageCircle, Network, PackageCheck, Server, ShieldCheck, Smartphone, Truck, UserRound,
 } from 'lucide-react';
 import type { MarketingAssetFormat } from '../../../../utils/marketing-sticker';
 import type { ProductMarketingArtworkData, ProductMarketingSpec } from './productMarketingArtwork';
+import { formatProductMarketingPrice } from './productCommercialCopy';
 
 interface Props {
   data: ProductMarketingArtworkData;
@@ -30,10 +31,6 @@ const icons: Record<ProductMarketingSpec['key'], React.ComponentType<{ className
   storage: HardDrive,
   ram: Database,
 };
-
-const money = (cents: number) => new Intl.NumberFormat('pt-BR', {
-  style: 'currency', currency: 'BRL',
-}).format(cents / 100);
 
 const isNearWhite = (pixels: Uint8ClampedArray, offset: number) => (
   pixels[offset] >= 238 && pixels[offset + 1] >= 238 && pixels[offset + 2] >= 238
@@ -145,11 +142,18 @@ function useProductCutout(sourceUrl: string | null) {
   return { renderedUrl, ready };
 }
 
-function ProductMarketingShowcase({ data, format, imageUrl, whatsapp, website, showPrice }: Props) {
+function ProductMarketingShowcase({ data, format, imageUrl, logoUrl, whatsapp, website, showPrice }: Props) {
   const story = format === 'status';
-  const visibleSpecs = data.specs.slice(0, story ? 3 : 2);
-  const subtitle = [data.version, data.technology].filter(Boolean).join('  |  ');
+  const hasPrice = showPrice && data.price > 0;
   const { renderedUrl, ready } = useProductCutout(imageUrl);
+  const commercialIdentity = `${data.commercial.badge} ${data.commercial.technicalName}`.toLowerCase();
+  const ContextIcon = /rack|patch panel/.test(commercialIdentity)
+    ? Server
+    : /rede|rj45|cat\d|keystone|cabo/.test(commercialIdentity)
+    ? Network
+    : /carregador|bateria|power bank/.test(commercialIdentity)
+    ? BatteryCharging
+    : PackageCheck;
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#050b11] text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
@@ -158,18 +162,19 @@ function ProductMarketingShowcase({ data, format, imageUrl, whatsapp, website, s
 
       <div className={`relative z-10 flex h-full flex-col ${story ? 'px-9 py-8' : 'px-8 py-7'}`}>
         <header className="flex shrink-0 items-center justify-between">
-          <img src="/brand/mercado-do-vale-logo.png" crossOrigin="anonymous" alt="Mercado do Vale" className={`${story ? 'h-[76px] max-w-[250px]' : 'h-[52px] max-w-[180px]'} object-contain object-left`} />
+          <img src={logoUrl || '/brand/mercado-do-vale-logo.png'} crossOrigin="anonymous" alt="Logomarca Mercado do Vale" className={`${story ? 'h-[76px] max-w-[250px]' : 'h-[52px] max-w-[180px]'} object-contain object-left`} />
           <span className={`${story ? 'px-6 py-3 text-2xl' : 'px-4 py-2 text-lg'} rounded-full font-black uppercase tracking-wide`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText }}>{data.brand}</span>
         </header>
 
         <div className={`${story ? 'mt-8' : 'mt-5'} shrink-0 text-center`}>
-          {data.sellingBadge && <span className={`${story ? 'mb-4 px-5 py-2 text-lg' : 'mb-3 px-4 py-1.5 text-sm'} inline-block rounded-full border font-black uppercase tracking-[0.15em]`} style={{ borderColor: data.theme.accent, color: data.theme.accent }}>{data.sellingBadge}</span>}
-          <h1 className={`${story ? 'text-[66px]' : 'text-[45px]'} mx-auto max-w-[92%] font-black uppercase leading-[0.95] tracking-tight`}>{data.name}</h1>
-          {subtitle && <p className={`${story ? 'mt-4 text-2xl' : 'mt-2 text-lg'} font-bold uppercase tracking-[0.12em] text-white/70`}>{subtitle}</p>}
+          <span className={`${story ? 'mb-5 px-6 py-2.5 text-xl' : 'mb-3 px-4 py-1.5 text-sm'} inline-block rounded-full border font-black uppercase tracking-[0.15em]`} style={{ borderColor: data.theme.accent, color: data.theme.accent }}>{data.commercial.badge}</span>
+          <h1 className={`${story ? 'text-[78px]' : 'text-[50px]'} mx-auto max-w-[94%] font-black uppercase leading-[0.9] tracking-tight`}>{data.commercial.title}</h1>
+          <p className={`${story ? 'mt-5 text-[30px]' : 'mt-3 text-xl'} font-bold leading-tight text-white/82`}>{data.commercial.subtitle}</p>
         </div>
 
         <section className={`relative flex min-h-0 flex-1 items-center justify-center ${story ? 'my-1' : 'my-0'}`}>
           <div className="absolute bottom-[12%] h-[42%] w-[82%] rounded-full blur-3xl" style={{ backgroundColor: `${data.theme.accent}63` }} />
+          <ContextIcon className={`${story ? 'h-[560px] w-[560px]' : 'h-[300px] w-[300px]'} absolute text-white/[0.045]`} strokeWidth={0.7} />
           {renderedUrl ? (
             <img
               data-marketing-product-image="true"
@@ -183,47 +188,42 @@ function ProductMarketingShowcase({ data, format, imageUrl, whatsapp, website, s
           ) : <Smartphone className="h-56 w-56 text-white/20" />}
         </section>
 
-        {(visibleSpecs.length > 0 || data.features.length > 0) && <div className={`${story ? 'mb-5 gap-3' : 'mb-3 gap-2'} grid shrink-0 ${visibleSpecs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          {visibleSpecs.map((spec) => {
-            const Icon = icons[spec.key];
-            return <div key={spec.key} className={`${story ? 'px-5 py-3' : 'px-4 py-2'} flex items-center gap-3 rounded-2xl border bg-black/55`} style={{ borderColor: `${data.theme.accent}80` }}>
-              <Icon className={`${story ? 'h-9 w-9' : 'h-6 w-6'} shrink-0`} style={{ color: data.theme.accent }} />
-              <span className={`${story ? 'text-lg' : 'text-sm'} min-w-0 truncate font-black uppercase`}>{spec.value}</span>
-            </div>;
-          })}
-          {data.features.map((feature) => <div key={feature} className={`${story ? 'px-5 py-3 text-lg' : 'px-4 py-2 text-sm'} flex items-center justify-center gap-2 rounded-2xl bg-white/10 font-black uppercase`}><CheckCircle2 className="h-5 w-5" style={{ color: data.theme.accent }} />{feature}</div>)}
+        {data.commercial.benefits.length > 0 && <div className={`${story ? 'mb-4 gap-3' : 'mb-3 gap-2'} grid shrink-0`} style={{ gridTemplateColumns: `repeat(${data.commercial.benefits.length}, minmax(0, 1fr))` }}>
+          {data.commercial.benefits.map((benefit) => <div key={benefit} className={`${story ? 'min-h-[76px] px-4 py-3 text-lg' : 'min-h-[48px] px-3 py-2 text-sm'} flex items-center justify-center gap-2 rounded-2xl border bg-black/55 text-center font-black uppercase`} style={{ borderColor: `${data.theme.accent}80` }}><CheckCircle2 className={`${story ? 'h-7 w-7' : 'h-5 w-5'} shrink-0`} style={{ color: data.theme.accent }} />{benefit}</div>)}
         </div>}
 
-        {showPrice ? (
+        <p className={`${story ? 'mb-4 min-h-[42px] text-base' : 'mb-2 min-h-[30px] text-xs'} shrink-0 overflow-hidden text-center font-bold uppercase leading-tight tracking-[0.08em] text-white/52`} style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 }}>{data.commercial.technicalName}</p>
+
+        {hasPrice ? (
           <div className={`${story ? 'min-h-[174px]' : 'min-h-[112px]'} grid shrink-0 grid-cols-2 overflow-hidden rounded-[1.8rem] border-2`} style={{ borderColor: data.theme.accent }}>
             <div className="flex flex-col items-center justify-center" style={{ background: `linear-gradient(135deg, ${data.theme.accent}, ${data.theme.accentSoft})`, color: data.theme.accentText }}>
               <span className={`${story ? 'text-xl' : 'text-base'} font-black uppercase`}>À vista no PIX</span>
-              <strong className={`${story ? 'text-[58px]' : 'text-[40px]'} leading-none`}>{money(data.price)}</strong>
+              <strong className={`${story ? 'text-[58px]' : 'text-[40px]'} leading-none`}>{formatProductMarketingPrice(data.price)}</strong>
             </div>
             <div className="flex flex-col items-center justify-center bg-black/70">
               <span className={`${story ? 'text-xl' : 'text-base'} font-bold uppercase`}>Em até {data.installmentCount}x</span>
-              <strong className={`${story ? 'text-[48px]' : 'text-[34px]'} leading-none`}>{money(data.installmentValue)}</strong>
-              <span className="mt-1 text-xs text-white/55">Total: {money(data.installmentTotal)}</span>
+              <strong className={`${story ? 'text-[48px]' : 'text-[34px]'} leading-none`}>{formatProductMarketingPrice(data.installmentValue)}</strong>
+              <span className="mt-1 text-xs text-white/55">Total: {formatProductMarketingPrice(data.installmentTotal)}</span>
             </div>
           </div>
         ) : (
           <div className={`${story ? 'min-h-[174px]' : 'min-h-[112px]'} flex shrink-0 flex-col items-center justify-center rounded-[1.8rem] border-2 bg-black/60 text-center`} style={{ borderColor: data.theme.accent }}>
-            <strong className={`${story ? 'text-3xl' : 'text-2xl'} uppercase`} style={{ color: data.theme.accent }}>{data.sellingBadge || 'GARANTA O SEU HOJE'}</strong>
-            <span className="mt-2 text-lg font-bold">Consulte condições e disponibilidade</span>
+            <strong className={`${story ? 'text-4xl' : 'text-3xl'} uppercase`} style={{ color: data.theme.accent }}>CONSULTE CONDIÇÕES</strong>
+            <span className={`${story ? 'mt-3 text-xl' : 'mt-2 text-base'} font-bold`}>Consulte condições com nossa equipe</span>
           </div>
         )}
 
         <footer className={`${story ? 'mt-5 min-h-[56px] text-lg' : 'mt-3 min-h-[44px] text-sm'} flex shrink-0 items-center justify-between rounded-xl px-5 font-black`} style={{ backgroundColor: data.theme.accent, color: data.theme.accentText }}>
-          <span>CHAME NO WHATSAPP</span><span>{whatsapp}</span><span>{website}</span>
+          <span>{data.commercial.cta}</span><span>{whatsapp}</span><span>{website}</span>
         </footer>
       </div>
     </div>
   );
 }
 
-export default function ProductMarketingCard({ data, format, imageUrl, whatsapp, website, showPrice, template = 'technical' }: Props) {
+export default function ProductMarketingCard({ data, format, imageUrl, logoUrl, whatsapp, website, showPrice, template = 'technical' }: Props) {
   if (template === 'showcase') {
-    return <ProductMarketingShowcase data={data} format={format} imageUrl={imageUrl} whatsapp={whatsapp} website={website} showPrice={showPrice} />;
+    return <ProductMarketingShowcase data={data} format={format} imageUrl={imageUrl} logoUrl={logoUrl} whatsapp={whatsapp} website={website} showPrice={showPrice} />;
   }
   const story = format === 'status';
   const visibleSpecs = data.specs.slice(0, story ? 8 : 4);
@@ -288,12 +288,12 @@ export default function ProductMarketingCard({ data, format, imageUrl, whatsapp,
           <div className={`${story ? 'mt-4 min-h-[176px]' : 'mt-3 min-h-[116px]'} grid shrink-0 grid-cols-2 overflow-hidden rounded-[2rem] border-2`} style={{ borderColor: data.theme.accent }}>
             <div className="flex flex-col items-center justify-center" style={{ background: `linear-gradient(135deg, ${data.theme.accent}, ${data.theme.accentSoft})`, color: data.theme.accentText }}>
               <span className={`${story ? 'text-2xl' : 'text-lg'} font-black uppercase`}>À vista no PIX</span>
-              <strong className={`${story ? 'text-[58px]' : 'text-[40px]'} leading-none`}>{money(data.price)}</strong>
+              <strong className={`${story ? 'text-[58px]' : 'text-[40px]'} leading-none`}>{formatProductMarketingPrice(data.price)}</strong>
             </div>
             <div className="flex flex-col items-center justify-center bg-black/60">
               <span className={`${story ? 'text-2xl' : 'text-lg'} font-bold uppercase`}>Ou em até {data.installmentCount}x</span>
-              <strong className={`${story ? 'text-[50px]' : 'text-[36px]'} leading-none`}>{money(data.installmentValue)}</strong>
-              <span className={`${story ? 'mt-2 text-base' : 'mt-1 text-xs'} text-white/55`}>Total a prazo: {money(data.installmentTotal)}</span>
+              <strong className={`${story ? 'text-[50px]' : 'text-[36px]'} leading-none`}>{formatProductMarketingPrice(data.installmentValue)}</strong>
+              <span className={`${story ? 'mt-2 text-base' : 'mt-1 text-xs'} text-white/55`}>Total a prazo: {formatProductMarketingPrice(data.installmentTotal)}</span>
             </div>
           </div>
         ) : (

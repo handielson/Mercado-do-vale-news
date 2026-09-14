@@ -39,6 +39,12 @@ import SocialStorySchedulerPanel from './marketing/SocialStorySchedulerPanel';
 import MarketingCalendarPanel from './marketing/MarketingCalendarPanel';
 import ProductMarketingCard, { type ProductMarketingTemplate } from './marketing/ProductMarketingCard';
 import { buildProductMarketingArtworkData, normalizeBrazilianWhatsapp } from './marketing/productMarketingArtwork';
+import {
+    COMMERCIAL_COPY_LIMITS,
+    buildProductCommercialEvidenceText,
+    validateProductCommercialArtwork,
+    type ProductCommercialCopy,
+} from './marketing/productCommercialCopy';
 import ProductBlueprintCard from './marketing/ProductBlueprintCard';
 import { buildProductBlueprintArtworkData, buildProductBlueprintSourcePayload } from './marketing/productBlueprintArtwork';
 import { paymentFeesService } from '../../../services/payment-fees';
@@ -315,6 +321,14 @@ const waitForPreviewAssets = async (
         img.addEventListener('error', finish, { once: true });
         timeoutId = window.setTimeout(finish, 5000);
     })));
+
+    const inaccessibleImage = images.find((img) => img.complete && img.naturalWidth === 0);
+    if (inaccessibleImage) {
+        const label = inaccessibleImage.alt.toLowerCase().includes('logomarca')
+            ? 'A logomarca oficial não pôde ser carregada.'
+            : 'A imagem oficial do produto não pôde ser carregada.';
+        throw new Error(`${label} Confira o arquivo e tente novamente.`);
+    }
 
     await waitForNextFrame();
 };
@@ -626,6 +640,8 @@ export default function MarketingPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
+    const [categories, setCategories] = useState<{ id: string, name: string }[]>([]);
+    const [commercialCopyDraft, setCommercialCopyDraft] = useState<{ productId: string; copy: ProductCommercialCopy } | null>(null);
     const [generatedCopy, setGeneratedCopy] = useState('');
     const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
     const [carouselSlideIndex, setCarouselSlideIndex] = useState(0);
@@ -637,14 +653,57 @@ export default function MarketingPage() {
         ? exportImageOverride
         : activeCarouselSlide?.imageUrl ?? null;
     const showCarouselPreview = carouselSlides.length > 1;
-    const productArtworkData = useMemo(
-        () => selectedProduct ? buildProductMarketingArtworkData(selectedProduct, marketingPaymentFees, companyInfo?.pixDiscountPercentage || 0) : null,
-        [selectedProduct, marketingPaymentFees, companyInfo?.pixDiscountPercentage],
+    const selectedCategoryName = selectedProduct?.category_id
+        ? categories.find((category) => category.id === selectedProduct.category_id)?.name ?? ''
+        : '';
+    const baseProductArtworkData = useMemo(
+        () => selectedProduct ? buildProductMarketingArtworkData(selectedProduct, marketingPaymentFees, companyInfo?.pixDiscountPercentage || 0, selectedCategoryName) : null,
+        [selectedProduct, marketingPaymentFees, companyInfo?.pixDiscountPercentage, selectedCategoryName],
     );
+    const activeCommercialCopy = selectedProduct && commercialCopyDraft?.productId === selectedProduct.id
+        ? commercialCopyDraft.copy
+        : baseProductArtworkData?.commercial ?? null;
+    const commercialCopyForArtwork = activeCommercialCopy ? {
+        ...activeCommercialCopy,
+        benefits: activeCommercialCopy.benefits.map((benefit) => benefit.trim()).filter(Boolean).slice(0, 3),
+    } : null;
+    const productArtworkData = useMemo(() => baseProductArtworkData ? {
+        ...baseProductArtworkData,
+        commercial: commercialCopyForArtwork || baseProductArtworkData.commercial,
+    } : null, [baseProductArtworkData, commercialCopyForArtwork]);
     const artworkWhatsapp = normalizeBrazilianWhatsapp(companyInfo?.phone) || '(87) 98803-2612';
     const artworkWebsite = (companyInfo?.socialMedia?.website || 'mercadodovale.com.br')
         .replace(/^https?:\/\//i, '')
         .replace(/\/$/, '');
+    const artworkLogo = companyInfo?.watermarkLogoUrl
+        || (settings as typeof settings & { logo_url?: string }).logo_url
+        || '/brand/mercado-do-vale-logo.png';
+    const effectiveShowArtworkPrice = Boolean(showArtworkPrice && productArtworkData && productArtworkData.price > 0);
+    const commercialValidation = useMemo(() => productArtworkData ? validateProductCommercialArtwork({
+        copy: productArtworkData.commercial,
+        imageUrl: selectedProductImage,
+        logoUrl: artworkLogo,
+        showPrice: showArtworkPrice,
+        price: productArtworkData.price,
+        supportedBenefits: baseProductArtworkData?.commercial.benefits,
+        evidenceText: selectedProduct ? buildProductCommercialEvidenceText(selectedProduct, selectedCategoryName) : '',
+    }) : null, [productArtworkData, selectedProductImage, artworkLogo, showArtworkPrice, baseProductArtworkData?.commercial.benefits, selectedProduct, selectedCategoryName]);
+
+    useEffect(() => {
+        setCommercialCopyDraft(selectedProduct && baseProductArtworkData
+            ? { productId: selectedProduct.id, copy: baseProductArtworkData.commercial }
+            : null);
+    }, [selectedProduct?.id, baseProductArtworkData]);
+
+    const updateCommercialCopyDraft = (updater: (copy: ProductCommercialCopy) => ProductCommercialCopy) => {
+        if (!selectedProduct || !baseProductArtworkData) return;
+        setCommercialCopyDraft((current) => {
+            const source = current?.productId === selectedProduct.id
+                ? current.copy
+                : baseProductArtworkData.commercial;
+            return { productId: selectedProduct.id, copy: updater(source) };
+        });
+    };
 
     const stageMarketingCanvasForExport = async (
         product: CatalogProduct | null,
@@ -689,7 +748,6 @@ export default function MarketingPage() {
 
     // Category & Grouping Logic
     const [selectedCategory, setSelectedCategory] = useState<string>('');
-    const [categories, setCategories] = useState<{ id: string, name: string }[]>([]);
     const [groupedResults, setGroupedResults] = useState<ProductGroup[]>([]);
     const marketingVariantOptions = useMemo(
         () => buildMarketingVariantOptions(groupedResults),
@@ -749,9 +807,6 @@ export default function MarketingPage() {
         if (!median || selectedPrice <= median * 1.35) return null;
         return { selectedPrice, median };
     }, [selectedProduct, selectedProductGroup]);
-    const selectedCategoryName = selectedProduct?.category_id
-        ? categories.find((category) => category.id === selectedProduct.category_id)?.name ?? ''
-        : '';
     const stickerTokenValues = {
         name: selectedProduct?.name || safeStickerSettings.stickerName,
         brand: selectedProduct?.brand || settings.company_name || 'Mercado do Vale',
@@ -1268,7 +1323,11 @@ export default function MarketingPage() {
             toast.error('Cadastre uma foto para este modelo e esta cor na galeria antes de gerar a arte.');
             return;
         }
-        if (!isStickerFormat && !isBlueprintFormat && showArtworkPrice && selectedPriceAnomaly) {
+        if (productArtworkTemplate === 'showcase' && commercialValidation && !commercialValidation.valid) {
+            toast.error(commercialValidation.errors[0]);
+            return;
+        }
+        if (!isStickerFormat && !isBlueprintFormat && effectiveShowArtworkPrice && selectedPriceAnomaly) {
             toast.error('Confira e corrija o preço deste SKU antes de gerar a arte.');
             return;
         }
@@ -1295,11 +1354,11 @@ export default function MarketingPage() {
                 } else {
                     const dataUrl = await exportCurrentCanvasPng(slide.imageUrl);
                     if (format === 'status' && selectedProduct && slide.slideNumber === 1) {
-                        const savedUrl = await saveMarketingArtworkForWhatsappStatus(selectedProduct, dataUrl, showArtworkPrice);
+                        const savedUrl = await saveMarketingArtworkForWhatsappStatus(selectedProduct, dataUrl, effectiveShowArtworkPrice);
                         setSelectedProduct((current) => current?.id === selectedProduct.id
                             ? {
                                 ...current,
-                                [showArtworkPrice ? 'marketing_background_url' : 'marketing_background_no_price_url']: savedUrl,
+                                [effectiveShowArtworkPrice ? 'marketing_background_url' : 'marketing_background_no_price_url']: savedUrl,
                             }
                             : current);
                     }
@@ -1321,7 +1380,7 @@ export default function MarketingPage() {
                     : format === 'blueprint' && selectedProductGroup
                     ? 'Blueprint baixado, salvo no modelo e disponibilizado para o site e o bot!'
                     : format === 'status' && selectedProduct
-                    ? (showArtworkPrice
+                    ? (effectiveShowArtworkPrice
                         ? 'Arte baixada e salva automaticamente como foto de marketing do Status!'
                         : 'Arte sem preço baixada e salva automaticamente como foto de marketing do Status!')
                     : slidesToExport.length > 1
@@ -1387,7 +1446,16 @@ export default function MarketingPage() {
                 } else {
                     const dataUrl = await exportCurrentCanvasPng(slide.imageUrl);
                     if (format === 'status' && slide.slideNumber === 1) {
-                        await saveMarketingArtworkForWhatsappStatus(slide.product, dataUrl, showArtworkPrice);
+                        const slideCategoryName = slide.product.category_id
+                            ? categories.find((category) => category.id === slide.product.category_id)?.name ?? ''
+                            : '';
+                        const slideHasPrice = showArtworkPrice && buildProductMarketingArtworkData(
+                            slide.product,
+                            marketingPaymentFees,
+                            companyInfo?.pixDiscountPercentage || 0,
+                            slideCategoryName,
+                        ).price > 0;
+                        await saveMarketingArtworkForWhatsappStatus(slide.product, dataUrl, slideHasPrice);
                     }
                     if (format === 'blueprint' && slide.slideNumber === 1) {
                         const blueprintGroup = groupedResults.find((group) => getGroupProducts(group)
@@ -1415,7 +1483,7 @@ export default function MarketingPage() {
                 format === 'blueprint'
                     ? `Lote concluído: ${completedSlides} blueprint(s) salvos por modelo e disponibilizados no site.`
                     : format === 'status'
-                    ? `Lote gerado: ${completedSlides} imagens baixadas e vinculadas automaticamente ao Status (${showArtworkPrice ? 'com preço' : 'sem preço'}).`
+                    ? `Lote gerado: ${completedSlides} imagens baixadas e vinculadas automaticamente ao Status (${showArtworkPrice ? 'com preço quando disponível' : 'sem preço'}).`
                     : `Lote gerado com sucesso! ${completedSlides} imagens baixadas.`,
             );
             setBulkSelectedIds(new Set());
@@ -1827,17 +1895,46 @@ export default function MarketingPage() {
 
                                     {!isStickerFormat && !isBlueprintFormat && <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                                         <h2 className="mb-1 text-sm font-bold text-slate-800">Modelo da arte</h2>
-                                        <p className="mb-3 text-xs leading-relaxed text-slate-500">Alterne antes de baixar. O modelo Vitrine amplia o produto e usa apenas os destaques que ajudam na venda.</p>
+                                        <p className="mb-3 text-xs leading-relaxed text-slate-500">Alterne antes de baixar. O modo comercial amplia o produto e usa somente argumentos sustentados pelo cadastro.</p>
                                         <div className="grid grid-cols-2 gap-2">
                                             <button type="button" onClick={() => setProductArtworkTemplate('technical')} className={`rounded-lg border px-3 py-3 text-left transition-colors ${productArtworkTemplate === 'technical' ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-                                                <span className="block text-xs font-black uppercase">Técnico</span>
+                                                <span className="block text-xs font-black uppercase">Técnico / legado</span>
                                                 <span className="mt-1 block text-[11px] leading-tight">Especificações em destaque</span>
                                             </button>
                                             <button type="button" onClick={() => setProductArtworkTemplate('showcase')} className={`rounded-lg border px-3 py-3 text-left transition-colors ${productArtworkTemplate === 'showcase' ? 'border-orange-500 bg-orange-50 text-orange-800 ring-1 ring-orange-500' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-                                                <span className="block text-xs font-black uppercase">Vitrine comercial</span>
-                                                <span className="mt-1 block text-[11px] leading-tight">Produto grande e poucos argumentos</span>
+                                                <span className="block text-xs font-black uppercase">Modo comercial padronizado</span>
+                                                <span className="mt-1 block text-[11px] leading-tight">Produto grande e argumentos comprováveis</span>
                                             </button>
                                         </div>
+                                        {productArtworkTemplate === 'showcase' && activeCommercialCopy && <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-[11px] font-black uppercase tracking-wide text-orange-700">Textos do criativo</p>
+                                                <button type="button" onClick={() => selectedProduct && baseProductArtworkData && setCommercialCopyDraft({ productId: selectedProduct.id, copy: baseProductArtworkData.commercial })} className="rounded-md bg-orange-50 px-2.5 py-1 text-[10px] font-black uppercase text-orange-700 hover:bg-orange-100">Gerar novamente</button>
+                                            </div>
+                                            {([
+                                                ['title', 'Título comercial', COMMERCIAL_COPY_LIMITS.title],
+                                                ['subtitle', 'Subtítulo', COMMERCIAL_COPY_LIMITS.subtitle],
+                                                ['badge', 'Selo', COMMERCIAL_COPY_LIMITS.badge],
+                                                ['cta', 'CTA', COMMERCIAL_COPY_LIMITS.cta],
+                                            ] as const).map(([key, label, limit]) => <label key={key} className="block">
+                                                <span className="mb-1 flex justify-between text-[10px] font-bold uppercase text-slate-500"><span>{label}</span><span>{activeCommercialCopy[key].length}/{limit}</span></span>
+                                                <input value={activeCommercialCopy[key]} maxLength={limit} onChange={(event) => updateCommercialCopyDraft((copy) => ({ ...copy, [key]: event.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-orange-500" />
+                                            </label>)}
+                                            <div>
+                                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-500">Benefícios comprováveis</span>
+                                                <span className="mb-2 block text-[10px] leading-tight text-slate-400">Você pode editar ou remover os benefícios. Alegações comerciais sensíveis sem apoio no cadastro são bloqueadas.</span>
+                                                <div className="space-y-2">
+                                                    {[0, 1, 2].map((index) => <input key={index} value={activeCommercialCopy.benefits[index] || ''} maxLength={COMMERCIAL_COPY_LIMITS.benefit} placeholder={`Benefício ${index + 1}`} onChange={(event) => updateCommercialCopyDraft((copy) => {
+                                                        const benefits = [...copy.benefits];
+                                                        benefits[index] = event.target.value;
+                                                        return { ...copy, benefits: benefits.filter((value, position) => value.trim() || position < index) };
+                                                    })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-orange-500" />)}
+                                                </div>
+                                            </div>
+                                            {commercialValidation && (commercialValidation.errors.length > 0 || commercialValidation.warnings.length > 0) && <div className={`rounded-lg border p-2.5 text-[10px] leading-relaxed ${commercialValidation.errors.length ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                                                {[...commercialValidation.errors, ...commercialValidation.warnings].map((message) => <p key={message}>• {message}</p>)}
+                                            </div>}
+                                        </div>}
                                     </div>}
 
                                     {/* Bloco 1: Seleção de Fundo */}
@@ -2440,10 +2537,10 @@ export default function MarketingPage() {
                                                         data={productArtworkData}
                                                         format={format}
                                                         imageUrl={selectedProductImage}
-                                                        logoUrl={companyInfo?.watermarkLogoUrl || settings.logo_url}
+                                                        logoUrl={artworkLogo}
                                                         whatsapp={artworkWhatsapp}
                                                         website={artworkWebsite}
-                                                        showPrice={showArtworkPrice}
+                                                        showPrice={effectiveShowArtworkPrice}
                                                         template={productArtworkTemplate}
                                                         carouselLabel={showCarouselPreview ? `Slide ${activeCarouselSlide?.slideNumber ?? 1} de ${activeCarouselSlide?.totalSlides ?? 1}` : undefined}
                                                     />
