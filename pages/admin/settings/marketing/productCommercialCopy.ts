@@ -5,6 +5,7 @@ export interface ProductCommercialCopy {
   subtitle: string;
   badge: string;
   benefits: string[];
+  triggers: string[];
   cta: string;
   technicalName: string;
 }
@@ -20,6 +21,7 @@ export const COMMERCIAL_COPY_LIMITS = {
   subtitle: 65,
   badge: 22,
   benefit: 30,
+  trigger: 24,
   cta: 30,
 } as const;
 
@@ -53,7 +55,7 @@ function uniqueBenefits(values: string[]): string[] {
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 3).map((value) => limitCommercialText(value, COMMERCIAL_COPY_LIMITS.benefit));
+  }).slice(0, 5).map((value) => limitCommercialText(value, COMMERCIAL_COPY_LIMITS.benefit));
 }
 
 export function buildProductCommercialEvidenceText(product: CatalogProduct, categoryName = ''): string {
@@ -126,6 +128,7 @@ export function buildProductCommercialCopy(product: CatalogProduct, categoryName
     subtitle: limitCommercialText(subtitle, COMMERCIAL_COPY_LIMITS.subtitle),
     badge: limitCommercialText(badge, COMMERCIAL_COPY_LIMITS.badge).toUpperCase(),
     benefits: uniqueBenefits(benefits),
+    triggers: [],
     cta: limitCommercialText(cta, COMMERCIAL_COPY_LIMITS.cta).toUpperCase(),
     technicalName: cleanText(product.name || product.model),
   };
@@ -144,6 +147,7 @@ export function validateProductCommercialArtwork(input: {
   const warnings: string[] = [];
   const imageUrl = cleanText(input.imageUrl);
   const logoUrl = cleanText(input.logoUrl);
+  const triggers = input.copy.triggers || [];
   if (!imageUrl) errors.push('Cadastre uma imagem oficial para este produto.');
   else if (!/^(https?:\/\/|data:image\/|blob:|\/)/i.test(imageUrl)) errors.push('A imagem do produto possui um endereço inválido.');
   if (!logoUrl) errors.push('Configure a logomarca oficial da loja.');
@@ -157,7 +161,9 @@ export function validateProductCommercialArtwork(input: {
   if (input.copy.badge.length > COMMERCIAL_COPY_LIMITS.badge) errors.push(`O selo deve ter até ${COMMERCIAL_COPY_LIMITS.badge} caracteres.`);
   if (input.copy.cta.length > COMMERCIAL_COPY_LIMITS.cta) errors.push(`O CTA deve ter até ${COMMERCIAL_COPY_LIMITS.cta} caracteres.`);
   if (input.copy.benefits.some((benefit) => benefit.length > COMMERCIAL_COPY_LIMITS.benefit)) errors.push(`Cada benefício deve ter até ${COMMERCIAL_COPY_LIMITS.benefit} caracteres.`);
-  if (input.copy.benefits.length > 3) errors.push('Use no máximo três benefícios na arte.');
+  if (input.copy.benefits.length > 5) errors.push('Use no máximo cinco benefícios na arte.');
+  if (triggers.some((trigger) => trigger.length > COMMERCIAL_COPY_LIMITS.trigger)) errors.push(`Cada gatilho comercial deve ter até ${COMMERCIAL_COPY_LIMITS.trigger} caracteres.`);
+  if (triggers.length > 3) errors.push('Use no máximo três gatilhos comerciais na arte.');
   if (input.supportedBenefits) {
     const supported = new Set(input.supportedBenefits.map(normalized));
     const editedBenefits = input.copy.benefits.filter((benefit) => !supported.has(normalized(benefit)));
@@ -183,5 +189,6 @@ export function validateProductCommercialArtwork(input: {
   }
   if (input.showPrice && Number(input.price || 0) <= 0) warnings.push('Preço inválido: a arte será reorganizada sem preço.');
   if (input.copy.benefits.length < 3) warnings.push('O cadastro possui menos de três benefícios comprováveis.');
+  if (triggers.length > 0) warnings.push('Revise os gatilhos comerciais e confirme condições de entrega, estoque ou preço antes de baixar a arte.');
   return { valid: errors.length === 0, errors, warnings };
 }

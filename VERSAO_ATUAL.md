@@ -1,11 +1,11 @@
 # Versão Atual
 
 ```text
-version: v1.2.392-pexels-miniaturas
+version: v1.2.393-beneficios-gatilhos
 date: 2026-09-14
-status: published
-release_vps: /var/www/mdv-site/releases/20260914-202700-pexels-miniaturas
+status: pending
+release_vps: pendente
 branch: main
-summary: Exibe miniaturas Pexels pelo backend para que não quebrem no navegador.
-tag: v1.2.392-pexels-miniaturas
+summary: Amplia benefícios e adiciona gatilhos comerciais ao gerador de artes.
+tag: v1.2.393-beneficios-gatilhos
 ```

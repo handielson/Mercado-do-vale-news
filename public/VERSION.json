@@ -1,25 +1,25 @@
 {
-  "version": "v1.2.392-pexels-miniaturas",
+  "version": "v1.2.393-beneficios-gatilhos",
   "date": "2026-09-14",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260914-202700-pexels-miniaturas",
+  "status": "pending",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Exibe miniaturas Pexels pelo backend para que não quebrem no navegador.",
-  "tag": "v1.2.392-pexels-miniaturas",
+  "summary": "Amplia benefícios e adiciona gatilhos comerciais ao gerador de artes.",
+  "tag": "v1.2.393-beneficios-gatilhos",
   "changed_files": [
-    "pages/admin/settings/marketing/MarketingScenePanel.tsx",
-    "services/marketingSceneService.ts",
-    "services/marketingScenesServer.cjs",
-    "deploy-vps-server-only.cjs",
-    "tmp-tests/marketing-scene-selection-flow-static.test.mjs",
+    "pages/admin/settings/MarketingPage.tsx",
+    "pages/admin/settings/marketing/ProductMarketingCard.tsx",
+    "pages/admin/settings/marketing/productCommercialCopy.ts",
+    "tmp-tests/product-commercial-copy.test.ts",
+    "tmp-tests/product-marketing-artwork-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
     "docs/versoes/2026-09-14-v1.2.392-pexels-miniaturas.md",
-    "docs/marketing-pexels-local.md"
+    "docs/versoes/2026-09-14-v1.2.393-beneficios-gatilhos.md"
   ],
   "validations": [
-    "node --test tmp-tests/marketing-scenes.test.mjs",
-    "node --test tmp-tests/marketing-scene-selection-flow-static.test.mjs",
+    "npx.cmd tsx tmp-tests/product-commercial-copy.test.ts",
+    "node tmp-tests/product-marketing-artwork-static.test.mjs",
     "npm.cmd run build"
   ]
 }

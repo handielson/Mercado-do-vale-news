@@ -36,6 +36,7 @@ assert.equal(completeCopy.title, 'ADEUS, CABOS BAGUNÇADOS');
 assert.equal(completeCopy.subtitle, 'Organização profissional para seu rack');
 assert.equal(completeCopy.badge, 'PARA RACK 19″');
 assert.deepEqual(completeCopy.benefits, ['Visual mais limpo', 'Cabos bem direcionados', 'Instalação profissional']);
+assert.deepEqual(completeCopy.triggers, []);
 assert.equal(completeCopy.technicalName, product().name);
 
 // 2. Sem preço: a validação permite gerar e avisa que o layout será reorganizado.
@@ -109,6 +110,16 @@ const manuallyEditedBenefit = validateProductCommercialArtwork({
 });
 assert.equal(manuallyEditedBenefit.valid, true);
 assert.match(manuallyEditedBenefit.warnings.join(' '), /editados manualmente/i);
+
+// Gatilhos são opcionais, limitados e avisam para conferência da condição comercial.
+const commercialTriggers = validateProductCommercialArtwork({
+  copy: { ...oneBenefit, triggers: ['Entrega grátis', 'Estoque limitado'] },
+  imageUrl: '/produto.png',
+  logoUrl: '/logo.png',
+  showPrice: false,
+});
+assert.equal(commercialTriggers.valid, true);
+assert.match(commercialTriggers.warnings.join(' '), /gatilhos comerciais/i);
 
 // 8. O modo padronizado não depende de IA/API; indisponibilidade de fetch não impede a geração local.
 const originalFetch = globalThis.fetch;

@@ -491,6 +491,8 @@ export default function MarketingPage() {
     const [format, setFormat] = useState<MarketingAssetFormat>('status');
     const [showArtworkPrice, setShowArtworkPrice] = useState(true);
     const [productArtworkTemplate, setProductArtworkTemplate] = useState<ProductMarketingTemplate>('showcase');
+    const [artworkTypographyScale, setArtworkTypographyScale] = useState(100);
+    const [sceneOverlayOpacity, setSceneOverlayOpacity] = useState(60);
     const [marketingPaymentFees, setMarketingPaymentFees] = useState<PaymentFee[]>([]);
     const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
     const [activeTab, setActiveTab] = useState<'studio' | 'calendar' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'>(() => {
@@ -679,7 +681,8 @@ export default function MarketingPage() {
         : baseProductArtworkData?.commercial ?? null;
     const commercialCopyForArtwork = activeCommercialCopy ? {
         ...activeCommercialCopy,
-        benefits: activeCommercialCopy.benefits.map((benefit) => benefit.trim()).filter(Boolean).slice(0, 3),
+        benefits: activeCommercialCopy.benefits.map((benefit) => benefit.trim()).filter(Boolean).slice(0, 5),
+        triggers: (activeCommercialCopy.triggers || []).map((trigger) => trigger.trim()).filter(Boolean).slice(0, 3),
     } : null;
     const productArtworkData = useMemo(() => baseProductArtworkData ? {
         ...baseProductArtworkData,
@@ -689,8 +692,8 @@ export default function MarketingPage() {
     const artworkWebsite = (companyInfo?.socialMedia?.website || 'mercadodovale.com.br')
         .replace(/^https?:\/\//i, '')
         .replace(/\/$/, '');
-    const artworkLogo = companyInfo?.watermarkLogoUrl
-        || (settings as typeof settings & { logo_url?: string }).logo_url
+    const artworkLogo = (settings as typeof settings & { logo_url?: string }).logo_url
+        || companyInfo?.logoUrl
         || '/brand/mercado-do-vale-logo.png';
     const effectiveShowArtworkPrice = Boolean(showArtworkPrice && productArtworkData && productArtworkData.price > 0);
     const commercialValidation = useMemo(() => productArtworkData ? validateProductCommercialArtwork({
@@ -1992,6 +1995,14 @@ export default function MarketingPage() {
                                                 <span className="mt-1 block text-[11px] leading-tight">Produto grande e argumentos comprováveis</span>
                                             </button>
                                         </div>
+                                        {productArtworkTemplate === 'showcase' && <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                                            <div className="flex items-center justify-between gap-3"><label htmlFor="artwork-typography-scale" className="text-[11px] font-black uppercase tracking-wide text-slate-600">Escala das fontes</label><output className="rounded bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-700">{artworkTypographyScale}%</output></div>
+                                            <input id="artwork-typography-scale" aria-label="Escala das fontes" type="range" min="85" max="120" step="1" value={artworkTypographyScale} onChange={(event) => setArtworkTypographyScale(Number(event.target.value))} className="w-full accent-orange-500" />
+                                            <div className="flex gap-2"><button type="button" onClick={() => setArtworkTypographyScale(90)} className="rounded border px-2 py-1 text-[10px] font-bold">Compacta</button><button type="button" onClick={() => setArtworkTypographyScale(100)} className="rounded border px-2 py-1 text-[10px] font-bold">Padrão</button><button type="button" onClick={() => setArtworkTypographyScale(112)} className="rounded border px-2 py-1 text-[10px] font-bold">Destaque</button></div>
+                                            <div className="flex items-center justify-between gap-3"><label htmlFor="artwork-background-opacity" className="text-[11px] font-black uppercase tracking-wide text-slate-600">Opacidade do fundo</label><output className="rounded bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-700">{sceneOverlayOpacity}%</output></div>
+                                            <input id="artwork-background-opacity" aria-label="Opacidade do fundo" type="range" min="15" max="90" step="1" value={sceneOverlayOpacity} onChange={(event) => setSceneOverlayOpacity(Number(event.target.value))} className="w-full accent-orange-500" />
+                                            <p className="text-[10px] leading-tight text-slate-400">Reduza para destacar a fotografia; aumente para dar mais contraste aos textos.</p>
+                                        </div>}
                                         {productArtworkTemplate === 'showcase' && activeCommercialCopy && <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
                                             <div className="flex items-center justify-between gap-2">
                                                 <p className="text-[11px] font-black uppercase tracking-wide text-orange-700">Textos do criativo</p>
@@ -2008,12 +2019,23 @@ export default function MarketingPage() {
                                             </label>)}
                                             <div>
                                                 <span className="mb-1 block text-[10px] font-bold uppercase text-slate-500">Benefícios comprováveis</span>
-                                                <span className="mb-2 block text-[10px] leading-tight text-slate-400">Você pode editar ou remover os benefícios. Alegações comerciais sensíveis sem apoio no cadastro são bloqueadas.</span>
+                                                <span className="mb-2 block text-[10px] leading-tight text-slate-400">Use até cinco. A prévia organiza quatro ou cinco benefícios em duas linhas. Alegações comerciais sensíveis sem apoio no cadastro são bloqueadas.</span>
                                                 <div className="space-y-2">
-                                                    {[0, 1, 2].map((index) => <input key={index} value={activeCommercialCopy.benefits[index] || ''} maxLength={COMMERCIAL_COPY_LIMITS.benefit} placeholder={`Benefício ${index + 1}`} onChange={(event) => updateCommercialCopyDraft((copy) => {
+                                                    {[0, 1, 2, 3, 4].map((index) => <input key={index} value={activeCommercialCopy.benefits[index] || ''} maxLength={COMMERCIAL_COPY_LIMITS.benefit} placeholder={`Benefício ${index + 1}`} onChange={(event) => updateCommercialCopyDraft((copy) => {
                                                         const benefits = [...copy.benefits];
                                                         benefits[index] = event.target.value;
                                                         return { ...copy, benefits: benefits.filter((value, position) => value.trim() || position < index) };
+                                                    })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-orange-500" />)}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-500">Gatilhos comerciais</span>
+                                                <span className="mb-2 block text-[10px] leading-tight text-slate-400">Use até três chamadas curtas, como “Entrega grátis”, “Estoque limitado” ou “Condição especial”. Confirme a condição antes de baixar.</span>
+                                                <div className="space-y-2">
+                                                    {[0, 1, 2].map((index) => <input key={index} value={activeCommercialCopy.triggers?.[index] || ''} maxLength={COMMERCIAL_COPY_LIMITS.trigger} placeholder={`Gatilho ${index + 1}`} onChange={(event) => updateCommercialCopyDraft((copy) => {
+                                                        const triggers = [...(copy.triggers || [])];
+                                                        triggers[index] = event.target.value;
+                                                        return { ...copy, triggers: triggers.filter((value, position) => value.trim() || position < index) };
                                                     })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-orange-500" />)}
                                                 </div>
                                             </div>
@@ -2660,6 +2682,8 @@ export default function MarketingPage() {
                                                         website={artworkWebsite}
                                                         showPrice={effectiveShowArtworkPrice}
                                                         template={productArtworkTemplate}
+                                                        typographyScale={artworkTypographyScale / 100}
+                                                        backgroundOverlayOpacity={sceneOverlayOpacity / 100}
                                                         carouselLabel={showCarouselPreview ? `Slide ${activeCarouselSlide?.slideNumber ?? 1} de ${activeCarouselSlide?.totalSlides ?? 1}` : undefined}
                                                     />
                                                 )}
