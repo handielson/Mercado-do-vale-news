@@ -4162,25 +4162,25 @@ async function sendBirthdayWhatsappAudio(phone) {
   };
 
   try {
-    // sendMedia e o endpoint padrao da Evolution para arquivo de audio. O endpoint
-    // legado fica apenas como contingencia para instalacoes antigas.
-    const primary = await send('/message/sendMedia', {
-        number,
-        mediatype: 'audio',
-        mimetype: 'audio/ogg; codecs=opus',
-        media: audioUrl,
-        fileName: 'parabens_xuxa.ogg',
-        delay: 1200,
-    });
-    if (primary.ok) return { ...primary, endpoint: 'sendMedia' };
-
-    const fallback = await send('/message/sendWhatsAppAudio', {
+    // sendWhatsAppAudio envia como nota de voz oficial (PTT) com waveform e foto de perfil, compativel com Android e iOS
+    const primary = await send('/message/sendWhatsAppAudio', {
       number,
       audio: audioUrl,
       delay: 1200,
       encoding: true,
     });
-    return { ...fallback, endpoint: 'sendWhatsAppAudio', primaryFailure: primary };
+    if (primary.ok) return { ...primary, endpoint: 'sendWhatsAppAudio' };
+
+    // Contingencia para envio como anexo de midia caso o endpoint de nota de voz falhe
+    const fallback = await send('/message/sendMedia', {
+      number,
+      mediatype: 'audio',
+      mimetype: 'audio/ogg; codecs=opus',
+      media: audioUrl,
+      fileName: 'parabens_xuxa.ogg',
+      delay: 1200,
+    });
+    return { ...fallback, endpoint: 'sendMedia', primaryFailure: primary };
   } catch (err) {
     console.error('[birthday-audio] Falha ao enviar audio de aniversario:', err?.message || err);
     return { ok: false, error: err?.message || String(err) };
@@ -27421,6 +27421,10 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
 
   const paidAmount = Number(payment.transaction_amount) || 0;
   const refundedAmount = Number(payment.transaction_amount_refunded) || 0;
+  const requestedAmount = req.body?.amount == null ? paidAmount - refundedAmount : Number(req.body.amount);
+  if (!Number.isFinite(requestedAmount) || requestedAmount <= 0 || requestedAmount > (paidAmount - refundedAmount) + 0.01) {
+    return reply.code(400).send({ error: 'O valor do estorno deve ser maior que zero e nao pode exceder o saldo do pagamento.' });
+  }
   const alreadyRefundedAtGateway = String(payment.status || '').toLowerCase() === 'refunded'
     || (paidAmount > 0 && refundedAmount >= paidAmount);
 
@@ -27439,7 +27443,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
           'Content-Type': 'application/json',
           'X-Idempotency-Key': `order-refund-${String(order.id).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 48)}`,
         },
-        body: '{}',
+        body: JSON.stringify(req.body?.amount == null ? {} : { amount: Math.round(requestedAmount * 100) / 100 }),
         signal: AbortSignal.timeout(15000),
       },
     );
@@ -27452,16 +27456,17 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
 
   const gatewayRefund = refund?.id ? refund : (Array.isArray(payment.refunds) ? payment.refunds[0] : null);
   const refundId = gatewayRefund?.id ? String(gatewayRefund.id) : (order.refund_id ? String(order.refund_id) : null);
-  const refundAmount = Math.max(0, Math.round((paidAmount || (Number(order.total) / 100)) * 100));
+  const refundAmount = Math.max(0, Math.round((refundedAmount + requestedAmount) * 100));
+  const fullyRefunded = paidAmount > 0 && refundAmount >= Math.round(paidAmount * 100) - 1;
   await pool.query(
     `UPDATE orders
-        SET payment_status = 'refunded',
+        SET payment_status = ?,
             refund_id = COALESCE(?, refund_id),
             refunded_at = COALESCE(refunded_at, CURRENT_TIMESTAMP),
             refund_amount = ?,
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`,
-    [refundId, refundAmount, order.id],
+    [fullyRefunded ? 'refunded' : 'paid', refundId, refundAmount, order.id],
   );
   const [[updatedRefund]] = await pool.query(
     'SELECT refund_id, refunded_at, refund_amount FROM orders WHERE id = ? LIMIT 1',
@@ -27471,7 +27476,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
   return {
     ok: true,
     already_refunded: alreadyRefundedAtGateway,
-    payment_status: 'refunded',
+    payment_status: fullyRefunded ? 'refunded' : 'paid',
     refund_id: updatedRefund?.refund_id ? String(updatedRefund.refund_id) : undefined,
     refunded_at: updatedRefund?.refunded_at || undefined,
     refund_amount: Number(updatedRefund?.refund_amount) || refundAmount,
@@ -31904,6 +31909,23 @@ fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, asyn
     }
   }
   const requestedStatus = String(req.query?.status || 'open').trim().toLowerCase();
+  const period = String(req.query?.period || 'all').trim().toLowerCase();
+  const dateFrom = String(req.query?.date_from || '').trim();
+  const dateTo = String(req.query?.date_to || '').trim();
+  let dateFilter = '';
+  if (dateFrom && dateTo) {
+    dateFilter = `AND DATE(jobs.created_at) BETWEEN ${pool.escape(dateFrom)} AND ${pool.escape(dateTo)}`;
+  } else if (dateFrom) {
+    dateFilter = `AND DATE(jobs.created_at) = ${pool.escape(dateFrom)}`;
+  } else if (period === 'today') {
+    dateFilter = 'AND jobs.created_at >= CURDATE()';
+  } else if (period === 'yesterday') {
+    dateFilter = 'AND jobs.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND jobs.created_at < CURDATE()';
+  } else if (period === '7d') {
+    dateFilter = 'AND jobs.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)';
+  } else if (period === 'month') {
+    dateFilter = 'AND jobs.created_at >= DATE_FORMAT(CURDATE(), "%Y-%m-01")';
+  }
   const statusClause = requestedStatus === 'all'
     ? ''
     : requestedStatus === 'delivered'
@@ -31925,6 +31947,7 @@ fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, asyn
         AND jobs.delivery_person_customer_id LIKE 'team:%'
       WHERE ${access.isAdmin ? '1 = 1' : 'jobs.delivery_person_customer_id = ?'}
       ${statusClause}
+      ${dateFilter}
       ORDER BY CASE jobs.delivery_status WHEN 'in_route' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
                jobs.created_at DESC
       LIMIT 200`,
@@ -31941,7 +31964,7 @@ fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, asyn
     );
     const [teamPeople] = await pool.query(
       `SELECT id, name FROM team_members
-        WHERE role = 'delivery' AND is_active = 1
+        WHERE role = 'delivery' AND active = 1
         ORDER BY name ASC`
     );
     deliveryPeople = [
@@ -31978,6 +32001,106 @@ fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, asyn
   };
 });
 
+fastify.get('/delivery/app/dashboard', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  const access = req.customerAccess || {};
+  const customerId = String(access.customerId || '').trim();
+  let deliveryWorker = null;
+  if (!access.isAdmin) {
+    const [customers] = await pool.query(
+      'SELECT id, name, is_delivery_worker FROM customers WHERE id = ? LIMIT 1',
+      [customerId]
+    );
+    deliveryWorker = customers?.[0] || null;
+    if (!deliveryWorker || Number(deliveryWorker.is_delivery_worker) !== 1) {
+      return reply.code(403).send({ error: 'Perfil de entregador nao habilitado' });
+    }
+  }
+
+  const period = String(req.query?.period || 'today').trim().toLowerCase();
+  const dateFrom = String(req.query?.date_from || '').trim();
+  const dateTo = String(req.query?.date_to || '').trim();
+  let dateFilter = '';
+  if (dateFrom && dateTo) {
+    dateFilter = `AND DATE(jobs.created_at) BETWEEN ${pool.escape(dateFrom)} AND ${pool.escape(dateTo)}`;
+  } else if (dateFrom) {
+    dateFilter = `AND DATE(jobs.created_at) = ${pool.escape(dateFrom)}`;
+  } else if (period === 'today') {
+    dateFilter = 'AND jobs.created_at >= CURDATE()';
+  } else if (period === 'yesterday') {
+    dateFilter = 'AND jobs.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND jobs.created_at < CURDATE()';
+  } else if (period === '7d') {
+    dateFilter = 'AND jobs.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)';
+  } else if (period === 'month') {
+    dateFilter = 'AND jobs.created_at >= DATE_FORMAT(CURDATE(), "%Y-%m-01")';
+  }
+
+  const actorCondition = access.isAdmin ? '1 = 1' : 'jobs.delivery_person_customer_id = ?';
+  const queryParams = access.isAdmin ? [] : [customerId];
+
+  const [summaryRows] = await pool.query(
+    `SELECT
+       COUNT(*) as total_jobs,
+       SUM(CASE WHEN delivery_status = 'pending' THEN 1 ELSE 0 END) as pending_jobs,
+       SUM(CASE WHEN delivery_status = 'in_route' THEN 1 ELSE 0 END) as in_route_jobs,
+       SUM(CASE WHEN delivery_status = 'delivered' THEN 1 ELSE 0 END) as delivered_jobs,
+       SUM(CASE WHEN delivery_status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_jobs,
+       COALESCE(SUM(delivery_amount), 0) as total_delivery_cents
+     FROM customer_delivery_jobs jobs
+     WHERE ${actorCondition} ${dateFilter}`,
+    queryParams
+  );
+
+  const summary = {
+    total_jobs: Number(summaryRows?.[0]?.total_jobs || 0),
+    pending_jobs: Number(summaryRows?.[0]?.pending_jobs || 0),
+    in_route_jobs: Number(summaryRows?.[0]?.in_route_jobs || 0),
+    delivered_jobs: Number(summaryRows?.[0]?.delivered_jobs || 0),
+    cancelled_jobs: Number(summaryRows?.[0]?.cancelled_jobs || 0),
+    total_delivery_cents: Number(summaryRows?.[0]?.total_delivery_cents || 0),
+  };
+
+  let byPerson = [];
+  if (access.isAdmin) {
+    const [personRows] = await pool.query(
+      `SELECT
+         jobs.delivery_person_customer_id as person_id,
+         COALESCE(cust.name, team.name, CASE
+           WHEN jobs.delivery_person_customer_id = ? THEN 'Loja Mercado do Vale'
+           WHEN jobs.delivery_person_customer_id = ? THEN 'A definir'
+           ELSE 'Entregador'
+         END) as person_name,
+         COUNT(*) as jobs_count,
+         SUM(CASE WHEN jobs.delivery_status = 'delivered' THEN 1 ELSE 0 END) as delivered_count,
+         COALESCE(SUM(jobs.delivery_amount), 0) as total_amount_cents
+       FROM customer_delivery_jobs jobs
+       LEFT JOIN customers cust ON cust.id = jobs.delivery_person_customer_id
+       LEFT JOIN team_members team ON team.id = SUBSTRING(jobs.delivery_person_customer_id, 6)
+            AND jobs.delivery_person_customer_id LIKE 'team:%'
+       WHERE 1 = 1 ${dateFilter}
+       GROUP BY jobs.delivery_person_customer_id, person_name
+       ORDER BY delivered_count DESC, jobs_count DESC`,
+      [STORE_DELIVERY_PERSON_ID, STORE_UNASSIGNED_DELIVERY_PERSON_ID]
+    );
+
+    byPerson = (personRows || []).map((row) => ({
+      person_id: String(row.person_id || ''),
+      person_name: String(row.person_name || 'Entregador'),
+      jobs_count: Number(row.jobs_count || 0),
+      delivered_count: Number(row.delivered_count || 0),
+      total_amount_cents: Number(row.total_amount_cents || 0),
+    }));
+  }
+
+  return {
+    profile: access.isAdmin
+      ? { id: customerId, name: 'Loja Mercado do Vale', type: 'store' }
+      : { id: deliveryWorker.id, name: deliveryWorker.name || 'Entregador', type: 'delivery_worker' },
+    period,
+    summary,
+    by_person: byPerson,
+  };
+});
+
 fastify.post('/delivery/app/jobs/:jobId/assign', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
   const access = req.customerAccess || {};
   if (!access.isAdmin) return reply.code(403).send({ error: 'Apenas a loja pode atribuir entregas' });
@@ -31994,7 +32117,7 @@ fastify.post('/delivery/app/jobs/:jobId/assign', { preHandler: requireSyncKeyOrC
     const teamMemberId = assigneeId.slice('team:'.length);
     const [[person]] = await pool.query(
       `SELECT id, name FROM team_members
-        WHERE id = ? AND role = 'delivery' AND is_active = 1 LIMIT 1`,
+        WHERE id = ? AND role = 'delivery' AND active = 1 LIMIT 1`,
       [teamMemberId]
     );
     deliveryPersonName = String(person?.name || '').trim();
@@ -35500,6 +35623,7 @@ function sanitizeDeliveryTeamMemberPayload(input = {}) {
     pix_key: input.pix_key ? String(input.pix_key).trim() : undefined,
     bank_name: input.bank_name ? String(input.bank_name).trim() : undefined,
     delivery_fee: deliveryFee,
+    active: 1,
     is_active: true,
     admin_notes: input.admin_notes ? String(input.admin_notes).trim() : undefined,
   };
@@ -40185,6 +40309,8 @@ async function runMigrations() {
   console.log('[migration] legacy_customer_purchases table: OK');
 
   await addColumnIfMissing('customers', 'is_delivery_worker', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumnIfMissing('team_members', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1');
+  await pool.query('UPDATE team_members SET is_active = active WHERE active IS NOT NULL').catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_delivery_profiles (

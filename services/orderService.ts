@@ -858,10 +858,10 @@ export async function notifyOrderStatusWhatsApp(id: string): Promise<OrderWhatsA
     return result.whatsapp;
 }
 
-export async function refundOrderPayment(id: string): Promise<OrderRefundResult> {
+export async function refundOrderPayment(id: string, amountCents?: number): Promise<OrderRefundResult> {
     return vpsClient.post<OrderRefundResult>(
         `/orders/${encodeURIComponent(id)}/payments/mercado-pago/refund`,
-        {}
+        amountCents == null ? {} : { amount: amountCents / 100 }
     );
 }
 

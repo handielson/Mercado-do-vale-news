@@ -143,18 +143,31 @@ export default function OnlineOrdersPage() {
     };
 
     const handleRefund = async (order: OrderWithItems) => {
+        const totalCents = Math.round(Number(order.total) || 0);
+        const alreadyRefundedCents = Math.round(Number(order.refund_amount) || 0);
+        const remainingCents = Math.max(0, totalCents - alreadyRefundedCents);
+        const amountInput = window.prompt(
+            `Informe o valor do estorno para ${order.customer_name}.\nDisponível: ${formatCurrency(remainingCents)}\n\nDeixe em branco para estornar o valor disponível inteiro.`,
+            formatCurrency(remainingCents).replace(/[^0-9,.-]/g, '')
+        );
+        if (amountInput === null) return;
+        const normalizedAmount = amountInput.trim() === '' ? remainingCents : Math.round(Number(amountInput.replace(/\./g, '').replace(',', '.')) * 100);
+        if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0 || normalizedAmount > remainingCents) {
+            alert(`Informe um valor entre ${formatCurrency(0.01)} e ${formatCurrency(remainingCents)}.`);
+            return;
+        }
         const confirmed = window.confirm(
-            `Estornar ${formatCurrency(order.total)} para ${order.customer_name}?\n\n` +
+            `Estornar ${formatCurrency(normalizedAmount)} para ${order.customer_name}?\n\n` +
             'O estorno sera solicitado ao Mercado Pago e nao podera ser desfeito pelo sistema.'
         );
         if (!confirmed) return;
 
         setActionLoading(order.id + 'refund');
         try {
-            const result = await refundOrderPayment(order.id);
+            const result = await refundOrderPayment(order.id, normalizedAmount);
             const refundedOrder: OrderWithItems = {
                 ...order,
-                payment_status: 'refunded',
+                payment_status: result.payment_status,
                 refund_id: result.refund_id || order.refund_id,
                 refunded_at: result.refunded_at || order.refunded_at || new Date().toISOString(),
                 refund_amount: result.refund_amount ?? order.refund_amount ?? order.total,

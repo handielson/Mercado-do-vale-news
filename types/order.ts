@@ -218,7 +218,7 @@ export interface OrderWhatsAppNotificationResult {
 export interface OrderRefundResult {
     ok: boolean;
     already_refunded?: boolean;
-    payment_status: 'refunded';
+    payment_status: 'paid' | 'refunded';
     refund_id?: string;
     refunded_at?: string;
     refund_amount?: number;
