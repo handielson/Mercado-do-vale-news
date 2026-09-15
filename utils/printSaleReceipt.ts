@@ -140,9 +140,12 @@ export function printSaleReceipt(
         const publicInstallmentDetail = paymentView.installments > 1
             ? `<br><span style="font-size:11px;color:#6b7280;">${paymentView.installments}x de ${fmt(paymentView.installmentValue)} = ${fmt(paymentView.totalWithFee)}</span>`
             : '';
+        const cashDetail = p.method === 'money' && p.change_amount > 0
+            ? `<br><span style="font-size:11px;color:#6b7280;">Entregue: ${fmt(p.cash_received)} · Troco: ${fmt(p.change_amount)}</span>`
+            : '';
         return `
         <tr>
-            <td style="padding:4px 0;font-size:13px;color:#374151;">${escapeHtml(paymentView.labelWithInstallments)}${publicInstallmentDetail}</td>
+            <td style="padding:4px 0;font-size:13px;color:#374151;">${escapeHtml(paymentView.labelWithInstallments)}${publicInstallmentDetail}${cashDetail}</td>
             <td style="padding:4px 0;text-align:right;font-size:13px;font-family:monospace;vertical-align:top;">${fmt(paymentView.totalWithFee)}</td>
         </tr>`;
     }).join('');

@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { cn } from '../../utils/cn';
+import { moneyReaisToCents } from '../../utils/money';
 
 interface CurrencyInputProps {
   value?: number;
@@ -57,11 +58,7 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
     // Remove everything except digits, comma and dot
     const cleaned = str.replace(/[^\d,.]/g, '');
 
-    // Replace comma with dot for parseFloat
-    const normalized = cleaned.replace(',', '.');
-
-    const num = parseFloat(normalized);
-    return isNaN(num) ? 0 : Math.round(num * 100);
+    return moneyReaisToCents(cleaned);
   };
 
   // Update input value when value prop changes (only if not focused)
@@ -106,6 +103,8 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
         </span>
         <input
           type="text"
+          inputMode="decimal"
+          aria-label={label || 'Valor em reais'}
           value={inputValue}
           onChange={handleInputChange}
           onBlur={handleBlur}

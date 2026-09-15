@@ -14,29 +14,12 @@ assert.match(
     'PDV must expose a final payment amount handler after card installments are selected'
 );
 
-assert.match(
-    pdvPage,
-    /targetCreditTotal = safeTargetTotal - paymentsWithoutAdjustedCredit/,
-    'final adjustment must recalculate the selected credit payment instead of only changing sale total'
-);
-
-assert.match(
-    pdvPage,
-    /const adjustedCreditBaseAmount = Math\.round\(targetCreditTotal \/ \(1 \+ appliedFeeRate\)\)/,
-    'final adjustment must keep credit amount as the base amount before customer fee'
-);
-
-assert.match(
-    pdvPage,
-    /fee_amount: adjustedCreditFeeAmount/,
-    'final adjustment must recalculate the customer fee separately from the base amount'
-);
-
-assert.match(
-    pdvPage,
-    /operator_fee_amount: adjustedOperatorFeeAmount/,
-    'final adjustment must recalculate the operator fee from the adjusted base amount'
-);
+assert.match(pdvPage, /adjustFinalCreditPayment\(baseTotal, payments, targetTotal\)/,
+    'PDV must use the behavior-tested shared adjustment calculation');
+assert.match(pdvPage, /setPayments\(adjusted.payments\)/,
+    'PDV must update the card and its fee together');
+assert.match(pdvPage, /setFinalAdjustmentDiscount\(adjusted.discount\)/,
+    'PDV must apply the discount computed from the new fee');
 
 assert.match(
     pdvPage,
@@ -76,7 +59,7 @@ assert.match(
 
 assert.match(
     paymentSection,
-    /Valor final cobrado/,
+    /Ajustar total final da venda/,
     'payment section must show a final charged amount control'
 );
 

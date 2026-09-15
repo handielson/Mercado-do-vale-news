@@ -1,12 +1,12 @@
 # Versão Atual
 
 ``text
-version: v1.2.395-preservar-produtos-brancos
-date: 2026-09-14
-status: published
-release_vps: /var/www/mdv-site/releases/20260914-211500-preservar-produtos-brancos
+version: v1.2.396-pdv-pagamentos
+date: 2026-09-15
+status: prepared
+release_vps: pendente
 branch: main
-summary: Preserva produtos brancos durante o recorte automático do gerador de artes.
-tag: v1.2.395-preservar-produtos-brancos
+summary: Corrige o fluxo e os cálculos de pagamentos do PDV.
+tag: v1.2.396-pdv-pagamentos
 ``
 

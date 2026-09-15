@@ -38,16 +38,16 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
         <div className="installment-calculator bg-white p-4 rounded-lg shadow-sm border border-gray-200">
             <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-blue-600" />
-                Opcoes de Parcelamento
+                3. Escolha as parcelas do cartão
             </h3>
 
             <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="text-sm text-gray-700">Saldo restante:</div>
+                <div className="text-sm text-gray-700">Valor destinado a este cartão (sem acréscimo):</div>
                 <div className="text-2xl font-bold text-blue-600">{formatCurrency(remainingBalance)}</div>
             </div>
 
             {installmentOptions.length > 0 ? (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
                     {installmentOptions.map(option => (
                         <button
                             key={option.installments}
@@ -70,6 +70,7 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
                             <span className="text-[10px] text-gray-500 mt-1 font-medium">
                                 Total: {formatCurrency(option.totalWithFee)}
                             </span>
+                            <span className="text-[10px] text-slate-500 mt-1">Acréscimo: {formatCurrency(option.feeAmount)}</span>
                         </button>
                     ))}
                 </div>

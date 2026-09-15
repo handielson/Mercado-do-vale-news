@@ -59,14 +59,14 @@ const requiredPaymentSectionSnippets = [
   'ticket_url',
   'pdvPixDisplays',
   '<select',
-  'Selecione um display',
+  'Selecione o display pareado',
   'value={display.id}',
   'data:image/png;base64,',
   'alt="QR Code Pix"',
   'pending',
   'approved',
   'creating',
-  'disabled={Boolean(pdvPixPayment',
+  'pixPending || pdvPixLoading',
 ];
 
 for (const snippet of requiredPaymentSectionSnippets) {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Receipt, User, Package, Truck, CreditCard, DollarSign, Smartphone } from 'lucide-react';
 import { SaleItem, PaymentMethod, DeliveryType } from '../../types/sale';
 import * as ReactQRCode from 'react-qr-code';
-import { calculateSaleTotals, calculateTotalPaid } from '../../utils/saleCalculations';
+import { calculateSaleTotals, calculateSalePaymentTotals, calculatePaymentSummary } from '../../utils/saleCalculations';
 import { companySettingsService } from '../../services/companySettingsService';
 import { CompanySettings } from '../../types/companySettings';
 import { capitalizeName } from '../../utils/customerFormUtils';
@@ -75,7 +75,7 @@ export default function ReceiptPreview({
         loadSettings();
     }, []);
 
-    const { subtotal, discount_total, total: itemsTotal } = calculateSaleTotals(items);
+    const { subtotal, discount_total } = calculateSaleTotals(items);
 
     // Calcular desconto de brindes (valor integral dos produtos marcados como brinde)
     const giftDiscount = items.reduce((sum, item) => {
@@ -85,8 +85,6 @@ export default function ReceiptPreview({
         return sum;
     }, 0);
 
-    console.log('Gift items:', items.filter(i => i.is_gift));
-    console.log('Gift discount:', giftDiscount);
 
     // Calcular total de juros/taxas dos pagamentos
     const totalFees = payments.reduce((sum, p) => {
@@ -95,14 +93,12 @@ export default function ReceiptPreview({
     }, 0);
 
     // Total = Subtotal - Brindes - Promoção + Entrega + Juros
-    const total = itemsTotal - giftDiscount - (promotionalDiscount || 0) - (finalAdjustmentDiscount || 0) + deliveryCostCustomer + totalFees;
-
-    // Total pago usa o mesmo calculo da secao de pagamento, incluindo juros do credito.
-    const totalPaid = calculateTotalPaid(payments);
+    const { total } = calculateSalePaymentTotals(items, payments, promotionalDiscount || 0, deliveryCostCustomer, finalAdjustmentDiscount || 0);
+    const summary = calculatePaymentSummary(total, payments);
 
     // Troco ou falta
-    const change = totalPaid - total;
-    const isComplete = customer && items.length > 0 && totalPaid >= total;
+    const change = summary.remaining > 0 ? -summary.remaining : summary.change;
+    const isComplete = customer && items.length > 0 && summary.isComplete;
 
     // Função para mascarar CPF (mostra apenas os últimos 3 dígitos)
     const maskCPF = (cpf: string) => {
@@ -353,13 +349,14 @@ export default function ReceiptPreview({
                 </div>
 
                 {/* Descontos - C */}
-                {(giftDiscount > 0 || (promotionalDiscount && promotionalDiscount > 0) || (finalAdjustmentDiscount && finalAdjustmentDiscount > 0) || deliveryCostStore > 0) && (
+                {(discount_total > 0 || (promotionalDiscount && promotionalDiscount > 0) || (finalAdjustmentDiscount && finalAdjustmentDiscount > 0) || deliveryCostStore > 0) && (
                     <div className="border-b border-slate-200 pb-4">
                         <div className="flex items-center gap-2 mb-3">
                             <DollarSign size={16} className="text-slate-600" />
                             <h3 className="font-semibold text-slate-800">Descontos</h3>
                         </div>
                         <div className="text-sm text-slate-600 space-y-1 ml-6">
+                            {discount_total > giftDiscount && <div className="flex justify-between"><span>Desconto nos produtos:</span><span className="font-mono text-red-600">-{formatCurrency(discount_total - giftDiscount)}</span></div>}
                             {promotionalDiscount && promotionalDiscount > 0 ? (
                                 <div className="flex justify-between">
                                     <span>Desconto Promocional:</span>
@@ -386,7 +383,7 @@ export default function ReceiptPreview({
                             )}
                             <div className="pt-2 mt-2 border-t border-slate-300 text-sm text-right">
                                 <span className="text-xs text-slate-500">Subtotal (C): </span>
-                                <span className="font-mono font-semibold text-red-600">-{formatCurrency((promotionalDiscount || 0) + (finalAdjustmentDiscount || 0) + giftDiscount + deliveryCostStore)}</span>
+                                <span className="font-mono font-semibold text-red-600">-{formatCurrency((promotionalDiscount || 0) + (finalAdjustmentDiscount || 0) + discount_total + deliveryCostStore)}</span>
                             </div>
                         </div>
                     </div>
@@ -435,9 +432,9 @@ export default function ReceiptPreview({
                             <span>(Subtotal A + Subtotal B) - (Subtotal C)</span>
                         </div>
                         <div className="flex justify-between font-bold text-lg">
-                            <span className="text-slate-800">TOTAL A PAGAR:</span>
+                            <span className="text-slate-800">TOTAL SEM ACRÉSCIMOS:</span>
                             <span className="font-mono text-blue-600">
-                                {formatCurrency((itemsTotal + deliveryCostCustomer + deliveryCostStore) - (giftDiscount + (promotionalDiscount || 0) + (finalAdjustmentDiscount || 0) + deliveryCostStore))}
+                                {formatCurrency(total - totalFees)}
                             </span>
                         </div>
                     </div>
@@ -450,7 +447,7 @@ export default function ReceiptPreview({
                                 <span className="font-mono">+{formatCurrency(totalFees)}</span>
                             </div>
                             <div className="flex justify-between font-semibold">
-                                <span className="text-slate-800">TOTAL COM JUROS:</span>
+                                <span className="text-slate-800">TOTAL DA VENDA:</span>
                                 <span className="font-mono text-blue-600">{formatCurrency(total)}</span>
                             </div>
                         </div>
@@ -460,9 +457,11 @@ export default function ReceiptPreview({
                     {payments.length > 0 && (
                         <div className="space-y-2 text-sm pt-3 border-t-2 border-slate-300">
                             <div className="flex justify-between text-green-600 font-medium">
-                                <span>Pago:</span>
-                                <span className="font-mono">{formatCurrency(totalPaid)}</span>
+                                <span>Recebido (líquido):</span>
+                                <span className="font-mono">{formatCurrency(summary.received)}</span>
                             </div>
+                            {summary.deferred > 0 && <div className="flex justify-between text-sm text-blue-700"><span>A receber no crediário:</span><span className="font-mono">{formatCurrency(summary.deferred)}</span></div>}
+                            {summary.nonCashExcess > 0 && <p role="alert" className="text-sm text-red-700">Revise os pagamentos: o valor sem dinheiro excede o total da venda.</p>}
                             {change > 0 && (
                                 <div className="flex justify-between text-amber-600 font-medium">
                                     <span>Troco:</span>

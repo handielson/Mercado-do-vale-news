@@ -4,6 +4,7 @@ import { PaymentMethod, PaymentMethodType, PaymentInstallmentScheduleItem } from
 import type { PdvDisplay, PdvPixPayment } from '../../types/pdvDisplay';
 import {
     calculateTotalPaid,
+    calculatePaymentSummary,
     calculateRemaining,
     calculateChange,
     formatCurrency,
@@ -16,6 +17,7 @@ import {
 } from '../../utils/installmentCalculations';
 import { toast } from 'sonner';
 import InstallmentCalculator from './InstallmentCalculator';
+import { CurrencyInput } from '../ui/CurrencyInput';
 import { getBestCreditFeeByInstallment } from '../../utils/paymentFeeCalculations';
 
 interface PaymentSectionProps {
@@ -41,6 +43,7 @@ interface PaymentSectionProps {
     maxFinalAdjustmentDiscount?: number;
     onFinalAdjustmentDiscountChange?: (discount: number) => void;
     onApplyFinalPaymentAmount?: (amount: number) => void;
+    onResetFinalPaymentAmount?: () => void;
     selectedCustomer?: any;
     onUpdatePayment?: (index: number, updated: PaymentMethod) => void;
     pdvPixPayment?: PdvPixPayment | null;
@@ -72,6 +75,7 @@ export default function PaymentSection({
     maxFinalAdjustmentDiscount,
     onFinalAdjustmentDiscountChange,
     onApplyFinalPaymentAmount,
+    onResetFinalPaymentAmount,
     selectedCustomer,
     onUpdatePayment,
     pdvPixPayment,
@@ -95,20 +99,25 @@ export default function PaymentSection({
         return d.toISOString().split('T')[0];
     };
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('money');
-    const [paymentAmount, setPaymentAmount] = useState('');
-    const [discountInput, setDiscountInput] = useState('');
-    const [finalAdjustmentInput, setFinalAdjustmentInput] = useState('');
+    const [paymentAmount, setPaymentAmount] = useState<number | null>(null);
+    const [pixMode, setPixMode] = useState<'generate' | 'manual'>('generate');
+    const [finalAdjustmentInput, setFinalAdjustmentInput] = useState(0);
 
     const totalPaid = calculateTotalPaid(payments);
     const remaining = calculateRemaining(total, payments);
     const change = calculateChange(total, payments);
-    const isComplete = totalPaid >= total;
+    const summary = calculatePaymentSummary(total, payments);
+    const isComplete = summary.isComplete;
+    const enteredAmount = paymentAmount ?? remaining;
+    const pixPending = Boolean(pdvPixPayment && ['creating', 'pending'].includes(pdvPixPayment.status));
     const creditPayment = [...payments].reverse().find(payment => payment.method === 'credit');
     const creditPaymentTotal = creditPayment ? (creditPayment.total_with_fee ?? creditPayment.amount ?? 0) : 0;
     const creditInstallmentValue = creditPayment?.installments
         ? Math.round(creditPaymentTotal / creditPayment.installments)
         : 0;
-    const totalBeforeFinalAdjustment = total + (finalAdjustmentDiscount || 0);
+    const totalBeforeFinalAdjustment = total + (finalAdjustmentDiscount || 0)
+        + payments.reduce((sum, payment) => sum + (payment.original_credit
+            ? (payment.original_credit.fee_amount || 0) - (payment.fee_amount || 0) : 0), 0);
 
     // Estado e configuracao de Venda a Prazo (Crediario)
     const [isAPrazoModalOpen, setIsAPrazoModalOpen] = useState(false);
@@ -120,26 +129,19 @@ export default function PaymentSection({
     const applyFinalPaymentAmount = () => {
         if (!onApplyFinalPaymentAmount) return;
 
-        const cleanValue = finalAdjustmentInput.replace(',', '.');
-        const parsedValue = parseFloat(cleanValue) * 100;
-
-        if (isNaN(parsedValue) || parsedValue <= 0) {
-            toast.error('Digite um valor final valido');
+        if (finalAdjustmentInput <= 0) {
+            toast.error('Digite o total final da venda');
             return;
         }
-
-        onApplyFinalPaymentAmount(Math.round(parsedValue));
+        onApplyFinalPaymentAmount(finalAdjustmentInput);
     };
 
-    const getTypedPaymentAmount = () => {
-        const amount = parseFloat(paymentAmount.replace(',', '.')) * 100;
-        return Number.isFinite(amount) ? Math.round(amount) : 0;
-    };
+    const getTypedPaymentAmount = () => enteredAmount;
 
     const handleCreatePixPayment = () => {
         const amount = getTypedPaymentAmount();
-        if (!amount || amount <= 0) {
-            toast.error('Digite um valor valido para gerar o Pix');
+        if (amount <= 0 || amount > remaining) {
+            toast.error('Informe um valor entre zero e o saldo restante');
             return;
         }
         onCreatePdvPixPayment?.(amount);
@@ -155,18 +157,6 @@ export default function PaymentSection({
         return 'Pix Mercado Pago';
     };
 
-    // Calcular preview de 12x para o Total a Pagar
-    let twelveInstallmentTotal = 0;
-    let twelveInstallmentValue = 0;
-    if (paymentFees && paymentFees.length > 0) {
-        const twelveFee = getBestCreditFeeByInstallment(paymentFees, 12);
-        if (twelveFee) {
-             const feeAmount = Math.round(total * (twelveFee.applied_fee / 100));
-             twelveInstallmentTotal = total + feeAmount;
-             twelveInstallmentValue = Math.round(twelveInstallmentTotal / 12);
-        }
-    }
-
     const openAPrazoModal = () => {
         if (!selectedCustomer) {
             toast.error('Selecione um cliente para vender a prazo');
@@ -178,8 +168,7 @@ export default function PaymentSection({
             return;
         }
 
-        const typedAmount = getTypedPaymentAmount();
-        const targetAmount = typedAmount > 0 ? typedAmount : (remaining > 0 ? remaining : total);
+        const targetAmount = remaining;
         if (!targetAmount || targetAmount <= 0) {
             toast.error('Digite um valor válido');
             return;
@@ -233,7 +222,7 @@ export default function PaymentSection({
         const totalWithFee = aPrazoAmount + feeAmount;
         const validation = validatePaymentInstallmentSchedule(totalWithFee, aPrazoSchedule);
         if (!validation.valid) {
-            toast.error(validation.error || 'Cronograma de parcelamento inválido');
+            toast.error(validation.reason || 'Cronograma de parcelamento inválido');
             return;
         }
 
@@ -251,7 +240,7 @@ export default function PaymentSection({
         };
 
         onAddPayment(payment);
-        setPaymentAmount('');
+        setPaymentAmount(null);
         setIsAPrazoModalOpen(false);
         toast.success(`A Prazo (${aPrazoSchedule.length}x) adicionado`);
     };
@@ -263,13 +252,18 @@ export default function PaymentSection({
             return;
         }
 
-        const amount = parseFloat(paymentAmount.replace(',', '.')) * 100; // converter para centavos
+        const amount = getTypedPaymentAmount();
 
         if (!amount || amount <= 0) {
             toast.error('Digite um valor válido');
             return;
         }
 
+        if (method !== 'money' && amount > remaining) {
+            toast.error('Esse valor excede o saldo restante. Troco é permitido apenas em dinheiro.');
+            return;
+        }
+        if (method === 'pix' && pixPending) return;
         const payment: PaymentMethod = {
             method: method,
             amount: Math.round(amount),
@@ -277,22 +271,17 @@ export default function PaymentSection({
         };
 
         onAddPayment(payment);
-        setPaymentAmount('');
+        setPaymentAmount(null);
         toast.success(`${getPaymentMethodLabel(method)} adicionado`);
     };
 
-    // Enter para adicionar - Padrão é dinheiro
-    const handleKeyPress = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            handleAddPayment('money');
-        }
+    const addSelectedPayment = () => {
+        if (selectedMethod === 'credit') return;
+        if (selectedMethod === 'pix' && pixMode === 'generate') handleCreatePixPayment();
+        else handleAddPayment(selectedMethod);
     };
 
-    // Preencher com valor restante
-    const fillRemaining = () => {
-        const remainingValue = (remaining / 100).toFixed(2);
-        setPaymentAmount(remainingValue);
-    };
+    const fillRemaining = () => setPaymentAmount(remaining);
 
     return (
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
@@ -301,74 +290,35 @@ export default function PaymentSection({
                 Pagamento
             </h3>
 
-            {/* Desconto Promocional - logo após o título Pagamento */}
-            {!isComplete && onPromotionalDiscountChange && (
-                <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-200 rounded-lg">
-                    <h4 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
-                        <span className="text-lg">💰</span>
-                        Desconto Promocional
-                    </h4>
-                    <div className="flex gap-2">
-                        <div className="flex-1">
-                            <input
-                                type="text"
-                                value={discountInput}
-                                onChange={(e) => {
-                                    const rawValue = e.target.value.replace(/[^\d,.]/g, '');
-                                    setDiscountInput(rawValue);
-                                }}
-                                onBlur={() => {
-                                    const cleanValue = discountInput.replace(',', '.');
-                                    const value = parseFloat(cleanValue) * 100;
-                                    onPromotionalDiscountChange(isNaN(value) || value < 0 ? 0 : Math.round(value));
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        const cleanValue = discountInput.replace(',', '.');
-                                        const value = parseFloat(cleanValue) * 100;
-                                        onPromotionalDiscountChange(isNaN(value) || value < 0 ? 0 : Math.round(value));
-                                        e.currentTarget.blur(); // Remove o foco do input
-                                    }
-                                }}
-                                placeholder="0,00"
-                                className="w-full px-4 py-2 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                            />
-                        </div>
-                        <button
-                            onClick={() => {
-                                setDiscountInput('');
-                                onPromotionalDiscountChange(0);
-                            }}
-                            className="px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors text-sm font-medium"
-                        >
-                            Limpar
-                        </button>
-                    </div>
-                    {promotionalDiscount > 0 && (
-                        <p className="text-xs text-amber-700 mt-2">
-                            Desconto aplicado: {formatCurrency(promotionalDiscount)}
-                        </p>
-                    )}
+            <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <p className="text-sm text-slate-600">Total da venda</p>
+                <p className="text-3xl font-bold text-blue-800">{formatCurrency(total)}</p>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm" aria-live="polite">
+                    <div><span className="block text-slate-600">Recebido (líquido)</span><strong>{formatCurrency(summary.received)}</strong></div>
+                    <div><span className="block text-slate-600">A receber no crediário</span><strong>{formatCurrency(summary.deferred)}</strong></div>
+                    <div><span className="block text-slate-600">Falta definir</span><strong className="text-blue-800">{formatCurrency(remaining)}</strong></div>
+                    <div><span className="block text-slate-600">Troco em dinheiro</span><strong className="text-green-700">{formatCurrency(change)}</strong></div>
                 </div>
-            )}
-
-            {/* Total a Pagar */}
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
-                <p className="text-sm text-slate-600 mb-1">Total a Pagar à vista:</p>
-                <p className="text-2xl font-bold text-blue-700">{formatCurrency(total)}</p>
-                {twelveInstallmentTotal > 0 && (
-                    <p className="text-sm font-medium text-slate-600 mt-1">
-                        ou no cartão em até 12x de <span className="font-bold text-blue-700">{formatCurrency(twelveInstallmentValue)}</span> ({formatCurrency(twelveInstallmentTotal)})
-                    </p>
+                {summary.nonCashExcess > 0 && <p role="alert" className="mt-3 text-sm font-semibold text-red-700">Os pagamentos sem dinheiro excedem a venda em {formatCurrency(summary.nonCashExcess)}. Remova o lançamento e corrija o valor.</p>}
+                {onPromotionalDiscountChange && (
+                    <details className="mt-4 border-t border-blue-200 pt-3">
+                        <summary className="cursor-pointer text-sm font-medium text-blue-900">
+                            Desconto da venda{promotionalDiscount ? ` · ${formatCurrency(promotionalDiscount)}` : ''}
+                        </summary>
+                        <div className="mt-3 flex items-end gap-2">
+                            <CurrencyInput label="Desconto promocional" value={promotionalDiscount || 0}
+                                onChange={onPromotionalDiscountChange} />
+                            <button type="button" onClick={() => onPromotionalDiscountChange(0)}
+                                className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Limpar</button>
+                        </div>
+                    </details>
                 )}
             </div>
-
-
 
             {/* Pagamentos Adicionados */}
             {payments.length > 0 && (
                 <div className="mb-4 space-y-2">
-                    <h4 className="text-sm font-medium text-slate-700">Formas de Pagamento:</h4>
+                    <h4 className="text-sm font-medium text-slate-700">Pagamentos definidos:</h4>
                     {payments.map((payment, index) => (
                         <div
                             key={index}
@@ -382,6 +332,7 @@ export default function PaymentSection({
                                             ? `A Prazo (${payment.installment_schedule.length}x)`
                                             : getPaymentMethodLabel(payment.method, payment.installments)}
                                     </p>
+                                    <p className="text-xs text-slate-500">{payment.method === 'a_prazo' ? 'A receber nos vencimentos' : payment.pix_status === 'approved' ? 'Pix aprovado automaticamente' : 'Recebimento informado pelo operador'}</p>
                                     <p className="text-sm text-slate-600">
                                         {formatCurrency(payment.total_with_fee ?? payment.amount)}
                                         {payment.method === 'credit' && payment.installments && payment.installments > 1 && (
@@ -436,28 +387,21 @@ export default function PaymentSection({
             )}
 
             {/* Ajuste final depois da escolha do cartao */}
-            {creditPayment && onApplyFinalPaymentAmount && (
-                <div className="mb-4 p-4 bg-rose-50 border-2 border-rose-200 rounded-lg">
-                    <h4 className="text-sm font-semibold text-rose-800 mb-2">
-                        Valor final cobrado
-                    </h4>
-                    <p className="text-xs text-rose-700 mb-3">
-                        Use depois de escolher o parcelamento. O sistema mantem a quantidade de parcelas e recalcula o valor de cada parcela.
+            {creditPayment && !payments.some(payment => payment.method === 'a_prazo') && onApplyFinalPaymentAmount && (
+                <details className="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-lg">
+                    <summary className="cursor-pointer text-sm font-semibold text-rose-800">
+                        Ajustar total final da venda
+                    </summary>
+                    <p className="text-xs text-rose-700 mb-3 mt-3">
+                        Informe o total de toda a venda, incluindo Pix e dinheiro já definidos. O ajuste será aplicado ao último cartão, mantendo a quantidade de parcelas.
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2">
-                        <input
-                            type="text"
-                            value={finalAdjustmentInput}
-                            onChange={(e) => setFinalAdjustmentInput(e.target.value.replace(/[^\d,.]/g, ''))}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    applyFinalPaymentAmount();
-                                    e.currentTarget.blur();
-                                }
-                            }}
-                            placeholder={(creditPaymentTotal / 100).toFixed(2).replace('.', ',')}
-                            className="w-full px-4 py-2 border border-rose-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent"
-                        />
+                        <CurrencyInput label="Total final da venda" value={finalAdjustmentInput}
+                            onChange={setFinalAdjustmentInput}
+                            placeholder={(total / 100).toFixed(2).replace('.', ',')}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') { event.preventDefault(); applyFinalPaymentAmount(); }
+                            }} />
                         <button
                             onClick={applyFinalPaymentAmount}
                             className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors text-sm font-medium"
@@ -466,9 +410,8 @@ export default function PaymentSection({
                         </button>
                         <button
                             onClick={() => {
-                                setFinalAdjustmentInput('');
-                                onFinalAdjustmentDiscountChange?.(0);
-                                onApplyFinalPaymentAmount(totalBeforeFinalAdjustment);
+                                setFinalAdjustmentInput(0);
+                                onResetFinalPaymentAmount?.();
                             }}
                             className="px-4 py-2 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors text-sm font-medium"
                         >
@@ -481,8 +424,8 @@ export default function PaymentSection({
                             <strong className="text-slate-800">{formatCurrency(totalBeforeFinalAdjustment)}</strong>
                         </div>
                         <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
-                            <span className="block text-rose-700">Ajuste aplicado</span>
-                            <strong className="text-red-600">-{formatCurrency(finalAdjustmentDiscount || 0)}</strong>
+                            <span className="block text-rose-700">Redução total</span>
+                            <strong className="text-red-600">-{formatCurrency(Math.max(0, totalBeforeFinalAdjustment - total))}</strong>
                         </div>
                         <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
                             <span className="block text-rose-700">Parcelas atuais</span>
@@ -495,39 +438,64 @@ export default function PaymentSection({
                     </div>
                     {maxFinalAdjustmentDiscount !== undefined && (
                         <p className="text-xs text-rose-700 mt-2">
-                            Valor minimo permitido: {formatCurrency(Math.max(0, totalBeforeFinalAdjustment - maxFinalAdjustmentDiscount))}
+                            Outros pagamentos definidos: {formatCurrency(totalPaid - creditPaymentTotal)}
                         </p>
                     )}
-                </div>
+                </details>
             )}
 
-            {/* Totais do Pagamento */}
-            <div className="bg-slate-50 p-4 rounded-lg space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Total Pago:</span>
-                    <span className="font-semibold text-slate-800">{formatCurrency(totalPaid)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Restante:</span>
-                    <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-slate-800'}`}>
-                        {formatCurrency(remaining)}
-                    </span>
-                </div>
-                {change > 0 && (
-                    <div className="flex justify-between text-sm pt-2 border-t border-slate-200">
-                        <span className="text-green-600 font-medium">Troco:</span>
-                        <span className="font-bold text-green-600 text-lg">{formatCurrency(change)}</span>
+            {!isComplete && (
+                <section className="mb-5 space-y-4" aria-label="Adicionar pagamento">
+                    <h4 className="text-sm font-semibold text-slate-800">1. Escolha a forma de pagamento</h4>
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                        {(['money', 'pix', 'debit', 'credit', 'a_prazo'] as PaymentMethodType[]).map(method => (
+                            <button key={method} type="button" aria-pressed={selectedMethod === method}
+                                onClick={() => { setSelectedMethod(method); setPaymentAmount(null); }}
+                                disabled={method === 'a_prazo' && payments.some(payment => payment.method === 'a_prazo')}
+                                className={`rounded-lg border-2 px-2 py-3 text-xs font-semibold disabled:opacity-50 ${selectedMethod === method ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
+                                <span aria-hidden="true" className="mb-1 block text-xl">{getPaymentMethodIcon(method)}</span>
+                                {{money: 'Dinheiro', pix: 'Pix', debit: 'Débito', credit: 'Crédito', a_prazo: 'Crediário'}[method]}
+                            </button>
+                        ))}
                     </div>
-                )}
-            </div>
+                    {selectedMethod === 'a_prazo' ? (
+                        <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">O saldo de {formatCurrency(remaining)} será lançado no crediário. Adicione a entrada antes de definir as parcelas.</p>
+                    ) : (
+                        <div className="flex items-end gap-2">
+                            <CurrencyInput label={selectedMethod === 'money' ? '2. Dinheiro entregue pelo cliente' : '2. Valor nesta forma de pagamento'}
+                                value={enteredAmount} onChange={setPaymentAmount}
+                                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); addSelectedPayment(); } }} />
+                            <button type="button" onClick={fillRemaining} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700">Usar restante</button>
+                        </div>
+                    )}
+                    {selectedMethod === 'pix' && (
+                        <div className="space-y-2 text-sm">
+                            <label className="flex items-center gap-2"><input type="radio" name="pdv-pix-mode" checked={pixMode === 'generate'} onChange={() => setPixMode('generate')} />Gerar cobrança e aguardar aprovação</label>
+                            <label className="flex items-center gap-2"><input type="radio" name="pdv-pix-mode" checked={pixMode === 'manual'} onChange={() => setPixMode('manual')} />Registrar Pix já recebido (conferência manual)</label>
+                        </div>
+                    )}
+                    {selectedMethod === 'credit' ? (
+                        enteredAmount > 0 && enteredAmount <= remaining && paymentFees && onSelectInstallment ? (
+                            <InstallmentCalculator remainingBalance={enteredAmount} paymentFees={paymentFees}
+                                onSelectInstallment={(...args) => { onSelectInstallment(...args); setPaymentAmount(null); }} />
+                        ) : <p role="alert" className="text-sm text-amber-700">Informe um valor maior que zero e até {formatCurrency(remaining)} para consultar as parcelas.</p>
+                    ) : (
+                        <button type="button" onClick={addSelectedPayment}
+                            disabled={selectedMethod === 'pix' && (pixPending || pdvPixLoading || (pixMode === 'generate' && Boolean(pdvPixPayment)))}
+                            className="w-full rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white hover:bg-blue-800 disabled:opacity-50">
+                            {selectedMethod === 'a_prazo' ? 'Definir parcelas do crediário' : selectedMethod === 'pix' && pixMode === 'generate' ? 'Gerar Pix Mercado Pago' : 'Adicionar pagamento'}
+                        </button>
+                    )}
+                </section>
+            )}
 
             {/* Totem / Display / Pix Mercado Pago */}
-            <div className="mb-4 rounded-lg border border-cyan-100 bg-cyan-50/60 p-4">
+            {((selectedMethod === 'pix' && pixMode === 'generate' && !isComplete) || pdvPixPayment) && <div className="mb-4 rounded-lg border border-cyan-100 bg-cyan-50/60 p-4">
                 <div className="mb-3 flex items-center justify-between gap-2">
                     <div>
-                        <h4 className="text-sm font-semibold text-cyan-900">Pix Mercado Pago e Totem</h4>
+                        <h4 className="text-sm font-semibold text-cyan-900">Cobrança Pix</h4>
                         <p className="text-xs text-cyan-700">
-                            Gere o Pix dinâmico e envie o QR Code para o display do cliente no PDV.
+                            A cobrança só entra nos pagamentos após a aprovação. O display é opcional.
                         </p>
                     </div>
                     <span className="rounded bg-cyan-100 px-2 py-0.5 text-[11px] font-semibold text-cyan-800">
@@ -535,7 +503,8 @@ export default function PaymentSection({
                     </span>
                 </div>
 
-                <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <details className="mb-3"><summary className="cursor-pointer text-sm font-medium text-cyan-900">Configurar display e caixa</summary>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <label className="text-xs text-slate-700">
                         <span className="mb-1 block font-medium">Display do caixa</span>
                         <select
@@ -546,7 +515,7 @@ export default function PaymentSection({
                             <option value="">Selecione o display pareado</option>
                             {pdvPixDisplays.map((display) => (
                                 <option key={display.id} value={display.id}>
-                                    {display.name || display.code} ({display.is_online ? 'Online' : 'Offline'})
+                                    {display.name || display.slug}
                                 </option>
                             ))}
                         </select>
@@ -565,12 +534,14 @@ export default function PaymentSection({
                             <option value="pdv-principal">PDV Principal</option>
                             {pdvPixDisplays.map((display) => (
                                 <option key={`opt-${display.id}`} value={display.cashier_key || display.id}>
-                                    {display.name || display.code} ({display.cashier_key || 'sem chave'})
+                                    {display.name || display.slug} ({display.cashier_key || 'sem chave'})
                                 </option>
                             ))}
                         </select>
                     </label>
                 </div>
+
+                </details>
 
                 {pdvPixPayment && (
                     <div className="mb-3 rounded border border-cyan-200 bg-white p-3 text-xs text-slate-700">
@@ -603,14 +574,7 @@ export default function PaymentSection({
                     </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-2">
-                    <button
-                        onClick={handleCreatePixPayment}
-                        disabled={Boolean(pdvPixPayment) || pdvPixLoading}
-                        className="rounded bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-700 disabled:opacity-50"
-                    >
-                        {pdvPixLoading && !pdvPixPayment ? 'Criando...' : 'Gerar Pix Mercado Pago'}
-                    </button>
+                {pdvPixPayment && <div className="grid grid-cols-2 gap-2">
                     <button
                         onClick={onShowPdvPixOnDisplay}
                         disabled={!pdvPixPayment || !pdvPixDisplayId || pdvPixLoading}
@@ -639,101 +603,23 @@ export default function PaymentSection({
                     >
                         Cancelar Pix
                     </button>
-                    <button
+                    {onSharePdvPixReceipt && <button
                         onClick={onSharePdvPixReceipt}
                         disabled={!pdvPixPayment || pdvPixPayment.status !== 'approved' || pdvPixLoading}
                         className="inline-flex items-center justify-center gap-1 rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
                     >
                         <Share2 size={14} />
                         Compartilhar comprovante
-                    </button>
-                    <button
+                    </button>}
+                    {onClearPdvTotemVisual && <button
                         onClick={onClearPdvTotemVisual}
                         disabled={!pdvPixDisplayId || pdvPixLoading}
                         className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
                     >
                         Limpar totem
-                    </button>
-                </div>
-            </div>
-
-            {/* Adicionar Novo Pagamento */}
-            {!isComplete && (
-                <div className="space-y-3 mb-4">
-                    <h4 className="text-sm font-medium text-slate-700">Informe o valor e a forma de pagamento:</h4>
-
-                    <div className="flex gap-2">
-                        <div className="flex-1">
-                            <input
-                                type="text"
-                                value={paymentAmount}
-                                onChange={(e) => setPaymentAmount(e.target.value)}
-                                onKeyPress={handleKeyPress}
-                                placeholder="0,00"
-                                className="w-full px-4 py-3 text-lg border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center font-bold"
-                            />
-                        </div>
-                        <button
-                            onClick={fillRemaining}
-                            className="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors"
-                        >
-                            Restante
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-4 gap-2">
-                        <button
-                            onClick={() => handleAddPayment('pix')}
-                            disabled={Boolean(pdvPixPayment && pdvPixPayment.status !== 'approved')}
-                            className="flex flex-col items-center justify-center p-3 border-2 border-cyan-200 bg-cyan-50 rounded-lg hover:bg-cyan-100 hover:border-cyan-300 transition-colors"
-                        >
-                            <Smartphone size={20} className="mb-1 text-cyan-700" />
-                            <span className="text-xs font-semibold text-cyan-800">Add PIX</span>
-                        </button>
-                        <button
-                            onClick={() => handleAddPayment('money')}
-                            className="flex flex-col items-center justify-center p-3 border-2 border-green-200 bg-green-50 rounded-lg hover:bg-green-100 hover:border-green-300 transition-colors"
-                        >
-                            <DollarSign size={20} className="mb-1 text-green-700" />
-                            <span className="text-xs font-semibold text-green-800">Add Dinheiro</span>
-                        </button>
-                        <button
-                            onClick={() => handleAddPayment('debit')}
-                            className="flex flex-col items-center justify-center p-3 border-2 border-purple-200 bg-purple-50 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition-colors"
-                        >
-                            <CreditCard size={20} className="mb-1 text-purple-700" />
-                            <span className="text-xs font-semibold text-purple-800">Add Débito</span>
-                        </button>
-                        <button
-                            type="button"
-                            disabled={payments.some(p => p.method === 'a_prazo')}
-                            onClick={() => openAPrazoModal()}
-                            title={payments.some(p => p.method === 'a_prazo') ? 'Já existe um pagamento a prazo nesta venda' : undefined}
-                            className={`flex flex-col items-center justify-center p-3 border-2 rounded-lg transition-colors ${
-                                payments.some(p => p.method === 'a_prazo')
-                                    ? 'border-slate-200 bg-slate-100 opacity-50 cursor-not-allowed text-slate-400'
-                                    : 'border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 text-blue-800'
-                            }`}
-                        >
-                            <Calendar size={20} className={`mb-1 ${payments.some(p => p.method === 'a_prazo') ? 'text-slate-400' : 'text-blue-700'}`} />
-                            <span className={`text-xs font-semibold ${payments.some(p => p.method === 'a_prazo') ? 'text-slate-500' : 'text-blue-800'}`}>
-                                {payments.some(p => p.method === 'a_prazo') ? 'A Prazo (Já add)' : 'Add A Prazo'}
-                            </span>
-                        </button>
-                    </div>
-
-                    {/* Tabela de Parcelamento (Cartão de Crédito) baseada no Saldo Restante */}
-                    {remaining > 0 && paymentFees && onSelectInstallment && (
-                        <div className="mt-6 border-t border-slate-200 pt-4">
-                            <InstallmentCalculator
-                                remainingBalance={remaining}
-                                paymentFees={paymentFees}
-                                onSelectInstallment={onSelectInstallment}
-                            />
-                        </div>
-                    )}
-                </div>
-            )}
+                    </button>}
+                </div>}
+            </div>}
 
             {/* Modal de Configuracao de Venda a Prazo (Crediario) */}
             {isAPrazoModalOpen && (

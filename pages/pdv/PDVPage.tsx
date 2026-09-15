@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, ArrowLeft, Ticket, X as XIcon, Printer, FileText, User, CheckCircle2, RotateCcw, Copy, Download, AlertTriangle } from 'lucide-react';
 import { Product } from '../../types/product';
 import { SaleItem, PaymentMethod, SaleInput, DeliveryType } from '../../types/sale';
-import { calculateSaleTotals, calculateTotalPaid } from '../../utils/saleCalculations';
+import { calculateSaleTotals, calculateTotalPaid, calculateSalePaymentTotals, calculatePaymentSummary, adjustFinalCreditPayment, restoreCreditPayments } from '../../utils/saleCalculations';
 import ProductSearchSection from '../../components/pdv/ProductSearchSection';
 import CartItemsSection from '../../components/pdv/CartItemsSection';
 import CustomerSection from '../../components/pdv/CustomerSection';
@@ -338,19 +338,13 @@ export default function PDVPage() {
 
     // Total em centavos dos itens (sem brindes)
     const { total: itemsTotal } = calculateSaleTotals(cartItems);
-    const giftDiscount = cartItems.reduce((sum, item) => item.is_gift ? sum + (item.unit_price * item.quantity) : sum, 0);
-    const totalFees = payments.reduce((sum, p) => sum + (p.fee_amount || 0), 0);
     const hasAPrazoPayment = payments.some(payment => payment.method === 'a_prazo');
-    const totalBeforeFinalAdjustment = itemsTotal - giftDiscount - promotionalDiscount + deliveryCostCustomer + totalFees;
+    const { baseTotal, totalBeforeFinalAdjustment, total, appliedFinalAdjustmentDiscount } = calculateSalePaymentTotals(cartItems, payments, promotionalDiscount, deliveryCostCustomer, finalAdjustmentDiscount);
     const maxFinalAdjustmentDiscount = Math.max(0, totalBeforeFinalAdjustment);
-    const appliedFinalAdjustmentDiscount = Math.min(finalAdjustmentDiscount, maxFinalAdjustmentDiscount);
-    const total = Math.max(0, totalBeforeFinalAdjustment - appliedFinalAdjustmentDiscount);
-    const totalPaid = calculateTotalPaid(payments);
-    const remainingBalance = total - totalPaid;
     const pixPaymentPending = pdvPixPayment && ['creating', 'pending'].includes(pdvPixPayment.status);
 
     // Total do carrinho em R$ para o cupom (sem taxas, sem entrega)
-    const cartTotalForCoupon = (itemsTotal - giftDiscount) / 100;
+    const cartTotalForCoupon = itemsTotal / 100;
 
     const handleApplyCoupon = async () => {
         if (!couponCode.trim()) return;
@@ -478,9 +472,8 @@ export default function PDVPage() {
         finalAdjDiscount: number
     ): PaymentMethod[] => {
         const totals = calculateSaleTotals(currentCartItems);
-        const giftDiscount = currentCartItems.reduce((sum, item) => item.is_gift ? sum + (item.unit_price * item.quantity) : sum, 0);
         const totalFees = currentPayments.reduce((sum, payment) => payment.method === 'a_prazo' ? sum : sum + (payment.fee_amount || 0), 0);
-        const totalBeforeFinalAdj = totals.total - giftDiscount - promoDiscount + deliveryCustomer + totalFees;
+        const totalBeforeFinalAdj = Math.max(0, totals.total - promoDiscount + deliveryCustomer) + totalFees;
         const validFinalAdj = Math.min(finalAdjDiscount, Math.max(0, totalBeforeFinalAdj));
         const saleTotal = Math.max(0, totalBeforeFinalAdj - validFinalAdj);
 
@@ -594,7 +587,7 @@ export default function PDVPage() {
     // Remover pagamento
     const handleRemovePayment = (index: number) => {
         setPayments(currentPayments => {
-            const nextList = currentPayments.filter((_, i) => i !== index);
+            const nextList = restoreCreditPayments(currentPayments).filter((_, i) => i !== index);
             return syncAPrazoWithSaleState(
                 nextList,
                 cartItems,
@@ -660,56 +653,24 @@ export default function PDVPage() {
             total_with_fee: totalWithFee
         };
         setFinalAdjustmentDiscount(0);
-        setPayments([...payments, newPayment]);
+        setPayments(current => [...restoreCreditPayments(current), newPayment]);
         toast.success(`Pagamento de ${installments}x adicionado`);
     };
 
     const handleApplyFinalPaymentAmount = (targetTotal: number) => {
-        let creditPaymentIndex = -1;
-        for (let index = payments.length - 1; index >= 0; index -= 1) {
-            if (payments[index].method === 'credit') {
-                creditPaymentIndex = index;
-                break;
-            }
+        try {
+            const adjusted = adjustFinalCreditPayment(baseTotal, payments, targetTotal);
+            setPayments(adjusted.payments);
+            setFinalAdjustmentDiscount(adjusted.discount);
+            toast.success('Total final ajustado e parcelas recalculadas');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Não foi possível ajustar o pagamento');
         }
+    };
 
-        if (creditPaymentIndex < 0) {
-            toast.error('Selecione um pagamento no cartao antes do ajuste final');
-            return;
-        }
-
-        const safeTargetTotal = Math.max(0, Math.min(Math.round(targetTotal), totalBeforeFinalAdjustment));
-        const paymentsWithoutAdjustedCredit = payments.reduce((sum, payment, index) => {
-            if (index === creditPaymentIndex) return sum;
-            return sum + (payment.total_with_fee ?? payment.amount ?? 0);
-        }, 0);
-        const targetCreditTotal = safeTargetTotal - paymentsWithoutAdjustedCredit;
-
-        if (targetCreditTotal < 0) {
-            toast.error('O valor final nao pode ser menor que os pagamentos ja informados');
-            return;
-        }
-
-        const nextPayments = payments.map((payment, index) => {
-            if (index !== creditPaymentIndex) return payment;
-            const appliedFeeRate = Math.max(0, Number(payment.fee_percentage || 0)) / 100;
-            const operatorFeeRate = Math.max(0, Number((payment as any).operator_fee_percentage || 0)) / 100;
-            const adjustedCreditBaseAmount = Math.round(targetCreditTotal / (1 + appliedFeeRate));
-            const adjustedCreditFeeAmount = Math.max(0, targetCreditTotal - adjustedCreditBaseAmount);
-            const adjustedOperatorFeeAmount = Math.round(adjustedCreditBaseAmount * operatorFeeRate);
-
-            return {
-                ...payment,
-                amount: adjustedCreditBaseAmount,
-                fee_amount: adjustedCreditFeeAmount,
-                operator_fee_amount: adjustedOperatorFeeAmount,
-                total_with_fee: targetCreditTotal
-            };
-        });
-
-        setPayments(nextPayments);
-        setFinalAdjustmentDiscount(Math.max(0, totalBeforeFinalAdjustment - safeTargetTotal));
-        toast.success('Ajuste final aplicado e parcelas recalculadas');
+    const handleResetFinalPaymentAmount = () => {
+        setPayments(current => restoreCreditPayments(current));
+        setFinalAdjustmentDiscount(0);
     };
 
     const rememberPdvPixDisplayConfig = (displayId = pdvPixDisplayId, cashierKey = pdvPixCashierKey) => {
@@ -754,7 +715,7 @@ export default function PDVPage() {
     const addApprovedPdvPixPayment = (payment: PdvPixPayment) => {
         setPayments(currentPayments => {
             if (currentPayments.some(item => item.pix_payment_id === payment.id)) return currentPayments;
-            return [
+            return syncAPrazoWithSaleState([
                 ...currentPayments,
                 {
                     method: 'pix',
@@ -765,7 +726,7 @@ export default function PDVPage() {
                     pix_status: 'approved',
                     pix_paid_at: payment.approved_at || payment.updated_at || new Date().toISOString()
                 }
-            ];
+            ], cartItems, promotionalDiscount, deliveryCostCustomer, finalAdjustmentDiscount);
         });
     };
 
@@ -798,7 +759,7 @@ export default function PDVPage() {
             cancelled = true;
             window.clearInterval(interval);
         };
-    }, [pdvPixPayment?.id, pdvPixPayment?.status, pdvPixDisplayId]);
+    }, [pdvPixPayment?.id, pdvPixPayment?.status, pdvPixDisplayId, cartItems, promotionalDiscount, deliveryCostCustomer, finalAdjustmentDiscount]);
 
     const handleShowPdvPixOnDisplay = async () => {
         if (!pdvPixPayment) {
@@ -941,6 +902,14 @@ export default function PDVPage() {
 
         if (cartItems.length === 0) {
             toast.error('Adicione produtos ao carrinho');
+            return;
+        }
+
+        const paymentSummary = calculatePaymentSummary(total, payments);
+        if (!paymentSummary.isComplete) {
+            toast.error(paymentSummary.nonCashExcess > 0
+                ? 'Os pagamentos sem dinheiro excedem o total. Revise os valores.'
+                : 'Complete a definição dos pagamentos antes de finalizar.');
             return;
         }
 
@@ -1644,6 +1613,7 @@ export default function PDVPage() {
                             onCancelPdvPixPayment={handleCancelPdvPixPayment}
                             onFinalAdjustmentDiscountChange={setFinalAdjustmentDiscount}
                             onApplyFinalPaymentAmount={handleApplyFinalPaymentAmount}
+                            onResetFinalPaymentAmount={handleResetFinalPaymentAmount}
                         />
                     </div>
 

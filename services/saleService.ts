@@ -13,7 +13,7 @@ import {
     PaymentMethod,
     PaymentMethodType
 } from '../types/sale';
-import { calculateSaleTotals } from '../utils/saleCalculations';
+import { calculateSaleTotals, calculateSalePaymentTotals, prepareSalePayments } from '../utils/saleCalculations';
 import { promotionService } from './promotionService';
 import { benefitService } from './benefitService';
 import { syncStockToBling } from './blingService';
@@ -604,17 +604,15 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
 
         const promotionalDiscount = Math.max(0, saleInput.promotional_discount || 0);
         const discountTotal = totals.discount_total + (saleInput.delivery_cost_store || 0) + promotionalDiscount;
-        const paymentCollectedTotal = (saleInput.payment_methods || []).reduce((sum, payment) => {
-            return sum + moneyToCents(payment.total_with_fee ?? payment.amount ?? 0);
-        }, 0);
-        const customerFeeTotal = (saleInput.payment_methods || []).reduce((sum, payment) => {
-            return sum + moneyToCents(payment.fee_amount || 0);
-        }, 0);
+
         const paymentOperatorFeeTotal = (saleInput.payment_methods || []).reduce((sum, payment) => {
             return sum + moneyToCents(payment.operator_fee_amount || 0);
         }, 0);
-        const computedSaleTotal = Math.max(0, totals.total + (saleInput.delivery_cost_customer || 0) + customerFeeTotal - promotionalDiscount);
-        const saleTotal = paymentCollectedTotal > 0 ? paymentCollectedTotal : computedSaleTotal;
+        const { total: saleTotal } = calculateSalePaymentTotals(
+            saleInput.items, saleInput.payment_methods || [], promotionalDiscount, saleInput.delivery_cost_customer || 0
+        );
+        const settledPayments = prepareSalePayments(saleTotal, saleInput.payment_methods || [])
+            .map(({ original_credit, ...payment }) => payment);
         const realProfit = saleTotal - totals.cost_total - paymentOperatorFeeTotal - (saleInput.delivery_total || 0);
         const finalizationIssues: SaleFinalizationIssue[] = [];
         const finalizationWarnings: SaleFinalizationWarning[] = [];
@@ -649,7 +647,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             payment_method: summarizePaymentMethodForSalesTable(saleInput.payment_methods),
             payment_status: 'paid',
             notes: saleInput.notes,
-            payment_methods: saleInput.payment_methods,
+            payment_methods: settledPayments,
             subtotal: totals.subtotal,
             discount_total: discountTotal,
             cost_total: totals.cost_total,

@@ -3,8 +3,8 @@
  * Utility functions for calculating sale totals, discounts, profit, and payment fees
  */
 
-import { SaleItem, PaymentMethod, PaymentMethodType, DeliveryType } from '../types/sale';
-import { PaymentFee } from '../types/payment-fees';
+import type { SaleItem, PaymentMethod, PaymentMethodType, DeliveryType } from '../types/sale';
+import type { PaymentFee } from '../types/payment-fees';
 
 /**
  * Calculate total for a single item
@@ -135,6 +135,94 @@ export const calculateTotalPaid = (payments: PaymentMethod[]): number => {
     }, 0);
 };
 
+/** Shared draft total. calculateSaleTotals already deducts gifts and item discounts. */
+export function calculateSalePaymentTotals(
+    items: SaleItem[], payments: PaymentMethod[], promotionalDiscount = 0,
+    deliveryCostCustomer = 0, finalAdjustmentDiscount = 0
+) {
+    const totals = calculateSaleTotals(items);
+    const totalFees = payments.reduce((sum, payment) => sum + (payment.fee_amount || 0), 0);
+    const baseTotal = Math.max(0, totals.total - promotionalDiscount + deliveryCostCustomer);
+    const totalBeforeFinalAdjustment = baseTotal + totalFees;
+    const appliedFinalAdjustmentDiscount = Math.min(Math.max(0, finalAdjustmentDiscount), totalBeforeFinalAdjustment);
+    return { ...totals, baseTotal, totalFees, totalBeforeFinalAdjustment, appliedFinalAdjustmentDiscount,
+        total: totalBeforeFinalAdjustment - appliedFinalAdjustmentDiscount };
+}
+
+/** Allocated payments include debt; only cash can produce change. */
+export function calculatePaymentSummary(total: number, payments: PaymentMethod[]) {
+    const allocated = calculateTotalPaid(payments);
+    const deferred = calculateTotalPaid(payments.filter(payment => payment.method === 'a_prazo'));
+    const cash = calculateTotalPaid(payments.filter(payment => payment.method === 'money'));
+    const nonCashExcess = Math.max(0, allocated - cash - total);
+    const change = Math.min(cash, Math.max(0, allocated - total));
+    const remaining = Math.max(0, total - allocated);
+    const pendingPix = payments.some(payment => payment.pix_status && payment.pix_status !== 'approved');
+    return { allocated, deferred, received: allocated - deferred - change, cash, change, remaining,
+        nonCashExcess, isComplete: remaining === 0 && nonCashExcess === 0 && !pendingPix };
+}
+
+/** Persist net cash so revenue, cash register and receipts never count returned change. */
+export function prepareSalePayments(total: number, payments: PaymentMethod[]): PaymentMethod[] {
+    if (!Number.isSafeInteger(total) || total < 0 || payments.some(payment =>
+        !Number.isSafeInteger(payment.amount) || payment.amount < 0 ||
+        !Number.isSafeInteger(payment.total_with_fee) || payment.total_with_fee < 0
+    )) throw new Error('Valores de pagamento inválidos. Revise os pagamentos.');
+    if (payments.some(payment => payment.pix_status && payment.pix_status !== 'approved')) {
+        throw new Error('Aguarde a aprovação do Pix antes de finalizar.');
+    }
+    const summary = calculatePaymentSummary(total, payments);
+    if (summary.remaining > 0) throw new Error('Falta definir parte do pagamento.');
+    if (summary.nonCashExcess > 0) throw new Error('Os pagamentos sem dinheiro excedem o total da venda. Revise os valores.');
+    let changeLeft = summary.change;
+    return payments.map(payment => {
+        if (payment.method !== 'money' || changeLeft === 0) return { ...payment };
+        const change = Math.min(payment.total_with_fee, changeLeft);
+        changeLeft -= change;
+        return { ...payment, amount: payment.amount - change, total_with_fee: payment.total_with_fee - change,
+            cash_received: payment.cash_received ?? payment.total_with_fee,
+            change_amount: (payment.change_amount || 0) + change };
+    });
+}
+
+export function restoreCreditPayments(payments: PaymentMethod[]): PaymentMethod[] {
+    return payments.map(payment => {
+        if (!payment.original_credit) return payment;
+        const { original_credit, ...rest } = payment;
+        const restored = { ...rest, ...original_credit };
+        if (original_credit.operator_fee_amount === undefined) delete restored.operator_fee_amount;
+        if (original_credit.fee_amount === undefined) delete restored.fee_amount;
+        return restored;
+    });
+}
+
+/** Target is the whole sale. Compute the discount using the NEW fee, not the old fee. */
+export function adjustFinalCreditPayment(baseTotal: number, payments: PaymentMethod[], targetTotal: number) {
+    const originalPayments = restoreCreditPayments(payments);
+    const index = originalPayments.map(payment => payment.method).lastIndexOf('credit');
+    if (index < 0) throw new Error('Selecione um pagamento no cartão antes do ajuste final.');
+    if (payments.some(payment => payment.method === 'a_prazo')) throw new Error('Ajuste o desconto antes de definir o crediário.');
+    const originalTotal = baseTotal + originalPayments.reduce((sum, payment) => sum + (payment.fee_amount || 0), 0);
+    if (!Number.isSafeInteger(targetTotal) || targetTotal <= 0 || targetTotal > originalTotal) {
+        throw new Error('Informe um total final entre zero e o total original da venda.');
+    }
+    const otherPayments = calculateTotalPaid(payments.filter((_, i) => i !== index));
+    const targetCreditTotal = targetTotal - otherPayments;
+    if (targetCreditTotal <= 0) throw new Error('O total final deve ser maior que os outros pagamentos.');
+    const original = originalPayments[index];
+    const amount = Math.round(targetCreditTotal / (1 + Math.max(0, original.fee_percentage || 0) / 100));
+    const nextPayments = payments.map((payment, i) => i !== index ? payment : {
+        ...payment, amount, fee_amount: targetCreditTotal - amount, total_with_fee: targetCreditTotal,
+        operator_fee_amount: Math.round(amount * Math.max(0, original.operator_fee_percentage || 0) / 100),
+        original_credit: {
+            amount: original.amount, fee_amount: original.fee_amount, total_with_fee: original.total_with_fee,
+            operator_fee_amount: original.operator_fee_amount,
+        },
+    });
+    const newFees = nextPayments.reduce((sum, payment) => sum + (payment.fee_amount || 0), 0);
+    return { payments: nextPayments, discount: Math.max(0, baseTotal + newFees - targetTotal) };
+}
+
 /**
  * Calculate delivery discount based on delivery type
  */
@@ -177,9 +265,7 @@ export const calculateDeliveryTotal = (
  * Calculate change (troco) for money payments
  */
 export const calculateChange = (total: number, payments: PaymentMethod[]): number => {
-    const totalPaid = calculateTotalPaid(payments);
-    const change = totalPaid - total;
-    return change > 0 ? change : 0;
+    return calculatePaymentSummary(total, payments).change;
 };
 
 /**
@@ -195,7 +281,7 @@ export const calculateRemaining = (total: number, payments: PaymentMethod[]): nu
  * Check if payment is complete
  */
 export const isPaymentComplete = (total: number, payments: PaymentMethod[]): boolean => {
-    return calculateTotalPaid(payments) >= total;
+    return calculatePaymentSummary(total, payments).isComplete;
 };
 
 /**

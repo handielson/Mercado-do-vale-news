@@ -31,11 +31,8 @@ assert.doesNotMatch(
   /arr\.findIndex\(f => f\.installments === fee\.installments\)/,
   'InstallmentCalculator must not keep the first duplicate 1x fee row'
 );
-assert.match(
-  paymentSection,
-  /getBestCreditFeeByInstallment\(paymentFees,\s*12\)/,
-  'PaymentSection 12x preview must use the same credit fee selector'
-);
+assert.match(paymentSection, /remainingBalance=\{enteredAmount\}/,
+  'card options must use the amount chosen for this payment, without a second 12x estimate');
 assert.match(
   paymentSection,
   /onSelectInstallment\?:\s*\(\s*installments:\s*number,\s*amount:\s*number,\s*feeAmount:\s*number,\s*operatorFeeAmount:\s*number,\s*operatorFeePercentage:\s*number,\s*appliedFeePercentage:\s*number\s*\)\s*=>\s*void/,

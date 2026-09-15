@@ -34,6 +34,9 @@ export interface PaymentMethod {
     mercado_pago_payment_id?: string;
     pix_status?: 'pending' | 'approved' | 'rejected' | 'expired' | 'error';
     pix_paid_at?: string;
+    cash_received?: number; // Dinheiro entregue pelo cliente, antes do troco
+    change_amount?: number; // Troco devolvido; amount e total_with_fee já são líquidos
+    original_credit?: Pick<PaymentMethod, 'amount' | 'fee_amount' | 'total_with_fee' | 'operator_fee_amount'>;
 }
 
 /**
