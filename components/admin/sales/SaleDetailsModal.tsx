@@ -1004,7 +1004,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 })}
                             </div>
 
-                            {sale.status === 'completed' && (
+                            {(['completed', 'cancelled'] as const).includes(sale.status) && (
                                 <div className="mt-4 border-t border-slate-200 pt-4">
                                     {!showPartialRefund ? (
                                         <button
@@ -1050,7 +1050,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                                 />
                                             </div>
                                             <p className="text-xs text-orange-800">
-                                                A venda continuará concluída e o estoque não será alterado.
+                                            A venda permanecerá cancelada/concluída e o estoque não será alterado.
                                             </p>
                                             <div className="flex justify-end gap-2">
                                                 <button type="button" onClick={() => setShowPartialRefund(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">Voltar</button>

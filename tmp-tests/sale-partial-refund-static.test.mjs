@@ -5,14 +5,14 @@ const modal = readFileSync('components/admin/sales/SaleDetailsModal.tsx', 'utf8'
 const service = readFileSync('services/saleService.ts', 'utf8');
 
 assert.match(modal, /Estornar parte do pagamento/, 'completed sales must offer a separate partial-refund action');
-assert.match(modal, /A venda continuará concluída e o estoque não será alterado/, 'UI must explain that partial refund keeps sale and stock');
+assert.match(modal, /A venda permanecerá cancelada\/concluída e o estoque não será alterado/, 'UI must explain that partial refund keeps sale status and stock');
 assert.match(modal, /partialRefundReason\.trim\(\)/, 'partial refund must require a reason');
 assert.match(service, /\/sales\/\$\{encodeURIComponent\(id\)\}\/partial-refunds/, 'sale service must use the dedicated partial-refund API');
 
 for (const serverFile of ['vps_server.js', 'vps_server.cjs']) {
   const server = readFileSync(serverFile, 'utf8');
   assert.match(server, /CREATE TABLE IF NOT EXISTS sale_partial_refunds/, `${serverFile} must persist partial refunds separately`);
-  assert.match(server, /Somente vendas concluidas aceitam estorno parcial/, `${serverFile} must keep cancellation outside the partial-refund flow`);
+  assert.match(server, /\['completed', 'cancelled'\]\.includes\(String\(sale\.status/, `${serverFile} must allow partial refunds on cancelled sales without restoring stock`);
   assert.match(server, /amountCents > paymentTotalCents - alreadyRefundedCents/, `${serverFile} must reject refunds above the payment balance`);
   assert.match(server, /paymentMethod === 'a_prazo'/, `${serverFile} must keep customer debt adjustments in the credit flow`);
   assert.match(server, /paymentMethod === 'pix'[\s\S]*mercadoPagoPaymentId[\s\S]*\/refunds/, `${serverFile} must refund linked Pix through Mercado Pago`);

@@ -1,11 +1,11 @@
 # Versão Atual
 
-version: v1.2.398-estorno-venda-ativa
+version: v1.2.399-estorno-cancelada
 date: 2026-09-15
-status: published
-release_vps: /var/www/mdv-site/releases/20260915-210800-estorno-venda-ativa
+status: pending
+release_vps: pendente
 branch: main
-summary: Permite estorno parcial mantendo a venda concluída e cria a tabela de créditos de entrega.
-tag: v1.2.398-estorno-venda-ativa
+summary: Permite estorno parcial também em vendas canceladas.
+tag: v1.2.399-estorno-cancelada
 
 

@@ -27391,7 +27391,7 @@ fastify.post('/sales/:saleId/partial-refunds', { preHandler: requireSyncKeyOrAdm
   const [sales] = await pool.query('SELECT * FROM sales WHERE id = ? LIMIT 1', [saleId]);
   const sale = sales?.[0] || null;
   if (!sale) return reply.code(404).send({ error: 'Venda nao encontrada.' });
-  if (String(sale.status || '') !== 'completed') return reply.code(409).send({ error: 'Somente vendas concluidas aceitam estorno parcial.' });
+  if (!['completed', 'cancelled'].includes(String(sale.status || ''))) return reply.code(409).send({ error: 'Somente vendas concluidas ou canceladas aceitam estorno parcial.' });
 
   const payments = parseDeliveryJson(sale.payment_methods, []);
   const payment = Array.isArray(payments) ? payments[paymentIndex] : null;
