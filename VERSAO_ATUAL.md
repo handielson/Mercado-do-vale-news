@@ -1,11 +1,11 @@
 # Versão Atual
 
-version: v1.2.399-estorno-cancelada
+version: v1.2.400-estorno-status-legado
 date: 2026-09-15
 status: published
-release_vps: /var/www/mdv-site/releases/20260915-211500-estorno-cancelada
+release_vps: /var/www/mdv-site/releases/20260915-210122-estorno-status-legado
 branch: main
-summary: Permite estorno parcial também em vendas canceladas.
-tag: v1.2.399-estorno-cancelada
+summary: Aceita estorno parcial em vendas canceladas com status legado normalizado.
+tag: v1.2.400-estorno-status-legado
 
 

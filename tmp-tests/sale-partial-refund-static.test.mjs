@@ -12,7 +12,7 @@ assert.match(service, /\/sales\/\$\{encodeURIComponent\(id\)\}\/partial-refunds/
 for (const serverFile of ['vps_server.js', 'vps_server.cjs']) {
   const server = readFileSync(serverFile, 'utf8');
   assert.match(server, /CREATE TABLE IF NOT EXISTS sale_partial_refunds/, `${serverFile} must persist partial refunds separately`);
-  assert.match(server, /\['completed', 'cancelled'\]\.includes\(String\(sale\.status/, `${serverFile} must allow partial refunds on cancelled sales without restoring stock`);
+  assert.match(server, /const saleStatus = String\(sale\.status \|\| ''\)\.trim\(\)\.toLowerCase\(\);[\s\S]*\['completed', 'cancelled', 'canceled'\]\.includes\(saleStatus\)/, `${serverFile} must allow partial refunds on cancelled sales and normalize legacy status values`);
   assert.match(server, /amountCents > paymentTotalCents - alreadyRefundedCents/, `${serverFile} must reject refunds above the payment balance`);
   assert.match(server, /paymentMethod === 'a_prazo'/, `${serverFile} must keep customer debt adjustments in the credit flow`);
   assert.match(server, /paymentMethod === 'pix'[\s\S]*mercadoPagoPaymentId[\s\S]*\/refunds/, `${serverFile} must refund linked Pix through Mercado Pago`);
