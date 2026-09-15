@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingBag, X, Calendar, User, UserCheck, Package, DollarSign, CreditCard, Banknote, Truck, AlertCircle, RefreshCw, FileText, Receipt, ExternalLink, Copy, Download } from 'lucide-react';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
-import { SaleWithItems } from '../../../types/sale';
-import { cancelSale, refundSale, deleteSale, patchSale, updateSaleCostsAndProfit } from '../../../services/saleService';
+import { SalePartialRefund, SaleWithItems } from '../../../types/sale';
+import { cancelSale, refundSale, deleteSale, patchSale, updateSaleCostsAndProfit, createSalePartialRefund, getSalePartialRefunds } from '../../../services/saleService';
+import { CurrencyInput } from '../../ui/CurrencyInput';
 import { toast } from 'sonner';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { replaceWarrantyTags, applyWarrantyDisplayFlags, renderWarrantyBothCopies, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../../utils/warrantyTagReplacement';
@@ -81,6 +82,12 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
     const [isPrintingAll, setIsPrintingAll] = useState(false);
     const [isUpdatingCosts, setIsUpdatingCosts] = useState(false);
+    const [showPartialRefund, setShowPartialRefund] = useState(false);
+    const [partialRefundPaymentIndex, setPartialRefundPaymentIndex] = useState(0);
+    const [partialRefundAmount, setPartialRefundAmount] = useState(0);
+    const [partialRefundReason, setPartialRefundReason] = useState('');
+    const [partialRefunds, setPartialRefunds] = useState<SalePartialRefund[]>([]);
+    const [isSavingPartialRefund, setIsSavingPartialRefund] = useState(false);
     // Map keyed por product_id (specs gerais) e por sale_item.id (IMEI da unit serializada).
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
 
@@ -143,6 +150,52 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
 
     const deliveryCompletionBlockers = getDeliveryCompletionBlockers(deliveryJob, deliveryProofs, { adminOverride: true });
     const canAdminCompleteDelivery = Boolean(adminCompletionReason.trim());
+
+    useEffect(() => {
+        if (!isOpen || !sale?.id) return;
+        const firstRefundableIndex = sale.payment_methods.findIndex((payment) => payment.method !== 'a_prazo');
+        setPartialRefundPaymentIndex(firstRefundableIndex >= 0 ? firstRefundableIndex : 0);
+        getSalePartialRefunds(sale.id).then(setPartialRefunds).catch((error) => {
+            console.error('Erro ao carregar estornos parciais:', error);
+            setPartialRefunds([]);
+        });
+    }, [isOpen, sale?.id]);
+
+    const selectedPayment = sale?.payment_methods?.[partialRefundPaymentIndex];
+    const hasRefundablePayment = Boolean(sale?.payment_methods?.some((payment) => payment.method !== 'a_prazo'));
+    const selectedPaymentRefunded = partialRefunds
+        .filter((refund) => refund.payment_index === partialRefundPaymentIndex)
+        .reduce((sum, refund) => sum + Number(refund.amount || 0), 0);
+    const selectedPaymentAvailable = Math.max(
+        0,
+        Number(selectedPayment?.total_with_fee ?? selectedPayment?.amount ?? 0) - selectedPaymentRefunded
+    );
+
+    const handlePartialRefund = async () => {
+        if (!sale) return;
+        if (!partialRefundReason.trim()) return toast.error('Informe o motivo do estorno');
+        if (partialRefundAmount <= 0 || partialRefundAmount > selectedPaymentAvailable) {
+            return toast.error(`Informe um valor de até ${formatCurrencyCents(selectedPaymentAvailable)}`);
+        }
+        setIsSavingPartialRefund(true);
+        try {
+            const created = await createSalePartialRefund(sale.id, {
+                payment_index: partialRefundPaymentIndex,
+                amount: partialRefundAmount,
+                reason: partialRefundReason.trim(),
+            });
+            setPartialRefunds((current) => [created, ...current]);
+            setPartialRefundAmount(0);
+            setPartialRefundReason('');
+            setShowPartialRefund(false);
+            toast.success('Estorno parcial registrado. A venda continua concluída.');
+            onStatusChange();
+        } catch (error: any) {
+            toast.error(error?.message || 'Não foi possível realizar o estorno parcial');
+        } finally {
+            setIsSavingPartialRefund(false);
+        }
+    };
 
     const handleCopyFinalizationLog = async () => {
         if (!saleFinalizationLog) return;
@@ -950,6 +1003,80 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                     );
                                 })}
                             </div>
+
+                            {sale.status === 'completed' && (
+                                <div className="mt-4 border-t border-slate-200 pt-4">
+                                    {!showPartialRefund ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPartialRefund(true)}
+                                            disabled={!hasRefundablePayment}
+                                            className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            Estornar parte do pagamento
+                                        </button>
+                                    ) : (
+                                        <div className="space-y-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
+                                            <div>
+                                                <label className="mb-1 block text-xs font-semibold text-slate-700">Forma de pagamento</label>
+                                                <select
+                                                    value={partialRefundPaymentIndex}
+                                                    onChange={(event) => {
+                                                        setPartialRefundPaymentIndex(Number(event.target.value));
+                                                        setPartialRefundAmount(0);
+                                                    }}
+                                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                                                >
+                                                    {sale.payment_methods.map((payment, index) => (
+                                                        <option key={index} value={index} disabled={payment.method === 'a_prazo'}>
+                                                            {buildPaymentPresentation(payment).labelWithInstallments}{payment.method === 'a_prazo' ? ' — ajustar no crediário' : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <CurrencyInput
+                                                label={`Valor do estorno — disponível ${formatCurrencyCents(selectedPaymentAvailable)}`}
+                                                value={partialRefundAmount}
+                                                onValueChange={setPartialRefundAmount}
+                                            />
+                                            <div>
+                                                <label className="mb-1 block text-xs font-semibold text-slate-700">Motivo</label>
+                                                <textarea
+                                                    value={partialRefundReason}
+                                                    onChange={(event) => setPartialRefundReason(event.target.value)}
+                                                    placeholder="Ex.: devolução de valor cobrado a mais"
+                                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                                                    rows={2}
+                                                />
+                                            </div>
+                                            <p className="text-xs text-orange-800">
+                                                A venda continuará concluída e o estoque não será alterado.
+                                            </p>
+                                            <div className="flex justify-end gap-2">
+                                                <button type="button" onClick={() => setShowPartialRefund(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">Voltar</button>
+                                                <button type="button" onClick={handlePartialRefund} disabled={isSavingPartialRefund || selectedPaymentAvailable <= 0} className="rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                                                    {isSavingPartialRefund ? 'Estornando...' : 'Confirmar estorno'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {partialRefunds.length > 0 && (
+                                        <div className="mt-4 space-y-2">
+                                            <p className="text-xs font-semibold uppercase text-slate-500">Estornos parciais</p>
+                                            {partialRefunds.map((refund) => (
+                                                <div key={refund.id} className="flex items-start justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                                                    <div>
+                                                        <p className="font-medium text-slate-700">{refund.reason}</p>
+                                                        <p className="text-xs text-slate-500">{refund.payment_method === 'pix' && refund.gateway === 'mercado_pago' ? 'Pix Mercado Pago' : 'Registro manual'} · {formatBrazilDateTime(refund.created_at)}</p>
+                                                    </div>
+                                                    <span className="font-bold text-orange-700">-{formatCurrencyCents(refund.amount)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                     </div>

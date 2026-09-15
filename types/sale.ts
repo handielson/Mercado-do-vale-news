@@ -39,6 +39,18 @@ export interface PaymentMethod {
     original_credit?: Pick<PaymentMethod, 'amount' | 'fee_amount' | 'total_with_fee' | 'operator_fee_amount'>;
 }
 
+export interface SalePartialRefund {
+    id: string;
+    sale_id: string;
+    payment_index: number;
+    payment_method: PaymentMethodType;
+    amount: number;
+    reason: string;
+    gateway: 'mercado_pago' | 'manual';
+    gateway_refund_id?: string | null;
+    created_at: string;
+}
+
 /**
  * Delivery Types
  */

@@ -27368,6 +27368,109 @@ fastify.post('/orders/:orderId/purchase-notification', { preHandler: requireSync
   return { ok: ['sent', 'already_sent'].includes(whatsapp.status), order_id: order.id, mobile, whatsapp };
 });
 
++fastify.get('/sales/:saleId/partial-refunds', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const saleId = String(req.params?.saleId || '').trim();
+  const [sales] = await pool.query('SELECT id FROM sales WHERE id = ? LIMIT 1', [saleId]);
+  if (!sales?.[0]) return reply.code(404).send({ error: 'Venda nao encontrada.' });
+  const [rows] = await pool.query(
+    'SELECT * FROM sale_partial_refunds WHERE sale_id = ? ORDER BY created_at DESC',
+    [saleId]
+  );
+  return { rows };
+});
+
+fastify.post('/sales/:saleId/partial-refunds', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const saleId = String(req.params?.saleId || '').trim();
+  const paymentIndex = Number(req.body?.payment_index);
+  const amountCents = Math.round(Number(req.body?.amount || 0));
+  const reason = String(req.body?.reason || '').trim();
+  if (!Number.isInteger(paymentIndex) || paymentIndex < 0) return reply.code(400).send({ error: 'Forma de pagamento invalida.' });
+  if (!amountCents || amountCents <= 0) return reply.code(400).send({ error: 'Informe um valor de estorno maior que zero.' });
+  if (!reason) return reply.code(400).send({ error: 'Informe o motivo do estorno.' });
+
+  const [sales] = await pool.query('SELECT * FROM sales WHERE id = ? LIMIT 1', [saleId]);
+  const sale = sales?.[0] || null;
+  if (!sale) return reply.code(404).send({ error: 'Venda nao encontrada.' });
+  if (String(sale.status || '') !== 'completed') return reply.code(409).send({ error: 'Somente vendas concluidas aceitam estorno parcial.' });
+
+  const payments = parseDeliveryJson(sale.payment_methods, []);
+  const payment = Array.isArray(payments) ? payments[paymentIndex] : null;
+  if (!payment) return reply.code(400).send({ error: 'Forma de pagamento nao encontrada na venda.' });
+  const paymentTotalCents = Math.round(Number(payment.total_with_fee ?? payment.amount ?? 0));
+  const [[refundTotals]] = await pool.query(
+    "SELECT COALESCE(SUM(amount), 0) AS refunded FROM sale_partial_refunds WHERE sale_id = ? AND payment_index = ? AND status = 'completed'",
+    [saleId, paymentIndex]
+  );
+  const alreadyRefundedCents = Number(refundTotals?.refunded || 0);
+  if (amountCents > paymentTotalCents - alreadyRefundedCents) {
+    return reply.code(409).send({ error: 'O valor excede o saldo disponivel desta forma de pagamento.' });
+  }
+
+  const paymentMethod = String(payment.method || '').trim();
+  if (paymentMethod === 'a_prazo') {
+    return reply.code(409).send({ error: 'Valores em crediario devem ser ajustados pelo fluxo do crediario.' });
+  }
+  const mercadoPagoPaymentId = String(payment.mercado_pago_payment_id || '').trim();
+  let gateway = 'manual';
+  let gatewayRefundId = null;
+  if (paymentMethod === 'pix' && mercadoPagoPaymentId) {
+    const mp = await getPdvMercadoPagoAccessToken();
+    if (!mp?.accessToken) return reply.code(400).send({ error: 'Mercado Pago nao configurado.' });
+    const refundResponse = await fetch(
+      `https://api.mercadopago.com/v1/payments/${encodeURIComponent(mercadoPagoPaymentId)}/refunds`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${mp.accessToken}`,
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': `sale-partial-refund-${crypto.randomUUID()}`,
+        },
+        body: JSON.stringify({ amount: amountCents / 100 }),
+        signal: AbortSignal.timeout(15000),
+      }
+    );
+    const refundPayload = await refundResponse.json().catch(() => ({}));
+    if (!refundResponse.ok) {
+      const detail = refundPayload?.message || refundPayload?.cause?.[0]?.description || 'Solicitacao recusada.';
+      return reply.code(502).send({ error: `Nao foi possivel estornar o Pix: ${detail}` });
+    }
+    gateway = 'mercado_pago';
+    gatewayRefundId = refundPayload?.id ? String(refundPayload.id) : null;
+  }
+
+  const id = crypto.randomUUID();
+  const cashSessionId = String(req.body?.cash_session_id || '').trim() || null;
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(
+      `INSERT INTO sale_partial_refunds
+        (id, sale_id, payment_index, payment_method, amount, reason, gateway, gateway_payment_id, gateway_refund_id, status, cash_session_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?)`,
+      [id, saleId, paymentIndex, paymentMethod, amountCents, reason, gateway, mercadoPagoPaymentId || null, gatewayRefundId, cashSessionId]
+    );
+    if (cashSessionId) {
+      await recordCashEvent(connection, req, {
+        sessionId: cashSessionId,
+        eventType: 'sale_refund',
+        amountCents,
+        referenceType: 'sale_partial_refund',
+        referenceId: id,
+        payload: { sale_id: saleId, payment_index: paymentIndex, payment_method: paymentMethod, reason },
+      });
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  const [[created]] = await pool.query('SELECT * FROM sale_partial_refunds WHERE id = ? LIMIT 1', [id]);
+  return reply.code(201).send(created);
+});
+
+
 fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const orderId = String(req.params?.orderId || '').trim();
   if (!orderId) return reply.code(400).send({ error: 'Pedido obrigatorio.' });
@@ -40309,6 +40412,43 @@ async function runMigrations() {
   await addColumnIfMissing('customers', 'is_delivery_worker', 'TINYINT(1) NOT NULL DEFAULT 0');
   await addColumnIfMissing('team_members', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1');
   await pool.query('UPDATE team_members SET is_active = active WHERE active IS NOT NULL').catch(() => {});
+
++  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sale_partial_refunds (
+      id CHAR(36) PRIMARY KEY,
+      sale_id VARCHAR(80) NOT NULL,
+      payment_index INT NOT NULL,
+      payment_method VARCHAR(40) NOT NULL,
+      amount BIGINT NOT NULL,
+      reason VARCHAR(500) NOT NULL,
+      gateway VARCHAR(40) NOT NULL DEFAULT 'manual',
+      gateway_payment_id VARCHAR(120) NULL,
+      gateway_refund_id VARCHAR(120) NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'completed',
+      cash_session_id VARCHAR(80) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_sale_partial_refunds_sale (sale_id, created_at),
+      INDEX idx_sale_partial_refunds_payment (sale_id, payment_index, status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] sale_partial_refunds table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS delivery_credits (
+      id CHAR(36) PRIMARY KEY,
+      delivery_person_id VARCHAR(255) NOT NULL,
+      sale_id VARCHAR(80) NOT NULL,
+      amount BIGINT NOT NULL DEFAULT 0,
+      delivery_type VARCHAR(80) NOT NULL,
+      status ENUM('pending','paid','cancelled') NOT NULL DEFAULT 'pending',
+      paid_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_delivery_credits_person_status (delivery_person_id, status),
+      INDEX idx_delivery_credits_sale (sale_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] delivery_credits table: OK');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_delivery_profiles (

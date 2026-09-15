@@ -1,11 +1,11 @@
 # Versão Atual
 
-version: v1.2.397-estorno-parcial
+version: v1.2.398-estorno-venda-ativa
 date: 2026-09-15
-status: published
-release_vps: /var/www/mdv-site/releases/20260915-202038
+status: pending
+release_vps: pendente
 branch: main
-summary: Permite estorno parcial de pagamentos Mercado Pago.
-tag: v1.2.397-estorno-parcial
+summary: Permite estorno parcial mantendo a venda concluída e cria a tabela de créditos de entrega.
+tag: v1.2.398-estorno-venda-ativa
 
 

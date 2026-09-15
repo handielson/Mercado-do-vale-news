@@ -13,6 +13,7 @@ import {
     PaymentMethod,
     PaymentMethodType
 } from '../types/sale';
+import type { SalePartialRefund } from '../types/sale';
 import { calculateSaleTotals, calculateSalePaymentTotals, prepareSalePayments } from '../utils/saleCalculations';
 import { promotionService } from './promotionService';
 import { benefitService } from './benefitService';
@@ -1105,6 +1106,24 @@ export const refundSale = async (id: string): Promise<void> => {
         throw error;
     }
 };
+
+export async function getSalePartialRefunds(id: string): Promise<SalePartialRefund[]> {
+    const response = await vpsClient.get<{ rows?: SalePartialRefund[] }>(
+        `/sales/${encodeURIComponent(id)}/partial-refunds`
+    );
+    return response.rows || [];
+}
+
+export async function createSalePartialRefund(
+    id: string,
+    input: { payment_index: number; amount: number; reason: string }
+): Promise<SalePartialRefund> {
+    const refundCashSessionId = await resolveRefundCashSessionId();
+    return vpsClient.post<SalePartialRefund>(
+        `/sales/${encodeURIComponent(id)}/partial-refunds`,
+        { ...input, cash_session_id: refundCashSessionId }
+    );
+}
 
 /**
  * Delete a sale permanently

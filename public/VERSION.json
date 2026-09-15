@@ -1,22 +1,26 @@
 {
-  "version": "v1.2.397-estorno-parcial",
+  "version": "v1.2.398-estorno-venda-ativa",
   "date": "2026-09-15",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260915-202038",
+  "status": "pending",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Permite estorno parcial de pagamentos Mercado Pago.",
-  "tag": "v1.2.397-estorno-parcial",
+  "summary": "Permite estorno parcial mantendo a venda concluída e cria a tabela de créditos de entrega.",
+  "tag": "v1.2.398-estorno-venda-ativa",
   "changed_files": [
-    "pages/admin/orders/OnlineOrdersPage.tsx",
-    "services/orderService.ts",
-    "types/order.ts",
+    "components/admin/sales/SaleDetailsModal.tsx",
+    "services/saleService.ts",
+    "types/sale.ts",
+    "tmp-tests/sale-partial-refund-static.test.mjs",
+    "tmp-tests/delivery-credits-vps-static.test.mjs",
     "vps_server.js",
     "vps_server.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-15-v1.2.397-estorno-parcial.md"
+    "docs/versoes/2026-09-15-v1.2.398-estorno-venda-ativa.md"
   ],
   "validations": [
+    "node tmp-tests/sale-partial-refund-static.test.mjs",
+    "node tmp-tests/delivery-credits-vps-static.test.mjs",
     "node --check vps_server.js",
     "node --check vps_server.cjs",
     "npm.cmd run build"

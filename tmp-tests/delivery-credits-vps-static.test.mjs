@@ -5,6 +5,15 @@ const service = readFileSync('services/deliveryCreditService.ts', 'utf8');
 const saleService = readFileSync('services/saleService.ts', 'utf8');
 const teamHistory = readFileSync('components/team/TeamDeliveryHistoryTab.tsx', 'utf8');
 
+for (const serverFile of ['vps_server.js', 'vps_server.cjs']) {
+  const server = readFileSync(serverFile, 'utf8');
+  assert.match(
+    server,
+    /CREATE TABLE IF NOT EXISTS delivery_credits[\s\S]*status ENUM\('pending','paid','cancelled'\)/,
+    `${serverFile} must create the delivery_credits table before table-data consumers use it`,
+  );
+}
+
 assert.doesNotMatch(
   service,
   /from ['"]\.\/supabase['"]|supabase\.from\('delivery_credits'\)/,
