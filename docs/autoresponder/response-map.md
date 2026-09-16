@@ -37,6 +37,7 @@
 | Entrada | Estado atual | Resposta do bot | Proximo estado | Resposta esperada | Fallback contextual |
 |---|---|---|---|---|---|
 | redmi note 15 | none | Lista opcoes | product_search.awaiting_choice | numero, nome ou mais | Me diga o numero da opcao ou o nome do modelo. |
+| Poco qualquer modelo contanto que seja 12 de RAM | none ou product_search.awaiting_choice | Uma única lista filtrada; cada modelo traz características curtas, memória, preço PIX, cartão em 12x e cores | product_search.awaiting_choice | numero ou nome | Qual modelo você quer ver em mais detalhes? |
 | 1 | product_search.awaiting_choice | Detalhe do produto | purchase.awaiting_action | comprar, detalhes ou outro produto | Quer comprar, ver detalhes ou procurar outro modelo? |
 | mais | product_search.awaiting_choice | Proxima pagina | product_search.awaiting_choice | numero, nome ou mais | Ja mostrei tudo dessa lista. Quer buscar outro modelo? |
 
@@ -54,6 +55,13 @@
 - Contatos com DDD 87 são tratados como Petrolina-PE e contatos com DDD 74 como Juazeiro-BA.
 - A identificação pelo DDD inicia a coleta do bairro e da localização. O endereço captado sempre precisa ser confirmado pelo cliente.
 - A gratuidade automática não se aplica a outras categorias de produto.
+
+### Regra De Comparação De Smartphones
+
+- Pedidos por família e memória, como `Poco com 12 de RAM`, devem reconhecer a memória mesmo quando o cliente omitir `GB`.
+- `Poco` e `Redmi` limitam os resultados à família citada, mesmo quando o cadastro da marca está como Xiaomi.
+- Cada modelo aparece uma vez, com uma linha curta de características confirmadas e, logo abaixo, memória, preço à vista no PIX, cartão em até 12x e cores.
+- Quando a lista estruturada estiver pronta, a resposta conversacional da IA não deve ser enviada junto nem repetir características ou valores.
 
 ## Fallback Fora Do Fluxo
 

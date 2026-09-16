@@ -1,29 +1,26 @@
 {
-  "version": "v1.2.403-n8n-entrega-localizacao",
+  "version": "v1.2.404-n8n-comparacao-celulares",
   "date": "2026-09-16",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260916-170922-v12403-n8n-entrega-localizacao",
+  "release_vps": "/var/www/mdv-site/releases/20260916-195106-n8n-comparacao-celulares",
   "branch": "main",
-  "summary": "Atualiza o fluxo de entrega de smartphones por DDD, bairro, localização e confirmação automática do endereço.",
-  "tag": "v1.2.403-n8n-entrega-localizacao",
+  "summary": "Estrutura comparações de smartphones com características, PIX, cartão e cores sem redação repetida.",
+  "tag": "v1.2.404-n8n-comparacao-celulares",
   "changed_files": [
     "docs/autoresponder/response-map.md",
     "docs/autoresponder/test-scenarios.md",
-    "tmp-tests/n8n-delivery-address-confirmation-static.test.cjs",
-    "tmp-tests/n8n-fix-delivery-address-confirmation.cjs",
-    "tmp-tests/n8n-free-smartphone-location-delivery.cjs",
-    "tmp-tests/n8n-free-smartphone-location-delivery-static.test.cjs",
+    "tmp-tests/n8n-structured-phone-comparison.cjs",
+    "tmp-tests/n8n-structured-phone-comparison-static.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-16-v1.2.403-n8n-entrega-localizacao.md"
+    "docs/versoes/2026-09-16-v1.2.404-n8n-comparacao-celulares.md"
   ],
   "validations": [
-    "node tmp-tests/n8n-delivery-address-confirmation-static.test.cjs",
-    "node tmp-tests/n8n-free-smartphone-location-delivery-static.test.cjs",
+    "node tmp-tests/n8n-structured-phone-comparison-static.test.cjs",
     "node --check nos scripts n8n alterados",
     "simulação e publicação do workflow n8n SkrkB4vyKVDnQ68t",
     "workflow_entity e workflow_history idênticos",
     "n8n, runner e Evolution API em 1/1",
-    "verificação final sem a regra de R$ 199 no workflow ativo"
+    "verificação ativa dos marcadores de RAM, família, características e supressão da redação"
   ]
 }
