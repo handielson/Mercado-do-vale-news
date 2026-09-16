@@ -17,7 +17,8 @@ export interface MercadoLivreStatus {
 export interface MercadoLivrePrintJob {
   shipment_id: string;
   order_id: string;
-  status: 'awaiting_dce' | 'ready' | 'printing' | 'printed' | 'intervention';
+  status: 'awaiting_dce' | 'ready' | 'printing' | 'printed' | 'intervention' | 'closed';
+  shipment_status: string | null;
   shipment_substatus: string | null;
   tracking_number: string | null;
   last_error: string | null;

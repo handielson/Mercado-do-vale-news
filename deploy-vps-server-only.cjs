@@ -370,6 +370,21 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--mercado-livre-only')) {
+    if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+    const target = `${appDir}/${mercadoLivreServicePath}`;
+    const staged = `${target}.next.cjs`;
+    const backupDir = `${appDir}/backups/mercado-livre-${Date.now()}`;
+    await exec(`mkdir -p ${backupDir}`);
+    await exec(`cp -p ${target} ${backupDir}/mercadoLivreServer.cjs`);
+    await upload(path.join(__dirname, mercadoLivreServicePath), staged);
+    await exec(`node --check ${staged}`);
+    await exec(`mv ${staged} ${target}`);
+    console.log((await exec('pm2 restart mdv-api')).trim());
+    console.log(`Mercado Livre backup: ${backupDir}`);
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--central-printing-only')) {
     await require('./scripts/deploy-central-printing.cjs')({ appDir, apiProc, exec, upload, root: __dirname });
     conn.end();

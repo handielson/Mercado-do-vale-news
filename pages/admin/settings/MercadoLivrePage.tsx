@@ -5,7 +5,7 @@ import { mercadoLivreService, type MercadoLivrePrintJob, type MercadoLivreStatus
 
 const statusLabels: Record<string, string> = {
   awaiting_dce: 'Aguardando DC-e', ready: 'Pronta para imprimir', printing: 'Imprimindo',
-  printed: 'Impressa', intervention: 'Requer atencao',
+  printed: 'Impressa', intervention: 'Requer atencao', closed: 'Encerrada para impressao',
 };
 
 export default function MercadoLivrePage() {

@@ -37,14 +37,8 @@ for (const source of [vps, legacy]) {
   assert.ok(source.includes("stockAction: 'awaiting_stock_webhook'"), 'venda deve aguardar o evento fisico de estoque');
 }
 
-assert.ok(printer.includes('runMercadoLivreLoop'), 'servico local sem consumidor Mercado Livre');
-assert.ok(printer.includes("paperSize: '4x6'"), 'etiqueta deve usar papel termico 10x15');
-assert.ok(printer.includes('/print-jobs/next'), 'servico local deve consumir a fila idempotente');
-assert.ok(printer.includes("markMercadoLivrePrintStep(shipmentId, 'label')"), 'etiqueta Mercado Livre deve ser marcada apos imprimir');
-assert.ok(printer.includes("markMercadoLivrePrintStep(shipmentId, 'declaration')"), 'declaracao Mercado Livre deve ser impressa separadamente');
-assert.ok(printer.includes("markMercadoLivrePrintStep(shipmentId, 'summary')"), 'comprovante Mercado Livre deve ser impresso separadamente');
-assert.ok(printer.includes('printer: labelPrinter'), 'etiqueta e declaracao devem usar a termica ZD configurada');
-assert.ok(printer.includes('printer: summaryPrinter'), 'comprovante deve usar a impressora Comprovante configurada');
-assert.ok(printer.includes('retryable: Number(error.status) === 409'), 'DC-e ainda em processamento deve voltar para a fila');
+// Source wiring only; print sequencing/recovery is verified behaviorally in mercado-livre-print-agent.test.cjs.
+assert.ok(printer.includes("require('./mercado-livre-print-agent.cjs').startMercadoLivrePrintAgent"), 'servico local sem consumidor Mercado Livre');
+assert.ok(printer.includes('getSettings: getCompanySettings'), 'deve reutilizar configuracao existente das impressoras');
 
 console.log('Mercado Livre integration static contract: OK');

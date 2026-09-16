@@ -29,6 +29,17 @@ function classifyShipment(shipment = {}) {
   };
 }
 
+function isClosedShipment(status) {
+  return ['shipped', 'delivered', 'cancelled', 'not_delivered'].includes(String(status || ''));
+}
+
+function presentPrintJob(job) {
+  // Keep the stored audit/print steps intact; closed shipping is not a printing failure.
+  return isClosedShipment(job.shipment_status) && job.status !== 'printed'
+    ? { ...job, status: 'closed', last_error: null }
+    : job;
+}
+
 function buildEventKey(payload = {}) {
   return crypto.createHash('sha256').update(JSON.stringify({
     id: payload._id || payload.id || '',
@@ -253,7 +264,7 @@ async function upsertPrintJob(pool, order, shipment) {
       (shipment_id, order_id, pack_id, status, shipment_status, shipment_substatus, tracking_number, payload)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE order_id=VALUES(order_id), pack_id=VALUES(pack_id),
-       status=IF(status='printed','printed',VALUES(status)), shipment_status=VALUES(shipment_status),
+       status=IF(status IN ('printed','printing') OR (status='intervention' AND last_error IS NOT NULL),status,VALUES(status)), shipment_status=VALUES(shipment_status),
        shipment_substatus=VALUES(shipment_substatus), tracking_number=VALUES(tracking_number),
        payload=VALUES(payload), updated_at=CURRENT_TIMESTAMP`,
     [shipmentId, String(order.id), order.pack_id ? String(order.pack_id) : null, status,
@@ -441,15 +452,43 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
     const [rows] = await pool.query(`SELECT shipment_id, order_id, pack_id, status, shipment_status, shipment_substatus,
       tracking_number, attempts, last_error, label_printed_at, declaration_printed_at, summary_printed_at, created_at, updated_at
       FROM mercado_livre_print_jobs ORDER BY created_at DESC LIMIT ?`, [limit]);
-    return { items: rows };
+    return { items: rows.map(presentPrintJob) };
   };
   registerAliases(fastify, 'get', '/mercado-livre/print-jobs', protectedRoute, listJobs);
 
   const nextJob = async (_request, reply) => {
-    const [rows] = await pool.query("SELECT * FROM mercado_livre_print_jobs WHERE status='ready' OR (status='printing' AND updated_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)) ORDER BY created_at ASC LIMIT 1");
+    // Reconcile pending DC-e without depending on a second webhook arriving.
+    const [pending] = await pool.query("SELECT shipment_id FROM mercado_livre_print_jobs WHERE status='awaiting_dce' AND shipment_status='ready_to_ship' ORDER BY updated_at ASC LIMIT 1");
+    if (pending.length) {
+      try {
+        const shipment = await (await mlRequest(pool, `/shipments/${encodeURIComponent(pending[0].shipment_id)}`)).json();
+        const state = classifyShipment(shipment);
+        await pool.query("UPDATE mercado_livre_print_jobs SET status=?, shipment_status=?, shipment_substatus=?, updated_at=NOW() WHERE shipment_id=? AND status='awaiting_dce'",
+          [state.printable ? 'ready' : state.needsDce ? 'awaiting_dce' : 'intervention', shipment.status, shipment.substatus || null, pending[0].shipment_id]);
+      } catch {
+        // Advance the retry clock so one unavailable remessa cannot starve other pending jobs.
+        await pool.query("UPDATE mercado_livre_print_jobs SET updated_at=NOW() WHERE shipment_id=? AND status='awaiting_dce'", [pending[0].shipment_id]);
+        fastify.log?.warn('Mercado Livre: conciliacao de remessa pendente indisponivel; nova tentativa no proximo ciclo.');
+      }
+    }
+    const eligible = "(status='ready' OR (status='printing' AND updated_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))) AND shipment_status='ready_to_ship' AND shipment_substatus='ready_to_print'";
+    const [rows] = await pool.query(`SELECT * FROM mercado_livre_print_jobs WHERE ${eligible} ORDER BY created_at ASC LIMIT 1`);
     if (!rows.length) return reply.code(204).send();
     const job = rows[0];
-    await pool.query("UPDATE mercado_livre_print_jobs SET status='printing', attempts=attempts+1 WHERE shipment_id=?", [job.shipment_id]);
+    const [claim] = await pool.query(`UPDATE mercado_livre_print_jobs SET status='printing', attempts=attempts+1, updated_at=NOW() WHERE shipment_id=? AND ${eligible}`, [job.shipment_id]);
+    if (!claim.affectedRows) return reply.code(204).send();
+    try {
+      // Do not print from an old webhook snapshot after a cancellation or dispatch.
+      const shipment = await (await mlRequest(pool, `/shipments/${encodeURIComponent(job.shipment_id)}`)).json();
+      if (!classifyShipment(shipment).printable) {
+        await pool.query("UPDATE mercado_livre_print_jobs SET status=?, shipment_status=?, shipment_substatus=? WHERE shipment_id=? AND status='printing'",
+          [classifyShipment(shipment).needsDce ? 'awaiting_dce' : 'intervention', shipment.status, shipment.substatus || null, job.shipment_id]);
+        return reply.code(204).send();
+      }
+    } catch (error) {
+      await pool.query("UPDATE mercado_livre_print_jobs SET status='ready' WHERE shipment_id=? AND status='printing'", [job.shipment_id]);
+      throw error;
+    }
     return {
       shipmentId: job.shipment_id,
       orderId: job.order_id,
@@ -551,4 +590,6 @@ module.exports = {
   buildEventKey,
   createPkcePair,
   selectDcePdfDocument,
+  isClosedShipment,
+  presentPrintJob,
 };
