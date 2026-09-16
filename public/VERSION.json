@@ -1,26 +1,27 @@
 {
-  "version": "v1.2.404-n8n-comparacao-celulares",
+  "version": "v1.2.405-n8n-lista-direta",
   "date": "2026-09-16",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260916-195106-n8n-comparacao-celulares",
+  "release_vps": "/var/www/mdv-site/releases/20260916-181048-n8n-lista-direta",
   "branch": "main",
-  "summary": "Estrutura comparações de smartphones com características, PIX, cartão e cores sem redação repetida.",
-  "tag": "v1.2.404-n8n-comparacao-celulares",
+  "summary": "Envia o catálogo oficial sem introdução da IA e abre listas de marcas reconhecidas sem confirmação intermediária.",
+  "tag": "v1.2.405-n8n-lista-direta",
   "changed_files": [
     "docs/autoresponder/response-map.md",
     "docs/autoresponder/test-scenarios.md",
-    "tmp-tests/n8n-structured-phone-comparison.cjs",
-    "tmp-tests/n8n-structured-phone-comparison-static.test.cjs",
+    "tmp-tests/n8n-catalog-direct-response.cjs",
+    "tmp-tests/n8n-catalog-direct-response-static.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-16-v1.2.404-n8n-comparacao-celulares.md"
+    "docs/versoes/2026-09-16-v1.2.405-n8n-lista-direta.md"
   ],
   "validations": [
+    "node tmp-tests/n8n-catalog-direct-response-static.test.cjs",
     "node tmp-tests/n8n-structured-phone-comparison-static.test.cjs",
-    "node --check nos scripts n8n alterados",
-    "simulação e publicação do workflow n8n SkrkB4vyKVDnQ68t",
+    "node --check tmp-tests/n8n-catalog-direct-response.cjs",
+    "simulação, publicação e verificação do workflow n8n SkrkB4vyKVDnQ68t",
     "workflow_entity e workflow_history idênticos",
     "n8n, runner e Evolution API em 1/1",
-    "verificação ativa dos marcadores de RAM, família, características e supressão da redação"
+    "verificação ativa da lista direta por marca e da supressão da introdução da IA"
   ]
 }

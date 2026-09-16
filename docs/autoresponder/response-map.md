@@ -63,6 +63,13 @@
 - Cada modelo aparece uma vez, com uma linha curta de características confirmadas e, logo abaixo, memória, preço à vista no PIX, cartão em até 12x e cores.
 - Quando a lista estruturada estiver pronta, a resposta conversacional da IA não deve ser enviada junto nem repetir características ou valores.
 
+### Regra De Envio Da Lista
+
+- Quando o catálogo determinístico estiver pronto, ele é a resposta completa: não enviar apresentação, resumo ou pergunta criada pela IA antes da lista.
+- A pergunta de escolha permanece no último bloco do catálogo, separada dos produtos.
+- Uma marca de smartphone reconhecida, como `Realme`, `Poco`, `Redmi`, `Samsung` ou `Motorola`, abre imediatamente a lista correspondente; não pedir confirmação do tipo de produto.
+- A resposta livre da IA só é usada quando não existe catálogo determinístico para enviar.
+
 ## Fallback Fora Do Fluxo
 
 Mensagem padrao:
