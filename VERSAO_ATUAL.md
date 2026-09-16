@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.402-mercado-livre-auto-print
+version: v1.2.403-n8n-entrega-localizacao
 date: 2026-09-16
 status: published
-release_vps: /var/www/mdv-site/releases/20260916-142734-mercado-livre-auto-print
+release_vps: /var/www/mdv-site/releases/20260916-170922-v12403-n8n-entrega-localizacao
 branch: main
-summary: Ativa impressao Mercado Livre no Lenovo com diario por etapa, retomada sem duplicacao e bloqueio de remessas encerradas.
-tag: v1.2.402-mercado-livre-auto-print
+summary: Atualiza o fluxo de entrega de smartphones por DDD, bairro, localização e confirmação automática do endereço.
+tag: v1.2.403-n8n-entrega-localizacao
