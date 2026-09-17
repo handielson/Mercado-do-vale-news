@@ -472,7 +472,8 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
       }
     }
     const legacyDeclarationRecovery = "(status='intervention' AND label_printed_at IS NOT NULL AND declaration_printed_at IS NULL AND summary_printed_at IS NULL AND last_error LIKE '%/declaration: HTTP 409%')";
-    const eligible = `(status='ready' OR (status='printing' AND updated_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)) OR ${legacyDeclarationRecovery}) AND shipment_status='ready_to_ship' AND shipment_substatus='ready_to_print'`;
+    const eligibleShipment = `shipment_status='ready_to_ship' AND (shipment_substatus='ready_to_print' OR (${legacyDeclarationRecovery} AND shipment_substatus='printed'))`;
+    const eligible = `(status='ready' OR (status='printing' AND updated_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)) OR ${legacyDeclarationRecovery}) AND ${eligibleShipment}`;
     const [rows] = await pool.query(`SELECT * FROM mercado_livre_print_jobs WHERE ${eligible} ORDER BY created_at ASC LIMIT 1`);
     if (!rows.length) return reply.code(204).send();
     const job = rows[0];
@@ -481,9 +482,13 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
     try {
       // Do not print from an old webhook snapshot after a cancellation or dispatch.
       const shipment = await (await mlRequest(pool, `/shipments/${encodeURIComponent(job.shipment_id)}`)).json();
-      if (!classifyShipment(shipment).printable) {
+      const state = classifyShipment(shipment);
+      const legacyPrintable = job.status === 'intervention' && job.label_printed_at && !job.declaration_printed_at && !job.summary_printed_at
+        && String(job.last_error || '').includes('/declaration: HTTP 409')
+        && String(shipment.status) === 'ready_to_ship' && ['printed', 'ready_to_print'].includes(String(shipment.substatus || ''));
+      if (!state.printable && !legacyPrintable) {
         await pool.query("UPDATE mercado_livre_print_jobs SET status=?, shipment_status=?, shipment_substatus=? WHERE shipment_id=? AND status='printing'",
-          [classifyShipment(shipment).needsDce ? 'awaiting_dce' : 'intervention', shipment.status, shipment.substatus || null, job.shipment_id]);
+          [state.needsDce ? 'awaiting_dce' : 'intervention', shipment.status, shipment.substatus || null, job.shipment_id]);
         return reply.code(204).send();
       }
     } catch (error) {

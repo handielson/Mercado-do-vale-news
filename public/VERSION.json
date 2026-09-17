@@ -1,23 +1,24 @@
 {
-  "version": "v1.2.409-mercado-livre-duas-paginas-resumo",
+  "version": "v1.2.410-mercado-livre-recuperacao-resumo",
   "date": "2026-09-17",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260917-195827-mercado-livre-duas-paginas-resumo",
+  "release_vps": "/var/www/mdv-site/releases/20260917-174944-mercado-livre-recuperacao-resumo",
   "branch": "main",
-  "summary": "Corrige a impressão Mercado Livre para enviar duas páginas à Zebra e o resumo do pedido à Comprovante.",
-  "tag": "v1.2.409-mercado-livre-duas-paginas-resumo",
+  "summary": "Recupera pedidos Mercado Livre interrompidos após a etiqueta e envia o resumo pendente à Comprovante.",
+  "tag": "v1.2.410-mercado-livre-recuperacao-resumo",
   "changed_files": [
     "scripts/mercado-livre-print-agent.cjs",
     "services/mercadoLivreServer.cjs",
     "tmp-tests/mercado-livre-print-agent.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-17-v1.2.409-mercado-livre-duas-paginas-resumo.md"
+    "docs/versoes/2026-09-17-v1.2.410-mercado-livre-recuperacao-resumo.md"
   ],
   "validations": [
     "npm.cmd run test:mercado-livre (20 testes)",
     "node --check scripts/mercado-livre-print-agent.cjs",
     "node --check services/mercadoLivreServer.cjs",
-    "Mercado Livre integration static contract: OK"
+    "Mercado Livre integration static contract: OK",
+    "recuperacao legacy ready_to_ship/printed sem reimprimir Zebra"
   ]
 }

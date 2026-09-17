@@ -144,6 +144,7 @@ test('fila reconcilia DC-e pronta, reserva atomicamente e consulta a remessa atu
     assert.ok(queries.some(sql => sql.includes("AND status='awaiting_dce'")));
     assert.ok(queries.find(sql => sql.includes('attempts=attempts+1')).includes("AND shipment_status='ready_to_ship'"));
     assert.ok(queries.find(sql => sql.startsWith('SELECT * FROM mercado_livre_print_jobs')).includes("last_error LIKE '%/declaration: HTTP 409%'"));
+    assert.ok(queries.find(sql => sql.startsWith('SELECT * FROM mercado_livre_print_jobs')).includes("shipment_substatus='printed'"));
     await handlers['/mercado-livre/print-jobs/next']({}, reply);
     assert.equal(reply.status, 204, 'another consumer cannot take the same claim');
     claimed = false;
