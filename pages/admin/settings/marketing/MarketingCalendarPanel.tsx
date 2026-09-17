@@ -19,6 +19,7 @@ import {
   CalendarDays,
   ExternalLink,
   Trash2,
+  MapPin,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -45,6 +46,8 @@ import {
 } from '../../../../services/facebookMarketplaceScheduleService';
 import { toBrowserSafeMediaUrl } from '../../../../utils/media-url';
 import { holidayService, type Holiday } from '../../../../utils/holidayService';
+import { companySettingsService } from '../../../../services/companySettingsService';
+import type { LocalHoliday } from '../../../../types/companySettings';
 
 export interface CalendarEvent {
   id: string;
@@ -94,10 +97,52 @@ export function getCalendarDayKind(dateKey: string, holiday?: Holiday): Calendar
 }
 
 function calendarDayKindLabel(kind: CalendarDayKind, holiday?: Holiday): string {
-  if (kind === 'holiday') return `Feriado nacional${holiday?.name ? `: ${holiday.name}` : ''}`;
+  if (kind === 'holiday') {
+    const scope = holiday?.scope === 'municipal'
+      ? 'municipal'
+      : holiday?.scope === 'state'
+      ? 'estadual'
+      : holiday?.scope === 'manual'
+      ? 'manual'
+      : 'nacional';
+    return `Feriado ${scope}${holiday?.name ? `: ${holiday.name}` : ''}`;
+  }
   if (kind === 'saturday') return 'Sábado';
   if (kind === 'sunday') return 'Domingo';
   return 'Dia útil';
+}
+
+function formatHolidayDate(dateKey: string): string {
+  const [year, month, day] = dateKey.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function HolidayListGroup({
+  title,
+  holidays,
+  emptyLabel = 'Nenhum feriado cadastrado.',
+}: {
+  title: string;
+  holidays: Holiday[];
+  emptyLabel?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+      <h4 className="text-xs font-black uppercase tracking-wide text-slate-700">{title}</h4>
+      {holidays.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {holidays.map((holiday) => (
+            <div key={`${holiday.location}-${holiday.date}-${holiday.name}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <p className="text-xs font-bold text-slate-900">{formatHolidayDate(holiday.date)} · {holiday.name}</p>
+              {holiday.source && <p className="mt-0.5 text-[10px] text-slate-500">{holiday.source}</p>}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-slate-400">{emptyLabel}</p>
+      )}
+    </div>
+  );
 }
 
 function calendarDaySurfaceClass(day: CalendarDay): string {
@@ -291,7 +336,10 @@ export default function MarketingCalendarPanel({
   const [channelFilter, setChannelFilter] = useState<'all' | 'instagram' | 'whatsapp' | 'facebook'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'completed'>('all');
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
-  const [holidaysByDate, setHolidaysByDate] = useState<Map<string, Holiday>>(() => new Map());
+  const [automaticHolidays, setAutomaticHolidays] = useState<Holiday[]>([]);
+  const [localHolidays, setLocalHolidays] = useState<LocalHoliday[]>([]);
+  const [newLocalHoliday, setNewLocalHoliday] = useState({ date: '', label: '' });
+  const [savingLocalHoliday, setSavingLocalHoliday] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -378,21 +426,57 @@ export default function MarketingCalendarPanel({
   useEffect(() => {
     let active = true;
 
-    const loadNationalHolidays = async () => {
+    const loadAutomaticHolidays = async () => {
       const years = [year - 1, year, year + 1];
-      const lists = await Promise.all(years.map((holidayYear) => holidayService.getHolidays(holidayYear)));
+      const lists = await Promise.all(years.map((holidayYear) => holidayService.getCalendarHolidays(holidayYear)));
       if (!active) return;
-
-      const next = new Map<string, Holiday>();
-      for (const holidays of lists) {
-        for (const holiday of holidays) next.set(holiday.date, holiday);
-      }
-      setHolidaysByDate(next);
+      setAutomaticHolidays(lists.flat());
     };
 
-    void loadNationalHolidays();
+    void loadAutomaticHolidays();
     return () => { active = false; };
   }, [year]);
+
+  useEffect(() => {
+    let active = true;
+    const loadLocalHolidays = async () => {
+      const settings = await companySettingsService.get();
+      if (active) setLocalHolidays(Array.isArray(settings?.local_holidays) ? settings.local_holidays : []);
+    };
+    void loadLocalHolidays();
+    return () => { active = false; };
+  }, []);
+
+  const allHolidays = useMemo<Holiday[]>(() => [
+    ...automaticHolidays,
+    ...localHolidays.map((holiday) => ({
+      date: holiday.date,
+      name: holiday.label,
+      type: 'manual',
+      scope: 'manual' as const,
+      location: 'Cadastro manual',
+      source: 'Incluído manualmente no Mercado do Vale',
+    })),
+  ], [automaticHolidays, localHolidays]);
+
+  const holidaysByDate = useMemo(() => {
+    const next = new Map<string, Holiday[]>();
+    for (const holiday of allHolidays) {
+      const current = next.get(holiday.date) || [];
+      current.push(holiday);
+      next.set(holiday.date, current);
+    }
+    return next;
+  }, [allHolidays]);
+
+  const visibleYearHolidays = useMemo(
+    () => automaticHolidays.filter((holiday) => holiday.date.startsWith(`${year}-`)),
+    [automaticHolidays, year],
+  );
+
+  const holidaysFor = (scope: Holiday['scope'], location?: string) => visibleYearHolidays.filter((holiday) => (
+    holiday.scope === scope && (!location || holiday.location === location)
+  ));
 
   const handlePrevMonth = () => {
     const nextDate = new Date(year, month - 1, 1);
@@ -410,6 +494,42 @@ export default function MarketingCalendarPanel({
     const today = new Date();
     setCurrentDate(today);
     setSelectedDayKey(parseDateKey(today));
+  };
+
+  const persistLocalHolidays = async (next: LocalHoliday[], successMessage: string) => {
+    setSavingLocalHoliday(true);
+    try {
+      await companySettingsService.update({ local_holidays: next });
+      setLocalHolidays(next);
+      toast.success(successMessage);
+    } catch (error) {
+      console.error('Erro ao salvar feriado manual:', error);
+      toast.error('Não foi possível salvar o feriado manual.');
+    } finally {
+      setSavingLocalHoliday(false);
+    }
+  };
+
+  const handleAddLocalHoliday = async () => {
+    const label = newLocalHoliday.label.trim();
+    if (!newLocalHoliday.date || !label) {
+      toast.error('Informe a data e o nome do feriado.');
+      return;
+    }
+    if (localHolidays.some((holiday) => holiday.date === newLocalHoliday.date && holiday.label.toLocaleLowerCase('pt-BR') === label.toLocaleLowerCase('pt-BR'))) {
+      toast.error('Este feriado manual já está cadastrado.');
+      return;
+    }
+
+    const next = [...localHolidays, { date: newLocalHoliday.date, label }]
+      .sort((left, right) => left.date.localeCompare(right.date));
+    await persistLocalHolidays(next, 'Feriado manual incluído.');
+    setNewLocalHoliday({ date: '', label: '' });
+  };
+
+  const handleRemoveLocalHoliday = async (target: LocalHoliday) => {
+    const next = localHolidays.filter((holiday) => !(holiday.date === target.date && holiday.label === target.label));
+    await persistLocalHolidays(next, 'Feriado manual removido.');
   };
 
   const canDeleteEvent = (event: CalendarEvent): boolean => {
@@ -763,8 +883,8 @@ export default function MarketingCalendarPanel({
         isCurrentMonth: false,
         isToday: dateKey === todayDateKey,
         events: eventsByDate.get(dateKey) || [],
-        kind: getCalendarDayKind(dateKey, holidaysByDate.get(dateKey)),
-        holiday: holidaysByDate.get(dateKey),
+        kind: getCalendarDayKind(dateKey, holidaysByDate.get(dateKey)?.[0]),
+        holiday: holidaysByDate.get(dateKey)?.[0],
       });
     }
 
@@ -778,8 +898,8 @@ export default function MarketingCalendarPanel({
         isCurrentMonth: true,
         isToday: dateKey === todayDateKey,
         events: eventsByDate.get(dateKey) || [],
-        kind: getCalendarDayKind(dateKey, holidaysByDate.get(dateKey)),
-        holiday: holidaysByDate.get(dateKey),
+        kind: getCalendarDayKind(dateKey, holidaysByDate.get(dateKey)?.[0]),
+        holiday: holidaysByDate.get(dateKey)?.[0],
       });
     }
 
@@ -794,8 +914,8 @@ export default function MarketingCalendarPanel({
         isCurrentMonth: false,
         isToday: dateKey === todayDateKey,
         events: eventsByDate.get(dateKey) || [],
-        kind: getCalendarDayKind(dateKey, holidaysByDate.get(dateKey)),
-        holiday: holidaysByDate.get(dateKey),
+        kind: getCalendarDayKind(dateKey, holidaysByDate.get(dateKey)?.[0]),
+        holiday: holidaysByDate.get(dateKey)?.[0],
       });
     }
 
@@ -817,8 +937,9 @@ export default function MarketingCalendarPanel({
         year: 'numeric',
       }),
       events: [...events].sort((a, b) => a.timeStr.localeCompare(b.timeStr)),
-      kind: getCalendarDayKind(selectedDayKey, holidaysByDate.get(selectedDayKey)),
-      holiday: holidaysByDate.get(selectedDayKey),
+      kind: getCalendarDayKind(selectedDayKey, holidaysByDate.get(selectedDayKey)?.[0]),
+      holiday: holidaysByDate.get(selectedDayKey)?.[0],
+      holidays: holidaysByDate.get(selectedDayKey) || [],
     };
   }, [selectedDayKey, eventsByDate, holidaysByDate]);
 
@@ -1012,7 +1133,7 @@ export default function MarketingCalendarPanel({
             <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-slate-300" />Dia útil</span>
             <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-amber-300" />Sábado</span>
             <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-violet-300" />Domingo</span>
-            <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-rose-400" />Feriado nacional</span>
+            <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-rose-400" />Feriado nacional, estadual, municipal ou manual</span>
           </div>
 
           {loading ? (
@@ -1127,6 +1248,11 @@ export default function MarketingCalendarPanel({
                       : 'text-amber-700'
                   }`}>
                     {calendarDayKindLabel(selectedDayData.kind, selectedDayData.holiday)}
+                  </p>
+                )}
+                {selectedDayData && selectedDayData.holidays.length > 1 && (
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    {selectedDayData.holidays.slice(1).map((holiday) => `${holiday.name} · ${holiday.location}`).join(' | ')}
                   </p>
                 )}
               </div>
@@ -1320,6 +1446,95 @@ export default function MarketingCalendarPanel({
           </div>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="calendar-holidays-title">
+        <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-rose-50 p-2.5 text-rose-600">
+              <MapPin className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 id="calendar-holidays-title" className="text-base font-black text-slate-900">Feriados do calendário · {year}</h3>
+              <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500">
+                Nacionais sincronizados com a BrasilAPI e completados por regras legais. Pernambuco, Bahia, Petrolina e Juazeiro usam os calendários oficiais locais.
+              </p>
+            </div>
+          </div>
+          <span className="w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-bold text-amber-800">
+            A BrasilAPI não fornece feriados estaduais ou municipais
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <HolidayListGroup title="Brasil · nacionais" holidays={holidaysFor('national')} />
+          <HolidayListGroup title="Pernambuco · estaduais" holidays={holidaysFor('state', 'Pernambuco')} />
+          <HolidayListGroup title="Bahia · estaduais" holidays={holidaysFor('state', 'Bahia')} />
+          <HolidayListGroup title="Petrolina-PE · municipais" holidays={holidaysFor('municipal', 'Petrolina-PE')} />
+          <HolidayListGroup title="Juazeiro-BA · municipais" holidays={holidaysFor('municipal', 'Juazeiro-BA')} />
+
+          <div className="rounded-xl border border-pink-200 bg-pink-50/50 p-4">
+            <h4 className="text-xs font-black uppercase tracking-wide text-pink-800">Datas incluídas manualmente</h4>
+            <p className="mt-1 text-[11px] leading-relaxed text-pink-700/80">
+              Também serão usadas no indicador de funcionamento da loja.
+            </p>
+
+            <div className="mt-3 space-y-2">
+              {localHolidays.filter((holiday) => holiday.date.startsWith(`${year}-`)).map((holiday) => (
+                <div key={`${holiday.date}-${holiday.label}`} className="flex items-center justify-between gap-2 rounded-lg border border-pink-100 bg-white px-3 py-2">
+                  <p className="min-w-0 text-xs font-bold text-slate-900">
+                    <span className="whitespace-nowrap">{formatHolidayDate(holiday.date)}</span> · {holiday.label}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveLocalHoliday(holiday)}
+                    disabled={savingLocalHoliday}
+                    className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                    title="Remover feriado manual"
+                    aria-label={`Remover ${holiday.label}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              {!localHolidays.some((holiday) => holiday.date.startsWith(`${year}-`)) && (
+                <p className="rounded-lg border border-dashed border-pink-200 bg-white/70 px-3 py-2 text-xs text-slate-400">
+                  Nenhuma data manual em {year}.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-[145px_1fr_auto] md:grid-cols-1 xl:grid-cols-[145px_1fr_auto]">
+              <input
+                type="date"
+                value={newLocalHoliday.date}
+                onChange={(event) => setNewLocalHoliday((current) => ({ ...current, date: event.target.value }))}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+                aria-label="Data do feriado manual"
+              />
+              <input
+                type="text"
+                value={newLocalHoliday.label}
+                onChange={(event) => setNewLocalHoliday((current) => ({ ...current, label: event.target.value }))}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void handleAddLocalHoliday();
+                }}
+                placeholder="Nome do feriado ou fechamento"
+                className="min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+                aria-label="Nome do feriado manual"
+              />
+              <button
+                type="button"
+                onClick={() => void handleAddLocalHoliday()}
+                disabled={savingLocalHoliday}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-pink-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-pink-700 disabled:cursor-wait disabled:opacity-60"
+              >
+                {savingLocalHoliday ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                Incluir
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

@@ -149,8 +149,8 @@ assert.match(
 );
 assert.match(
   calendar,
-  /holidayService\.getHolidays\(holidayYear\)/,
-  'Calendar must reuse the canonical national-holiday service',
+  /holidayService\.getCalendarHolidays\(holidayYear\)/,
+  'Calendar must reuse the canonical national and regional holiday service',
 );
 assert.match(
   calendar,
@@ -178,5 +178,27 @@ assert.equal(getCalendarDayKind('2026-09-16'), 'weekday');
 assert.equal(getCalendarDayKind('2026-09-19'), 'saturday');
 assert.equal(getCalendarDayKind('2026-09-20'), 'sunday');
 assert.equal(getCalendarDayKind('2026-09-07', { date: '2026-09-07', name: 'Independência do Brasil', type: 'national' }), 'holiday');
+
+assert.match(calendar, /Feriados do calendário · \{year\}/);
+assert.match(calendar, /Pernambuco · estaduais/);
+assert.match(calendar, /Bahia · estaduais/);
+assert.match(calendar, /Petrolina-PE · municipais/);
+assert.match(calendar, /Juazeiro-BA · municipais/);
+assert.match(calendar, /companySettingsService\.update\(\{ local_holidays: next \}\)/,
+  'Manual holidays must reuse the canonical company settings storage');
+
+const holidayServiceSource = readFileSync('utils/holidayService.ts', 'utf8');
+const holidayCompiled = ts.transpileModule(holidayServiceSource, { compilerOptions: {
+  module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
+} }).outputText;
+const holidayModule = { exports: {} };
+new Function('require', 'module', 'exports', holidayCompiled)(require, holidayModule, holidayModule.exports);
+const regional2026 = holidayModule.exports.getRegionalHolidays(2026);
+assert.ok(regional2026.some((holiday) => holiday.date === '2026-03-06' && holiday.location === 'Pernambuco'));
+assert.ok(regional2026.some((holiday) => holiday.date === '2026-07-02' && holiday.location === 'Bahia'));
+assert.ok(regional2026.some((holiday) => holiday.date === '2026-06-04' && holiday.location === 'Petrolina-PE' && holiday.name === 'Corpus Christi'));
+assert.ok(regional2026.some((holiday) => holiday.date === '2026-09-21' && holiday.location === 'Petrolina-PE'));
+assert.ok(regional2026.some((holiday) => holiday.date === '2026-02-17' && holiday.location === 'Juazeiro-BA' && holiday.name === 'Carnaval'));
+assert.ok(regional2026.some((holiday) => holiday.date === '2026-09-08' && holiday.location === 'Juazeiro-BA'));
 
 console.log('marketing calendar data-loading static checks passed');

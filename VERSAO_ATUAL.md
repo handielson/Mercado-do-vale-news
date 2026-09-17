@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.407-calendario-dias-feriados
+version: v1.2.408-calendario-feriados-regionais
 date: 2026-09-17
-status: published
-release_vps: /var/www/mdv-site/releases/20260917-142000-calendario-dias-feriados
+status: pending
+release_vps: pendente
 branch: main
-summary: Diferencia dias úteis, fins de semana e feriados nacionais no calendário editorial.
-tag: v1.2.407-calendario-dias-feriados
+summary: Inclui feriados estaduais e municipais de PE, BA, Petrolina e Juazeiro, além de cadastro manual no calendário editorial.
+tag: v1.2.408-calendario-feriados-regionais
