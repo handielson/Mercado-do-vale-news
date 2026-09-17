@@ -1,27 +1,27 @@
 {
-  "version": "v1.2.405-n8n-lista-direta",
-  "date": "2026-09-16",
+  "version": "v1.2.406-n8n-followup-modelo",
+  "date": "2026-09-17",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260916-181048-n8n-lista-direta",
+  "release_vps": "/var/www/mdv-site/releases/20260917-110943-n8n-followup-modelo",
   "branch": "main",
-  "summary": "Envia o catálogo oficial sem introdução da IA e abre listas de marcas reconhecidas sem confirmação intermediária.",
-  "tag": "v1.2.405-n8n-lista-direta",
+  "summary": "Mantém o cartão oficial ao pedir informações de outro modelo em uma continuação da conversa.",
+  "tag": "v1.2.406-n8n-followup-modelo",
   "changed_files": [
     "docs/autoresponder/response-map.md",
     "docs/autoresponder/test-scenarios.md",
-    "tmp-tests/n8n-catalog-direct-response.cjs",
-    "tmp-tests/n8n-catalog-direct-response-static.test.cjs",
+    "tmp-tests/n8n-followup-model-official-card.cjs",
+    "tmp-tests/n8n-followup-model-official-card-static.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-16-v1.2.405-n8n-lista-direta.md"
+    "docs/versoes/2026-09-17-v1.2.406-n8n-followup-modelo.md"
   ],
   "validations": [
-    "node tmp-tests/n8n-catalog-direct-response-static.test.cjs",
+    "node tmp-tests/n8n-followup-model-official-card-static.test.cjs",
     "node tmp-tests/n8n-structured-phone-comparison-static.test.cjs",
-    "node --check tmp-tests/n8n-catalog-direct-response.cjs",
+    "node --check tmp-tests/n8n-followup-model-official-card.cjs",
     "simulação, publicação e verificação do workflow n8n SkrkB4vyKVDnQ68t",
     "workflow_entity e workflow_history idênticos",
     "n8n, runner e Evolution API em 1/1",
-    "verificação ativa da lista direta por marca e da supressão da introdução da IA"
+    "verificação ativa do redirecionamento do seguimento por modelo para o cartão oficial"
   ]
 }

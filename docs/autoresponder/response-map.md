@@ -68,6 +68,8 @@
 - Quando o catálogo determinístico estiver pronto, ele é a resposta completa: não enviar apresentação, resumo ou pergunta criada pela IA antes da lista.
 - A pergunta de escolha permanece no último bloco do catálogo, separada dos produtos.
 - Uma marca de smartphone reconhecida, como `Realme`, `Poco`, `Redmi`, `Samsung` ou `Motorola`, abre imediatamente a lista correspondente; não pedir confirmação do tipo de produto.
+- Uma continuação pelo nome do modelo, como `Me envia também do Poco M7 Pró 5G`, volta ao formatador oficial: características, memória, PIX, cartão em 12x e cores, no mesmo padrão do modelo anterior.
+- Nesse seguimento, enviar a ficha técnica prevista para o modelo e não acrescentar uma segunda imagem avulsa do produto.
 - A resposta livre da IA só é usada quando não existe catálogo determinístico para enviar.
 
 ## Fallback Fora Do Fluxo

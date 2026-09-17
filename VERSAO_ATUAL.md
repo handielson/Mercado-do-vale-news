@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.405-n8n-lista-direta
-date: 2026-09-16
+version: v1.2.406-n8n-followup-modelo
+date: 2026-09-17
 status: published
-release_vps: /var/www/mdv-site/releases/20260916-181048-n8n-lista-direta
+release_vps: /var/www/mdv-site/releases/20260917-110943-n8n-followup-modelo
 branch: main
-summary: Envia o catálogo oficial sem introdução da IA e abre listas de marcas reconhecidas sem confirmação intermediária.
-tag: v1.2.405-n8n-lista-direta
+summary: Mantém o cartão oficial ao pedir informações de outro modelo em uma continuação da conversa.
+tag: v1.2.406-n8n-followup-modelo
