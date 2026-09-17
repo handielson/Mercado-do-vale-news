@@ -471,7 +471,8 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         fastify.log?.warn('Mercado Livre: conciliacao de remessa pendente indisponivel; nova tentativa no proximo ciclo.');
       }
     }
-    const eligible = "(status='ready' OR (status='printing' AND updated_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))) AND shipment_status='ready_to_ship' AND shipment_substatus='ready_to_print'";
+    const legacyDeclarationRecovery = "(status='intervention' AND label_printed_at IS NOT NULL AND declaration_printed_at IS NULL AND summary_printed_at IS NULL AND last_error LIKE '%/declaration: HTTP 409%')";
+    const eligible = `(status='ready' OR (status='printing' AND updated_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)) OR ${legacyDeclarationRecovery}) AND shipment_status='ready_to_ship' AND shipment_substatus='ready_to_print'`;
     const [rows] = await pool.query(`SELECT * FROM mercado_livre_print_jobs WHERE ${eligible} ORDER BY created_at ASC LIMIT 1`);
     if (!rows.length) return reply.code(204).send();
     const job = rows[0];

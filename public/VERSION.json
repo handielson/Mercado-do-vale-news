@@ -1,21 +1,23 @@
 {
-  "version": "v1.2.408-calendario-feriados-regionais",
+  "version": "v1.2.409-mercado-livre-duas-paginas-resumo",
   "date": "2026-09-17",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260917-145500-calendario-feriados-regionais",
+  "release_vps": "/var/www/mdv-site/releases/20260917-195827-mercado-livre-duas-paginas-resumo",
   "branch": "main",
-  "summary": "Inclui feriados estaduais e municipais de PE, BA, Petrolina e Juazeiro, além de cadastro manual no calendário editorial.",
-  "tag": "v1.2.408-calendario-feriados-regionais",
+  "summary": "Corrige a impressão Mercado Livre para enviar duas páginas à Zebra e o resumo do pedido à Comprovante.",
+  "tag": "v1.2.409-mercado-livre-duas-paginas-resumo",
   "changed_files": [
-    "pages/admin/settings/marketing/MarketingCalendarPanel.tsx",
-    "utils/holidayService.ts",
-    "tmp-tests/marketing-calendar-data-loading-static.test.mjs",
+    "scripts/mercado-livre-print-agent.cjs",
+    "services/mercadoLivreServer.cjs",
+    "tmp-tests/mercado-livre-print-agent.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-17-v1.2.408-calendario-feriados-regionais.md"
+    "docs/versoes/2026-09-17-v1.2.409-mercado-livre-duas-paginas-resumo.md"
   ],
   "validations": [
-    "node tmp-tests/marketing-calendar-data-loading-static.test.mjs",
-    "npm.cmd run build"
+    "npm.cmd run test:mercado-livre (20 testes)",
+    "node --check scripts/mercado-livre-print-agent.cjs",
+    "node --check services/mercadoLivreServer.cjs",
+    "Mercado Livre integration static contract: OK"
   ]
 }

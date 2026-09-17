@@ -9,9 +9,19 @@ const execFileAsync = promisify(execFile);
 
 const STEPS = [
     { name: 'label', field: 'labelPrintedAt', suffix: 'etiqueta-10x15' },
-    { name: 'declaration', field: 'declarationPrintedAt', suffix: 'declaracao-dce' },
     { name: 'summary', field: 'summaryPrintedAt', suffix: 'resumo-separacao-90x100' },
 ];
+
+async function keepFirstPdfPages(buffer, maximumPages = 2) {
+    const source = await PDFDocument.load(buffer);
+    if (!source.getPageCount()) throw new Error('Documento PDF vazio.');
+    if (source.getPageCount() <= maximumPages) return buffer;
+    const output = await PDFDocument.create();
+    const indexes = Array.from({ length: maximumPages }, (_, index) => index);
+    const pages = await output.copyPages(source, indexes);
+    pages.forEach(page => output.addPage(page));
+    return Buffer.from(await output.save());
+}
 
 function writeJournal(file, record) {
     const temp = `${file}.tmp`;
@@ -71,6 +81,13 @@ async function executeMercadoLivreJob({ job, settings, request, print, directory
     fs.mkdirSync(journalDirectory, { recursive: true });
     const prefix = `/print-jobs/${encodeURIComponent(shipmentId)}`;
     try {
+        // The Mercado Livre shipping-label PDF already contains the Correios receipt.
+        // Older agents requested a separate DC-e after printing it; acknowledge that
+        // legacy step without sending the Zebra output again.
+        if (job.labelPrintedAt && !job.declarationPrintedAt) {
+            await request(`${prefix}/step`, { body: { step: 'declaration' } });
+            job.declarationPrintedAt = new Date().toISOString();
+        }
         for (const step of STEPS) {
             if (job[step.field]) continue;
             const journalFile = path.join(journalDirectory, `${shipmentId}.${step.name}.json`);
@@ -94,6 +111,7 @@ async function executeMercadoLivreJob({ job, settings, request, print, directory
                     buffer = await createMercadoLivreSummaryPdf(summary);
                 } else {
                     buffer = await request(`${prefix}/${step.name}`, { pdf: true });
+                    if (step.name === 'label') buffer = await keepFirstPdfPages(buffer, 2);
                 }
                 const pdf = await PDFDocument.load(buffer);
                 if (!pdf.getPageCount()) throw new Error('Documento PDF vazio.');
@@ -115,6 +133,10 @@ async function executeMercadoLivreJob({ job, settings, request, print, directory
             }
             // Retry only the acknowledgement when Windows already accepted the document.
             await request(`${prefix}/step`, { body: { step: step.name } });
+            if (step.name === 'label' && !job.declarationPrintedAt) {
+                await request(`${prefix}/step`, { body: { step: 'declaration' } });
+                job.declarationPrintedAt = new Date().toISOString();
+            }
             logger.log(`Mercado Livre: ${shipmentId} ${step.name} confirmado.`);
         }
         await request(`${prefix}/complete`, { body: { ok: true } });
@@ -152,4 +174,4 @@ function startMercadoLivrePrintAgent({ apiUrl, syncKey, getSettings, getStockLoc
 }
 
 module.exports = { createMercadoLivreRequest, executeMercadoLivreJob, startMercadoLivrePrintAgent,
-    prepareMercadoLivreSummaryPrinter };
+    prepareMercadoLivreSummaryPrinter, keepFirstPdfPages };

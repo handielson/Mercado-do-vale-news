@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.408-calendario-feriados-regionais
+version: v1.2.409-mercado-livre-duas-paginas-resumo
 date: 2026-09-17
 status: published
-release_vps: /var/www/mdv-site/releases/20260917-145500-calendario-feriados-regionais
+release_vps: /var/www/mdv-site/releases/20260917-195827-mercado-livre-duas-paginas-resumo
 branch: main
-summary: Inclui feriados estaduais e municipais de PE, BA, Petrolina e Juazeiro, além de cadastro manual no calendário editorial.
-tag: v1.2.408-calendario-feriados-regionais
+summary: Corrige a impressão Mercado Livre para enviar duas páginas à Zebra e o resumo do pedido à Comprovante.
+tag: v1.2.409-mercado-livre-duas-paginas-resumo

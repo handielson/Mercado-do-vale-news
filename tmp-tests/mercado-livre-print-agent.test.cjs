@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { PDFDocument } = require('pdf-lib');
-const { executeMercadoLivreJob } = require('../scripts/mercado-livre-print-agent.cjs');
+const { executeMercadoLivreJob, keepFirstPdfPages } = require('../scripts/mercado-livre-print-agent.cjs');
 const { createMercadoLivreSummaryPdf, ML_SUMMARY_WIDTH_MM, ML_SUMMARY_HEIGHT_MM,
     ML_SUMMARY_HORIZONTAL_MARGIN_MM } = require('../scripts/mercado-livre-print-core.cjs');
 const { presentPrintJob, classifyShipment, registerMercadoLivreRoutes } = require('../services/mercadoLivreServer.cjs');
@@ -12,7 +12,7 @@ const { presentPrintJob, classifyShipment, registerMercadoLivreRoutes } = requir
 async function fixture(t) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-ml-test-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-    const doc = await PDFDocument.create(); doc.addPage([288, 432]);
+    const doc = await PDFDocument.create(); doc.addPage([288, 432]); doc.addPage([288, 432]); doc.addPage([288, 432]);
     const pdf = Buffer.from(await doc.save());
     const calls = [], printed = [], marked = [];
     const settings = { shopee_printer_thermal: 'ZD', shopee_printer_a4: 'Comprovante' };
@@ -31,16 +31,33 @@ async function fixture(t) {
     return { options, calls, printed, marked, pdf };
 }
 
-test('tres documentos usam destinos corretos e segunda execucao nao reimprime', async t => {
+test('Zebra recebe somente etiqueta e comprovante dos Correios; resumo vai para Comprovante', async t => {
     const f = await fixture(t);
     await executeMercadoLivreJob(f.options);
-    assert.deepEqual(f.printed.map(p => p.config.printer), ['ZD', 'ZD', 'Comprovante']);
+    assert.deepEqual(f.printed.map(p => p.config.printer), ['ZD', 'Comprovante']);
     assert.deepEqual(f.marked, ['label', 'declaration', 'summary']);
     assert.equal(f.printed[0].config.paperSize, '4x6');
-    assert.deepEqual(f.printed[2].config, { printer: 'Comprovante', orientation: 'portrait', scale: 'noscale' });
+    assert.equal((await PDFDocument.load(fs.readFileSync(f.printed[0].file))).getPageCount(), 2);
+    assert.deepEqual(f.printed[1].config, { printer: 'Comprovante', orientation: 'portrait', scale: 'noscale' });
     assert.equal(f.calls.at(-1).body.ok, true);
     await executeMercadoLivreJob(f.options);
-    assert.equal(f.printed.length, 3, 'restart with stale server state must only replay acknowledgements');
+    assert.equal(f.printed.length, 2, 'restart with stale server state must only replay acknowledgements');
+});
+
+test('recupera falha antiga da declaracao e imprime somente o resumo pendente', async t => {
+    const f = await fixture(t);
+    f.options.job.labelPrintedAt = 'now';
+    await executeMercadoLivreJob(f.options);
+    assert.deepEqual(f.printed.map(p => p.config.printer), ['Comprovante']);
+    assert.deepEqual(f.marked, ['declaration', 'summary']);
+});
+
+test('recorte conserva no maximo as duas primeiras paginas do PDF logistico', async () => {
+    const source = await PDFDocument.create();
+    source.addPage([100, 200]); source.addPage([110, 210]); source.addPage([120, 220]);
+    const result = await PDFDocument.load(await keepFirstPdfPages(Buffer.from(await source.save())));
+    assert.equal(result.getPageCount(), 2);
+    assert.deepEqual(result.getPages().map(page => page.getSize()), [{ width: 100, height: 200 }, { width: 110, height: 210 }]);
 });
 
 test('comprovante Mercado Livre usa pagina compacta 90x100 para a LABEL-9X10', async () => {
@@ -55,21 +72,6 @@ test('comprovante Mercado Livre usa pagina compacta 90x100 para a LABEL-9X10', a
     assert.equal(ML_SUMMARY_HORIZONTAL_MARGIN_MM, 10, 'conteudo deve recuar 10 mm de cada lateral');
 });
 
-test('DC-e em processamento retoma sem repetir etiqueta', async t => {
-    const f = await fixture(t); let pending = true;
-    const request = f.options.request;
-    f.options.request = async (route, options) => {
-        if (pending && route.endsWith('/declaration')) throw Object.assign(new Error('DC-e pendente'), { status: 409, retryable: true });
-        return request(route, options);
-    };
-    await assert.rejects(executeMercadoLivreJob(f.options), /pendente/);
-    assert.equal(f.printed.length, 1);
-    assert.equal(f.calls.at(-1).body.retryable, true);
-    pending = false;
-    await executeMercadoLivreJob(f.options);
-    assert.equal(f.printed.length, 3);
-});
-
 test('perda da confirmacao apos Windows retoma so a confirmacao', async t => {
     const f = await fixture(t); let fail = true;
     const request = f.options.request;
@@ -82,7 +84,7 @@ test('perda da confirmacao apos Windows retoma so a confirmacao', async t => {
     assert.equal(f.calls.at(-1).body.retryable, true);
     fail = false;
     await executeMercadoLivreJob(f.options);
-    assert.equal(f.printed.length, 3);
+    assert.equal(f.printed.length, 2);
 });
 
 test('falha ou queda durante envio exige conferencia e nunca repete automaticamente', async t => {
@@ -141,6 +143,7 @@ test('fila reconcilia DC-e pronta, reserva atomicamente e consulta a remessa atu
     assert.equal(first.shipmentId, '123');
     assert.ok(queries.some(sql => sql.includes("AND status='awaiting_dce'")));
     assert.ok(queries.find(sql => sql.includes('attempts=attempts+1')).includes("AND shipment_status='ready_to_ship'"));
+    assert.ok(queries.find(sql => sql.startsWith('SELECT * FROM mercado_livre_print_jobs')).includes("last_error LIKE '%/declaration: HTTP 409%'"));
     await handlers['/mercado-livre/print-jobs/next']({}, reply);
     assert.equal(reply.status, 204, 'another consumer cannot take the same claim');
     claimed = false;
