@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import ts from 'typescript';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 const calendar = readFileSync(
   'pages/admin/settings/marketing/MarketingCalendarPanel.tsx',
@@ -71,11 +75,43 @@ assert.match(
   /Possível duplicidade em/,
   'Overlapping Story schedules must be visibly flagged instead of silently looking identical',
 );
-assert.match(
-  calendar,
-  /if \(event\.status === 'failed'\) return false;/,
-  'Cancelled or rejected records must not look like active publications in the calendar',
+assert.doesNotMatch(calendar, /if \(event\.status === 'failed'\) return false;/,
+  'Failed deliveries must remain visible in the all-status calendar');
+assert.match(calendar, /if \(!isVisibleCalendarEvent\(event\)\) return false;/);
+assert.match(calendar, /schedule\.status === 'partial'[\s\S]*?normalizedStatus = 'partial';[\s\S]*?statusLabel = 'Concluído parcialmente';/);
+assert.match(calendar, /case 'partial':\s*return 'bg-amber-50/,
+  'Partial publication must use warning styling');
+assert.match(calendar, /<StoryDeliveryDetails items=\{event\.rawPayload\?\.dayItems \|\| \[\]\}/);
+
+// Exercise the real presentation with the incident: Instagram published, WhatsApp timed out.
+const require = createRequire(import.meta.url);
+const compiled = ts.transpileModule(calendar, { compilerOptions: {
+  jsx: ts.JsxEmit.React, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true,
+} }).outputText;
+const module = { exports: {} };
+new Function('require', 'module', 'exports', compiled)(
+  (name) => name === 'react' ? require(name) : {}, module, module.exports,
 );
+const { isVisibleCalendarEvent, StoryDeliveryDetails } = module.exports;
+for (const status of ['failed', 'partial', 'completed', 'pending', 'approved']) {
+  assert.equal(isVisibleCalendarEvent({ status }), true, `${status} must remain visible`);
+}
+assert.equal(isVisibleCalendarEvent({ status: 'cancelled' }), false);
+const incident = [{ label: 'Realme_C71.png', deliveries: [
+  { id: 'ig', destination: 'instagram', status: 'published' },
+  { id: 'wa', destination: 'whatsapp', status: 'failed', error: 'The operation was aborted due to timeout' },
+] }];
+const html = renderToStaticMarkup(React.createElement(StoryDeliveryDetails, { items: incident }));
+assert.match(html, /Instagram: Publicado/);
+assert.match(html, /WhatsApp: Falhou/);
+assert.match(html, /The operation was aborted due to timeout/);
+assert.match(html, /border-rose-200/);
+const batch = renderToStaticMarkup(React.createElement(StoryDeliveryDetails, { items: [
+  ...incident, { label: 'Outro.png', deliveries: [{ id: 'wa2', destination: 'whatsapp', status: 'published' }] },
+] }));
+assert.match(batch, /WhatsApp: Falhou \(1\/2\) · Publicado \(1\/2\)/);
+assert.match(batch, /Realme_C71.png: /);
+assert.doesNotThrow(() => renderToStaticMarkup(React.createElement(StoryDeliveryDetails, { items: [{}] })));
 assert.match(
   calendar,
   /title="Excluir programação"/,
@@ -111,5 +147,36 @@ assert.match(
   /Todos os Stories ainda pendentes deste lote, inclusive em outros dias/,
   'Multi-day Story deletion must disclose that the whole batch is cancelled',
 );
+assert.match(
+  calendar,
+  /holidayService\.getHolidays\(holidayYear\)/,
+  'Calendar must reuse the canonical national-holiday service',
+);
+assert.match(
+  calendar,
+  /Legenda dos tipos de dia/,
+  'Calendar must explain the distinction between weekdays, weekends, and holidays',
+);
+assert.match(
+  calendar,
+  /Feriado nacional/,
+  'National holidays must be visibly labelled in the calendar',
+);
+assert.match(
+  calendar,
+  /calendarDaySurfaceClass\(day\)/,
+  'Calendar day cells must use the centralized visual classification',
+);
+assert.match(
+  calendar,
+  /selectedDayData\.kind !== 'weekday'/,
+  'Selected weekend and holiday days must identify their type in the details panel',
+);
+
+const { getCalendarDayKind } = module.exports;
+assert.equal(getCalendarDayKind('2026-09-16'), 'weekday');
+assert.equal(getCalendarDayKind('2026-09-19'), 'saturday');
+assert.equal(getCalendarDayKind('2026-09-20'), 'sunday');
+assert.equal(getCalendarDayKind('2026-09-07', { date: '2026-09-07', name: 'Independência do Brasil', type: 'national' }), 'holiday');
 
 console.log('marketing calendar data-loading static checks passed');

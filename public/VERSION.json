@@ -1,27 +1,20 @@
 {
-  "version": "v1.2.406-n8n-followup-modelo",
+  "version": "v1.2.407-calendario-dias-feriados",
   "date": "2026-09-17",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260917-110943-n8n-followup-modelo",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Mantém o cartão oficial ao pedir informações de outro modelo em uma continuação da conversa.",
-  "tag": "v1.2.406-n8n-followup-modelo",
+  "summary": "Diferencia dias úteis, fins de semana e feriados nacionais no calendário editorial.",
+  "tag": "v1.2.407-calendario-dias-feriados",
   "changed_files": [
-    "docs/autoresponder/response-map.md",
-    "docs/autoresponder/test-scenarios.md",
-    "tmp-tests/n8n-followup-model-official-card.cjs",
-    "tmp-tests/n8n-followup-model-official-card-static.test.cjs",
+    "pages/admin/settings/marketing/MarketingCalendarPanel.tsx",
+    "tmp-tests/marketing-calendar-data-loading-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
     "docs/versoes/2026-09-17-v1.2.406-n8n-followup-modelo.md"
   ],
   "validations": [
-    "node tmp-tests/n8n-followup-model-official-card-static.test.cjs",
-    "node tmp-tests/n8n-structured-phone-comparison-static.test.cjs",
-    "node --check tmp-tests/n8n-followup-model-official-card.cjs",
-    "simulação, publicação e verificação do workflow n8n SkrkB4vyKVDnQ68t",
-    "workflow_entity e workflow_history idênticos",
-    "n8n, runner e Evolution API em 1/1",
-    "verificação ativa do redirecionamento do seguimento por modelo para o cartão oficial"
+    "node tmp-tests/marketing-calendar-data-loading-static.test.mjs",
+    "npm.cmd run build"
   ]
 }

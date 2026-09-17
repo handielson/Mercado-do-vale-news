@@ -44,6 +44,7 @@ import {
   type FacebookMarketplaceSchedule,
 } from '../../../../services/facebookMarketplaceScheduleService';
 import { toBrowserSafeMediaUrl } from '../../../../utils/media-url';
+import { holidayService, type Holiday } from '../../../../utils/holidayService';
 
 export interface CalendarEvent {
   id: string;
@@ -52,7 +53,7 @@ export interface CalendarEvent {
   dateKey: string; // YYYY-MM-DD
   timeStr: string; // HH:mm
   destinations: Array<'instagram' | 'whatsapp' | 'facebook'>;
-  status: 'pending' | 'approved' | 'executing' | 'completed' | 'failed' | 'slot';
+  status: 'pending' | 'approved' | 'executing' | 'completed' | 'partial' | 'failed' | 'cancelled' | 'slot';
   statusLabel: string;
   itemsCount: number;
   thumbnailUrl?: string | null;
@@ -66,6 +67,85 @@ const MONTH_NAMES = [
 ];
 
 const WEEK_DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+type CalendarDayKind = 'weekday' | 'saturday' | 'sunday' | 'holiday';
+
+interface CalendarDay {
+  dayNumber: number;
+  dateKey: string;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  events: CalendarEvent[];
+  kind: CalendarDayKind;
+  holiday?: Holiday;
+}
+
+function dateFromKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+export function getCalendarDayKind(dateKey: string, holiday?: Holiday): CalendarDayKind {
+  if (holiday) return 'holiday';
+  const weekday = dateFromKey(dateKey).getDay();
+  if (weekday === 0) return 'sunday';
+  if (weekday === 6) return 'saturday';
+  return 'weekday';
+}
+
+function calendarDayKindLabel(kind: CalendarDayKind, holiday?: Holiday): string {
+  if (kind === 'holiday') return `Feriado nacional${holiday?.name ? `: ${holiday.name}` : ''}`;
+  if (kind === 'saturday') return 'Sábado';
+  if (kind === 'sunday') return 'Domingo';
+  return 'Dia útil';
+}
+
+function calendarDaySurfaceClass(day: CalendarDay): string {
+  if (!day.isCurrentMonth) return 'bg-slate-50/60 text-slate-400';
+  if (day.kind === 'holiday') return 'bg-rose-50/80';
+  if (day.kind === 'sunday') return 'bg-violet-50/70';
+  if (day.kind === 'saturday') return 'bg-amber-50/70';
+  return 'bg-white';
+}
+
+export function isVisibleCalendarEvent(event: CalendarEvent): boolean {
+  // Cancelled/rejected records are audit history; publication failures need attention.
+  return event.status !== 'cancelled';
+}
+
+export function StoryDeliveryDetails({ items }: { items: SocialStoryScheduleItem[] }) {
+  const labels: Record<string, string> = {
+    published: 'Publicado', failed: 'Falhou', processing: 'Publicando',
+    pending: 'Pendente', waiting_approval: 'Aguardando aprovação', cancelled: 'Cancelado',
+  };
+  return (
+    <div className="space-y-2 text-[11px]" aria-label="Resultado por canal">
+      {(['instagram', 'whatsapp'] as const).map((destination) => {
+        const deliveries = items.flatMap((item) => (Array.isArray(item.deliveries) ? item.deliveries : [])
+          .filter((delivery) => delivery.destination === destination)
+          .map((delivery) => ({ ...delivery, label: item.label })));
+        if (!deliveries.length) return null;
+        const counts = new Map<string, number>();
+        for (const delivery of deliveries) counts.set(delivery.status, (counts.get(delivery.status) || 0) + 1);
+        const hasFailure = deliveries.some((delivery) => delivery.status === 'failed');
+        return (
+          <div key={destination} className={`rounded-lg border px-2 py-1.5 ${hasFailure ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-slate-200 bg-white text-slate-700'}`}>
+            <p className="font-bold">
+              {destination === 'instagram' ? 'Instagram' : 'WhatsApp'}: {Array.from(counts, ([status, count]) => `${labels[status] || status}${deliveries.length > 1 ? ` (${count}/${deliveries.length})` : ''}`).join(' · ')}
+            </p>
+            <div className="max-h-32 overflow-y-auto space-y-1">
+              {deliveries.filter((delivery) => delivery.error && delivery.status !== 'published').map((delivery) => (
+                <p key={delivery.id} className="mt-1 break-words">
+                  {items.length > 1 && delivery.label ? `${delivery.label}: ` : ''}{delivery.error}
+                </p>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 interface MarketingCalendarPanelProps {
   onNavigateToTab?: (tab: string) => void;
@@ -211,6 +291,7 @@ export default function MarketingCalendarPanel({
   const [channelFilter, setChannelFilter] = useState<'all' | 'instagram' | 'whatsapp' | 'facebook'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'completed'>('all');
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const [holidaysByDate, setHolidaysByDate] = useState<Map<string, Holiday>>(() => new Map());
 
   const loadData = async () => {
     setLoading(true);
@@ -293,6 +374,25 @@ export default function MarketingCalendarPanel({
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
+
+  useEffect(() => {
+    let active = true;
+
+    const loadNationalHolidays = async () => {
+      const years = [year - 1, year, year + 1];
+      const lists = await Promise.all(years.map((holidayYear) => holidayService.getHolidays(holidayYear)));
+      if (!active) return;
+
+      const next = new Map<string, Holiday>();
+      for (const holidays of lists) {
+        for (const holiday of holidays) next.set(holiday.date, holiday);
+      }
+      setHolidaysByDate(next);
+    };
+
+    void loadNationalHolidays();
+    return () => { active = false; };
+  }, [year]);
 
   const handlePrevMonth = () => {
     const nextDate = new Date(year, month - 1, 1);
@@ -396,14 +496,17 @@ export default function MarketingCalendarPanel({
       } else if (schedule.status === 'processing' || schedule.status === 'executing') {
         normalizedStatus = 'executing';
         statusLabel = 'Publicando';
-      } else if (schedule.status === 'completed' || schedule.status === 'partial') {
+      } else if (schedule.status === 'partial') {
+        normalizedStatus = 'partial';
+        statusLabel = 'Concluído parcialmente';
+      } else if (schedule.status === 'completed') {
         normalizedStatus = 'completed';
         statusLabel = 'Concluído';
       } else if (schedule.status === 'failed') {
         normalizedStatus = 'failed';
         statusLabel = 'Falhou';
       } else if (schedule.status === 'cancelled') {
-        normalizedStatus = 'failed';
+        normalizedStatus = 'cancelled';
         statusLabel = 'Cancelado';
       }
 
@@ -496,7 +599,7 @@ export default function MarketingCalendarPanel({
             normalizedStatus = 'failed';
             statusLabel = 'Falhou';
           } else if (app.status === 'cancelled' || app.status === 'rejected') {
-            normalizedStatus = 'failed';
+            normalizedStatus = 'cancelled';
             statusLabel = app.status === 'rejected' ? 'Rejeitada' : 'Cancelada';
           }
 
@@ -592,7 +695,7 @@ export default function MarketingCalendarPanel({
       const normalized = effectiveStatus === 'published'
         ? { status: 'completed' as const, label: 'Publicado' }
         : effectiveStatus === 'cancelled'
-        ? { status: 'failed' as const, label: 'Cancelado' }
+        ? { status: 'cancelled' as const, label: 'Cancelado' }
         : effectiveStatus === 'ready'
         ? { status: 'pending' as const, label: 'Pronto para publicar' }
         : { status: 'approved' as const, label: 'Agendado' };
@@ -617,9 +720,7 @@ export default function MarketingCalendarPanel({
 
   const filteredEvents = useMemo(() => {
     return allEvents.filter((event) => {
-      // Cancelled/rejected records remain available for audit in the backend, but
-      // must not look like active publications in the editorial calendar.
-      if (event.status === 'failed') return false;
+      if (!isVisibleCalendarEvent(event)) return false;
       if (channelFilter !== 'all') {
         if (!event.destinations.includes(channelFilter)) return false;
       }
@@ -647,13 +748,7 @@ export default function MarketingCalendarPanel({
     const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
     const daysInPrevMonth = new Date(year, month, 0).getDate();
 
-    const days: Array<{
-      dayNumber: number;
-      dateKey: string;
-      isCurrentMonth: boolean;
-      isToday: boolean;
-      events: CalendarEvent[];
-    }> = [];
+    const days: CalendarDay[] = [];
 
     const todayDateKey = parseDateKey(new Date());
 
@@ -668,6 +763,8 @@ export default function MarketingCalendarPanel({
         isCurrentMonth: false,
         isToday: dateKey === todayDateKey,
         events: eventsByDate.get(dateKey) || [],
+        kind: getCalendarDayKind(dateKey, holidaysByDate.get(dateKey)),
+        holiday: holidaysByDate.get(dateKey),
       });
     }
 
@@ -681,6 +778,8 @@ export default function MarketingCalendarPanel({
         isCurrentMonth: true,
         isToday: dateKey === todayDateKey,
         events: eventsByDate.get(dateKey) || [],
+        kind: getCalendarDayKind(dateKey, holidaysByDate.get(dateKey)),
+        holiday: holidaysByDate.get(dateKey),
       });
     }
 
@@ -695,11 +794,13 @@ export default function MarketingCalendarPanel({
         isCurrentMonth: false,
         isToday: dateKey === todayDateKey,
         events: eventsByDate.get(dateKey) || [],
+        kind: getCalendarDayKind(dateKey, holidaysByDate.get(dateKey)),
+        holiday: holidaysByDate.get(dateKey),
       });
     }
 
     return days;
-  }, [year, month, eventsByDate]);
+  }, [year, month, eventsByDate, holidaysByDate]);
 
   const selectedDayData = useMemo(() => {
     if (!selectedDayKey) return null;
@@ -716,12 +817,15 @@ export default function MarketingCalendarPanel({
         year: 'numeric',
       }),
       events: [...events].sort((a, b) => a.timeStr.localeCompare(b.timeStr)),
+      kind: getCalendarDayKind(selectedDayKey, holidaysByDate.get(selectedDayKey)),
+      holiday: holidaysByDate.get(selectedDayKey),
     };
-  }, [selectedDayKey, eventsByDate]);
+  }, [selectedDayKey, eventsByDate, holidaysByDate]);
 
   const getStatusBadgeClass = (status: CalendarEvent['status']) => {
     switch (status) {
       case 'pending':
+      case 'partial':
         return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'approved':
         return 'bg-emerald-50 text-emerald-700 border-emerald-200';
@@ -904,6 +1008,13 @@ export default function MarketingCalendarPanel({
             ))}
           </div>
 
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 bg-white px-3 py-2 text-[10px] font-semibold text-slate-500" aria-label="Legenda dos tipos de dia">
+            <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-slate-300" />Dia útil</span>
+            <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-amber-300" />Sábado</span>
+            <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-violet-300" />Domingo</span>
+            <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-rose-400" />Feriado nacional</span>
+          </div>
+
           {loading ? (
             <div className="p-16 flex flex-col items-center justify-center text-slate-400 gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-pink-600" />
@@ -914,14 +1025,16 @@ export default function MarketingCalendarPanel({
               {calendarDays.map((day, idx) => {
                 const isSelected = day.dateKey === selectedDayKey;
                 const hasEvents = day.events.length > 0;
+                const dayLabel = calendarDayKindLabel(day.kind, day.holiday);
 
                 return (
                   <div
                     key={`${day.dateKey}-${idx}`}
                     onClick={() => setSelectedDayKey(day.dateKey)}
-                    className={`min-h-[105px] p-2 bg-white transition-all cursor-pointer flex flex-col justify-between group ${
-                      !day.isCurrentMonth ? 'bg-slate-50/60 text-slate-400' : ''
-                    } ${isSelected ? 'ring-2 ring-pink-500 ring-inset z-10 bg-pink-50/20' : 'hover:bg-slate-50'}`}
+                    title={dayLabel}
+                    className={`min-h-[105px] p-2 transition-all cursor-pointer flex flex-col justify-between group ${calendarDaySurfaceClass(day)} ${
+                      isSelected ? 'ring-2 ring-pink-500 ring-inset z-10' : 'hover:brightness-[0.98]'
+                    }`}
                   >
                     <div className="flex items-center justify-between">
                       <span
@@ -930,6 +1043,8 @@ export default function MarketingCalendarPanel({
                             ? 'bg-pink-600 text-white shadow-sm scale-110'
                             : isSelected
                             ? 'bg-slate-900 text-white'
+                            : day.kind === 'holiday'
+                            ? 'bg-rose-500 text-white'
                             : day.isCurrentMonth
                             ? 'text-slate-800 group-hover:scale-105'
                             : 'text-slate-400'
@@ -939,6 +1054,11 @@ export default function MarketingCalendarPanel({
                       </span>
 
                       <div className="flex items-center gap-1">
+                        {day.kind === 'holiday' && (
+                          <span className="max-w-[70px] truncate rounded bg-rose-100 px-1 py-0.5 text-[8px] font-extrabold uppercase tracking-wide text-rose-700" title={dayLabel}>
+                            Feriado
+                          </span>
+                        )}
                         {hasEvents && (
                           <span className="w-2 h-2 rounded-full bg-pink-500 animate-pulse" />
                         )}
@@ -998,6 +1118,17 @@ export default function MarketingCalendarPanel({
                 <h3 className="text-base font-black text-slate-900 capitalize mt-0.5">
                   {selectedDayData ? selectedDayData.formattedDate : 'Selecione um dia'}
                 </h3>
+                {selectedDayData && selectedDayData.kind !== 'weekday' && (
+                  <p className={`mt-1 text-[10px] font-bold ${
+                    selectedDayData.kind === 'holiday'
+                      ? 'text-rose-600'
+                      : selectedDayData.kind === 'sunday'
+                      ? 'text-violet-600'
+                      : 'text-amber-700'
+                  }`}>
+                    {calendarDayKindLabel(selectedDayData.kind, selectedDayData.holiday)}
+                  </p>
+                )}
               </div>
 
               {onSelectDateForNewSchedule && selectedDayKey && (
@@ -1152,6 +1283,17 @@ export default function MarketingCalendarPanel({
                         )}
                       </div>
                     </div>
+                    {event.type === 'story_schedule' && (
+                      <>
+                        <StoryDeliveryDetails items={event.rawPayload?.dayItems || []} />
+                        {['partial', 'failed'].includes(event.status) && event.rawPayload?.schedule?.last_error
+                          && !event.rawPayload?.dayItems?.some((item: SocialStoryScheduleItem) => item.deliveries?.some((delivery) => delivery.error)) && (
+                            <p className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] text-rose-800 break-words">
+                              {event.rawPayload.schedule.last_error}
+                            </p>
+                          )}
+                      </>
+                    )}
                     </div>
                   );
                 })
