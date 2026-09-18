@@ -55,5 +55,6 @@ export function buildSharedColorLines(values, indent = '   ') {
         '',
         `${indent}🎨 Cores:`,
         ...colors.map((color, index) => `${indent}${index + 1}. ${color}`),
+        '',
     ];
 }

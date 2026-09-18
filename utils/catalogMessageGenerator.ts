@@ -192,7 +192,7 @@ export function generateCatalogMessage(
             message += `   📱 ${item.variant.ram}/${item.variant.storage}\n`;
             message += `   💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}\n`;
             message += `   💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})\n`;
-            message += `${buildSharedColorLines(item.colors).join('\n')}\n\n`;
+            message += `${buildSharedColorLines(item.colors).join('\n')}\n`;
         });
     });
 

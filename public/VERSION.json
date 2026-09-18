@@ -1,21 +1,22 @@
 {
-  "version": "v1.2.414-orcamento-cores-numeradas",
+  "version": "v1.2.415-orcamento-espaco-apos-cores",
   "date": "2026-09-18",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260918-143103-v1214-orcamento-cores-numeradas",
+  "release_vps": "/var/www/mdv-site/releases/20260918-145834-v1215-orcamento-espaco-apos-cores",
   "branch": "main",
-  "summary": "Numera as cores em linhas separadas nos compartilhamentos de orçamento e catálogo.",
-  "tag": "v1.2.414-orcamento-cores-numeradas",
+  "summary": "Adiciona uma linha em branco depois da lista de cores nos compartilhamentos.",
+  "tag": "v1.2.415-orcamento-espaco-apos-cores",
   "changed_files": [
     "utils/sharedMessageFormatting.js",
+    "utils/catalogMessageGenerator.ts",
     "tmp-tests/shared-budget-message-format.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-18-v1.2.414-orcamento-cores-numeradas.md"
+    "docs/versoes/2026-09-18-v1.2.415-orcamento-espaco-apos-cores.md"
   ],
   "validations": [
-    "cores numeradas a partir de 1 em cada produto",
-    "uma cor por linha com capitalização normalizada",
+    "linha em branco antes e depois da lista de cores",
+    "numeração e capitalização das cores preservadas",
     "teste focado do compartilhamento",
     "npm.cmd run build"
   ]

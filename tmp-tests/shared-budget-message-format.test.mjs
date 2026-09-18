@@ -26,8 +26,8 @@ assert.deepEqual(
 
 assert.deepEqual(
     buildSharedColorLines(['Amarelo', 'Azul Escuro', 'CIANO ESCURO']),
-    ['', '   🎨 Cores:', '   1. Amarelo', '   2. Azul escuro', '   3. Ciano escuro'],
-    'colors must start after a blank line and use standard numbered-list punctuation',
+    ['', '   🎨 Cores:', '   1. Amarelo', '   2. Azul escuro', '   3. Ciano escuro', ''],
+    'colors must have blank lines before and after the numbered list',
 );
 
 const cartShareSource = readFileSync('utils/cartShareUtils.ts', 'utf8');
