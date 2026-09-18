@@ -49,10 +49,11 @@ export function stripSharedProductColorVariation(value, colorValue = '') {
 
 export function buildSharedColorLines(values, indent = '   ') {
     const colors = normalizeSharedColors(values);
-    if (colors.length === 0) return [`${indent}🎨 Cores: Consultar`];
+    if (colors.length === 0) return ['', `${indent}🎨 Cores: Consultar`];
 
     return [
+        '',
         `${indent}🎨 Cores:`,
-        ...colors.map(color => `${indent}${color}`),
+        ...colors.map((color, index) => `${indent}${index + 1}. ${color}`),
     ];
 }
