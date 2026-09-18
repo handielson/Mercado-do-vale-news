@@ -68,6 +68,8 @@
 - Quando o catálogo determinístico estiver pronto, ele é a resposta completa: não enviar apresentação, resumo ou pergunta criada pela IA antes da lista.
 - O estado da lista deve ser persistido antes de dividir e enviar qualquer bloco, inclusive respostas que passam pelo controle de handoff ou pelo esclarecimento do tipo de compra.
 - A ação `escolher_item` do classificador seleciona o número informado. Números residuais só podem ser usados quando a ação atual confirmar uma seleção.
+- Modelos Poco das famílias M, X e C, como `M6 Pro`, `M7 Pro`, `X7 Pro` e `C71`, são reconhecidos mesmo sem a palavra `Poco`.
+- Se um desses modelos não estiver no estoque, enviar a lista atual com uma explicação curta e não ativar handoff automático. Se a lista já tiver sido enviada, não repeti-la.
 - A pergunta de escolha permanece no último bloco do catálogo, separada dos produtos.
 - Uma marca de smartphone reconhecida, como `Realme`, `Poco`, `Redmi`, `Samsung` ou `Motorola`, abre imediatamente a lista correspondente; não pedir confirmação do tipo de produto.
 - Uma continuação pelo nome do modelo, como `Me envia também do Poco M7 Pró 5G`, volta ao formatador oficial: características, memória, PIX, cartão em 12x e cores, no mesmo padrão do modelo anterior.
