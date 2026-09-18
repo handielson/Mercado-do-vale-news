@@ -8,6 +8,11 @@
 import { calculateInstallments, formatPrice } from '@/services/installmentCalculator';
 import { vpsApiService } from '@/services/vpsApiService';
 import { getMemorySpecs, normalizeSpecValue, readSpecValue } from '@/utils/productSpecUtils';
+import {
+    buildSharedColorLines,
+    formatSharedColor,
+    stripSharedProductColorVariation,
+} from '@/utils/sharedMessageFormatting';
 import type { MixedPaymentState } from '@/components/catalog/MixedPaymentSimulator';
 
 const SITE_BASE = 'https://mercadodovale.com.br';
@@ -136,17 +141,20 @@ function getBudgetVariantSpecLine(product: any): string {
     return [ram, storage].filter(Boolean).join('/') || 'Opcao disponivel';
 }
 
+function getBudgetVariantColor(product: any): string {
+    return readSpecValue(product?.specs || {}, ['color', 'cor', 'colour']);
+}
+
 function getBudgetVariantName(product: any): string {
-    const name = String(product?.model || product?.name || 'Produto').trim();
+    const name = stripSharedProductColorVariation(
+        product?.model || product?.name || 'Produto',
+        getBudgetVariantColor(product)
+    );
     const specLine = getBudgetVariantSpecLine(product);
     if (!specLine || specLine === 'Opcao disponivel') return name;
     return name
         .replace(new RegExp(`,?\\s*${specLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i'), '')
         .trim() || name;
-}
-
-function getBudgetVariantColor(product: any): string {
-    return readSpecValue(product?.specs || {}, ['color', 'cor', 'colour']);
 }
 
 function buildVariationSummary(rows: Array<{ specs?: Record<string, unknown> }>): VariationSummary {
@@ -243,7 +251,7 @@ export async function fetchSiblingBudgetVariantGroups(product: any): Promise<Bud
         if (getProductBudgetGroupKey(row).split('|')[0] !== currentBaseKey) continue;
         const key = getProductBudgetGroupKey(row);
         const price = Number(row.price_retail ?? row.price ?? product.price_retail ?? 0) || 0;
-        const color = getBudgetVariantColor(row);
+        const color = formatSharedColor(getBudgetVariantColor(row));
         const existing = groups.get(key);
         if (!existing) {
             groups.set(key, {
@@ -487,7 +495,7 @@ export async function generateBudgetText(
             specLine: getBudgetVariantSpecLine(product),
             price: unit_price,
             quantity,
-            colors: [getBudgetVariantColor(product)].filter(Boolean),
+            colors: [formatSharedColor(getBudgetVariantColor(product))].filter(Boolean),
             url: getProductUrl(product),
         });
     }
@@ -523,7 +531,7 @@ export async function generateBudgetText(
         if (plan12) {
             lines.push(`   💳 Cartão: 12x de ${brl(plan12.value)} (total ${brl(plan12.total)})`);
         }
-        lines.push(`   🎨 Cores: ${row.colors.length > 0 ? row.colors.join(', ') : 'Consultar'}`);
+        lines.push(...buildSharedColorLines(row.colors));
         lines.push(`   🔗 ${row.url}`);
         if (!shouldTotalize && includeInstallments) {
             const rowMixedPaymentState = buildRowMixedPaymentState(

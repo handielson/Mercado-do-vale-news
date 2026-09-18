@@ -4,6 +4,11 @@ import { paymentFeesService, type PaymentFee } from '@/services/payment-fees';
 import { vpsApiService } from '@/services/vpsApiService';
 import { publicCompanySettingsService } from '@/services/publicCompanySettings';
 import { getMemorySpecs } from '@/utils/productSpecUtils';
+import {
+    buildSharedColorLines,
+    formatSharedColor,
+    stripSharedProductColorVariation,
+} from '@/utils/sharedMessageFormatting';
 
 export type CustomerType = 'retail' | 'wholesale' | 'resale';
 
@@ -44,13 +49,15 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
     const grouped = new Map<string, GroupedProduct>();
 
     products.forEach(product => {
-        // Clean product name (remove RAM/Storage if present)
-        const cleanName = product.name.replace(/,?\s*\d+GB\/\d+GB\s*$/i, '').trim();
-
         const { ram: rawRam, storage: rawStorage } = getMemorySpecs(product);
         const ram = rawRam || 'N/A';
         const storage = rawStorage || 'N/A';
-        const color = product.specs?.color || 'Sem cor';
+        const rawColor = product.specs?.color || 'Sem cor';
+        const color = formatSharedColor(rawColor);
+        // Clean product name (remove color variation and RAM/Storage if present)
+        const cleanName = stripSharedProductColorVariation(product.name, rawColor)
+            .replace(/,?\s*\d+GB\/\d+GB\s*$/i, '')
+            .trim();
         const brand = product.brand || 'Sem marca';
 
         // Create unique key for variant
@@ -185,7 +192,7 @@ export function generateCatalogMessage(
             message += `   📱 ${item.variant.ram}/${item.variant.storage}\n`;
             message += `   💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}\n`;
             message += `   💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})\n`;
-            message += `   🎨 Cores: ${item.colors.join(', ')}\n\n`;
+            message += `${buildSharedColorLines(item.colors).join('\n')}\n\n`;
         });
     });
 
