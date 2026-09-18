@@ -25,8 +25,9 @@ Cada publicacao que altera bot deve rodar estes cenarios em `/autoresponder/test
    - Esperado: os dois modelos usam o mesmo cartão oficial com características, memória, PIX, cartão em 12x e cores; o segundo pedido não usa frase abreviada e não envia uma imagem avulsa adicional do produto.
 
 6. Escolha de produto
-   - Mensagens: `["redmi note 15", "1"]`
-   - Esperado: detalhe do produto e proximo passo de compra/detalhes.
+   - Mensagens: `["Quais são os preços dos celulares?", "7", "Forma de pagamento"]`
+   - Esperado: a lista grava o estado antes do envio; `7` seleciona exatamente o item 7 e responde no cartão oficial com memória, PIX, cartão em 12x e cores; a continuação mantém o mesmo produto.
+   - Um número antigo devolvido pelo classificador junto de uma ação `indefinido` não pode selecionar novamente um aparelho nem gerar `Não encontrei esse número na lista`.
 
 7. Entrega fora de compra com DDD local
    - Mensagens: `["faz entrega?", "Centro", "<localização do WhatsApp>", "sim"]`

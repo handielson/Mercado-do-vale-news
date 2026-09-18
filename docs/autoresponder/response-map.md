@@ -38,7 +38,7 @@
 |---|---|---|---|---|---|
 | redmi note 15 | none | Lista opcoes | product_search.awaiting_choice | numero, nome ou mais | Me diga o numero da opcao ou o nome do modelo. |
 | Poco qualquer modelo contanto que seja 12 de RAM | none ou product_search.awaiting_choice | Uma única lista filtrada; cada modelo traz características curtas, memória, preço PIX, cartão em 12x e cores | product_search.awaiting_choice | numero ou nome | Qual modelo você quer ver em mais detalhes? |
-| 1 | product_search.awaiting_choice | Detalhe do produto | purchase.awaiting_action | comprar, detalhes ou outro produto | Quer comprar, ver detalhes ou procurar outro modelo? |
+| 1 | product_search.awaiting_choice | Cartão oficial do item com memória, PIX, cartão em 12x e cores | purchase.awaiting_action | comprar, detalhes ou outro produto | Quer comprar, ver detalhes ou procurar outro modelo? |
 | mais | product_search.awaiting_choice | Proxima pagina | product_search.awaiting_choice | numero, nome ou mais | Ja mostrei tudo dessa lista. Quer buscar outro modelo? |
 
 ## Fluxo: Compra
@@ -66,6 +66,8 @@
 ### Regra De Envio Da Lista
 
 - Quando o catálogo determinístico estiver pronto, ele é a resposta completa: não enviar apresentação, resumo ou pergunta criada pela IA antes da lista.
+- O estado da lista deve ser persistido antes de dividir e enviar qualquer bloco, inclusive respostas que passam pelo controle de handoff ou pelo esclarecimento do tipo de compra.
+- A ação `escolher_item` do classificador seleciona o número informado. Números residuais só podem ser usados quando a ação atual confirmar uma seleção.
 - A pergunta de escolha permanece no último bloco do catálogo, separada dos produtos.
 - Uma marca de smartphone reconhecida, como `Realme`, `Poco`, `Redmi`, `Samsung` ou `Motorola`, abre imediatamente a lista correspondente; não pedir confirmação do tipo de produto.
 - Uma continuação pelo nome do modelo, como `Me envia também do Poco M7 Pró 5G`, volta ao formatador oficial: características, memória, PIX, cartão em 12x e cores, no mesmo padrão do modelo anterior.
