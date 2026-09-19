@@ -1,0 +1,11 @@
+'use strict';
+const assert = require('assert');
+const { validateNfeXml, packageFromOrder, shipPackageBody, uploadInvoice } = require('../services/tiktokShopFulfillmentService.cjs');
+const xml = Buffer.from('<?xml version="1.0"?><nfeProc><NFe><infNFe/></NFe></nfeProc>');
+assert.equal(validateNfeXml(xml).length, xml.length);
+assert.throws(() => validateNfeXml(Buffer.from('<html/>')), /XML NF-e/);
+assert.deepEqual(packageFromOrder({ id: '586142367857673979', packages: [{ id: 'pkg-1' }] }), { orderId: '586142367857673979', packageId: 'pkg-1', package: { id: 'pkg-1' } });
+assert.deepEqual(shipPackageBody('pkg-1'), { packages: [{ id: 'pkg-1', handover_method: 'DROP_OFF' }] });
+let multipartArgs;
+const uploaded = uploadInvoice({ packageId: 'pkg-1', xml, callMultipart: async args => (multipartArgs = args, { payload: { code: 0 } }) });
+uploaded.then(() => { assert.equal(multipartArgs.fields.package_id, 'pkg-1'); assert.equal(multipartArgs.file.contentType, 'application/xml'); console.log('TikTok fulfillment service tests: OK'); }).catch(error => { console.error(error); process.exitCode = 1; });

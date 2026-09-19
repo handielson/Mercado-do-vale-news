@@ -48,6 +48,12 @@ const {
   buildMemorySessionKey: buildN8nBotContextMemorySessionKey,
   selectConversationContext,
 } = require('./services/n8nBotConversationContext.cjs');
+const {
+  packageFromOrder: packageFromTikTokOrderVps,
+  uploadInvoice: uploadTikTokInvoiceVps,
+  shipPackageBody: buildTikTokShipPackageBodyVps,
+  SHIPPING_DOCUMENT_PATH: tikTokShippingDocumentPathVps,
+} = require('./services/tiktokShopFulfillmentService.cjs');
 
 let isWhatsAppAutomationLogsSchemaReady = false;
 
@@ -8009,6 +8015,11 @@ async function handleTikTokShopWebhookVps(request, reply) {
     const body = request.body && typeof request.body === 'object' ? request.body : {};
     const data = body.data && typeof body.data === 'object' ? body.data : {};
     const orderId = String(data.order_id || '').trim();
+    const eventType = Number(body.type || data.type || 0);
+    if (eventType === 36 || String(body.event_type || '').toUpperCase() === 'INVOICE_STATUS_CHANGE') {
+      const status = String(data.invoice_status || '').toUpperCase();
+      console.info('[tiktok-shop] invoice status change', JSON.stringify({ package_id: String(data.package_id || ''), order_ids: Array.isArray(data.order_ids) ? data.order_ids.map(String).slice(0, 20) : [], invoice_status: status, invalid_reason: String(data.invalid_reason || '') }));
+    }
     if (orderId) {
       await recordMobileTikTokSaleVps(orderId);
     }
@@ -8050,6 +8061,36 @@ async function handleTikTokShopOrderWebhookConfigureVps(_request, reply) {
       detail: error.message || String(error),
       request_id: error.requestId || null,
     });
+  }
+}
+
+async function fulfillTikTokOrderVps(orderId, { handoverMethod = 'DROP_OFF' } = {}) {
+  const safeOrderId = String(orderId || '').trim();
+  if (!/^\d{8,32}$/.test(safeOrderId)) throw new Error('Pedido TikTok inválido.');
+  const settings = await loadTikTokShopOAuthSettingsVps();
+  const orderResult = await callTikTokShopOpenApiVps(settings, { pathname: '/order/202309/orders', query: { ids: safeOrderId } });
+  const order = orderResult?.payload?.data?.orders?.[0];
+  const target = packageFromTikTokOrderVps(order, safeOrderId);
+  const authHeader = await getBlingProductDetailAuthHeaderVps({ headers: {} });
+  if (!authHeader) throw new Error('Bling não conectado.');
+  const invoice = await findBlingNfeForShopeeOrderVps(safeOrderId, authHeader);
+  if (!invoice) throw new Error(`NF-e do pedido ${safeOrderId} não encontrada no Bling.`);
+  const authorizedInvoice = await ensureBlingNfeAuthorizedForShopeeVps(invoice, authHeader);
+  const xml = await downloadBlingNfeXmlVps(authorizedInvoice);
+  const uploaded = await uploadTikTokInvoiceVps({ packageId: target.packageId, xml, filename: `NFE-${authorizedInvoice.chaveAcesso || authorizedInvoice.numero || safeOrderId}.xml`, pathname: process.env.TIKTOK_SHOP_UPLOAD_INVOICE_PATH || '/fulfillment/202309/packages/invoice/upload', callMultipart: args => callTikTokShopMultipartVps(settings, args) });
+  const shipped = await callTikTokShopOpenApiVps(settings, { method: 'POST', pathname: '/fulfillment/202309/packages/ship', body: buildTikTokShipPackageBodyVps(target.packageId, { handoverMethod }) });
+  const document = await callTikTokShopOpenApiVps(settings, { pathname: tikTokShippingDocumentPathVps(target.packageId), query: { document_type: 'SHIPPING_LABEL', invoice_label: 'true' } });
+  return { success: true, order_id: safeOrderId, package_id: target.packageId, invoice_number: authorizedInvoice.numero || null, invoice_access_key: authorizedInvoice.chaveAcesso || null, invoice_upload: uploaded?.payload || uploaded, shipment: shipped?.payload || shipped, shipping_document: document?.payload || document };
+}
+
+async function handleTikTokShopInvoiceWebhookConfigureVps(_request, reply) {
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const address = String(process.env.TIKTOK_SHOP_ORDER_WEBHOOK_URL || 'https://api.xiaomipetrolina.com.br/api/tiktok-shop/webhook').trim();
+    const result = await callTikTokShopOpenApiVps(settings, { method: 'PUT', pathname: '/event/202309/webhooks', body: { address, event_type: 'INVOICE_STATUS_CHANGE' } });
+    return { configured: true, event_type: 'INVOICE_STATUS_CHANGE', address, request_id: result?.payload?.request_id || null };
+  } catch (error) {
+    return reply.code(error.statusCode || 500).send({ error: 'Falha ao configurar webhook fiscal TikTok Shop.', detail: error.message || String(error), request_id: error.requestId || null });
   }
 }
 
@@ -13329,7 +13370,17 @@ fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);
 fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
 fastify.all('/api/shopee-actions', handleShopeeActionsVps);
 fastify.all('/api/tiktok-shop/webhook', handleTikTokShopWebhookVps);
+fastify.post('/api/tiktok-shop/orders/:orderId/fulfill', { preHandler: requireSyncKeyOrAdmin }, async (request, reply) => {
+  try {
+    const result = await fulfillTikTokOrderVps(request.params?.orderId, { handoverMethod: String(request.body?.handover_method || 'DROP_OFF').toUpperCase() });
+    reply.header('Cache-Control', 'no-store');
+    return result;
+  } catch (error) {
+    return reply.code(error.statusCode || 502).send({ error: 'Falha ao enviar pedido TikTok Shop.', detail: error.message || String(error), request_id: error.requestId || null });
+  }
+});
 fastify.put('/api/tiktok-shop/webhooks/order-status', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopOrderWebhookConfigureVps);
+fastify.put('/api/tiktok-shop/webhooks/invoice-status', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopInvoiceWebhookConfigureVps);
 fastify.post('/admin/mobile-push/devices', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   try {
     const auth = await getVpsBearerAuthContext(request);
