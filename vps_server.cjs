@@ -8024,6 +8024,26 @@ async function handleTikTokShopWebhookVps(request, reply) {
         invoice_status: status,
         invalid_reason: String(data.invalid_reason || ''),
       }));
+      if (status === 'SUCCESS') {
+        const packageId = String(data.package_id || '').trim();
+        const webhookOrderId = orderId || (Array.isArray(data.order_ids) ? String(data.order_ids[0] || '').trim() : '');
+        if (packageId) {
+          try {
+            const shipment = await shipTikTokPackageVps(packageId, { handoverMethod: 'DROP_OFF' });
+            console.info('[tiktok-shop] invoice approved; package shipped', JSON.stringify({
+              order_id: webhookOrderId,
+              package_id: packageId,
+              request_id: shipment?.shipment?.request_id || null,
+            }));
+          } catch (shipmentError) {
+            console.error('[tiktok-shop] invoice approved but shipment failed:', buildCopyableDebug('tiktok-shop-shipment', {
+              order_id: webhookOrderId,
+              package_id: packageId,
+              rawMessage: shipmentError.message,
+            }));
+          }
+        }
+      }
     }
     if (orderId) {
       await recordMobileTikTokSaleVps(orderId);
@@ -8083,9 +8103,16 @@ async function fulfillTikTokOrderVps(orderId, { handoverMethod = 'DROP_OFF' } = 
   const authorizedInvoice = await ensureBlingNfeAuthorizedForShopeeVps(invoice, authHeader);
   const xml = await downloadBlingNfeXmlVps(authorizedInvoice);
   const uploaded = await uploadTikTokInvoiceVps({ packageId: target.packageId, xml, filename: `NFE-${authorizedInvoice.chaveAcesso || authorizedInvoice.numero || safeOrderId}.xml`, pathname: process.env.TIKTOK_SHOP_UPLOAD_INVOICE_PATH || '/fulfillment/202309/packages/invoice/upload', callMultipart: args => callTikTokShopMultipartVps(settings, args) });
-  const shipped = await callTikTokShopOpenApiVps(settings, { method: 'POST', pathname: '/fulfillment/202309/packages/ship', body: buildTikTokShipPackageBodyVps(target.packageId, { handoverMethod }) });
-  const document = await callTikTokShopOpenApiVps(settings, { pathname: tikTokShippingDocumentPathVps(target.packageId), query: { document_type: 'SHIPPING_LABEL', invoice_label: 'true' } });
-  return { success: true, order_id: safeOrderId, package_id: target.packageId, invoice_number: authorizedInvoice.numero || null, invoice_access_key: authorizedInvoice.chaveAcesso || null, invoice_upload: uploaded?.payload || uploaded, shipment: shipped?.payload || shipped, shipping_document: document?.payload || document };
+  return { success: true, order_id: safeOrderId, package_id: target.packageId, invoice_number: authorizedInvoice.numero || null, invoice_access_key: authorizedInvoice.chaveAcesso || null, invoice_upload: uploaded?.payload || uploaded, invoice_status: 'PROCESSING', ready_to_ship: false, message: 'NF-e enviada. A expedição será liberada automaticamente após a confirmação fiscal do TikTok Shop.' };
+}
+
+async function shipTikTokPackageVps(packageId, { handoverMethod = 'DROP_OFF' } = {}) {
+  const safePackageId = String(packageId || '').trim();
+  if (!safePackageId) throw new Error('Pacote TikTok inválido.');
+  const settings = await loadTikTokShopOAuthSettingsVps();
+  const shipment = await callTikTokShopOpenApiVps(settings, { method: 'POST', pathname: '/fulfillment/202309/packages/ship', body: buildTikTokShipPackageBodyVps(safePackageId, { handoverMethod }) });
+  const document = await callTikTokShopOpenApiVps(settings, { pathname: tikTokShippingDocumentPathVps(safePackageId), query: { document_type: 'SHIPPING_LABEL', invoice_label: 'true' } });
+  return { success: true, package_id: safePackageId, shipment: shipment?.payload || shipment, shipping_document: document?.payload || document };
 }
 
 async function handleTikTokShopInvoiceWebhookConfigureVps(_request, reply) {
