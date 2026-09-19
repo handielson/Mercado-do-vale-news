@@ -36,6 +36,7 @@ const smartphonePhotoIntakeServiceFiles = [
   'services/modelBlingMapping.mjs',
 ];
 const mercadoLivreServicePath = 'services/mercadoLivreServer.cjs';
+const tiktokShopFulfillmentServicePath = 'services/tiktokShopFulfillmentService.cjs';
 const autoresponderEngineFiles = [
   'services/autoresponder/engine/types.js',
   'services/autoresponder/engine/state.js',
@@ -446,6 +447,8 @@ async function main() {
   await uploadSmartphonePhotoIntakeFiles(appDir);
   await uploadMercadoLivreFiles(appDir);
   await exec(`mkdir -p ${appDir}/services ${appDir}/utils`);
+  await upload(path.join(__dirname, tiktokShopFulfillmentServicePath), remotePathJoin(appDir, tiktokShopFulfillmentServicePath));
+  console.log(`Uploaded ${tiktokShopFulfillmentServicePath}`);
   await upload(path.join(__dirname, 'services/customerDebtReminderCore.cjs'), remotePathJoin(appDir, 'services/customerDebtReminderCore.cjs'));
   console.log('Uploaded services/customerDebtReminderCore.cjs');
   await upload(path.join(__dirname, 'utils/installmentCalculations.cjs'), remotePathJoin(appDir, 'utils/installmentCalculations.cjs'));
