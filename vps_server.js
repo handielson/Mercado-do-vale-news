@@ -8101,7 +8101,6 @@ async function shipTikTokPackageVps(packageId, { handoverMethod = 'DROP_OFF' } =
   const document = await callTikTokShopOpenApiVps(settings, { pathname: tikTokShippingDocumentPathVps(safePackageId), query: { document_type: 'SHIPPING_LABEL', invoice_label: 'true' } });
   return { success: true, package_id: safePackageId, shipment: shipment?.payload || shipment, shipping_document: document?.payload || document };
 }
-}
 
 async function handleTikTokShopInvoiceWebhookConfigureVps(_request, reply) {
   try {
