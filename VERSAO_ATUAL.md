@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.416-compartilhamento-catalogo-filtrado
+version: v1.2.417-tiktok-auto-fulfillment
 date: 2026-09-19
-status: published
-release_vps: /var/www/mdv-site/releases/20260919-154906-v1216-catalogo-filtrado
+status: prepared
+release_vps: pendente
 branch: main
-summary: Permite compartilhar somente os resultados filtrados ou a categoria completa no catálogo.
-tag: v1.2.416-compartilhamento-catalogo-filtrado
+summary: Automação TikTok Shop para NF-e, expedição e preparação da impressão.
+tag: v1.2.417-tiktok-auto-fulfillment

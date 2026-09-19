@@ -1,29 +1,25 @@
 {
-  "version": "v1.2.416-compartilhamento-catalogo-filtrado",
+  "version": "v1.2.417-tiktok-auto-fulfillment",
   "date": "2026-09-19",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260919-154906-v1216-catalogo-filtrado",
+  "status": "prepared",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Permite compartilhar somente os resultados filtrados ou a categoria completa no catálogo.",
-  "tag": "v1.2.416-compartilhamento-catalogo-filtrado",
+  "summary": "Automação TikTok Shop para NF-e, expedição e preparação da impressão.",
+  "tag": "v1.2.417-tiktok-auto-fulfillment",
   "changed_files": [
-    "components/catalog/ShareCatalogButton.tsx",
-    "pages/catalog/index.tsx",
-    "utils/catalogMessageGenerator.ts",
-    "utils/catalogPDFGenerator.ts",
-    "tmp-tests/catalog-filtered-share-static.test.mjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "services/tiktokShopFulfillmentService.cjs",
+    "tmp-tests/tiktok-fulfillment-service.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-19-v1.2.416-compartilhamento-catalogo-filtrado.md"
+    "docs/versoes/2026-09-19-v1.2.417-tiktok-auto-fulfillment.md"
   ],
   "validations": [
-    "node tmp-tests/catalog-filtered-share-static.test.mjs",
-    "node tmp-tests/catalog-message-footer-static.test.mjs",
-    "node tmp-tests/catalog-message-generator-vps-static.test.mjs",
-    "node tmp-tests/catalog-share-brand-budget-format-static.test.mjs",
-    "node tmp-tests/catalog-share-stock-guard-static.test.mjs",
-    "node tmp-tests/catalog-visibility-static.test.mjs",
-    "npm.cmd run build",
-    "validação visual local do seletor de escopo"
+    "node tmp-tests/tiktok-fulfillment-service.test.cjs",
+    "node --check vps_server.js",
+    "node --check vps_server.cjs",
+    "npm.cmd run build"
   ]
 }
+
