@@ -31,6 +31,7 @@ import { ShareCatalogButton } from '@/components/catalog/ShareCatalogButton';
 import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import type { CustomerType } from '@/services/bannerService';
 import { CartIcon } from '@/components/store/CartIcon';
+import type { CatalogShareFilters } from '@/utils/catalogMessageGenerator';
 import {
     buildCatalogPageHref,
     CATALOG_RETURN_STORAGE_KEY,
@@ -334,6 +335,21 @@ function CatalogContent() {
         const groups = groupProductsByVariants(products, false);
         return groups;
     }, [products]);
+
+    const catalogShareFilters = useMemo<CatalogShareFilters>(() => ({
+        search: searchQuery.trim() || undefined,
+        categories: filters.categories,
+        brands: filters.brands,
+        priceRange: filters.priceRange
+            ? [filters.priceRange.min, filters.priceRange.max]
+            : undefined,
+        inStockOnly: filters.inStockOnly,
+        featuredOnly: filters.featuredOnly,
+        newOnly: filters.newOnly,
+        favoritesOnly: filters.favoritesOnly,
+        customerId: customer?.id,
+        sortBy: filters.sortBy,
+    }), [customer?.id, filters, searchQuery]);
 
     const categoryNavCategories = useMemo(() => {
         const baseCategories = filterStats?.categories || [];
@@ -892,7 +908,11 @@ function CatalogContent() {
                             onFiltersChange={setFilters}
                             filterStats={filterStats || { brands: [] }}
                         />
-                        <ShareCatalogButton categoryId={filters.categories[0] || undefined} />
+                        <ShareCatalogButton
+                            categoryId={filters.categories[0] || undefined}
+                            filteredScope={catalogShareFilters}
+                            filteredCount={hasMore ? undefined : productGroups.length}
+                        />
                         <CartIcon />
                     </div>
 

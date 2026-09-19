@@ -1,23 +1,29 @@
 {
-  "version": "v1.2.415-orcamento-espaco-apos-cores",
-  "date": "2026-09-18",
+  "version": "v1.2.416-compartilhamento-catalogo-filtrado",
+  "date": "2026-09-19",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260918-145834-v1215-orcamento-espaco-apos-cores",
+  "release_vps": "/var/www/mdv-site/releases/20260919-154906-v1216-catalogo-filtrado",
   "branch": "main",
-  "summary": "Adiciona uma linha em branco depois da lista de cores nos compartilhamentos.",
-  "tag": "v1.2.415-orcamento-espaco-apos-cores",
+  "summary": "Permite compartilhar somente os resultados filtrados ou a categoria completa no catálogo.",
+  "tag": "v1.2.416-compartilhamento-catalogo-filtrado",
   "changed_files": [
-    "utils/sharedMessageFormatting.js",
+    "components/catalog/ShareCatalogButton.tsx",
+    "pages/catalog/index.tsx",
     "utils/catalogMessageGenerator.ts",
-    "tmp-tests/shared-budget-message-format.test.mjs",
+    "utils/catalogPDFGenerator.ts",
+    "tmp-tests/catalog-filtered-share-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-18-v1.2.415-orcamento-espaco-apos-cores.md"
+    "docs/versoes/2026-09-19-v1.2.416-compartilhamento-catalogo-filtrado.md"
   ],
   "validations": [
-    "linha em branco antes e depois da lista de cores",
-    "numeração e capitalização das cores preservadas",
-    "teste focado do compartilhamento",
-    "npm.cmd run build"
+    "node tmp-tests/catalog-filtered-share-static.test.mjs",
+    "node tmp-tests/catalog-message-footer-static.test.mjs",
+    "node tmp-tests/catalog-message-generator-vps-static.test.mjs",
+    "node tmp-tests/catalog-share-brand-budget-format-static.test.mjs",
+    "node tmp-tests/catalog-share-stock-guard-static.test.mjs",
+    "node tmp-tests/catalog-visibility-static.test.mjs",
+    "npm.cmd run build",
+    "validação visual local do seletor de escopo"
   ]
 }

@@ -9,8 +9,29 @@ import {
     formatSharedColor,
     stripSharedProductColorVariation,
 } from '@/utils/sharedMessageFormatting';
+import { catalogService } from '@/services/catalogService';
 
 export type CustomerType = 'retail' | 'wholesale' | 'resale';
+
+export interface CatalogShareFilters {
+    search?: string;
+    categories?: string[];
+    brands?: string[];
+    priceRange?: [number, number];
+    inStockOnly?: boolean;
+    featuredOnly?: boolean;
+    newOnly?: boolean;
+    favoritesOnly?: boolean;
+    customerId?: string;
+    sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'featured';
+}
+
+export interface FilteredCatalogShareData {
+    products: Product[];
+    categoryName?: string;
+    filterDescription: string;
+    catalogUrl: string;
+}
 
 interface GroupedProduct {
     name: string;
@@ -139,6 +160,55 @@ function buildCatalogUrl(categoryName?: string): string {
     return `${origin}/?categoria=${encodeURIComponent(categoryName)}`;
 }
 
+function buildFilteredCatalogUrl(): string {
+    if (typeof window !== 'undefined' && window.location?.href) return window.location.href;
+    return buildCatalogUrl();
+}
+
+function describeCatalogFilters(filters: CatalogShareFilters): string {
+    const labels: string[] = [];
+    const search = String(filters.search || '').trim();
+    if (search) labels.push(`Busca: “${search}”`);
+    if (filters.brands?.length) labels.push(`Marcas: ${filters.brands.join(', ')}`);
+    if (filters.priceRange) labels.push(`Preço: ${formatPrice(filters.priceRange[0])} a ${formatPrice(filters.priceRange[1])}`);
+    if (filters.featuredOnly) labels.push('Somente destaques');
+    if (filters.newOnly) labels.push('Somente novidades');
+    if (filters.favoritesOnly) labels.push('Somente favoritos');
+    return labels.join(' • ') || 'Filtros atuais';
+}
+
+function applyShareFilters(products: Product[], filters: CatalogShareFilters): Product[] {
+    let result = [...products];
+    if (filters.brands?.length) result = result.filter(product => product.brand && filters.brands!.includes(product.brand));
+    if (filters.priceRange) {
+        const [minimum, maximum] = filters.priceRange;
+        result = result.filter(product => Number(product.price_retail || 0) >= minimum && Number(product.price_retail || 0) <= maximum);
+    }
+    if (filters.featuredOnly) result = result.filter(product => product.custom_fields?.featured === true);
+    if (filters.newOnly) result = result.filter(product => (product as Product & { is_new?: boolean }).is_new === true);
+
+    const recentTime = (product: Product) => new Date(product.created_at || 0).getTime();
+    if (filters.sortBy === 'price_asc') result.sort((left, right) => Number(left.price_retail || 0) - Number(right.price_retail || 0));
+    else if (filters.sortBy === 'price_desc') result.sort((left, right) => Number(right.price_retail || 0) - Number(left.price_retail || 0));
+    else if (filters.sortBy === 'featured') {
+        result.sort((left, right) => Number(right.custom_fields?.featured === true) - Number(left.custom_fields?.featured === true) || recentTime(right) - recentTime(left));
+    } else result.sort((left, right) => recentTime(right) - recentTime(left));
+    return result;
+}
+
+export async function getFilteredCatalogShareData(filters: CatalogShareFilters): Promise<FilteredCatalogShareData> {
+    const [result, categoryName] = await Promise.all([
+        catalogService.getProducts(filters, 1, 5000, true),
+        filters.categories?.[0] ? getCategoryName(filters.categories[0]) : Promise.resolve(undefined),
+    ]);
+    return {
+        products: normalizeProducts(applyShareFilters(result.products as Product[], filters)),
+        categoryName,
+        filterDescription: describeCatalogFilters(filters),
+        catalogUrl: buildFilteredCatalogUrl(),
+    };
+}
+
 /**
  * Generate catalog message for WhatsApp
  */
@@ -148,7 +218,8 @@ export function generateCatalogMessage(
     categoryName?: string,
     catalogUrl: string = buildCatalogUrl(categoryName),
     paymentFees: PaymentFee[] = [],
-    pixDiscountPercent: number = 0
+    pixDiscountPercent: number = 0,
+    filterDescription?: string
 ): string {
     products = normalizeProducts(products);
 
@@ -176,6 +247,7 @@ export function generateCatalogMessage(
     }
 
     message += `📅 Data: ${new Date().toLocaleDateString('pt-BR')}\n\n`;
+    if (filterDescription) message += `🔎 *${filterDescription}*\n\n`;
     message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     let productIndex = 1;
@@ -201,6 +273,33 @@ export function generateCatalogMessage(
     message += `Veja no site: ${catalogUrl}`;
 
     return message;
+}
+
+/** Generate a message from the search and filters currently applied in the public catalog. */
+export async function generateFilteredCatalogMessage(
+    filters: CatalogShareFilters,
+    customerType: CustomerType = 'retail'
+): Promise<string> {
+    try {
+        const [{ products, categoryName, filterDescription, catalogUrl }, paymentFees, companySettings] = await Promise.all([
+            getFilteredCatalogShareData(filters),
+            paymentFeesService.list(),
+            publicCompanySettingsService.get(),
+        ]);
+        if (products.length === 0) return 'Nenhum produto disponível com os filtros atuais.';
+        return generateCatalogMessage(
+            products,
+            customerType,
+            categoryName,
+            catalogUrl,
+            paymentFees,
+            Number(companySettings?.pix_discount_percentage || 0),
+            filterDescription,
+        );
+    } catch (error) {
+        console.error('Error generating filtered catalog message:', error);
+        return 'Erro ao gerar catálogo filtrado.';
+    }
 }
 
 /**

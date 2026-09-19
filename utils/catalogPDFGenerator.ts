@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { Product } from '@/types/product';
-import type { CustomerType } from './catalogMessageGenerator';
+import { getFilteredCatalogShareData, type CatalogShareFilters, type CustomerType } from './catalogMessageGenerator';
 import { calculateInstallmentFromFees, calculatePixPrice, formatPrice } from '@/services/installmentCalculator';
 import { paymentFeesService, type PaymentFee } from '@/services/payment-fees';
 import { vpsApiService } from '@/services/vpsApiService';
@@ -501,6 +501,25 @@ export async function generateCategoryPDF(
         await generateCatalogPDF(products, customerType, categoryName);
     } catch (error) {
         console.error('Error generating category PDF:', error);
+        throw error;
+    }
+}
+
+/** Generate a PDF from the search and filters currently applied in the public catalog. */
+export async function generateFilteredCatalogPDF(
+    filters: CatalogShareFilters,
+    customerType: CustomerType = 'retail'
+): Promise<void> {
+    try {
+        const { products, categoryName } = await getFilteredCatalogShareData(filters);
+        if (products.length === 0) throw new Error('Nenhum produto disponível com os filtros atuais');
+        await generateCatalogPDF(
+            products,
+            customerType,
+            categoryName ? `${categoryName} — Filtrados` : 'Resultados filtrados',
+        );
+    } catch (error) {
+        console.error('Error generating filtered catalog PDF:', error);
         throw error;
     }
 }
