@@ -1,11 +1,11 @@
 {
-  "version": "v1.2.417-tiktok-auto-fulfillment",
+  "version": "v1.2.418-tiktok-auto-fulfillment",
   "date": "2026-09-19",
   "status": "prepared",
   "release_vps": "pendente",
   "branch": "main",
   "summary": "Automação TikTok Shop para NF-e, expedição e preparação da impressão.",
-  "tag": "v1.2.417-tiktok-auto-fulfillment",
+  "tag": "v1.2.418-tiktok-auto-fulfillment",
   "changed_files": [
     "vps_server.js",
     "vps_server.cjs",
@@ -13,7 +13,7 @@
     "tmp-tests/tiktok-fulfillment-service.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-19-v1.2.417-tiktok-auto-fulfillment.md"
+    "docs/versoes/2026-09-19-v1.2.418-tiktok-auto-fulfillment.md"
   ],
   "validations": [
     "node tmp-tests/tiktok-fulfillment-service.test.cjs",
