@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { PDFDocument } = require('pdf-lib');
-const { executeTikTokPrintJob } = require('../scripts/tiktok-shop-print-agent.cjs');
+const { executeTikTokPrintJob, separationLocation } = require('../scripts/tiktok-shop-print-agent.cjs');
 const { summaryFromOrder, isPrintableOrder } = require('../services/tiktokShopPrintServer.cjs');
 
 async function main() {
@@ -15,6 +15,7 @@ async function main() {
   assert.equal(isPrintableOrder({ ...order, status: 'CANCELLED' }), false);
   const summary = summaryFromOrder(order, order.packages[0].id, 'BR123456789');
   assert.equal(summary.items[0].sku, 'ABC-1');
+  assert.equal(separationLocation('Loja Principal / Estoque Geral | Deposito / Caixa 70 | Deposito / Entrada / Conferencia'), 'Deposito / Caixa 70');
   const pdf = await PDFDocument.create();
   pdf.addPage([288, 432]);
   const label = Buffer.from(await pdf.save());

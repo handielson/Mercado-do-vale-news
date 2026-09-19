@@ -33,6 +33,12 @@ function journalWrite(file, data) {
   fs.renameSync(temporary, file);
 }
 
+function separationLocation(value) {
+  const locations = String(value || '').split(' | ').map(item => item.trim()).filter(Boolean);
+  return locations.find(item => /\b(?:caixa|prateleira|gaveta|corredor|armario|armário|estante)\b/i.test(item))
+    || locations[0] || 'Nao cadastrada';
+}
+
 async function executeTikTokPrintJob({ job, settings, request, print, getStockLocations,
   directory, journalDirectory, prepareSummaryPrinter = prepareMercadoLivreSummaryPrinter, logger = console }) {
   const packageId = String(job.packageId || '');
@@ -64,7 +70,7 @@ async function executeTikTokPrintJob({ job, settings, request, print, getStockLo
           if (getStockLocations) {
             const locations = await getStockLocations(summary.items.map(item => item.sku).filter(Boolean));
             summary.items = summary.items.map(item => ({ ...item,
-              stockLocation: locations[String(item.sku).toUpperCase()] || 'Nao cadastrada' }));
+              stockLocation: separationLocation(locations[String(item.sku).toUpperCase()]) }));
           }
           pdf = await createMercadoLivreSummaryPdf(summary);
         }
@@ -117,4 +123,4 @@ function startTikTokPrintAgent({ apiUrl, syncKey, getSettings, getStockLocations
   return { tick, stop: () => clearInterval(timer) };
 }
 
-module.exports = { requestFactory, executeTikTokPrintJob, startTikTokPrintAgent };
+module.exports = { requestFactory, executeTikTokPrintJob, startTikTokPrintAgent, separationLocation };
