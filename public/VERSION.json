@@ -1,22 +1,33 @@
 {
-  "version": "v1.2.419-tiktok-auto-fulfillment",
+  "version": "v1.2.420-tiktok-auto-print",
   "date": "2026-09-19",
   "status": "prepared",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20260919-221912-v12420-tiktok-auto-print",
   "branch": "main",
-  "summary": "Automação TikTok Shop para NF-e, expedição e preparação da impressão.",
-  "tag": "v1.2.419-tiktok-auto-fulfillment",
+  "summary": "NF-e, expedição, etiqueta e recibo de conferência automáticos do TikTok Shop.",
+  "tag": "v1.2.420-tiktok-auto-print",
   "changed_files": [
     "vps_server.js",
     "vps_server.cjs",
     "services/tiktokShopFulfillmentService.cjs",
+    "services/tiktokShopFulfillmentAutomation.cjs",
+    "services/tiktokShopPrintServer.cjs",
+    "scripts/tiktok-shop-print-agent.cjs",
+    "scripts/install-tiktok-print-lenovo.ps1",
+    "scripts/shopee-auto-print.cjs",
+    "scripts/mercado-livre-print-core.cjs",
+    "deploy-vps-server-only.cjs",
     "tmp-tests/tiktok-fulfillment-service.test.cjs",
+    "tmp-tests/tiktok-fulfillment-automation.test.cjs",
+    "tmp-tests/tiktok-auto-print.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-19-v1.2.419-tiktok-auto-fulfillment.md"
+    "docs/versoes/2026-09-19-v1.2.420-tiktok-auto-print.md"
   ],
   "validations": [
     "node tmp-tests/tiktok-fulfillment-service.test.cjs",
+    "node tmp-tests/tiktok-fulfillment-automation.test.cjs",
+    "node tmp-tests/tiktok-auto-print.test.cjs",
     "node --check vps_server.js",
     "node --check vps_server.cjs",
     "npm.cmd run build"

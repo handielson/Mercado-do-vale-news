@@ -1,6 +1,6 @@
 'use strict';
 
-const DEFAULT_UPLOAD_PATH = '/fulfillment/202309/packages/invoice/upload';
+const DEFAULT_UPLOAD_PATH = '/fulfillment/202502/invoice/upload';
 const SHIP_PATH = '/fulfillment/202309/packages/ship';
 const SHIPPING_DOCUMENT_PATH = packageId => `/fulfillment/202309/packages/${encodeURIComponent(String(packageId))}/shipping_documents`;
 
@@ -28,22 +28,22 @@ function shipPackageBody(packageId, { handoverMethod = 'DROP_OFF', pickupSlot = 
   return { packages: [item] };
 }
 
-async function uploadInvoice({ callMultipart, packageId, xml, filename, pathname = DEFAULT_UPLOAD_PATH }) {
+async function uploadInvoice({ callJson, packageId, orderIds, xml, pathname = DEFAULT_UPLOAD_PATH }) {
   const buffer = validateNfeXml(xml);
-  const result = await callMultipart({
-    pathname,
-    fields: { package_id: String(packageId) },
-    file: { buffer, filename: filename || `NFE-${packageId}.xml`, contentType: 'application/xml' },
-  });
+  if (buffer.length > 1024 * 1024) throw new Error('XML da NF-e excede 1 MB, limite do TikTok Shop.');
+  const ids = (Array.isArray(orderIds) ? orderIds : [orderIds]).map(String).filter(Boolean);
+  if (!ids.length) throw new Error('Pedido TikTok ausente no upload da NF-e.');
+  const result = await callJson({ method: 'POST', pathname, body: {
+    invoices: [{ package_id: String(packageId), order_ids: ids, file_type: 'XML', file: buffer.toString('base64') }],
+  } });
+  if (result?.payload?.data?.errors?.length) throw new Error('TikTok Shop recusou o XML da NF-e.');
   return { ...result, packageId: String(packageId) };
 }
 
-async function fulfillTikTokPackage({ order, orderId, xml, callMultipart, callJson, getDocument, handoverMethod = 'DROP_OFF' }) {
+async function fulfillTikTokPackage({ order, orderId, xml, callJson }) {
   const target = packageFromOrder(order, orderId);
-  const invoice = await uploadInvoice({ callMultipart, packageId: target.packageId, xml });
-  const shipped = await callJson({ method: 'POST', pathname: SHIP_PATH, body: shipPackageBody(target.packageId, { handoverMethod }) });
-  const document = await getDocument({ packageId: target.packageId, documentType: 'SHIPPING_LABEL', invoiceLabel: true });
-  return { orderId: target.orderId, packageId: target.packageId, invoice, shipped, document };
+  const invoice = await uploadInvoice({ callJson, packageId: target.packageId, orderIds: [target.orderId], xml });
+  return { orderId: target.orderId, packageId: target.packageId, invoice, invoiceStatus: 'PROCESSING' };
 }
 
 module.exports = { DEFAULT_UPLOAD_PATH, SHIP_PATH, SHIPPING_DOCUMENT_PATH, validateNfeXml, packageFromOrder, shipPackageBody, uploadInvoice, fulfillTikTokPackage };

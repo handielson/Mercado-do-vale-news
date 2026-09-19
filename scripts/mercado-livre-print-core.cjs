@@ -59,7 +59,7 @@ function fitText(value, font, size, maxWidth) {
 }
 
 async function createMercadoLivreSummaryPdf(job = {}) {
-    const data = job.marketplaceName === 'MERCADO LIVRE' ? job : buildMercadoLivreSummaryData(job);
+    const data = job.marketplaceName ? job : buildMercadoLivreSummaryData(job);
     const pdf = await PDFDocument.create();
     const regular = await pdf.embedFont(StandardFonts.Helvetica);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -81,7 +81,7 @@ async function createMercadoLivreSummaryPdf(job = {}) {
         const page = pdf.addPage([width, height]);
         page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(1, 1, 1) });
         page.drawRectangle({ x: marginX, y: height - marginY - 27, width: contentWidth, height: 27, borderColor: black, borderWidth: 1 });
-        page.drawText('MERCADO LIVRE - SEPARACAO', { x: marginX + 5, y: height - marginY - 13, size: 9, font: bold, color: black });
+        page.drawText(fitText(`${data.marketplaceName} - SEPARACAO`, bold, 9, contentWidth - 26), { x: marginX + 5, y: height - marginY - 13, size: 9, font: bold, color: black });
         page.drawText(`${pageIndex + 1}/${pageGroups.length}`, { x: width - marginX - 18, y: height - marginY - 13, size: 7, font: bold, color: black });
         page.drawText(`Pedido: ${fitText(data.orderSn || '-', bold, 8.5, contentWidth - 4)}`, { x: marginX + 2, y: height - marginY - 42, size: 8.5, font: bold, color: black });
         page.drawText(`Cliente: ${fitText(data.buyerName, regular, 6.5, contentWidth - 4)}`, { x: marginX + 2, y: height - marginY - 54, size: 6.5, font: regular, color: black });

@@ -1068,3 +1068,18 @@ try {
 } catch (error) {
     console.error('Mercado Livre Auto Print: inicializacao falhou:', error.message);
 }
+
+try {
+    require('./tiktok-shop-print-agent.cjs').startTikTokPrintAgent({
+        apiUrl: VPS_API_URL, syncKey: VPS_SYNC_KEY, getSettings: getCompanySettings,
+        getStockLocations: async (skus) => {
+            if (!skus.length) return {};
+            const result = await callVpsShopeeAction('get_stock_locations', { skus });
+            return Object.fromEntries((result.data?.items || []).map(item => [
+                String(item.sku || '').toUpperCase(), (item.locations || []).filter(Boolean).join(' | '),
+            ]));
+        },
+    });
+} catch (error) {
+    console.error('TikTok Shop Auto Print: inicializacao falhou:', error.message);
+}

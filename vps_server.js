@@ -17,6 +17,8 @@ const {
 } = require('./services/mercadoLivreServer.cjs');
 const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
 const { registerCustomerGoogleAuthRoutes } = require('./services/customerGoogleAuthServer.cjs');
+const { ensureTikTokPrintTable, registerTikTokPrintRoutes } = require('./services/tiktokShopPrintServer.cjs');
+const { ensureTikTokFulfillmentTable, createTikTokFulfillmentAutomation } = require('./services/tiktokShopFulfillmentAutomation.cjs');
 const { normalizeRelayCommand, ensureSchema: ensureN8nAdminHandoffSchema, notifyAdmins: notifyN8nHandoffAdmins, handleRelayCommand } = require('./services/n8nAdminHandoffRelay.cjs');
 const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
 const {
@@ -8019,28 +8021,15 @@ async function handleTikTokShopWebhookVps(request, reply) {
     if (eventType === 36 || String(body.event_type || '').toUpperCase() === 'INVOICE_STATUS_CHANGE') {
       const status = String(data.invoice_status || '').toUpperCase();
       console.info('[tiktok-shop] invoice status change', JSON.stringify({ package_id: String(data.package_id || ''), order_ids: Array.isArray(data.order_ids) ? data.order_ids.map(String).slice(0, 20) : [], invoice_status: status, invalid_reason: String(data.invalid_reason || '') }));
-      if (status === 'SUCCESS') {
-        const packageId = String(data.package_id || '').trim();
-        const webhookOrderId = orderId || (Array.isArray(data.order_ids) ? String(data.order_ids[0] || '').trim() : '');
-        if (packageId) {
-          try {
-            const shipment = await shipTikTokPackageVps(packageId, { handoverMethod: 'DROP_OFF' });
-            console.info('[tiktok-shop] invoice approved; package shipped', JSON.stringify({ order_id: webhookOrderId, package_id: packageId, request_id: shipment?.shipment?.request_id || null }));
-          } catch (shipmentError) {
-            console.error('[tiktok-shop] invoice approved but shipment failed:', buildCopyableDebug('tiktok-shop-shipment', { order_id: webhookOrderId, package_id: packageId, rawMessage: shipmentError.message }));
-          }
-        }
-      }
+      // Webhook data is a wake-up hint only. Shipping and print eligibility are
+      // determined by fresh authenticated TikTok API reads in the poller.
     }
     if (orderId) {
       await recordMobileTikTokSaleVps(orderId);
     }
     return reply.code(200).send({ message: 'success' });
   } catch (err) {
-    console.error('[tiktok-shop-webhook] fatal:', buildCopyableDebug('tiktok-shop-webhook', {
-      step: 'process order status webhook',
-      rawMessage: err.message,
-    }));
+    console.error('[tiktok-shop-webhook] processing failed:', err.message);
     return reply.code(200).send({ error: err.message });
   }
 }
@@ -8076,21 +8065,32 @@ async function handleTikTokShopOrderWebhookConfigureVps(_request, reply) {
   }
 }
 
-async function fulfillTikTokOrderVps(orderId, { handoverMethod = 'DROP_OFF' } = {}) {
+async function fulfillTikTokOrderVps(orderId, { packageId = '' } = {}) {
   const safeOrderId = String(orderId || '').trim();
   if (!/^\d{8,32}$/.test(safeOrderId)) throw new Error('Pedido TikTok inválido.');
   const settings = await loadTikTokShopOAuthSettingsVps();
   const orderResult = await callTikTokShopOpenApiVps(settings, { pathname: '/order/202309/orders', query: { ids: safeOrderId } });
   const order = orderResult?.payload?.data?.orders?.[0];
+  if (String(order?.status || '').toUpperCase() !== 'AWAITING_SHIPMENT'
+    || String(order?.need_upload_invoice || '').toUpperCase() !== 'NEED_INVOICE') {
+    throw new Error('Pedido não precisa de novo upload de NF-e.');
+  }
+  if (order?.cancellation_request || order?.cancel_reason) throw new Error('Pedido com cancelamento pendente.');
   const target = packageFromTikTokOrderVps(order, safeOrderId);
-  const authHeader = await getBlingProductDetailAuthHeaderVps({ headers: {} });
-  if (!authHeader) throw new Error('Bling não conectado.');
-  const invoice = await findBlingNfeForShopeeOrderVps(safeOrderId, authHeader);
-  if (!invoice) throw new Error(`NF-e do pedido ${safeOrderId} não encontrada no Bling.`);
-  const authorizedInvoice = await ensureBlingNfeAuthorizedForShopeeVps(invoice, authHeader);
-  const xml = await downloadBlingNfeXmlVps(authorizedInvoice);
-  const uploaded = await uploadTikTokInvoiceVps({ packageId: target.packageId, xml, filename: `NFE-${authorizedInvoice.chaveAcesso || authorizedInvoice.numero || safeOrderId}.xml`, pathname: process.env.TIKTOK_SHOP_UPLOAD_INVOICE_PATH || '/fulfillment/202309/packages/invoice/upload', callMultipart: args => callTikTokShopMultipartVps(settings, args) });
-  return { success: true, order_id: safeOrderId, package_id: target.packageId, invoice_number: authorizedInvoice.numero || null, invoice_access_key: authorizedInvoice.chaveAcesso || null, invoice_upload: uploaded?.payload || uploaded, invoice_status: 'PROCESSING', ready_to_ship: false, message: 'NF-e enviada. A expedição será liberada automaticamente após a confirmação fiscal do TikTok Shop.' };
+  const selectedPackageId = String(packageId || target.packageId);
+  if (!(order.packages || []).some(pkg => String(pkg.id || pkg.package_id) === selectedPackageId)) throw new Error('Pacote não pertence ao pedido.');
+  let authorizedInvoice, xml;
+  try {
+    const authHeader = await getBlingProductDetailAuthHeaderVps({ headers: {} });
+    if (!authHeader) throw new Error('Bling não conectado.');
+    const invoice = await findBlingNfeForShopeeOrderVps(safeOrderId, authHeader);
+    if (!invoice) throw new Error(`NF-e do pedido ${safeOrderId} não encontrada no Bling.`);
+    authorizedInvoice = await ensureBlingNfeAuthorizedForShopeeVps(invoice, authHeader);
+    xml = await downloadBlingNfeXmlVps(authorizedInvoice);
+  } catch (error) { error.beforeTikTokUpload = true; throw error; }
+  const uploaded = await uploadTikTokInvoiceVps({ packageId: selectedPackageId, orderIds: [safeOrderId], xml,
+    callJson: args => callTikTokShopOpenApiVps(settings, args) });
+  return { success: true, order_id: safeOrderId, package_id: selectedPackageId, invoice_number: authorizedInvoice.numero || null, invoice_access_key: authorizedInvoice.chaveAcesso || null, invoice_upload: uploaded?.payload || uploaded, invoice_status: 'PROCESSING', ready_to_ship: false, message: 'NF-e enviada. A expedição será liberada automaticamente após a confirmação fiscal do TikTok Shop.' };
 }
 
 async function shipTikTokPackageVps(packageId, { handoverMethod = 'DROP_OFF' } = {}) {
@@ -8098,7 +8098,7 @@ async function shipTikTokPackageVps(packageId, { handoverMethod = 'DROP_OFF' } =
   if (!safePackageId) throw new Error('Pacote TikTok inválido.');
   const settings = await loadTikTokShopOAuthSettingsVps();
   const shipment = await callTikTokShopOpenApiVps(settings, { method: 'POST', pathname: '/fulfillment/202309/packages/ship', body: buildTikTokShipPackageBodyVps(safePackageId, { handoverMethod }) });
-  const document = await callTikTokShopOpenApiVps(settings, { pathname: tikTokShippingDocumentPathVps(safePackageId), query: { document_type: 'SHIPPING_LABEL', invoice_label: 'true' } });
+  const document = await callTikTokShopOpenApiVps(settings, { pathname: tikTokShippingDocumentPathVps(safePackageId), query: { document_type: 'SHIPPING_LABEL' } });
   return { success: true, package_id: safePackageId, shipment: shipment?.payload || shipment, shipping_document: document?.payload || document };
 }
 
@@ -38913,6 +38913,8 @@ async function getDefaultCompanyIdForCatalog() {
 
 async function runMigrations() {
   await ensureMercadoLivreTables(pool);
+  await ensureTikTokPrintTable(pool);
+  await ensureTikTokFulfillmentTable(pool);
   console.log('[migration] Mercado Livre tables: OK');
   await ensureCustomerSelfServiceTables(pool);
   console.log('[migration] customer self-service tables: OK');
@@ -42117,6 +42119,14 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname });
 registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey });
 registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin });
+const tiktokPrint = registerTikTokPrintRoutes(fastify, {
+  pool, requireSyncKey, requireSyncKeyOrAdmin,
+  callApi: callTikTokShopOpenApiVps, loadSettings: loadTikTokShopOAuthSettingsVps,
+});
+const tiktokFulfillment = createTikTokFulfillmentAutomation({
+  pool, uploadOrderInvoice: (orderId, packageId) => fulfillTikTokOrderVps(orderId, { packageId }),
+  callApi: callTikTokShopOpenApiVps, loadSettings: loadTikTokShopOAuthSettingsVps,
+});
 require('./services/centralPrintingServer.cjs').registerCentralPrintingRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 scheduleNextSystemBackup();
 
@@ -42127,6 +42137,37 @@ runMigrations().then(() => {
   startShopeeReviewAutomationVps();
   startN8nBotHealthMonitorVps();
   startN8nPhoneCatalogFollowupScheduler();
+  let tiktokPrintPollRunning = false;
+  const pollTikTokPrint = async () => {
+    if (tiktokPrintPollRunning) return;
+    tiktokPrintPollRunning = true;
+    try {
+      const settings = await loadTikTokShopOAuthSettingsVps();
+      const [activationRows] = await pool.query('SELECT UNIX_TIMESTAMP(activated_at) AS cutoff FROM tiktok_shop_automation_config WHERE id=1');
+      const cutoff = Number(activationRows[0]?.cutoff || 0);
+      const result = await callTikTokShopOpenApiVps(settings, {
+        method: 'POST', pathname: '/order/202309/orders/search',
+        query: { page_size: 50, sort_field: 'create_time', sort_order: 'DESC' },
+        body: { create_time_ge: Math.floor(Date.now() / 1000) - 48 * 60 * 60 },
+      });
+      for (const order of result?.payload?.data?.orders || []) {
+        try {
+          if (Number(order.create_time || 0) < cutoff) continue;
+          if (!['AWAITING_SHIPMENT', 'AWAITING_COLLECTION'].includes(String(order.status || '').toUpperCase())) continue;
+          const detail = await callTikTokShopOpenApiVps(settings, { pathname: '/order/202309/orders', query: { ids: String(order.id) } });
+          const freshOrder = detail?.payload?.data?.orders?.[0];
+          if (!freshOrder) continue;
+          if (String(freshOrder.status || '').toUpperCase() === 'AWAITING_COLLECTION') {
+            await tiktokFulfillment.reconcileCollected(freshOrder);
+            await tiktokPrint.syncOrder(freshOrder.id);
+          } else await tiktokFulfillment.processOrder(freshOrder);
+        } catch (error) { console.error(`[tiktok-shop-print] pedido ${order.id}: ${error.message}`); }
+      }
+    } catch (error) { console.error('[tiktok-shop-print] sync failed:', error.message); }
+    finally { tiktokPrintPollRunning = false; }
+  };
+  void pollTikTokPrint();
+  setInterval(() => void pollTikTokPrint(), 60_000).unref?.();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);
