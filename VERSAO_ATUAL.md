@@ -1,9 +1,9 @@
-# Versão Atual
+# Versao Atual
 
-version: v1.2.435-validacao-contabil
-date: 2026-09-23
+version: v1.2.409-n8n-garantia-citacao
+date: 2026-09-20
 status: published
-release_vps: /var/www/mdv-site/releases/20260923-142432-validacao-contabil
+release_vps: /var/www/mdv-site/releases/20260921-021619-garantia-citacao-whatsapp
 branch: main
-summary: Adiciona painel persistente por empresa para o contador validar as regras fiscais antes da implementação.
-tag: v1.2.435-validacao-contabil
+summary: Corrige o contexto do modelo na garantia e permite responder citando a pergunta original do cliente no WhatsApp.
+tag: v1.2.409-n8n-garantia-citacao
