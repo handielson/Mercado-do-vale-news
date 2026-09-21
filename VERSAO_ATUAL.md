@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.409-n8n-garantia-citacao
-date: 2026-09-20
+version: v1.2.423-n8n-blueprint-followup
+date: 2026-09-21
 status: published
-release_vps: /var/www/mdv-site/releases/20260921-021619-garantia-citacao-whatsapp
+release_vps: pendente (API/n8n only)
 branch: main
-summary: Corrige o contexto do modelo na garantia e permite responder citando a pergunta original do cliente no WhatsApp.
-tag: v1.2.409-n8n-garantia-citacao
+summary: Agenda follow-up comercial após blueprint de smartphone quando o cliente não responde.
+tag: v1.2.423-n8n-blueprint-followup

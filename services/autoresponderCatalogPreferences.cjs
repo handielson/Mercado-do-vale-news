@@ -4,8 +4,8 @@ const CATALOG_PREFERENCE_HANDOFF_MESSAGE = [
 ].join('\n\n');
 
 const PHONE_LIST_FOLLOWUP_MESSAGE = [
-  'Oi 😊 Conseguiu dar uma olhadinha na lista?',
-  'Se estiver procurando algo específico, como câmera, tela, NFC, memória, marca ou faixa de preço, pode me falar que eu filtro as opções disponíveis para você.',
+  'Oi 😊 Conseguiu dar uma olhadinha nas opções e na ficha técnica que te enviei?',
+  'Algum modelo fez sentido para você? Se me disser qual, eu confirmo a cor disponível, a condição de pagamento e já te ajudo a fechar a compra.',
 ].join('\n');
 
 function normalizeText(value) {
