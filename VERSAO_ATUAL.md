@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.421-tiktok-location
-date: 2026-09-19
-status: prepared
-release_vps: /var/www/mdv-site/releases/20260919-222530-v12421-tiktok-location
+version: v1.2.422-n8n-garantia-citacao
+date: 2026-09-20
+status: published
+release_vps: /var/www/mdv-site/releases/20260921-021619-garantia-citacao-whatsapp
 branch: main
-summary: Recibo TikTok prioriza a localização específica de separação do produto.
-tag: v1.2.421-tiktok-location
+summary: Corrige o contexto do modelo na garantia e permite responder citando a pergunta original do cliente no WhatsApp.
+tag: v1.2.422-n8n-garantia-citacao
