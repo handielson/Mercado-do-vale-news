@@ -71,8 +71,10 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
 
     products.forEach(product => {
         const { ram: rawRam, storage: rawStorage } = getMemorySpecs(product);
-        const ram = rawRam || 'N/A';
-        const storage = rawStorage || 'N/A';
+        // Acessórios não possuem RAM/armazenamento de smartphone.
+        // Deixe os campos vazios para não expor `N/A/N/A` na mensagem.
+        const ram = rawRam;
+        const storage = rawStorage;
         const rawColor = product.specs?.color || 'Sem cor';
         const color = formatSharedColor(rawColor);
         // Clean product name (remove color variation and RAM/Storage if present)
@@ -82,7 +84,7 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
         const brand = product.brand || 'Sem marca';
 
         // Create unique key for variant
-        const key = `${product.model || cleanName}-${ram}-${storage}`;
+        const key = `${product.model || cleanName}-${ram || 'sem-ram'}-${storage || 'sem-armazenamento'}`;
 
         if (grouped.has(key)) {
             // Add color to existing variant
@@ -261,7 +263,10 @@ export function generateCatalogMessage(
             const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
 
             message += `${productIndex++}. *${item.name}*\n`;
-            message += `   📱 ${item.variant.ram}/${item.variant.storage}\n`;
+            const memoryLabel = [item.variant.ram, item.variant.storage].filter(Boolean).join('/');
+            if (memoryLabel) {
+                message += `   📱 ${memoryLabel}\n`;
+            }
             message += `   💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}\n`;
             message += `   💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})\n`;
             message += `${buildSharedColorLines(item.colors).join('\n')}\n`;
