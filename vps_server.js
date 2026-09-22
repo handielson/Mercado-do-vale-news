@@ -9979,8 +9979,13 @@ async function applyReconcileStockChangesVps(changes, request) {
   const failed = [];
   for (const change of changes) {
     try {
-      const vpsUpdated = await patchVpsForReconcileVps('/products/stock', change.blingId ? { bling_id: change.blingId, stock_quantity: change.nextStock } : { sku: change.sku, stock_quantity: change.nextStock }, request);
+      const vpsUpdated = change.marketplaceReplay === true || await patchVpsForReconcileVps('/products/stock', change.blingId ? { bling_id: change.blingId, stock_quantity: change.nextStock } : { sku: change.sku, stock_quantity: change.nextStock }, request);
       if (!vpsUpdated) throw new Error('VPS stock endpoint rejected reconcile update');
+      const targets = await getShopeeStockTargetsForProductIds([change.productId]);
+      const marketplaces = await syncMarketplaceStockFromBlingTargetsVps(targets);
+      if (!marketplaces.ok) {
+        failed.push({ type: 'marketplace_stock', sku: change.sku, blingId: change.blingId, marketplaces });
+      }
       applied.push({ ...change, vpsUpdated });
     } catch (err) {
       failed.push({ type: 'stock', sku: change.sku, blingId: change.blingId, reason: err.message });
@@ -10444,13 +10449,14 @@ async function syncShopeeStockFromBlingTargetsVps(stockTargets = []) {
         item_id: itemId,
         stock_list: stockList,
       });
-      if (!result.ok || result.data?.error) {
+      if (!result.ok || result.data?.error || result.data?.response?.failure_list?.length) {
         results.ok = false;
         results.errors.push({
           item_id: itemId,
           status: result.status,
           error: result.data?.error || 'shopee_update_stock_failed',
           message: result.data?.message || '',
+          failure_list: result.data?.response?.failure_list || [],
         });
         continue;
       }
@@ -11694,11 +11700,24 @@ async function handleBlingApiVps(request, reply) {
       const includeDetails = String(query?.details || request.body?.details || '').toLowerCase() === 'true';
       const serialOrders = Math.min(100, Math.max(1, Number(query?.serialOrders || request.body?.serialOrders || 25) || 25));
       const accessToken = await getValidBlingAccessTokenForReconcileVps();
-      const serialSales = await syncBlingSerialSalesFromRecentOrdersVps({ accessToken, dryRun, maxOrders: serialOrders });
-      const localProducts = await fetchAllLocalProductsForReconcileVps();
-      const remoteProducts = await fetchAllBlingProductsForReconcileVps(accessToken);
+      const targetSku = String(query?.sku || request.body?.sku || '').trim();
+      const serialSales = targetSku ? { skipped: 'targeted_stock_reconcile' }
+        : await syncBlingSerialSalesFromRecentOrdersVps({ accessToken, dryRun, maxOrders: serialOrders });
+      const allLocalProducts = await fetchAllLocalProductsForReconcileVps();
+      const localProducts = targetSku
+        ? allLocalProducts.filter((p) => String(p.sku || '').toLowerCase() === targetSku.toLowerCase())
+        : allLocalProducts;
+      if (targetSku && localProducts.length !== 1) return reply.code(409).send({ ok: false, error: 'SKU must identify exactly one Bling-linked product' });
+      const remoteProducts = targetSku ? [] : await fetchAllBlingProductsForReconcileVps(accessToken);
       const remoteStocks = await fetchAllBlingStocksForReconcileVps(accessToken, localProducts.map((product) => product.bling_id));
       const plan = buildBlingReconcilePlanVps({ localProducts, remoteProducts, remoteStocks });
+      // Explicit single-SKU replay also repairs marketplaces when local stock already matches.
+      if (targetSku && !plan.stockChanges.length) {
+        const local = localProducts[0];
+        const matchingStocks = remoteStocks.filter((s) => String(getRemoteStockProductIdVps(s)) === String(local.bling_id));
+        if (!matchingStocks.length) return reply.code(422).send({ ok: false, error: 'Bling did not return stock for the requested SKU' });
+        plan.stockChanges.push({ productId: local.id, sku: local.sku, blingId: Number(local.bling_id), previousStock: Number(local.stock_quantity), nextStock: Number(local.stock_quantity), marketplaceReplay: true });
+      }
 
       if (dryRun) {
         return reply.code(200).send({
@@ -11713,7 +11732,7 @@ async function handleBlingApiVps(request, reply) {
 
       const stockResult = await applyReconcileStockChangesVps(plan.stockChanges, request);
       return reply.code(200).send({
-        ok: true,
+        ok: stockResult.failed.length === 0,
         totals: plan.totals,
         serialSales,
         planned: { stockChanges: plan.stockChanges.length, nameChanges: plan.nameChanges.length },

@@ -376,6 +376,15 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--bling-stock-reconcile-only')) {
+    await withSftp(sftp => require('./scripts/deploy-bling-stock-reconcile.cjs')({
+      appDir, apiProc, exec, root: __dirname,
+      read: file => readRemoteText(sftp, file),
+      write: (file, content) => writeRemoteText(sftp, file, content),
+    }));
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--mercado-livre-only')) {
     if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
     const target = `${appDir}/${mercadoLivreServicePath}`;
