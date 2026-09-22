@@ -2,7 +2,7 @@
   "version": "v1.2.425-catalog-share-memory",
   "date": "2026-09-22",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260922-170000-v125-catalog-share-memory",
+  "release_vps": "/var/www/mdv-site/releases/20260922-171000-v125-catalog-share-memory",
   "branch": "main",
   "summary": "Compartilhamento de catálogo filtrado omite RAM e armazenamento quando o produto não possui esses campos.",
   "tag": "v1.2.425-catalog-share-memory",
@@ -11,7 +11,7 @@
     "tmp-tests/catalog-share-optional-memory-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-22-v1.2.424-marketplace-stock-reconcile.md"
+    "docs/versoes/2026-09-22-v1.2.425-catalog-share-memory.md"
   ],
   "validations": [
     "node tmp-tests/catalog-share-optional-memory-static.test.mjs",
