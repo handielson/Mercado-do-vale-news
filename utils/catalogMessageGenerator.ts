@@ -254,24 +254,27 @@ export function generateCatalogMessage(
 
     let productIndex = 1;
 
-    groupedByBrand.forEach(({ brand, items }) => {
-        message += `*${brand}*\n\n`;
-
-        items.forEach((item) => {
+    const brandBlocks = groupedByBrand.map(({ brand, items }) => {
+        const productBlocks = items.map((item) => {
             const pixPrice = calculatePixPrice(item.price, pixDiscountPercent);
             const installment = calculateInstallmentFromFees(item.price, paymentFees, 12);
             const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
 
-            message += `${productIndex++}. *${item.name}*\n`;
+            const lines = [`${productIndex++}. *${item.name}*`];
             const memoryLabel = [item.variant.ram, item.variant.storage].filter(Boolean).join('/');
             if (memoryLabel) {
-                message += `   📱 ${memoryLabel}\n`;
+                lines.push(`   📱 ${memoryLabel}`);
             }
-            message += `   💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}\n`;
-            message += `   💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})\n`;
-            message += `${buildSharedColorLines(item.colors).join('\n')}\n`;
+            lines.push(`   💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}`);
+            lines.push(`   💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})`);
+            lines.push(buildSharedColorLines(item.colors).join('\n'));
+            return lines.join('\n');
         });
+
+        return [`*${brand}*`, productBlocks.join('\n━━━━━━━━━━━━━━━━━━━━━━\n')].join('\n\n');
     });
+
+    message += brandBlocks.join('\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n');
 
     message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     message += `*Gostou de algum desses?*\n`;
