@@ -8,6 +8,7 @@ const {
     createShopeeInterventionReceiptPdf,
     createShopeeSeparationSummaryPdf,
 } = require('./shopee-separation-summary.cjs');
+const { expandShopeeLabelForThermalPaper } = require('./shopee-label-core.cjs');
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -338,27 +339,6 @@ async function printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, 
         console.error(`[INTERVENTION] Falha ao imprimir aviso de ${orderSn}:`, printError.message || printError);
         return { printed: false, reason: 'print_failed', error: printError.message };
     }
-}
-
-// A etiqueta normal da Shopee ocupa um quadrante da página. O PDF ampliado é
-// ajustado pelo driver ao papel térmico 10x15, preenchendo toda a folha.
-async function expandShopeeLabelForThermalPaper(pdfBuffer) {
-    const sourcePdf = await PDFDocument.load(pdfBuffer);
-    const outputPdf = await PDFDocument.create();
-
-    for (const sourcePage of sourcePdf.getPages()) {
-        const { width, height } = sourcePage.getSize();
-        const label = await outputPdf.embedPage(sourcePage, {
-            left: 0,
-            bottom: height / 2,
-            right: width / 2,
-            top: height,
-        });
-        const outputPage = outputPdf.addPage([width, height]);
-        outputPage.drawPage(label, { x: 0, y: 0, width, height });
-    }
-
-    return Buffer.from(await outputPdf.save());
 }
 
 async function createThermalTestPdf({ title, subtitle, lines }) {

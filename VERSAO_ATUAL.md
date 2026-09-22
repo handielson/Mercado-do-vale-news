@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.422-n8n-garantia-citacao
-date: 2026-09-20
+version: v1.2.423-shopee-label-margin
+date: 2026-09-22
 status: published
-release_vps: /var/www/mdv-site/releases/20260921-021619-garantia-citacao-whatsapp
+release_vps: /var/www/mdv-site/releases/20260922-155223-v12423-shopee-label-margin
 branch: main
-summary: Corrige o contexto do modelo na garantia e permite responder citando a pergunta original do cliente no WhatsApp.
-tag: v1.2.422-n8n-garantia-citacao
+summary: Reserva 5 mm na borda direita da etiqueta Shopee 4x6 para evitar corte na Zebra.
+tag: v1.2.423-shopee-label-margin

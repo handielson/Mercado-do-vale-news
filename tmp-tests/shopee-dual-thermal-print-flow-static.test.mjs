@@ -8,6 +8,7 @@ const summary = readFileSync('scripts/shopee-separation-summary.cjs', 'utf8');
 const vpsServer = readFileSync('vps_server.cjs', 'utf8');
 const vpsServerMirror = readFileSync('vps_server.js', 'utf8');
 const mobilePush = readFileSync('services/mobileSalesPushService.cjs', 'utf8');
+const labelCore = readFileSync('scripts/shopee-label-core.cjs', 'utf8');
 
 assert.match(script, /shippingLabelsDir\s*=\s*path\.join\(__dirname, 'Etiquetas de envio'\)/,
   'etiquetas precisam ficar em uma pasta local dedicada');
@@ -19,6 +20,12 @@ assert.match(script, /shipping_document_type:\s*["']NORMAL_AIR_WAYBILL["']/,
   'a etiqueta normal da Shopee precisa ser usada para permitir o recorte 10x15');
 assert.match(script, /expandShopeeLabelForThermalPaper/,
   'a etiqueta da Shopee precisa ser ampliada antes da impressão térmica');
+assert.match(script, /require\('\.\/shopee-label-core\.cjs'\)/,
+  'o fluxo manual e automatico precisam compartilhar o mesmo ajuste de area util');
+assert.match(labelCore, /SHOPEE_LABEL_RIGHT_SAFE_MARGIN_MM\s*=\s*5/,
+  'a etiqueta termica precisa reservar 5 mm no lado direito');
+assert.match(labelCore, /SHOPEE_THERMAL_WIDTH_MM\s*=\s*101\.6[\s\S]*SHOPEE_THERMAL_HEIGHT_MM\s*=\s*152\.4/,
+  'o PDF ajustado precisa ter tamanho fisico 4x6');
 
 const labelPrints = script.match(/paperSize:\s*'4x6'[\s\S]{0,80}?scale:\s*'fit'/g) || [];
 assert.ok(labelPrints.length >= 4,

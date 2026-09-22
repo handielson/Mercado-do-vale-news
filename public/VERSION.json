@@ -1,11 +1,11 @@
 {
-  "version": "v1.2.422-n8n-garantia-citacao",
-  "date": "2026-09-20",
+  "version": "v1.2.423-shopee-label-margin",
+  "date": "2026-09-22",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260921-021619-garantia-citacao-whatsapp",
+  "release_vps": "/var/www/mdv-site/releases/20260922-155223-v12423-shopee-label-margin",
   "branch": "main",
-  "summary": "Corrige o contexto do modelo na garantia e permite responder citando a pergunta original do cliente no WhatsApp.",
-  "tag": "v1.2.422-n8n-garantia-citacao",
-  "changed_files": ["tmp-tests/n8n-fix-warranty-focus-and-quoted-reply.cjs", "public/VERSION.json", "VERSAO_ATUAL.md", "docs/versoes/2026-09-20-v1.2.422-n8n-garantia-citacao.md"],
-  "validations": ["node tmp-tests/n8n-fix-warranty-focus-and-quoted-reply.cjs", "npm.cmd run build"]
+  "summary": "Reserva 5 mm na borda direita da etiqueta Shopee 4x6 para evitar corte na Zebra.",
+  "tag": "v1.2.423-shopee-label-margin",
+  "changed_files": ["scripts/shopee-label-core.cjs", "scripts/shopee-auto-print.cjs", "scripts/install-shopee-label-margin-lenovo.ps1", "scripts/verify-shopee-label-margin.cjs", "tmp-tests/shopee-label-core.test.cjs", "tmp-tests/shopee-label-margin-installer-static.test.mjs", "tmp-tests/shopee-dual-thermal-print-flow-static.test.mjs", "public/VERSION.json", "VERSAO_ATUAL.md", "docs/versoes/2026-09-22-v1.2.423-shopee-label-margin.md"],
+  "validations": ["node --test tmp-tests/shopee-label-core.test.cjs", "node tmp-tests/shopee-label-margin-installer-static.test.mjs", "node tmp-tests/shopee-auto-print-vps-settings-static.test.mjs", "node tmp-tests/mercado-livre-integration-static.test.mjs", "node --check scripts/shopee-auto-print.cjs", "node --check scripts/shopee-label-core.cjs", "node --check scripts/verify-shopee-label-margin.cjs", "npm.cmd run build", "teste fisico Zebra aprovado"]
 }
