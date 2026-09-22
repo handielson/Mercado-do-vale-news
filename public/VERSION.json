@@ -1,22 +1,20 @@
 {
-  "version": "v1.2.425-catalog-share-memory",
+  "version": "v1.2.426-catalog-spacing",
   "date": "2026-09-22",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260922-171000-v125-catalog-share-memory",
+  "status": "pending",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Compartilhamento de catálogo filtrado omite RAM e armazenamento quando o produto não possui esses campos.",
-  "tag": "v1.2.425-catalog-share-memory",
+  "summary": "Compartilhamento de catálogo filtrado com separadores entre produtos e espaçamento compacto.",
+  "tag": "v1.2.426-catalog-spacing",
   "changed_files": [
     "utils/catalogMessageGenerator.ts",
-    "tmp-tests/catalog-share-optional-memory-static.test.mjs",
+    "tmp-tests/catalog-share-spacing-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-22-v1.2.425-catalog-share-memory.md"
+    "docs/versoes/2026-09-22-v1.2.426-catalog-spacing.md"
   ],
   "validations": [
-    "node tmp-tests/catalog-share-optional-memory-static.test.mjs",
-    "node tmp-tests/catalog-share-brand-budget-format-static.test.mjs",
-    "node tmp-tests/catalog-share-stock-guard-static.test.mjs",
+    "node tmp-tests/catalog-share-spacing-static.test.mjs",
     "npm.cmd run build"
   ]
 }
