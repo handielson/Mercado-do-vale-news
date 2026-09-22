@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.424-marketplace-stock-reconcile
+version: v1.2.425-catalog-share-memory
 date: 2026-09-22
 status: published
-release_vps: /var/www/mdv-site/releases/20260922-162500-v12424-marketplace-stock-reconcile
+release_vps: /var/www/mdv-site/releases/pendente
 branch: main
-summary: Reconciliacao Bling propaga estoque aos marketplaces; reenvio seguro por SKU e falhas Shopee explicitas.
-tag: v1.2.424-marketplace-stock-reconcile
+summary: Compartilhamento de catálogo filtrado omite RAM e armazenamento quando o produto não possui esses campos.
+tag: v1.2.425-catalog-share-memory
