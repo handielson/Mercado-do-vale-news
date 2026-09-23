@@ -255,4 +255,12 @@ Ambiente e procedimento: sessão autenticada no e-Fisco PE em produção com o c
 
 Resultado: a inscrição estadual foi reconhecida com razão social canônica e situação cadastral `Ativo`. NF-e homologação (38), NF-e produção (39), NFC-e homologação (83) e NFC-e produção (84) retornaram `Credenciado: Sim` e `Suspenso: Não`. A consulta de CSC retornou um token ativo em produção e um token ativo em homologação, ambos incluídos em 18/10/2023. Somente identificador, ambiente, situação e data foram conferidos; o conteúdo dos CSCs não foi lido, copiado, impresso em logs ou versionado.
 
-Referência oficial vigente consultada: as páginas da SEFAZ-PE de credenciamento NF-e e NFC-e confirmam os tipos 38/39 e 83/84 e exigem CSC separado por ambiente para NFC-e. Resultado: D08 e F01 aprovados. D06 permanece aberto para o contador confirmar as regras das operações; D07 continua com o backup externo adiado pelo operador; D09 ainda precisa fechar escopo de empresas, modelos, canais e operações.
+Referência oficial vigente consultada: as páginas da SEFAZ-PE de credenciamento NF-e e NFC-e confirmam os tipos 38/39 e 83/84 e exigem CSC separado por ambiente para NFC-e. Resultado: D08 e F01 aprovados. D06 permanece aberto para o contador confirmar as regras das operações; D07 continua com o backup externo adiado pelo operador. O escopo de D09 foi fechado em E35.
+
+## E35 — Escopo operacional inicial e classificação do Bling (23/09/2026)
+
+Entradas usadas: pedido expresso do operador para suportar novas empresas e testar o ciclo completo com estoque, Shopee, nota, etiqueta e comprovante; módulos existentes de PDV, loja própria, Shopee, Mercado Livre e TikTok; histórico autorizado de NF-e modelo 55 e NFC-e modelo 65; credenciamentos oficiais confirmados em E34; inventário funcional do Bling de E04.
+
+Decisão registrada em `escopo-operacional-inicial.md`: Mercado do Vale é a empresa do primeiro corte, mantendo seleção explícita e isolamento para futuras empresas. NF-e e NFC-e são necessárias; PDV, site e Shopee formam o primeiro ciclo; Mercado Livre e TikTok ficam para depois da aprovação da Shopee. Foram listados os casos obrigatórios de venda, cancelamento, devolução, inutilização, rejeição, timeout e contingência. CT-e, MDF-e, BP-e, NFCom, produção e serviços financeiros do Bling ficaram fora do primeiro corte; NFS-e permanece separado por ser municipal.
+
+Resultado: D09 aprovado como definição de escopo. O documento não escolhe CFOP, CST/CSOSN, alíquotas ou benefícios; essas regras continuam bloqueadas por D06 e serão validadas com o contador antes de emitir.

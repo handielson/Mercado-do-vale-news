@@ -34,7 +34,7 @@ Se um teste falhar, manter o item aberto, corrigir dentro do escopo e repetir o 
 - [x] D07a — Tela de metadados do certificado por empresa e aviso configurável em pop-up no painel administrativo implementados localmente (E26). Não guarda PFX/senha; só dispara ao usar o painel e após migration/publicação. Testes locais aprovados; não equivale à instalação do A1 no servidor nem ao backup pendente em D07.
 - [x] D07b — Gestão real do A1 pelo painel implantada e validada (E27/E28): instalação real, cofre AES-256-GCM, metadados, auditoria, exportação/exclusão controladas, guia/vídeo, alerta e consulta autenticada. O A1 da empresa foi aceito e a SEFAZ-PE homologação respondeu `107 — Serviço em Operação`; o backup externo de D07 continua separado.
 - [x] D08 — Conferência autenticada no e-Fisco PE concluída em E34: IE ativa; NF-e modelos 38/39 e NFC-e modelos 83/84 credenciadas, sem suspensão; CSC ativo em homologação e produção. Nenhum código CSC foi exibido, copiado ou versionado.
-- [ ] D09 — Definir empresas, modelos, canais e tipos de operação usados; classificar funções do inventário como necessárias, futuras ou não aplicáveis.
+- [x] D09 — Escopo inicial definido em `docs/migracao-bling/escopo-operacional-inicial.md` e E35: empresa principal com arquitetura multiempresa; NF-e/NFC-e; PDV, site e Shopee no primeiro ciclo; Mercado Livre/TikTok futuros; operações e funções do Bling classificadas sem inferir regras tributárias.
 - [x] D10 — Ambiente fiscal isolado e reproduzível com MySQL 8.4 descartável, fixtures sintéticas e backup lógico restaurado em banco separado com comparação integral. E32.
 
 ## F — Fiscal primeiro, direto na SEFAZ
