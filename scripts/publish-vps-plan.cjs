@@ -19,6 +19,7 @@ const API_PATTERNS = [
   /(?:^|\/)(?:webhook|cron|server|api)[^/]*\.(?:js|cjs|ts)$/,
   /^services\/autoresponder\/engine\//,
   /^services\/marketingCampaignApi\.cjs$/,
+  /^services\/mobileSalesPushService\.cjs$/,
   /^services\/.*Server\.(?:js|cjs|ts)$/i,
   /^tools\/install-autoresponder/,
 ];
@@ -325,6 +326,9 @@ function runSelfTest() {
 
   const marketingApi = classifyFiles(['pages/admin/settings/marketing/MarketingCampaignMetricsPanel.tsx', 'services/marketingCampaignApi.cjs']);
   assert(marketingApi.target === 'multiple', 'marketing campaign API module must deploy site and API');
+
+  const saleAlerts = classifyFiles(['components/admin/SaleAlerts.tsx', 'services/mobileSalesPushService.cjs']);
+  assert(saleAlerts.target === 'multiple', 'sale alerts must deploy site and API');
 
   const serviceServer = classifyFiles(['pages/admin/products/SmartphonePhotoIntakePage.tsx', 'services/smartphonePhotoIntakeServer.cjs']);
   assert(serviceServer.target === 'multiple', 'server modules inside services must deploy site and API');

@@ -8,6 +8,7 @@ type SaleAlert = {
   id: string;
   channel: 'online' | 'pdv' | 'shopee' | 'tiktok';
   external_id: string;
+  display_id?: string;
   created_at: string;
 };
 
@@ -73,7 +74,11 @@ export const SaleAlerts: React.FC = () => {
               <BellRing className="mt-0.5 h-5 w-5 flex-none text-blue-600" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-slate-900">Nova venda · {channel.label}</p>
-                <p className="mt-1 break-all text-sm text-slate-600">Pedido {alert.external_id}</p>
+                <p className="mt-1 break-all text-sm text-slate-600">
+                  {alert.channel === 'pdv'
+                    ? `Pedido #${alert.display_id || alert.external_id.split('-')[0].toUpperCase()}`
+                    : `Pedido ${alert.external_id}`}
+                </p>
                 <Link to={channel.path} onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))} className="mt-2 inline-block text-sm font-semibold text-blue-700 hover:underline">Ver no sistema</Link>
               </div>
               <button type="button" aria-label="Fechar aviso de venda" onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))} className="rounded p-1 text-slate-500 hover:bg-slate-100"><X size={16} /></button>

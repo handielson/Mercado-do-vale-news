@@ -37,6 +37,7 @@ test('authenticated feed returns minimal sale identifiers with a bounded query',
         queryLimit = params[0];
         return [[{
           id: 'event-id', channel: 'tiktok', external_id: 'order-id',
+          display_id: 'MUST-NOT-EXPOSE',
           occurred_at: new Date('2026-09-23T15:00:00.000Z'),
           created_at: new Date('2026-09-23T15:01:00.000Z'),
           customer_name: 'Must not be exposed',
@@ -47,7 +48,25 @@ test('authenticated feed returns minimal sale identifiers with a bounded query',
   const sales = await service.listRecentSaleAlerts(500);
   assert.match(queryText, /FROM mobile_sale_events/);
   assert.equal(queryLimit, 100);
-  assert.deepEqual(Object.keys(sales[0]), ['id', 'channel', 'external_id', 'occurred_at', 'created_at']);
+  assert.deepEqual(Object.keys(sales[0]), ['id', 'channel', 'external_id', 'display_id', 'occurred_at', 'created_at']);
+  assert.equal(sales[0].display_id, '');
+});
+
+test('PDV alert uses the receipt-facing sale code without exposing event details', async () => {
+  const service = createMobileSalesPushService({
+    pool: { query: async () => [[{
+      id: 'event-id', channel: 'pdv',
+      external_id: 'a4eaf564-6dd5-40b6-a0fc-c1c0ebec49c4',
+      display_id: 'A4EAF564',
+      occurred_at: new Date('2026-09-23T15:00:00.000Z'),
+      created_at: new Date('2026-09-23T15:01:00.000Z'),
+    }]] },
+  });
+  const [alert] = await service.listRecentSaleAlerts();
+  assert.equal(alert.display_id, 'A4EAF564');
+  assert.equal(alert.external_id, 'a4eaf564-6dd5-40b6-a0fc-c1c0ebec49c4');
+  const component = readFileSync(new URL('../components/admin/SaleAlerts.tsx', import.meta.url), 'utf8');
+  assert.match(component, /alert\.display_id \|\| alert\.external_id\.split\('-'\)\[0\]\.toUpperCase\(\)/);
 });
 
 test('API route stays admin-only and TikTok poller has an idempotent alert fallback', () => {

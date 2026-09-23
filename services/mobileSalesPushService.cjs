@@ -465,7 +465,9 @@ function createMobileSalesPushService({ pool, logger = console }) {
   async function listRecentSaleAlerts(limit = 50) {
     const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50));
     const [rows] = await pool.query(
-      `SELECT id, channel, external_id, occurred_at, created_at
+      `SELECT id, channel, external_id,
+              JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.display_id')) AS display_id,
+              occurred_at, created_at
          FROM mobile_sale_events
         WHERE created_at >= NOW() - INTERVAL 1 DAY
         ORDER BY created_at DESC, id DESC
@@ -476,6 +478,7 @@ function createMobileSalesPushService({ pool, logger = console }) {
       id: row.id,
       channel: row.channel,
       external_id: row.external_id,
+      display_id: row.channel === 'pdv' ? boundedText(row.display_id, 80) : '',
       occurred_at: row.occurred_at instanceof Date ? row.occurred_at.toISOString() : row.occurred_at,
       created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     }));
