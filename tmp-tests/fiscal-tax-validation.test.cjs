@@ -16,7 +16,16 @@ test('cria os dez cenários e identifica valores do Bling apenas como referênci
 test('salva rascunho incompleto, mas recusa aprovação sem responsável e vigência', () => {
   const draft = normalizeTaxValidation({ status: 'draft', rules: defaultRules() });
   assert.equal(draft.status, 'draft');
+  assert(draft.approvalIssues.includes('responsável/contador'));
+  assert.throws(() => normalizeTaxValidation({ status: 'reviewed', rules: defaultRules() }), /Para marcar como revisado/);
   assert.throws(() => normalizeTaxValidation({ status: 'approved', rules: defaultRules() }), /campos pendentes/);
+});
+
+test('permite marcar revisado somente com responsável e data, ainda mantendo pendências fiscais', () => {
+  const reviewed = normalizeTaxValidation({ status:'reviewed', reviewerName:'Contador responsável', reviewedAt:'2026-09-23', rules:defaultRules() });
+  assert.equal(reviewed.status,'reviewed');
+  assert.equal(reviewed.reviewIssues.length,0);
+  assert(reviewed.approvalIssues.length > 0);
 });
 
 test('aprova somente matriz completa e preserva campos do contador', () => {
@@ -46,6 +55,8 @@ test('painel, rotas, migration e deploy permanecem conectados', () => {
   const deploy = fs.readFileSync(path.join(root, 'deploy-vps-server-only.cjs'), 'utf8');
   assert.match(page, /<CompanyTaxValidationPanel\s*\/>/);
   assert.match(component, /Aprovar para implementação/);
+  assert.match(component, /pendência\(s\) para aprovação/);
+  assert.match(component, /disabled=\{busy\|\|issues\.review\.length>0\}/);
   assert.match(server, /\/tax-validation/);
   assert.match(deploy, /021_company_fiscal_tax_validation\.sql/);
   assert.match(deploy, /companyFiscalServicePaths[\s\S]*services\/fiscalTaxValidationCore\.cjs/);

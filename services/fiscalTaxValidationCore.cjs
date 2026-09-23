@@ -47,6 +47,33 @@ const text = (value, label, max = TEXT_LIMIT) => {
   return result;
 };
 
+const reviewIssues = data => {
+  const issues = [];
+  if (!data.reviewerName) issues.push('responsável/contador');
+  if (!data.reviewedAt || !/^\d{4}-\d{2}-\d{2}$/.test(data.reviewedAt)) issues.push('data da revisão');
+  return issues;
+};
+
+const approvalIssues = data => {
+  const missing = reviewIssues(data);
+  const { generalDecisions, productRules, rules } = data;
+  for (const [field,label] of [['taxRegime','regime tributário'],['crt','CRT'],['effectiveFrom','vigência geral'],['simplesBasis','regime de apuração do Simples'],['freightTreatment','frete, desconto e despesas'],['productExceptionsNotes','decisão sobre exceções por produto']]) if (!generalDecisions[field]) missing.push(label);
+  if (generalDecisions.productExceptions === 'pending') missing.push('situação das exceções por produto');
+  if (generalDecisions.productExceptions === 'listed' && !productRules.length) missing.push('ao menos uma regra por produto');
+  if (generalDecisions.productExceptions === 'listed') for (const [index,rule] of productRules.entries()) {
+    for (const [field,label] of [['group','grupo/produto'],['ncm','NCM'],['origin','origem'],['unit','unidade'],['taxTreatment','tributação'],['operations','operações'],['effectiveFrom','vigência']]) if (!rule[field]) missing.push(`PR${index + 1}: ${label}`);
+  }
+  for (const rule of rules.filter(rule => rule.used)) {
+    if (DOCUMENT_IDS.has(rule.id)) {
+      for (const field of ['model','cfop','icmsCode','icmsTreatment','pisCofins','ipi','effectiveFrom']) if (!rule[field]) missing.push(`${rule.id}: ${field}`);
+    } else {
+      if (!rule.notes) missing.push(`${rule.id}: procedimento/observação`);
+      if (!rule.effectiveFrom) missing.push(`${rule.id}: vigência`);
+    }
+  }
+  return missing;
+};
+
 function normalizeTaxValidation(input = {}) {
   const status = ['draft','reviewed','approved'].includes(input.status) ? input.status : 'draft';
   const incoming = Array.isArray(input.rules) ? input.rules : [];
@@ -91,41 +118,32 @@ function normalizeTaxValidation(input = {}) {
     effectiveFrom: text(rule.effectiveFrom, `Regra de produto ${index + 1}: vigência`, 10),
     notes: text(rule.notes, `Regra de produto ${index + 1}: observações`, 1000),
   }));
-  const missing = [];
-  if (status === 'approved') {
-    if (!reviewerName) missing.push('responsável');
-    if (!reviewedAt || !/^\d{4}-\d{2}-\d{2}$/.test(reviewedAt)) missing.push('data da revisão');
-    for (const [field,label] of [['taxRegime','regime tributário'],['crt','CRT'],['effectiveFrom','vigência geral'],['simplesBasis','regime de apuração do Simples'],['freightTreatment','frete, desconto e despesas'],['productExceptionsNotes','decisão sobre exceções por produto']]) if (!generalDecisions[field]) missing.push(label);
-    if (generalDecisions.productExceptions === 'pending') missing.push('situação das exceções por produto');
-    if (generalDecisions.productExceptions === 'listed' && !productRules.length) missing.push('ao menos uma regra por produto');
-    if (generalDecisions.productExceptions === 'listed') for (const [index,rule] of productRules.entries()) {
-      for (const [field,label] of [['group','grupo/produto'],['ncm','NCM'],['origin','origem'],['unit','unidade'],['taxTreatment','tributação'],['operations','operações'],['effectiveFrom','vigência']]) if (!rule[field]) missing.push(`PR${index + 1}: ${label}`);
-    }
-    for (const rule of rules.filter(rule => rule.used)) {
-      if (DOCUMENT_IDS.has(rule.id)) {
-        for (const field of ['model','cfop','icmsCode','icmsTreatment','pisCofins','ipi','effectiveFrom']) if (!rule[field]) missing.push(`${rule.id}: ${field}`);
-      } else {
-        if (!rule.notes) missing.push(`${rule.id}: procedimento/observação`);
-        if (!rule.effectiveFrom) missing.push(`${rule.id}: vigência`);
-      }
-    }
-  }
-  if (missing.length) throw problem(`A aprovação ainda possui campos pendentes: ${missing.join(', ')}.`, 409);
-  return { status, reviewerName, reviewerRegistration, reviewedAt, notes, generalDecisions, productRules, rules };
+  const normalized = { status, reviewerName, reviewerRegistration, reviewedAt, notes, generalDecisions, productRules, rules };
+  const reviewMissing = reviewIssues(normalized);
+  const approvalMissing = approvalIssues(normalized);
+  if (status === 'reviewed' && reviewMissing.length) throw problem(`Para marcar como revisado, informe: ${reviewMissing.join(', ')}.`, 409);
+  if (status === 'approved' && approvalMissing.length) throw problem(`A aprovação ainda possui campos pendentes: ${approvalMissing.join(', ')}.`, 409);
+  return { ...normalized, reviewIssues: reviewMissing, approvalIssues: approvalMissing };
 }
 
 function taxValidationView(row) {
-  if (!row) return { status: 'draft', reviewerName: '', reviewerRegistration: '', reviewedAt: '', notes: '', generalDecisions: defaultGeneralDecisions(), productRules: [], rules: defaultRules(), blingReference: blingReference(), version: 0, updatedAt: '' };
+  if (!row) {
+    const data = { status: 'draft', reviewerName: '', reviewerRegistration: '', reviewedAt: '', notes: '', generalDecisions: defaultGeneralDecisions(), productRules: [], rules: defaultRules() };
+    return { ...data, reviewIssues: reviewIssues(data), approvalIssues: approvalIssues(data), blingReference: blingReference(), version: 0, updatedAt: '' };
+  }
   const storedRules = JSON.parse(typeof row.rules_json === 'string' ? row.rules_json : JSON.stringify(row.rules_json || {}));
-  return {
+  const data = {
     status: row.status || 'draft', reviewerName: row.reviewer_name || '', reviewerRegistration: row.reviewer_registration || '',
     reviewedAt: row.reviewed_at ? String(row.reviewed_at instanceof Date ? row.reviewed_at.toISOString() : row.reviewed_at).slice(0,10) : '',
     notes: row.notes || '', rules: Array.isArray(storedRules) ? storedRules : (storedRules.rules || defaultRules()),
     generalDecisions: Array.isArray(storedRules) ? defaultGeneralDecisions() : { ...defaultGeneralDecisions(), ...(storedRules.generalDecisions || {}) },
     productRules: Array.isArray(storedRules) ? [] : (storedRules.productRules || []),
+  };
+  return {
+    ...data, reviewIssues: reviewIssues(data), approvalIssues: approvalIssues(data),
     blingReference: row.bling_reference_json ? JSON.parse(typeof row.bling_reference_json === 'string' ? row.bling_reference_json : JSON.stringify(row.bling_reference_json)) : blingReference(),
     version: Number(row.version || 0), updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : '',
   };
 }
 
-module.exports = { defaultRules, defaultGeneralDecisions, blingReference, normalizeTaxValidation, taxValidationView };
+module.exports = { defaultRules, defaultGeneralDecisions, blingReference, reviewIssues, approvalIssues, normalizeTaxValidation, taxValidationView };

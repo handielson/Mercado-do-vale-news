@@ -45,7 +45,27 @@ export interface FiscalTaxValidation {
     rules: FiscalTaxRule[]; blingReference: { observedAt: string; source: string; natures: Array<{ name: string; defaultUse: string }>; sale: Record<string, unknown> };
     generalDecisions: { taxRegime: string; crt: string; effectiveFrom: string; simplesBasis: string; freightTreatment: string; productExceptions: 'none' | 'listed' | 'pending'; productExceptionsNotes: string };
     productRules: Array<{ id: string; group: string; ncm: string; cest: string; origin: string; unit: string; taxTreatment: string; operations: string; effectiveFrom: string; notes: string }>;
+    reviewIssues: string[]; approvalIssues: string[];
     version: number; updatedAt: string;
+}
+const documentOperationIds = new Set(['OP01','OP02','OP03','OP04','OP05','OP06','OP07','OP08']);
+export function fiscalTaxValidationIssues(data: FiscalTaxValidation) {
+    const review: string[] = [];
+    if (!data.reviewerName.trim()) review.push('responsável/contador');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data.reviewedAt)) review.push('data da revisão');
+    const approval = [...review];
+    const general = data.generalDecisions;
+    for (const [value,label] of [[general.taxRegime,'regime tributário'],[general.crt,'CRT'],[general.effectiveFrom,'vigência geral'],[general.simplesBasis,'regime de apuração do Simples'],[general.freightTreatment,'frete, desconto e despesas'],[general.productExceptionsNotes,'decisão sobre exceções por produto']]) if (!value.trim()) approval.push(label);
+    if (general.productExceptions === 'pending') approval.push('situação das exceções por produto');
+    if (general.productExceptions === 'listed' && data.productRules.length === 0) approval.push('ao menos uma regra por produto');
+    if (general.productExceptions === 'listed') data.productRules.forEach((rule,index) => {
+        for (const [value,label] of [[rule.group,'grupo/produto'],[rule.ncm,'NCM'],[rule.origin,'origem'],[rule.unit,'unidade'],[rule.taxTreatment,'tributação'],[rule.operations,'operações'],[rule.effectiveFrom,'vigência']]) if (!value.trim()) approval.push(`PR${index + 1}: ${label}`);
+    });
+    data.rules.filter(rule=>rule.used).forEach(rule => {
+        if (documentOperationIds.has(rule.id)) for (const [value,label] of [[rule.model,'modelo'],[rule.cfop,'CFOP'],[rule.icmsCode,'CSOSN/CST ICMS'],[rule.icmsTreatment,'tratamento ICMS'],[rule.pisCofins,'PIS/COFINS'],[rule.ipi,'IPI'],[rule.effectiveFrom,'vigência']]) if (!value.trim()) approval.push(`${rule.id}: ${label}`);
+        else { if (!rule.notes.trim()) approval.push(`${rule.id}: procedimento/observação`); if (!rule.effectiveFrom.trim()) approval.push(`${rule.id}: vigência`); }
+    });
+    return { review, approval };
 }
 const BASE = '/admin/fiscal-companies';
 export const companyFiscalService = {
