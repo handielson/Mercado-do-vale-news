@@ -1,22 +1,26 @@
 {
-  "version": "v1.2.445-accountant-collation",
+  "version": "v1.2.446-accountant-login",
   "date": "2026-09-23",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260923-182026-accountant-collation",
+  "release_vps": "/var/www/mdv-site/releases/20260923-183406-accountant-login",
   "branch": "main",
-  "summary": "Corrige a collation do vínculo de acesso do contador e valida a migration fiscal.",
-  "tag": "v1.2.445-accountant-collation",
+  "summary": "Abre o Espaço do Contador após o login de contas autorizadas e oferece acesso direto pela loja.",
+  "tag": "v1.2.446-accountant-login",
   "changed_files": [
-    "deploy-vps-server-only.cjs",
-    "migrations/023_accountant_customer_collation.sql",
+    "components/PublicHeader.tsx",
+    "contexts/VpsAuthContext.tsx",
+    "pages/auth/AuthCallbackPage.tsx",
+    "pages/auth/ClienteLoginPage.tsx",
+    "services/accountantPortalService.ts",
     "tmp-tests/accountant-portal-static.test.mjs",
+    "types/auth.ts",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-23-v1.2.445-accountant-collation.md"
+    "docs/versoes/2026-09-23-v1.2.446-accountant-login.md"
   ],
   "validations": [
-    "npm.cmd run test:accountant-portal (14/14)",
-    "node --check deploy-vps-server-only.cjs",
+    "npm.cmd run test:accountant-portal (15/15)",
+    "npm.cmd run build",
     "git diff --check"
   ]
 }

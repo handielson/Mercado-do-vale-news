@@ -40,6 +40,22 @@ test('migração cria concessão, documentos e conciliação isolados por perfil
   assert.match(migration, /uniq_company_fiscal_source_document/);
 });
 
+test('login encaminha contador autorizado e a loja oferece acesso ao portal', () => {
+  const service = read('services/accountantPortalService.ts');
+  const login = read('pages/auth/ClienteLoginPage.tsx');
+  const callback = read('pages/auth/AuthCallbackPage.tsx');
+  const header = read('components/PublicHeader.tsx');
+  const authContext = read('contexts/VpsAuthContext.tsx');
+  assert.match(service, /requestedPath !== '\/' \|\| customerType === 'ADMIN'/);
+  assert.match(service, /result\.companies\.length > 0 \? '\/contador'/);
+  assert.match(login, /signInWithEmail\(email, password\)[\s\S]*resolveAccountantLandingPath\(nextPath, customer\.customer_type\)/);
+  assert.match(login, /signInWithCpf\(cpf, password\)[\s\S]*resolveAccountantLandingPath\(nextPath, customer\.customer_type\)/);
+  assert.match(callback, /resolveAccountantLandingPath\(safeNext, session\.customer\.customer_type\)/);
+  assert.match(header, /hasAccountantAccess[\s\S]*to="\/contador"/);
+  assert.match(header, /to="\/cliente\/login\?next=\/contador"/);
+  assert.match(authContext, /return session\.customer/);
+});
+
 test('migration alinha collation do contador com customers e deploy valida o schema', () => {
   const migration = read('migrations/023_accountant_customer_collation.sql');
   const deploy = read('deploy-vps-server-only.cjs');

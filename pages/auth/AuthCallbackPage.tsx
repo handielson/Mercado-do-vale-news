@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 import { vpsAuthService } from '../../services/vpsAuthService';
+import { resolveAccountantLandingPath } from '../../services/accountantPortalService';
 
 export const AuthCallbackPage: React.FC = () => {
     const [status, setStatus] = useState('Processando autenticação...');
@@ -25,7 +26,7 @@ export const AuthCallbackPage: React.FC = () => {
                 sessionStorage.removeItem('auth_next');
                 const destination = !session.customer.phone || !session.customer.cpf_cnpj || session.customer.custom_data?.whatsapp_verification_required === true
                     ? '/completar-cadastro'
-                    : safeNext;
+                    : await resolveAccountantLandingPath(safeNext, session.customer.customer_type);
                 window.location.replace(destination);
             } catch {
                 window.location.replace('/cliente/login?google_error=oauth_failed');
@@ -81,7 +82,8 @@ export const AuthCallbackPage: React.FC = () => {
                 setStatus('Login realizado! Redirecionando...');
                 const nextPath = sessionStorage.getItem('auth_next') || '/';
                 sessionStorage.removeItem('auth_next');
-                setTimeout(() => navigate(nextPath), 1000);
+                const destination = await resolveAccountantLandingPath(nextPath, customer.customer_type);
+                setTimeout(() => navigate(destination), 1000);
             }
         };
 

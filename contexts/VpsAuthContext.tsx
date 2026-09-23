@@ -75,6 +75,7 @@ export const VpsAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
             const session = await vpsAuthService.signInWithEmail(email, password);
             applySession(session);
             notify.success('Login realizado com sucesso!');
+            return session.customer;
         } catch (error: any) {
             notify.error(translateAuthError(error.message));
             throw error;
@@ -86,6 +87,7 @@ export const VpsAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
             const session = await vpsAuthService.signInWithCpf(cpf, password);
             applySession(session);
             notify.success('Login realizado com sucesso!');
+            return session.customer;
         } catch (error: any) {
             notify.error(translateAuthError(error.message));
             throw error;

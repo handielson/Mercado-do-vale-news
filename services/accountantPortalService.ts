@@ -55,6 +55,16 @@ export const accountantPortalService = {
   revenue: (id: string, from: string, to: string) => vpsClient.get<AccountantRevenueReport>(`${BASE}/${encodeURIComponent(id)}/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
 };
 
+export async function resolveAccountantLandingPath(requestedPath: string, customerType: string | undefined): Promise<string> {
+  if (requestedPath !== '/' || customerType === 'ADMIN') return requestedPath;
+  try {
+    const result = await accountantPortalService.list();
+    return result.companies.length > 0 ? '/contador' : requestedPath;
+  } catch {
+    return requestedPath;
+  }
+}
+
 export interface AccountantAccess {
   id: string;
   customer_id: string;

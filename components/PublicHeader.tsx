@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, User, LogOut, ChevronDown, Shield, Tag, Heart } from 'lucide-react';
+import { ShoppingBag, User, LogOut, ChevronDown, Shield, Tag, Heart, Building2 } from 'lucide-react';
 import { useVpsAuth } from '../contexts/VpsAuthContext';
+import { accountantPortalService } from '../services/accountantPortalService';
 import { useTheme } from '../contexts/ThemeContext';
 import { StoreStatusBadge } from './ui/StoreStatusBadge';
 import { WeatherWidget } from './WeatherWidget';
@@ -23,6 +24,7 @@ export const PublicHeader: React.FC = () => {
     const navigate = useNavigate();
     const [showLoginDropdown, setShowLoginDropdown] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
+    const [hasAccountantAccess, setHasAccountantAccess] = useState(false);
     const [scrolled, setScrolled] = useState(false);
 
     useEffect(() => {
@@ -30,6 +32,18 @@ export const PublicHeader: React.FC = () => {
         window.addEventListener('scroll', onScroll, { passive: true });
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
+
+    useEffect(() => {
+        if (!user || !customer || customer.customer_type === 'ADMIN') {
+            setHasAccountantAccess(false);
+            return;
+        }
+        let active = true;
+        accountantPortalService.list()
+            .then(result => { if (active) setHasAccountantAccess(result.companies.length > 0); })
+            .catch(() => { if (active) setHasAccountantAccess(false); });
+        return () => { active = false; };
+    }, [user?.id, customer?.id, customer?.customer_type]);
 
     const handleLogout = async () => {
         await signOut();
@@ -222,6 +236,17 @@ export const PublicHeader: React.FC = () => {
                                             </Link>
                                         )}
 
+                                        {hasAccountantAccess && (
+                                            <Link
+                                                to="/contador"
+                                                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                                                onClick={() => setShowUserMenu(false)}
+                                            >
+                                                <Building2 size={16} />
+                                                Espaço do Contador
+                                            </Link>
+                                        )}
+
                                         {/* Favoritos — só para clientes não-admin */}
                                         {customer?.customer_type !== 'ADMIN' && (
                                             <Link
@@ -293,6 +318,14 @@ export const PublicHeader: React.FC = () => {
                                         >
                                             <Shield size={16} />
                                             Entrar como Admin
+                                        </Link>
+                                        <Link
+                                            to="/cliente/login?next=/contador"
+                                            className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                                            onClick={() => setShowLoginDropdown(false)}
+                                        >
+                                            <Building2 size={16} />
+                                            Entrar como Contador
                                         </Link>
                                         <div className="border-t border-slate-200 my-1" />
                                         <Link

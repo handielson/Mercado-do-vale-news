@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { AuthLayout } from '../../components/auth/AuthLayout';
 import { GoogleButton } from '../../components/auth/GoogleButton';
 import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
+import { resolveAccountantLandingPath } from '../../services/accountantPortalService';
 
 type LoginTab = 'email' | 'cpf';
 
@@ -61,8 +62,8 @@ export const ClienteLoginPage: React.FC = () => {
         if (!email || !password) { toast.error('Preencha todos os campos'); return; }
         setLoading(true);
         try {
-            await signInWithEmail(email, password);
-            navigate(nextPath);
+            const customer = await signInWithEmail(email, password);
+            navigate(await resolveAccountantLandingPath(nextPath, customer.customer_type), { replace: true });
         } catch {
             // Toast já é mostrado pelo contexto em PT-BR
         } finally {
@@ -77,8 +78,8 @@ export const ClienteLoginPage: React.FC = () => {
         if (!password) { toast.error('Digite sua senha'); return; }
         setLoading(true);
         try {
-            await signInWithCpf(cpf, password);
-            navigate(nextPath);
+            const customer = await signInWithCpf(cpf, password);
+            navigate(await resolveAccountantLandingPath(nextPath, customer.customer_type), { replace: true });
         } catch {
             // Toast já é mostrado pelo contexto em PT-BR
         } finally {
@@ -98,7 +99,10 @@ export const ClienteLoginPage: React.FC = () => {
     };
 
     return (
-        <AuthLayout title="Bem-vindo de volta!" subtitle="Acesse sua conta para continuar">
+        <AuthLayout
+            title={nextPath === '/contador' ? 'Espaço do Contador' : 'Bem-vindo de volta!'}
+            subtitle={nextPath === '/contador' ? 'Entre com a conta autorizada pela empresa' : 'Acesse sua conta para continuar'}
+        >
             <div className="space-y-6">
                 {/* Google Login */}
                 <GoogleButton onClick={handleGoogleLogin} loading={googleLoading} />
