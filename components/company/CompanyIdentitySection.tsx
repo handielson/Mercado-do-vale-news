@@ -18,7 +18,7 @@ import {
     Building2, Loader2, FileText, Smartphone, Mail
 } from 'lucide-react';
 import { Company } from '../../types/company';
-import type { ReceitaFederalData } from '../../utils/cnpjHelper';
+import type { FiscalLookup } from '../../services/companyFiscalService';
 import { ImageUploader } from '../ui/ImageUploader';
 
 interface CompanyIdentitySectionProps {
@@ -26,7 +26,7 @@ interface CompanyIdentitySectionProps {
     onChange: (updates: Partial<Company>) => void;
     onCNPJSearch: () => Promise<void>;
     isLoadingCNPJ: boolean;
-    consultedActivities: Pick<ReceitaFederalData, 'atividade_principal' | 'atividades_secundarias'> | null;
+    cnpjLookup: FiscalLookup | null;
     formatPhone: (value: string) => string;
     formatCNPJ: (value: string) => string;
 }
@@ -36,7 +36,7 @@ export const CompanyIdentitySection: React.FC<CompanyIdentitySectionProps> = ({
     onChange,
     onCNPJSearch,
     isLoadingCNPJ,
-    consultedActivities,
+    cnpjLookup,
     formatPhone,
     formatCNPJ
 }) => {
@@ -114,7 +114,7 @@ export const CompanyIdentitySection: React.FC<CompanyIdentitySectionProps> = ({
                             onClick={onCNPJSearch}
                             disabled={isLoadingCNPJ || !form.cnpj}
                             className="bg-blue-100 text-blue-600 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-200 disabled:opacity-50 transition-all whitespace-nowrap"
-                            title="Consultar espelho público dos dados do CNPJ"
+                            title="Consultar os dados do CNPJ pela fonte configurada no servidor"
                         >
                             {isLoadingCNPJ ? <Loader2 className="animate-spin" size={18} /> : 'Buscar'}
                         </button>
@@ -272,10 +272,12 @@ export const CompanyIdentitySection: React.FC<CompanyIdentitySectionProps> = ({
                             readOnly
                         />
                     </div>
-                    {consultedActivities && <div className="md:col-span-2 rounded-lg border border-blue-200 bg-white p-3 text-sm">
-                        <p className="mb-2 text-xs text-amber-700">Consulta feita pela BrasilAPI, um espelho da base pública do CNPJ/RFB. Não é uma consulta direta à API oficial da Receita Federal.</p>
+                    {cnpjLookup && <div className="md:col-span-2 rounded-lg border border-blue-200 bg-white p-3 text-sm">
+                        <p className={`mb-2 text-xs ${cnpjLookup.officialDirect ? 'text-emerald-700' : 'text-amber-700'}`}>
+                            Base cadastral: {cnpjLookup.authority} · Provedor técnico: {cnpjLookup.source} · Consulta direta oficial: {cnpjLookup.officialDirect ? 'Sim' : 'Não'}
+                        </p>
                         <p className="font-semibold text-slate-700">Atividades econômicas retornadas pelo CNPJ</p>
-                        <ul className="mt-2 list-disc pl-5">{[...consultedActivities.atividade_principal.map(item => ({ ...item, primary: true })), ...consultedActivities.atividades_secundarias.map(item => ({ ...item, primary: false }))].map(item => <li key={`${item.primary}-${item.code}`}>{item.primary ? 'Principal' : 'Secundária'}: {item.code} — {item.text}</li>)}</ul>
+                        <ul className="mt-2 list-disc pl-5">{cnpjLookup.cnaeActivities.map(item => <li key={`${item.primary}-${item.code}`}>{item.primary ? 'Principal' : 'Secundária'}: {item.code} — {item.description}</li>)}</ul>
                         <p className="mt-2 text-xs text-slate-500">Para guardar a lista completa por empresa, use “Consultar cadastro do CNPJ” e “Usar todos os CNAEs consultados” na área fiscal. As notas explicativas da <a className="underline" href="https://concla.ibge.gov.br/busca-online-cnae.html" target="_blank" rel="noopener noreferrer">CNAE no IBGE</a> detalham o alcance de cada atividade.</p>
                     </div>}
                 </div>

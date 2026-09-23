@@ -1,20 +1,24 @@
 {
-  "version": "v1.2.433-fiscal-sandbox-restore",
+  "version": "v1.2.434-cnpj-canonico",
   "date": "2026-09-23",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260923-075153-v12433-fiscal-sandbox-restore",
+  "release_vps": "/var/www/mdv-site/releases/20260923-121443-v12434-cnpj-canonico",
   "branch": "main",
-  "summary": "Valida o ambiente fiscal isolado com backup e restauração integral em MySQL descartável.",
-  "tag": "v1.2.433-fiscal-sandbox-restore",
+  "summary": "Unifica a consulta do CNPJ das áreas geral e fiscal no backend canônico.",
+  "tag": "v1.2.434-cnpj-canonico",
   "changed_files": [
-    "tmp-tests/company-fiscal-mysql.test.cjs",
-    "package.json",
+    "services/companyFiscalServer.cjs",
+    "services/companyFiscalService.ts",
+    "pages/admin/settings/CompanyDataPage.tsx",
+    "components/company/CompanyIdentitySection.tsx",
+    "utils/cnpjHelper.ts",
+    "tmp-tests/company-fiscal.test.cjs",
+    "tmp-tests/company-data-separation-static.test.mjs",
     "CHECKLIST-MIGRACAO-BLING.md",
     "docs/migracao-bling/evidencias.md"
   ],
   "validations": [
-    "npm run test:company-fiscal:sandbox (1/1, dump e restauração integral)",
-    "npm run test:company-fiscal (27/27)",
+    "npm run test:company-fiscal (28/28)",
     "npm run build"
   ]
 }

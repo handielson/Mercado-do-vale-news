@@ -47,6 +47,10 @@ function registerCompanyFiscalRoutes(app, { pool, getBearerAuthContext, enabled 
     if (settings[0]) companies.unshift(primaryView(settings[0], rows.find(r => r.settings_id === settings[0].id)));
     return { enabled: true, companies };
   });
+  app.get('/admin/cnpj-lookup/:cnpj', { preHandler: admin, config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async req => {
+    if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
+    return lookup(req.params.cnpj);
+  });
   app.get('/admin/fiscal-companies/:id/readiness', { preHandler: admin }, async req => {
     if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
     const found = await locate(pool, req.params.id);

@@ -1,10 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const Fastify = require('fastify');
-const ts = require('typescript');
-const vm = require('node:vm');
-const fs = require('node:fs');
-const path = require('node:path');
 const { validCnpj, normalizeLookup, normalizeSerproLookup, lookupCnpj, lookupSerproCnpj, validateProfile, validateIssuerReadiness, inspectIssuerReadiness, verifyStateRegistration } = require('../services/companyFiscalCore.cjs');
 const { registerCompanyFiscalRoutes } = require('../services/companyFiscalServer.cjs');
 const CNPJ = '11222333000181', SECOND = '11444777000161';
@@ -77,17 +73,6 @@ test('consulta prioriza SERPRO quando as duas chaves existem e bloqueia configur
   }});
   assert.equal(urls.length,2); assert(urls.every(url=>url.includes('apiserpro.serpro.gov.br'))); assert.equal(result.officialDirect,true);
   await assert.rejects(lookupCnpj(CNPJ,{env:{SERPRO_CNPJ_CONSUMER_KEY:'incompleta'},fetchImpl:async()=>{ throw new Error('não deveria consultar'); }}),/parcialmente configurada/);
-});
-test('busca do cadastro principal também entrega as descrições dos CNAEs secundários', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../utils/cnpjHelper.ts'), 'utf8');
-  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  const exports = {};
-  const context = vm.createContext({ exports, console, fetch: async () => ({ ok: true, json: async () => ({ cnpj: CNPJ, cnae_fiscal: 4751201, cnae_fiscal_descricao: 'Comércio principal', cnaes_secundarios: [{ codigo: 4789001, descricao: 'Comércio secundário' }] }) }) });
-  vm.runInContext(js, context);
-  const result = await exports.searchCNPJ(CNPJ);
-  assert.equal(result.atividade_principal[0].text, 'Comércio principal');
-  assert.equal(result.atividades_secundarias[0].code, '4789001');
-  assert.equal(result.atividades_secundarias[0].text, 'Comércio secundário');
 });
 test('configuração manual mantém opções, valida CRT, calendário e versão', () => {
   for (const regime of ['nao_definido', 'simples_nacional', 'mei', 'lucro_presumido', 'lucro_real', 'lucro_arbitrado', 'imune', 'isenta', 'outro']) assert.equal(validateProfile(profile({ regime, crt: '' })).regime, regime);
@@ -184,6 +169,28 @@ test('autenticação e chave de ativação impedem acesso e não consultam tabel
   assert.deepEqual((await call('GET', '')).json(), { enabled: false, companies: [] });
   assert.equal((await call('POST', '', profile())).statusCode, 503); assert.equal(state.queries.length, 0);
   assert.equal((await call('GET', '/primary/readiness')).statusCode, 503); assert.equal(state.queries.length, 0);
+});
+
+test('consulta canônica de CNPJ é autenticada, não grava e devolve a fonte normalizada', async t => {
+  const lookup = async cnpj => normalizeLookup({
+    cnpj,
+    razao_social: 'EMPRESA CANÔNICA LTDA',
+    cnae_fiscal: 4752100,
+    cnae_fiscal_descricao: 'Comércio de telefonia',
+    cnaes_secundarios: [{ codigo: 4321500, descricao: 'Instalação elétrica' }],
+  }, cnpj, 'fonte canônica de teste');
+  const { app, state } = await setup(t, { lookup });
+  assert.equal((await app.inject(`/admin/cnpj-lookup/${CNPJ}`)).statusCode, 401);
+  const before = JSON.stringify(state);
+  const response = await app.inject({ method:'GET', url:`/admin/cnpj-lookup/${CNPJ}`, headers:{ authorization:'Bearer test' } });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(response.json().source, 'fonte canônica de teste');
+  assert.equal(response.json().registry.legalName, 'EMPRESA CANÔNICA LTDA');
+  assert.deepEqual(response.json().cnaeActivities, [
+    { code:'4752100', description:'Comércio de telefonia', primary:true },
+    { code:'4321500', description:'Instalação elétrica', primary:false },
+  ]);
+  assert.equal(JSON.stringify(state), before);
 });
 
 test('pré-validação autenticada usa o perfil selecionado e é somente leitura', async t => {

@@ -38,6 +38,7 @@ export interface FiscalCertificateStatus {
 const BASE = '/admin/fiscal-companies';
 export const companyFiscalService = {
     list: () => vpsClient.get<{ enabled: boolean; companies: FiscalCompany[] }>(BASE),
+    lookupCnpj: (cnpj: string) => vpsClient.get<FiscalLookup>(`/admin/cnpj-lookup/${encodeURIComponent(cnpj)}`),
     save: (company: FiscalCompany) => company.id === 'new'
         ? vpsClient.post<FiscalCompany>(BASE, company)
         : vpsClient.put<FiscalCompany>(`${BASE}/${encodeURIComponent(company.id)}`, company),

@@ -14,7 +14,8 @@ import { Building2, FileKey2, Save, Loader2 } from 'lucide-react';
 import { Company, defaultCompany } from '../../../types/company';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { formatCep, searchCep } from '../../../utils/customerFormUtils';
-import { searchCNPJ, isValidCNPJ, type ReceitaFederalData } from '../../../utils/cnpjHelper';
+import { isValidCNPJ } from '../../../utils/cnpjHelper';
+import { companyFiscalService, type FiscalLookup } from '../../../services/companyFiscalService';
 import { getDocuments } from '../../../services/documentService';
 import type { CompanyDocument } from '../../../types/document';
 import { SharePaymentDataModal } from '../../../components/SharePaymentDataModal';
@@ -42,7 +43,7 @@ export const CompanyDataPage: React.FC = () => {
     const [isLoadingDocs, setIsLoadingDocs] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [isLoadingCNPJ, setIsLoadingCNPJ] = useState(false);
-    const [consultedActivities, setConsultedActivities] = useState<Pick<ReceitaFederalData, 'atividade_principal' | 'atividades_secundarias'> | null>(null);
+    const [cnpjLookup, setCnpjLookup] = useState<FiscalLookup | null>(null);
 
     // Load company data on mount
     useEffect(() => {
@@ -102,40 +103,42 @@ export const CompanyDataPage: React.FC = () => {
 
         setIsLoadingCNPJ(true);
         try {
-            const data = await searchCNPJ(cnpj);
+            const data = await companyFiscalService.lookupCnpj(cnpj);
             if (data) {
-                setConsultedActivities({ atividade_principal: data.atividade_principal, atividades_secundarias: data.atividades_secundarias });
-                // Format CNAE
-                const cnaeFormatted = data.atividade_principal && data.atividade_principal.length > 0
-                    ? `${data.atividade_principal[0].code} - ${data.atividade_principal[0].text}`
+                setCnpjLookup(data);
+                const primaryCnae = data.cnaeActivities.find(activity => activity.primary);
+                const cnaeFormatted = primaryCnae
+                    ? `${primaryCnae.code} - ${primaryCnae.description}`
                     : '';
 
-                // Apply public CNPJ registration fields without inferring tax regime or CRT.
+                // Both company areas consume the same server-side provider and normalized response.
+                // Tax regime and CRT remain deliberate fiscal choices and are never inferred here.
+                const registry = data.registry;
                 setForm({
                     ...form,
-                    name: data.nome_fantasia || data.razao_social || form.name,
-                    razaoSocial: data.razao_social || form.razaoSocial,
+                    name: registry.tradeName || registry.legalName || form.name,
+                    razaoSocial: registry.legalName || form.razaoSocial,
                     cnae: cnaeFormatted || form.cnae,
-                    situacaoCadastral: data.situacao_cadastral || form.situacaoCadastral,
-                    dataAbertura: data.data_abertura || form.dataAbertura,
-                    porte: data.porte || form.porte,
-                    email: data.email || form.email,
-                    phone: data.telefone || form.phone,
+                    situacaoCadastral: registry.status || form.situacaoCadastral,
+                    dataAbertura: registry.openingDate || form.dataAbertura,
+                    porte: registry.size || form.porte,
+                    email: registry.email || form.email,
+                    phone: registry.phone || form.phone,
                     address: {
                         ...form.address,
-                        zipCode: data.cep ? formatCep(data.cep) : form.address.zipCode,
-                        street: data.logradouro || form.address.street,
-                        number: data.numero || form.address.number,
-                        complement: data.complemento || form.address.complement,
-                        neighborhood: data.bairro || form.address.neighborhood,
-                        city: data.municipio || form.address.city,
-                        state: data.uf || form.address.state
+                        zipCode: registry.address.zipCode ? formatCep(registry.address.zipCode) : form.address.zipCode,
+                        street: registry.address.street || form.address.street,
+                        number: registry.address.number || form.address.number,
+                        complement: registry.address.complement || form.address.complement,
+                        neighborhood: registry.address.neighborhood || form.address.neighborhood,
+                        city: registry.address.city || form.address.city,
+                        state: registry.address.uf || form.address.state
                     }
                 });
-                toast.success('Dados cadastrais do CNPJ carregados. Confira a origem antes de salvar.');
+                toast.success(`Dados cadastrais carregados via ${data.source}. Confira antes de salvar.`);
             }
         } catch (error) {
-            setConsultedActivities(null);
+            setCnpjLookup(null);
             console.error('Erro ao buscar CNPJ:', error);
             toast.error('Erro ao buscar dados do CNPJ');
         } finally {
@@ -201,7 +204,7 @@ export const CompanyDataPage: React.FC = () => {
     };
 
     const handleFormChange = (updates: Partial<Company>) => {
-        if (updates.cnpj !== undefined && updates.cnpj !== form.cnpj) setConsultedActivities(null);
+        if (updates.cnpj !== undefined && updates.cnpj !== form.cnpj) setCnpjLookup(null);
         setForm({ ...form, ...updates });
     };
 
@@ -272,7 +275,7 @@ export const CompanyDataPage: React.FC = () => {
                 onChange={handleFormChange}
                 onCNPJSearch={handleCNPJSearch}
                 isLoadingCNPJ={isLoadingCNPJ}
-                consultedActivities={consultedActivities}
+                cnpjLookup={cnpjLookup}
                 formatPhone={formatPhone}
                 formatCNPJ={formatCNPJ}
             />
