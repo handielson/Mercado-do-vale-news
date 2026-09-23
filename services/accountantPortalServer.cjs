@@ -1,4 +1,4 @@
-const { randomUUID } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { problem } = require('./companyFiscalCore.cjs');
 const { blingReference, normalizeTaxValidation, taxValidationView } = require('./fiscalTaxValidationCore.cjs');
 const { buildRevenueReport, validPeriod } = require('./accountantPortalCore.cjs');
@@ -178,7 +178,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     };
   });
 
-  app.post('/admin/fiscal-companies/:id/documents/import-bling', { preHandler: admin, config: { rateLimit: { max: 2, timeWindow: '10 minutes' } } }, async req => {
+  const collectFiscalDocuments = async req => {
     if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
     if (typeof importBlingDocuments !== 'function') throw problem('Importador fiscal do Bling não configurado.', 503);
     const profile = await findProfile(pool, req.params.id);
@@ -187,6 +187,28 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     const to = String(req.body?.to || '').trim();
     if (!validPeriod(from, to)) throw problem('Informe um período válido de até 366 dias.');
     const documents = await importBlingDocuments(req, { from, to });
+    const fingerprint = createHash('sha256').update(JSON.stringify({
+      profileId: profile.id, from, to,
+      documents: documents.map(document => [document.model, document.sourceReference, document.status, document.issuedAt, document.totalCents, document.accessKey, document.documentNumber, document.series]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    })).digest('hex');
+    return { profile, from, to, documents, fingerprint };
+  };
+
+  app.post('/admin/fiscal-companies/:id/documents/preview-bling', { preHandler: admin, config: { rateLimit: { max: 2, timeWindow: '10 minutes' } } }, async req => {
+    const { from, to, documents, fingerprint } = await collectFiscalDocuments(req);
+    return {
+      from, to, count: documents.length, fingerprint,
+      totals: fiscalDocumentTotals(documents),
+      byModel: ['55', '65'].map(model => ({ model, ...fiscalDocumentTotals(documents.filter(document => document.model === model)) })),
+      source: 'bling_preview',
+    };
+  });
+
+  app.post('/admin/fiscal-companies/:id/documents/import-bling', { preHandler: admin, config: { rateLimit: { max: 2, timeWindow: '10 minutes' } } }, async req => {
+    const { profile, from, to, documents, fingerprint } = await collectFiscalDocuments(req);
+    if (!/^[a-f0-9]{64}$/u.test(String(req.body?.fingerprint || '')) || req.body.fingerprint !== fingerprint) {
+      throw problem('As notas mudaram desde a prévia. Confira o período novamente antes de importar.', 409);
+    }
     let imported = 0;
     const db = await pool.getConnection();
     try {

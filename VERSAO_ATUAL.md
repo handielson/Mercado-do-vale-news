@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.450-accountant-revenue-cents
+version: v1.2.451-accountant-fiscal-preview
 date: 2026-09-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260923-191430-accountant-revenue-cents
+release_vps: /var/www/mdv-site/releases/20260923-201531-accountant-fiscal-preview
 branch: main
-summary: Alinha as consultas de faturamento ao schema MySQL e preserva os valores operacionais já armazenados em centavos.
-tag: v1.2.450-accountant-revenue-cents
+summary: Mostra prévia dos documentos fiscais do Bling e confere o lote novamente antes de importá-lo.
+tag: v1.2.451-accountant-fiscal-preview

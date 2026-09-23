@@ -1,27 +1,27 @@
 {
-  "version": "v1.2.450-accountant-revenue-cents",
+  "version": "v1.2.451-accountant-fiscal-preview",
   "date": "2026-09-23",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260923-191430-accountant-revenue-cents",
+  "release_vps": "/var/www/mdv-site/releases/20260923-201531-accountant-fiscal-preview",
   "branch": "main",
-  "summary": "Alinha as consultas de faturamento ao schema MySQL e preserva os valores operacionais já armazenados em centavos.",
-  "tag": "v1.2.450-accountant-revenue-cents",
+  "summary": "Mostra prévia dos documentos fiscais do Bling e confere o lote novamente antes de importá-lo.",
+  "tag": "v1.2.451-accountant-fiscal-preview",
   "changed_files": [
+    "components/company/CompanyAccountantAccessPanel.tsx",
+    "services/accountantPortalService.ts",
     "services/accountantPortalServer.cjs",
     "tmp-tests/accountant-portal.test.cjs",
     "CHECKLIST-MIGRACAO-BLING.md",
     "docs/migracao-bling/evidencias.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-23-v1.2.449-accountant-revenue-schema.md",
-    "docs/versoes/2026-09-23-v1.2.450-accountant-revenue-cents.md"
+    "docs/versoes/2026-09-23-v1.2.451-accountant-fiscal-preview.md"
   ],
   "validations": [
-    "npm.cmd run test:accountant-portal (19/19)",
+    "npm.cmd run test:accountant-portal (21/21)",
     "node --check services/accountantPortalServer.cjs",
     "node --check vps_server.js",
     "node --check vps_server.cjs",
-    "node tmp-tests/accountant-portal.test.cjs",
     "npm.cmd run build",
     "git diff --check"
   ]

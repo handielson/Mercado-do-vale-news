@@ -64,6 +64,97 @@ test('falha na coleta não inicia gravação fiscal no banco', async () => {
   assert.equal(openedTransaction, false);
 });
 
+test('prévia fiscal exige administrador, totaliza modelos e não inicia gravação', async () => {
+  const routes = new Map();
+  const app = {};
+  for (const method of ['get','put','post','delete']) app[method] = (path, options, handler) => routes.set(`${method}:${path}`, { preHandler:options.preHandler, handler });
+  let isAdmin = false;
+  let collected = 0;
+  let authorizedCents = 1250;
+  const pool = {
+    query: async sql => {
+      if (sql.includes('FROM company_settings')) return [[{ id:'settings-1', name:'Empresa', cnpj:'123' }]];
+      if (sql.includes('FROM company_fiscal_profiles')) return [[{ id:'profile-1', settings_id:'settings-1', name:'Empresa' }]];
+      throw new Error(`SQL inesperado: ${sql}`);
+    },
+    getConnection: async () => { throw new Error('Prévia não deve abrir transação.'); },
+  };
+  registerAccountantPortalRoutes(app, {
+    pool, enabled:true,
+    getBearerAuthContext: async () => ({ customerId:'user-1', userId:'user-1', isAdmin }),
+    importBlingDocuments: async () => {
+      collected += 1;
+      return [
+        { model:'55', status:'authorized', totalCents:authorizedCents },
+        { model:'65', status:'cancelled', totalCents:300 },
+      ];
+    },
+  });
+  const route = routes.get('post:/admin/fiscal-companies/:id/documents/preview-bling');
+  const req = { params:{ id:'primary' }, body:{ from:'2026-09-01', to:'2026-09-02' } };
+  const reply = { sent:false, status:200, header(){}, code(value){ this.status=value; return this; }, send(){ this.sent=true; } };
+  await route.preHandler(req, reply);
+  assert.equal(reply.status, 403);
+  assert.equal(collected, 0);
+  isAdmin = true;
+  reply.sent = false;
+  await route.preHandler(req, reply);
+  assert.equal(reply.sent, false);
+  const preview = await route.handler(req);
+  assert.equal(collected, 1);
+  assert.equal(preview.count, 2);
+  assert.match(preview.fingerprint, /^[a-f0-9]{64}$/);
+  assert.deepEqual(preview.totals, { authorizedDocumentCents:1250, authorizedDocumentCount:1, cancelledDocumentCents:300, cancelledDocumentCount:1 });
+  assert.equal(preview.byModel[0].authorizedDocumentCount, 1);
+  assert.equal(preview.byModel[1].cancelledDocumentCount, 1);
+  assert.equal(JSON.stringify(preview).includes('accessKey'), false);
+  const importRoute = routes.get('post:/admin/fiscal-companies/:id/documents/import-bling');
+  authorizedCents = 1300;
+  await importRoute.preHandler(req, reply);
+  await assert.rejects(importRoute.handler({ ...req, body:{ ...req.body, fingerprint:preview.fingerprint } }), /mudaram desde a prévia/);
+  assert.equal(collected, 2);
+});
+
+test('importação usa a prévia correspondente e grava somente após a conferência', async () => {
+  const routes = new Map();
+  const app = {};
+  for (const method of ['get','put','post','delete']) app[method] = (path, options, handler) => routes.set(`${method}:${path}`, { preHandler:options.preHandler, handler });
+  const actions = [];
+  const db = {
+    beginTransaction: async () => actions.push('begin'),
+    query: async sql => { actions.push(sql.includes('company_fiscal_documents') ? 'document' : 'event'); },
+    commit: async () => actions.push('commit'),
+    rollback: async () => actions.push('rollback'),
+    release: () => actions.push('release'),
+  };
+  const pool = {
+    query: async sql => {
+      if (sql.includes('FROM company_settings')) return [[{ id:'settings-1', name:'Empresa', cnpj:'123' }]];
+      if (sql.includes('FROM company_fiscal_profiles')) return [[{ id:'profile-1', settings_id:'settings-1', name:'Empresa' }]];
+      throw new Error(`SQL inesperado: ${sql}`);
+    },
+    getConnection: async () => db,
+  };
+  registerAccountantPortalRoutes(app, {
+    pool, enabled:true,
+    getBearerAuthContext: async () => ({ customerId:'admin', userId:'admin', isAdmin:true }),
+    importBlingDocuments: async () => [{ model:'55', channel:'bling', externalSaleId:'nfe:1', status:'authorized', accessKey:null, documentNumber:'1', series:'1', issuedAt:'2026-09-01 12:00:00', totalCents:1250, source:'bling_import', sourceReference:'1' }],
+  });
+  const req = { params:{ id:'primary' }, body:{ from:'2026-09-01', to:'2026-09-02' } };
+  const reply = { sent:false, header(){}, code(){ return this; }, send(){ this.sent=true; } };
+  const previewRoute = routes.get('post:/admin/fiscal-companies/:id/documents/preview-bling');
+  await previewRoute.preHandler(req, reply);
+  const preview = await previewRoute.handler(req);
+  assert.deepEqual(actions, []);
+  const importRoute = routes.get('post:/admin/fiscal-companies/:id/documents/import-bling');
+  const importReq = { ...req, body:{ ...req.body, fingerprint:preview.fingerprint } };
+  await importRoute.preHandler(importReq, reply);
+  const result = await importRoute.handler(importReq);
+  assert.deepEqual(actions, ['begin','document','event','commit','release']);
+  assert.equal(result.imported, 1);
+  assert.equal(result.authorized, 1);
+});
+
 test('totaliza documentos autorizados e cancelados separadamente', () => {
   assert.deepEqual(fiscalDocumentTotals([{ status:'authorized', total_cents:1000 }, { status:'authorized', totalCents:250 }, { status:'cancelled', total_cents:900 }]), { authorizedDocumentCents:1250, authorizedDocumentCount:2, cancelledDocumentCents:900, cancelledDocumentCount:1 });
 });
