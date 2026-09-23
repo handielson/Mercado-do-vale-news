@@ -1,31 +1,26 @@
 {
-  "version": "v1.2.447-bling-fiscal-import",
+  "version": "v1.2.448-accountant-revenue-query",
   "date": "2026-09-23",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260923-185048-bling-fiscal-import-accuracy",
+  "release_vps": "/var/www/mdv-site/releases/20260923-185940-accountant-revenue-query",
   "branch": "main",
-  "summary": "Importa documentos fiscais do Bling com situação e total conferidos no detalhe da nota.",
-  "tag": "v1.2.447-bling-fiscal-import",
+  "summary": "Corrige o relatório do Espaço do Contador para usar as colunas operacionais reais do MySQL.",
+  "tag": "v1.2.448-accountant-revenue-query",
   "changed_files": [
     "CHECKLIST-MIGRACAO-BLING.md",
-    "components/company/CompanyAccountantAccessPanel.tsx",
     "docs/migracao-bling/evidencias.md",
-    "pages/accountant/AccountantPortalPage.tsx",
     "services/accountantPortalServer.cjs",
-    "services/accountantPortalService.ts",
-    "services/blingFiscalImportCore.cjs",
     "tmp-tests/accountant-portal.test.cjs",
-    "vps_server.js",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-23-v1.2.447-bling-fiscal-import.md"
+    "docs/versoes/2026-09-23-v1.2.448-accountant-revenue-query.md"
   ],
   "validations": [
-    "npm.cmd run test:accountant-portal (18/18)",
-    "npm.cmd run test:company-fiscal (34/34)",
-    "node --check vps_server.js",
-    "node --check services/blingFiscalImportCore.cjs",
+    "npm.cmd run test:accountant-portal (19/19)",
     "node --check services/accountantPortalServer.cjs",
+    "node --check vps_server.js",
+    "node --check vps_server.cjs",
+    "node tmp-tests/accountant-portal.test.cjs",
     "npm.cmd run build",
     "git diff --check"
   ]

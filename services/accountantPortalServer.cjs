@@ -139,7 +139,13 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       [`${from} 00:00:00`, `${exclusiveDate} 00:00:00`]
     );
     const [pdvRows] = await pool.query(
-      `SELECT 'pdv' AS channel,id AS external_sale_id,COALESCE(status,'completed') AS status,total AS total_cents,created_at AS occurred_at,'' AS customer_name
+      `SELECT 'pdv' AS channel,id AS external_sale_id,
+              CASE
+                WHEN LOWER(COALESCE(payment_status,'')) IN ('cancelled','canceled','refunded','return_refund','returned','to_return') THEN payment_status
+                WHEN COALESCE(finalization_status,'success')='success' THEN 'completed'
+                ELSE COALESCE(finalization_status,'pending')
+              END AS status,
+              total AS total_cents,created_at AS occurred_at,'' AS customer_name
          FROM sales WHERE company_id=? AND created_at>=? AND created_at<? ORDER BY created_at DESC LIMIT 10000`,
       [profile.operational_company_id, `${from} 00:00:00`, `${exclusiveDate} 00:00:00`]
     );

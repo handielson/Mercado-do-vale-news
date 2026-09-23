@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.447-bling-fiscal-import
+version: v1.2.448-accountant-revenue-query
 date: 2026-09-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260923-185048-bling-fiscal-import-accuracy
+release_vps: /var/www/mdv-site/releases/20260923-185940-accountant-revenue-query
 branch: main
-summary: Importa documentos fiscais do Bling com situação e total conferidos no detalhe da nota.
-tag: v1.2.447-bling-fiscal-import
+summary: Corrige o relatório do Espaço do Contador para usar as colunas operacionais reais do MySQL.
+tag: v1.2.448-accountant-revenue-query

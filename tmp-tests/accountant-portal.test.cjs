@@ -137,3 +137,34 @@ test('nega empresa sem concessão e aceita somente a empresa vinculada ao contad
   assert.equal(allowedReply.sent, false);
   assert.equal(allowedRequest.accountantProfile.id, 'profile-a');
 });
+
+test('relatório de faturamento usa a situação final da venda, conforme o schema MySQL real', async () => {
+  const routes = new Map();
+  const app = {};
+  for (const method of ['get', 'put', 'post', 'delete']) app[method] = (route, options, handler) => routes.set(`${method}:${route}`, { preHandler: options.preHandler, handler });
+  const profile = { id:'profile-1', settings_id:'settings-1', name:'Empresa', cnpj:'123', regime:'simples_nacional', crt:'1' };
+  const sqlSeen = [];
+  const pool = { query: async (sql) => {
+    sqlSeen.push(sql);
+    if (sql.includes('FROM company_settings')) return [[{ id:'settings-1', name:'Empresa', cnpj:'123' }]];
+    if (sql.includes('FROM company_fiscal_profiles WHERE settings_id=')) return [[profile]];
+    if (sql.includes('FROM mobile_sale_events')) return [[]];
+    if (sql.includes('FROM sales WHERE company_id=')) return [[{ channel:'pdv', external_sale_id:'sale-1', status:'completed', total_cents:1200, occurred_at:'2026-09-10 12:00:00', customer_name:'' }]];
+    if (sql.includes('FROM orders WHERE company_id=')) return [[]];
+    if (sql.includes('FROM company_fiscal_documents')) return [[]];
+    if (sql.includes('FROM company_fiscal_sale_reconciliations')) return [[]];
+    throw new Error(`SQL inesperado no teste: ${sql}`);
+  } };
+  registerAccountantPortalRoutes(app, { pool, enabled:true, getBearerAuthContext:async () => ({ customerId:'admin', userId:'admin', isAdmin:true }) });
+  const route = routes.get('get:/accountant/companies/:id/revenue');
+  const req = { params:{ id:'primary' }, query:{ from:'2026-09-01', to:'2026-09-30' } };
+  const reply = { sent:false, header(){}, code(){ return this; }, send(){ this.sent=true; } };
+  await route.preHandler(req, reply);
+  const report = await route.handler(req);
+  const salesQuery = sqlSeen.find(sql => sql.includes('FROM sales WHERE company_id='));
+  assert.match(salesQuery, /finalization_status/);
+  assert.match(salesQuery, /payment_status/);
+  assert.doesNotMatch(salesQuery, /COALESCE\(status/);
+  assert.equal(report.totals.operationalCents, 1200);
+  assert.equal(report.totals.reconciliationPendingCents, 1200);
+});

@@ -314,3 +314,11 @@ Estado anterior do importador: a busca filtrava `situacao=2` e registrava qualqu
 Correção local: consultar os dois estados separadamente em NF-e e NFC-e, restringir NF-e a saída, buscar o detalhe de cada nota e validar identificador, situação, tipo, data e valor antes da transação de gravação. Falha ou lote superior a 25 documentos interrompe toda a operação, orientando a dividir o período; o painel mostra quantidades autorizadas e canceladas e o relatório exibe seus totais separadamente, sem declarar apuração de impostos. A importação continua somente leitura no Bling, idempotente na base própria e sem movimentar estoque/financeiro.
 
 Verificação: `npm.cmd run test:accountant-portal` 18/18, incluindo divergência de estado, ausência de valor, limite do lote e prova de que erro na coleta não inicia transação; `npm.cmd run build`, `node --check` dos três módulos de servidor afetados e `git diff --check` aprovados. Ambiente: checkout local; sem chamada real ao Bling nesta etapa, gravação de produção, commit, push ou publicação. Pendente: publicar site/API em janela autorizada, importar uma amostra pequena, conferir contagem e valores por estado com o Bling e então avançar por períodos com o contador.
+
+## E41 — Correção da consulta do faturamento no Espaço do Contador (23/09/2026)
+
+Após publicar `v1.2.447-bling-fiscal-import`, a validação autenticada da aba Faturamento retornou HTTP 500 `ER_BAD_FIELD_ERROR: Unknown column 'status' in 'field list'`. A inspeção somente leitura de `information_schema` na VPS confirmou que `sales` possui `finalization_status` e `payment_status`, mas não possui `status`. As tabelas `orders` e `mobile_sale_events` possuem `status`.
+
+Correção: a consulta de PDV deriva a situação operacional de `finalization_status` e identifica cancelamento/estorno por `payment_status`. Erros de finalização ficam pendentes; vendas concluídas entram como concluídas. Teste de rota atualizado para executar com as colunas reais esperadas e confirmar os totais, sem acessar dados pessoais nem escrever na base.
+
+Verificação local: `npm.cmd run test:accountant-portal` 19/19; `node --check services/accountantPortalServer.cjs`; `git diff --check`. Estado de publicação e nova validação da aba serão registrados após deploy. Nenhuma importação histórica do Bling foi iniciada.
