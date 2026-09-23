@@ -81,7 +81,7 @@ async function main() {
     assert.deepEqual(steps, ['label', 'summary', 'label', 'summary']);
     assert.equal(calls.length, 2, 'ack retry must not print duplicate sheets');
     assert.equal(calls[0].options.printer, 'Zebra');
-    assert.deepEqual(calls[1].options, { printer: 'Comprovante', width: 90, height: 70 });
+    assert.deepEqual(calls[1].options, { printer: 'Comprovante', width: 90, height: 70, orientation: 'landscape' });
     const summaryPdf = await PDFDocument.load(fs.readFileSync(calls[1].file));
     assert.equal(summaryPdf.getPageCount(), 1);
     assert.ok(Math.abs(summaryPdf.getPage(0).getHeight() - 70 * 72 / 25.4) < 0.01);

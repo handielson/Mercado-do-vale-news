@@ -99,7 +99,7 @@ async function executeTikTokPrintJob({ job, settings, request, print, getStockLo
         try {
           await print(filename, step.name === 'label'
             ? { printer: step.printer, paperSize: '4x6', scale: 'fit' }
-            : await prepareSummaryPrinter(step.printer, 90, tiktokSummaryHeightMm(job.summary?.items)));
+            : { ...await prepareSummaryPrinter(step.printer, 90, tiktokSummaryHeightMm(job.summary?.items)), orientation: 'landscape' });
         } catch {
           const error = new Error(`Conferir envio de ${step.name} do pacote ${packageId} ao Windows`);
           error.retryable = false;
