@@ -59,9 +59,28 @@ O contador deve devolver também uma relação de exceções por produto ou grup
 
 ## Referências históricas a confrontar
 
-- O Bling retornou quatro naturezas de operação na primeira página da API. A listagem não exporta toda a lógica tributária e, por isso, nenhum código foi promovido a regra do sistema.
+- A conta do Bling apresentou quatro naturezas ativas: **COMPRA** (padrão compra), **Devolução de produto** (padrão devolução de entrada), **Simples remessa** e **VENDA** (padrão venda).
 - XMLs históricos autorizados confirmam uso de NF-e modelo 55, NFC-e modelo 65, série 1 e CRT 1. Eles não determinam a próxima numeração nem as regras atuais.
 - O escopo operacional aprovado está em `escopo-operacional-inicial.md`.
+
+### Configuração observada na natureza VENDA do Bling
+
+Consulta somente leitura realizada em 23/09/2026. Estes valores são uma fotografia da configuração do Bling e continuam pendentes de confirmação contábil. Eles não foram ativados no motor fiscal próprio.
+
+| Campo/regra | Valor observado no Bling | Situação na migração |
+|---|---|---|
+| Série | `1` | Referência; numeração será tratada separadamente em F05 |
+| Tipo | Saída | Pendente de confirmação |
+| CRT | `1` — Simples Nacional | Pendente de confirmação em D06 |
+| Indicador de presença | `1` — Operação presencial | Aplicável ao PDV; não deve ser copiado para e-commerce |
+| Faturada / consumidor final / devolução | Sim / Sim / Não | Pendente de confirmação por cenário |
+| ICMS para PE | CFOP `5102`, CSOSN `400`, alíquota `0%`, base `0%` | Referência para OP01–OP03; contador deve confirmar abrangência e exceções |
+| ICMS para demais destinos | CFOP `6108`, CSOSN `400`, alíquota `0%`, base `0%` | Referência para OP04–OP06; contador deve confirmar consumidor/contribuinte, DIFAL, FCP e ST |
+| IPI | CST `53` — saída não tributada, alíquota `0%`, base `100%` | Pendente de confirmação por produto/operação |
+| PIS | CST `07` — operação isenta, alíquota `0%`, base `100%` | Pendente de confirmação |
+| COFINS | CST `07` — operação isenta, alíquota `0%`, base `100%` | Pendente de confirmação |
+
+A natureza VENDA usa uma regra geral para qualquer produto nas abas observadas. Isso não comprova que celulares, acessórios e outros grupos tenham o mesmo tratamento correto. O contador deve indicar exceções por NCM, CEST, origem, destino e tipo de destinatário.
 
 ## Critério de aceite de D06
 
