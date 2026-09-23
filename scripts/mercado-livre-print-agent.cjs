@@ -54,18 +54,18 @@ function createMercadoLivreRequest({ apiUrl, syncKey, requestFetch = global.fetc
     };
 }
 
-async function prepareMercadoLivreSummaryPrinter(printer) {
+async function prepareMercadoLivreSummaryPrinter(printer, widthMm = ML_SUMMARY_WIDTH_MM, heightMm = ML_SUMMARY_HEIGHT_MM) {
     const helper = [
         path.join(__dirname, 'central-print-runtime', 'central-print-paper.exe'),
         path.resolve(__dirname, '..', '..', 'scripts', 'central-print-runtime', 'central-print-paper.exe'),
     ].find(candidate => fs.existsSync(candidate));
     if (!fs.existsSync(helper)) throw new Error('Auxiliar de papel nao instalado para o comprovante Mercado Livre.');
-    const { stdout } = await execFileAsync(helper, [printer, String(ML_SUMMARY_WIDTH_MM), String(ML_SUMMARY_HEIGHT_MM)],
+    const { stdout } = await execFileAsync(helper, [printer, String(widthMm), String(heightMm)],
         { windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024 });
     const prepared = JSON.parse(stdout.replace(/^\uFEFF/, '').trim());
-    if (!prepared?.printer?.startsWith('MDV Central ') || Math.abs(prepared.widthMm - ML_SUMMARY_WIDTH_MM) > 0.1
-        || Math.abs(prepared.heightMm - ML_SUMMARY_HEIGHT_MM) > 0.1) {
-        throw new Error('Papel 90x100 mm nao confirmado para o comprovante Mercado Livre.');
+    if (!prepared?.printer?.startsWith('MDV Central ') || Math.abs(prepared.widthMm - widthMm) > 0.1
+        || Math.abs(prepared.heightMm - heightMm) > 0.1) {
+        throw new Error('Papel do comprovante nao confirmado.');
     }
     return { printer: prepared.printer, orientation: 'portrait', scale: 'noscale' };
 }

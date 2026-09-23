@@ -58,13 +58,14 @@ function fitText(value, font, size, maxWidth) {
     return `${clipped}...`;
 }
 
-async function createMercadoLivreSummaryPdf(job = {}) {
+async function createMercadoLivreSummaryPdf(job = {}, { pageHeightMm = ML_SUMMARY_HEIGHT_MM } = {}) {
     const data = job.marketplaceName ? job : buildMercadoLivreSummaryData(job);
+    if (![70, 80, 90, ML_SUMMARY_HEIGHT_MM].includes(pageHeightMm)) throw new Error('Altura do resumo invalida.');
     const pdf = await PDFDocument.create();
     const regular = await pdf.embedFont(StandardFonts.Helvetica);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
     const width = ML_SUMMARY_WIDTH_MM * MM_TO_PT;
-    const height = ML_SUMMARY_HEIGHT_MM * MM_TO_PT;
+    const height = pageHeightMm * MM_TO_PT;
     const marginX = ML_SUMMARY_HORIZONTAL_MARGIN_MM * MM_TO_PT;
     const marginY = ML_SUMMARY_VERTICAL_MARGIN_MM * MM_TO_PT;
     const contentWidth = width - (marginX * 2);

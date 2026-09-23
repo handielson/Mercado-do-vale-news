@@ -3,11 +3,27 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { PDFDocument } = require('pdf-lib');
-const { executeTikTokPrintJob, startTikTokPrintAgent, separationLocation, listWindowsPrinters } = require('../scripts/tiktok-shop-print-agent.cjs');
+const { PDFDocument, decodePDFRawStream } = require('pdf-lib');
+const { executeTikTokPrintJob, startTikTokPrintAgent, separationLocation, listWindowsPrinters, tiktokSummaryHeightMm } = require('../scripts/tiktok-shop-print-agent.cjs');
 const { summaryFromOrder, isPrintableOrder } = require('../services/tiktokShopPrintServer.cjs');
 
 async function main() {
+  assert.equal(tiktokSummaryHeightMm([{}]), 70);
+  assert.equal(tiktokSummaryHeightMm([{}, {}]), 80);
+  assert.equal(tiktokSummaryHeightMm([{}, {}, {}]), 90);
+  assert.equal(tiktokSummaryHeightMm([{}, {}, {}, {}]), 90);
+  const branded = await require('../scripts/mercado-livre-print-core.cjs').createMercadoLivreSummaryPdf({
+    marketplaceName: 'TIKTOK SHOP', orderSn: '586215533660637149', buyerName: 'Cliente TikTok',
+    trackingNumber: 'BR123456789', items: [{ name: 'Produto TikTok', sku: 'TK-1', quantity: 1 }],
+  }, { pageHeightMm: 70 });
+  const brandedPdf = await PDFDocument.load(branded);
+  assert.ok(Math.abs(brandedPdf.getPage(0).getHeight() - 70 * 72 / 25.4) < 0.01);
+  const pageContents = brandedPdf.context.lookup(brandedPdf.getPage(0).node.Contents());
+  const brandedContent = Array.from({ length: pageContents.size() }, (_, index) =>
+    Buffer.from(decodePDFRawStream(brandedPdf.context.lookup(pageContents.get(index))).decode()).toString()).join('');
+  assert.ok(brandedContent.includes(Buffer.from('TIKTOK SHOP - SEPARACAO').toString('hex').toUpperCase()));
+  assert.ok(brandedContent.includes(Buffer.from('586215533660637149').toString('hex').toUpperCase()));
+  assert.ok(!brandedContent.includes(Buffer.from('MERCADO LIVRE - SEPARACAO').toString('hex').toUpperCase()));
   const listed = await listWindowsPrinters(async (file, args, options) => {
     assert.equal(file, 'powershell.exe');
     assert.ok(args.includes('Get-Printer | Select-Object -ExpandProperty Name'));
@@ -57,7 +73,7 @@ async function main() {
     const args = { job, settings: { shopee_printer_thermal: 'Zebra', shopee_printer_a4: 'Comprovante' },
       request, print: async (file, options) => calls.push({ file, options }),
       getStockLocations: async () => ({ 'ABC-1': 'Prateleira A3' }),
-      prepareSummaryPrinter: async printer => ({ printer, paperSize: '90x100' }),
+      prepareSummaryPrinter: async (printer, width, height) => ({ printer, width, height }),
       directory: path.join(root, 'pdf'), journalDirectory: path.join(root, 'journal'),
       logger: { log() {} } };
     await executeTikTokPrintJob(args);
@@ -65,8 +81,10 @@ async function main() {
     assert.deepEqual(steps, ['label', 'summary', 'label', 'summary']);
     assert.equal(calls.length, 2, 'ack retry must not print duplicate sheets');
     assert.equal(calls[0].options.printer, 'Zebra');
-    assert.equal(calls[1].options.paperSize, '90x100');
-    assert.equal((await PDFDocument.load(fs.readFileSync(calls[1].file))).getPageCount(), 1);
+    assert.deepEqual(calls[1].options, { printer: 'Comprovante', width: 90, height: 70 });
+    const summaryPdf = await PDFDocument.load(fs.readFileSync(calls[1].file));
+    assert.equal(summaryPdf.getPageCount(), 1);
+    assert.ok(Math.abs(summaryPdf.getPage(0).getHeight() - 70 * 72 / 25.4) < 0.01);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
   console.log('TikTok auto print: OK');
 }

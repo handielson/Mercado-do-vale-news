@@ -52,6 +52,10 @@ function separationLocation(value) {
     || locations[0] || 'Nao cadastrada';
 }
 
+function tiktokSummaryHeightMm(items) {
+  return 60 + Math.min(Math.max((items || []).length, 1), 3) * 10;
+}
+
 async function executeTikTokPrintJob({ job, settings, request, print, getStockLocations,
   directory, journalDirectory, prepareSummaryPrinter = prepareMercadoLivreSummaryPrinter, logger = console }) {
   const packageId = String(job.packageId || '');
@@ -85,7 +89,7 @@ async function executeTikTokPrintJob({ job, settings, request, print, getStockLo
             summary.items = summary.items.map(item => ({ ...item,
               stockLocation: separationLocation(locations[String(item.sku).toUpperCase()]) }));
           }
-          pdf = await createMercadoLivreSummaryPdf(summary);
+          pdf = await createMercadoLivreSummaryPdf(summary, { pageHeightMm: tiktokSummaryHeightMm(summary.items) });
         }
         if (!(await PDFDocument.load(pdf)).getPageCount()) throw new Error('PDF TikTok vazio');
         const filename = path.join(directory, `TIKTOK-${packageId}-${step.name}.pdf`);
@@ -95,7 +99,7 @@ async function executeTikTokPrintJob({ job, settings, request, print, getStockLo
         try {
           await print(filename, step.name === 'label'
             ? { printer: step.printer, paperSize: '4x6', scale: 'fit' }
-            : await prepareSummaryPrinter(step.printer));
+            : await prepareSummaryPrinter(step.printer, 90, tiktokSummaryHeightMm(job.summary?.items)));
         } catch {
           const error = new Error(`Conferir envio de ${step.name} do pacote ${packageId} ao Windows`);
           error.retryable = false;
@@ -149,4 +153,4 @@ function startTikTokPrintAgent({ apiUrl, syncKey, getSettings, getStockLocations
   return { tick, stop: () => clearInterval(timer) };
 }
 
-module.exports = { requestFactory, executeTikTokPrintJob, startTikTokPrintAgent, separationLocation, listWindowsPrinters };
+module.exports = { requestFactory, executeTikTokPrintJob, startTikTokPrintAgent, separationLocation, listWindowsPrinters, tiktokSummaryHeightMm };
