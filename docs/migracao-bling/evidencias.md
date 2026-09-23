@@ -264,3 +264,13 @@ Entradas usadas: pedido expresso do operador para suportar novas empresas e test
 Decisão registrada em `escopo-operacional-inicial.md`: Mercado do Vale é a empresa do primeiro corte, mantendo seleção explícita e isolamento para futuras empresas. NF-e e NFC-e são necessárias; PDV, site e Shopee formam o primeiro ciclo; Mercado Livre e TikTok ficam para depois da aprovação da Shopee. Foram listados os casos obrigatórios de venda, cancelamento, devolução, inutilização, rejeição, timeout e contingência. CT-e, MDF-e, BP-e, NFCom, produção e serviços financeiros do Bling ficaram fora do primeiro corte; NFS-e permanece separado por ser municipal.
 
 Resultado: D09 aprovado como definição de escopo. O documento não escolhe CFOP, CST/CSOSN, alíquotas ou benefícios; essas regras continuam bloqueadas por D06 e serão validadas com o contador antes de emitir.
+
+## E36 — Pacote objetivo para validação contábil de D06
+
+Data: 23/09/2026. Ambiente: documentação versionada; consulta histórica somente leitura já registrada em E03; nenhuma emissão, alteração tributária ou gravação no Bling/SEFAZ.
+
+Estado anterior: D06 pedia confirmação contábil de forma genérica. O cadastro já continha Simples Nacional, CRT 1 e vigência baseada na data de opção, enquanto o e-Fisco comprovava IE e credenciamentos ativos. O escopo D09 já definia os canais e operações, mas ainda não havia um artefato único para o contador aprovar cada regra.
+
+Alteração: criado `validacao-contabil-operacoes.md` com dados do emitente a confirmar, dez cenários operacionais, matriz de modelo/CFOP/CSOSN-CST/tributos/benefícios/vigência, exceções por produto e critério de aceite. Os quatro registros de natureza de operação observados no Bling e os XMLs autorizados são tratados somente como referências históricas; nenhum código foi ativado por inferência.
+
+Verificação: links locais e estrutura obrigatória conferidos; `git diff --check` aprovado. D06 permanece aberto e atribuído ao contador até o preenchimento identificado e datado. D07 continua aberto somente para a segunda cópia segura e ensaio de recuperação, adiado pelo operador.

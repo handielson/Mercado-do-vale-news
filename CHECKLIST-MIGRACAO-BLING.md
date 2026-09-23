@@ -9,6 +9,7 @@ Atualizado em 2026-09-23. Objetivo aprovado: eliminar a dependência operacional
 - [Diagnóstico fiscal e proposta técnica](docs/migracao-bling/diagnostico-fiscal.md)
 - [Funções do Bling e reaproveitamento local](docs/migracao-bling/mapa-funcional.md)
 - [Registro dos testes e consultas](docs/migracao-bling/evidencias.md)
+- [Pacote de validação contábil por operação](docs/migracao-bling/validacao-contabil-operacoes.md)
 - [Inventário completo de métodos/caminhos da API consultada](docs/migracao-bling/catalogo-api.json)
 - [Índice público de categorias e seções](docs/migracao-bling/catalogo-ajuda.json)
 
@@ -29,7 +30,7 @@ Se um teste falhar, manter o item aberto, corrigir dentro do escopo e repetir o 
 - [x] D03 — Consultar amostras NF-e/NFC-e e XMLs sem mutação. E03: emitente coincidente, CRT 1 e protocolo 100 nos arquivos.
 - [x] D04 — Catalogar API pública e índice de ajuda. E04: 263 operações, 165 caminhos, 49 grupos; 23 categorias e 348 seções.
 - [x] D05 — Executar verificações iniciais e registrar inclusive falhas. E05; isto não significa aprovação da migração.
-- [ ] D06 — Confirmar regime atual/vigência e operações fiscais com o contador; histórico é referência, não configuração automaticamente vigente.
+- [ ] D06 — Pacote de validação preparado em `docs/migracao-bling/validacao-contabil-operacoes.md` e E36. **Aguardando o contador:** confirmar regime/CRT/vigência e preencher modelo, CFOP, CSOSN/CST, ICMS/ST/FCP/DIFAL, PIS/COFINS/IPI, benefícios e exceções das operações utilizadas. Histórico permanece apenas como referência.
 - [ ] D07 — A1 exportado e removido do repositório sincronizado (E19/E21/E23–E25). O operador executou validação local com a senha: CNPJ corresponde, certificado vigente até 02/03/2027, chave privada presente e assinatura local aprovada. A ACL do arquivo local permite apenas Nitro, SYSTEM e Administradores. **Pendente por escolha do operador em 22/09/2026:** criar segunda cópia segura fora deste computador e ensaiar a recuperação depois. A autenticação mTLS e a consulta de status na SEFAZ-PE foram aprovadas em E28; a assinatura de XML fiscal continua em F07.
 - [x] D07a — Tela de metadados do certificado por empresa e aviso configurável em pop-up no painel administrativo implementados localmente (E26). Não guarda PFX/senha; só dispara ao usar o painel e após migration/publicação. Testes locais aprovados; não equivale à instalação do A1 no servidor nem ao backup pendente em D07.
 - [x] D07b — Gestão real do A1 pelo painel implantada e validada (E27/E28): instalação real, cofre AES-256-GCM, metadados, auditoria, exportação/exclusão controladas, guia/vídeo, alerta e consulta autenticada. O A1 da empresa foi aceito e a SEFAZ-PE homologação respondeu `107 — Serviço em Operação`; o backup externo de D07 continua separado.
