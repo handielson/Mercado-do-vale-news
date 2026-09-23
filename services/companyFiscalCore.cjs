@@ -174,9 +174,72 @@ function normalizeLookup(data, cnpj, source, now = new Date()) {
     municipalityCode: /^\d{7}$/.test(String(data.codigo_municipio_ibge || '')) ? String(data.codigo_municipio_ibge) : null,
     cnaeActivities, registry };
 }
-async function lookupCnpj(cnpj, { fetchImpl = fetch, now = () => new Date() } = {}) {
+const SERPRO_SOURCE = 'SERPRO Consulta CNPJ v2 (base oficial da Receita Federal)';
+let serproTokenCache = { consumerKey: '', accessToken: '', expiresAt: 0 };
+function normalizeSerproLookup(data, cnpj, now = new Date()) {
+  const status = data?.situacaoCadastral || data?.situacao_cadastral || {};
+  const nature = data?.naturezaJuridica || data?.natureza_juridica || {};
+  const mainCnae = data?.cnaePrincipal || data?.cnae_principal || {};
+  const secondaryCnaes = data?.cnaeSecundarias || data?.cnaes_secundarios || [];
+  const address = data?.endereco || {};
+  const municipality = address?.municipio || data?.municipioJurisdicao || {};
+  const phones = Array.isArray(data?.telefone) ? data.telefone : (Array.isArray(data?.telefones) ? data.telefones : []);
+  const phone = entry => entry && [entry.ddd, entry.numero].filter(Boolean).join('');
+  const result = normalizeLookup({
+    cnpj: data?.ni,
+    razao_social: data?.nomeEmpresarial ?? data?.nome_empresarial,
+    nome_fantasia: data?.nomeFantasia ?? data?.nome_fantasia,
+    descricao_situacao_cadastral: status?.descricao ?? status?.codigo,
+    data_situacao_cadastral: status?.data,
+    data_inicio_atividade: data?.dataAbertura ?? data?.data_abertura,
+    porte: data?.porte,
+    natureza_juridica: nature?.descricao ?? nature?.codigo,
+    email: data?.correioEletronico ?? data?.correio_eletronico,
+    ddd_telefone_1: phone(phones[0]), ddd_telefone_2: phone(phones[1]),
+    cep: address?.cep, logradouro: address?.logradouro, numero: address?.numero,
+    complemento: address?.complemento, bairro: address?.bairro,
+    municipio: municipality?.descricao ?? municipality, uf: address?.uf,
+    codigo_municipio_ibge: municipality?.codigo,
+    cnae_fiscal: mainCnae?.codigo, cnae_fiscal_descricao: mainCnae?.descricao,
+    cnaes_secundarios: secondaryCnaes,
+  }, cnpj, SERPRO_SOURCE, now);
+  return { ...result, officialDirect: true };
+}
+async function serproAccessToken({ fetchImpl, consumerKey, consumerSecret, nowMs, force = false }) {
+  if (!force && serproTokenCache.consumerKey === consumerKey && serproTokenCache.accessToken && serproTokenCache.expiresAt > nowMs() + 60000) return serproTokenCache.accessToken;
+  const response = await fetchImpl('https://gateway.apiserpro.serpro.gov.br/token', {
+    method: 'POST',
+    headers: { Authorization: `Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: 'grant_type=client_credentials', signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw problem('A autenticação da consulta oficial do CNPJ falhou. Confira as chaves do SERPRO.', 502);
+  const payload = await response.json();
+  if (!payload?.access_token || typeof payload.access_token !== 'string') throw problem('O SERPRO não devolveu um token de acesso válido.', 502);
+  serproTokenCache = { consumerKey, accessToken: payload.access_token, expiresAt: nowMs() + Math.max(60, Number(payload.expires_in) || 3600) * 1000 };
+  return payload.access_token;
+}
+async function lookupSerproCnpj(cnpj, { fetchImpl, now, nowMs, consumerKey, consumerSecret }) {
+  let token = await serproAccessToken({ fetchImpl, consumerKey, consumerSecret, nowMs });
+  let response = await fetchImpl(`https://gateway.apiserpro.serpro.gov.br/consulta-cnpj-df/v2/basica/${encodeURIComponent(cnpj)}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'x-request-tag': 'mdv-cadastro-fiscal' }, signal: AbortSignal.timeout(10000),
+  });
+  if (response.status === 401) {
+    token = await serproAccessToken({ fetchImpl, consumerKey, consumerSecret, nowMs, force: true });
+    response = await fetchImpl(`https://gateway.apiserpro.serpro.gov.br/consulta-cnpj-df/v2/basica/${encodeURIComponent(cnpj)}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'x-request-tag': 'mdv-cadastro-fiscal' }, signal: AbortSignal.timeout(10000),
+    });
+  }
+  if (response.status === 404) throw problem('CNPJ não encontrado na base oficial da Receita Federal.', 404);
+  if (!response.ok) throw problem('A consulta oficial do CNPJ está indisponível. Os dados anteriores foram preservados.', 502);
+  return normalizeSerproLookup(await response.json(), cnpj, now());
+}
+async function lookupCnpj(cnpj, { fetchImpl = fetch, now = () => new Date(), nowMs = Date.now, env = process.env } = {}) {
   cnpj = normalizeCnpj(cnpj);
   if (!validCnpj(cnpj)) throw problem('CNPJ inválido.');
+  const consumerKey = String(env.SERPRO_CNPJ_CONSUMER_KEY || '').trim();
+  const consumerSecret = String(env.SERPRO_CNPJ_CONSUMER_SECRET || '').trim();
+  if (!!consumerKey !== !!consumerSecret) throw problem('A consulta oficial do CNPJ está parcialmente configurada. Cadastre as duas chaves do SERPRO.', 503);
+  if (consumerKey && consumerSecret) return lookupSerproCnpj(cnpj, { fetchImpl, now, nowMs, consumerKey, consumerSecret });
   // Public mirrors of the RFB CNPJ dataset. They are not the contracted, real-time SERPRO API.
   const providers = [['BrasilAPI (espelho da base pública CNPJ/RFB)', 'https://brasilapi.com.br/api/cnpj/v1/'], ['Minha Receita (espelho da base pública CNPJ/RFB)', 'https://minhareceita.org/']];
   let notFound = false;
@@ -189,4 +252,4 @@ async function lookupCnpj(cnpj, { fetchImpl = fetch, now = () => new Date() } = 
   }
   throw problem(notFound ? 'CNPJ não encontrado nas fontes disponíveis. Mantenha a seleção manual e tente novamente depois.' : 'Consulta indisponível. Seus dados anteriores foram preservados. Tente novamente depois.', 502);
 }
-module.exports = { REGIMES, problem, normalizeCnpj, validCnpj, verifyStateRegistration, validateProfile, validateIssuerReadiness, verifyIbgeMunicipality, inspectIssuerReadiness, normalizeLookup, lookupCnpj };
+module.exports = { REGIMES, problem, normalizeCnpj, validCnpj, verifyStateRegistration, validateProfile, validateIssuerReadiness, verifyIbgeMunicipality, inspectIssuerReadiness, normalizeLookup, normalizeSerproLookup, lookupSerproCnpj, lookupCnpj };

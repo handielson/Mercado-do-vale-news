@@ -5,7 +5,7 @@ const ts = require('typescript');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
-const { validCnpj, normalizeLookup, lookupCnpj, validateProfile, validateIssuerReadiness, inspectIssuerReadiness, verifyStateRegistration } = require('../services/companyFiscalCore.cjs');
+const { validCnpj, normalizeLookup, normalizeSerproLookup, lookupCnpj, lookupSerproCnpj, validateProfile, validateIssuerReadiness, inspectIssuerReadiness, verifyStateRegistration } = require('../services/companyFiscalCore.cjs');
 const { registerCompanyFiscalRoutes } = require('../services/companyFiscalServer.cjs');
 const CNPJ = '11222333000181', SECOND = '11444777000161';
 const address = { zipCode: '56300000', street: 'Rua Teste', number: '10', complement: '', neighborhood: 'Centro', city: 'Petrolina' };
@@ -45,6 +45,38 @@ test('consulta preserva os campos cadastrais retornados e não mistura IE ou CRT
   const result = normalizeLookup({ cnpj: CNPJ, razao_social: 'EMPRESA TESTE LTDA', nome_fantasia: 'Loja Teste', descricao_situacao_cadastral: 'ATIVA', data_situacao_cadastral: '2020-01-02', data_inicio_atividade: '2019-08-30', porte: 'MICRO EMPRESA', natureza_juridica: 'Empresário (Individual)', email: 'cadastro@example.test', ddd_telefone_1: '87999990000', cep: '56300000', logradouro: 'Rua A', numero: '5', complemento: 'Loja C', bairro: 'Centro', municipio: 'Petrolina', uf: 'PE', inscricao_estadual: 'nao-deve-entrar', crt: 'nao-deve-entrar' }, CNPJ, 'fixture', new Date('2026-09-23T12:00:00Z'));
   assert.deepEqual(result.registry, { legalName:'EMPRESA TESTE LTDA', tradeName:'Loja Teste', status:'ATIVA', statusDate:'2020-01-02', openingDate:'2019-08-30', size:'MICRO EMPRESA', legalNature:'Empresário (Individual)', email:'cadastro@example.test', phone:'87999990000', secondaryPhone:null, address:{ zipCode:'56300000', street:'Rua A', number:'5', complement:'Loja C', neighborhood:'Centro', city:'Petrolina', uf:'PE' } });
   assert(!('stateRegistration' in result.registry)); assert(!('crt' in result.registry));
+});
+test('retorno oficial SERPRO v2 preserva os campos recebidos e marca consulta direta', () => {
+  const result = normalizeSerproLookup({ ni:CNPJ, nomeEmpresarial:'EMPRESA OFICIAL LTDA', nomeFantasia:'Oficial', situacaoCadastral:{codigo:'02',data:'2020-01-02'}, naturezaJuridica:{codigo:'2135',descricao:'Empresário'}, dataAbertura:'2019-08-30', cnaePrincipal:{codigo:'4751201',descricao:'Comércio'}, cnaeSecundarias:[{codigo:'6201501',descricao:'Software'}], endereco:{cep:'56300000',logradouro:'Rua A',numero:'5',bairro:'Centro',municipio:{codigo:'2611101',descricao:'Petrolina'},uf:'PE'}, telefone:[{ddd:'87',numero:'999990000'}], correioEletronico:'cadastro@example.test', porte:'01', opcaoSimples:true }, CNPJ, new Date('2026-09-23T12:00:00Z'));
+  assert.equal(result.authority,'Receita Federal do Brasil'); assert.equal(result.officialDirect,true);
+  assert.equal(result.source,'SERPRO Consulta CNPJ v2 (base oficial da Receita Federal)');
+  assert.equal(result.registry.legalName,'EMPRESA OFICIAL LTDA'); assert.equal(result.registry.status,'02');
+  assert.equal(result.municipalityCode,'2611101'); assert.equal(result.registry.address.city,'Petrolina');
+  assert.deepEqual(result.cnaeActivities,[{code:'4751201',description:'Comércio',primary:true},{code:'6201501',description:'Software',primary:false}]);
+  assert.equal(result.suggestedRegime,null); assert.equal(result.simples,null);
+});
+test('cliente SERPRO usa OAuth2 sem expor segredo e consulta endpoint oficial', async () => {
+  const calls = [];
+  const result = await lookupSerproCnpj(CNPJ, { consumerKey:'key-fixture', consumerSecret:'secret-fixture', now:()=>new Date('2026-09-23T12:00:00Z'), nowMs:()=>1000, fetchImpl:async (url, options) => {
+    calls.push({url,options});
+    if (calls.length === 1) return {ok:true,status:200,json:async()=>({access_token:'token-fixture',expires_in:3600})};
+    return {ok:true,status:200,json:async()=>({ni:CNPJ,nomeEmpresarial:'EMPRESA OFICIAL LTDA'})};
+  }});
+  assert.equal(calls[0].url,'https://gateway.apiserpro.serpro.gov.br/token');
+  assert.equal(calls[0].options.method,'POST'); assert.match(calls[0].options.headers.Authorization,/^Basic /);
+  assert(!calls[0].options.headers.Authorization.includes('secret-fixture'));
+  assert.equal(calls[1].url,`https://gateway.apiserpro.serpro.gov.br/consulta-cnpj-df/v2/basica/${CNPJ}`);
+  assert.equal(calls[1].options.headers.Authorization,'Bearer token-fixture'); assert.equal(result.officialDirect,true);
+});
+test('consulta prioriza SERPRO quando as duas chaves existem e bloqueia configuração parcial', async () => {
+  const urls = [];
+  const result = await lookupCnpj(CNPJ, { env:{SERPRO_CNPJ_CONSUMER_KEY:'key-priority',SERPRO_CNPJ_CONSUMER_SECRET:'secret-priority'}, nowMs:()=>2000, fetchImpl:async url => {
+    urls.push(url);
+    if (urls.length === 1) return {ok:true,status:200,json:async()=>({access_token:'token-priority',expires_in:3600})};
+    return {ok:true,status:200,json:async()=>({ni:CNPJ,nomeEmpresarial:'EMPRESA OFICIAL LTDA'})};
+  }});
+  assert.equal(urls.length,2); assert(urls.every(url=>url.includes('apiserpro.serpro.gov.br'))); assert.equal(result.officialDirect,true);
+  await assert.rejects(lookupCnpj(CNPJ,{env:{SERPRO_CNPJ_CONSUMER_KEY:'incompleta'},fetchImpl:async()=>{ throw new Error('não deveria consultar'); }}),/parcialmente configurada/);
 });
 test('busca do cadastro principal também entrega as descrições dos CNAEs secundários', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../utils/cnpjHelper.ts'), 'utf8');

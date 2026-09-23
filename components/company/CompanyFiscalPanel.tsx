@@ -172,10 +172,10 @@ export function CompanyFiscalPanel({ api = companyFiscalService }: { api?: typeo
                 {draft.lookup && <div className="rounded-lg bg-slate-50 p-4 space-y-2 text-sm">
                     <h3 className="font-semibold">Cadastro nacional da pessoa jurídica</h3>
                     <p>Simples Nacional: <strong>{flag(draft.lookup.simples)}</strong> · MEI: <strong>{flag(draft.lookup.mei)}</strong></p>
-                    <p>Base cadastral: {draft.lookup.authority} · Provedor técnico: {draft.lookup.source}</p>
+                    <p>Base cadastral: {draft.lookup.authority || 'Receita Federal do Brasil'} · Provedor técnico: {draft.lookup.source || 'Consulta anterior sem provedor registrado'}</p>
                     <p>Consulta direta oficial: <strong>{draft.lookup.officialDirect ? 'Sim' : 'Não'}</strong> · Consultado em {new Date(draft.lookup.consultedAt).toLocaleString('pt-BR')}</p>
                     <p>Opção pelo Simples: {draft.lookup.simplesSince || 'Não informada'} · Exclusão: {draft.lookup.simplesUntil || 'Não informada'}</p>
-                    <p className="text-xs text-slate-600">O provedor atual é um espelho da base pública do CNPJ, não a API oficial em tempo real da Receita. Nenhum regime ou CRT é deduzido deste retorno.</p>
+                    <p className="text-xs text-slate-600">{draft.lookup.officialDirect ? 'Consulta realizada diretamente pela API Consulta CNPJ do SERPRO, na base oficial da Receita Federal.' : 'O provedor atual é um espelho da base pública do CNPJ, não a API oficial em tempo real da Receita.'} Nenhum regime ou CRT é deduzido deste retorno.</p>
                     <div className="grid gap-1 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-2">
                         <p>Razão social: <strong>{draft.lookup.registry?.legalName || 'Não informada'}</strong></p>
                         <p>Nome fantasia: <strong>{draft.lookup.registry?.tradeName || 'Não informado'}</strong></p>
