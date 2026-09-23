@@ -1,9 +1,9 @@
 # Versão Atual
 
-version: v1.2.428-certificado-cnpj-fix
-date: 2026-09-22
+version: v1.2.429-sefaz-icp-brasil
+date: 2026-09-23
 status: published
-release_vps: /var/www/mdv-site/releases/20260922-235500-v12428-certificado-cnpj-fix
+release_vps: /var/www/mdv-site/releases/20260923-000718-v12429-sefaz-icp-brasil
 branch: main
-summary: Corrige a identificação do CNPJ titular em certificados A1 com cadeia certificadora.
-tag: v1.2.428-certificado-cnpj-fix
+summary: Adiciona a raiz SSL oficial ICP-Brasil v10 à comunicação segura com a SEFAZ.
+tag: v1.2.429-sefaz-icp-brasil

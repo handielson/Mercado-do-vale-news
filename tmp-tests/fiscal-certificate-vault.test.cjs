@@ -62,3 +62,13 @@ test('consulta SEFAZ usa o A1 do cofre e interpreta código 107', async t => {
   } });
   assert.equal(result.operational, true); assert.equal(result.cStat, '107');
 });
+
+test('cliente SEFAZ confia na raiz SSL oficial da ICP-Brasil sem remover as raízes padrão', () => {
+  const root = new crypto.X509Certificate(vault.ICP_BRASIL_V10_ROOT);
+  assert.equal(root.ca, true);
+  assert.match(root.subject, /Autoridade Certificadora Raiz Brasileira v10/);
+  assert.equal(root.fingerprint256, '6E:0B:FF:06:9A:26:99:4C:15:DE:2C:48:88:CC:54:AF:84:88:2E:54:95:B7:FB:F6:6B:E9:CC:FF:EC:74:89:F6');
+  const authorities = vault.trustedAuthorities();
+  assert(authorities.length > 100);
+  assert.equal(authorities.at(-1), vault.ICP_BRASIL_V10_ROOT);
+});
