@@ -59,6 +59,10 @@ test('painel, rotas, migration e deploy permanecem conectados', () => {
   assert.match(component, /disabled=\{busy\|\|issues\.review\.length>0\}/);
   assert.match(server, /\/tax-validation/);
   assert.match(deploy, /021_company_fiscal_tax_validation\.sql/);
+  assert.match(deploy, /022_accountant_portal\.sql/);
+  assert.match(deploy, /company_accountant_access/);
+  assert.match(deploy, /services\/accountantPortalServer\.cjs/);
+  assert.match(deploy, /services\/blingFiscalImportCore\.cjs/);
   assert.match(deploy, /companyFiscalServicePaths[\s\S]*services\/fiscalTaxValidationCore\.cjs/);
   assert.match(deploy, /node --check \$\{appDir\}\/services\/fiscalTaxValidationCore\.cjs/);
   assert.ok((deploy.match(/applyCompanyFiscalMigration\(\{ appDir, apiProc \}\)/g) || []).length >= 4, 'o deploy completo também deve aplicar a migration fiscal');
