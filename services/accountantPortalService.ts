@@ -79,5 +79,5 @@ export const accountantAccessAdminService = {
   list: (companyId: string) => vpsClient.get<{ company: AccountantCompany; access: AccountantAccess[] }>(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/accountant-access`),
   grant: (companyId: string, email: string) => vpsClient.post(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/accountant-access`, { email, canEditTaxValidation: true, canViewRevenue: true }),
   revoke: (companyId: string, customerId: string) => vpsClient.delete(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/accountant-access/${encodeURIComponent(customerId)}`),
-  importBlingDocuments: (companyId: string, from: string, to: string) => vpsClient.post<{ imported: number; from: string; to: string; source: string }>(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/documents/import-bling`, { from, to }),
+  importBlingDocuments: (companyId: string, from: string, to: string) => vpsClient.post<{ imported: number; authorized: number; cancelled: number; from: string; to: string; source: string }>(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/documents/import-bling`, { from, to }),
 };

@@ -2,13 +2,66 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildRevenueReport, normalizeOperationalSale, reconcileSale, validPeriod } = require('../services/accountantPortalCore.cjs');
 const { registerAccountantPortalRoutes } = require('../services/accountantPortalServer.cjs');
-const { majorToCents, normalizeBlingFiscalDocument, fiscalDocumentTotals } = require('../services/blingFiscalImportCore.cjs');
+const { majorToCents, normalizeBlingFiscalDocument, collectBlingFiscalDocuments, fiscalDocumentTotals } = require('../services/blingFiscalImportCore.cjs');
 
 test('normaliza NF-e e NFC-e do Bling em centavos sem depender do cache do navegador', () => {
   assert.equal(majorToCents('123.45'), 12345);
-  const nfe = normalizeBlingFiscalDocument({ id:321, numero:'99', serie:'1', dataEmissao:'2026-09-10 12:30:00', totalNota:123.45, chaveAcesso:'1'.repeat(44) }, 'nfe');
+  const nfe = normalizeBlingFiscalDocument({ id:321, tipo:1, situacao:5, numero:'99', serie:'1', dataEmissao:'2026-09-10 12:30:00', valorNota:123.45, chaveAcesso:'1'.repeat(44) }, 'nfe');
   assert.deepEqual(nfe, { model:'55', channel:'bling', externalSaleId:'nfe:321', status:'authorized', accessKey:'1'.repeat(44), documentNumber:'99', series:'1', issuedAt:'2026-09-10 12:30:00', totalCents:12345, source:'bling_import', sourceReference:'321' });
+  const cancelled = normalizeBlingFiscalDocument({ id:322, tipo:1, situacao:2, dataEmissao:'2026-09-10', valorNota:10 }, 'nfce');
+  assert.equal(cancelled.status, 'cancelled');
+  assert.equal(cancelled.totalCents, 1000);
+  assert.equal(normalizeBlingFiscalDocument({ id:323, tipo:0, situacao:5, dataEmissao:'2026-09-10', valorNota:10 }, 'nfe'), null);
+  assert.equal(normalizeBlingFiscalDocument({ id:324, tipo:1, situacao:5, dataEmissao:'2026-09-10' }, 'nfe'), null);
   assert.equal(normalizeBlingFiscalDocument({ id:1, dataEmissao:'inválida' }, 'nfce'), null);
+});
+
+test('coleta autorizadas e canceladas dos dois modelos com detalhes e sem perder páginas', async () => {
+  const calls = [];
+  const docs = await collectBlingFiscalDocuments({
+    listPage: async (type, status, page) => {
+      calls.push(`${type}:${status}:${page}`);
+      return page === 1 ? [{ id: `${type}-${status}`, situacao: status }] : [];
+    },
+    getDetail: async (type, id) => ({ id, tipo:1, situacao:Number(id.split('-')[1]), dataEmissao:'2026-09-10 12:00:00', valorNota:12.34 }),
+  });
+  assert.deepEqual(calls, ['nfe:5:1','nfe:2:1','nfce:5:1','nfce:2:1']);
+  assert.deepEqual(docs.map(doc => `${doc.model}:${doc.status}:${doc.totalCents}`), [
+    '55:authorized:1234','55:cancelled:1234','65:authorized:1234','65:cancelled:1234',
+  ]);
+});
+
+test('aborta a importação inteira se detalhe divergir ou o período superar o limite', async () => {
+  const listPage = async () => [{ id: 1, situacao: 5 }];
+  await assert.rejects(collectBlingFiscalDocuments({ listPage, getDetail: async () => ({ id: 1, tipo:1, situacao:2, dataEmissao:'2026-09-10', valorNota:10 }) }), /divergente/);
+  await assert.rejects(collectBlingFiscalDocuments({ listPage, getDetail: async () => ({}), maxDocuments:0 }), /Divida em períodos menores/);
+  await assert.rejects(collectBlingFiscalDocuments({ listPage, getDetail: async () => ({ id:1, tipo:1, situacao:5, dataEmissao:'2026-09-10' }) }), /incompleto/);
+});
+
+test('falha na coleta não inicia gravação fiscal no banco', async () => {
+  const routes = new Map();
+  const app = { post: (path, options, handler) => routes.set(path, { preHandler: options.preHandler, handler }) };
+  for (const method of ['get', 'put', 'delete']) app[method] = () => {};
+  let openedTransaction = false;
+  const pool = {
+    query: async sql => {
+      if (sql.includes('FROM company_settings')) return [[{ id:'settings-1', name:'Empresa', cnpj:'123' }]];
+      if (sql.includes('FROM company_fiscal_profiles')) return [[{ id:'profile-1', settings_id:'settings-1', name:'Empresa' }]];
+      throw new Error(`SQL inesperado: ${sql}`);
+    },
+    getConnection: async () => { openedTransaction = true; throw new Error('A transação não deveria começar.'); },
+  };
+  registerAccountantPortalRoutes(app, {
+    pool, enabled:true,
+    getBearerAuthContext: async () => ({ customerId:'admin', userId:'admin', isAdmin:true }),
+    importBlingDocuments: async () => { throw new Error('Detalhe fiscal incompleto'); },
+  });
+  const route = routes.get('/admin/fiscal-companies/:id/documents/import-bling');
+  const req = { params:{ id:'primary' }, body:{ from:'2026-09-01', to:'2026-09-02' } };
+  const reply = { sent:false, header(){}, code(){ return this; }, send(value){ this.sent=true; return value; } };
+  await route.preHandler(req, reply);
+  await assert.rejects(route.handler(req), /Detalhe fiscal incompleto/);
+  assert.equal(openedTransaction, false);
 });
 
 test('totaliza documentos autorizados e cancelados separadamente', () => {

@@ -201,7 +201,12 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       await db.rollback();
       throw error;
     } finally { db.release(); }
-    return { imported, from, to, source: 'bling_import' };
+    return {
+      imported,
+      authorized: documents.filter(document => document.status === 'authorized').length,
+      cancelled: documents.filter(document => document.status === 'cancelled').length,
+      from, to, source: 'bling_import',
+    };
   });
 
   app.get('/admin/fiscal-companies/:id/accountant-access', { preHandler: admin }, async req => {

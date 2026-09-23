@@ -11,7 +11,7 @@ export function CompanyAccountantAccessPanel() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [importFrom, setImportFrom] = useState(`${new Date().getFullYear()}-01-01`);
+  const [importFrom, setImportFrom] = useState(new Date().toISOString().slice(0, 7) + '-01');
   const [importTo, setImportTo] = useState(new Date().toISOString().slice(0, 10));
   const selectedCompany = companies.find(company => company.id === selected);
 
@@ -38,7 +38,7 @@ export function CompanyAccountantAccessPanel() {
     setBusy(true); setError(''); setMessage('');
     try {
       const result = await accountantAccessAdminService.importBlingDocuments(selected, importFrom, importTo);
-      setMessage(`${result.imported} documento(s) fiscal(is) copiado(s) do Bling para a base própria. Repetir a importação atualiza os mesmos documentos sem duplicar.`);
+      setMessage(`${result.imported} documento(s) conferido(s): ${result.authorized} autorizado(s) e ${result.cancelled} cancelado(s). Repetir a importação atualiza os mesmos documentos sem duplicar.`);
     } catch (err) { setError(err instanceof Error ? err.message : 'Falha ao importar documentos fiscais.'); }
     finally { setBusy(false); }
   };
@@ -49,7 +49,7 @@ export function CompanyAccountantAccessPanel() {
     <div className="flex flex-col gap-2 sm:flex-row"><input type="email" className="flex-1 rounded-lg border border-slate-300 px-3 py-2" placeholder="E-mail da conta do contador" value={email} onChange={event => setEmail(event.target.value)} /><button type="button" disabled={busy || !email.trim()} onClick={grant} className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"><UserPlus size={17}/>Conceder acesso</button></div>
     <p className="text-xs text-slate-500">Se a conta ainda não existir, o contador deve criá-la em “Criar conta” na página de login. Depois, conceda o acesso pelo e-mail cadastrado.</p>
     <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
-      <div><h3 className="font-bold text-blue-950">Copiar histórico fiscal do Bling</h3><p className="text-sm text-blue-900">Importa NF-e e NFC-e autorizadas para a nossa base. A operação apenas consulta o Bling: não altera nem exclui documentos lá. A conexão atual pertence à empresa principal; cada empresa adicional precisará da própria conexão.</p></div>
+      <div><h3 className="font-bold text-blue-950">Copiar histórico fiscal do Bling</h3><p className="text-sm text-blue-900">Importa NF-e e NFC-e de saída, autorizadas e canceladas, para a nossa base. Valores e situação são conferidos no detalhe de cada nota. Importe em períodos pequenos (até 25 notas por operação). A operação apenas consulta o Bling: não altera nem exclui documentos lá. A conexão atual pertence à empresa principal; cada empresa adicional precisará da própria conexão.</p></div>
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]"><label className="text-sm font-semibold text-slate-800">De<input type="date" value={importFrom} onChange={event => setImportFrom(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label><label className="text-sm font-semibold text-slate-800">Até<input type="date" value={importTo} onChange={event => setImportTo(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label><button type="button" disabled={busy || !selected || !selectedCompany?.primary || !importFrom || !importTo || importFrom > importTo} onClick={importBling} className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 font-semibold text-white disabled:opacity-50"><DownloadCloud size={17}/>Importar notas</button></div>
     </div>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}{message && <p role="status" className="text-sm text-green-700">{message}</p>}

@@ -30,6 +30,7 @@ function RevenuePanel() {
   const cards = useMemo(() => report ? [
     ['Vendas concluídas', report.totals.operationalCents, 'text-slate-900'],
     ['Notas autorizadas', report.documentTotals.authorizedDocumentCents, 'text-emerald-700'],
+    ['Notas canceladas', report.documentTotals.cancelledDocumentCents, 'text-red-700'],
     ['Sem nota confirmado', report.totals.noInvoiceConfirmedCents, 'text-amber-700'],
     ['Pendente de conciliação', report.totals.reconciliationPendingCents, 'text-blue-700'],
   ] as const : [], [report]);
@@ -38,7 +39,7 @@ function RevenuePanel() {
     {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>}
     {report && <>
       {!report.coverage.available && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{report.coverage.reason}</p>}
-      {report.coverage.note && <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900"><strong>Escopo atual:</strong> {report.coverage.note} O total de notas autorizadas é apurado diretamente nos documentos fiscais importados; a vinculação de cada nota à venda aparece separadamente na conciliação.</p>}
+      {report.coverage.note && <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900"><strong>Escopo atual:</strong> {report.coverage.note} Os totais de notas autorizadas e canceladas vêm dos documentos fiscais importados; a vinculação de cada nota à venda aparece separadamente na conciliação. Este relatório não calcula impostos.</p>}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label,value,color]) => <article key={label} className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm text-slate-500">{label}</p><p className={`mt-2 text-2xl font-black ${color}`}>{money(value)}</p></article>)}</div>
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="border-b border-slate-200 p-5"><h2 className="font-bold text-slate-900">Movimentos do período</h2><p className="text-sm text-slate-500">“Pendente de conciliação” não significa venda sem nota; indica que o XML autorizado ainda não está vinculado ao sistema.</p></div><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-slate-600"><tr><th className="px-4 py-3">Data</th><th className="px-4 py-3">Canal</th><th className="px-4 py-3">Referência</th><th className="px-4 py-3">Situação fiscal</th><th className="px-4 py-3 text-right">Valor</th></tr></thead><tbody className="divide-y divide-slate-100">{report.sales.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Nenhum movimento encontrado.</td></tr>}{report.sales.map(sale => <tr key={`${sale.channel}:${sale.externalSaleId}`}><td className="whitespace-nowrap px-4 py-3">{new Date(sale.occurredAt).toLocaleDateString('pt-BR')}</td><td className="px-4 py-3 uppercase">{sale.channel}</td><td className="px-4 py-3 font-mono text-xs">{sale.externalSaleId}</td><td className="px-4 py-3">{fiscalLabel[sale.fiscalState] || sale.fiscalState}</td><td className="px-4 py-3 text-right font-semibold">{money(sale.totalCents)}</td></tr>)}</tbody></table></div></section>
     </>}

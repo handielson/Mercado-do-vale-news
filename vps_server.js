@@ -21,7 +21,7 @@ const { ensureTikTokPrintTable, registerTikTokPrintRoutes } = require('./service
 const { ensureTikTokFulfillmentTable, createTikTokFulfillmentAutomation } = require('./services/tiktokShopFulfillmentAutomation.cjs');
 const { normalizeRelayCommand, ensureSchema: ensureN8nAdminHandoffSchema, notifyAdmins: notifyN8nHandoffAdmins, handleRelayCommand } = require('./services/n8nAdminHandoffRelay.cjs');
 const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
-const { normalizeBlingFiscalDocument } = require('./services/blingFiscalImportCore.cjs');
+const { collectBlingFiscalDocuments } = require('./services/blingFiscalImportCore.cjs');
 const {
   CATALOG_PREFERENCE_HANDOFF_MESSAGE,
   PHONE_LIST_FOLLOWUP_MESSAGE,
@@ -9726,18 +9726,16 @@ async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to }) {
     throw error;
   }
 
-  const documents = [];
-  for (const type of ['nfe', 'nfce']) {
-    for (let page = 1; page <= 100; page += 1) {
-      if (page > 1) await sleepBlingReconcileVps(350);
+  const read = async (type, status, page, id) => {
+      const path = id == null ? type : `${type}/${encodeURIComponent(String(id))}`;
       const params = new URLSearchParams({
-        pagina: String(page),
-        limite: '100',
-        dataEmissaoInicial: from,
-        dataEmissaoFinal: to,
-        situacao: '2',
+        ...(id == null ? {
+          pagina: String(page), limite: '100', dataEmissaoInicial: from,
+          dataEmissaoFinal: to, situacao: String(status),
+          ...(type === 'nfe' ? { tipo: '1' } : {}),
+        } : {}),
       });
-      const response = await fetch(`https://api.bling.com.br/Api/v3/${type}?${params.toString()}`, {
+      const response = await fetch(`https://api.bling.com.br/Api/v3/${path}${id == null ? `?${params}` : ''}`, {
         headers: { Authorization: authHeader, Accept: 'application/json' },
         signal: AbortSignal.timeout(30000),
       });
@@ -9751,15 +9749,14 @@ async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to }) {
         error.statusCode = response.status === 401 ? 409 : 502;
         throw error;
       }
-      const items = Array.isArray(body.json?.data) ? body.json.data : [];
-      for (const item of items) {
-        const document = normalizeBlingFiscalDocument(item, type);
-        if (document) documents.push(document);
-      }
-      if (items.length < 100) break;
-    }
-  }
-  return documents;
+      return body.json?.data;
+  };
+  return collectBlingFiscalDocuments({
+    listPage: (type, status, page) => read(type, status, page),
+    getDetail: (type, id) => read(type, null, null, id),
+    pause: () => sleepBlingReconcileVps(450),
+    maxDocuments: 25,
+  });
 }
 
 function readBlingStockQuantityVps(item) {
