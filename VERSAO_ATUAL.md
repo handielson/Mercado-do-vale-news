@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.423-n8n-blueprint-followup
-date: 2026-09-21
-status: published
-release_vps: pendente (API/n8n only)
+version: v1.2.436-tiktok-print-flow
+date: 2026-09-23
+status: ready
+release_vps: pendente
 branch: main
-summary: Agenda follow-up comercial após blueprint de smartphone quando o cliente não responde.
-tag: v1.2.423-n8n-blueprint-followup
+summary: Fluxo TikTok Shop com confirmação fiscal, fila oficial e impressão local integrada.
+tag: v1.2.436-tiktok-print-flow

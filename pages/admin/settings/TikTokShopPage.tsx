@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ExternalLink, KeyRound, Loader2, RefreshCw, Save, ShieldCheck, Store } from 'lucide-react';
+import { ExternalLink, KeyRound, Loader2, Printer, RefreshCw, Save, ShieldCheck, Store } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   tiktokShopService,
@@ -44,6 +44,8 @@ export default function TikTokShopPage() {
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [tiktokOrderId, setTiktokOrderId] = useState('586215533660637149');
+  const [printingTikTok, setPrintingTikTok] = useState(false);
 
   useEffect(() => {
     if (!initialProductId) return;
@@ -143,6 +145,28 @@ export default function TikTokShopPage() {
       toast.error('Nao foi possivel consultar as lojas autorizadas.');
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function handleTikTokPrint() {
+    const orderId = tiktokOrderId.trim();
+    if (!/^\d{8,32}$/.test(orderId)) {
+      toast.error('Informe um ID de pedido TikTok válido.');
+      return;
+    }
+    setPrintingTikTok(true);
+    try {
+      const response = await fetch(`http://127.0.0.1:8081/print-tiktok-order?order_id=${encodeURIComponent(orderId)}`);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result?.success === false || result?.error) {
+        throw new Error(result?.error || 'O agente local não concluiu a impressão.');
+      }
+      toast.success(result.already_printed ? 'Etiqueta TikTok já estava impressa.' : 'Fluxo concluído: etiqueta TikTok enviada para a impressora.');
+    } catch (error: any) {
+      console.error('[TikTokShopPage] print error:', error);
+      toast.error(error?.message || 'Não foi possível concluir a impressão TikTok.');
+    } finally {
+      setPrintingTikTok(false);
     }
   }
 
@@ -315,6 +339,39 @@ export default function TikTokShopPage() {
           </div>
         </section>
       )}
+
+      <section className="rounded-lg border border-teal-200 bg-teal-50 p-5 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Printer className="h-5 w-5 text-teal-700" />
+              <h2 className="text-lg font-semibold text-slate-900">Expedição e impressão TikTok Shop</h2>
+            </div>
+            <p className="mt-2 max-w-3xl text-sm text-slate-700">
+              O sistema autoriza a NF-e no Bling, aguarda a confirmação fiscal do TikTok, envia o pacote,
+              baixa a etiqueta oficial A6 e imprime pela impressora térmica configurada no agente local.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+            <input
+              className="w-full rounded-lg border border-teal-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-teal-600 focus:outline-none sm:w-72"
+              value={tiktokOrderId}
+              onChange={(event) => setTiktokOrderId(event.target.value.replace(/\D/g, ''))}
+              placeholder="ID do pedido TikTok"
+              inputMode="numeric"
+            />
+            <button
+              type="button"
+              onClick={handleTikTokPrint}
+              disabled={printingTikTok || !isConnected}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {printingTikTok ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+              {printingTikTok ? 'Processando...' : 'Enviar e imprimir'}
+            </button>
+          </div>
+        </div>
+      </section>
 
       <TikTokShopProductPreparation status={status} initialProductId={initialProductId} />
       <TikTokShopBulkPreparation />

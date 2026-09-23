@@ -17,7 +17,11 @@ function requestFactory(apiUrl, syncKey, requestFetch = global.fetch) {
     });
     if (response.status === 204) return null;
     if (!response.ok) {
-      const error = new Error(`TikTok Shop ${route}: HTTP ${response.status}`);
+      const errorBody = await response.text().catch(() => '');
+      let detail = errorBody;
+      try { detail = JSON.parse(errorBody)?.detail || JSON.parse(errorBody)?.error || errorBody; } catch {}
+      const error = new Error(`TikTok Shop ${route}: HTTP ${response.status}${detail ? ` - ${String(detail).slice(0, 500)}` : ''}`);
+      error.status = response.status;
       error.retryable = [409, 429, 500, 502, 503, 504].includes(response.status);
       throw error;
     }

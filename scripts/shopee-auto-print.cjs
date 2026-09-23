@@ -98,6 +98,55 @@ async function callVpsShopeeAction(action, payload = {}) {
     return { ok: response.ok, status: response.status, contentType, buffer: null, data };
 }
 
+function tiktokPrintStatePaths(orderId) {
+    const safeId = String(orderId || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    return {
+        printed: path.join(printedMarkersDir, `tiktok-${safeId}.label.txt`),
+        failed: path.join(printedMarkersDir, `tiktok-${safeId}.failed.txt`),
+    };
+}
+
+async function runTikTokPrintFlow(orderId) {
+    const safeOrderId = String(orderId || '').trim();
+    if (!/^\d{8,32}$/.test(safeOrderId)) throw new Error('Pedido TikTok inválido.');
+    const state = tiktokPrintStatePaths(safeOrderId);
+    if (fs.existsSync(state.printed)) return { success: true, already_printed: true, order_id: safeOrderId };
+
+    const settings = await getCompanySettings();
+    const printer = String(settings?.shopee_printer_thermal || '').trim();
+    if (!printer) throw new Error('Impressora térmica não configurada no sistema.');
+
+    const requestFetch = await getFetch();
+    const apiRequest = require('./tiktok-shop-print-agent.cjs').requestFactory(VPS_API_URL, VPS_SYNC_KEY, requestFetch);
+    try {
+        await apiRequest(`/orders/${encodeURIComponent(safeOrderId)}/fulfill`, { body: { handover_method: 'DROP_OFF' } });
+    } catch (error) {
+        // A retry is safe when TikTok already accepted the NF-e; the automation
+        // queue remains the source of truth for the next stages.
+        if (!/não precisa de novo upload|nao precisa de novo upload/i.test(String(error.message || ''))) throw error;
+        console.warn(`[TIKTOK PRINT] Fulfillment já estava iniciado para ${safeOrderId}: ${error.message}`);
+    }
+
+    const deadline = Date.now() + 8 * 60 * 1000;
+    while (Date.now() < deadline) {
+        await apiRequest('/print-jobs/sync', { body: { order_id: safeOrderId } }).catch(error => {
+            if (!/order_not_ready|não apto|nao apto/i.test(String(error.message || ''))) throw error;
+        });
+        const status = await apiRequest(`/print-jobs/order/${encodeURIComponent(safeOrderId)}`);
+        const printed = (status?.jobs || []).find(job => job.status === 'printed');
+        if (printed) {
+            markPrintStep(state.printed);
+            if (fs.existsSync(state.failed)) fs.unlinkSync(state.failed);
+            console.log(`[TIKTOK PRINT] Pedido ${safeOrderId}: impressão confirmada pelo sistema.`);
+            return { success: true, order_id: safeOrderId, package_id: printed.package_id, tracking_number: printed.tracking_number || null, printer };
+        }
+        const intervention = (status?.jobs || []).find(job => job.status === 'intervention');
+        if (intervention) throw new Error(intervention.last_error || 'Fila TikTok exige intervenção.');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+    throw new Error('Tempo excedido aguardando a fila TikTok concluir a impressão.');
+}
+
 function orderPrintStatePaths(orderSn) {
     return {
         legacy: path.join(printedMarkersDir, `${orderSn}.txt`),
@@ -610,6 +659,22 @@ function startLocalServer() {
                     </html>
                 `);
             });
+        } else if (req.url.startsWith('/print-tiktok-order')) {
+            const urlParams = new URLSearchParams(req.url.split('?')[1]);
+            const orderId = urlParams.get('order_id');
+            if (!orderId) {
+                res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                return res.end(JSON.stringify({ error: 'order_id ausente' }));
+            }
+            try {
+                const result = await runTikTokPrintFlow(orderId);
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                return res.end(JSON.stringify(result));
+            } catch (error) {
+                console.error(`[TIKTOK PRINT] Falha no pedido ${orderId}:`, error.message || error);
+                res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+                return res.end(JSON.stringify({ error: error.message || String(error) }));
+            }
         } else if (req.url.startsWith('/print-order')) {
             const urlParams = new URLSearchParams(req.url.split('?')[1]);
             const orderSn = urlParams.get('order_sn');

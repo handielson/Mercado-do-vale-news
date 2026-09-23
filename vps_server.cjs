@@ -8103,7 +8103,7 @@ async function shipTikTokPackageVps(packageId, { handoverMethod = 'DROP_OFF' } =
   if (!safePackageId) throw new Error('Pacote TikTok inválido.');
   const settings = await loadTikTokShopOAuthSettingsVps();
   const shipment = await callTikTokShopOpenApiVps(settings, { method: 'POST', pathname: '/fulfillment/202309/packages/ship', body: buildTikTokShipPackageBodyVps(safePackageId, { handoverMethod }) });
-  const document = await callTikTokShopOpenApiVps(settings, { pathname: tikTokShippingDocumentPathVps(safePackageId), query: { document_type: 'SHIPPING_LABEL' } });
+  const document = await callTikTokShopOpenApiVps(settings, { pathname: tikTokShippingDocumentPathVps(safePackageId), query: { document_type: 'SHIPPING_LABEL', invoice_label: 'true' } });
   return { success: true, package_id: safePackageId, shipment: shipment?.payload || shipment, shipping_document: document?.payload || document };
 }
 
