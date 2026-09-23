@@ -110,7 +110,7 @@ export const CompanyDataPage: React.FC = () => {
                     ? `${data.atividade_principal[0].code} - ${data.atividade_principal[0].text}`
                     : '';
 
-                // Update form with Receita Federal data
+                // Apply public CNPJ registration fields without inferring tax regime or CRT.
                 setForm({
                     ...form,
                     name: data.nome_fantasia || data.razao_social || form.name,
@@ -132,7 +132,7 @@ export const CompanyDataPage: React.FC = () => {
                         state: data.uf || form.address.state
                     }
                 });
-                toast.success('Dados da Receita Federal carregados com sucesso!');
+                toast.success('Dados cadastrais do CNPJ carregados. Confira a origem antes de salvar.');
             }
         } catch (error) {
             setConsultedActivities(null);

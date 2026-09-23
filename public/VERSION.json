@@ -1,22 +1,22 @@
 {
-  "version": "v1.2.430-dados-empresa-fiscal",
+  "version": "v1.2.431-receita-federal-canonica",
   "date": "2026-09-23",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260923-002939-v12430-dados-empresa-fiscal",
+  "status": "prepared",
+  "release_vps": "pending",
   "branch": "main",
-  "summary": "Separa dados gerais e fiscais sem duplicar a fonte da empresa principal.",
-  "tag": "v1.2.430-dados-empresa-fiscal",
+  "summary": "Distingue Receita Federal, provedor técnico e SEFAZ e impede inferência de regime pelo cadastro CNPJ.",
+  "tag": "v1.2.431-receita-federal-canonica",
   "changed_files": [
-    "pages/admin/settings/CompanyDataPage.tsx",
-    "components/company/CompanyFiscalPanel.tsx",
-    "services/companyFiscalServer.cjs",
+    "services/companyFiscalCore.cjs",
     "services/companyFiscalService.ts",
-    "layouts/AdminLayout.tsx"
+    "components/company/CompanyFiscalPanel.tsx",
+    "utils/cnpjHelper.ts",
+    "pages/admin/settings/CompanyDataPage.tsx",
+    "components/company/CompanyIdentitySection.tsx"
   ],
   "validations": [
-    "npm run test:company-fiscal",
+    "npm run test:company-fiscal (24/24)",
     "npm run build",
-    "auditoria somente leitura da fonte canônica em produção",
-    "validação visual autenticada das duas áreas em produção"
+    "consulta real controlada ao espelho público do CNPJ"
   ]
 }

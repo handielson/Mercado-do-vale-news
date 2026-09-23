@@ -15,14 +15,14 @@ test('CNPJ: numérico, alfanumérico oficial e rejeição sem remover caracteres
   assert(validCnpj(CNPJ)); assert(validCnpj('11.222.333/0001-81')); assert(validCnpj('12.ABC.345/01DE-35'));
   for (const value of ['00000000000000', '11222333000182', '11?222333000181', '11222333000181x']) assert(!validCnpj(value));
 });
-test('consulta não inventa regime para false/null nem converte string false em verdadeiro', () => {
+test('consulta não inventa regime a partir do cadastro do CNPJ', () => {
   for (const flag of [false, null, undefined, 'false']) {
     const result = normalizeLookup({ cnpj: CNPJ, opcao_pelo_simples: flag }, CNPJ, 'test');
     assert.equal(result.suggestedRegime, null);
     assert.equal(result.simples, flag === false ? false : null);
   }
-  assert.equal(normalizeLookup({ cnpj: CNPJ, opcao_pelo_simples: true }, CNPJ, 'test').suggestedRegime, 'simples_nacional');
-  assert.equal(normalizeLookup({ cnpj: CNPJ, opcao_pelo_simples: true, opcao_pelo_mei: true }, CNPJ, 'test').suggestedRegime, 'mei');
+  assert.equal(normalizeLookup({ cnpj: CNPJ, opcao_pelo_simples: true }, CNPJ, 'test').suggestedRegime, null);
+  assert.equal(normalizeLookup({ cnpj: CNPJ, opcao_pelo_simples: true, opcao_pelo_mei: true }, CNPJ, 'test').suggestedRegime, null);
   assert.throws(() => normalizeLookup({ cnpj: SECOND }, CNPJ, 'test'));
   assert.throws(() => normalizeLookup({ cnpj: CNPJ, opcao_pelo_simples: false, opcao_pelo_mei: true }, CNPJ, 'test'));
 });
@@ -32,13 +32,19 @@ test('falha da primeira fonte usa alternativa e só devolve campos fiscais permi
     urls.push(url);
     return urls.length === 1 ? { ok: false, status: 403 } : { ok: true, json: async () => ({ cnpj: CNPJ, opcao_pelo_simples: true, qsa: [{ cpf: 'nao-retornar' }] }) };
   } });
-  assert.equal(urls.length, 2); assert.equal(result.source, 'Minha Receita'); assert(!('qsa' in result));
+  assert.equal(urls.length, 2); assert.equal(result.source, 'Minha Receita (espelho da base pública CNPJ/RFB)'); assert(!('qsa' in result));
+  assert.equal(result.authority, 'Receita Federal do Brasil'); assert.equal(result.officialDirect, false);
   assert.equal(result.consultedAt, '2026-09-22T12:00:00.000Z');
   await assert.rejects(lookupCnpj(CNPJ, { fetchImpl: async () => { throw new Error('timeout'); } }), /preservados/);
 });
 test('consulta de CNPJ preserva principal, todos os secundários distintos e descrições', () => {
   const result = normalizeLookup({ cnpj: CNPJ, cnae_fiscal: 4751201, cnae_fiscal_descricao: 'Comércio especializado', cnaes_secundarios: [{ codigo: 4789001, descricao: 'Comércio de outros produtos' }, { codigo: 6201501, descricao: 'Desenvolvimento de programas' }, { codigo: 4751201, descricao: 'Duplicado' }] }, CNPJ, 'test');
   assert.deepEqual(result.cnaeActivities,[{ code:'4751201',description:'Comércio especializado',primary:true },{ code:'4789001',description:'Comércio de outros produtos',primary:false },{ code:'6201501',description:'Desenvolvimento de programas',primary:false }]);
+});
+test('consulta preserva os campos cadastrais retornados e não mistura IE ou CRT', () => {
+  const result = normalizeLookup({ cnpj: CNPJ, razao_social: 'EMPRESA TESTE LTDA', nome_fantasia: 'Loja Teste', descricao_situacao_cadastral: 'ATIVA', data_situacao_cadastral: '2020-01-02', data_inicio_atividade: '2019-08-30', porte: 'MICRO EMPRESA', natureza_juridica: 'Empresário (Individual)', email: 'cadastro@example.test', ddd_telefone_1: '87999990000', cep: '56300000', logradouro: 'Rua A', numero: '5', complemento: 'Loja C', bairro: 'Centro', municipio: 'Petrolina', uf: 'PE', inscricao_estadual: 'nao-deve-entrar', crt: 'nao-deve-entrar' }, CNPJ, 'fixture', new Date('2026-09-23T12:00:00Z'));
+  assert.deepEqual(result.registry, { legalName:'EMPRESA TESTE LTDA', tradeName:'Loja Teste', status:'ATIVA', statusDate:'2020-01-02', openingDate:'2019-08-30', size:'MICRO EMPRESA', legalNature:'Empresário (Individual)', email:'cadastro@example.test', phone:'87999990000', secondaryPhone:null, address:{ zipCode:'56300000', street:'Rua A', number:'5', complement:'Loja C', neighborhood:'Centro', city:'Petrolina', uf:'PE' } });
+  assert(!('stateRegistration' in result.registry)); assert(!('crt' in result.registry));
 });
 test('busca do cadastro principal também entrega as descrições dos CNAEs secundários', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../utils/cnpjHelper.ts'), 'utf8');

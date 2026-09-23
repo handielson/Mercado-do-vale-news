@@ -114,7 +114,7 @@ export const CompanyIdentitySection: React.FC<CompanyIdentitySectionProps> = ({
                             onClick={onCNPJSearch}
                             disabled={isLoadingCNPJ || !form.cnpj}
                             className="bg-blue-100 text-blue-600 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-200 disabled:opacity-50 transition-all whitespace-nowrap"
-                            title="Buscar dados na Receita Federal"
+                            title="Consultar espelho público dos dados do CNPJ"
                         >
                             {isLoadingCNPJ ? <Loader2 className="animate-spin" size={18} /> : 'Buscar'}
                         </button>
@@ -200,7 +200,7 @@ export const CompanyIdentitySection: React.FC<CompanyIdentitySectionProps> = ({
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
                 <h3 className="text-sm font-bold text-blue-800 mb-4 flex items-center gap-2">
                     <FileText size={16} />
-                    Dados da Receita Federal (preenchidos automaticamente)
+                    Dados cadastrais do CNPJ (preenchidos automaticamente)
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -273,9 +273,10 @@ export const CompanyIdentitySection: React.FC<CompanyIdentitySectionProps> = ({
                         />
                     </div>
                     {consultedActivities && <div className="md:col-span-2 rounded-lg border border-blue-200 bg-white p-3 text-sm">
+                        <p className="mb-2 text-xs text-amber-700">Consulta feita pela BrasilAPI, um espelho da base pública do CNPJ/RFB. Não é uma consulta direta à API oficial da Receita Federal.</p>
                         <p className="font-semibold text-slate-700">Atividades econômicas retornadas pelo CNPJ</p>
                         <ul className="mt-2 list-disc pl-5">{[...consultedActivities.atividade_principal.map(item => ({ ...item, primary: true })), ...consultedActivities.atividades_secundarias.map(item => ({ ...item, primary: false }))].map(item => <li key={`${item.primary}-${item.code}`}>{item.primary ? 'Principal' : 'Secundária'}: {item.code} — {item.text}</li>)}</ul>
-                        <p className="mt-2 text-xs text-slate-500">Para guardar a lista completa por empresa, use “Atualizar dados tributários” e “Usar todos os CNAEs consultados” no cadastro fiscal acima. As notas explicativas da <a className="underline" href="https://concla.ibge.gov.br/busca-online-cnae.html" target="_blank" rel="noopener noreferrer">CNAE no IBGE</a> detalham o alcance de cada atividade.</p>
+                        <p className="mt-2 text-xs text-slate-500">Para guardar a lista completa por empresa, use “Consultar cadastro do CNPJ” e “Usar todos os CNAEs consultados” na área fiscal. As notas explicativas da <a className="underline" href="https://concla.ibge.gov.br/busca-online-cnae.html" target="_blank" rel="noopener noreferrer">CNAE no IBGE</a> detalham o alcance de cada atividade.</p>
                     </div>}
                 </div>
             </div>

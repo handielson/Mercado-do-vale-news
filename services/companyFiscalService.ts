@@ -7,11 +7,17 @@ export const fiscalRegimes = [
 ] as const;
 export type FiscalRegime = typeof fiscalRegimes[number][0];
 export interface FiscalLookup {
-    cnpj: string; source: string; consultedAt: string; sourceUpdatedAt: string | null;
+    cnpj: string; authority: 'Receita Federal do Brasil'; source: string; officialDirect: boolean; consultedAt: string; sourceUpdatedAt: string | null;
     simples: boolean | null; mei: boolean | null; suggestedRegime: FiscalRegime | null;
     simplesSince: string | null; simplesUntil: string | null; meiSince: string | null; meiUntil: string | null;
     municipalityCode: string | null;
     cnaeActivities: Array<{ code: string; description: string; primary: boolean }>;
+    registry: {
+        legalName: string | null; tradeName: string | null; status: string | null; statusDate: string | null;
+        openingDate: string | null; size: string | null; legalNature: string | null; email: string | null;
+        phone: string | null; secondaryPhone: string | null;
+        address: { zipCode: string | null; street: string | null; number: string | null; complement: string | null; neighborhood: string | null; city: string | null; uf: string | null };
+    };
 }
 export interface FiscalCompany {
     id: string; primary: boolean; identitySource: 'company_settings' | 'fiscal_profile'; cnpj: string; name: string; legalName: string; stateRegistration: string; stateRegistrationExempt: boolean; municipalRegistration: string;

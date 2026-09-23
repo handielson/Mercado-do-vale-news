@@ -5,7 +5,6 @@ const emptyCompany = (): FiscalCompany => ({ id: 'new', primary: false, identity
 const inputClass = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100';
 const buttonClass = 'rounded-lg border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50';
 const flag = (value: boolean | null) => value === true ? 'Sim' : value === false ? 'Não' : 'Não informado';
-const regimeName = (key: string) => fiscalRegimes.find(([value]) => value === key)?.[1] || key;
 const readinessLabels: Record<string, string> = {
     empresa: 'Vínculo da empresa', cnpj: 'CNPJ', razao_social: 'Razão social', inscricao_estadual: 'Inscrição estadual informada',
     inscricao_estadual_invalida: 'Inscrição estadual com formato ou dígito verificador inválido',
@@ -55,7 +54,7 @@ export function CompanyFiscalPanel({ api = companyFiscalService }: { api?: typeo
         setBusy(true); setError(''); setMessage('');
         try {
             accept(await (action === 'save' ? api.save(draft) : api.refresh(draft)));
-            setMessage(action === 'save' ? 'Cadastro fiscal salvo.' : 'Consulta atualizada. Sua seleção manual foi preservada.');
+            setMessage(action === 'save' ? 'Cadastro fiscal salvo.' : 'Cadastro do CNPJ consultado. Sua configuração fiscal manual foi preservada.');
         } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível concluir a operação.'); }
         finally { setBusy(false); }
     };
@@ -158,7 +157,7 @@ export function CompanyFiscalPanel({ api = companyFiscalService }: { api?: typeo
                     <p className="text-xs text-slate-500">A configuração escolhida fica salva por empresa. Confirme o regime, o CRT e a vigência com a contabilidade antes da emissão.</p>
                     <div className="flex flex-wrap gap-3">
                         <button type="button" className={buttonClass} onClick={() => run('save')}>Salvar cadastro fiscal</button>
-                        <button type="button" className={buttonClass} disabled={dirty || draft.version === 0 || draft.id === 'new'} onClick={() => run('refresh')}>Atualizar dados tributários</button>
+                        <button type="button" className={buttonClass} disabled={dirty || draft.version === 0 || draft.id === 'new'} onClick={() => run('refresh')}>Consultar cadastro do CNPJ</button>
                         <button type="button" className={buttonClass} disabled={dirty || draft.version === 0 || draft.id === 'new'} onClick={checkReadiness}>Verificar dados para emissão</button>
                     </div>
                     {(dirty || draft.version === 0) && <p className="text-xs text-slate-500">Salve o cadastro fiscal antes de atualizar a consulta.</p>}
@@ -171,12 +170,20 @@ export function CompanyFiscalPanel({ api = companyFiscalService }: { api?: typeo
                     {readiness.municipality.status === 'mismatch' && <p>O código informado corresponde a {readiness.municipality.officialName}/{readiness.municipality.officialUf} no IBGE. Confira a cidade e a UF cadastradas.</p>}
                 </div>}
                 {draft.lookup && <div className="rounded-lg bg-slate-50 p-4 space-y-2 text-sm">
-                    <h3 className="font-semibold">Resultado da consulta do CNPJ</h3>
+                    <h3 className="font-semibold">Cadastro nacional da pessoa jurídica</h3>
                     <p>Simples Nacional: <strong>{flag(draft.lookup.simples)}</strong> · MEI: <strong>{flag(draft.lookup.mei)}</strong></p>
-                    <p>Fonte: {draft.lookup.source} · Consultado em {new Date(draft.lookup.consultedAt).toLocaleString('pt-BR')}</p>
+                    <p>Base cadastral: {draft.lookup.authority} · Provedor técnico: {draft.lookup.source}</p>
+                    <p>Consulta direta oficial: <strong>{draft.lookup.officialDirect ? 'Sim' : 'Não'}</strong> · Consultado em {new Date(draft.lookup.consultedAt).toLocaleString('pt-BR')}</p>
                     <p>Opção pelo Simples: {draft.lookup.simplesSince || 'Não informada'} · Exclusão: {draft.lookup.simplesUntil || 'Não informada'}</p>
-                    <p className="text-xs text-slate-600">A data acima é da consulta, não da atualização da base pública. O resultado pode estar defasado. Não ser optante não distingue Lucro Real de Lucro Presumido.</p>
-                    {draft.lookup.suggestedRegime && <button type="button" className={buttonClass} disabled={busy || draft.identityConflict} onClick={() => change({ regime: draft.lookup!.suggestedRegime! })}>Usar sugestão: {regimeName(draft.lookup.suggestedRegime)}</button>}
+                    <p className="text-xs text-slate-600">O provedor atual é um espelho da base pública do CNPJ, não a API oficial em tempo real da Receita. Nenhum regime ou CRT é deduzido deste retorno.</p>
+                    <div className="grid gap-1 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-2">
+                        <p>Razão social: <strong>{draft.lookup.registry?.legalName || 'Não informada'}</strong></p>
+                        <p>Nome fantasia: <strong>{draft.lookup.registry?.tradeName || 'Não informado'}</strong></p>
+                        <p>Situação: <strong>{draft.lookup.registry?.status || 'Não informada'}</strong></p>
+                        <p>Abertura: <strong>{draft.lookup.registry?.openingDate || 'Não informada'}</strong></p>
+                        <p>Porte: <strong>{draft.lookup.registry?.size || 'Não informado'}</strong></p>
+                        <p>Natureza jurídica: <strong>{draft.lookup.registry?.legalNature || 'Não informada'}</strong></p>
+                    </div>
                     {draft.lookup.municipalityCode && <button type="button" className={`${buttonClass} sm:ml-2`} disabled={busy || draft.identityConflict} onClick={() => change({ municipalityCode: draft.lookup!.municipalityCode! })}>Usar código IBGE consultado</button>}
                     {!!draft.lookup.cnaeActivities?.length && <><p className="font-semibold">Atividades econômicas consultadas</p><ul className="list-disc pl-5">{draft.lookup.cnaeActivities.map(item => <li key={item.code}>{item.primary ? 'Principal' : 'Secundário'}: {item.code} — {item.description}</li>)}</ul><button type="button" className={buttonClass} disabled={busy || draft.identityConflict || (draft.primary && (!draft.cnae || draft.cnae.replace(/\D/g, '').slice(0, 7) !== draft.lookup.cnaeActivities.find(item => item.primary)?.code))} onClick={() => { const activities = draft.lookup!.cnaeActivities; const principal = activities.find(item => item.primary); change({ cnaeActivities: activities, ...(draft.primary ? {} : { cnae: principal?.code || draft.cnae }), mainActivity: principal?.description || draft.mainActivity }); }}>Usar todos os CNAEs consultados</button>{draft.primary && (!draft.cnae || draft.cnae.replace(/\D/g, '').slice(0, 7) !== draft.lookup.cnaeActivities.find(item => item.primary)?.code) && <p className="text-amber-700">O CNAE principal consultado está ausente ou difere do cadastro principal. Confira e salve primeiro os dados da loja.</p>}</>}
                     <p><a className="text-blue-700 underline" href="https://www8.receita.fazenda.gov.br/SimplesNacional/" target="_blank" rel="noopener noreferrer">Conferir opção no portal oficial do Simples Nacional</a></p>

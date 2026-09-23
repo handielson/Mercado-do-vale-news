@@ -19,3 +19,10 @@ test('interface identifica a fonte canônica e alerta abre diretamente a área f
   assert.match(panel, /o salvamento fiscal não substitui esses valores/);
   assert.match(layout, /\/admin\/settings\/company#fiscal/);
 });
+
+test('consulta cadastral distingue Receita Federal, provedor técnico e SEFAZ', () => {
+  assert.match(panel, /Base cadastral:.*authority/);
+  assert.match(panel, /Consulta direta oficial/);
+  assert.match(panel, /Nenhum regime ou CRT é deduzido/);
+  assert.doesNotMatch(panel, /Atualizar dados tributários/);
+});

@@ -4,6 +4,10 @@
  */
 
 export interface ReceitaFederalData {
+    authority: 'Receita Federal do Brasil';
+    source: 'BrasilAPI (espelho da base pública CNPJ/RFB)';
+    officialDirect: false;
+    consultedAt: string;
     cnpj: string;
     razao_social: string;
     nome_fantasia: string;
@@ -28,8 +32,8 @@ export interface ReceitaFederalData {
 }
 
 /**
- * Search company data by CNPJ from Receita Federal
- * Uses BrasilAPI (free, no authentication required)
+ * Search public CNPJ registration data through BrasilAPI.
+ * This is a mirror of the public RFB dataset, not the contracted real-time SERPRO API.
  */
 export const searchCNPJ = async (cnpj: string): Promise<ReceitaFederalData | null> => {
     try {
@@ -40,7 +44,6 @@ export const searchCNPJ = async (cnpj: string): Promise<ReceitaFederalData | nul
             throw new Error('CNPJ deve ter 14 dígitos');
         }
 
-        // Using BrasilAPI (free and reliable)
         const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCNPJ}`);
 
         if (!response.ok) {
@@ -53,6 +56,10 @@ export const searchCNPJ = async (cnpj: string): Promise<ReceitaFederalData | nul
         const data = await response.json();
 
         return {
+            authority: 'Receita Federal do Brasil',
+            source: 'BrasilAPI (espelho da base pública CNPJ/RFB)',
+            officialDirect: false,
+            consultedAt: new Date().toISOString(),
             cnpj: data.cnpj,
             razao_social: data.razao_social || '',
             nome_fantasia: data.nome_fantasia || data.razao_social || '',

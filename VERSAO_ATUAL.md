@@ -1,9 +1,9 @@
 # Versão Atual
 
-version: v1.2.430-dados-empresa-fiscal
+version: v1.2.431-receita-federal-canonica
 date: 2026-09-23
-status: published
-release_vps: /var/www/mdv-site/releases/20260923-002939-v12430-dados-empresa-fiscal
+status: prepared
+release_vps: pending
 branch: main
-summary: Separa dados gerais e fiscais sem duplicar a fonte da empresa principal.
-tag: v1.2.430-dados-empresa-fiscal
+summary: Distingue Receita Federal, provedor técnico e SEFAZ e impede inferência de regime pelo cadastro CNPJ.
+tag: v1.2.431-receita-federal-canonica

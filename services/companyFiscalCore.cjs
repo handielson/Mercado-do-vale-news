@@ -155,18 +155,30 @@ function normalizeLookup(data, cnpj, source, now = new Date()) {
   };
   addActivity(data.cnae_fiscal, data.cnae_fiscal_descricao, true);
   for (const entry of Array.isArray(data.cnaes_secundarios) ? data.cnaes_secundarios : []) addActivity(entry?.codigo, entry?.descricao, false);
-  return { cnpj, source, consultedAt: now.toISOString(), sourceUpdatedAt: null, simples, mei,
-    suggestedRegime: mei === true ? 'mei' : simples === true ? 'simples_nacional' : null,
+  const nullableText = (value, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : null;
+  const registry = {
+    legalName: nullableText(data.razao_social), tradeName: nullableText(data.nome_fantasia),
+    status: nullableText(data.descricao_situacao_cadastral, 100), statusDate: date(data.data_situacao_cadastral),
+    openingDate: date(data.data_inicio_atividade), size: nullableText(data.porte, 100),
+    legalNature: nullableText(data.natureza_juridica), email: nullableText(data.email),
+    phone: nullableText(data.ddd_telefone_1, 30), secondaryPhone: nullableText(data.ddd_telefone_2, 30),
+    address: {
+      zipCode: nullableText(data.cep, 20), street: nullableText(data.logradouro), number: nullableText(data.numero, 50),
+      complement: nullableText(data.complemento), neighborhood: nullableText(data.bairro), city: nullableText(data.municipio), uf: nullableText(data.uf, 2),
+    },
+  };
+  return { cnpj, authority: 'Receita Federal do Brasil', source, officialDirect: false, consultedAt: now.toISOString(), sourceUpdatedAt: null, simples, mei,
+    suggestedRegime: null,
     simplesSince: date(data.data_opcao_pelo_simples), simplesUntil: date(data.data_exclusao_do_simples),
     meiSince: date(data.data_opcao_pelo_mei), meiUntil: date(data.data_exclusao_do_mei),
     municipalityCode: /^\d{7}$/.test(String(data.codigo_municipio_ibge || '')) ? String(data.codigo_municipio_ibge) : null,
-    cnaeActivities };
+    cnaeActivities, registry };
 }
 async function lookupCnpj(cnpj, { fetchImpl = fetch, now = () => new Date() } = {}) {
   cnpj = normalizeCnpj(cnpj);
   if (!validCnpj(cnpj)) throw problem('CNPJ inválido.');
-  // Both providers expose public CNPJ records. Neither proves the current emission CRT.
-  const providers = [['BrasilAPI / Minha Receita', 'https://brasilapi.com.br/api/cnpj/v1/'], ['Minha Receita', 'https://minhareceita.org/']];
+  // Public mirrors of the RFB CNPJ dataset. They are not the contracted, real-time SERPRO API.
+  const providers = [['BrasilAPI (espelho da base pública CNPJ/RFB)', 'https://brasilapi.com.br/api/cnpj/v1/'], ['Minha Receita (espelho da base pública CNPJ/RFB)', 'https://minhareceita.org/']];
   let notFound = false;
   for (const [source, base] of providers) {
     try {
