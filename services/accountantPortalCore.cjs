@@ -24,6 +24,7 @@ function normalizeOperationalSale(row) {
     externalSaleId: String(row?.external_sale_id || '').trim(),
     status,
     occurredAt: occurredAt ? occurredAt.toISOString() : '',
+    statusCapturedAt: safeDate(row?.status_captured_at)?.toISOString() || '',
     totalCents,
     operationalState,
     customerName: String(row?.customer_name || '').trim(),

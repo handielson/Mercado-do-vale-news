@@ -378,3 +378,15 @@ test('relatório de faturamento usa colunas e valores monetários do schema MySQ
   assert.equal(report.totals.operationalCents, 3595);
   assert.equal(report.totals.reconciliationPendingCents, 3595);
 });
+
+test('status do marketplace preserva a data da captura sem apresentá-lo como estado atual', () => {
+  const sale = normalizeOperationalSale({
+    channel:'tiktok', external_sale_id:'order-1', status:'AWAITING_SHIPMENT',
+    total_cents:16610, occurred_at:'2026-09-23T09:53:13Z', status_captured_at:'2026-09-23T09:53:54Z',
+  });
+  assert.equal(sale.statusCapturedAt, '2026-09-23T09:53:54.000Z');
+  assert.equal(sale.operationalState, 'pending');
+  const note = { status:'authorized', totalCents:16610 };
+  assert.deepEqual(reconcileSale(sale, { documents:[note] }).reviewReasons, ['operational_pending_with_document']);
+  assert.equal(normalizeOperationalSale({ ...sale, status_captured_at:undefined }).statusCapturedAt, '');
+});

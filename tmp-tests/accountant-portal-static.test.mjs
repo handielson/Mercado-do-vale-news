@@ -31,6 +31,14 @@ test('relatório nunca chama ausência de vínculo de venda sem nota', () => {
   assert.match(page, /não significa venda sem nota/);
 });
 
+test('portal identifica data e limite do status capturado do marketplace', () => {
+  const server = read('services/accountantPortalServer.cjs');
+  const page = read('pages/accountant/AccountantPortalPage.tsx');
+  assert.match(server, /created_at AS status_captured_at/);
+  assert.match(page, /Status capturado em/);
+  assert.match(page, /conferir situação atual do pedido/);
+});
+
 test('migração cria concessão, documentos e conciliação isolados por perfil', () => {
   const migration = read('migrations/022_accountant_portal.sql');
   assert.match(migration, /company_accountant_access/);

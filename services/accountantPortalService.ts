@@ -17,6 +17,7 @@ export interface AccountantRevenueSale {
   externalSaleId: string;
   status: string;
   occurredAt: string;
+  statusCapturedAt: string;
   totalCents: number;
   operationalState: 'completed' | 'cancelled' | 'pending';
   fiscalState: 'invoiced' | 'no_invoice_confirmed' | 'reconciliation_pending' | 'cancelled' | 'operational_pending';

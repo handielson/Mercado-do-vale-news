@@ -136,7 +136,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       };
     }
     const [eventRows] = await pool.query(
-      `SELECT channel,external_id AS external_sale_id,status,total_cents,occurred_at,customer_name
+      `SELECT channel,external_id AS external_sale_id,status,total_cents,occurred_at,created_at AS status_captured_at,customer_name
          FROM mobile_sale_events
         WHERE occurred_at>=? AND occurred_at<? ORDER BY occurred_at DESC LIMIT 10000`,
       [`${from} 00:00:00`, `${exclusiveDate} 00:00:00`]
@@ -181,7 +181,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     })).sort((left, right) => String(right.issuedAt || '').localeCompare(String(left.issuedAt || '')));
     return {
       company: companyView(profile), period: { from, to },
-      coverage: { available: true, sources: ['sales','orders','mobile_sale_events'], note: 'PDV e site vêm das bases operacionais; canais de marketplace dependem dos eventos já sincronizados. Vendas sem XML histórico permanecem pendentes de conciliação.' },
+      coverage: { available: true, sources: ['sales','orders','mobile_sale_events'], note: 'PDV e site vêm das bases operacionais. Shopee e TikTok usam eventos capturados no momento da sincronização; o status mostrado pode não ser o atual no marketplace. Vendas sem XML histórico permanecem pendentes de conciliação.' },
       ...report, documentTotals, documents,
     };
   });

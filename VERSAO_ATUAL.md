@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.456-accountant-company-isolation
+version: v1.2.457-accountant-status-snapshot
 date: 2026-09-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260923-214900-accountant-company-isolation
+release_vps: /var/www/mdv-site/releases/20260923-220539-accountant-status-snapshot
 branch: main
-summary: Impede que empresas fiscais adicionais consultem vendas globais ou importem pela conexão Bling da empresa principal.
-tag: v1.2.456-accountant-company-isolation
+summary: Mostra quando o status do marketplace foi capturado na conciliação do Espaço do Contador.
+tag: v1.2.457-accountant-status-snapshot
