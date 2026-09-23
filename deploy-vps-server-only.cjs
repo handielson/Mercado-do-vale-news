@@ -370,7 +370,7 @@ async function deployCompanyFiscalOnly(appDir, apiProc) {
   await ensureRemoteFiscalDependencies(appDir);
   const patchSource = `
     const fs=require('fs');
-    for(const file of ['vps_server.js','vps_server.cjs']){
+    for(const file of ['server.js','vps_server.js','vps_server.cjs']){
       const target='${appDir}/'+file; let source=fs.readFileSync(target,'utf8');
       const route="require('./services/companyFiscalServer.cjs').registerCompanyFiscalRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });";
       if(!source.includes(route)){
