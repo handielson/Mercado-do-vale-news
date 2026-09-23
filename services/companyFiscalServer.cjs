@@ -18,7 +18,7 @@ const certificateView = (row, today = new Date()) => {
 };
 const addressFrom = row => ({ zipCode: row.address_zip_code || '', street: row.address_street || '', number: row.address_number || '', complement: row.address_complement || '', neighborhood: row.address_neighborhood || '', city: row.address_city || '' });
 function view(row) {
-  return { id: row.settings_id ? 'primary' : row.id, primary: !!row.settings_id, cnpj: row.cnpj, name: row.name,
+  return { id: row.settings_id ? 'primary' : row.id, primary: !!row.settings_id, identitySource: row.settings_id ? 'company_settings' : 'fiscal_profile', cnpj: row.cnpj, name: row.name,
     legalName: row.legal_name || '', stateRegistration: row.state_registration || '', stateRegistrationExempt: !!row.state_registration_exempt, municipalRegistration: row.municipal_registration || '',
     suframaRegistration: row.suframa_registration || '', cnae: row.cnae || '', cnaeActivities: parse(row.cnae_activities) || [], companySize: row.company_size || '', mainActivity: row.main_activity || '',
     segments: row.business_segments ? row.business_segments.split(',') : [], annualRevenueBand: row.annual_revenue_band || '', employeesBand: row.employees_band || '',

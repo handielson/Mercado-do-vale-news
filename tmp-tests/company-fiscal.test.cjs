@@ -165,12 +165,24 @@ test('pré-validação autenticada usa o perfil selecionado e é somente leitura
 test('empresa principal reaproveita identidade e não grava em GET; CNPJ principal não pode ser duplicado', async t => {
   const { call, state } = await setup(t);
   const list = (await call('GET', '')).json(); assert.equal(list.companies[0].id, 'primary'); assert.equal(state.rows.length, 0);
+  assert.equal(list.companies[0].identitySource, 'company_settings');
   assert.equal((await call('POST', '', profile({ cnpj: CNPJ }))).statusCode, 409);
-  const saved = await call('PUT', '/primary', profile({ name: 'tentativa de sobrescrever', cnpj: SECOND }));
+  const saved = await call('PUT', '/primary', profile({
+    name: 'tentativa de sobrescrever', cnpj: SECOND, legalName: 'Outra razão social', stateRegistration: '999999999',
+    companySize: 'Grande', phone: '0000', email: 'forjado@example.test', website: 'https://forjado.example.test',
+    uf: 'SP', address: { zipCode: '00000000', street: 'Rua Forjada', number: '99', complement: '', neighborhood: 'Outro', city: 'Outra' }
+  }));
   assert.equal(saved.statusCode, 200); assert.equal(saved.json().cnpj, CNPJ); assert.equal(saved.json().name, 'Loja principal');
+  assert.equal(saved.json().identitySource, 'company_settings');
+  assert.equal(saved.json().legalName, 'Loja Ltda');
+  assert.equal(saved.json().stateRegistration, '123');
+  assert.equal(saved.json().companySize, 'Micro');
+  assert.equal(saved.json().phone, '0000000000');
   assert.equal(saved.json().municipalRegistration, 'IM-123');
   assert.equal(saved.json().cnae, '4751201');
   assert.equal(saved.json().email, 'principal@example.test');
+  assert.equal(saved.json().website, 'https://loja.example.test');
+  assert.equal(saved.json().uf, 'PE');
   assert.equal(state.settings.name, 'Loja principal');
   assert.equal(saved.json().address.street, 'Rua Loja');
   assert.equal(state.settings.address_street, 'Rua Loja');
@@ -179,6 +191,8 @@ test('duas empresas isoladas; atualização não substitui seleção manual e re
   const { call, state } = await setup(t);
   const primary = (await call('PUT', '/primary', profile())).json();
   const other = (await call('POST', '', profile({ regime: 'lucro_real' }))).json();
+  assert.equal(primary.identitySource, 'company_settings');
+  assert.equal(other.identitySource, 'fiscal_profile');
   assert.equal((await call('POST', '', profile())).statusCode, 409);
   const updated = await call('POST', `/${other.id}/refresh`, { version: other.version });
   assert.equal(updated.statusCode, 200); assert.equal(updated.json().regime, 'lucro_real'); assert.equal(updated.json().crt, '3');

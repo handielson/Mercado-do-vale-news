@@ -14,7 +14,7 @@ export interface FiscalLookup {
     cnaeActivities: Array<{ code: string; description: string; primary: boolean }>;
 }
 export interface FiscalCompany {
-    id: string; primary: boolean; cnpj: string; name: string; legalName: string; stateRegistration: string; stateRegistrationExempt: boolean; municipalRegistration: string;
+    id: string; primary: boolean; identitySource: 'company_settings' | 'fiscal_profile'; cnpj: string; name: string; legalName: string; stateRegistration: string; stateRegistrationExempt: boolean; municipalRegistration: string;
     suframaRegistration: string; cnae: string; cnaeActivities: Array<{ code: string; description: string; primary: boolean }>; companySize: string; mainActivity: string;
     segments: Array<'comercio' | 'ecommerce' | 'industria' | 'servicos'>; annualRevenueBand: string; employeesBand: string;
     contactPerson: string; phone: string; mobilePhone: string; email: string; billingEmail: string; website: string;

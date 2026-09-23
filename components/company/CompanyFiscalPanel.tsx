@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { companyFiscalService, fiscalRegimes, type FiscalCompany } from '../../services/companyFiscalService';
 
-const emptyCompany = (): FiscalCompany => ({ id: 'new', primary: false, cnpj: '', name: '', legalName: '', stateRegistration: '', stateRegistrationExempt: false, municipalRegistration: '', suframaRegistration: '', cnae: '', cnaeActivities: [], companySize: '', mainActivity: '', segments: [], annualRevenueBand: '', employeesBand: '', contactPerson: '', phone: '', mobilePhone: '', email: '', billingEmail: '', website: '', substituteStateRegistrations: [], uf: '', municipalityCode: '', address: { zipCode: '', street: '', number: '', complement: '', neighborhood: '', city: '' }, regime: 'nao_definido', crt: '', effectiveFrom: '', notes: '', version: 0, lookup: null });
+const emptyCompany = (): FiscalCompany => ({ id: 'new', primary: false, identitySource: 'fiscal_profile', cnpj: '', name: '', legalName: '', stateRegistration: '', stateRegistrationExempt: false, municipalRegistration: '', suframaRegistration: '', cnae: '', cnaeActivities: [], companySize: '', mainActivity: '', segments: [], annualRevenueBand: '', employeesBand: '', contactPerson: '', phone: '', mobilePhone: '', email: '', billingEmail: '', website: '', substituteStateRegistrations: [], uf: '', municipalityCode: '', address: { zipCode: '', street: '', number: '', complement: '', neighborhood: '', city: '' }, regime: 'nao_definido', crt: '', effectiveFrom: '', notes: '', version: 0, lookup: null });
 const inputClass = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100';
 const buttonClass = 'rounded-lg border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50';
 const flag = (value: boolean | null) => value === true ? 'Sim' : value === false ? 'Não' : 'Não informado';
@@ -88,7 +88,7 @@ export function CompanyFiscalPanel({ api = companyFiscalService }: { api?: typeo
                 <button type="button" className={buttonClass} disabled={busy} onClick={() => select('new')}>Adicionar empresa</button>
             </div>
             {draft && <>
-                {draft.primary && <p className="text-xs text-slate-500">Os dados de identificação da loja vêm do cadastro principal. Salve alterações nele e recarregue a página para refletir aqui.</p>}
+                {draft.primary && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><strong>Fonte: Dados gerais e operacionais.</strong> Os campos compartilhados da loja principal aparecem abaixo somente para conferência. Para alterá-los, use a aba “Dados gerais e operacionais”; o salvamento fiscal não substitui esses valores.</div>}
                 {draft.identityConflict && <p role="alert" className="text-sm text-red-700">O CNPJ da loja mudou. Revise o vínculo fiscal antes de continuar.</p>}
                 <fieldset disabled={busy || draft.identityConflict} className="space-y-4">
                     <legend className="sr-only">Cadastro fiscal da empresa selecionada</legend>

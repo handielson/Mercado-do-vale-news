@@ -1,19 +1,22 @@
 {
-  "version": "v1.2.429-sefaz-icp-brasil",
+  "version": "v1.2.430-dados-empresa-fiscal",
   "date": "2026-09-23",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260923-000718-v12429-sefaz-icp-brasil",
+  "release_vps": "/var/www/mdv-site/releases/20260923-002939-v12430-dados-empresa-fiscal",
   "branch": "main",
-  "summary": "Adiciona a raiz SSL oficial ICP-Brasil v10 à comunicação segura com a SEFAZ.",
-  "tag": "v1.2.429-sefaz-icp-brasil",
+  "summary": "Separa dados gerais e fiscais sem duplicar a fonte da empresa principal.",
+  "tag": "v1.2.430-dados-empresa-fiscal",
   "changed_files": [
-    "services/fiscalCertificateVault.cjs",
-    "tmp-tests/fiscal-certificate-vault.test.cjs"
+    "pages/admin/settings/CompanyDataPage.tsx",
+    "components/company/CompanyFiscalPanel.tsx",
+    "services/companyFiscalServer.cjs",
+    "services/companyFiscalService.ts",
+    "layouts/AdminLayout.tsx"
   ],
   "validations": [
     "npm run test:company-fiscal",
-    "TLS autorizado com a SEFAZ-PE usando a raiz ICP-Brasil v10",
     "npm run build",
-    "node --check services/fiscalCertificateVault.cjs"
+    "auditoria somente leitura da fonte canônica em produção",
+    "validação visual autenticada das duas áreas em produção"
   ]
 }

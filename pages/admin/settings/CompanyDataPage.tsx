@@ -4,13 +4,13 @@
  * Main page for managing company data
  * Orchestrates all company data sections via sub-components
  * 
- * Route: /admin/settings/company-data
+ * Route: /admin/settings/company
  * 
  * ANTIGRAVITY PROTOCOL: Refactored from 976 lines to ~200 lines
  */
 
 import React, { useState, useEffect } from 'react';
-import { Save, Loader2 } from 'lucide-react';
+import { Building2, FileKey2, Save, Loader2 } from 'lucide-react';
 import { Company, defaultCompany } from '../../../types/company';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { formatCep, searchCep } from '../../../utils/customerFormUtils';
@@ -33,6 +33,7 @@ import { CompanyFiscalPanel } from '../../../components/company/CompanyFiscalPan
 import { CompanyCertificatePanel } from '../../../components/company/CompanyCertificatePanel';
 
 export const CompanyDataPage: React.FC = () => {
+    const [activeArea, setActiveArea] = useState<'general' | 'fiscal'>(() => window.location.hash === '#fiscal' ? 'fiscal' : 'general');
     const [form, setForm] = useState<Company>(defaultCompany);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingCep, setIsLoadingCep] = useState(false);
@@ -73,6 +74,18 @@ export const CompanyDataPage: React.FC = () => {
         loadData();
         loadDocumentsData();
     }, []);
+
+    useEffect(() => {
+        const syncHash = () => setActiveArea(window.location.hash === '#fiscal' ? 'fiscal' : 'general');
+        window.addEventListener('hashchange', syncHash);
+        return () => window.removeEventListener('hashchange', syncHash);
+    }, []);
+
+    const selectArea = (area: 'general' | 'fiscal') => {
+        setActiveArea(area);
+        const baseUrl = window.location.pathname + window.location.search;
+        window.history.replaceState(null, '', area === 'fiscal' ? `${baseUrl}#fiscal` : baseUrl);
+    };
 
     const handleCNPJSearch = async () => {
         const cnpj = form.cnpj.replace(/\D/g, '');
@@ -212,10 +225,10 @@ export const CompanyDataPage: React.FC = () => {
                 <div>
                     <h1 className="text-3xl font-bold text-slate-800">Dados da Empresa</h1>
                     <p className="text-slate-500 text-sm">
-                        Gerencie as informações completas da sua empresa
+                        Dados operacionais e fiscais separados, com uma única fonte para cada informação.
                     </p>
                 </div>
-                <button
+                {activeArea === 'general' && <button
                     onClick={handleSave}
                     disabled={isSaving}
                     className="w-full md:w-auto bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all"
@@ -231,11 +244,27 @@ export const CompanyDataPage: React.FC = () => {
                             Salvar Alterações
                         </>
                     )}
+                </button>}
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-2 sm:grid-cols-2" role="tablist" aria-label="Áreas dos dados da empresa">
+                <button type="button" role="tab" aria-selected={activeArea === 'general'} aria-controls="company-general-panel" onClick={() => selectArea('general')} className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeArea === 'general' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
+                    <Building2 size={18} /> Dados gerais e operacionais
+                </button>
+                <button type="button" role="tab" aria-selected={activeArea === 'fiscal'} aria-controls="company-fiscal-panel" onClick={() => selectArea('fiscal')} className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeArea === 'fiscal' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
+                    <FileKey2 size={18} /> Fiscal e certificado
                 </button>
             </div>
 
-            <CompanyFiscalPanel />
-            <CompanyCertificatePanel />
+            {activeArea === 'fiscal' && <div id="company-fiscal-panel" role="tabpanel" className="space-y-6" aria-label="Fiscal e certificado">
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+                    <strong>Cadastro fiscal separado.</strong> Para a empresa principal, CNPJ, nomes, IE, CNAE, porte, contato e endereço são somente leitura aqui e continuam vindo dos dados gerais usados pelo restante do sistema. Esta área salva regime, CRT, vigência, inscrições complementares, CNAEs consultados e certificado.
+                </div>
+                <CompanyFiscalPanel />
+                <CompanyCertificatePanel />
+            </div>}
+
+            {activeArea === 'general' && <div id="company-general-panel" role="tabpanel" className="space-y-6" aria-label="Dados gerais e operacionais">
 
             {/* Section 1: Identity */}
             <CompanyIdentitySection
@@ -288,6 +317,7 @@ export const CompanyDataPage: React.FC = () => {
                 isLoading={isLoadingDocs}
                 onDocumentsChange={handleDocumentsChange}
             />
+            </div>}
 
             {/* Share Payment Data Modal */}
             <SharePaymentDataModal

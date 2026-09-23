@@ -1,9 +1,9 @@
 # Versão Atual
 
-version: v1.2.429-sefaz-icp-brasil
+version: v1.2.430-dados-empresa-fiscal
 date: 2026-09-23
 status: published
-release_vps: /var/www/mdv-site/releases/20260923-000718-v12429-sefaz-icp-brasil
+release_vps: /var/www/mdv-site/releases/20260923-002939-v12430-dados-empresa-fiscal
 branch: main
-summary: Adiciona a raiz SSL oficial ICP-Brasil v10 à comunicação segura com a SEFAZ.
-tag: v1.2.429-sefaz-icp-brasil
+summary: Separa dados gerais e fiscais sem duplicar a fonte da empresa principal.
+tag: v1.2.430-dados-empresa-fiscal
