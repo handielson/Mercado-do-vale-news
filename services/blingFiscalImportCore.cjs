@@ -29,6 +29,10 @@ function normalizeBlingFiscalDocument(item, type) {
   };
 }
 
+function blingFiscalEmissionPeriod(from, to) {
+  return { initial: `${from} 00:00:00`, final: `${to} 23:59:59` };
+}
+
 function invalidImport(message) {
   const error = new Error(message);
   error.statusCode = 422;
@@ -74,4 +78,4 @@ function fiscalDocumentTotals(documents = []) {
   };
 }
 
-module.exports = { majorToCents, normalizeBlingFiscalDocument, collectBlingFiscalDocuments, fiscalDocumentTotals };
+module.exports = { majorToCents, blingFiscalEmissionPeriod, normalizeBlingFiscalDocument, collectBlingFiscalDocuments, fiscalDocumentTotals };

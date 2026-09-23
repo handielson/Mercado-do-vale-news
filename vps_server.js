@@ -21,7 +21,7 @@ const { ensureTikTokPrintTable, registerTikTokPrintRoutes } = require('./service
 const { ensureTikTokFulfillmentTable, createTikTokFulfillmentAutomation } = require('./services/tiktokShopFulfillmentAutomation.cjs');
 const { normalizeRelayCommand, ensureSchema: ensureN8nAdminHandoffSchema, notifyAdmins: notifyN8nHandoffAdmins, handleRelayCommand } = require('./services/n8nAdminHandoffRelay.cjs');
 const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
-const { collectBlingFiscalDocuments } = require('./services/blingFiscalImportCore.cjs');
+const { blingFiscalEmissionPeriod, collectBlingFiscalDocuments } = require('./services/blingFiscalImportCore.cjs');
 const {
   CATALOG_PREFERENCE_HANDOFF_MESSAGE,
   PHONE_LIST_FOLLOWUP_MESSAGE,
@@ -9726,12 +9726,13 @@ async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to }) {
     throw error;
   }
 
+  const emissionPeriod = blingFiscalEmissionPeriod(from, to);
   const read = async (type, status, page, id) => {
       const path = id == null ? type : `${type}/${encodeURIComponent(String(id))}`;
       const params = new URLSearchParams({
         ...(id == null ? {
-          pagina: String(page), limite: '100', dataEmissaoInicial: from,
-          dataEmissaoFinal: to, situacao: String(status),
+          pagina: String(page), limite: '100', dataEmissaoInicial: emissionPeriod.initial,
+          dataEmissaoFinal: emissionPeriod.final, situacao: String(status),
           ...(type === 'nfe' ? { tipo: '1' } : {}),
         } : {}),
       });

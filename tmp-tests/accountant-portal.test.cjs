@@ -2,7 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildRevenueReport, normalizeOperationalSale, reconcileSale, validPeriod } = require('../services/accountantPortalCore.cjs');
 const { registerAccountantPortalRoutes } = require('../services/accountantPortalServer.cjs');
-const { majorToCents, normalizeBlingFiscalDocument, collectBlingFiscalDocuments, fiscalDocumentTotals } = require('../services/blingFiscalImportCore.cjs');
+const { majorToCents, blingFiscalEmissionPeriod, normalizeBlingFiscalDocument, collectBlingFiscalDocuments, fiscalDocumentTotals } = require('../services/blingFiscalImportCore.cjs');
+
+test('filtra o dia completo na consulta fiscal do Bling', () => {
+  assert.deepEqual(blingFiscalEmissionPeriod('2026-09-22', '2026-09-22'), { initial:'2026-09-22 00:00:00', final:'2026-09-22 23:59:59' });
+});
 
 test('normaliza NF-e e NFC-e do Bling em centavos sem depender do cache do navegador', () => {
   assert.equal(majorToCents('123.45'), 12345);

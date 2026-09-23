@@ -71,6 +71,8 @@ test('importação fiscal do Bling ocorre no servidor e o painel usa total docum
   const page = read('pages/accountant/AccountantPortalPage.tsx');
   assert.match(server, /fetchBlingFiscalDocumentsForMigrationVps/);
   assert.match(server, /importBlingDocuments: fetchBlingFiscalDocumentsForMigrationVps/);
+  assert.match(server, /dataEmissaoInicial: emissionPeriod\.initial/);
+  assert.match(server, /dataEmissaoFinal: emissionPeriod\.final/);
   assert.match(routes, /documents\/import-bling/);
   assert.match(page, /documentTotals\.authorizedDocumentCents/);
 });
