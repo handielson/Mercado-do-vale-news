@@ -9,6 +9,7 @@
     "build": "vite build",
     "test:company-fiscal": "node --test tmp-tests/company-fiscal.test.cjs tmp-tests/fiscal-certificate-vault.test.cjs tmp-tests/company-data-separation-static.test.mjs",
     "test:company-fiscal:mysql": "node --test tmp-tests/company-fiscal-mysql.test.cjs",
+    "test:company-fiscal:sandbox": "node --test tmp-tests/company-fiscal-mysql.test.cjs",
     "test:company-fiscal:browser": "node tmp-tests/company-fiscal-mysql.test.cjs --browser",
     "test:customer-profile": "node tmp-tests/customer-profile-financial-tab-static.test.mjs",
     "test:customer-phone": "node tmp-tests/customer-phone-validation-static.test.mjs",

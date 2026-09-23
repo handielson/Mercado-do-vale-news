@@ -35,7 +35,7 @@ Se um teste falhar, manter o item aberto, corrigir dentro do escopo e repetir o 
 - [x] D07b — Gestão real do A1 pelo painel implantada e validada (E27/E28): instalação real, cofre AES-256-GCM, metadados, auditoria, exportação/exclusão controladas, guia/vídeo, alerta e consulta autenticada. O A1 da empresa foi aceito e a SEFAZ-PE homologação respondeu `107 — Serviço em Operação`; o backup externo de D07 continua separado.
 - [ ] D08 — Conferir no e-Fisco PE credenciamento NF-e/NFC-e por modelo e ambiente e CSC por ambiente se NFC-e for aplicável. Requisitos oficiais revistos em E20; situação desta empresa ainda não comprovada.
 - [ ] D09 — Definir empresas, modelos, canais e tipos de operação usados; classificar funções do inventário como necessárias, futuras ou não aplicáveis.
-- [ ] D10 — Preparar ambiente isolado, fixtures sintéticas e backup com teste de restauração.
+- [x] D10 — Ambiente fiscal isolado e reproduzível com MySQL 8.4 descartável, fixtures sintéticas e backup lógico restaurado em banco separado com comparação integral. E32.
 
 ## F — Fiscal primeiro, direto na SEFAZ
 

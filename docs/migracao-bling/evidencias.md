@@ -228,3 +228,11 @@ Verificações: `npm.cmd run test:company-fiscal` passou 24/24; `npm.cmd run bui
 O servidor agora prioriza a API Consulta CNPJ v2 do SERPRO quando `SERPRO_CNPJ_CONSUMER_KEY` e `SERPRO_CNPJ_CONSUMER_SECRET` estiverem configuradas juntas. O fluxo solicita token temporário via OAuth2 Client Credentials, mantém o token apenas em memória, consulta o endpoint oficial e registra `officialDirect=true`. Uma configuração com apenas uma chave é rejeitada; uma falha oficial preserva os dados anteriores e não é ocultada por consulta a espelho. Sem chaves, BrasilAPI e Minha Receita continuam como contingência explicitamente identificada.
 
 Verificações: `npm.cmd run test:company-fiscal` passou 27/27, incluindo mapeamento da resposta v2, prioridade do SERPRO, sigilo do segredo no cabeçalho codificado e bloqueio de configuração parcial; `npm.cmd run build` passou. A consulta real oficial permanece pendente porque ainda não há contrato nem chaves de produção do SERPRO no cofre da VPS. Nenhuma credencial de exemplo foi publicada.
+
+## E32 — Ambiente fiscal isolado e restauração do backup (23/09/2026)
+
+Estado anterior: a integração fiscal já criava um MySQL 8.4 descartável no Docker Desktop, aplicava a migration duas vezes e usava duas empresas fictícias para testar isolamento, persistência, concorrência, rollback, certificado simulado e navegador. Ainda não havia evidência de que um backup desse ambiente podia ser restaurado sem perda.
+
+Alteração: o teste canônico ganhou um ciclo real de `mysqldump` com transação consistente e sem bloqueio de tabelas, cálculo SHA-256 do conteúdo, criação de um segundo banco no mesmo contêiner e restauração pelo cliente MySQL. Depois da restauração, compara integralmente `company_settings`, `company_fiscal_profiles`, `company_fiscal_events` e `company_certificate_settings`, incluindo binários e datas normalizados. Uma alteração posterior na origem confirma que o banco restaurado permanece isolado. O script não lê `.env`, não usa certificado real e não acessa VPS ou banco externo.
+
+Critério de aprovação: `npm.cmd run test:company-fiscal:sandbox` deve criar o contêiner local, aplicar migration/fixtures, provar rollback e concorrência, gerar e restaurar o backup, comparar os quatro conjuntos de dados e remover o contêiner ao final, inclusive em caso de falha. D10 só permanece aprovado enquanto esse teste passar.

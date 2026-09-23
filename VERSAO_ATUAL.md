@@ -1,9 +1,9 @@
 # Versão Atual
 
-version: v1.2.432-serpro-cnpj
+version: v1.2.433-fiscal-sandbox-restore
 date: 2026-09-23
 status: published
-release_vps: /var/www/mdv-site/releases/20260923-074001-v12432-serpro-cnpj
+release_vps: /var/www/mdv-site/releases/20260923-075153-v12433-fiscal-sandbox-restore
 branch: main
-summary: Prepara a consulta oficial do CNPJ via SERPRO, com OAuth2 e credenciais exclusivas do servidor.
-tag: v1.2.432-serpro-cnpj
+summary: Valida o ambiente fiscal isolado com backup e restauração integral em MySQL descartável.
+tag: v1.2.433-fiscal-sandbox-restore

@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
-const { randomUUID } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const mysql = require('mysql2/promise');
@@ -10,6 +10,21 @@ const Fastify = require('fastify');
 const { registerCompanyFiscalRoutes } = require('../services/companyFiscalServer.cjs');
 const { normalizeLookup } = require('../services/companyFiscalCore.cjs');
 const docker = (...args) => execFileSync('docker', ['--context','desktop-linux',...args], { encoding:'utf8', timeout:args[0]==='run'?180000:15000, windowsHide:true, stdio:['ignore','pipe','pipe'] }).trim();
+const dockerWithInput = (input, ...args) => execFileSync('docker', ['--context','desktop-linux',...args], { input, encoding:'utf8', timeout:60000, windowsHide:true, stdio:['pipe','pipe','pipe'] });
+
+const normalizeBackupRows = rows => rows.map(row => Object.fromEntries(
+  Object.entries(row).map(([key,value]) => [key, Buffer.isBuffer(value) ? value.toString('hex') : value instanceof Date ? value.toISOString() : value])
+));
+
+async function snapshotFiscalDatabase(pool, database) {
+  const tables = ['company_settings','company_fiscal_profiles','company_fiscal_events','company_certificate_settings'];
+  const snapshot = {};
+  for (const table of tables) {
+    const [rows] = await pool.query(`SELECT * FROM \`${database}\`.\`${table}\` ORDER BY 1`);
+    snapshot[table] = normalizeBackupRows(rows);
+  }
+  return snapshot;
+}
 
 test('MySQL real: migration, isolamento, persistência, concorrência e rollback', { timeout:300000 }, async t => {
   const name = `mdv-fiscal-test-${randomUUID()}`;
@@ -106,9 +121,26 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   assert.equal(after[0].version,before[0].version);assert.equal(after[0].notes,before[0].notes);
   const [events]=await pool.query('SELECT COUNT(*) AS count FROM company_fiscal_events');assert.equal(events[0].count,8);
   const [settings]=await pool.query('SELECT name FROM company_settings');assert.equal(settings[0].name,'Empresa A');
-  console.log('MySQL real: duas aplicações da migration, duas empresas, consulta, concorrência e rollback aprovados.');
+  await pool.query('DROP TRIGGER fiscal_test_reject_event');
+
+  const sourceSnapshot = await snapshotFiscalDatabase(pool,'mdv_fiscal_test');
+  const dump = docker('exec',container,'mysqldump','-uroot',`-p${password}`,'--single-transaction','--skip-lock-tables','--no-tablespaces','mdv_fiscal_test');
+  assert.match(dump,/CREATE TABLE `company_fiscal_profiles`/);
+  assert.match(dump,/INSERT INTO `company_fiscal_profiles`/);
+  const dumpSha256 = createHash('sha256').update(dump).digest('hex');
+  assert.match(dumpSha256,/^[a-f0-9]{64}$/);
+
+  docker('exec',container,'mysql','-uroot',`-p${password}`,'-e','CREATE DATABASE mdv_fiscal_restore CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+  dockerWithInput(dump,'exec','-i',container,'mysql','-uroot',`-p${password}`,'mdv_fiscal_restore');
+  const restoredSnapshot = await snapshotFiscalDatabase(pool,'mdv_fiscal_restore');
+  assert.deepEqual(restoredSnapshot,sourceSnapshot,'A restauração deve preservar integralmente cadastros, eventos e metadados fiscais');
+
+  await pool.query('UPDATE company_fiscal_profiles SET notes=? WHERE id=?',['alteração posterior ao backup',company.id]);
+  const [restoredRows] = await pool.query('SELECT notes FROM mdv_fiscal_restore.company_fiscal_profiles WHERE id=?',[company.id]);
+  assert.notEqual(restoredRows[0].notes,'alteração posterior ao backup','O banco restaurado deve permanecer isolado da origem');
+
+  console.log(`MySQL real: migration, fixtures, concorrência, rollback e restauração integral aprovados (SHA-256 ${dumpSha256.slice(0,12)}…).`);
   if (process.argv.includes('--browser')) {
-    await pool.query('DROP TRIGGER fiscal_test_reject_event');
     await require('./company-fiscal-browser-integration.cjs')(pool);
   }
 });
