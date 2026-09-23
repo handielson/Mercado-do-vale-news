@@ -2,7 +2,7 @@
   "version": "v1.2.437-tiktok-fiscal-review",
   "date": "2026-09-23",
   "status": "ready",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20260923-153000-v12437-tiktok-fiscal-review",
   "branch": "main",
   "summary": "Fluxo TikTok Shop até impressão e revisão contábil obrigatória antes da aprovação fiscal.",
   "tag": "v1.2.437-tiktok-fiscal-review",
@@ -14,16 +14,26 @@
     "scripts/shopee-auto-print.cjs",
     "services/tiktokShopFulfillmentService.cjs",
     "services/tiktokShopPrintServer.cjs",
+    "scripts/tiktok-shop-print-agent.cjs",
     "tmp-tests/tiktok-fulfillment-service.test.cjs",
+    "tmp-tests/tiktok-shop-print-flow-static.test.mjs",
     "tmp-tests/fiscal-tax-validation.test.cjs",
     "vps_server.cjs",
     "vps_server.js"
   ],
   "validations": [
-    "node tmp-tests/n8n-blueprint-followup-sales-static.test.cjs",
-    "node --check services/autoresponderCatalogPreferences.cjs",
-    "node tmp-tests/n8n-fix-blueprint-followup-sales.cjs --apply",
+    "npm.cmd run test:company-fiscal (34/34)",
+    "node tmp-tests/fiscal-tax-validation.test.cjs",
+    "node tmp-tests/tiktok-fulfillment-service.test.cjs",
+    "node tmp-tests/tiktok-shop-print-flow-static.test.mjs",
+    "node --check services/fiscalTaxValidationCore.cjs",
+    "node --check scripts/tiktok-shop-print-agent.cjs",
+    "node --check scripts/shopee-auto-print.cjs",
+    "node --check services/tiktokShopPrintServer.cjs",
+    "node --check vps_server.cjs",
+    "node --check vps_server.js",
+    "npm.cmd run build",
     "curl.exe -s -i https://api.xiaomipetrolina.com.br/status",
-    "curl.exe -s -i https://n8n.mercadodovale.com.br/healthz"
+    "curl.exe -L -s -o NUL -w \\\"SITE %{http_code} %{url_effective}\\\\n\\\" https://www.mercadodovale.com.br/"
   ]
 }
