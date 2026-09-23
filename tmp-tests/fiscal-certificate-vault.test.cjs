@@ -12,13 +12,23 @@ const PROFILE = '11111111-2222-4333-8444-555555555555';
 
 function fixture(password = 'senha-segura') {
   const keys = forge.pki.rsa.generateKeyPair(1024);
+  const authorityKeys = forge.pki.rsa.generateKeyPair(1024);
+  const authority = forge.pki.createCertificate();
+  authority.publicKey = authorityKeys.publicKey; authority.serialNumber = '10';
+  authority.validity.notBefore = new Date('2025-01-01T00:00:00Z'); authority.validity.notAfter = new Date('2035-01-01T00:00:00Z');
+  authority.setSubject([{ name: 'commonName', value: 'AC TESTE' }, { name: 'organizationalUnitName', value: '11471380000169' }]);
+  authority.setIssuer(authority.subject.attributes);
+  authority.sign(authorityKeys.privateKey, forge.md.sha256.create());
   const cert = forge.pki.createCertificate();
   cert.publicKey = keys.publicKey; cert.serialNumber = '01';
   cert.validity.notBefore = new Date('2026-01-01T00:00:00Z'); cert.validity.notAfter = new Date('2027-03-02T23:59:59Z');
-  cert.setSubject([{ name: 'commonName', value: `EMPRESA TESTE:${CNPJ}` }]);
-  cert.setIssuer([{ name: 'commonName', value: 'AC TESTE' }]);
-  cert.sign(keys.privateKey, forge.md.sha256.create());
-  const asn1 = forge.pkcs12.toPkcs12Asn1(keys.privateKey, [cert], password, { algorithm: '3des' });
+  cert.setSubject([
+    { name: 'organizationalUnitName', value: '11471380000169' },
+    { name: 'commonName', value: `EMPRESA TESTE:${CNPJ}` },
+  ]);
+  cert.setIssuer(authority.subject.attributes);
+  cert.sign(authorityKeys.privateKey, forge.md.sha256.create());
+  const asn1 = forge.pkcs12.toPkcs12Asn1(keys.privateKey, [authority, cert], password, { algorithm: '3des' });
   return Buffer.from(forge.asn1.toDer(asn1).getBytes(), 'binary');
 }
 
@@ -29,6 +39,7 @@ test('cofre A1 valida CNPJ, cifra em repouso, exporta e exclui com senha', async
   const pfx = fixture();
   const metadata = vault.inspectPfx(pfx, 'senha-segura');
   assert.equal(metadata.cnpj, CNPJ); assert.equal(metadata.validUntil, '2027-03-02'); assert.equal(metadata.hasPrivateKey, true);
+  assert.match(metadata.subjectName, /EMPRESA TESTE/);
   await assert.rejects(() => vault.installCertificate(PROFILE, pfx, 'senha-segura', '99888777000166', options), /não corresponde/);
   const installed = await vault.installCertificate(PROFILE, pfx, 'senha-segura', CNPJ, options);
   assert.match(installed.fingerprintSha256, /^([A-F0-9]{2}:){31}[A-F0-9]{2}$/);

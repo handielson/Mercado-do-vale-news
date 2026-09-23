@@ -25,12 +25,35 @@ function profilePath(profileId, options) {
 }
 
 function findCnpj(cert) {
-  const values = cert.subject.attributes.map(attribute => String(attribute.value || ''));
-  for (const value of values) {
-    const matches = value.match(/\d{14}/g) || [];
-    for (const match of matches) if (/^\d{14}$/.test(match)) return match;
-  }
-  return '';
+  const attributes = cert.subject.attributes || [];
+  const candidates = values => [...new Set(values.flatMap(value => String(value || '').match(/\d{14}/g) || []))];
+  const preferred = candidates(attributes
+    .filter(attribute => attribute.shortName === 'CN' || attribute.name === 'commonName' || attribute.type === '2.5.4.3')
+    .map(attribute => attribute.value));
+  if (preferred.length === 1) return preferred[0];
+  if (preferred.length > 1) return '';
+
+  const serialNumber = candidates(attributes
+    .filter(attribute => attribute.shortName === 'SERIALNUMBER' || attribute.name === 'serialNumber' || attribute.type === '2.5.4.5')
+    .map(attribute => attribute.value));
+  if (serialNumber.length === 1) return serialNumber[0];
+  if (serialNumber.length > 1) return '';
+
+  const fallback = candidates(attributes.map(attribute => attribute.value));
+  return fallback.length === 1 ? fallback[0] : '';
+}
+
+function sameLocalKeyId(certBag, keyBag) {
+  const certId = certBag?.attributes?.localKeyId?.[0];
+  const keyId = keyBag?.attributes?.localKeyId?.[0];
+  return Boolean(certId && keyId && certId === keyId);
+}
+
+function certificateMatchesPrivateKey(certBag, keyBag) {
+  const publicKey = certBag?.cert?.publicKey;
+  const privateKey = keyBag?.key;
+  if (publicKey?.n && privateKey?.n) return publicKey.n.toString(16) === privateKey.n.toString(16);
+  return sameLocalKeyId(certBag, keyBag);
 }
 
 function distinguishedName(attributes) {
@@ -52,8 +75,10 @@ function inspectPfx(pfx, password) {
     ...(p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag] || []),
     ...(p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag] || []),
   ];
-  const leaf = certBags.find(bag => bag.cert && findCnpj(bag.cert)) || certBags[0];
-  if (!leaf?.cert || keyBags.length === 0) throw Object.assign(new Error('O arquivo precisa conter certificado e chave privada.'), { statusCode: 400 });
+  if (certBags.length === 0 || keyBags.length === 0) throw Object.assign(new Error('O arquivo precisa conter certificado e chave privada.'), { statusCode: 400 });
+  const leaf = certBags.find(certBag => keyBags.some(keyBag => certificateMatchesPrivateKey(certBag, keyBag)))
+    || (certBags.length === 1 && keyBags.length === 1 ? certBags[0] : null);
+  if (!leaf?.cert) throw Object.assign(new Error('Não foi possível associar o certificado à chave privada do arquivo.'), { statusCode: 400 });
   const der = Buffer.from(forge.asn1.toDer(forge.pki.certificateToAsn1(leaf.cert)).getBytes(), 'binary');
   return {
     cnpj: findCnpj(leaf.cert),
