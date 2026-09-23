@@ -48,4 +48,6 @@ test('painel, rotas, migration e deploy permanecem conectados', () => {
   assert.match(component, /Aprovar para implementação/);
   assert.match(server, /\/tax-validation/);
   assert.match(deploy, /021_company_fiscal_tax_validation\.sql/);
+  assert.match(deploy, /companyFiscalServicePaths[\s\S]*services\/fiscalTaxValidationCore\.cjs/);
+  assert.match(deploy, /node --check \$\{appDir\}\/services\/fiscalTaxValidationCore\.cjs/);
 });

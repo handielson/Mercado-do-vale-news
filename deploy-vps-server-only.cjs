@@ -46,6 +46,7 @@ const companyFiscalServicePaths = [
   'services/companyFiscalCore.cjs',
   'services/companyFiscalServer.cjs',
   'services/fiscalCertificateVault.cjs',
+  'services/fiscalTaxValidationCore.cjs',
 ];
 const autoresponderEngineFiles = [
   'services/autoresponder/engine/types.js',
@@ -384,7 +385,7 @@ async function deployCompanyFiscalOnly(appDir, apiProc) {
   `;
   const encoded = Buffer.from(patchSource).toString('base64');
   await exec(`node -e "eval(Buffer.from('${encoded}','base64').toString())"`);
-  await exec(`node --check ${appDir}/services/companyFiscalServer.cjs && node --check ${appDir}/services/fiscalCertificateVault.cjs && node --check ${appDir}/vps_server.js && node --check ${appDir}/vps_server.cjs`);
+  await exec(`node --check ${appDir}/services/companyFiscalServer.cjs && node --check ${appDir}/services/fiscalCertificateVault.cjs && node --check ${appDir}/services/fiscalTaxValidationCore.cjs && node --check ${appDir}/vps_server.js && node --check ${appDir}/vps_server.cjs`);
   console.log((await exec(`pm2 restart ${apiProc.name} --update-env`)).trim());
   console.log(`Company fiscal backup: ${backupDir}`);
 }
