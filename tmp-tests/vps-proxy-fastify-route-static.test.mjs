@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 
 for (const file of ['vps_server.js', 'vps_server.cjs']) {
   const source = readFileSync(file, 'utf8');
@@ -64,11 +65,25 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
     `${file} must not require admin auth for public write proxy paths such as banner tracking`,
   );
 
+  assert.match(source, /isVpsProxyAccountantInvoiceStatusPath\(vpsProxyTargetPath, method\)[\s\S]*?if\s*\(!auth\.userId\)\s*return reply\.code\(401\)/,
+    `${file} must pass only authenticated accountant status consultations to the route's company grant check`);
+
   assert.match(
     source,
     /fastify\.inject\(\{[\s\S]*url:\s*vpsProxyTargetPath/,
     `${file} must forward protected proxy requests internally with the VPS sync key`,
   );
+}
+
+for (const file of ['server.js', 'vps_server.js', 'vps_server.cjs']) {
+  const source = readFileSync(file, 'utf8');
+  const functionSource = source.match(/function isVpsProxyAccountantInvoiceStatusPath\(proxyPath, method\) \{[\s\S]*?\n\}/u)?.[0];
+  assert.ok(functionSource, `${file} must classify the accountant consultation precisely`);
+  const matches = vm.runInNewContext(`${functionSource}\nisVpsProxyAccountantInvoiceStatusPath`);
+  assert.equal(matches('/accountant/companies/primary/fiscal-documents/nfe-1/sefaz-status', 'POST'), true);
+  assert.equal(matches('/accountant/companies/primary/fiscal-documents/nfe-1/sefaz-status', 'GET'), false);
+  assert.equal(matches('/accountant/companies/primary/tax-validation', 'POST'), false);
+  assert.equal(matches('/admin/fiscal-companies/primary/certificate/upload', 'POST'), false);
 }
 
 console.log('vps proxy Fastify route static checks ok');

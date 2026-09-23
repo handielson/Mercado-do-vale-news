@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.460-accountant-sefaz-invoice-status
+version: v1.2.461-accountant-sefaz-proxy-auth
 date: 2026-09-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260923-235107-accountant-sefaz-invoice-status
+release_vps: /var/www/mdv-site/releases/20260923-235656-accountant-sefaz-proxy-auth
 branch: main
-summary: Consulta somente de leitura da situação da NF-e na SEFAZ-PE pelo Espaço do Contador.
-tag: v1.2.460-accountant-sefaz-invoice-status
+summary: Permite ao contador autenticado consultar a SEFAZ através do proxy do site.
+tag: v1.2.461-accountant-sefaz-proxy-auth

@@ -2057,6 +2057,11 @@ function isVpsProxySensitiveGetPath(proxyPath) {
   );
 }
 
+function isVpsProxyAccountantInvoiceStatusPath(proxyPath, method) {
+  return String(method).toUpperCase() === 'POST' &&
+    /^\/accountant\/companies\/[^/?]+\/fiscal-documents\/[^/?]+\/sefaz-status$/u.test(proxyPath.split('?')[0]);
+}
+
 function isVpsProxyPublicProductReadPath(pathname) {
   if (pathname === '/products' || pathname === '/products/category-counts') return true;
   if (/^\/products\/by-category\/[^/]+$/u.test(pathname)) return true;
@@ -14162,6 +14167,8 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
     }
   } else if (isCustomerSelfServicePath) {
     if (!auth.userId || !auth.customerId) return reply.code(401).send({ error: 'Auth required' });
+  } else if (isVpsProxyAccountantInvoiceStatusPath(vpsProxyTargetPath, method)) {
+    if (!auth.userId) return reply.code(401).send({ error: 'Auth required' });
   } else if (!isPublicPath && (isWrite || isVpsProxySensitiveGetPath(vpsProxyTargetPath)) && !auth.isAdmin) {
     return reply.code(403).send({ error: 'Admin required' });
   }
