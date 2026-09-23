@@ -89,7 +89,7 @@ function registerTikTokPrintRoutes(fastify, { pool, requireSyncKey, requireSyncK
     try { return await syncOrder(request.body?.order_id); }
     catch (error) { return reply.code(502).send({ error: error.message }); }
   });
-  fastify.get('/api/tiktok-shop/print-jobs/order/:orderId', { preHandler: requireSyncKey }, async (request, reply) => {
+  fastify.get('/api/tiktok-shop/print-jobs/order/:orderId', { preHandler: requireSyncKeyOrAdmin }, async (request, reply) => {
     const orderId = String(request.params?.orderId || '').trim();
     if (!ORDER_ID.test(orderId)) return reply.code(400).send({ error: 'Pedido TikTok inválido.' });
     const [rows] = await pool.query(`SELECT package_id,order_id,status,tracking_number,label_printed_at,summary_printed_at,last_error,updated_at

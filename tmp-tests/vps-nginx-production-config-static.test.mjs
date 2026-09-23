@@ -6,6 +6,11 @@ const configPath = 'infra/nginx/mdv-site-production.conf';
 assert(fs.existsSync(configPath), 'infra/nginx/mdv-site-production.conf should exist');
 
 const config = fs.readFileSync(configPath, 'utf8');
+const apiConfig = fs.readFileSync('infra/nginx/mdv-api-ssl.conf', 'utf8');
+
+assert.equal((apiConfig.match(/proxy_pass\s+http:\/\/127\.0\.0\.1:4000;/g) || []).length, 2,
+  'API HTTP and HTTPS must target the IPv4 listener');
+assert(!/proxy_pass\s+http:\/\/localhost:4000/.test(apiConfig), 'localhost may resolve to unavailable IPv6 ::1');
 
 assert(/server_name\s+mercadodovale\.com\.br/.test(config), 'root production host should be documented');
 assert(/server_name\s+www\.mercadodovale\.com\.br/.test(config), 'www production host should be documented');

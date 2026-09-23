@@ -107,16 +107,29 @@ async function executeTikTokPrintJob({ job, settings, request, print, getStockLo
 
 function startTikTokPrintAgent({ apiUrl, syncKey, getSettings, getStockLocations,
   request = requestFactory(apiUrl, syncKey), print = (...args) => require('pdf-to-printer').print(...args),
+  listPrinters = () => require('pdf-to-printer').getPrinters(),
   directory = path.join(__dirname, 'Etiquetas de envio'),
   journalDirectory = path.join(__dirname, 'tiktok_shop_printed'), logger = console, intervalMs = 60000 } = {}) {
   if (!syncKey) throw new Error('Chave da API ausente');
   let running = false;
+  let missingPrintersWarning = '';
   const tick = async () => {
     if (running) return;
     running = true;
     try {
+      const settings = await getSettings();
+      const requiredPrinters = [settings?.shopee_printer_thermal, settings?.shopee_printer_a4].map(value => String(value || '').trim());
+      const availablePrinters = new Set((await listPrinters()).map(printer => String(printer.name || '').trim()));
+      const missingPrinters = requiredPrinters.filter(name => !name || !availablePrinters.has(name));
+      if (missingPrinters.length) {
+        const warning = `Impressoras TikTok indisponíveis neste computador: ${missingPrinters.join(', ') || 'não configuradas'}`;
+        if (warning !== missingPrintersWarning) logger.warn(warning);
+        missingPrintersWarning = warning;
+        return;
+      }
+      missingPrintersWarning = '';
       const job = await request('/print-jobs/next');
-      if (job) await executeTikTokPrintJob({ job, settings: await getSettings(), request, print,
+      if (job) await executeTikTokPrintJob({ job, settings, request, print,
         getStockLocations, directory, journalDirectory, logger });
     } catch (error) { logger.error('TikTok Shop Auto Print:', error.message); }
     finally { running = false; }

@@ -46,6 +46,7 @@ export default function TikTokShopPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [tiktokOrderId, setTiktokOrderId] = useState('586215533660637149');
   const [printingTikTok, setPrintingTikTok] = useState(false);
+  const [tiktokPrintProgress, setTiktokPrintProgress] = useState('');
 
   useEffect(() => {
     if (!initialProductId) return;
@@ -155,18 +156,44 @@ export default function TikTokShopPage() {
       return;
     }
     setPrintingTikTok(true);
+    setTiktokPrintProgress('Consultando o estado do pedido e da fila de impressão...');
     try {
-      const response = await fetch(`http://127.0.0.1:8081/print-tiktok-order?order_id=${encodeURIComponent(orderId)}`);
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || result?.success === false || result?.error) {
-        throw new Error(result?.error || 'O agente local não concluiu a impressão.');
+      let jobs = (await tiktokShopService.getPrintJobs(orderId)).jobs;
+      if (jobs.some((job) => job.status === 'printed')) {
+        toast.success('Impressão TikTok já confirmada pelo sistema.');
+        return;
       }
-      toast.success(result.already_printed ? 'Etiqueta TikTok já estava impressa.' : 'Fluxo concluído: etiqueta TikTok enviada para a impressora.');
+      const blocked = jobs.find((job) => job.status === 'intervention');
+      if (blocked) throw new Error(`Impressão exige conferência no computador das impressoras: ${blocked.last_error || 'fila em intervenção'}`);
+      let sync = jobs.length ? { queued: 0 } : await tiktokShopService.syncPrintJobs(orderId);
+      if (sync.reason === 'order_not_ready' && !jobs.length) {
+        setTiktokPrintProgress('Conferindo NF-e e expedição na TikTok Shop...');
+        try {
+          await tiktokShopService.startOrderFulfillment(orderId);
+        } catch (error) {
+          if (!/n[aã]o precisa de novo upload/i.test(String(error))) throw error;
+        }
+      }
+      const deadline = Date.now() + 8 * 60 * 1000;
+      while (Date.now() < deadline) {
+        setTiktokPrintProgress('Aguardando o agente de impressão confirmar etiqueta e resumo...');
+        jobs = (await tiktokShopService.getPrintJobs(orderId)).jobs;
+        if (jobs.some((job) => job.status === 'printed')) {
+          toast.success('Etiqueta e resumo TikTok enviados às impressoras e confirmados pelo sistema.');
+          return;
+        }
+        const intervention = jobs.find((job) => job.status === 'intervention');
+        if (intervention) throw new Error(intervention.last_error || 'Fila TikTok exige intervenção.');
+        if (!jobs.length) await tiktokShopService.syncPrintJobs(orderId);
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
+      throw new Error('A impressão ainda não foi confirmada. Consulte o agente de impressão antes de tentar novamente.');
     } catch (error: any) {
       console.error('[TikTokShopPage] print error:', error);
       toast.error(error?.message || 'Não foi possível concluir a impressão TikTok.');
     } finally {
       setPrintingTikTok(false);
+      setTiktokPrintProgress('');
     }
   }
 
@@ -370,6 +397,7 @@ export default function TikTokShopPage() {
               {printingTikTok ? 'Processando...' : 'Enviar e imprimir'}
             </button>
           </div>
+          {tiktokPrintProgress && <p role="status" className="w-full text-sm text-teal-900">{tiktokPrintProgress}</p>}
         </div>
       </section>
 

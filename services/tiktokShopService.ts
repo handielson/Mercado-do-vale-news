@@ -34,6 +34,14 @@ export interface TikTokShopSafeStatus {
   granted_scopes: string[];
 }
 
+export interface TikTokPrintJob {
+  package_id: string;
+  status: 'ready' | 'printing' | 'printed' | 'intervention';
+  label_printed_at: string | null;
+  summary_printed_at: string | null;
+  last_error: string | null;
+}
+
 export interface TikTokAuthorizedShopSummary {
   name: string | null;
   region: string | null;
@@ -149,6 +157,18 @@ export interface TikTokShopRequiredAttributeInput {
 }
 
 export const tiktokShopService = {
+  getPrintJobs(orderId: string): Promise<{ orderId: string; jobs: TikTokPrintJob[] }> {
+    return vpsClient.get(`/api/tiktok-shop/print-jobs/order/${encodeURIComponent(orderId)}`);
+  },
+
+  syncPrintJobs(orderId: string): Promise<{ queued: number; reason?: string }> {
+    return vpsClient.post('/api/tiktok-shop/print-jobs/sync', { order_id: orderId });
+  },
+
+  startOrderFulfillment(orderId: string): Promise<{ success: boolean }> {
+    return vpsClient.post(`/api/tiktok-shop/orders/${encodeURIComponent(orderId)}/fulfill`, { handover_method: 'DROP_OFF' });
+  },
+
   getStatus(): Promise<TikTokShopSafeStatus> {
     return vpsClient.get<TikTokShopSafeStatus>('/tiktok-shop/settings');
   },

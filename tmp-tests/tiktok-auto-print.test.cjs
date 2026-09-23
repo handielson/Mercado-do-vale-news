@@ -4,10 +4,27 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { PDFDocument } = require('pdf-lib');
-const { executeTikTokPrintJob, separationLocation } = require('../scripts/tiktok-shop-print-agent.cjs');
+const { executeTikTokPrintJob, startTikTokPrintAgent, separationLocation } = require('../scripts/tiktok-shop-print-agent.cjs');
 const { summaryFromOrder, isPrintableOrder } = require('../services/tiktokShopPrintServer.cjs');
 
 async function main() {
+  let claims = 0;
+  const settings = { shopee_printer_thermal: 'Zebra', shopee_printer_a4: 'Comprovante' };
+  const wrongComputer = startTikTokPrintAgent({ syncKey: 'test', getSettings: async () => settings,
+    listPrinters: async () => [{ name: 'P50 Printer' }], request: async () => { claims++; return null; },
+    logger: { log() {}, warn() {}, error() {} }, intervalMs: 60000 });
+  try {
+    await new Promise(resolve => setTimeout(resolve, 40));
+    assert.equal(claims, 0, 'a machine without configured printers must not claim a live TikTok job');
+  } finally { wrongComputer.stop(); }
+  const rightComputer = startTikTokPrintAgent({ syncKey: 'test', getSettings: async () => settings,
+    listPrinters: async () => [{ name: 'Zebra' }, { name: 'Comprovante' }],
+    request: async () => { claims++; return null; },
+    logger: { log() {}, warn() {}, error() {} }, intervalMs: 60000 });
+  try {
+    await new Promise(resolve => setTimeout(resolve, 40));
+    assert.equal(claims, 1, 'the configured print computer should claim the job');
+  } finally { rightComputer.stop(); }
   const order = { id: '586142367857673979', status: 'AWAITING_COLLECTION', create_time: 1789800000,
     recipient_address: { name: 'Cliente' }, line_items: [{ product_name: 'Produto teste', seller_sku: 'ABC-1', quantity: 2 }],
     packages: [{ id: '586142367857673971' }] };
