@@ -29,7 +29,7 @@ test('cofre A1 valida CNPJ, cifra em repouso, exporta e exclui com senha', async
   const pfx = fixture();
   const metadata = vault.inspectPfx(pfx, 'senha-segura');
   assert.equal(metadata.cnpj, CNPJ); assert.equal(metadata.validUntil, '2027-03-02'); assert.equal(metadata.hasPrivateKey, true);
-  await assert.rejects(() => vault.installCertificate(PROFILE, pfx, 'senha-segura', '11222333000181', options), /não corresponde/);
+  await assert.rejects(() => vault.installCertificate(PROFILE, pfx, 'senha-segura', '99888777000166', options), /não corresponde/);
   const installed = await vault.installCertificate(PROFILE, pfx, 'senha-segura', CNPJ, options);
   assert.match(installed.fingerprintSha256, /^([A-F0-9]{2}:){31}[A-F0-9]{2}$/);
   const raw = await fs.readFile(path.join(vaultDir, `${PROFILE}.vault`), 'utf8');
