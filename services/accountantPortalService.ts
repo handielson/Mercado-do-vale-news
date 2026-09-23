@@ -25,7 +25,7 @@ export interface AccountantRevenueSale {
   document?: { model: string; number?: string; accessKey?: string; status: string; issuedAt?: string; totalCents: number; source: string };
   documentTotalCents?: number;
   amountDifferenceCents?: number;
-  reviewReasons?: Array<'amount_difference' | 'operational_pending_with_document' | 'cancelled_with_document'>;
+  reviewReasons?: Array<'amount_difference' | 'operational_pending_with_document' | 'cancelled_with_document' | 'sale_outside_period'>;
 }
 
 export interface AccountantRevenueReport {

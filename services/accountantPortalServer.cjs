@@ -173,6 +173,30 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       fiscalBySale.set(key, item);
     }
     const report = buildRevenueReport([...byKey.values()], fiscalBySale);
+    // A nota pertence ao período de emissão, mas o pedido vinculado pode ter sido criado em outro dia.
+    // Mostrá-lo apenas na revisão evita somá-lo novamente ao faturamento operacional do período.
+    const crossPeriodReferences = [...new Set(documentRows
+      .filter(row => ['shopee', 'tiktok'].includes(row.channel) && row.external_sale_id
+        && !byKey.has(`${row.channel}:${row.external_sale_id}`))
+      .map(row => row.external_sale_id))];
+    const crossPeriodRows = new Map();
+    for (let offset = 0; offset < crossPeriodReferences.length; offset += 100) {
+      const references = crossPeriodReferences.slice(offset, offset + 100);
+      const [rows] = await pool.query(
+        `SELECT channel,external_id AS external_sale_id,status,total_cents,occurred_at,created_at AS status_captured_at,customer_name
+           FROM mobile_sale_events
+          WHERE channel IN ('shopee','tiktok') AND external_id IN (${references.map(() => '?').join(',')})
+            AND (occurred_at<? OR occurred_at>=?)
+          ORDER BY created_at DESC LIMIT 10000`,
+        [...references, `${from} 00:00:00`, `${exclusiveDate} 00:00:00`]
+      );
+      for (const row of rows) {
+        const key = `${row.channel}:${row.external_sale_id}`;
+        if (fiscalBySale.get(key)?.documents?.length && !crossPeriodRows.has(key)) crossPeriodRows.set(key, row);
+      }
+    }
+    const crossPeriodSales = buildRevenueReport([...crossPeriodRows.values()], fiscalBySale).sales
+      .map(sale => ({ ...sale, reviewReasons: [...new Set([...(sale.reviewReasons || []), 'sale_outside_period'])] }));
     const documentTotals = fiscalDocumentTotals(documentRows);
     const documents = documentRows.map(row => ({
       model: row.model, status: row.status, channel: ['shopee', 'tiktok'].includes(row.channel) ? row.channel : 'unidentified',
@@ -182,7 +206,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     return {
       company: companyView(profile), period: { from, to },
       coverage: { available: true, sources: ['sales','orders','mobile_sale_events'], note: 'PDV e site vêm das bases operacionais. Shopee e TikTok usam eventos capturados no momento da sincronização; o status mostrado pode não ser o atual no marketplace. Vendas sem XML histórico permanecem pendentes de conciliação.' },
-      ...report, documentTotals, documents,
+      ...report, reviewSales: [...report.reviewSales, ...crossPeriodSales], documentTotals, documents,
     };
   });
 

@@ -390,3 +390,42 @@ test('status do marketplace preserva a data da captura sem apresentá-lo como es
   assert.deepEqual(reconcileSale(sale, { documents:[note] }).reviewReasons, ['operational_pending_with_document']);
   assert.equal(normalizeOperationalSale({ ...sale, status_captured_at:undefined }).statusCapturedAt, '');
 });
+
+test('nota emitida no dia mostra pedido de outro dia para revisão sem alterar totais operacionais', async () => {
+  const routes = new Map();
+  const app = {};
+  for (const method of ['get','put','post','delete']) app[method] = (path, options, handler) => routes.set(`${method}:${path}`, { preHandler:options.preHandler, handler });
+  const queries = [];
+  const pool = { query: async (sql, params = []) => {
+    queries.push({ sql, params });
+    if (sql.includes('FROM company_settings')) return [[{ id:'settings-1', name:'Empresa', cnpj:'123' }]];
+    if (sql.includes('FROM company_fiscal_profiles WHERE settings_id=')) return [[{ id:'profile-1', settings_id:'settings-1', name:'Empresa', cnpj:'123' }]];
+    if (sql.includes('FROM mobile_sale_events') && sql.includes('external_id IN')) return [[{
+      channel:'shopee', external_sale_id:'order-1', status:'READY_TO_SHIP', total_cents:2631,
+      occurred_at:'2026-09-21 20:48:41', status_captured_at:'2026-09-22 08:52:04', customer_name:'',
+    }]];
+    if (sql.includes('FROM mobile_sale_events')) return [[]];
+    if (sql.includes('FROM sales WHERE') || sql.includes('FROM orders WHERE')) return [[]];
+    if (sql.includes('FROM company_fiscal_documents')) return [[{
+      id:'note-1', profile_id:'profile-1', channel:'shopee', external_sale_id:'order-1',
+      model:'55', status:'authorized', document_number:'000693', issued_at:'2026-09-22 05:52:12', total_cents:2438, source:'bling_import',
+    }]];
+    if (sql.includes('FROM company_fiscal_sale_reconciliations')) return [[]];
+    throw new Error(`SQL inesperado: ${sql}`);
+  } };
+  registerAccountantPortalRoutes(app, { pool, enabled:true, getBearerAuthContext:async () => ({ customerId:'admin', userId:'admin', isAdmin:true }) });
+  const route = routes.get('get:/accountant/companies/:id/revenue');
+  const req = { params:{ id:'primary' }, query:{ from:'2026-09-22', to:'2026-09-22' } };
+  const reply = { sent:false, header(){}, code(){ return this; }, send(){ this.sent=true; } };
+  await route.preHandler(req, reply);
+  const report = await route.handler(req);
+  assert.equal(report.documentTotals.authorizedDocumentCents, 2438);
+  assert.equal(report.totals.operationalCents, 0);
+  assert.deepEqual(report.sales, []);
+  assert.equal(report.reviewSales.length, 1);
+  assert.equal(report.reviewSales[0].externalSaleId, 'order-1');
+  assert.equal(report.reviewSales[0].amountDifferenceCents, -193);
+  assert.deepEqual(report.reviewSales[0].reviewReasons, ['amount_difference','sale_outside_period']);
+  assert.deepEqual(queries.find(entry => entry.sql.includes('external_id IN')).params, ['order-1','2026-09-22 00:00:00','2026-09-23 00:00:00']);
+  assert.equal(queries.every(entry => /^SELECT /u.test(entry.sql.trim())), true);
+});

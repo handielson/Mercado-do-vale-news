@@ -39,6 +39,14 @@ test('portal identifica data e limite do status capturado do marketplace', () =>
   assert.match(page, /conferir situação atual do pedido/);
 });
 
+test('fila distingue pedido fora do período dos totais operacionais', () => {
+  const server = read('services/accountantPortalServer.cjs');
+  const page = read('pages/accountant/AccountantPortalPage.tsx');
+  assert.match(server, /reviewSales: \[\.\.\.report\.reviewSales, \.\.\.crossPeriodSales\]/);
+  assert.match(page, /não entram nos totais operacionais do período/);
+  assert.match(page, /Pedido criado fora do período selecionado/);
+});
+
 test('migração cria concessão, documentos e conciliação isolados por perfil', () => {
   const migration = read('migrations/022_accountant_portal.sql');
   assert.match(migration, /company_accountant_access/);
