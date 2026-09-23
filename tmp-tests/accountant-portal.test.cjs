@@ -138,19 +138,19 @@ test('nega empresa sem concessão e aceita somente a empresa vinculada ao contad
   assert.equal(allowedRequest.accountantProfile.id, 'profile-a');
 });
 
-test('relatório de faturamento usa a situação final da venda, conforme o schema MySQL real', async () => {
+test('relatório de faturamento usa colunas e valores monetários do schema MySQL real', async () => {
   const routes = new Map();
   const app = {};
   for (const method of ['get', 'put', 'post', 'delete']) app[method] = (route, options, handler) => routes.set(`${method}:${route}`, { preHandler: options.preHandler, handler });
   const profile = { id:'profile-1', settings_id:'settings-1', name:'Empresa', cnpj:'123', regime:'simples_nacional', crt:'1' };
   const sqlSeen = [];
-  const pool = { query: async (sql) => {
+  const pool = { query: async (sql, params = []) => {
     sqlSeen.push(sql);
     if (sql.includes('FROM company_settings')) return [[{ id:'settings-1', name:'Empresa', cnpj:'123' }]];
     if (sql.includes('FROM company_fiscal_profiles WHERE settings_id=')) return [[profile]];
     if (sql.includes('FROM mobile_sale_events')) return [[]];
-    if (sql.includes('FROM sales WHERE company_id=')) return [[{ channel:'pdv', external_sale_id:'sale-1', status:'completed', total_cents:1200, occurred_at:'2026-09-10 12:00:00', customer_name:'' }]];
-    if (sql.includes('FROM orders WHERE company_id=')) return [[]];
+    if (sql.includes('FROM sales WHERE created_at>=')) return [[{ channel:'pdv', external_sale_id:'sale-1', status:'completed', total_cents:1250, occurred_at:'2026-09-10 12:00:00', customer_name:'' }]];
+    if (sql.includes('FROM orders WHERE company_id=')) return [[{ channel:'online', external_sale_id:'order-1', status:'delivered', total_cents:2345, occurred_at:'2026-09-11 12:00:00', customer_name:'' }]];
     if (sql.includes('FROM company_fiscal_documents')) return [[]];
     if (sql.includes('FROM company_fiscal_sale_reconciliations')) return [[]];
     throw new Error(`SQL inesperado no teste: ${sql}`);
@@ -161,10 +161,16 @@ test('relatório de faturamento usa a situação final da venda, conforme o sche
   const reply = { sent:false, header(){}, code(){ return this; }, send(){ this.sent=true; } };
   await route.preHandler(req, reply);
   const report = await route.handler(req);
-  const salesQuery = sqlSeen.find(sql => sql.includes('FROM sales WHERE company_id='));
+  const salesQuery = sqlSeen.find(sql => sql.includes('FROM sales WHERE created_at>='));
   assert.match(salesQuery, /finalization_status/);
   assert.match(salesQuery, /payment_status/);
+  assert.match(salesQuery, /ROUND\(COALESCE\(total,0\)\*100\) AS total_cents/);
+  assert.doesNotMatch(salesQuery, /company_id/);
   assert.doesNotMatch(salesQuery, /COALESCE\(status/);
-  assert.equal(report.totals.operationalCents, 1200);
-  assert.equal(report.totals.reconciliationPendingCents, 1200);
+  const ordersQuery = sqlSeen.find(sql => sql.includes('FROM orders WHERE company_id='));
+  assert.match(ordersQuery, /created_at/);
+  assert.doesNotMatch(ordersQuery, /paid_at/);
+  assert.match(ordersQuery, /ROUND\(COALESCE\(total,0\)\*100\) AS total_cents/);
+  assert.equal(report.totals.operationalCents, 3595);
+  assert.equal(report.totals.reconciliationPendingCents, 3595);
 });

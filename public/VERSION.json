@@ -1,19 +1,19 @@
 {
-  "version": "v1.2.448-accountant-revenue-query",
+  "version": "v1.2.449-accountant-revenue-schema",
   "date": "2026-09-23",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260923-185940-accountant-revenue-query",
+  "release_vps": "/var/www/mdv-site/releases/20260923-190558-accountant-revenue-schema",
   "branch": "main",
-  "summary": "Corrige o relatório do Espaço do Contador para usar as colunas operacionais reais do MySQL.",
-  "tag": "v1.2.448-accountant-revenue-query",
+  "summary": "Alinha as consultas de faturamento ao schema MySQL real e converte valores em reais para centavos.",
+  "tag": "v1.2.449-accountant-revenue-schema",
   "changed_files": [
-    "CHECKLIST-MIGRACAO-BLING.md",
-    "docs/migracao-bling/evidencias.md",
     "services/accountantPortalServer.cjs",
     "tmp-tests/accountant-portal.test.cjs",
+    "CHECKLIST-MIGRACAO-BLING.md",
+    "docs/migracao-bling/evidencias.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-23-v1.2.448-accountant-revenue-query.md"
+    "docs/versoes/2026-09-23-v1.2.449-accountant-revenue-schema.md"
   ],
   "validations": [
     "npm.cmd run test:accountant-portal (19/19)",

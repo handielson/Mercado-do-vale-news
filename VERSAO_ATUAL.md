@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.448-accountant-revenue-query
+version: v1.2.449-accountant-revenue-schema
 date: 2026-09-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260923-185940-accountant-revenue-query
+release_vps: /var/www/mdv-site/releases/20260923-190558-accountant-revenue-schema
 branch: main
-summary: Corrige o relatório do Espaço do Contador para usar as colunas operacionais reais do MySQL.
-tag: v1.2.448-accountant-revenue-query
+summary: Alinha as consultas de faturamento ao schema MySQL real e converte valores em reais para centavos.
+tag: v1.2.449-accountant-revenue-schema

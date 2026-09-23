@@ -322,3 +322,11 @@ Após publicar `v1.2.447-bling-fiscal-import`, a validação autenticada da aba 
 Correção: a consulta de PDV deriva a situação operacional de `finalization_status` e identifica cancelamento/estorno por `payment_status`. Erros de finalização ficam pendentes; vendas concluídas entram como concluídas. Teste de rota atualizado para executar com as colunas reais esperadas e confirmar os totais, sem acessar dados pessoais nem escrever na base.
 
 Verificação local: `npm.cmd run test:accountant-portal` 19/19; `node --check services/accountantPortalServer.cjs`; `git diff --check`. Estado de publicação e nova validação da aba serão registrados após deploy. Nenhuma importação histórica do Bling foi iniciada.
+
+## E42 — Alinhamento do relatório de faturamento ao schema real (23/09/2026)
+
+Durante a nova validação autenticada da aba Faturamento após E41, a API retornou HTTP 500 `ER_BAD_FIELD_ERROR: Unknown column 'company_id' in 'where clause'`. A consulta somente leitura de schema na VPS confirmou que a tabela `sales` não possui `company_id` nem `status`; usa `finalization_status`, `payment_status`, `total` decimal em reais e `created_at`. A tabela `orders` possui `company_id` e `status`, mas não `paid_at`; também usa `total` decimal em reais e `created_at`.
+
+Correção local: a consulta PDV usa `created_at` para o intervalo e filtra por data, pois `sales` é uma tabela operacional única sem vínculo de empresa. A consulta online permanece limitada à empresa por `company_id` e passa a usar `created_at`. Ambas convertem `total` para centavos com arredondamento no banco antes da consolidação. O teste de rota agora simula as colunas reais, inclui uma venda PDV de 12,50 e um pedido online de 23,45 e verifica total de 35,95; nenhuma informação de cliente ou venda real foi consultada. Nenhuma nota do Bling foi importada.
+
+Verificação local: `npm.cmd run test:accountant-portal` 19/19; verificações sintáticas dos servidores, build e `git diff --check` serão registradas junto da publicação. Pendente: publicar API/site, abrir novamente a aba Faturamento e confirmar totais; depois testar a importação histórica em períodos pequenos e validar com o contador real. D06b permanece aberto.
