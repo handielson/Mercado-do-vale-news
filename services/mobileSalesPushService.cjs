@@ -428,6 +428,12 @@ function createMobileSalesPushService({ pool, logger = console }) {
     let push = null;
     try {
       push = await sendSalePush(sale);
+      logger.info?.('[mobile-sales-push] delivery summary', {
+        channel: sale.channel,
+        configured: push.configured,
+        sent: push.sent,
+        failed: push.failed,
+      });
       if (push.configured) {
         await pool.query(
           'UPDATE mobile_sale_events SET notified_at = CURRENT_TIMESTAMP WHERE event_key = ?',
@@ -456,6 +462,25 @@ function createMobileSalesPushService({ pool, logger = console }) {
     return (rows || []).map(rowToSale);
   }
 
+  async function listRecentSaleAlerts(limit = 50) {
+    const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50));
+    const [rows] = await pool.query(
+      `SELECT id, channel, external_id, occurred_at, created_at
+         FROM mobile_sale_events
+        WHERE created_at >= NOW() - INTERVAL 1 DAY
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?`,
+      [safeLimit],
+    );
+    return (rows || []).map((row) => ({
+      id: row.id,
+      channel: row.channel,
+      external_id: row.external_id,
+      occurred_at: row.occurred_at instanceof Date ? row.occurred_at.toISOString() : row.occurred_at,
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    }));
+  }
+
   async function getRecordedSale(channel, externalId) {
     const normalizedChannel = normalizeChannel(channel);
     const safeExternalId = boundedText(externalId, 255);
@@ -475,6 +500,7 @@ function createMobileSalesPushService({ pool, logger = console }) {
     ensureTables,
     getRecordedSale,
     listOperationalAlerts,
+    listRecentSaleAlerts,
     listRecordedSales,
     recordSaleEvent,
     registerDevice,

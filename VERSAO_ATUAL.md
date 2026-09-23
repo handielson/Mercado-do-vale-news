@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.442-tiktok-summary-landscape
+version: v1.2.443-sale-alerts-web-android
 date: 2026-09-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260923-131537-v12442-tiktok-summary-landscape
+release_vps: /var/www/mdv-site/releases/20260923-143006-v12443-sale-alerts-web-android
 branch: main
-summary: Fixa a orientação confirmada fisicamente para o comprovante TikTok de 90 × 70 mm.
-tag: v1.2.442-tiktok-summary-landscape
+summary: Mostra novas vendas no painel web e permite notificação flutuante no app Gestão MDV.
+tag: v1.2.443-sale-alerts-web-android

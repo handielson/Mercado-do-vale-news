@@ -88,7 +88,6 @@ class SalesMessagingService : FirebaseMessagingService() {
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setSilent(true)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()

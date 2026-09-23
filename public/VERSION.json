@@ -1,18 +1,27 @@
 {
-  "version": "v1.2.442-tiktok-summary-landscape",
+  "version": "v1.2.443-sale-alerts-web-android",
   "date": "2026-09-23",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260923-131537-v12442-tiktok-summary-landscape",
+  "release_vps": "/var/www/mdv-site/releases/20260923-143006-v12443-sale-alerts-web-android",
   "branch": "main",
-  "summary": "Fixa a orientação confirmada fisicamente para o comprovante TikTok de 90 × 70 mm.",
-  "tag": "v1.2.442-tiktok-summary-landscape",
+  "summary": "Mostra novas vendas no painel web e permite notificação flutuante no app Gestão MDV.",
+  "tag": "v1.2.443-sale-alerts-web-android",
   "changed_files": [
-    "scripts/tiktok-shop-print-agent.cjs",
-    "tmp-tests/tiktok-auto-print.test.cjs"
+    "android/admin-estoque/app/build.gradle.kts",
+    "android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/push/SalesMessagingService.kt",
+    "components/admin/SaleAlerts.tsx",
+    "layouts/AdminLayout.tsx",
+    "services/mobileSalesPushService.cjs",
+    "services/saleAlertFeed.js",
+    "tmp-tests/sale-alerts.test.mjs",
+    "vps_server.cjs",
+    "vps_server.js"
   ],
   "validations": [
-    "node tmp-tests/tiktok-auto-print.test.cjs",
-    "node --check scripts/tiktok-shop-print-agent.cjs",
-    "npm.cmd run build"
+    "node --test tmp-tests/sale-alerts.test.mjs",
+    "node --check vps_server.js",
+    "node --check vps_server.cjs",
+    "npm.cmd run build",
+    "Gradle :app:assembleDebug --offline"
   ]
 }

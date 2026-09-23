@@ -13442,6 +13442,15 @@ fastify.delete('/admin/mobile-push/devices', { preHandler: requireAdminBearerTok
     return reply.code(400).send({ error: error.message || 'Falha ao remover notificacoes.' });
   }
 });
+fastify.get('/admin/sale-alerts', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    const sales = await mobileSalesPushService.listRecentSaleAlerts(request.query?.limit);
+    reply.header('Cache-Control', 'no-store');
+    return { sales };
+  } catch (error) {
+    return reply.code(500).send({ error: 'Falha ao carregar avisos de vendas.' });
+  }
+});
 fastify.get('/admin/mobile-sales', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   const channel = String(request.query?.channel || '').trim().toLowerCase();
   const limit = Math.max(1, Math.min(100, Number(request.query?.limit) || 50));
@@ -42179,6 +42188,12 @@ runMigrations().then(() => {
           const detail = await callTikTokShopOpenApiVps(settings, { pathname: '/order/202309/orders', query: { ids: String(order.id) } });
           const freshOrder = detail?.payload?.data?.orders?.[0];
           if (!freshOrder) continue;
+          // The webhook may be delayed or missed; reuse this authenticated order read
+          // to feed both Android push and the web alert without affecting fulfillment.
+          if (Number(freshOrder.create_time || 0) >= Math.floor(Date.now() / 1000) - 30 * 60) {
+            await mobileSalesPushService.recordSaleEvent(normalizeMobileTikTokOrderVps(freshOrder))
+              .catch((error) => console.error('[tiktok-shop-sale-alert] recording failed:', error.message));
+          }
           if (String(freshOrder.status || '').toUpperCase() === 'AWAITING_COLLECTION') {
             await tiktokFulfillment.reconcileCollected(freshOrder);
             await tiktokPrint.syncOrder(freshOrder.id);
