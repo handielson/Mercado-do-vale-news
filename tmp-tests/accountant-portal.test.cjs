@@ -164,13 +164,13 @@ test('relatório de faturamento usa colunas e valores monetários do schema MySQ
   const salesQuery = sqlSeen.find(sql => sql.includes('FROM sales WHERE created_at>='));
   assert.match(salesQuery, /finalization_status/);
   assert.match(salesQuery, /payment_status/);
-  assert.match(salesQuery, /ROUND\(COALESCE\(total,0\)\*100\) AS total_cents/);
+  assert.match(salesQuery, /total AS total_cents/);
   assert.doesNotMatch(salesQuery, /company_id/);
   assert.doesNotMatch(salesQuery, /COALESCE\(status/);
   const ordersQuery = sqlSeen.find(sql => sql.includes('FROM orders WHERE company_id='));
   assert.match(ordersQuery, /created_at/);
   assert.doesNotMatch(ordersQuery, /paid_at/);
-  assert.match(ordersQuery, /ROUND\(COALESCE\(total,0\)\*100\) AS total_cents/);
+  assert.match(ordersQuery, /total AS total_cents/);
   assert.equal(report.totals.operationalCents, 3595);
   assert.equal(report.totals.reconciliationPendingCents, 3595);
 });

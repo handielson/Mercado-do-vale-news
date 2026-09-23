@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.449-accountant-revenue-schema
+version: v1.2.450-accountant-revenue-cents
 date: 2026-09-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260923-190558-accountant-revenue-schema
+release_vps: /var/www/mdv-site/releases/20260923-191430-accountant-revenue-cents
 branch: main
-summary: Alinha as consultas de faturamento ao schema MySQL real e converte valores em reais para centavos.
-tag: v1.2.449-accountant-revenue-schema
+summary: Alinha as consultas de faturamento ao schema MySQL e preserva os valores operacionais já armazenados em centavos.
+tag: v1.2.450-accountant-revenue-cents

@@ -145,12 +145,12 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
                 WHEN COALESCE(finalization_status,'success')='success' THEN 'completed'
                 ELSE COALESCE(finalization_status,'pending')
               END AS status,
-              ROUND(COALESCE(total,0)*100) AS total_cents,created_at AS occurred_at,'' AS customer_name
+              total AS total_cents,created_at AS occurred_at,'' AS customer_name
          FROM sales WHERE created_at>=? AND created_at<? ORDER BY created_at DESC LIMIT 10000`,
       [`${from} 00:00:00`, `${exclusiveDate} 00:00:00`]
     );
     const [onlineRows] = await pool.query(
-      `SELECT 'online' AS channel,id AS external_sale_id,COALESCE(status,'pending') AS status,ROUND(COALESCE(total,0)*100) AS total_cents,created_at AS occurred_at,COALESCE(customer_name,'') AS customer_name
+      `SELECT 'online' AS channel,id AS external_sale_id,COALESCE(status,'pending') AS status,total AS total_cents,created_at AS occurred_at,COALESCE(customer_name,'') AS customer_name
          FROM orders WHERE company_id=? AND created_at>=? AND created_at<? ORDER BY created_at DESC LIMIT 10000`,
       [profile.operational_company_id, `${from} 00:00:00`, `${exclusiveDate} 00:00:00`]
     );
