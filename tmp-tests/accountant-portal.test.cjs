@@ -246,6 +246,77 @@ test('nega empresa sem concessão e aceita somente a empresa vinculada ao contad
   assert.equal(allowedRequest.accountantProfile.id, 'profile-a');
 });
 
+test('isola duas contas e empresas e não consulta vendas globais para empresa sem vínculo operacional', async () => {
+  const routes = new Map();
+  const app = {};
+  for (const method of ['get','put','post','delete']) app[method] = (path, options, handler) => routes.set(`${method}:${path}`, { preHandler: options.preHandler, handler });
+  const primary = { id:'profile-primary', settings_id:'settings-primary', name:'Empresa principal', cnpj:'111', regime:'simples_nacional', crt:'1' };
+  const secondary = { id:'profile-secondary', settings_id:null, name:'Segunda empresa', cnpj:'222', regime:'nao_definido', crt:'' };
+  const grants = new Map([['account-primary','profile-primary'], ['account-secondary','profile-secondary']]);
+  const sqlSeen = [];
+  let importedFromBling = 0;
+  const pool = { query: async (sql, params = []) => {
+    sqlSeen.push(sql);
+    if (sql.includes('FROM company_settings')) return [[{ id:'settings-primary', name:'Empresa principal', cnpj:'111' }]];
+    if (sql.includes('FROM company_fiscal_profiles WHERE settings_id=')) return [[primary]];
+    if (sql.includes('FROM company_fiscal_profiles WHERE id=')) return [params[0] === secondary.id ? [secondary] : []];
+    if (sql.includes('SELECT DISTINCT p.* FROM company_fiscal_profiles')) return [[primary, secondary].filter(row => grants.get(params[0]) === row.id)];
+    if (sql.includes('FROM company_accountant_access WHERE')) return [grants.get(params[1]) === params[0] ? [{ id:'grant' }] : []];
+    if (sql.includes('FROM company_fiscal_tax_validations')) return [[{ profile_id:params[0], status:'draft', version:1 }]];
+    throw new Error(`Consulta operacional indevida para empresa sem vínculo: ${sql}`);
+  } };
+  let customerId = 'account-primary';
+  let isAdmin = false;
+  registerAccountantPortalRoutes(app, { pool, enabled:true,
+    getBearerAuthContext: async () => ({ customerId, userId:customerId, isAdmin }),
+    importBlingDocuments: async () => { importedFromBling += 1; return []; },
+  });
+  const reply = () => ({ sent:false, status:200, header(){}, code(value){ this.status=value; return this; }, send(value){ this.sent=true; this.body=value; return value; } });
+  const listRoute = routes.get('get:/accountant/companies');
+  const revenueRoute = routes.get('get:/accountant/companies/:id/revenue');
+  const validationRoute = routes.get('get:/accountant/companies/:id/tax-validation');
+  for (const [account, ownId, otherId] of [
+    ['account-primary','primary',secondary.id],
+    ['account-secondary',secondary.id,'primary'],
+  ]) {
+    customerId = account;
+    const listReq = {};
+    await listRoute.preHandler(listReq, reply());
+    const listed = await listRoute.handler(listReq);
+    assert.deepEqual(listed.companies.map(company => company.id), [ownId]);
+    assert.equal(listed.companies[0].revenueAvailable, ownId === 'primary');
+    const deniedRevenue = { params:{ id:otherId }, query:{ from:'2026-09-01', to:'2026-09-30' } };
+    const deniedReply = reply();
+    await revenueRoute.preHandler(deniedRevenue, deniedReply);
+    assert.equal(deniedReply.status, 403);
+    assert.equal(deniedReply.sent, true);
+    const deniedValidation = { params:{ id:otherId } };
+    const deniedValidationReply = reply();
+    await validationRoute.preHandler(deniedValidation, deniedValidationReply);
+    assert.equal(deniedValidationReply.status, 403);
+  }
+  customerId = 'account-secondary';
+  const secondaryRequest = { params:{ id:secondary.id }, query:{ from:'2026-09-01', to:'2026-09-30' } };
+  const allowedReply = reply();
+  await revenueRoute.preHandler(secondaryRequest, allowedReply);
+  assert.equal(allowedReply.sent, false);
+  const report = await revenueRoute.handler(secondaryRequest);
+  assert.equal(report.coverage.available, false);
+  assert.deepEqual(report.sales, []);
+  assert.deepEqual(report.reviewSales, []);
+  assert.deepEqual(report.documents, []);
+  assert.equal(sqlSeen.some(sql => /FROM (?:sales|orders|mobile_sale_events|company_fiscal_documents)/u.test(sql)), false);
+  customerId = 'admin';
+  isAdmin = true;
+  const importRoute = routes.get('post:/admin/fiscal-companies/:id/documents/preview-bling');
+  const importRequest = { params:{ id:secondary.id }, body:{ from:'2026-09-01', to:'2026-09-30' } };
+  const importReply = reply();
+  await importRoute.preHandler(importRequest, importReply);
+  assert.equal(importReply.sent, false);
+  await assert.rejects(importRoute.handler(importRequest), /conexão atual do Bling pertence à empresa principal/);
+  assert.equal(importedFromBling, 0);
+});
+
 test('sinaliza diferenças de valor e de situação sem reclassificar pedidos ou calcular imposto', () => {
   const rows = [
     { channel:'shopee', external_sale_id:'a', status:'completed', total_cents:5591, occurred_at:'2026-09-23T12:00:00Z' },

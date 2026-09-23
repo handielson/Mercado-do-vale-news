@@ -23,6 +23,9 @@ async function findProfile(pool, id) {
   return { ...profiles[0], public_id: profiles[0].id, display_name: profiles[0].name, operational_company_id: null };
 }
 
+// sales e mobile_sale_events ainda não identificam a empresa; só a principal pode consumi-los.
+const canUsePrimaryOperationalSource = profile => profile.public_id === 'primary' && Boolean(profile.operational_company_id);
+
 function companyView(profile) {
   return {
     id: profile.public_id,
@@ -32,7 +35,7 @@ function companyView(profile) {
     regime: profile.regime || 'nao_definido',
     crt: profile.crt || '',
     effectiveFrom: profile.effective_from ? String(profile.effective_from).slice(0, 10) : '',
-    revenueAvailable: Boolean(profile.operational_company_id),
+    revenueAvailable: canUsePrimaryOperationalSource(profile),
   };
 }
 
@@ -125,10 +128,10 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     toExclusive.setUTCDate(toExclusive.getUTCDate() + 1);
     const exclusiveDate = toExclusive.toISOString().slice(0, 10);
     const profile = req.accountantProfile;
-    if (!profile.operational_company_id) {
+    if (!canUsePrimaryOperationalSource(profile)) {
       return {
         company: companyView(profile), period: { from, to },
-        coverage: { available: false, reason: 'Empresa fiscal ainda não vinculada a uma empresa operacional.' },
+        coverage: { available: false, reason: 'Faturamento indisponível até que as vendas e eventos operacionais desta empresa sejam segregados.' },
         ...buildRevenueReport([]), documentTotals: fiscalDocumentTotals([]), documents: [],
       };
     }
@@ -187,7 +190,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
     if (typeof importBlingDocuments !== 'function') throw problem('Importador fiscal do Bling não configurado.', 503);
     const profile = await findProfile(pool, req.params.id);
-    if (!profile.operational_company_id) throw problem('A conexão atual do Bling pertence à empresa principal. Configure uma conexão própria antes de importar documentos desta empresa.', 409);
+    if (!canUsePrimaryOperationalSource(profile)) throw problem('A conexão atual do Bling pertence à empresa principal. Configure uma conexão própria antes de importar documentos desta empresa.', 409);
     const from = String(req.body?.from || '').trim();
     const to = String(req.body?.to || '').trim();
     if (!validPeriod(from, to)) throw problem('Informe um período válido de até 366 dias.');
