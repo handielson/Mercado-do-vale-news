@@ -33,13 +33,13 @@ Se um teste falhar, manter o item aberto, corrigir dentro do escopo e repetir o 
 - [ ] D07 — A1 exportado e removido do repositório sincronizado (E19/E21/E23–E25). O operador executou validação local com a senha: CNPJ corresponde, certificado vigente até 02/03/2027, chave privada presente e assinatura local aprovada. A ACL do arquivo local permite apenas Nitro, SYSTEM e Administradores. **Pendente por escolha do operador em 22/09/2026:** criar segunda cópia segura fora deste computador e ensaiar a recuperação depois. A autenticação mTLS e a consulta de status na SEFAZ-PE foram aprovadas em E28; a assinatura de XML fiscal continua em F07.
 - [x] D07a — Tela de metadados do certificado por empresa e aviso configurável em pop-up no painel administrativo implementados localmente (E26). Não guarda PFX/senha; só dispara ao usar o painel e após migration/publicação. Testes locais aprovados; não equivale à instalação do A1 no servidor nem ao backup pendente em D07.
 - [x] D07b — Gestão real do A1 pelo painel implantada e validada (E27/E28): instalação real, cofre AES-256-GCM, metadados, auditoria, exportação/exclusão controladas, guia/vídeo, alerta e consulta autenticada. O A1 da empresa foi aceito e a SEFAZ-PE homologação respondeu `107 — Serviço em Operação`; o backup externo de D07 continua separado.
-- [ ] D08 — Conferir no e-Fisco PE credenciamento NF-e/NFC-e por modelo e ambiente e CSC por ambiente se NFC-e for aplicável. Requisitos oficiais revistos em E20; situação desta empresa ainda não comprovada.
+- [x] D08 — Conferência autenticada no e-Fisco PE concluída em E34: IE ativa; NF-e modelos 38/39 e NFC-e modelos 83/84 credenciadas, sem suspensão; CSC ativo em homologação e produção. Nenhum código CSC foi exibido, copiado ou versionado.
 - [ ] D09 — Definir empresas, modelos, canais e tipos de operação usados; classificar funções do inventário como necessárias, futuras ou não aplicáveis.
 - [x] D10 — Ambiente fiscal isolado e reproduzível com MySQL 8.4 descartável, fixtures sintéticas e backup lógico restaurado em banco separado com comparação integral. E32.
 
 ## F — Fiscal primeiro, direto na SEFAZ
 
-- [ ] F01 — Pré-validação reutilizável do emitente: CNPJ, IE, UF, município, endereço e perfil tributário com vigência. Testar ausências, formatos e divergência de empresa.
+- [x] F01 — Pré-validação reutilizável do emitente concluída: identidade, IE ativa, UF/município IBGE, endereço, regime/CRT, vigência e CNAEs persistidos; ausências, formatos, divergência de empresa e sessão operacional testados em E07–E16, E27–E30 e E33–E34.
 - [x] F01a — Implementação local do cadastro fiscal por empresa, seleção manual de regime/CRT e consulta de CNPJ sem substituir escolhas. Testes locais E07; não representa liberação para emissão.
 - [x] F01b — Validar migration e rotas em MySQL real isolado com duas empresas, concorrência e rollback. E09: MySQL 8.4 local aprovado; consulta externa e autenticação simuladas.
 - [x] F01c — Validar localmente página → HTTP → autenticação bearer → MySQL e consulta pública real, mantendo regime/CRT escolhidos. Evidência E10; não representa publicação.
@@ -47,7 +47,7 @@ Se um teste falhar, manter o item aberto, corrigir dentro do escopo e repetir o 
 - [x] F01f — Cadastrar endereço fiscal por empresa adicional; manter endereço da loja principal canônico em company_settings. Testes MySQL e navegador E12.
 - [x] F01g — Exibir pré-validação por empresa com leitura autenticada e conferir prefixo UF do código municipal IBGE. E13; não equivale à validação completa para SEFAZ.
 - [x] F01h — Conferir código, cidade e UF completos pela API oficial do IBGE na pré-validação; falha da fonte não libera cadastro. E14.
-- [x] F01i — Validar formato e dois dígitos da IE de PE pela regra oficial; para outras UFs, marcar validação indisponível até implementar regra própria. E15; situação cadastral atual ainda não confirmada.
+- [x] F01i — Validar formato e dois dígitos da IE de PE pela regra oficial; para outras UFs, marcar validação indisponível até implementar regra própria. E15; situação cadastral ativa confirmada no e-Fisco PE em E34.
 - [x] F01j — Registrar inscrição municipal opcional por empresa sem alterar a identidade operacional; conferir persistência na empresa principal e adicional, com testes de API, MySQL e navegador. E16. Captura do Bling é referência, não preenchimento automático.
 - [x] F01k — Cobrir campos cadastrais observados no Bling por empresa: Suframa, CNAE/porte canônicos, atividade, segmentos, faixas, contato, celular, e-mail de cobrança e IE substituta por UF. E18/E19: testes locais; valores reais não copiados.
 - [x] F01m — Expor segmentos por empresa, opção explícita de isenção de IE e todos os CNAEs retornados pelo CNPJ com descrição; manter a isenção pendente de confirmação para emissão. E22: testes locais e integração MySQL/navegador; nenhum valor real aplicado.
