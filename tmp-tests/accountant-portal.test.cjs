@@ -10,11 +10,12 @@ test('filtra o dia completo na consulta fiscal do Bling', () => {
 
 test('normaliza NF-e e NFC-e do Bling em centavos sem depender do cache do navegador', () => {
   assert.equal(majorToCents('123.45'), 12345);
-  const nfe = normalizeBlingFiscalDocument({ id:321, tipo:1, situacao:5, numero:'99', serie:'1', dataEmissao:'2026-09-10 12:30:00', valorNota:123.45, chaveAcesso:'1'.repeat(44) }, 'nfe');
-  assert.deepEqual(nfe, { model:'55', channel:'bling', externalSaleId:'nfe:321', status:'authorized', accessKey:'1'.repeat(44), documentNumber:'99', series:'1', issuedAt:'2026-09-10 12:30:00', totalCents:12345, source:'bling_import', sourceReference:'321' });
+  const nfe = normalizeBlingFiscalDocument({ id:321, tipo:1, situacao:5, numero:'99', serie:'1', dataEmissao:'2026-09-10 12:30:00', valorNota:123.45, chaveAcesso:'1'.repeat(44), numeroPedidoLoja:'order-123' }, 'nfe');
+  assert.deepEqual(nfe, { model:'55', channel:'bling', externalSaleId:'nfe:321', status:'authorized', accessKey:'1'.repeat(44), documentNumber:'99', series:'1', issuedAt:'2026-09-10 12:30:00', totalCents:12345, source:'bling_import', sourceReference:'321', marketplaceOrderId:'order-123' });
   const cancelled = normalizeBlingFiscalDocument({ id:322, tipo:1, situacao:2, dataEmissao:'2026-09-10', valorNota:10 }, 'nfce');
   assert.equal(cancelled.status, 'cancelled');
   assert.equal(cancelled.totalCents, 1000);
+  assert.equal(cancelled.marketplaceOrderId, null);
   assert.equal(normalizeBlingFiscalDocument({ id:323, tipo:0, situacao:5, dataEmissao:'2026-09-10', valorNota:10 }, 'nfe'), null);
   assert.equal(normalizeBlingFiscalDocument({ id:324, tipo:1, situacao:5, dataEmissao:'2026-09-10' }, 'nfe'), null);
   assert.equal(normalizeBlingFiscalDocument({ id:1, dataEmissao:'inválida' }, 'nfce'), null);
@@ -124,9 +125,14 @@ test('importação usa a prévia correspondente e grava somente após a conferê
   const app = {};
   for (const method of ['get','put','post','delete']) app[method] = (path, options, handler) => routes.set(`${method}:${path}`, { preHandler:options.preHandler, handler });
   const actions = [];
+  const savedDocuments = [];
   const db = {
     beginTransaction: async () => actions.push('begin'),
-    query: async sql => { actions.push(sql.includes('company_fiscal_documents') ? 'document' : 'event'); },
+    query: async (sql, params) => {
+      if (sql.includes('FROM mobile_sale_events')) { actions.push('match'); return [params[0] === 'order-123' ? [{ channel:'shopee', external_id:'order-123' }] : [{ channel:'tiktok', external_id:'ORDER-456' }]]; }
+      if (sql.includes('INSERT INTO company_fiscal_documents')) savedDocuments.push(params);
+      actions.push(sql.includes('company_fiscal_documents') ? 'document' : 'event');
+    },
     commit: async () => actions.push('commit'),
     rollback: async () => actions.push('rollback'),
     release: () => actions.push('release'),
@@ -142,7 +148,10 @@ test('importação usa a prévia correspondente e grava somente após a conferê
   registerAccountantPortalRoutes(app, {
     pool, enabled:true,
     getBearerAuthContext: async () => ({ customerId:'admin', userId:'admin', isAdmin:true }),
-    importBlingDocuments: async () => [{ model:'55', channel:'bling', externalSaleId:'nfe:1', status:'authorized', accessKey:null, documentNumber:'1', series:'1', issuedAt:'2026-09-01 12:00:00', totalCents:1250, source:'bling_import', sourceReference:'1' }],
+    importBlingDocuments: async () => [
+      { model:'55', channel:'bling', externalSaleId:'nfe:1', status:'authorized', accessKey:null, documentNumber:'1', series:'1', issuedAt:'2026-09-01 12:00:00', totalCents:1250, source:'bling_import', sourceReference:'1', marketplaceOrderId:'order-123' },
+      { model:'55', channel:'bling', externalSaleId:'nfe:2', status:'authorized', accessKey:null, documentNumber:'2', series:'1', issuedAt:'2026-09-01 13:00:00', totalCents:900, source:'bling_import', sourceReference:'2', marketplaceOrderId:'order-456' },
+    ],
   });
   const req = { params:{ id:'primary' }, body:{ from:'2026-09-01', to:'2026-09-02' } };
   const reply = { sent:false, header(){}, code(){ return this; }, send(){ this.sent=true; } };
@@ -154,9 +163,13 @@ test('importação usa a prévia correspondente e grava somente após a conferê
   const importReq = { ...req, body:{ ...req.body, fingerprint:preview.fingerprint } };
   await importRoute.preHandler(importReq, reply);
   const result = await importRoute.handler(importReq);
-  assert.deepEqual(actions, ['begin','document','event','commit','release']);
-  assert.equal(result.imported, 1);
-  assert.equal(result.authorized, 1);
+  assert.deepEqual(actions, ['begin','match','document','match','document','event','commit','release']);
+  assert.equal(savedDocuments[0][2], 'shopee');
+  assert.equal(savedDocuments[0][3], 'order-123');
+  assert.equal(savedDocuments[1][2], 'bling');
+  assert.equal(savedDocuments[1][3], 'order-456');
+  assert.equal(result.imported, 2);
+  assert.equal(result.authorized, 2);
 });
 
 test('totaliza documentos autorizados e cancelados separadamente', () => {

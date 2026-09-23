@@ -171,10 +171,15 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     }
     const report = buildRevenueReport([...byKey.values()], fiscalBySale);
     const documentTotals = fiscalDocumentTotals(documentRows);
+    const documents = documentRows.map(row => ({
+      model: row.model, status: row.status, channel: ['shopee', 'tiktok'].includes(row.channel) ? row.channel : 'unidentified',
+      orderReference: /^(?:nfe|nfce):/u.test(String(row.external_sale_id || '')) ? null : row.external_sale_id,
+      number: row.document_number, series: row.series, issuedAt: row.issued_at, totalCents: Number(row.total_cents || 0),
+    })).sort((left, right) => String(right.issuedAt || '').localeCompare(String(left.issuedAt || '')));
     return {
       company: companyView(profile), period: { from, to },
       coverage: { available: true, sources: ['sales','orders','mobile_sale_events'], note: 'PDV e site vêm das bases operacionais; canais de marketplace dependem dos eventos já sincronizados. Vendas sem XML histórico permanecem pendentes de conciliação.' },
-      ...report, documentTotals,
+      ...report, documentTotals, documents,
     };
   });
 
@@ -189,7 +194,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     const documents = await importBlingDocuments(req, { from, to });
     const fingerprint = createHash('sha256').update(JSON.stringify({
       profileId: profile.id, from, to,
-      documents: documents.map(document => [document.model, document.sourceReference, document.status, document.issuedAt, document.totalCents, document.accessKey, document.documentNumber, document.series]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+      documents: documents.map(document => [document.model, document.sourceReference, document.status, document.issuedAt, document.totalCents, document.accessKey, document.documentNumber, document.series, document.marketplaceOrderId]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
     })).digest('hex');
     return { profile, from, to, documents, fingerprint };
   };
@@ -214,12 +219,25 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     try {
       await db.beginTransaction();
       for (const document of documents) {
+        let channel = 'bling';
+        let externalSaleId = document.marketplaceOrderId || document.externalSaleId;
+        if (document.marketplaceOrderId) {
+          const [candidateRows] = await db.query(
+            "SELECT DISTINCT channel, external_id FROM mobile_sale_events WHERE external_id=? AND channel IN ('shopee','tiktok')",
+            [document.marketplaceOrderId]
+          );
+          const matches = [...new Set(candidateRows.filter(row => String(row.external_id) === document.marketplaceOrderId).map(row => row.channel))];
+          if (matches.length === 1) {
+            channel = matches[0];
+            externalSaleId = document.marketplaceOrderId;
+          }
+        }
         await db.query(
           `INSERT INTO company_fiscal_documents
             (id,profile_id,channel,external_sale_id,model,status,access_key,document_number,series,issued_at,total_cents,source,source_reference,created_by)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-           ON DUPLICATE KEY UPDATE status=VALUES(status),access_key=COALESCE(VALUES(access_key),access_key),document_number=VALUES(document_number),series=VALUES(series),issued_at=VALUES(issued_at),total_cents=VALUES(total_cents),updated_at=CURRENT_TIMESTAMP`,
-          [randomUUID(),profile.id,document.channel,document.externalSaleId,document.model,document.status,document.accessKey,document.documentNumber,document.series,document.issuedAt,document.totalCents,document.source,document.sourceReference,String(req.accountantAuth.userId)]
+           ON DUPLICATE KEY UPDATE channel=VALUES(channel),external_sale_id=VALUES(external_sale_id),status=VALUES(status),access_key=COALESCE(VALUES(access_key),access_key),document_number=VALUES(document_number),series=VALUES(series),issued_at=VALUES(issued_at),total_cents=VALUES(total_cents),updated_at=CURRENT_TIMESTAMP`,
+          [randomUUID(),profile.id,channel,externalSaleId,document.model,document.status,document.accessKey,document.documentNumber,document.series,document.issuedAt,document.totalCents,document.source,document.sourceReference,String(req.accountantAuth.userId)]
         );
         imported += 1;
       }

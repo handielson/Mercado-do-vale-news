@@ -14,6 +14,7 @@ function normalizeBlingFiscalDocument(item, type) {
     || ![2, 5].includes(status) || amount == null || !Number.isFinite(Number(amount)) || Number(amount) < 0
     || Number(item?.tipo) !== 1) return null;
   const accessKey = String(item?.chaveAcesso || item?.chave || '').replace(/\D/g, '');
+  const marketplaceOrderId = String(item?.numeroPedidoLoja || '').trim().slice(0, 255);
   return {
     model,
     channel: 'bling',
@@ -26,6 +27,7 @@ function normalizeBlingFiscalDocument(item, type) {
     totalCents: majorToCents(amount),
     source: 'bling_import',
     sourceReference,
+    marketplaceOrderId: marketplaceOrderId || null,
   };
 }
 

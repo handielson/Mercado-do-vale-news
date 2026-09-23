@@ -75,4 +75,6 @@ test('importação fiscal do Bling ocorre no servidor e o painel usa total docum
   assert.match(server, /dataEmissaoFinal: emissionPeriod\.final/);
   assert.match(routes, /documents\/import-bling/);
   assert.match(page, /documentTotals\.authorizedDocumentCents/);
+  assert.match(page, /Notas fiscais por canal de venda/);
+  assert.match(page, /Canal não identificado/);
 });

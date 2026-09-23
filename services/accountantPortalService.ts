@@ -42,6 +42,16 @@ export interface AccountantRevenueReport {
     cancelledDocumentCents: number;
     cancelledDocumentCount: number;
   };
+  documents: Array<{
+    model: string;
+    status: string;
+    channel: 'shopee' | 'tiktok' | 'unidentified';
+    orderReference: string | null;
+    number: string | null;
+    series: string | null;
+    issuedAt: string;
+    totalCents: number;
+  }>;
   months: Array<AccountantRevenueReport['totals'] & { competence: string }>;
   sales: AccountantRevenueSale[];
 }
