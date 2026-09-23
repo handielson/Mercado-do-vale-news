@@ -17,7 +17,7 @@ const normalizeBackupRows = rows => rows.map(row => Object.fromEntries(
 ));
 
 async function snapshotFiscalDatabase(pool, database) {
-  const tables = ['company_settings','company_fiscal_profiles','company_fiscal_events','company_certificate_settings','company_fiscal_tax_validations'];
+  const tables = ['company_settings','company_fiscal_profiles','company_fiscal_events','company_certificate_settings','company_fiscal_tax_validations','company_accountant_access','company_fiscal_documents','company_fiscal_sale_reconciliations'];
   const snapshot = {};
   for (const table of tables) {
     const [rows] = await pool.query(`SELECT * FROM \`${database}\`.\`${table}\` ORDER BY 1`);
@@ -55,7 +55,7 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   pool = mysql.createPool(config);
   await pool.query(`CREATE TABLE company_settings (id CHAR(36) PRIMARY KEY, cnpj VARCHAR(14),name VARCHAR(255),company_name VARCHAR(255),razao_social VARCHAR(255),state_registration VARCHAR(30),cnae VARCHAR(255),porte VARCHAR(80),phone VARCHAR(30),email VARCHAR(255),social_website VARCHAR(255),address_state CHAR(2),address_zip_code VARCHAR(8),address_street VARCHAR(255),address_number VARCHAR(30),address_complement VARCHAR(255),address_neighborhood VARCHAR(255),address_city VARCHAR(255))`);
   await pool.query('INSERT INTO company_settings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[randomUUID(),'11222333000181','Empresa A','Empresa A','Empresa A Ltda','123','4751201','Micro','0000000000','principal@example.test','https://loja.example.test','PE','56300000','Rua Loja','1','','Centro','Petrolina']);
-  const migrations = ['020_company_fiscal_profiles.sql','021_company_fiscal_tax_validation.sql'].flatMap(file => readFileSync(path.join(__dirname,'../migrations',file),'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean));
+  const migrations = ['020_company_fiscal_profiles.sql','021_company_fiscal_tax_validation.sql','022_accountant_portal.sql'].flatMap(file => readFileSync(path.join(__dirname,'../migrations',file),'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean));
   for(let round=0;round<2;round++) for(const sql of migrations) await pool.query(sql);
   const profile = {cnpj:'11444777000161',name:'Empresa B',legalName:'',stateRegistration:'',stateRegistrationExempt:true,municipalRegistration:'IM-123',suframaRegistration:'SUF-123',cnae:'4751201',cnaeActivities:[{code:'4751201',description:'Comércio especializado',primary:true},{code:'4789001',description:'Comércio de outros produtos',primary:false}],companySize:'Micro',mainActivity:'Comércio',segments:['comercio','ecommerce'],annualRevenueBand:'Maior que R$ 360.000,00',employeesBand:'Até 5 funcionários',contactPerson:'Contato fictício',phone:'0000000000',mobilePhone:'00000000000',email:'empresa@example.test',billingEmail:'cobranca@example.test',website:'https://example.test',substituteStateRegistrations:[{uf:'SP',registration:'123456789'}],uf:'PE',municipalityCode:'2611101',address:{zipCode:'56300-000',street:'Rua Empresa B',number:'12',complement:'Sala 1',neighborhood:'Centro',city:'Petrolina'},regime:'lucro_real',crt:'3',effectiveFrom:'2026-01-01',notes:'',version:0};
   app=Fastify();

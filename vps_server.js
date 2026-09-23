@@ -21,6 +21,7 @@ const { ensureTikTokPrintTable, registerTikTokPrintRoutes } = require('./service
 const { ensureTikTokFulfillmentTable, createTikTokFulfillmentAutomation } = require('./services/tiktokShopFulfillmentAutomation.cjs');
 const { normalizeRelayCommand, ensureSchema: ensureN8nAdminHandoffSchema, notifyAdmins: notifyN8nHandoffAdmins, handleRelayCommand } = require('./services/n8nAdminHandoffRelay.cjs');
 const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
+const { normalizeBlingFiscalDocument } = require('./services/blingFiscalImportCore.cjs');
 const {
   CATALOG_PREFERENCE_HANDOFF_MESSAGE,
   PHONE_LIST_FOLLOWUP_MESSAGE,
@@ -2197,6 +2198,8 @@ function isVpsProxyCustomerOrderWritePath(proxyPath, method = 'GET') {
 function isVpsProxyCustomerSelfServicePath(proxyPath, method = 'GET') {
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const pathname = proxyPath.split('?')[0] || '/';
+  if (pathname === '/accountant/companies' && ['GET', 'HEAD'].includes(normalizedMethod)) return true;
+  if (/^\/accountant\/companies\/[^/]+\/(?:tax-validation|revenue)$/u.test(pathname) && ['GET', 'HEAD', 'PUT'].includes(normalizedMethod)) return true;
   if (normalizedMethod !== 'POST') return false;
   return pathname === '/customer/checkin'
     || pathname === '/customer/reviews'
@@ -9713,6 +9716,50 @@ async function getBlingProductDetailAuthHeaderVps(request) {
     ? await refreshBlingStoredAccessTokenVps(settings)
     : settings.bling_access_token;
   return accessToken ? `Bearer ${accessToken}` : '';
+}
+
+async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to }) {
+  const authHeader = await getBlingProductDetailAuthHeaderVps(request);
+  if (!authHeader) {
+    const error = new Error('Conecte o Bling antes de importar o histórico fiscal.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const documents = [];
+  for (const type of ['nfe', 'nfce']) {
+    for (let page = 1; page <= 100; page += 1) {
+      if (page > 1) await sleepBlingReconcileVps(350);
+      const params = new URLSearchParams({
+        pagina: String(page),
+        limite: '100',
+        dataEmissaoInicial: from,
+        dataEmissaoFinal: to,
+        situacao: '2',
+      });
+      const response = await fetch(`https://api.bling.com.br/Api/v3/${type}?${params.toString()}`, {
+        headers: { Authorization: authHeader, Accept: 'application/json' },
+        signal: AbortSignal.timeout(30000),
+      });
+      const body = await readBlingProxyResponse(response);
+      if (!response.ok) {
+        const message = body.json?.error?.description
+          || body.json?.error?.message
+          || body.json?.message
+          || `Falha ao consultar ${type.toUpperCase()} no Bling (${response.status}).`;
+        const error = new Error(String(message).slice(0, 500));
+        error.statusCode = response.status === 401 ? 409 : 502;
+        throw error;
+      }
+      const items = Array.isArray(body.json?.data) ? body.json.data : [];
+      for (const item of items) {
+        const document = normalizeBlingFiscalDocument(item, type);
+        if (document) documents.push(document);
+      }
+      if (items.length < 100) break;
+    }
+  }
+  return documents;
 }
 
 function readBlingStockQuantityVps(item) {
@@ -42159,6 +42206,11 @@ const tiktokFulfillment = createTikTokFulfillmentAutomation({
 });
 require('./services/centralPrintingServer.cjs').registerCentralPrintingRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 require('./services/companyFiscalServer.cjs').registerCompanyFiscalRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
+require('./services/accountantPortalServer.cjs').registerAccountantPortalRoutes(fastify, {
+  pool,
+  getBearerAuthContext: getVpsBearerAuthContext,
+  importBlingDocuments: fetchBlingFiscalDocumentsForMigrationVps,
+});
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {

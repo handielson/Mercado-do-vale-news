@@ -8,6 +8,7 @@
     "prebuild": "node scripts/assert-no-supabase-runtime.cjs",
     "build": "vite build",
     "test:company-fiscal": "node --test tmp-tests/company-fiscal.test.cjs tmp-tests/fiscal-certificate-vault.test.cjs tmp-tests/company-data-separation-static.test.mjs tmp-tests/fiscal-tax-validation.test.cjs",
+    "test:accountant-portal": "node --test tmp-tests/accountant-portal.test.cjs tmp-tests/accountant-portal-static.test.mjs",
     "test:company-fiscal:mysql": "node --test tmp-tests/company-fiscal-mysql.test.cjs",
     "test:company-fiscal:sandbox": "node --test tmp-tests/company-fiscal-mysql.test.cjs",
     "test:company-fiscal:browser": "node tmp-tests/company-fiscal-mysql.test.cjs --browser",

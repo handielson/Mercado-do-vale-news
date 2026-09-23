@@ -3,6 +3,7 @@
 import React from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import { ProtectedRoute } from '../components/ProtectedRoute';
+import { AccountantProtectedRoute } from '../components/AccountantProtectedRoute';
 import { CartProvider } from '../contexts/CartContext';
 import { QuoteCartProvider } from '../contexts/QuoteCartContext';
 import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
@@ -36,6 +37,7 @@ const lazy = <T extends React.ComponentType<any>>(importer: () => Promise<{ defa
 const AdminLoginPage = lazy(() => import('../pages/auth/AdminLoginPage').then(module => ({ default: module.AdminLoginPage })));
 const ClienteLoginPage = lazy(() => import('../pages/auth/ClienteLoginPage').then(module => ({ default: module.ClienteLoginPage })));
 const ClienteRegisterPage = lazy(() => import('../pages/auth/ClienteRegisterPage').then(module => ({ default: module.ClienteRegisterPage })));
+const AccountantPortalPage = lazy(() => import('../pages/accountant/AccountantPortalPage'));
 const AuthCallbackPage = lazy(() => import('../pages/auth/AuthCallbackPage').then(module => ({ default: module.AuthCallbackPage })));
 const CompletarCadastroPage = lazy(() => import('../pages/auth/CompletarCadastroPage').then(module => ({ default: module.CompletarCadastroPage })));
 const RecuperarSenhaPage = lazy(() => import('../pages/auth/RecuperarSenhaPage').then(module => ({ default: module.RecuperarSenhaPage })));
@@ -190,6 +192,10 @@ export const router = createBrowserRouter([
   {
     path: "/cliente/cadastro",
     element: <ClienteRegisterPage />
+  },
+  {
+    path: "/contador",
+    element: <AccountantProtectedRoute><AccountantPortalPage /></AccountantProtectedRoute>
   },
   {
     path: "/auth/callback",

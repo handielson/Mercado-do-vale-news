@@ -33,6 +33,7 @@ import { BusinessHoursTextPanel } from '../../../components/settings/BusinessHou
 import { CompanyFiscalPanel } from '../../../components/company/CompanyFiscalPanel';
 import { CompanyCertificatePanel } from '../../../components/company/CompanyCertificatePanel';
 import { CompanyTaxValidationPanel } from '../../../components/company/CompanyTaxValidationPanel';
+import { CompanyAccountantAccessPanel } from '../../../components/company/CompanyAccountantAccessPanel';
 
 export const CompanyDataPage: React.FC = () => {
     const [activeArea, setActiveArea] = useState<'general' | 'fiscal'>(() => window.location.hash === '#fiscal' ? 'fiscal' : 'general');
@@ -266,6 +267,7 @@ export const CompanyDataPage: React.FC = () => {
                 </div>
                 <CompanyFiscalPanel />
                 <CompanyTaxValidationPanel />
+                <CompanyAccountantAccessPanel />
                 <CompanyCertificatePanel />
             </div>}
 

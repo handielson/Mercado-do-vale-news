@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { companyFiscalService, fiscalRegimes, fiscalTaxValidationIssues, type FiscalCompany, type FiscalTaxRule, type FiscalTaxValidation } from '../../services/companyFiscalService';
+import { companyFiscalService, fiscalRegimes, fiscalTaxValidationIssues, type FiscalTaxRule, type FiscalTaxValidation } from '../../services/companyFiscalService';
 
 const input = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100';
 const button = 'rounded-lg border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50';
 const statusLabel = { draft: 'Rascunho', reviewed: 'Revisado pelo contador', approved: 'Aprovado para implementação' } as const;
 
-export function CompanyTaxValidationPanel({ api = companyFiscalService }: { api?: typeof companyFiscalService }) {
-  const [companies,setCompanies] = useState<FiscalCompany[]>([]);
+export interface TaxValidationCompanyOption { id: string; name: string; cnpj: string; regime: string; crt: string; effectiveFrom: string; }
+export interface TaxValidationApi { list: () => Promise<{ companies: TaxValidationCompanyOption[] }>; taxValidation: (id: string) => Promise<FiscalTaxValidation>; saveTaxValidation: (id: string, data: FiscalTaxValidation) => Promise<FiscalTaxValidation>; }
+
+export function CompanyTaxValidationPanel({ api = companyFiscalService }: { api?: TaxValidationApi }) {
+  const [companies,setCompanies] = useState<TaxValidationCompanyOption[]>([]);
   const [selected,setSelected] = useState('primary');
   const [data,setData] = useState<FiscalTaxValidation | null>(null);
   const [busy,setBusy] = useState(true);
