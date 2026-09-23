@@ -19,6 +19,10 @@ assert.match(api, /tiktokPrint\.syncOrder/);
 assert.doesNotMatch(page, /127\.0\.0\.1:8081\/print-tiktok-order/);
 assert.match(page, /getPrintJobs\(orderId\)/);
 assert.match(page, /status === 'intervention'/);
-assert.match(service, /\/api\/tiktok-shop\/print-jobs\/sync/);
+assert.match(server, /fastify\.post\('\/tiktok-shop\/print-jobs\/sync'/);
+assert.match(server, /fastify\.get\('\/tiktok-shop\/print-jobs\/order\/:orderId'/);
+assert.match(api, /fastify\.post\('\/tiktok-shop\/orders\/:orderId\/fulfill'/);
+assert.match(service, /vpsClient\.post\('\/tiktok-shop\/print-jobs\/sync'/);
+assert.doesNotMatch(service, /vpsClient\.(?:get|post)\(`?\/api\/tiktok-shop\/print-jobs/);
 
 console.log('TikTok Shop print flow static test: OK');

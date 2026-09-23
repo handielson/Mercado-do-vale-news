@@ -1,30 +1,25 @@
 {
-  "version": "v1.2.438-tiktok-print-routing",
+  "version": "v1.2.439-tiktok-proxy-print",
   "date": "2026-09-23",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260923-152500-v12438-tiktok-print-routing",
+  "release_vps": "/var/www/mdv-site/releases/20260923-152700-v12439-tiktok-proxy-print",
   "branch": "main",
-  "summary": "Corrige gateway IPv4, roteamento da impressão TikTok e reserva da fila apenas no computador com as impressoras configuradas.",
-  "tag": "v1.2.438-tiktok-print-routing",
+  "summary": "Corrige as rotas do painel TikTok através do proxy autenticado para acompanhar a impressão no Lenovo.",
+  "tag": "v1.2.439-tiktok-proxy-print",
   "changed_files": [
-    "infra/nginx/mdv-api-ssl.conf",
-    "pages/admin/settings/TikTokShopPage.tsx",
+    "vps_server.cjs",
+    "vps_server.js",
     "services/tiktokShopService.ts",
     "services/tiktokShopPrintServer.cjs",
-    "scripts/tiktok-shop-print-agent.cjs",
-    "tmp-tests/tiktok-auto-print.test.cjs",
-    "tmp-tests/tiktok-shop-print-flow-static.test.mjs",
-    "tmp-tests/vps-nginx-production-config-static.test.mjs"
+    "tmp-tests/tiktok-shop-print-flow-static.test.mjs"
   ],
   "validations": [
     "node tmp-tests/tiktok-auto-print.test.cjs",
     "node tmp-tests/tiktok-fulfillment-service.test.cjs",
     "node tmp-tests/tiktok-shop-print-flow-static.test.mjs",
     "node tmp-tests/vps-nginx-production-config-static.test.mjs",
-    "node --check scripts/tiktok-shop-print-agent.cjs",
     "node --check services/tiktokShopPrintServer.cjs",
-    "npm.cmd run build",
-    "nginx -t",
-    "GET /api/tiktok-shop/print-jobs/order/:orderId"
+    "node --check vps_server.cjs",
+    "npm.cmd run build"
   ]
 }

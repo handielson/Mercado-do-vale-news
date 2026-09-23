@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.438-tiktok-print-routing
+version: v1.2.439-tiktok-proxy-print
 date: 2026-09-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260923-152500-v12438-tiktok-print-routing
+release_vps: /var/www/mdv-site/releases/20260923-152700-v12439-tiktok-proxy-print
 branch: main
-summary: Corrige gateway IPv4, roteamento da impressão TikTok e reserva da fila apenas no computador com as impressoras configuradas.
-tag: v1.2.438-tiktok-print-routing
+summary: Corrige as rotas do painel TikTok através do proxy autenticado para acompanhar a impressão no Lenovo.
+tag: v1.2.439-tiktok-proxy-print

@@ -13408,7 +13408,7 @@ fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);
 fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
 fastify.all('/api/shopee-actions', handleShopeeActionsVps);
 fastify.all('/api/tiktok-shop/webhook', handleTikTokShopWebhookVps);
-fastify.post('/api/tiktok-shop/orders/:orderId/fulfill', { preHandler: requireSyncKeyOrAdmin }, async (request, reply) => {
+const fulfillTikTokOrderRoute = async (request, reply) => {
   try {
     const result = await fulfillTikTokOrderVps(request.params?.orderId, { handoverMethod: String(request.body?.handover_method || 'DROP_OFF').toUpperCase() });
     reply.header('Cache-Control', 'no-store');
@@ -13416,7 +13416,9 @@ fastify.post('/api/tiktok-shop/orders/:orderId/fulfill', { preHandler: requireSy
   } catch (error) {
     return reply.code(error.statusCode || 502).send({ error: 'Falha ao enviar pedido TikTok Shop.', detail: error.message || String(error), request_id: error.requestId || null });
   }
-});
+};
+fastify.post('/api/tiktok-shop/orders/:orderId/fulfill', { preHandler: requireSyncKeyOrAdmin }, fulfillTikTokOrderRoute);
+fastify.post('/tiktok-shop/orders/:orderId/fulfill', { preHandler: requireSyncKeyOrAdmin }, fulfillTikTokOrderRoute);
 fastify.put('/api/tiktok-shop/webhooks/order-status', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopOrderWebhookConfigureVps);
 fastify.put('/api/tiktok-shop/webhooks/invoice-status', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopInvoiceWebhookConfigureVps);
 fastify.post('/admin/mobile-push/devices', { preHandler: requireAdminBearerToken }, async (request, reply) => {

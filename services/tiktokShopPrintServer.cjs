@@ -85,17 +85,21 @@ function registerTikTokPrintRoutes(fastify, { pool, requireSyncKey, requireSyncK
     }
     return { queued };
   };
-  fastify.post('/api/tiktok-shop/print-jobs/sync', { preHandler: requireSyncKeyOrAdmin }, async (request, reply) => {
+  const syncPrintJobs = async (request, reply) => {
     try { return await syncOrder(request.body?.order_id); }
     catch (error) { return reply.code(502).send({ error: error.message }); }
-  });
-  fastify.get('/api/tiktok-shop/print-jobs/order/:orderId', { preHandler: requireSyncKeyOrAdmin }, async (request, reply) => {
+  };
+  fastify.post('/api/tiktok-shop/print-jobs/sync', { preHandler: requireSyncKeyOrAdmin }, syncPrintJobs);
+  fastify.post('/tiktok-shop/print-jobs/sync', { preHandler: requireSyncKeyOrAdmin }, syncPrintJobs);
+  const getPrintJobs = async (request, reply) => {
     const orderId = String(request.params?.orderId || '').trim();
     if (!ORDER_ID.test(orderId)) return reply.code(400).send({ error: 'Pedido TikTok inválido.' });
     const [rows] = await pool.query(`SELECT package_id,order_id,status,tracking_number,label_printed_at,summary_printed_at,last_error,updated_at
       FROM tiktok_shop_print_jobs WHERE order_id=? ORDER BY created_at DESC LIMIT 10`, [orderId]);
     return { orderId, jobs: rows };
-  });
+  };
+  fastify.get('/api/tiktok-shop/print-jobs/order/:orderId', { preHandler: requireSyncKeyOrAdmin }, getPrintJobs);
+  fastify.get('/tiktok-shop/print-jobs/order/:orderId', { preHandler: requireSyncKeyOrAdmin }, getPrintJobs);
   fastify.get('/api/tiktok-shop/print-jobs/next', { preHandler: requireSyncKey }, async (_request, reply) => {
     const [rows] = await pool.query(`SELECT * FROM tiktok_shop_print_jobs WHERE status='ready'
       OR (status='printing' AND updated_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)) ORDER BY created_at LIMIT 1`);

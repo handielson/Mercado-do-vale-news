@@ -158,15 +158,15 @@ export interface TikTokShopRequiredAttributeInput {
 
 export const tiktokShopService = {
   getPrintJobs(orderId: string): Promise<{ orderId: string; jobs: TikTokPrintJob[] }> {
-    return vpsClient.get(`/api/tiktok-shop/print-jobs/order/${encodeURIComponent(orderId)}`);
+    return vpsClient.get(`/tiktok-shop/print-jobs/order/${encodeURIComponent(orderId)}`);
   },
 
   syncPrintJobs(orderId: string): Promise<{ queued: number; reason?: string }> {
-    return vpsClient.post('/api/tiktok-shop/print-jobs/sync', { order_id: orderId });
+    return vpsClient.post('/tiktok-shop/print-jobs/sync', { order_id: orderId });
   },
 
   startOrderFulfillment(orderId: string): Promise<{ success: boolean }> {
-    return vpsClient.post(`/api/tiktok-shop/orders/${encodeURIComponent(orderId)}/fulfill`, { handover_method: 'DROP_OFF' });
+    return vpsClient.post(`/tiktok-shop/orders/${encodeURIComponent(orderId)}/fulfill`, { handover_method: 'DROP_OFF' });
   },
 
   getStatus(): Promise<TikTokShopSafeStatus> {
