@@ -2,6 +2,8 @@
 
 Pacote preparado em 23/09/2026 para concluir o item D06 antes da implementação do motor fiscal. O preenchimento deve ser feito pelo contador responsável pela empresa. Códigos encontrados no Bling ou em XMLs antigos são referências de comparação e não serão ativados automaticamente.
 
+O mesmo conteúdo está disponível para preenchimento persistente no painel administrativo em **Dados da Empresa → Fiscal → Validação contábil das operações**. O contador deve usar a empresa selecionada, salvar o trabalho como rascunho e somente aprovar depois de concluir as decisões gerais, as operações utilizadas e as exceções por produto. A aprovação registra a revisão e a auditoria; ela não habilita cálculo, numeração, assinatura ou transmissão.
+
 ## Emitente conferido
 
 | Campo | Valor cadastrado | Origem da conferência | Confirmação do contador |

@@ -17,7 +17,7 @@ const normalizeBackupRows = rows => rows.map(row => Object.fromEntries(
 ));
 
 async function snapshotFiscalDatabase(pool, database) {
-  const tables = ['company_settings','company_fiscal_profiles','company_fiscal_events','company_certificate_settings'];
+  const tables = ['company_settings','company_fiscal_profiles','company_fiscal_events','company_certificate_settings','company_fiscal_tax_validations'];
   const snapshot = {};
   for (const table of tables) {
     const [rows] = await pool.query(`SELECT * FROM \`${database}\`.\`${table}\` ORDER BY 1`);
@@ -55,8 +55,8 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   pool = mysql.createPool(config);
   await pool.query(`CREATE TABLE company_settings (id CHAR(36) PRIMARY KEY, cnpj VARCHAR(14),name VARCHAR(255),company_name VARCHAR(255),razao_social VARCHAR(255),state_registration VARCHAR(30),cnae VARCHAR(255),porte VARCHAR(80),phone VARCHAR(30),email VARCHAR(255),social_website VARCHAR(255),address_state CHAR(2),address_zip_code VARCHAR(8),address_street VARCHAR(255),address_number VARCHAR(30),address_complement VARCHAR(255),address_neighborhood VARCHAR(255),address_city VARCHAR(255))`);
   await pool.query('INSERT INTO company_settings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[randomUUID(),'11222333000181','Empresa A','Empresa A','Empresa A Ltda','123','4751201','Micro','0000000000','principal@example.test','https://loja.example.test','PE','56300000','Rua Loja','1','','Centro','Petrolina']);
-  const migration = readFileSync(path.join(__dirname,'../migrations/020_company_fiscal_profiles.sql'),'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean);
-  for(let round=0;round<2;round++) for(const sql of migration) await pool.query(sql);
+  const migrations = ['020_company_fiscal_profiles.sql','021_company_fiscal_tax_validation.sql'].flatMap(file => readFileSync(path.join(__dirname,'../migrations',file),'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean));
+  for(let round=0;round<2;round++) for(const sql of migrations) await pool.query(sql);
   const profile = {cnpj:'11444777000161',name:'Empresa B',legalName:'',stateRegistration:'',stateRegistrationExempt:true,municipalRegistration:'IM-123',suframaRegistration:'SUF-123',cnae:'4751201',cnaeActivities:[{code:'4751201',description:'Comércio especializado',primary:true},{code:'4789001',description:'Comércio de outros produtos',primary:false}],companySize:'Micro',mainActivity:'Comércio',segments:['comercio','ecommerce'],annualRevenueBand:'Maior que R$ 360.000,00',employeesBand:'Até 5 funcionários',contactPerson:'Contato fictício',phone:'0000000000',mobilePhone:'00000000000',email:'empresa@example.test',billingEmail:'cobranca@example.test',website:'https://example.test',substituteStateRegistrations:[{uf:'SP',registration:'123456789'}],uf:'PE',municipalityCode:'2611101',address:{zipCode:'56300-000',street:'Rua Empresa B',number:'12',complement:'Sala 1',neighborhood:'Centro',city:'Petrolina'},regime:'lucro_real',crt:'3',effectiveFrom:'2026-01-01',notes:'',version:0};
   app=Fastify();
   await app.register(require('@fastify/multipart'));
@@ -96,6 +96,16 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   assert.equal(list.find(c=>c.id===company.id).billingEmail,'cobranca@example.test');
   assert.equal(list.find(c=>c.id===company.id).cnaeActivities.length,2);
   assert.equal(list.find(c=>c.id===company.id).lookup.simples,true);
+  const taxDraft = await call('GET',`/${company.id}/tax-validation`);
+  assert.equal(taxDraft.statusCode,200,taxDraft.body);
+  assert.equal(taxDraft.json().status,'draft');
+  assert.equal(taxDraft.json().rules.length,10);
+  const savedTaxDraft = await call('PUT',`/${company.id}/tax-validation`,{...taxDraft.json(),reviewerName:'Contador de teste',notes:'Rascunho de integração'});
+  assert.equal(savedTaxDraft.statusCode,200,savedTaxDraft.body);
+  assert.equal(savedTaxDraft.json().version,1);
+  assert.equal(savedTaxDraft.json().reviewerName,'Contador de teste');
+  const staleTaxDraft = await call('PUT',`/${company.id}/tax-validation`,{...taxDraft.json(),notes:'Versão antiga'});
+  assert.equal(staleTaxDraft.statusCode,409,staleTaxDraft.body);
   const certificate = await call('PUT',`/${company.id}/certificate`,{validUntil:'2027-03-02',alertDays:365,certificateType:'A1_SERVER'});
   assert.equal(certificate.statusCode,200,certificate.body);
   assert.equal(certificate.json().validUntil,'2027-03-02');
@@ -119,7 +129,7 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   assert.equal(rejected.statusCode,500);
   const [after]=await pool.query('SELECT * FROM company_fiscal_profiles WHERE id=?',[company.id]);
   assert.equal(after[0].version,before[0].version);assert.equal(after[0].notes,before[0].notes);
-  const [events]=await pool.query('SELECT COUNT(*) AS count FROM company_fiscal_events');assert.equal(events[0].count,8);
+  const [events]=await pool.query('SELECT COUNT(*) AS count FROM company_fiscal_events');assert.equal(events[0].count,9);
   const [settings]=await pool.query('SELECT name FROM company_settings');assert.equal(settings[0].name,'Empresa A');
   await pool.query('DROP TRIGGER fiscal_test_reject_event');
 
@@ -127,6 +137,8 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   const dump = docker('exec',container,'mysqldump','-uroot',`-p${password}`,'--single-transaction','--skip-lock-tables','--no-tablespaces','mdv_fiscal_test');
   assert.match(dump,/CREATE TABLE `company_fiscal_profiles`/);
   assert.match(dump,/INSERT INTO `company_fiscal_profiles`/);
+  assert.match(dump,/CREATE TABLE `company_fiscal_tax_validations`/);
+  assert.match(dump,/INSERT INTO `company_fiscal_tax_validations`/);
   const dumpSha256 = createHash('sha256').update(dump).digest('hex');
   assert.match(dumpSha256,/^[a-f0-9]{64}$/);
 

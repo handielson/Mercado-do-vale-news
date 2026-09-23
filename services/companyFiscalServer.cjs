@@ -1,6 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const { problem, normalizeCnpj, validateProfile, inspectIssuerReadiness, lookupCnpj } = require('./companyFiscalCore.cjs');
 const defaultCertificateVault = require('./fiscalCertificateVault.cjs');
+const { blingReference, normalizeTaxValidation, taxValidationView } = require('./fiscalTaxValidationCore.cjs');
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const SETTINGS_SQL = 'SELECT id,cnpj,name,company_name,razao_social,state_registration,cnae,porte,phone,email,social_website,address_state,address_zip_code,address_street,address_number,address_complement,address_neighborhood,address_city FROM company_settings LIMIT 1';
 const parse = value => typeof value === 'string' ? JSON.parse(value) : value;
@@ -55,6 +56,13 @@ function registerCompanyFiscalRoutes(app, { pool, getBearerAuthContext, enabled 
     if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
     const found = await locate(pool, req.params.id);
     return inspectIssuerReadiness(found.current, { fetchImpl: municipalityLookupFetch });
+  });
+  app.get('/admin/fiscal-companies/:id/tax-validation', { preHandler: admin }, async req => {
+    if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
+    const found = await locate(pool, req.params.id);
+    if (!found.row) throw problem('Salve primeiro o cadastro fiscal da empresa.');
+    const [rows] = await pool.query('SELECT * FROM company_fiscal_tax_validations WHERE profile_id=?', [found.row.id]);
+    return taxValidationView(rows[0]);
   });
   app.get('/admin/fiscal-certificates/alerts', { preHandler: admin }, async () => {
     if (!enabled) return { alerts: [] };
@@ -130,6 +138,26 @@ function registerCompanyFiscalRoutes(app, { pool, getBearerAuthContext, enabled 
     await pool.query('INSERT INTO company_certificate_settings (profile_id,valid_until,alert_days,certificate_type,verified_locally,updated_by) VALUES (?,?,?,?,0,?) ON DUPLICATE KEY UPDATE valid_until=VALUES(valid_until),alert_days=VALUES(alert_days),certificate_type=VALUES(certificate_type),updated_by=VALUES(updated_by)', [found.row.id, validUntil || null, alertDays, certificateType, req.fiscalActor]);
     const [rows] = await pool.query('SELECT * FROM company_certificate_settings WHERE profile_id=?', [found.row.id]);
     return certificateView(rows[0]);
+  });
+  app.put('/admin/fiscal-companies/:id/tax-validation', { preHandler: write }, async req => {
+    const found = await locate(pool, req.params.id);
+    if (!found.row) throw problem('Salve primeiro o cadastro fiscal da empresa.');
+    const data = normalizeTaxValidation(req.body || {});
+    const expectedVersion = Number(req.body?.version || 0);
+    return transaction(async db => {
+      const [rows] = await db.query('SELECT * FROM company_fiscal_tax_validations WHERE profile_id=? FOR UPDATE', [found.row.id]);
+      const current = rows[0];
+      if (Number(current?.version || 0) !== expectedVersion) throw problem('A validação foi alterada em outra sessão. Recarregue antes de salvar.', 409);
+      const reviewedAt = data.reviewedAt || null;
+      if (current) {
+        await db.query('UPDATE company_fiscal_tax_validations SET status=?,reviewer_name=?,reviewer_registration=?,reviewed_at=?,notes=?,rules_json=?,version=version+1,updated_by=? WHERE profile_id=?', [data.status,data.reviewerName,data.reviewerRegistration,reviewedAt,data.notes,JSON.stringify({ rules:data.rules, generalDecisions:data.generalDecisions, productRules:data.productRules }),req.fiscalActor,found.row.id]);
+      } else {
+        await db.query('INSERT INTO company_fiscal_tax_validations (profile_id,status,reviewer_name,reviewer_registration,reviewed_at,notes,rules_json,bling_reference_json,updated_by) VALUES (?,?,?,?,?,?,?,?,?)', [found.row.id,data.status,data.reviewerName,data.reviewerRegistration,reviewedAt,data.notes,JSON.stringify({ rules:data.rules, generalDecisions:data.generalDecisions, productRules:data.productRules }),JSON.stringify(blingReference()),req.fiscalActor]);
+      }
+      await db.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)', [found.row.id,req.fiscalActor,'tax_validation_save',JSON.stringify({ status: data.status, reviewerName: data.reviewerName, reviewedAt })]);
+      const [saved] = await db.query('SELECT * FROM company_fiscal_tax_validations WHERE profile_id=?', [found.row.id]);
+      return taxValidationView(saved[0]);
+    });
   });
   app.post('/admin/fiscal-companies/:id/certificate/upload', { preHandler: write, config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } }, async req => {
     const found = await locate(pool, req.params.id);

@@ -32,6 +32,7 @@ import { BusinessHoursPanel } from '../../../components/settings/BusinessHoursPa
 import { BusinessHoursTextPanel } from '../../../components/settings/BusinessHoursTextPanel';
 import { CompanyFiscalPanel } from '../../../components/company/CompanyFiscalPanel';
 import { CompanyCertificatePanel } from '../../../components/company/CompanyCertificatePanel';
+import { CompanyTaxValidationPanel } from '../../../components/company/CompanyTaxValidationPanel';
 
 export const CompanyDataPage: React.FC = () => {
     const [activeArea, setActiveArea] = useState<'general' | 'fiscal'>(() => window.location.hash === '#fiscal' ? 'fiscal' : 'general');
@@ -264,6 +265,7 @@ export const CompanyDataPage: React.FC = () => {
                     <strong>Cadastro fiscal separado.</strong> Para a empresa principal, CNPJ, nomes, IE, CNAE, porte, contato e endereço são somente leitura aqui e continuam vindo dos dados gerais usados pelo restante do sistema. Esta área salva regime, CRT, vigência, inscrições complementares, CNAEs consultados e certificado.
                 </div>
                 <CompanyFiscalPanel />
+                <CompanyTaxValidationPanel />
                 <CompanyCertificatePanel />
             </div>}
 

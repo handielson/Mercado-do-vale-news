@@ -276,3 +276,13 @@ Alteração: criado `validacao-contabil-operacoes.md` com dados do emitente a co
 Verificação: links locais e estrutura obrigatória conferidos; `git diff --check` aprovado. D06 permanece aberto e atribuído ao contador até o preenchimento identificado e datado. D07 continua aberto somente para a segunda cópia segura e ensaio de recuperação, adiado pelo operador.
 
 Complemento de 23/09/2026: conferência somente leitura na interface autenticada do Bling identificou quatro naturezas ativas: COMPRA, Devolução de produto, Simples remessa e VENDA. Na natureza VENDA foram registrados no pacote, como referência pendente de validação, série 1, saída, CRT 1, presença presencial, ICMS PE 5102/CSOSN 400, ICMS demais destinos 6108/CSOSN 400, IPI CST 53 e PIS/COFINS CST 07. Nenhuma configuração foi salva ou alterada no Bling. Esses códigos não foram promovidos a regra do sistema próprio.
+
+## E37 — Painel persistente para validação do contador (23/09/2026)
+
+Item: D06a. Estado anterior: o contador dispunha do pacote público em Markdown, mas não de uma tela operacional para registrar a revisão por empresa. Os valores observados no Bling continuavam apenas como referência e D06 permanecia aberto.
+
+Alteração: criado painel administrativo por empresa com dez cenários operacionais, decisões gerais de regime/CRT/vigência, apuração do Simples, frete/rateio e decisão explícita sobre exceções por produto. Quando houver exceções, o painel recebe grupo/produto, NCM, CEST, origem, unidade, tributação, operações e vigência. O registro possui rascunho, revisado e aprovado, identificação do responsável, data, controle otimista de versão e evento de auditoria. O servidor impede aprovação com campos obrigatórios pendentes. Aprovar a matriz não ativa cálculo, emissão, numeração ou transmissão.
+
+Persistência: a migration `021_company_fiscal_tax_validation.sql` cria armazenamento isolado pelo perfil fiscal. A referência do Bling é guardada separadamente do conteúdo editado pelo contador. A API exige sessão administrativa para leitura e escrita.
+
+Verificação local: `npm.cmd run test:company-fiscal` passou 33/33; `npm.cmd run test:company-fiscal:mysql` aplicou as migrations 020 e 021 duas vezes em MySQL 8.4 descartável, salvou rascunho, recusou versão antiga e restaurou integralmente o backup em banco separado; `npm.cmd run build` e verificações de sintaxe passaram. D06 continua aberto até o contador preencher e aprovar os dados reais.

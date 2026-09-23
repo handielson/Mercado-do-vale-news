@@ -338,16 +338,18 @@ async function ensureRemoteFiscalDependencies(appDir) {
 
 async function applyCompanyFiscalMigration({ appDir, apiProc }) {
   if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
-  const migrationPath = 'migrations/020_company_fiscal_profiles.sql';
+  const migrationPaths = ['migrations/020_company_fiscal_profiles.sql', 'migrations/021_company_fiscal_tax_validation.sql'];
   await exec(`mkdir -p ${appDir}/migrations`);
-  await upload(path.join(__dirname, migrationPath), remotePathJoin(appDir, migrationPath));
+  for (const migrationPath of migrationPaths) await upload(path.join(__dirname, migrationPath), remotePathJoin(appDir, migrationPath));
   const source = `
     const fs = require('fs'); require('dotenv').config();
     (async () => {
       const db = await require('mysql2/promise').createConnection({host:process.env.DB_HOST,user:process.env.DB_USER,password:process.env.DB_PASS,database:process.env.DB_NAME,multipleStatements:true});
-      const sql=fs.readFileSync('${migrationPath}','utf8').replace(/--[^\\n]*/g,'');
-      for (const statement of sql.split(';').map(value=>value.trim()).filter(Boolean)) await db.query(statement);
-      const expected=['company_fiscal_profiles','company_fiscal_events','company_certificate_settings'];
+      for (const migrationPath of ${JSON.stringify(['migrations/020_company_fiscal_profiles.sql', 'migrations/021_company_fiscal_tax_validation.sql'])}) {
+        const sql=fs.readFileSync(migrationPath,'utf8').replace(/--[^\\n]*/g,'');
+        for (const statement of sql.split(';').map(value=>value.trim()).filter(Boolean)) await db.query(statement);
+      }
+      const expected=['company_fiscal_profiles','company_fiscal_events','company_certificate_settings','company_fiscal_tax_validations'];
       for (const table of expected) { const [rows]=await db.query('SHOW TABLES LIKE ?',[table]); if(!rows.length) throw new Error('Missing table '+table); }
       const [columns]=await db.query("SHOW COLUMNS FROM company_certificate_settings LIKE 'fingerprint_sha256'"); if(!columns.length) throw new Error('Certificate metadata columns missing');
       console.log('Company fiscal migration applied and validated.'); await db.end();

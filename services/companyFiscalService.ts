@@ -35,6 +35,18 @@ export interface FiscalCertificateStatus {
     installed: boolean; installedAt: string; subjectName: string; issuerName: string; serialNumber: string; fingerprintSha256: string;
     sefaz: SefazStatus | null; daysRemaining: number | null; alert: boolean;
 }
+export interface FiscalTaxRule {
+    id: string; scenario: string; used: boolean; model: string; destinationUf: string; recipient: string; finality: string;
+    cfop: string; icmsCode: string; icmsTreatment: string; pisCofins: string; ipi: string; benefit: string; effectiveFrom: string; notes: string;
+    source: 'bling_reference' | 'scope' | 'accountant';
+}
+export interface FiscalTaxValidation {
+    status: 'draft' | 'reviewed' | 'approved'; reviewerName: string; reviewerRegistration: string; reviewedAt: string; notes: string;
+    rules: FiscalTaxRule[]; blingReference: { observedAt: string; source: string; natures: Array<{ name: string; defaultUse: string }>; sale: Record<string, unknown> };
+    generalDecisions: { taxRegime: string; crt: string; effectiveFrom: string; simplesBasis: string; freightTreatment: string; productExceptions: 'none' | 'listed' | 'pending'; productExceptionsNotes: string };
+    productRules: Array<{ id: string; group: string; ncm: string; cest: string; origin: string; unit: string; taxTreatment: string; operations: string; effectiveFrom: string; notes: string }>;
+    version: number; updatedAt: string;
+}
 const BASE = '/admin/fiscal-companies';
 export const companyFiscalService = {
     list: () => vpsClient.get<{ enabled: boolean; companies: FiscalCompany[] }>(BASE),
@@ -44,6 +56,8 @@ export const companyFiscalService = {
         : vpsClient.put<FiscalCompany>(`${BASE}/${encodeURIComponent(company.id)}`, company),
     refresh: (company: FiscalCompany) => vpsClient.post<FiscalCompany>(`${BASE}/${encodeURIComponent(company.id)}/refresh`, { version: company.version }),
     readiness: (company: FiscalCompany) => vpsClient.get<{ ready: boolean; missing: string[]; municipality: { status: 'confirmed' | 'mismatch' | 'not_found' | 'unavailable' | 'not_checked'; officialName?: string; officialUf?: string } }>(`${BASE}/${encodeURIComponent(company.id)}/readiness`),
+    taxValidation: (id: string) => vpsClient.get<FiscalTaxValidation>(`${BASE}/${encodeURIComponent(id)}/tax-validation`),
+    saveTaxValidation: (id: string, data: FiscalTaxValidation) => vpsClient.put<FiscalTaxValidation>(`${BASE}/${encodeURIComponent(id)}/tax-validation`, data),
     certificate: (id: string) => vpsClient.get<FiscalCertificateStatus>(`${BASE}/${encodeURIComponent(id)}/certificate`),
     saveCertificate: (id: string, data: Pick<FiscalCertificateStatus,'validUntil' | 'alertDays' | 'certificateType'>) => vpsClient.put<FiscalCertificateStatus>(`${BASE}/${encodeURIComponent(id)}/certificate`, data),
     uploadCertificate: (id: string, file: File, password: string, alertDays: number) => {
