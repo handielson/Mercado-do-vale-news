@@ -22,6 +22,9 @@ export interface AccountantRevenueSale {
   fiscalState: 'invoiced' | 'no_invoice_confirmed' | 'reconciliation_pending' | 'cancelled' | 'operational_pending';
   customerName: string;
   document?: { model: string; number?: string; accessKey?: string; status: string; issuedAt?: string; totalCents: number; source: string };
+  documentTotalCents?: number;
+  amountDifferenceCents?: number;
+  reviewReasons?: Array<'amount_difference' | 'operational_pending_with_document' | 'cancelled_with_document'>;
 }
 
 export interface AccountantRevenueReport {
@@ -54,6 +57,7 @@ export interface AccountantRevenueReport {
   }>;
   months: Array<AccountantRevenueReport['totals'] & { competence: string }>;
   sales: AccountantRevenueSale[];
+  reviewSales: AccountantRevenueSale[];
 }
 
 const BASE = '/accountant/companies';

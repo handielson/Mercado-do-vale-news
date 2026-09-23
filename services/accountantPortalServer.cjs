@@ -129,7 +129,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       return {
         company: companyView(profile), period: { from, to },
         coverage: { available: false, reason: 'Empresa fiscal ainda não vinculada a uma empresa operacional.' },
-        ...buildRevenueReport([]), documentTotals: fiscalDocumentTotals([]),
+        ...buildRevenueReport([]), documentTotals: fiscalDocumentTotals([]), documents: [],
       };
     }
     const [eventRows] = await pool.query(

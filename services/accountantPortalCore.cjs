@@ -31,12 +31,26 @@ function normalizeOperationalSale(row) {
 }
 
 function reconcileSale(sale, fiscal = {}) {
-  if (sale.operationalState === 'cancelled') return { ...sale, fiscalState: 'cancelled' };
-  if (sale.operationalState !== 'completed') return { ...sale, fiscalState: 'operational_pending' };
-  const authorizedDocument = Array.isArray(fiscal.documents)
-    ? fiscal.documents.find(document => String(document.status || '').toLowerCase() === 'authorized')
-    : null;
-  if (authorizedDocument) return { ...sale, fiscalState: 'invoiced', document: authorizedDocument };
+  const authorizedDocuments = Array.isArray(fiscal.documents)
+    ? fiscal.documents.filter(document => String(document.status || '').toLowerCase() === 'authorized')
+    : [];
+  const authorizedDocument = authorizedDocuments[0];
+  const reviewReasons = [];
+  let documentTotalCents;
+  let amountDifferenceCents;
+  if (authorizedDocument) {
+    if (authorizedDocuments.every(document => Number.isFinite(Number(document.totalCents)))) {
+      documentTotalCents = authorizedDocuments.reduce((sum, document) => sum + Math.round(Number(document.totalCents)), 0);
+      amountDifferenceCents = documentTotalCents - sale.totalCents;
+      if (amountDifferenceCents !== 0) reviewReasons.push('amount_difference');
+    }
+    if (sale.operationalState === 'pending') reviewReasons.push('operational_pending_with_document');
+    if (sale.operationalState === 'cancelled') reviewReasons.push('cancelled_with_document');
+  }
+  const details = authorizedDocument ? { document: authorizedDocument, documentTotalCents, amountDifferenceCents, reviewReasons } : {};
+  if (sale.operationalState === 'cancelled') return { ...sale, fiscalState: 'cancelled', ...details };
+  if (sale.operationalState !== 'completed') return { ...sale, fiscalState: 'operational_pending', ...details };
+  if (authorizedDocument) return { ...sale, fiscalState: 'invoiced', ...details };
   const classification = String(fiscal.classification || '').toLowerCase();
   if (classification === 'no_invoice') return { ...sale, fiscalState: 'no_invoice_confirmed' };
   return { ...sale, fiscalState: 'reconciliation_pending' };
@@ -81,7 +95,8 @@ function buildRevenueReport(rows, fiscalBySale = new Map()) {
     }
     months.set(key, month);
   }
-  return { totals, months: [...months.values()].sort((a, b) => b.competence.localeCompare(a.competence)), sales };
+  return { totals, months: [...months.values()].sort((a, b) => b.competence.localeCompare(a.competence)), sales,
+    reviewSales: sales.filter(sale => sale.reviewReasons?.length > 0) };
 }
 
 function validPeriod(from, to) {

@@ -246,6 +246,31 @@ test('nega empresa sem concessão e aceita somente a empresa vinculada ao contad
   assert.equal(allowedRequest.accountantProfile.id, 'profile-a');
 });
 
+test('sinaliza diferenças de valor e de situação sem reclassificar pedidos ou calcular imposto', () => {
+  const rows = [
+    { channel:'shopee', external_sale_id:'a', status:'completed', total_cents:5591, occurred_at:'2026-09-23T12:00:00Z' },
+    { channel:'tiktok', external_sale_id:'b', status:'pending', total_cents:16610, occurred_at:'2026-09-23T12:00:00Z' },
+    { channel:'shopee', external_sale_id:'c', status:'cancelled', total_cents:1000, occurred_at:'2026-09-23T12:00:00Z' },
+    { channel:'pdv', external_sale_id:'d', status:'completed', total_cents:2000, occurred_at:'2026-09-23T12:00:00Z' },
+  ];
+  const fiscal = new Map([
+    ['shopee:a', { documents:[{ status:'authorized', totalCents:5791, model:'55', number:'1' }] }],
+    ['tiktok:b', { documents:[{ status:'authorized', totalCents:16610, model:'55', number:'2' }] }],
+    ['shopee:c', { documents:[{ status:'authorized', totalCents:1000, model:'55', number:'3' }] }],
+  ]);
+  const report = buildRevenueReport(rows, fiscal);
+  assert.deepEqual(report.reviewSales.map(sale => sale.externalSaleId), ['a','b','c']);
+  assert.equal(report.sales[0].fiscalState, 'invoiced');
+  assert.equal(report.sales[0].amountDifferenceCents, 200);
+  assert.deepEqual(report.sales[0].reviewReasons, ['amount_difference']);
+  assert.equal(report.sales[1].fiscalState, 'operational_pending');
+  assert.deepEqual(report.sales[1].reviewReasons, ['operational_pending_with_document']);
+  assert.equal(report.sales[2].fiscalState, 'cancelled');
+  assert.deepEqual(report.sales[2].reviewReasons, ['cancelled_with_document']);
+  assert.equal(report.sales[3].fiscalState, 'reconciliation_pending');
+  assert.equal(report.totals.noInvoiceConfirmedCents, 0);
+});
+
 test('relatório de faturamento usa colunas e valores monetários do schema MySQL real', async () => {
   const routes = new Map();
   const app = {};
