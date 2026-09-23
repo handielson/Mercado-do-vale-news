@@ -50,6 +50,15 @@ test('fila distingue pedido fora do período dos totais operacionais', () => {
   assert.match(page, /\{reportDate\(document\.issuedAt\)\}/);
 });
 
+test('consulta da situação de NF-e na SEFAZ passa pela concessão do contador e mantém a resposta somente para leitura', () => {
+  const server = read('services/accountantPortalServer.cjs');
+  const page = read('pages/accountant/AccountantPortalPage.tsx');
+  assert.match(server, /fiscal-documents\/:documentId\/sefaz-status/);
+  assert.match(server, /preHandler: requireCompanyAccess\('revenue'\)/);
+  assert.match(page, /Consultar situação da NF-e na SEFAZ-PE/);
+  assert.match(page, /A resposta não altera a nota importada/);
+});
+
 test('migração cria concessão, documentos e conciliação isolados por perfil', () => {
   const migration = read('migrations/022_accountant_portal.sql');
   assert.match(migration, /company_accountant_access/);

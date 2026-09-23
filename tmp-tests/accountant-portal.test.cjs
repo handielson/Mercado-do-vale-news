@@ -429,3 +429,49 @@ test('nota emitida no dia mostra pedido de outro dia para revisão sem alterar t
   assert.deepEqual(queries.find(entry => entry.sql.includes('external_id IN')).params, ['order-1','2026-09-22 00:00:00','2026-09-23 00:00:00']);
   assert.equal(queries.every(entry => /^SELECT /u.test(entry.sql.trim())), true);
 });
+
+test('consulta SEFAZ de nota exige acesso à empresa e chave do emitente, sem gravar', async () => {
+  const routes = new Map();
+  const app = {};
+  for (const method of ['get','put','post','delete']) app[method] = (route, options, handler) => routes.set(`${method}:${route}`, { preHandler:options.preHandler, handler });
+  const seen = [];
+  let allowAccess = true;
+  let documentKey = '26260934719515000168550010000006991123456780';
+  const pool = { query: async (sql, params = []) => {
+    seen.push({ sql, params });
+    if (sql.includes('FROM company_settings')) return [[{ id:'settings-1', cnpj:'34719515000168', name:'Empresa' }]];
+    if (sql.includes('FROM company_fiscal_profiles WHERE settings_id=')) return [[{ id:'profile-1', settings_id:'settings-1', cnpj:'34719515000168', uf:'PE' }]];
+    if (sql.includes('FROM company_accountant_access')) return [allowAccess ? [{ id:'grant-1' }] : []];
+    if (sql.includes('FROM company_fiscal_documents')) return [[{
+      id:'doc-1', model:'55', access_key:documentKey,
+    }]];
+    throw new Error(`SQL inesperado: ${sql}`);
+  } };
+  let consulted = 0;
+  registerAccountantPortalRoutes(app, { pool, enabled:true,
+    getBearerAuthContext:async () => ({ customerId:'accountant-1', userId:'accountant-1', isAdmin:false }),
+    consultSefazInvoice:async (profileId, key, environment) => {
+      consulted += 1;
+      assert.equal(profileId, 'profile-1'); assert.equal(key.slice(6,20), '34719515000168'); assert.equal(environment, 'production');
+      return { cStat:'100', situation:'authorized', reason:'Autorizado', checkedAt:'2026-09-23T23:00:00.000Z' };
+    },
+  });
+  const route = routes.get('post:/accountant/companies/:id/fiscal-documents/:documentId/sefaz-status');
+  const req = { params:{ id:'primary', documentId:'doc-1' } };
+  const reply = { sent:false, header(){}, code(){ return this; }, send(){ this.sent=true; } };
+  await route.preHandler(req, reply);
+  assert.equal(reply.sent, false);
+  assert.equal((await route.handler(req)).situation, 'authorized');
+  assert.equal(consulted, 1);
+  assert.deepEqual(seen.find(item => item.sql.includes('FROM company_fiscal_documents')).params, ['doc-1','profile-1']);
+  assert.equal(seen.every(item => /^SELECT /u.test(item.sql.trim())), true);
+  documentKey = '26260900000000000000550010000006991123456780';
+  await assert.rejects(() => route.handler(req), /CNPJ da chave não corresponde/);
+  assert.equal(consulted, 1);
+  allowAccess = false;
+  const denied = { params:{ id:'primary', documentId:'doc-1' } };
+  const deniedReply = { sent:false, header(){}, code(){ return this; }, send(){ this.sent=true; } };
+  await route.preHandler(denied, deniedReply);
+  assert.equal(deniedReply.sent, true);
+  assert.equal(consulted, 1);
+});

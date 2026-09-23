@@ -63,6 +63,32 @@ test('consulta SEFAZ usa o A1 do cofre e interpreta código 107', async t => {
   assert.equal(result.operational, true); assert.equal(result.cStat, '107');
 });
 
+test('consulta de protocolo usa o A1, a chave e o ambiente de produção sem alterar o cofre', async t => {
+  const vaultDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-vault-protocol-'));
+  t.after(() => fs.rm(vaultDir, { recursive: true, force: true }));
+  const options = { vaultDir, masterKey: crypto.randomBytes(32).toString('hex') };
+  await vault.installCertificate(PROFILE, fixture(), 'senha-segura', CNPJ, options);
+  const accessKey = '26' + '2609' + CNPJ + '55' + '001' + '000000699' + '1' + '12345678' + '0';
+  assert.equal(accessKey.length, 44);
+  const result = await vault.consultInvoice(PROFILE, accessKey, 'production', { ...options,
+    endpoints: { production: 'https://sefaz.test/consulta' },
+    request: async (endpoint, body, pfx, password, action) => {
+      assert.equal(endpoint, 'https://sefaz.test/consulta');
+      assert.match(body, /<tpAmb>1<\/tpAmb>/);
+      assert.match(body, /<xServ>CONSULTAR<\/xServ>/);
+      assert(body.includes(`<chNFe>${accessKey}</chNFe>`));
+      assert.match(action, /NFeConsultaProtocolo4\/nfeConsultaNF$/);
+      assert(pfx.length > 0); assert.equal(password, 'senha-segura');
+      return { statusCode: 200, body: '<retConsSitNFe><tpAmb>1</tpAmb><cStat>101</cStat><xMotivo>Cancelamento homologado</xMotivo></retConsSitNFe>' };
+    },
+  });
+  assert.equal(result.cStat, '101');
+  assert.equal(result.situation, 'cancelled');
+  assert.equal(result.reason, 'Cancelamento homologado');
+  await assert.rejects(() => vault.consultInvoice(PROFILE, '123', 'production', options), /Chave de acesso/);
+  await assert.rejects(() => vault.consultInvoice(PROFILE, accessKey, 'production', { ...options, request: async () => ({ body: '<soap:Fault>erro</soap:Fault>' }) }), /consulta de protocolo válida/);
+});
+
 test('cliente SEFAZ confia na raiz SSL oficial da ICP-Brasil sem remover as raízes padrão', () => {
   const root = new crypto.X509Certificate(vault.ICP_BRASIL_V10_ROOT);
   assert.equal(root.ca, true);

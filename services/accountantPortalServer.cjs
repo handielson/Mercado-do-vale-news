@@ -3,6 +3,7 @@ const { problem } = require('./companyFiscalCore.cjs');
 const { blingReference, normalizeTaxValidation, taxValidationView } = require('./fiscalTaxValidationCore.cjs');
 const { buildRevenueReport, validPeriod } = require('./accountantPortalCore.cjs');
 const { fiscalDocumentTotals } = require('./blingFiscalImportCore.cjs');
+const certificateVault = require('./fiscalCertificateVault.cjs');
 
 const parseJson = value => {
   if (!value) return null;
@@ -39,7 +40,7 @@ function companyView(profile) {
   };
 }
 
-function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabled = process.env.MDV_COMPANY_FISCAL_ENABLED === '1', importBlingDocuments }) {
+function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabled = process.env.MDV_COMPANY_FISCAL_ENABLED === '1', importBlingDocuments, consultSefazInvoice = certificateVault.consultInvoice }) {
   const auth = async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     const context = await getBearerAuthContext(req);
@@ -199,7 +200,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       .map(sale => ({ ...sale, reviewReasons: [...new Set([...(sale.reviewReasons || []), 'sale_outside_period'])] }));
     const documentTotals = fiscalDocumentTotals(documentRows);
     const documents = documentRows.map(row => ({
-      model: row.model, status: row.status, channel: ['shopee', 'tiktok'].includes(row.channel) ? row.channel : 'unidentified',
+      id: row.id, model: row.model, status: row.status, channel: ['shopee', 'tiktok'].includes(row.channel) ? row.channel : 'unidentified',
       orderReference: /^(?:nfe|nfce):/u.test(String(row.external_sale_id || '')) ? null : row.external_sale_id,
       number: row.document_number, series: row.series, issuedAt: row.issued_at, totalCents: Number(row.total_cents || 0),
     })).sort((left, right) => String(right.issuedAt || '').localeCompare(String(left.issuedAt || '')));
@@ -208,6 +209,24 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       coverage: { available: true, sources: ['sales','orders','mobile_sale_events'], note: 'PDV e site vêm das bases operacionais. Shopee e TikTok usam eventos capturados no momento da sincronização; o status mostrado pode não ser o atual no marketplace. Vendas sem XML histórico permanecem pendentes de conciliação.' },
       ...report, reviewSales: [...report.reviewSales, ...crossPeriodSales], documentTotals, documents,
     };
+  });
+
+  app.post('/accountant/companies/:id/fiscal-documents/:documentId/sefaz-status', {
+    preHandler: requireCompanyAccess('revenue'), config: { rateLimit: { max: 6, timeWindow: '10 minutes' } },
+  }, async req => {
+    const profile = req.accountantProfile;
+    if (profile.uf !== 'PE') throw problem('Consulta de protocolo disponível inicialmente para NF-e de Pernambuco.', 422);
+    const [rows] = await pool.query('SELECT id,model,access_key FROM company_fiscal_documents WHERE id=? AND profile_id=? LIMIT 1',
+      [req.params.documentId, profile.id]);
+    const document = rows[0];
+    if (!document) throw problem('NF-e não encontrada nesta empresa.', 404);
+    if (String(document.model) !== '55' || !/^\d{44}$/.test(String(document.access_key || ''))) {
+      throw problem('Esta nota não possui chave de acesso de NF-e válida para consulta.', 422);
+    }
+    if (String(document.access_key).slice(6, 20) !== String(profile.cnpj || '').replace(/\D/g, '')) {
+      throw problem('O CNPJ da chave não corresponde ao emitente selecionado.', 409);
+    }
+    return consultSefazInvoice(profile.id, document.access_key, 'production');
   });
 
   const collectFiscalDocuments = async req => {

@@ -11,6 +11,10 @@ const SEFAZ_PE = {
   production: 'https://nfe.sefaz.pe.gov.br/nfe-service/services/NFeStatusServico4',
   homologation: 'https://nfehomolog.sefaz.pe.gov.br/nfe-service/services/NFeStatusServico4',
 };
+const SEFAZ_PE_CONSULTA = {
+  production: 'https://nfe.sefaz.pe.gov.br/nfe-service/services/NFeConsultaProtocolo4',
+  homologation: 'https://nfehomolog.sefaz.pe.gov.br/nfe-service/services/NFeConsultaProtocolo4',
+};
 // Public trust anchor published by ITI for ICP-Brasil SSL/TLS chains.
 // Source: https://acraiz.icpbrasil.gov.br/credenciadas/RAIZ/ICP-Brasilv10.crt
 // SHA-256: 6E:0B:FF:06:9A:26:99:4C:15:DE:2C:48:88:CC:54:AF:84:88:2E:54:95:B7:FB:F6:6B:E9:CC:FF:EC:74:89:F6
@@ -195,6 +199,11 @@ function statusSoap(environment) {
   return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header><nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4"><cUF>26</cUF><versaoDados>4.00</versaoDados></nfeCabecMsg></soap12:Header><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4"><consStatServ versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe"><tpAmb>${tpAmb}</tpAmb><cUF>26</cUF><xServ>STATUS</xServ></consStatServ></nfeDadosMsg></soap12:Body></soap12:Envelope>`;
 }
 
+function invoiceStatusSoap(environment, accessKey) {
+  const tpAmb = environment === 'production' ? '1' : '2';
+  return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4"><consSitNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe"><tpAmb>${tpAmb}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${accessKey}</chNFe></consSitNFe></nfeDadosMsg></soap12:Body></soap12:Envelope>`;
+}
+
 function xmlValue(xml, name) {
   const match = String(xml).match(new RegExp(`<(?:\\w+:)?${name}[^>]*>([^<]*)<\\/(?:\\w+:)?${name}>`, 'i'));
   return match ? match[1].trim() : '';
@@ -215,9 +224,29 @@ async function testSefaz(profileId, environment = 'homologation', options = {}) 
   return { environment, endpoint, cStat, reason, operational: cStat === '107', checkedAt: new Date().toISOString() };
 }
 
-function requestSoap(endpoint, body, pfx, passphrase) {
+async function consultInvoice(profileId, accessKey, environment = 'production', options = {}) {
+  if (!['production', 'homologation'].includes(environment)) throw Object.assign(new Error('Ambiente da SEFAZ inválido.'), { statusCode: 400 });
+  if (!/^\d{44}$/.test(String(accessKey || ''))) throw Object.assign(new Error('Chave de acesso da NF-e inválida.'), { statusCode: 400 });
+  const stored = await readCertificate(profileId, options).catch(error => {
+    if (error?.code === 'ENOENT') throw Object.assign(new Error('Certificado não está instalado no servidor.'), { statusCode: 404 });
+    throw error;
+  });
+  const endpoint = (options.endpoints || SEFAZ_PE_CONSULTA)[environment];
+  const response = await (options.request || requestSoap)(endpoint, invoiceStatusSoap(environment, accessKey), stored.pfx, stored.password,
+    'http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4/nfeConsultaNF');
+  const result = String(response.body || '').match(/<(?:\w+:)?retConsSitNFe\b[^>]*>([\s\S]*?)<\/(?:\w+:)?retConsSitNFe>/i)?.[1];
+  const cStat = result ? xmlValue(result, 'cStat') : '';
+  const reason = result ? xmlValue(result, 'xMotivo') : '';
+  const returnedEnvironment = result ? xmlValue(result, 'tpAmb') : '';
+  if (!cStat || returnedEnvironment !== (environment === 'production' ? '1' : '2')) {
+    throw Object.assign(new Error('A SEFAZ não retornou uma consulta de protocolo válida para o ambiente solicitado.'), { statusCode: 502 });
+  }
+  return { environment, cStat, reason, situation: ({ '100': 'authorized', '101': 'cancelled', '110': 'denied' })[cStat] || 'unconfirmed', checkedAt: new Date().toISOString() };
+}
+
+function requestSoap(endpoint, body, pfx, passphrase, soapAction = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF') {
   return new Promise((resolve, reject) => {
-    const request = https.request(endpoint, { method: 'POST', pfx, passphrase, ca: trustedAuthorities(), minVersion: 'TLSv1.2', timeout: 20000, headers: { 'Content-Type': 'application/soap+xml; charset=utf-8', 'Content-Length': Buffer.byteLength(body), SOAPAction: 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF' } }, response => {
+    const request = https.request(endpoint, { method: 'POST', pfx, passphrase, ca: trustedAuthorities(), minVersion: 'TLSv1.2', timeout: 20000, headers: { 'Content-Type': 'application/soap+xml; charset=utf-8', 'Content-Length': Buffer.byteLength(body), SOAPAction: soapAction } }, response => {
       const chunks = [];
       response.on('data', chunk => chunks.push(chunk));
       response.on('end', () => resolve({ statusCode: response.statusCode || 0, body: Buffer.concat(chunks).toString('utf8') }));
@@ -228,4 +257,4 @@ function requestSoap(endpoint, body, pfx, passphrase) {
   });
 }
 
-module.exports = { MAX_PFX_BYTES, SEFAZ_PE, ICP_BRASIL_V10_ROOT, trustedAuthorities, inspectPfx, installCertificate, readCertificate, exportCertificate, deleteCertificate, testSefaz, statusSoap, xmlValue };
+module.exports = { MAX_PFX_BYTES, SEFAZ_PE, SEFAZ_PE_CONSULTA, ICP_BRASIL_V10_ROOT, trustedAuthorities, inspectPfx, installCertificate, readCertificate, exportCertificate, deleteCertificate, testSefaz, consultInvoice, statusSoap, invoiceStatusSoap, xmlValue };

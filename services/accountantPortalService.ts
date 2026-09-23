@@ -47,6 +47,7 @@ export interface AccountantRevenueReport {
     cancelledDocumentCount: number;
   };
   documents: Array<{
+    id: string;
     model: string;
     status: string;
     channel: 'shopee' | 'tiktok' | 'unidentified';
@@ -68,6 +69,7 @@ export const accountantPortalService = {
   taxValidation: (id: string) => vpsClient.get<FiscalTaxValidation>(`${BASE}/${encodeURIComponent(id)}/tax-validation`),
   saveTaxValidation: (id: string, data: FiscalTaxValidation) => vpsClient.put<FiscalTaxValidation>(`${BASE}/${encodeURIComponent(id)}/tax-validation`, data),
   revenue: (id: string, from: string, to: string) => vpsClient.get<AccountantRevenueReport>(`${BASE}/${encodeURIComponent(id)}/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  sefazStatus: (id: string, documentId: string) => vpsClient.post<{ environment: string; cStat: string; reason: string; situation: string; checkedAt: string }>(`${BASE}/${encodeURIComponent(id)}/fiscal-documents/${encodeURIComponent(documentId)}/sefaz-status`, {}),
 };
 
 export async function resolveAccountantLandingPath(requestedPath: string, customerType: string | undefined): Promise<string> {

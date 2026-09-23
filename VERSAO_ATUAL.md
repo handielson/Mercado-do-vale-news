@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.459-accountant-period-date-display
+version: v1.2.460-accountant-sefaz-invoice-status
 date: 2026-09-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260923-223745-accountant-period-date-display
+release_vps: /var/www/mdv-site/releases/20260923-235107-accountant-sefaz-invoice-status
 branch: main
-summary: Alinha as datas de pedidos e notas ao dia usado pelo filtro do contador.
-tag: v1.2.459-accountant-period-date-display
+summary: Consulta somente de leitura da situação da NF-e na SEFAZ-PE pelo Espaço do Contador.
+tag: v1.2.460-accountant-sefaz-invoice-status

@@ -28,13 +28,24 @@ function RevenuePanel() {
   const [report, setReport] = useState<AccountantRevenueReport | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
+  const [selectedDocumentId, setSelectedDocumentId] = useState('');
+  const [sefazBusy, setSefazBusy] = useState(false);
+  const [sefazError, setSefazError] = useState('');
+  const [sefazResult, setSefazResult] = useState<{ cStat: string; reason: string; situation: string; checkedAt: string } | null>(null);
   useEffect(() => { accountantPortalService.list().then(result => { setCompanies(result.companies); setCompanyId(result.companies[0]?.id || ''); }).catch(err => setError(err.message)).finally(() => setBusy(false)); }, []);
   const load = async () => {
     if (!companyId) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setSelectedDocumentId(''); setSefazResult(null); setSefazError('');
     try { setReport(await accountantPortalService.revenue(companyId, from, to)); } catch (err) { setError(err instanceof Error ? err.message : 'Falha ao carregar faturamento.'); } finally { setBusy(false); }
   };
   useEffect(() => { if (companyId) void load(); }, [companyId]);
+  const consultSefaz = async () => {
+    if (!companyId || !selectedDocumentId) return;
+    setSefazBusy(true); setSefazError(''); setSefazResult(null);
+    try { setSefazResult(await accountantPortalService.sefazStatus(companyId, selectedDocumentId)); }
+    catch (err) { setSefazError(err instanceof Error ? err.message : 'Falha ao consultar a SEFAZ.'); }
+    finally { setSefazBusy(false); }
+  };
   const cards = useMemo(() => report ? [
     ['Vendas concluídas', report.totals.operationalCents, 'text-slate-900'],
     ['Notas autorizadas', report.documentTotals.authorizedDocumentCents, 'text-emerald-700'],
@@ -52,6 +63,21 @@ function RevenuePanel() {
       <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white"><div className="border-b border-amber-200 bg-amber-50 p-5"><h2 className="font-bold text-amber-950">Pedidos e notas para conferir ({report.reviewSales.length})</h2><p className="text-sm text-amber-900">Diferenças de valor ou de situação operacional exigem conferência; frete e descontos podem explicá-las. Notas emitidas neste período podem estar ligadas a pedidos de outros dias: esses pedidos aparecem aqui, mas não entram nos totais operacionais do período. Nenhum imposto é calculado ou estado é alterado aqui.</p></div><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-slate-600"><tr><th className="px-4 py-3">Canal / pedido</th><th className="px-4 py-3">Nota</th><th className="px-4 py-3 text-right">Pedido</th><th className="px-4 py-3 text-right">Nota</th><th className="px-4 py-3 text-right">Diferença</th><th className="px-4 py-3">Conferir</th></tr></thead><tbody className="divide-y divide-slate-100">{report.reviewSales.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-500">Nenhuma divergência identificada entre os pedidos e notas vinculados neste período.</td></tr>}{report.reviewSales.map(sale => <tr key={`${sale.channel}:${sale.externalSaleId}`}><td className="px-4 py-3"><span className="font-semibold">{channelLabel[sale.channel] || sale.channel}</span><br/><span className="font-mono text-xs">{sale.externalSaleId}</span></td><td className="px-4 py-3">{sale.document?.model === '65' ? 'NFC-e' : 'NF-e'} {sale.document?.number || 's/n'}</td><td className="px-4 py-3 text-right">{money(sale.totalCents)}</td><td className="px-4 py-3 text-right">{sale.documentTotalCents === undefined ? '—' : money(sale.documentTotalCents)}</td><td className="px-4 py-3 text-right font-semibold">{sale.amountDifferenceCents === undefined ? '—' : money(sale.amountDifferenceCents)}</td><td className="px-4 py-3 text-amber-900">{sale.reviewReasons?.map(reason => reviewLabel[reason] || reason).join('; ')}{sale.reviewReasons?.includes('sale_outside_period') && <p className="mt-1 text-xs">Pedido criado em {reportDate(sale.occurredAt)}</p>}{sale.statusCapturedAt && <p className="mt-1 text-xs">Status capturado em {new Date(sale.statusCapturedAt).toLocaleString('pt-BR')}</p>}</td></tr>)}</tbody></table></div></section>
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="border-b border-slate-200 p-5"><h2 className="font-bold text-slate-900">Movimentos do período</h2><p className="text-sm text-slate-500">“Pendente de conciliação” não significa venda sem nota; indica que o XML autorizado ainda não está vinculado ao sistema.</p></div><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-slate-600"><tr><th className="px-4 py-3">Data</th><th className="px-4 py-3">Canal</th><th className="px-4 py-3">Referência</th><th className="px-4 py-3">Situação fiscal</th><th className="px-4 py-3 text-right">Valor</th></tr></thead><tbody className="divide-y divide-slate-100">{report.sales.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Nenhum movimento encontrado.</td></tr>}{report.sales.map(sale => <tr key={`${sale.channel}:${sale.externalSaleId}`}><td className="whitespace-nowrap px-4 py-3">{reportDate(sale.occurredAt)}</td><td className="px-4 py-3 uppercase">{sale.channel}</td><td className="px-4 py-3 font-mono text-xs">{sale.externalSaleId}</td><td className="px-4 py-3">{fiscalLabel[sale.fiscalState] || sale.fiscalState}</td><td className="px-4 py-3 text-right font-semibold">{money(sale.totalCents)}</td></tr>)}</tbody></table></div></section>
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="border-b border-slate-200 p-5"><h2 className="font-bold text-slate-900">Notas fiscais por canal de venda</h2><p className="text-sm text-slate-500">O canal é identificado pelo número do pedido da loja na nota, quando corresponde a um pedido sincronizado da Shopee ou do TikTok. Sem correspondência única, fica pendente de identificação.</p></div><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left text-slate-600"><tr><th className="px-4 py-3">Emissão</th><th className="px-4 py-3">Canal</th><th className="px-4 py-3">Nota</th><th className="px-4 py-3">Pedido</th><th className="px-4 py-3">Situação</th><th className="px-4 py-3 text-right">Valor</th></tr></thead><tbody className="divide-y divide-slate-100">{report.documents.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Nenhuma nota importada neste período.</td></tr>}{report.documents.map((document, index) => <tr key={`${document.model}:${document.number || index}:${document.issuedAt}`}><td className="whitespace-nowrap px-4 py-3">{reportDate(document.issuedAt)}</td><td className="px-4 py-3">{channelLabel[document.channel] || 'Canal não identificado'}</td><td className="px-4 py-3">{document.model === '65' ? 'NFC-e' : 'NF-e'} {document.number || 's/n'}</td><td className="px-4 py-3 font-mono text-xs">{document.orderReference || '—'}</td><td className="px-4 py-3">{document.status === 'authorized' ? 'Autorizada' : 'Cancelada'}</td><td className="px-4 py-3 text-right font-semibold">{money(document.totalCents)}</td></tr>)}</tbody></table></div></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="font-bold text-slate-900">Consultar situação da NF-e na SEFAZ-PE</h2>
+        <p className="mt-1 text-sm text-slate-600">Consulta de protocolo em produção com o A1 da empresa. A resposta não altera a nota importada nem a classificação do pedido.</p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="min-w-64 flex-1 text-sm font-semibold">NF-e
+            <select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" value={selectedDocumentId} onChange={event => { setSelectedDocumentId(event.target.value); setSefazResult(null); setSefazError(''); }}>
+              <option value="">Selecione uma nota</option>
+              {report.documents.filter(document => document.model === '55').map(document => <option key={document.id} value={document.id}>NF-e {document.number || 's/n'} · {channelLabel[document.channel] || 'Canal não identificado'} · {reportDate(document.issuedAt)}</option>)}
+            </select>
+          </label>
+          <button type="button" onClick={() => void consultSefaz()} disabled={!selectedDocumentId || sefazBusy} className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{sefazBusy ? 'Consultando…' : 'Consultar SEFAZ'}</button>
+        </div>
+        {sefazError && <p role="alert" className="mt-3 text-sm text-red-700">{sefazError}</p>}
+        {sefazResult && <p className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-950">SEFAZ produção: {sefazResult.cStat} — {sefazResult.reason}. Consulta em {new Date(sefazResult.checkedAt).toLocaleString('pt-BR')}. Confira qualquer divergência com o contador antes de alterar a nota.</p>}
+      </section>
     </>}
   </section>;
 }
