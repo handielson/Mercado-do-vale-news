@@ -45,6 +45,9 @@ test('fila distingue pedido fora do período dos totais operacionais', () => {
   assert.match(server, /reviewSales: \[\.\.\.report\.reviewSales, \.\.\.crossPeriodSales\]/);
   assert.match(page, /não entram nos totais operacionais do período/);
   assert.match(page, /Pedido criado fora do período selecionado/);
+  assert.match(page, /const reportDate = .*timeZone: 'UTC'/);
+  assert.match(page, /Pedido criado em \{reportDate\(sale\.occurredAt\)\}/);
+  assert.match(page, /\{reportDate\(document\.issuedAt\)\}/);
 });
 
 test('migração cria concessão, documentos e conciliação isolados por perfil', () => {

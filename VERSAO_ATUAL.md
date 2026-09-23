@@ -1,9 +1,9 @@
 # Versao Atual
 
-version: v1.2.458-accountant-cross-day-reconciliation
+version: v1.2.459-accountant-period-date-display
 date: 2026-09-23
 status: ready
-release_vps: /var/www/mdv-site/releases/20260923-223154-accountant-cross-day-reconciliation
+release_vps: /var/www/mdv-site/releases/20260923-223745-accountant-period-date-display
 branch: main
-summary: Mostra pedidos de outro dia vinculados às notas do período sem alterar os totais operacionais.
-tag: v1.2.458-accountant-cross-day-reconciliation
+summary: Alinha as datas de pedidos e notas ao dia usado pelo filtro do contador.
+tag: v1.2.459-accountant-period-date-display
