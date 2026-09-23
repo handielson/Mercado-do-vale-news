@@ -547,6 +547,7 @@ async function main() {
     await upload(path.join(__dirname, file), remotePathJoin(appDir, file));
     console.log(`Uploaded ${file}`);
   }
+  await applyCompanyFiscalMigration({ appDir, apiProc });
   await upload(path.join(__dirname, 'services/customerDebtReminderCore.cjs'), remotePathJoin(appDir, 'services/customerDebtReminderCore.cjs'));
   console.log('Uploaded services/customerDebtReminderCore.cjs');
   await upload(path.join(__dirname, 'utils/installmentCalculations.cjs'), remotePathJoin(appDir, 'utils/installmentCalculations.cjs'));

@@ -50,4 +50,5 @@ test('painel, rotas, migration e deploy permanecem conectados', () => {
   assert.match(deploy, /021_company_fiscal_tax_validation\.sql/);
   assert.match(deploy, /companyFiscalServicePaths[\s\S]*services\/fiscalTaxValidationCore\.cjs/);
   assert.match(deploy, /node --check \$\{appDir\}\/services\/fiscalTaxValidationCore\.cjs/);
+  assert.ok((deploy.match(/applyCompanyFiscalMigration\(\{ appDir, apiProc \}\)/g) || []).length >= 4, 'o deploy completo também deve aplicar a migration fiscal');
 });
