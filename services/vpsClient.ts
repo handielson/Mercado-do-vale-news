@@ -137,6 +137,23 @@ export const vpsClient = {
         return handleResponse<T>(path, 'POST', res);
     },
 
+    postDownload: async (path: string, body: unknown): Promise<{ blob: Blob; filename: string }> => {
+        assertCheckpointNotBlocked(path, 'POST');
+        const res = await fetch(buildVpsUrl(path, { method: 'POST' }), {
+            method: 'POST',
+            headers: await buildHeaders(),
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+            const text = await res.text().catch(() => res.statusText);
+            const summary = summarizeErrorBody(text);
+            throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` — ${summary}` : ''}`);
+        }
+        const disposition = res.headers.get('content-disposition') || '';
+        const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'certificado.pfx';
+        return { blob: await res.blob(), filename };
+    },
+
     /**
      * PATCH /resource/:id  (body JSON)
      */

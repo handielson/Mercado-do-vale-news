@@ -42154,6 +42154,7 @@ const tiktokFulfillment = createTikTokFulfillmentAutomation({
   callApi: callTikTokShopOpenApiVps, loadSettings: loadTikTokShopOAuthSettingsVps,
 });
 require('./services/centralPrintingServer.cjs').registerCentralPrintingRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
+require('./services/companyFiscalServer.cjs').registerCompanyFiscalRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {

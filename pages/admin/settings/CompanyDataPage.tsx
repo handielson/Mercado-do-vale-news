@@ -14,7 +14,7 @@ import { Save, Loader2 } from 'lucide-react';
 import { Company, defaultCompany } from '../../../types/company';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { formatCep, searchCep } from '../../../utils/customerFormUtils';
-import { searchCNPJ, isValidCNPJ } from '../../../utils/cnpjHelper';
+import { searchCNPJ, isValidCNPJ, type ReceitaFederalData } from '../../../utils/cnpjHelper';
 import { getDocuments } from '../../../services/documentService';
 import type { CompanyDocument } from '../../../types/document';
 import { SharePaymentDataModal } from '../../../components/SharePaymentDataModal';
@@ -29,6 +29,8 @@ import { CompanyAdditionalInfoSection } from '../../../components/company/Compan
 import { CompanyDocumentsSection } from '../../../components/company/CompanyDocumentsSection';
 import { BusinessHoursPanel } from '../../../components/settings/BusinessHoursPanel';
 import { BusinessHoursTextPanel } from '../../../components/settings/BusinessHoursTextPanel';
+import { CompanyFiscalPanel } from '../../../components/company/CompanyFiscalPanel';
+import { CompanyCertificatePanel } from '../../../components/company/CompanyCertificatePanel';
 
 export const CompanyDataPage: React.FC = () => {
     const [form, setForm] = useState<Company>(defaultCompany);
@@ -39,6 +41,7 @@ export const CompanyDataPage: React.FC = () => {
     const [isLoadingDocs, setIsLoadingDocs] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [isLoadingCNPJ, setIsLoadingCNPJ] = useState(false);
+    const [consultedActivities, setConsultedActivities] = useState<Pick<ReceitaFederalData, 'atividade_principal' | 'atividades_secundarias'> | null>(null);
 
     // Load company data on mount
     useEffect(() => {
@@ -88,6 +91,7 @@ export const CompanyDataPage: React.FC = () => {
         try {
             const data = await searchCNPJ(cnpj);
             if (data) {
+                setConsultedActivities({ atividade_principal: data.atividade_principal, atividades_secundarias: data.atividades_secundarias });
                 // Format CNAE
                 const cnaeFormatted = data.atividade_principal && data.atividade_principal.length > 0
                     ? `${data.atividade_principal[0].code} - ${data.atividade_principal[0].text}`
@@ -118,6 +122,7 @@ export const CompanyDataPage: React.FC = () => {
                 toast.success('Dados da Receita Federal carregados com sucesso!');
             }
         } catch (error) {
+            setConsultedActivities(null);
             console.error('Erro ao buscar CNPJ:', error);
             toast.error('Erro ao buscar dados do CNPJ');
         } finally {
@@ -183,6 +188,7 @@ export const CompanyDataPage: React.FC = () => {
     };
 
     const handleFormChange = (updates: Partial<Company>) => {
+        if (updates.cnpj !== undefined && updates.cnpj !== form.cnpj) setConsultedActivities(null);
         setForm({ ...form, ...updates });
     };
 
@@ -228,12 +234,16 @@ export const CompanyDataPage: React.FC = () => {
                 </button>
             </div>
 
+            <CompanyFiscalPanel />
+            <CompanyCertificatePanel />
+
             {/* Section 1: Identity */}
             <CompanyIdentitySection
                 form={form}
                 onChange={handleFormChange}
                 onCNPJSearch={handleCNPJSearch}
                 isLoadingCNPJ={isLoadingCNPJ}
+                consultedActivities={consultedActivities}
                 formatPhone={formatPhone}
                 formatCNPJ={formatCNPJ}
             />

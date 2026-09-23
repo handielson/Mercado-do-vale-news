@@ -1,0 +1,2119 @@
+{
+  "collectedAt": "2026-09-22T23:18:07.046Z",
+  "source": "https://developer.bling.com.br/build/assets/openapi-BVqLYFZn.json",
+  "discovery": "https://developer.bling.com.br/referencia",
+  "schemaVersion": "3.0",
+  "sha256": "09b54989ad2665d1b4390996d74bb8332abdb1d40f416c249f19629d973a7edc",
+  "pathCount": 165,
+  "operationalPathCount": 164,
+  "pathsWithoutOperations": [
+    "/"
+  ],
+  "operationCount": 263,
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/anuncios/categorias",
+      "groups": [
+        "Anúncios - Categorias"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/anuncios/categorias/{idCategoria}",
+      "groups": [
+        "Anúncios - Categorias"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/anuncios",
+      "groups": [
+        "Anúncios"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/anuncios",
+      "groups": [
+        "Anúncios"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/anuncios/{idAnuncio}",
+      "groups": [
+        "Anúncios"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/anuncios/{idAnuncio}",
+      "groups": [
+        "Anúncios"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/anuncios/{idAnuncio}",
+      "groups": [
+        "Anúncios"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/anuncios/{idAnuncio}/publicar",
+      "groups": [
+        "Anúncios"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/anuncios/{idAnuncio}/pausar",
+      "groups": [
+        "Anúncios"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/borderos/{idBordero}",
+      "groups": [
+        "Borderôs"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/borderos/{idBordero}",
+      "groups": [
+        "Borderôs"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/campos-customizados/modulos",
+      "groups": [
+        "Campos Customizados"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/campos-customizados/tipos",
+      "groups": [
+        "Campos Customizados"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/campos-customizados/modulos/{idModulo}",
+      "groups": [
+        "Campos Customizados"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/campos-customizados/{idCampoCustomizado}",
+      "groups": [
+        "Campos Customizados"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/campos-customizados/{idCampoCustomizado}",
+      "groups": [
+        "Campos Customizados"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/campos-customizados/{idCampoCustomizado}",
+      "groups": [
+        "Campos Customizados"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/campos-customizados",
+      "groups": [
+        "Campos Customizados"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/campos-customizados/{idCampoCustomizado}/situacoes",
+      "groups": [
+        "Campos Customizados"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/categorias/lojas",
+      "groups": [
+        "Categorias - Lojas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/categorias/lojas",
+      "groups": [
+        "Categorias - Lojas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/categorias/lojas/{idCategoriaLoja}",
+      "groups": [
+        "Categorias - Lojas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/categorias/lojas/{idCategoriaLoja}",
+      "groups": [
+        "Categorias - Lojas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/categorias/lojas/{idCategoriaLoja}",
+      "groups": [
+        "Categorias - Lojas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/categorias/produtos",
+      "groups": [
+        "Categorias - Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/categorias/produtos",
+      "groups": [
+        "Categorias - Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/categorias/produtos/{idCategoriaProduto}",
+      "groups": [
+        "Categorias - Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/categorias/produtos/{idCategoriaProduto}",
+      "groups": [
+        "Categorias - Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/categorias/produtos/{idCategoriaProduto}",
+      "groups": [
+        "Categorias - Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/categorias/receitas-despesas",
+      "groups": [
+        "Categorias - Receitas e Despesas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/categorias/receitas-despesas",
+      "groups": [
+        "Categorias - Receitas e Despesas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/categorias/receitas-despesas",
+      "groups": [
+        "Categorias - Receitas e Despesas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/categorias/receitas-despesas/{idCategoria}",
+      "groups": [
+        "Categorias - Receitas e Despesas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/categorias/receitas-despesas/{idCategoria}",
+      "groups": [
+        "Categorias - Receitas e Despesas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/categorias/receitas-despesas/{idCategoria}",
+      "groups": [
+        "Categorias - Receitas e Despesas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contas-contabeis",
+      "groups": [
+        "Contas Financeiras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contas-contabeis/{idContaContabil}",
+      "groups": [
+        "Contas Financeiras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contas/receber",
+      "groups": [
+        "Contas a Receber"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/contas/receber",
+      "groups": [
+        "Contas a Receber"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contas/receber/{idContaReceber}",
+      "groups": [
+        "Contas a Receber"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/contas/receber/{idContaReceber}",
+      "groups": [
+        "Contas a Receber"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/contas/receber/{idContaReceber}",
+      "groups": [
+        "Contas a Receber"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/contas/receber/{idContaReceber}/baixar",
+      "groups": [
+        "Contas a Receber"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contas/receber/boletos",
+      "groups": [
+        "Contas a Receber"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/contas/receber/boletos/cancelar",
+      "groups": [
+        "Contas a Receber"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contatos",
+      "groups": [
+        "Contatos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/contatos",
+      "groups": [
+        "Contatos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/contatos",
+      "groups": [
+        "Contatos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contatos/{idContato}",
+      "groups": [
+        "Contatos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/contatos/{idContato}",
+      "groups": [
+        "Contatos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/contatos/{idContato}",
+      "groups": [
+        "Contatos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contatos/{idContato}/tipos",
+      "groups": [
+        "Contatos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contatos/consumidor-final",
+      "groups": [
+        "Contatos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/contatos/{idContato}/situacoes",
+      "groups": [
+        "Contatos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/contatos/situacoes",
+      "groups": [
+        "Contatos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contatos/tipos",
+      "groups": [
+        "Contatos - Tipos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contratos",
+      "groups": [
+        "Contratos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/contratos",
+      "groups": [
+        "Contratos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contratos/{idContrato}",
+      "groups": [
+        "Contratos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/contratos/{idContrato}",
+      "groups": [
+        "Contratos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/contratos/{idContrato}",
+      "groups": [
+        "Contratos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/depositos",
+      "groups": [
+        "Depósitos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/depositos",
+      "groups": [
+        "Depósitos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/depositos/{idDeposito}",
+      "groups": [
+        "Depósitos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/depositos/{idDeposito}",
+      "groups": [
+        "Depósitos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/empresas/me/dados-basicos",
+      "groups": [
+        "Empresas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/estoques/saldos/{idDeposito}",
+      "groups": [
+        "Estoques"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/estoques/saldos",
+      "groups": [
+        "Estoques"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/estoques",
+      "groups": [
+        "Estoques"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/estoques/{idEstoque}",
+      "groups": [
+        "Estoques"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/lotes",
+      "groups": [
+        "Produtos - Lotes"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/produtos/lotes",
+      "groups": [
+        "Produtos - Lotes"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/produtos/lotes",
+      "groups": [
+        "Produtos - Lotes"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/lotes/{idLote}",
+      "groups": [
+        "Produtos - Lotes"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/produtos/lotes/{idLote}",
+      "groups": [
+        "Produtos - Lotes"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/lotes/controla-lote",
+      "groups": [
+        "Produtos - Lotes"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/produtos/{idProduto}/lotes/controla-lote/desativar",
+      "groups": [
+        "Produtos - Lotes"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/produtos/lotes/{idLote}/status",
+      "groups": [
+        "Produtos - Lotes"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/lotes/{idLote}/lancamentos",
+      "groups": [
+        "Produtos - Lotes Lançamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/produtos/lotes/{idLote}/lancamentos",
+      "groups": [
+        "Produtos - Lotes Lançamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/lotes/lancamentos/{idLancamento}",
+      "groups": [
+        "Produtos - Lotes Lançamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/produtos/lotes/lancamentos/{idLancamento}",
+      "groups": [
+        "Produtos - Lotes Lançamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/{idProduto}/lotes/{idLote}/depositos/{idDeposito}/saldo",
+      "groups": [
+        "Produtos - Lotes Lançamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/{idProduto}/lotes/depositos/{idDeposito}/saldo",
+      "groups": [
+        "Produtos - Lotes Lançamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/{idProduto}/lotes/depositos/{idDeposito}/saldo/soma",
+      "groups": [
+        "Produtos - Lotes Lançamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/{idProduto}/lotes/saldo/soma",
+      "groups": [
+        "Produtos - Lotes Lançamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/formas-pagamentos",
+      "groups": [
+        "Formas de Pagamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/formas-pagamentos",
+      "groups": [
+        "Formas de Pagamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/formas-pagamentos/{idFormaPagamento}",
+      "groups": [
+        "Formas de Pagamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/formas-pagamentos/{idFormaPagamento}",
+      "groups": [
+        "Formas de Pagamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/formas-pagamentos/{idFormaPagamento}",
+      "groups": [
+        "Formas de Pagamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/formas-pagamentos/{idFormaPagamento}/padrao",
+      "groups": [
+        "Formas de Pagamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/formas-pagamentos/{idFormaPagamento}/situacao",
+      "groups": [
+        "Formas de Pagamentos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/homologacao/produtos",
+      "groups": [
+        "Homologação"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/homologacao/produtos",
+      "groups": [
+        "Homologação"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/homologacao/produtos/{idProdutoHomologacao}",
+      "groups": [
+        "Homologação"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/homologacao/produtos/{idProdutoHomologacao}",
+      "groups": [
+        "Homologação"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/homologacao/produtos/{idProdutoHomologacao}/situacoes",
+      "groups": [
+        "Homologação"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/logisticas",
+      "groups": [
+        "Logísticas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/logisticas",
+      "groups": [
+        "Logísticas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/logisticas/{idLogistica}",
+      "groups": [
+        "Logísticas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/logisticas/{idLogistica}",
+      "groups": [
+        "Logísticas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/logisticas/{idLogistica}",
+      "groups": [
+        "Logísticas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/logisticas/servicos",
+      "groups": [
+        "Logísticas - Serviços"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/logisticas/servicos",
+      "groups": [
+        "Logísticas - Serviços"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/logisticas/servicos/{idLogisticaServico}",
+      "groups": [
+        "Logísticas - Serviços"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/logisticas/servicos/{idLogisticaServico}",
+      "groups": [
+        "Logísticas - Serviços"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/logisticas/{idLogisticaServico}/situacoes",
+      "groups": [
+        "Logísticas - Serviços"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/logisticas/objetos/{idObjeto}",
+      "groups": [
+        "Logísticas - Objetos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/logisticas/objetos/{idObjeto}",
+      "groups": [
+        "Logísticas - Objetos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/logisticas/objetos/{idObjeto}",
+      "groups": [
+        "Logísticas - Objetos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/logisticas/objetos",
+      "groups": [
+        "Logísticas - Objetos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/logisticas/etiquetas",
+      "groups": [
+        "Logísticas - Etiquetas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/logisticas/remessas/{idRemessa}",
+      "groups": [
+        "Logísticas - Remessas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/logisticas/remessas/{idRemessa}",
+      "groups": [
+        "Logísticas - Remessas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/logisticas/remessas/{idRemessa}",
+      "groups": [
+        "Logísticas - Remessas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/logisticas/{idLogistica}/remessas",
+      "groups": [
+        "Logísticas - Remessas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/logisticas/remessas",
+      "groups": [
+        "Logísticas - Remessas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/naturezas-operacoes",
+      "groups": [
+        "Naturezas de Operações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/naturezas-operacoes/{idNaturezaOperacao}/obter-tributacao",
+      "groups": [
+        "Naturezas de Operações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/nfce",
+      "groups": [
+        "Notas Fiscais de Consumidor Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfce",
+      "groups": [
+        "Notas Fiscais de Consumidor Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/nfce/{idNotaFiscalConsumidor}",
+      "groups": [
+        "Notas Fiscais de Consumidor Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/nfce/{idNotaFiscalConsumidor}",
+      "groups": [
+        "Notas Fiscais de Consumidor Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfce/{idNotaFiscalConsumidor}/enviar",
+      "groups": [
+        "Notas Fiscais de Consumidor Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfce/{idNotaFiscalConsumidor}/lancar-contas",
+      "groups": [
+        "Notas Fiscais de Consumidor Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfce/{idNotaFiscalConsumidor}/estornar-contas",
+      "groups": [
+        "Notas Fiscais de Consumidor Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfce/{idNotaFiscalConsumidor}/lancar-estoque",
+      "groups": [
+        "Notas Fiscais de Consumidor Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfce/{idNotaFiscalConsumidor}/lancar-estoque/{idDeposito}",
+      "groups": [
+        "Notas Fiscais de Consumidor Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfce/{idNotaFiscalConsumidor}/estornar-estoque",
+      "groups": [
+        "Notas Fiscais de Consumidor Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/nfe",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfe",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/nfe",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/nfe/{idNotaFiscal}",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/nfe/{idNotaFiscal}",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfe/{idNotaFiscal}/enviar",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfe/{idNotaFiscal}/lancar-contas",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfe/{idNotaFiscal}/estornar-contas",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfe/{idNotaFiscal}/lancar-estoque",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfe/{idNotaFiscal}/lancar-estoque/{idDeposito}",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfe/{idNotaFiscal}/estornar-estoque",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/nfe/documento/{chaveAcesso}",
+      "groups": [
+        "Notas Fiscais Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/nfse",
+      "groups": [
+        "Notas Fiscais de Serviço Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfse",
+      "groups": [
+        "Notas Fiscais de Serviço Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/nfse/{idNotaServico}",
+      "groups": [
+        "Notas Fiscais de Serviço Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/nfse/{idNotaServico}",
+      "groups": [
+        "Notas Fiscais de Serviço Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfse/{idNotaServico}/enviar",
+      "groups": [
+        "Notas Fiscais de Serviço Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/nfse/{idNotaServico}/cancelar",
+      "groups": [
+        "Notas Fiscais de Serviço Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/nfse/configuracoes",
+      "groups": [
+        "Notas Fiscais de Serviço Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/nfse/configuracoes",
+      "groups": [
+        "Notas Fiscais de Serviço Eletrônicas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/notificacoes",
+      "groups": [
+        "Notificações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/notificacoes/{idNotificacao}/confirmar-leitura",
+      "groups": [
+        "Notificações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/notificacoes/quantidade",
+      "groups": [
+        "Notificações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/propostas-comerciais",
+      "groups": [
+        "Propostas Comerciais"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/propostas-comerciais",
+      "groups": [
+        "Propostas Comerciais"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/propostas-comerciais",
+      "groups": [
+        "Propostas Comerciais"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/propostas-comerciais/{idPropostaComercial}",
+      "groups": [
+        "Propostas Comerciais"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/propostas-comerciais/{idPropostaComercial}",
+      "groups": [
+        "Propostas Comerciais"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/propostas-comerciais/{idPropostaComercial}",
+      "groups": [
+        "Propostas Comerciais"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/propostas-comerciais/{idPropostaComercial}/situacoes",
+      "groups": [
+        "Propostas Comerciais"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/pedidos/compras",
+      "groups": [
+        "Pedidos - Compras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/compras",
+      "groups": [
+        "Pedidos - Compras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/pedidos/compras/{idPedidoCompra}",
+      "groups": [
+        "Pedidos - Compras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/pedidos/compras/{idPedidoCompra}",
+      "groups": [
+        "Pedidos - Compras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/pedidos/compras/{idPedidoCompra}",
+      "groups": [
+        "Pedidos - Compras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/pedidos/compras/{idPedidoCompra}/situacoes/{idSituacao}",
+      "groups": [
+        "Pedidos - Compras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/compras/{idPedidoCompra}/lancar-contas",
+      "groups": [
+        "Pedidos - Compras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/compras/{idPedidoCompra}/estornar-contas",
+      "groups": [
+        "Pedidos - Compras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/compras/{idPedidoCompra}/lancar-estoque",
+      "groups": [
+        "Pedidos - Compras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/compras/{idPedidoCompra}/estornar-estoque",
+      "groups": [
+        "Pedidos - Compras"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/estruturas/{idProdutoEstrutura}",
+      "groups": [
+        "Produtos - Estruturas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/produtos/estruturas/{idProdutoEstrutura}",
+      "groups": [
+        "Produtos - Estruturas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/produtos/estruturas/{idProdutoEstrutura}/componentes",
+      "groups": [
+        "Produtos - Estruturas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/produtos/estruturas/{idProdutoEstrutura}/componentes",
+      "groups": [
+        "Produtos - Estruturas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/produtos/estruturas/{idProdutoEstrutura}/componentes/{idComponente}",
+      "groups": [
+        "Produtos - Estruturas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/produtos/estruturas",
+      "groups": [
+        "Produtos - Estruturas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/fornecedores",
+      "groups": [
+        "Produtos - Fornecedores"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/produtos/fornecedores",
+      "groups": [
+        "Produtos - Fornecedores"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/fornecedores/{idProdutoFornecedor}",
+      "groups": [
+        "Produtos - Fornecedores"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/produtos/fornecedores/{idProdutoFornecedor}",
+      "groups": [
+        "Produtos - Fornecedores"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/produtos/fornecedores/{idProdutoFornecedor}",
+      "groups": [
+        "Produtos - Fornecedores"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/lojas",
+      "groups": [
+        "Produtos - Lojas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/produtos/lojas",
+      "groups": [
+        "Produtos - Lojas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/lojas/{idProdutoLoja}",
+      "groups": [
+        "Produtos - Lojas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/produtos/lojas/{idProdutoLoja}",
+      "groups": [
+        "Produtos - Lojas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/produtos/lojas/{idProdutoLoja}",
+      "groups": [
+        "Produtos - Lojas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos",
+      "groups": [
+        "Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/produtos",
+      "groups": [
+        "Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/produtos",
+      "groups": [
+        "Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/{idProduto}",
+      "groups": [
+        "Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/produtos/{idProduto}",
+      "groups": [
+        "Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/produtos/{idProduto}",
+      "groups": [
+        "Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/produtos/{idProduto}",
+      "groups": [
+        "Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/produtos/{idProduto}/situacoes",
+      "groups": [
+        "Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/produtos/situacoes",
+      "groups": [
+        "Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/produtos/variacoes/{idProdutoPai}",
+      "groups": [
+        "Produtos - Variações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/produtos/variacoes/atributos/gerar-combinacoes",
+      "groups": [
+        "Produtos - Variações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/produtos/variacoes/{idProdutoPai}/atributos",
+      "groups": [
+        "Produtos - Variações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/situacoes/modulos",
+      "groups": [
+        "Situações - Módulos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/situacoes/modulos/{idModuloSistema}",
+      "groups": [
+        "Situações - Módulos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/situacoes/modulos/{idModuloSistema}/acoes",
+      "groups": [
+        "Situações - Módulos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/situacoes/modulos/{idModuloSistema}/transicoes",
+      "groups": [
+        "Situações - Módulos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/situacoes/{idSituacao}",
+      "groups": [
+        "Situações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/situacoes/{idSituacao}",
+      "groups": [
+        "Situações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/situacoes/{idSituacao}",
+      "groups": [
+        "Situações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/situacoes",
+      "groups": [
+        "Situações"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/situacoes/transicoes/{idTransicao}",
+      "groups": [
+        "Situações - Transições"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/situacoes/transicoes/{idTransicao}",
+      "groups": [
+        "Situações - Transições"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/situacoes/transicoes/{idTransicao}",
+      "groups": [
+        "Situações - Transições"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/situacoes/transicoes",
+      "groups": [
+        "Situações - Transições"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/usuarios/recuperar-senha",
+      "groups": [
+        "Usuários"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/usuarios/redefinir-senha",
+      "groups": [
+        "Usuários"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/usuarios/verificar-hash",
+      "groups": [
+        "Usuários"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/pedidos/vendas",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/vendas",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/pedidos/vendas",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/pedidos/vendas/{idPedidoVenda}",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/pedidos/vendas/{idPedidoVenda}",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/pedidos/vendas/{idPedidoVenda}",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/pedidos/vendas/{idPedidoVenda}/situacoes/{idSituacao}",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/vendas/{idPedidoVenda}/lancar-estoque/{idDeposito}",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/vendas/{idPedidoVenda}/lancar-estoque",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/vendas/{idPedidoVenda}/estornar-estoque",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/vendas/{idPedidoVenda}/lancar-contas",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/vendas/{idPedidoVenda}/estornar-contas",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/vendas/{idPedidoVenda}/gerar-nfe",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/vendas/{idPedidoVenda}/gerar-nfce",
+      "groups": [
+        "Pedidos - Vendas"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/vendedores",
+      "groups": [
+        "Vendedores"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/vendedores/{idVendedor}",
+      "groups": [
+        "Vendedores"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contas/pagar",
+      "groups": [
+        "Contas a Pagar"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/contas/pagar",
+      "groups": [
+        "Contas a Pagar"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/contas/pagar/{idContaPagar}",
+      "groups": [
+        "Contas a Pagar"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/contas/pagar/{idContaPagar}",
+      "groups": [
+        "Contas a Pagar"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/contas/pagar/{idContaPagar}",
+      "groups": [
+        "Contas a Pagar"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/contas/pagar/{idContaPagar}/baixar",
+      "groups": [
+        "Contas a Pagar"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/canais-venda",
+      "groups": [
+        "Canais de Venda"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/canais-venda/{idCanalVenda}",
+      "groups": [
+        "Canais de Venda"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/canais-venda/tipos",
+      "groups": [
+        "Canais de Venda"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/ordens-producao",
+      "groups": [
+        "Ordens de Produção"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/ordens-producao",
+      "groups": [
+        "Ordens de Produção"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/ordens-producao/{idOrdemProducao}",
+      "groups": [
+        "Ordens de Produção"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/ordens-producao/{idOrdemProducao}",
+      "groups": [
+        "Ordens de Produção"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/ordens-producao/{idOrdemProducao}",
+      "groups": [
+        "Ordens de Produção"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/ordens-producao/{idOrdemProducao}/situacoes",
+      "groups": [
+        "Ordens de Produção"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/ordens-producao/gerar-sob-demanda",
+      "groups": [
+        "Ordens de Produção"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/ordens/servico",
+      "groups": [
+        "Ordens de Serviço"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/ordens/servico",
+      "groups": [
+        "Ordens de Serviço"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/ordens/servico/{idOrdemServico}",
+      "groups": [
+        "Ordens de Serviço"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/ordens/servico/{idOrdemServico}",
+      "groups": [
+        "Ordens de Serviço"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/ordens/servico/{idOrdemServico}",
+      "groups": [
+        "Ordens de Serviço"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/ordens/servico/{idOrdemServico}/situacoes/{idSituacao}",
+      "groups": [
+        "Ordens de Serviço"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/grupos-produtos",
+      "groups": [
+        "Grupos de Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/grupos-produtos",
+      "groups": [
+        "Grupos de Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/grupos-produtos",
+      "groups": [
+        "Grupos de Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/grupos-produtos/{idGrupoProduto}",
+      "groups": [
+        "Grupos de Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/grupos-produtos/{idGrupoProduto}",
+      "groups": [
+        "Grupos de Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/grupos-produtos/{idGrupoProduto}",
+      "groups": [
+        "Grupos de Produtos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/caixas",
+      "groups": [
+        "Caixas e Bancos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/caixas",
+      "groups": [
+        "Caixas e Bancos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/caixas/{idCaixa}",
+      "groups": [
+        "Caixas e Bancos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "PUT",
+      "path": "/caixas/{idCaixa}",
+      "groups": [
+        "Caixas e Bancos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/caixas/{idCaixa}",
+      "groups": [
+        "Caixas e Bancos"
+      ],
+      "deprecated": false
+    },
+    {
+      "method": "GET",
+      "path": "/documentos-compartilhados/{token}",
+      "groups": [
+        "Documentos Compartilhados"
+      ],
+      "deprecated": false
+    }
+  ]
+}

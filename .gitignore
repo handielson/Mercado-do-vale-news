@@ -19,6 +19,8 @@ build/
 .env.production.local
 
 # Service-account private keys
+*.pfx
+*.p12
 *firebase-adminsdk*.json
 firebase-service-account*.json
 android/totem-pix/keystore.properties

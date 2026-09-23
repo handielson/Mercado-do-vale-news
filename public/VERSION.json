@@ -1,20 +1,27 @@
 {
-  "version": "v1.2.426-catalog-spacing",
+  "version": "v1.2.427-certificado-fiscal-sefaz",
   "date": "2026-09-22",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260922-180500-v126-catalog-spacing",
+  "status": "ready",
+  "release_vps": "/var/www/mdv-site/releases/20260922-232207-v12427-certificado-fiscal-sefaz",
   "branch": "main",
-  "summary": "Compartilhamento de catálogo filtrado com separadores entre produtos e espaçamento compacto.",
-  "tag": "v1.2.426-catalog-spacing",
+  "summary": "Gestão segura do certificado A1 pelo painel e consulta autenticada de status da SEFAZ-PE.",
+  "tag": "v1.2.427-certificado-fiscal-sefaz",
   "changed_files": [
-    "utils/catalogMessageGenerator.ts",
-    "tmp-tests/catalog-share-spacing-static.test.mjs",
-    "public/VERSION.json",
-    "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-22-v1.2.426-catalog-spacing.md"
+    "components/company/CompanyCertificatePanel.tsx",
+    "services/fiscalCertificateVault.cjs",
+    "services/companyFiscalServer.cjs",
+    "services/companyFiscalService.ts",
+    "migrations/020_company_fiscal_profiles.sql",
+    "deploy-vps-server-only.cjs",
+    "public/help/certificado-digital-a1.html",
+    "public/help/certificado-digital-a1.mp4"
   ],
   "validations": [
-    "node tmp-tests/catalog-share-spacing-static.test.mjs",
-    "npm.cmd run build"
+    "npm run test:company-fiscal (19/19)",
+    "npm run test:company-fiscal:mysql (1/1)",
+    "npm run test:company-fiscal:browser (1/1)",
+    "npm run build",
+    "node --check services/fiscalCertificateVault.cjs",
+    "node --check services/companyFiscalServer.cjs"
   ]
 }

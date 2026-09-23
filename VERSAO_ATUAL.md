@@ -1,9 +1,9 @@
-# Versao Atual
+# Versão Atual
 
-version: v1.2.426-catalog-spacing
+version: v1.2.427-certificado-fiscal-sefaz
 date: 2026-09-22
-status: published
-release_vps: /var/www/mdv-site/releases/20260922-180500-v126-catalog-spacing
+status: ready
+release_vps: /var/www/mdv-site/releases/20260922-232207-v12427-certificado-fiscal-sefaz
 branch: main
-summary: Compartilhamento de catálogo filtrado com separadores entre produtos e espaçamento compacto.
-tag: v1.2.426-catalog-spacing
+summary: Gestão segura do certificado A1 pelo painel e consulta autenticada de status da SEFAZ-PE.
+tag: v1.2.427-certificado-fiscal-sefaz

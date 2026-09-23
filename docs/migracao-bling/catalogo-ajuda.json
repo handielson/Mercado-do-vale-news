@@ -1,0 +1,2560 @@
+{
+  "collectedAt": "2026-09-22T23:18:07.046Z",
+  "source": "https://ajuda.bling.com.br/hc/pt-br",
+  "coverage": "All categories and sections returned by the public API; not all articles or account features. Names and URLs only, no article bodies.",
+  "categories": [
+    {
+      "id": 360004485654,
+      "name": "Dúvidas Comerciais",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360004485654-D%C3%BAvidas-Comerciais"
+    },
+    {
+      "id": 360002186274,
+      "name": "Primeiros Passos",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002186274-Primeiros-Passos"
+    },
+    {
+      "id": 6656835250711,
+      "name": "Implantação Top Especialista",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/6656835250711-Implanta%C3%A7%C3%A3o-Top-Especialista"
+    },
+    {
+      "id": 40765433999127,
+      "name": "Inteligência Artificial",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/40765433999127-Intelig%C3%AAncia-Artificial"
+    },
+    {
+      "id": 360002199393,
+      "name": "Cadastros",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002199393-Cadastros"
+    },
+    {
+      "id": 360002199433,
+      "name": "Estoque",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002199433-Estoque"
+    },
+    {
+      "id": 40323812535191,
+      "name": "Multiempresas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/40323812535191-Multiempresas"
+    },
+    {
+      "id": 360002199453,
+      "name": "Vendas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002199453-Vendas"
+    },
+    {
+      "id": 360002199413,
+      "name": "Notas Fiscais",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002199413-Notas-Fiscais"
+    },
+    {
+      "id": 360002186334,
+      "name": "Financeiro",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002186334-Financeiro"
+    },
+    {
+      "id": 36384679511191,
+      "name": "Bling Loja Virtual",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/36384679511191-Bling-Loja-Virtual"
+    },
+    {
+      "id": 360002186374,
+      "name": "Integrações",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002186374-Integra%C3%A7%C3%B5es"
+    },
+    {
+      "id": 36569975319319,
+      "name": "Gestão de Anúncios",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/36569975319319-Gest%C3%A3o-de-An%C3%BAncios"
+    },
+    {
+      "id": 360002349373,
+      "name": "Logística",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002349373-Log%C3%ADstica"
+    },
+    {
+      "id": 37646974889623,
+      "name": "Bling Envios",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/37646974889623-Bling-Envios"
+    },
+    {
+      "id": 26616103231895,
+      "name": "Dashboard Meu Negócio",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/26616103231895-Dashboard-Meu-Neg%C3%B3cio"
+    },
+    {
+      "id": 360002186354,
+      "name": "Sistema",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002186354-Sistema"
+    },
+    {
+      "id": 360002199473,
+      "name": "Serviços",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002199473-Servi%C3%A7os"
+    },
+    {
+      "id": 360002186394,
+      "name": "API Bling",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360002186394-API-Bling"
+    },
+    {
+      "id": 360004139214,
+      "name": "Programa de Parceiros",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360004139214-Programa-de-Parceiros"
+    },
+    {
+      "id": 360005933353,
+      "name": "Contabilidade",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/360005933353-Contabilidade"
+    },
+    {
+      "id": 8864522791191,
+      "name": "Atualizações",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/8864522791191-Atualiza%C3%A7%C3%B5es"
+    },
+    {
+      "id": 10217658976151,
+      "name": "Soluções rápidas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/categories/10217658976151-Solu%C3%A7%C3%B5es-r%C3%A1pidas"
+    }
+  ],
+  "sections": [
+    {
+      "id": 43484071952919,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 354 - 16/09/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/43484071952919-Vers%C3%A3o-354-16-09-2026"
+    },
+    {
+      "id": 43066071468183,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 353 - 02/09/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/43066071468183-Vers%C3%A3o-353-02-09-2026"
+    },
+    {
+      "id": 42783895945495,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 352 - 19/08/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/42783895945495-Vers%C3%A3o-352-19-08-2026"
+    },
+    {
+      "id": 42365280765591,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 351 - 05/08/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/42365280765591-Vers%C3%A3o-351-05-08-2026"
+    },
+    {
+      "id": 42014565129879,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 350 - 22/07/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/42014565129879-Vers%C3%A3o-350-22-07-2026"
+    },
+    {
+      "id": 41709783045143,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 349 - 08/07/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/41709783045143-Vers%C3%A3o-349-08-07-2026"
+    },
+    {
+      "id": 41445438130071,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 348 - 23/06/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/41445438130071-Vers%C3%A3o-348-23-06-2026"
+    },
+    {
+      "id": 41055271853207,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 347 - 10/06/2026 ",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/41055271853207-Vers%C3%A3o-347-10-06-2026"
+    },
+    {
+      "id": 40765473101591,
+      "categoryId": 40765433999127,
+      "parentSectionId": null,
+      "name": "Assistente de IA",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/40765473101591-Assistente-de-IA"
+    },
+    {
+      "id": 40736872532247,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 346 - 27/05/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/40736872532247-Vers%C3%A3o-346-27-05-2026"
+    },
+    {
+      "id": 40452052405399,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 345 - 13/05/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/40452052405399-Vers%C3%A3o-345-13-05-2026"
+    },
+    {
+      "id": 40324061374103,
+      "categoryId": 40323812535191,
+      "parentSectionId": null,
+      "name": "Multiempresas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/40324061374103-Multiempresas"
+    },
+    {
+      "id": 40124336048151,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 344 - 29/04/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/40124336048151-Vers%C3%A3o-344-29-04-2026"
+    },
+    {
+      "id": 39791318033431,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 343 - 15/04/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/39791318033431-Vers%C3%A3o-343-15-04-2026"
+    },
+    {
+      "id": 39441345678999,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 342 - 31/03/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/39441345678999-Vers%C3%A3o-342-31-03-2026"
+    },
+    {
+      "id": 39096905261975,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 341 - 18/03/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/39096905261975-Vers%C3%A3o-341-18-03-2026"
+    },
+    {
+      "id": 38781561244055,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 340 - 04/03/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/38781561244055-Vers%C3%A3o-340-04-03-2026"
+    },
+    {
+      "id": 38225912913431,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 339 - 11/02/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/38225912913431-Vers%C3%A3o-339-11-02-2026"
+    },
+    {
+      "id": 38014372283287,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 338 - 28/01/2026 ",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/38014372283287-Vers%C3%A3o-338-28-01-2026"
+    },
+    {
+      "id": 37688925114647,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 337 - 14/01/2026",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/37688925114647-Vers%C3%A3o-337-14-01-2026"
+    },
+    {
+      "id": 37057607480855,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 336 - 16/12/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/37057607480855-Vers%C3%A3o-336-16-12-2025"
+    },
+    {
+      "id": 36570007743639,
+      "categoryId": 36569975319319,
+      "parentSectionId": null,
+      "name": "Gestão de anúncio - Mercado Livre",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/36570007743639-Gest%C3%A3o-de-an%C3%BAncio-Mercado-Livre"
+    },
+    {
+      "id": 36564266094999,
+      "categoryId": 36384679511191,
+      "parentSectionId": null,
+      "name": "Bling Loja Virtual",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/36564266094999-Bling-Loja-Virtual"
+    },
+    {
+      "id": 36438954164759,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 335 - 18/11/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/36438954164759-Vers%C3%A3o-335-18-11-2025"
+    },
+    {
+      "id": 35805758450455,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 334 - 29/10/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/35805758450455-Vers%C3%A3o-334-29-10-2025"
+    },
+    {
+      "id": 35549324759575,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 333 - 15/10/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/35549324759575-Vers%C3%A3o-333-15-10-2025"
+    },
+    {
+      "id": 35221214735767,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 332 - 01/10/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/35221214735767-Vers%C3%A3o-332-01-10-2025"
+    },
+    {
+      "id": 34869882524439,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 331 - 17/09/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/34869882524439-Vers%C3%A3o-331-17-09-2025"
+    },
+    {
+      "id": 34845515211287,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com integrações e logísticas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/34845515211287-Ajuda-com-integra%C3%A7%C3%B5es-e-log%C3%ADsticas"
+    },
+    {
+      "id": 34691876281111,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 330 - 03/09/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/34691876281111-Vers%C3%A3o-330-03-09-2025"
+    },
+    {
+      "id": 34188525210775,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 329 - 20/08/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/34188525210775-Vers%C3%A3o-329-20-08-2025"
+    },
+    {
+      "id": 33772751083799,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 328 - 06/08/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/33772751083799-Vers%C3%A3o-328-06-08-2025"
+    },
+    {
+      "id": 33662700145815,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 327 - 23/07/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/33662700145815-Vers%C3%A3o-327-23-07-2025"
+    },
+    {
+      "id": 33293722173847,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 326 - 09/07/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/33293722173847-Vers%C3%A3o-326-09-07-2025"
+    },
+    {
+      "id": 33024353671063,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 325 - 25/06/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/33024353671063-Vers%C3%A3o-325-25-06-2025"
+    },
+    {
+      "id": 32532829868567,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 324 - 11/06/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/32532829868567-Vers%C3%A3o-324-11-06-2025"
+    },
+    {
+      "id": 32277396606231,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 323 - 28/05/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/32277396606231-Vers%C3%A3o-323-28-05-2025"
+    },
+    {
+      "id": 31942712792215,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 322 - 14/05/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/31942712792215-Vers%C3%A3o-322-14-05-2025"
+    },
+    {
+      "id": 31752414868119,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 321 - 29/04/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/31752414868119-Vers%C3%A3o-321-29-04-2025"
+    },
+    {
+      "id": 31452242165271,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 320 - 16/04/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/31452242165271-Vers%C3%A3o-320-16-04-2025"
+    },
+    {
+      "id": 31079451290263,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 319 - 02/04/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/31079451290263-Vers%C3%A3o-319-02-04-2025"
+    },
+    {
+      "id": 30730248028183,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 318 - 19/03/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/30730248028183-Vers%C3%A3o-318-19-03-2025"
+    },
+    {
+      "id": 29903934831383,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 316 - 19/02/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/29903934831383-Vers%C3%A3o-316-19-02-2025"
+    },
+    {
+      "id": 28629545686807,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 314 - 22/01/2025",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/28629545686807-Vers%C3%A3o-314-22-01-2025"
+    },
+    {
+      "id": 28246103070871,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 313 - 19/12/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/28246103070871-Vers%C3%A3o-313-19-12-2024"
+    },
+    {
+      "id": 27281545493399,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 312 - 30/10/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/27281545493399-Vers%C3%A3o-312-30-10-2024"
+    },
+    {
+      "id": 26926179047063,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 311 - 16/10/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/26926179047063-Vers%C3%A3o-311-16-10-2024"
+    },
+    {
+      "id": 26822201747351,
+      "categoryId": 26616103231895,
+      "parentSectionId": null,
+      "name": "Dashboard Meu Negócio",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/26822201747351-Dashboard-Meu-Neg%C3%B3cio"
+    },
+    {
+      "id": 26760478576023,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 310 - 02/09/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/26760478576023-Vers%C3%A3o-310-02-09-2024"
+    },
+    {
+      "id": 26324495319319,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 309 - 18/09/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/26324495319319-Vers%C3%A3o-309-18-09-2024"
+    },
+    {
+      "id": 25916536777111,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 308 - 04/09/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/25916536777111-Vers%C3%A3o-308-04-09-2024"
+    },
+    {
+      "id": 25414673763863,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 307 - 21/08/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/25414673763863-Vers%C3%A3o-307-21-08-2024"
+    },
+    {
+      "id": 25282440764055,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 306 - 07/08/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/25282440764055-Vers%C3%A3o-306-07-08-2024"
+    },
+    {
+      "id": 25111368386583,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 305 - 24/07/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/25111368386583-Vers%C3%A3o-305-24-07-2024"
+    },
+    {
+      "id": 24594542776215,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 304 - 03/07/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/24594542776215-Vers%C3%A3o-304-03-07-2024"
+    },
+    {
+      "id": 24178930849943,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 303 - 19/06/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/24178930849943-Vers%C3%A3o-303-19-06-2024"
+    },
+    {
+      "id": 23899532116119,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 302 - 05/06/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/23899532116119-Vers%C3%A3o-302-05-06-2024"
+    },
+    {
+      "id": 23633973917975,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 301 - 22/05/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/23633973917975-Vers%C3%A3o-301-22-05-2024"
+    },
+    {
+      "id": 23290814240407,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 300 - 08/05/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/23290814240407-Vers%C3%A3o-300-08-05-2024"
+    },
+    {
+      "id": 22760281358231,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 299 - 25/04/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/22760281358231-Vers%C3%A3o-299-25-04-2024"
+    },
+    {
+      "id": 15852604888983,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com pedidos de venda",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/15852604888983-Ajuda-com-pedidos-de-venda"
+    },
+    {
+      "id": 15852585953943,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com cadastro de produtos",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/15852585953943-Ajuda-com-cadastro-de-produtos"
+    },
+    {
+      "id": 13494441736343,
+      "categoryId": 10217658976151,
+      "parentSectionId": 11629896061463,
+      "name": "Ajuda com o Melhor Envio",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/13494441736343-Ajuda-com-o-Melhor-Envio"
+    },
+    {
+      "id": 12146713223831,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com importação de planilhas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/12146713223831-Ajuda-com-importa%C3%A7%C3%A3o-de-planilhas"
+    },
+    {
+      "id": 10448060485015,
+      "categoryId": 360002186274,
+      "parentSectionId": null,
+      "name": "Seus primeiros dias no Bling ",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/10448060485015-Seus-primeiros-dias-no-Bling"
+    },
+    {
+      "id": 6764777011863,
+      "categoryId": 6656835250711,
+      "parentSectionId": null,
+      "name": "Implantação Top Especialista",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/6764777011863-Implanta%C3%A7%C3%A3o-Top-Especialista"
+    },
+    {
+      "id": 4410320825751,
+      "categoryId": 37646974889623,
+      "parentSectionId": null,
+      "name": "Logística Bling Envios",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410320825751-Log%C3%ADstica-Bling-Envios"
+    },
+    {
+      "id": 1500002456281,
+      "categoryId": 360002186394,
+      "parentSectionId": null,
+      "name": "Orientações de uso geral da API",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/1500002456281-Orienta%C3%A7%C3%B5es-de-uso-geral-da-API"
+    },
+    {
+      "id": 360012097633,
+      "categoryId": 360005933353,
+      "parentSectionId": null,
+      "name": "Espaço Meu Contador",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360012097633-Espa%C3%A7o-Meu-Contador"
+    },
+    {
+      "id": 360009713274,
+      "categoryId": 360004485654,
+      "parentSectionId": null,
+      "name": "Dúvidas Frequentes",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009713274-D%C3%BAvidas-Frequentes"
+    },
+    {
+      "id": 360009064634,
+      "categoryId": 360004139214,
+      "parentSectionId": null,
+      "name": "Programa de parceiros",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009064634-Programa-de-parceiros"
+    },
+    {
+      "id": 360008800854,
+      "categoryId": 360002199453,
+      "parentSectionId": null,
+      "name": "Loja Física",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008800854-Loja-F%C3%ADsica"
+    },
+    {
+      "id": 360006958333,
+      "categoryId": 360002186334,
+      "parentSectionId": null,
+      "name": "Bling Conta Digital",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006958333-Bling-Conta-Digital"
+    },
+    {
+      "id": 360005722333,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Ações de Lojas Virtuais",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005722333-A%C3%A7%C3%B5es-de-Lojas-Virtuais"
+    },
+    {
+      "id": 360005600173,
+      "categoryId": 360002199473,
+      "parentSectionId": null,
+      "name": "Ordem de Serviço",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005600173-Ordem-de-Servi%C3%A7o"
+    },
+    {
+      "id": 360005580353,
+      "categoryId": 360002199433,
+      "parentSectionId": null,
+      "name": "Controle de Estoque",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005580353-Controle-de-Estoque"
+    },
+    {
+      "id": 360005563393,
+      "categoryId": 360002186354,
+      "parentSectionId": null,
+      "name": "Minha conta",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005563393-Minha-conta"
+    },
+    {
+      "id": 360005500754,
+      "categoryId": 360002199393,
+      "parentSectionId": null,
+      "name": "Produtos",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005500754-Produtos"
+    },
+    {
+      "id": 360005265154,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Ações da Nota Fiscal",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005265154-A%C3%A7%C3%B5es-da-Nota-Fiscal"
+    },
+    {
+      "id": 41817468214807,
+      "categoryId": 40323812535191,
+      "parentSectionId": null,
+      "name": "FAQ - Multiempresas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/41817468214807-FAQ-Multiempresas"
+    },
+    {
+      "id": 38225039771159,
+      "categoryId": 360002186354,
+      "parentSectionId": null,
+      "name": "Segurança de Dados",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/38225039771159-Seguran%C3%A7a-de-Dados"
+    },
+    {
+      "id": 37674386395671,
+      "categoryId": 37646974889623,
+      "parentSectionId": null,
+      "name": "APP - Bling Envios",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/37674386395671-APP-Bling-Envios"
+    },
+    {
+      "id": 22655411316759,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 298 - 10/04/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/22655411316759-Vers%C3%A3o-298-10-04-2024"
+    },
+    {
+      "id": 11629110175127,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com o Mercado Livre",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629110175127-Ajuda-com-o-Mercado-Livre"
+    },
+    {
+      "id": 360010584774,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Certificado Digital",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360010584774-Certificado-Digital"
+    },
+    {
+      "id": 360009158994,
+      "categoryId": 360002199433,
+      "parentSectionId": null,
+      "name": "Conferência de Estoque",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009158994-Confer%C3%AAncia-de-Estoque"
+    },
+    {
+      "id": 360006578253,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Mercado Livre",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006578253-Mercado-Livre"
+    },
+    {
+      "id": 360005625574,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Correios",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005625574-Log%C3%ADstica-Correios"
+    },
+    {
+      "id": 360005600153,
+      "categoryId": 360002199473,
+      "parentSectionId": null,
+      "name": "Nota Fiscal de Serviço",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005600153-Nota-Fiscal-de-Servi%C3%A7o"
+    },
+    {
+      "id": 360005577073,
+      "categoryId": 360002199453,
+      "parentSectionId": null,
+      "name": "Frente de Caixa",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005577073-Frente-de-Caixa"
+    },
+    {
+      "id": 360005500814,
+      "categoryId": 360002199393,
+      "parentSectionId": null,
+      "name": "Contatos",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005500814-Contatos"
+    },
+    {
+      "id": 360005254834,
+      "categoryId": 360002186274,
+      "parentSectionId": null,
+      "name": "Treinamentos",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005254834-Treinamentos"
+    },
+    {
+      "id": 37664918184855,
+      "categoryId": 37646974889623,
+      "parentSectionId": null,
+      "name": "FAQ - Bling Envios",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/37664918184855-FAQ-Bling-Envios"
+    },
+    {
+      "id": 37029115632919,
+      "categoryId": 360002199433,
+      "parentSectionId": null,
+      "name": "Check-in de recebimentos",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/37029115632919-Check-in-de-recebimentos"
+    },
+    {
+      "id": 22313416878487,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 297 - 27/03/2024 ",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/22313416878487-Vers%C3%A3o-297-27-03-2024"
+    },
+    {
+      "id": 11629957001751,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Amazon",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629957001751-Ajuda-com-a-Amazon"
+    },
+    {
+      "id": 10448303628567,
+      "categoryId": 360002186274,
+      "parentSectionId": null,
+      "name": "Traga sua loja física para o Bling",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/10448303628567-Traga-sua-loja-f%C3%ADsica-para-o-Bling"
+    },
+    {
+      "id": 4410817555863,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Correios Log+ (efulfillment)",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410817555863-Log%C3%ADstica-Correios-Log-efulfillment"
+    },
+    {
+      "id": 360012742533,
+      "categoryId": 360002186334,
+      "parentSectionId": null,
+      "name": "PIX do Bling",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360012742533-PIX-do-Bling"
+    },
+    {
+      "id": 360010654234,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Shopee",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360010654234-Shopee"
+    },
+    {
+      "id": 360008165054,
+      "categoryId": 360002199393,
+      "parentSectionId": null,
+      "name": "Categoria",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008165054-Categoria"
+    },
+    {
+      "id": 360005888193,
+      "categoryId": 360002199473,
+      "parentSectionId": null,
+      "name": "Contratos",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005888193-Contratos"
+    },
+    {
+      "id": 360005576393,
+      "categoryId": 360002199453,
+      "parentSectionId": null,
+      "name": "Pedido de Venda",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005576393-Pedido-de-Venda"
+    },
+    {
+      "id": 360005536614,
+      "categoryId": 360002186354,
+      "parentSectionId": null,
+      "name": "Armazenamento",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005536614-Armazenamento"
+    },
+    {
+      "id": 360005521093,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Campos Detalhados da Nota",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005521093-Campos-Detalhados-da-Nota"
+    },
+    {
+      "id": 32482661841047,
+      "categoryId": 360002199433,
+      "parentSectionId": null,
+      "name": "Controle de Lote",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/32482661841047-Controle-de-Lote"
+    },
+    {
+      "id": 21970583437079,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 296 - 13/03/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/21970583437079-Vers%C3%A3o-296-13-03-2024"
+    },
+    {
+      "id": 11629978864023,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Shopee",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629978864023-Ajuda-com-a-Shopee"
+    },
+    {
+      "id": 10448277536919,
+      "categoryId": 360002186274,
+      "parentSectionId": null,
+      "name": "Gestão e Automações",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/10448277536919-Gest%C3%A3o-e-Automa%C3%A7%C3%B5es"
+    },
+    {
+      "id": 4413649838615,
+      "categoryId": 360002186334,
+      "parentSectionId": null,
+      "name": "Link de Pagamento",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4413649838615-Link-de-Pagamento"
+    },
+    {
+      "id": 4410814423575,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Americanas Entrega",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410814423575-Log%C3%ADstica-Americanas-Entrega"
+    },
+    {
+      "id": 360007349994,
+      "categoryId": 360002199473,
+      "parentSectionId": null,
+      "name": "Conhecimento de Transporte - CT-e",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007349994-Conhecimento-de-Transporte-CT-e"
+    },
+    {
+      "id": 360006832874,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Notas de Devolução",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006832874-Notas-de-Devolu%C3%A7%C3%A3o"
+    },
+    {
+      "id": 360006765293,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Amazon",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006765293-Amazon"
+    },
+    {
+      "id": 360005744313,
+      "categoryId": 360002199453,
+      "parentSectionId": null,
+      "name": "Proposta Comercial",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005744313-Proposta-Comercial"
+    },
+    {
+      "id": 360005635254,
+      "categoryId": 360002199393,
+      "parentSectionId": null,
+      "name": "Vendedores",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005635254-Vendedores"
+    },
+    {
+      "id": 360005537914,
+      "categoryId": 360002186354,
+      "parentSectionId": null,
+      "name": "Sistema",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005537914-Sistema"
+    },
+    {
+      "id": 21619526795671,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 295 - 28/02/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/21619526795671-Vers%C3%A3o-295-28-02-2024"
+    },
+    {
+      "id": 20973505376023,
+      "categoryId": 360002199393,
+      "parentSectionId": null,
+      "name": "Funcionários",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/20973505376023-Funcion%C3%A1rios"
+    },
+    {
+      "id": 14356518878615,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com os Correios",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/14356518878615-Ajuda-com-os-Correios"
+    },
+    {
+      "id": 4411994127255,
+      "categoryId": 360002186354,
+      "parentSectionId": null,
+      "name": "Gerenciador de Transição",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4411994127255-Gerenciador-de-Transi%C3%A7%C3%A3o"
+    },
+    {
+      "id": 4411293104407,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Americanas Entrega na Loja",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4411293104407-Log%C3%ADstica-Americanas-Entrega-na-Loja"
+    },
+    {
+      "id": 360008169834,
+      "categoryId": 360002199453,
+      "parentSectionId": null,
+      "name": "Checkout de pedidos de venda",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008169834-Checkout-de-pedidos-de-venda"
+    },
+    {
+      "id": 360006895353,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": " Americanas Marketplace",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006895353--Americanas-Marketplace"
+    },
+    {
+      "id": 360006294273,
+      "categoryId": 360002199433,
+      "parentSectionId": null,
+      "name": "Pedido de Compra",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006294273-Pedido-de-Compra"
+    },
+    {
+      "id": 360005552754,
+      "categoryId": 360002186334,
+      "parentSectionId": null,
+      "name": "Formas de Pagamento",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005552754-Formas-de-Pagamento"
+    },
+    {
+      "id": 360005538734,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Nota Fiscal de Consumidor (NFC-e)",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005538734-Nota-Fiscal-de-Consumidor-NFC-e"
+    },
+    {
+      "id": 33541208851735,
+      "categoryId": 360002199453,
+      "parentSectionId": null,
+      "name": "Maquina de cartão POS",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/33541208851735-Maquina-de-cart%C3%A3o-POS"
+    },
+    {
+      "id": 21859861053207,
+      "categoryId": 360002199433,
+      "parentSectionId": null,
+      "name": "Gestão de Compras",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/21859861053207-Gest%C3%A3o-de-Compras"
+    },
+    {
+      "id": 21343869736855,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 294 - 14/02/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/21343869736855-Vers%C3%A3o-294-14-02-2024"
+    },
+    {
+      "id": 11629676011799,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com o Aliexpress",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629676011799-Ajuda-com-o-Aliexpress"
+    },
+    {
+      "id": 9137940394903,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Amazon DBA",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/9137940394903-Log%C3%ADstica-Amazon-DBA"
+    },
+    {
+      "id": 7950790893207,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Shein",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/7950790893207-Shein"
+    },
+    {
+      "id": 360009803533,
+      "categoryId": 360002199393,
+      "parentSectionId": null,
+      "name": "Lista de Preços",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009803533-Lista-de-Pre%C3%A7os"
+    },
+    {
+      "id": 360006869113,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Notas Complementares",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006869113-Notas-Complementares"
+    },
+    {
+      "id": 360006465834,
+      "categoryId": 360002186354,
+      "parentSectionId": null,
+      "name": "Campos Customizados",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006465834-Campos-Customizados"
+    },
+    {
+      "id": 360005598253,
+      "categoryId": 360002186334,
+      "parentSectionId": null,
+      "name": "Gerenciamento de contas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005598253-Gerenciamento-de-contas"
+    },
+    {
+      "id": 36494209749015,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Nuvemshop",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/36494209749015-Log%C3%ADstica-Nuvemshop"
+    },
+    {
+      "id": 20949777010455,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 293 - 31/01/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/20949777010455-Vers%C3%A3o-293-31-01-2024"
+    },
+    {
+      "id": 11629976562839,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Magazine Luiza",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629976562839-Ajuda-com-a-Magazine-Luiza"
+    },
+    {
+      "id": 360009445793,
+      "categoryId": 360002186334,
+      "parentSectionId": null,
+      "name": "Conciliação Bancária",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009445793-Concilia%C3%A7%C3%A3o-Banc%C3%A1ria"
+    },
+    {
+      "id": 360009245753,
+      "categoryId": 360002199433,
+      "parentSectionId": null,
+      "name": "Ordem de Produção",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009245753-Ordem-de-Produ%C3%A7%C3%A3o"
+    },
+    {
+      "id": 360007753393,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Casas Bahia Marketplace",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007753393-Casas-Bahia-Marketplace"
+    },
+    {
+      "id": 360005876033,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Outros tipos de notas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005876033-Outros-tipos-de-notas"
+    },
+    {
+      "id": 360005657313,
+      "categoryId": 360002186354,
+      "parentSectionId": null,
+      "name": "Relatórios",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005657313-Relat%C3%B3rios"
+    },
+    {
+      "id": 31593913406487,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística TikTok Shop",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/31593913406487-Log%C3%ADstica-TikTok-Shop"
+    },
+    {
+      "id": 28527584801943,
+      "categoryId": 360002186354,
+      "parentSectionId": null,
+      "name": "Suporte Bling",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/28527584801943-Suporte-Bling"
+    },
+    {
+      "id": 23151582820119,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "GNRE",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/23151582820119-GNRE"
+    },
+    {
+      "id": 20581636700951,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 292 - 17/01/2024",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/20581636700951-Vers%C3%A3o-292-17-01-2024"
+    },
+    {
+      "id": 19616955473303,
+      "categoryId": 360002186334,
+      "parentSectionId": null,
+      "name": "Conciliação com POS da Vindi",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/19616955473303-Concilia%C3%A7%C3%A3o-com-POS-da-Vindi"
+    },
+    {
+      "id": 11629996390551,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Americanas Marketplace",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629996390551-Ajuda-com-a-Americanas-Marketplace"
+    },
+    {
+      "id": 360007891013,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Magazine Luiza",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007891013-Magazine-Luiza"
+    },
+    {
+      "id": 35039683351447,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Temu",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/35039683351447-Log%C3%ADstica-Temu"
+    },
+    {
+      "id": 19773354655255,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 291 - 13/12/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/19773354655255-Vers%C3%A3o-291-13-12-2023"
+    },
+    {
+      "id": 11630883842967,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Via Marketplace",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11630883842967-Ajuda-com-a-Via-Marketplace"
+    },
+    {
+      "id": 360008037033,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Tray",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008037033-Tray"
+    },
+    {
+      "id": 360006920394,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "PDV / SAT ",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006920394-PDV-SAT"
+    },
+    {
+      "id": 360005612174,
+      "categoryId": 360002186334,
+      "parentSectionId": null,
+      "name": "Boletos",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005612174-Boletos"
+    },
+    {
+      "id": 18665072215319,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 290 - 31/10/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/18665072215319-Vers%C3%A3o-290-31-10-2023"
+    },
+    {
+      "id": 11629896061463,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Olist",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629896061463-Ajuda-com-a-Olist"
+    },
+    {
+      "id": 4558261615255,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística AliExpress",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4558261615255-Log%C3%ADstica-AliExpress"
+    },
+    {
+      "id": 1500001495702,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "SPED",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/1500001495702-SPED"
+    },
+    {
+      "id": 360008037013,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Loja Integrada",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008037013-Loja-Integrada"
+    },
+    {
+      "id": 360006094654,
+      "categoryId": 360002186334,
+      "parentSectionId": null,
+      "name": "Relatórios Financeiros",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006094654-Relat%C3%B3rios-Financeiros"
+    },
+    {
+      "id": 18299707578519,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 289 - 18/10/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/18299707578519-Vers%C3%A3o-289-18-10-2023"
+    },
+    {
+      "id": 11629940191127,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Loja Integrada",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629940191127-Ajuda-com-a-Loja-Integrada"
+    },
+    {
+      "id": 4461344090391,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "SINTEGRA",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4461344090391-SINTEGRA"
+    },
+    {
+      "id": 4418847418903,
+      "categoryId": 360002186334,
+      "parentSectionId": null,
+      "name": "Empréstimo",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4418847418903-Empr%C3%A9stimo"
+    },
+    {
+      "id": 4410797416087,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Dafiti Milkrun",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410797416087-Log%C3%ADstica-Dafiti-Milkrun"
+    },
+    {
+      "id": 360007968154,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Nuvemshop",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007968154-Nuvemshop"
+    },
+    {
+      "id": 17969185625367,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 288 - 04/10/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/17969185625367-Vers%C3%A3o-288-04-10-2023"
+    },
+    {
+      "id": 11629832426775,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com o Carrefour",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629832426775-Ajuda-com-o-Carrefour"
+    },
+    {
+      "id": 6853793629335,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Dafiti Envios",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/6853793629335-Log%C3%ADstica-Dafiti-Envios"
+    },
+    {
+      "id": 360008037053,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "WooCommerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008037053-WooCommerce"
+    },
+    {
+      "id": 360005474554,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Erros e Rejeições",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005474554-Erros-e-Rejei%C3%A7%C3%B5es"
+    },
+    {
+      "id": 35703595777047,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Reforma Tributária",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/35703595777047-Reforma-Tribut%C3%A1ria"
+    },
+    {
+      "id": 20707475006615,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Enviali",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/20707475006615-Log%C3%ADstica-Enviali"
+    },
+    {
+      "id": 17622772263575,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 287 - 20/09/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/17622772263575-Vers%C3%A3o-287-20-09-2023"
+    },
+    {
+      "id": 12036866022039,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "iFood",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/12036866022039-iFood"
+    },
+    {
+      "id": 11629997509911,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Tray",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629997509911-Ajuda-com-a-Tray"
+    },
+    {
+      "id": 40237760974231,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Eventos de NF-e (Reforma Tributária)",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/40237760974231-Eventos-de-NF-e-Reforma-Tribut%C3%A1ria"
+    },
+    {
+      "id": 17268042270871,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 286 - 05/09/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/17268042270871-Vers%C3%A3o-286-05-09-2023"
+    },
+    {
+      "id": 11630280379031,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a WooCommerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11630280379031-Ajuda-com-a-WooCommerce"
+    },
+    {
+      "id": 4410748136471,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Envvias",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410748136471-Log%C3%ADstica-Envvias"
+    },
+    {
+      "id": 16939423007127,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 285 - 23/08/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/16939423007127-Vers%C3%A3o-285-23-08-2023"
+    },
+    {
+      "id": 11629938778391,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Nuvemshop",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629938778391-Ajuda-com-a-Nuvemshop"
+    },
+    {
+      "id": 4410950719127,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Frenet",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410950719127-Log%C3%ADstica-Frenet"
+    },
+    {
+      "id": 360005489573,
+      "categoryId": 360002199413,
+      "parentSectionId": null,
+      "name": "Perguntas Frequentes",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360005489573-Perguntas-Frequentes"
+    },
+    {
+      "id": 16589571275031,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 284 - 09/08/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/16589571275031-Vers%C3%A3o-284-09-08-2023"
+    },
+    {
+      "id": 11706325660055,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Robô de Vendas Instagram",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11706325660055-Rob%C3%B4-de-Vendas-Instagram"
+    },
+    {
+      "id": 11629027913111,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a MadeiraMadeira",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629027913111-Ajuda-com-a-MadeiraMadeira"
+    },
+    {
+      "id": 4410941320855,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Intelipost",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410941320855-Log%C3%ADstica-Intelipost"
+    },
+    {
+      "id": 16244115856023,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 283 - 26/07/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/16244115856023-Vers%C3%A3o-283-26-07-2023"
+    },
+    {
+      "id": 11628730350871,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Wix",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11628730350871-Ajuda-com-a-Wix"
+    },
+    {
+      "id": 4419102599959,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Robô de Vendas Messenger",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4419102599959-Rob%C3%B4-de-Vendas-Messenger"
+    },
+    {
+      "id": 4410785107863,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Jadlog",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410785107863-Log%C3%ADstica-Jadlog"
+    },
+    {
+      "id": 31322396634903,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "TikTok Shop",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/31322396634903-TikTok-Shop"
+    },
+    {
+      "id": 15864755131671,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 282 - 13/07/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/15864755131671-Vers%C3%A3o-282-13-07-2023"
+    },
+    {
+      "id": 11872992205591,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda a Magento (Multiloja)",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11872992205591-Ajuda-a-Magento-Multiloja"
+    },
+    {
+      "id": 4410791292183,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Jamef",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410791292183-Log%C3%ADstica-Jamef"
+    },
+    {
+      "id": 34604412850711,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Temu",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/34604412850711-Temu"
+    },
+    {
+      "id": 18044381473303,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Kwai",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/18044381473303-Log%C3%ADstica-Kwai"
+    },
+    {
+      "id": 15497274988311,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 281 - 28/06/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/15497274988311-Vers%C3%A3o-281-28-06-2023"
+    },
+    {
+      "id": 11630638540695,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com o GPA",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11630638540695-Ajuda-com-o-GPA"
+    },
+    {
+      "id": 14998709847191,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 280 - 14/06/2023 ",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/14998709847191-Vers%C3%A3o-280-14-06-2023"
+    },
+    {
+      "id": 11630622986135,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a VTex Marketplace",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11630622986135-Ajuda-com-a-VTex-Marketplace"
+    },
+    {
+      "id": 4410790280215,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Integração com a Loggi",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410790280215-Integra%C3%A7%C3%A3o-com-a-Loggi"
+    },
+    {
+      "id": 360008904053,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Integração Bling API",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008904053-Integra%C3%A7%C3%A3o-Bling-API"
+    },
+    {
+      "id": 14499600743063,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 279 - 24/05/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/14499600743063-Vers%C3%A3o-279-24-05-2023"
+    },
+    {
+      "id": 11629071979159,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Bagy",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629071979159-Ajuda-com-a-Bagy"
+    },
+    {
+      "id": 4410482943511,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Olist",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410482943511-Log%C3%ADstica-Olist"
+    },
+    {
+      "id": 18143898570903,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Shein",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/18143898570903-Log%C3%ADstica-Shein"
+    },
+    {
+      "id": 14446164879255,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 278 - 10/05/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/14446164879255-Vers%C3%A3o-278-10-05-2023"
+    },
+    {
+      "id": 11630624543511,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a Wake Commerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11630624543511-Ajuda-com-a-Wake-Commerce"
+    },
+    {
+      "id": 14111892178711,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 277 - 26/04/2023 ",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/14111892178711-Vers%C3%A3o-277-26-04-2023"
+    },
+    {
+      "id": 11629838563351,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com o Wish",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11629838563351-Ajuda-com-o-Wish"
+    },
+    {
+      "id": 4410456573847,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Shopee",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410456573847-Log%C3%ADstica-Shopee"
+    },
+    {
+      "id": 360009804213,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Balanças Comerciais",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009804213-Balan%C3%A7as-Comerciais"
+    },
+    {
+      "id": 13589964384663,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 276 - 12/04/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/13589964384663-Vers%C3%A3o-276-12-04-2023"
+    },
+    {
+      "id": 11698846235799,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com o Google Shopping",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11698846235799-Ajuda-com-o-Google-Shopping"
+    },
+    {
+      "id": 7294333598103,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Wish",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/7294333598103-Log%C3%ADstica-Wish"
+    },
+    {
+      "id": 4420558142231,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Aplicativos Autorizados",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4420558142231-Aplicativos-Autorizados"
+    },
+    {
+      "id": 13307766598423,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 275 - 29/03/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/13307766598423-Vers%C3%A3o-275-29-03-2023"
+    },
+    {
+      "id": 12888235840279,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Netshoes",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/12888235840279-Log%C3%ADstica-Netshoes"
+    },
+    {
+      "id": 12234048020119,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com o OpenCart",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/12234048020119-Ajuda-com-o-OpenCart"
+    },
+    {
+      "id": 360008145173,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "00K",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008145173-00K"
+    },
+    {
+      "id": 13047592393879,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 274 - 16/03/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/13047592393879-Vers%C3%A3o-274-16-03-2023"
+    },
+    {
+      "id": 12150828240919,
+      "categoryId": 10217658976151,
+      "parentSectionId": null,
+      "name": "Ajuda com a iSet WS",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/12150828240919-Ajuda-com-a-iSet-WS"
+    },
+    {
+      "id": 4410721072407,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Magalu Entregas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410721072407-Log%C3%ADstica-Magalu-Entregas"
+    },
+    {
+      "id": 12444516085143,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 273 - 01/03/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/12444516085143-Vers%C3%A3o-273-01-03-2023"
+    },
+    {
+      "id": 4410652210327,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Mandaê",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410652210327-Log%C3%ADstica-Manda%C3%AA"
+    },
+    {
+      "id": 12442298166167,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 272 - 15/02/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/12442298166167-Vers%C3%A3o-272-15-02-2023"
+    },
+    {
+      "id": 4410616461079,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Mercado Envios",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410616461079-Log%C3%ADstica-Mercado-Envios"
+    },
+    {
+      "id": 360008060674,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Adena E-Commerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060674-Adena-E-Commerce"
+    },
+    {
+      "id": 11951307442711,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 271 - 01/02/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11951307442711-Vers%C3%A3o-271-01-02-2023"
+    },
+    {
+      "id": 4410487172119,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Mercado Envios Flex",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410487172119-Log%C3%ADstica-Mercado-Envios-Flex"
+    },
+    {
+      "id": 360008240953,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Alcateia",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008240953-Alcateia"
+    },
+    {
+      "id": 11589492468375,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 270 - 18/01/2023",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11589492468375-Vers%C3%A3o-270-18-01-2023"
+    },
+    {
+      "id": 4410470328471,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Total Express",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410470328471-Log%C3%ADstica-Total-Express"
+    },
+    {
+      "id": 360008240973,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Aldo",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008240973-Aldo"
+    },
+    {
+      "id": 10793100579863,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 269 - 14/12/2022",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/10793100579863-Vers%C3%A3o-269-14-12-2022"
+    },
+    {
+      "id": 4403848184599,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Aliexpress",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4403848184599-Aliexpress"
+    },
+    {
+      "id": 360008116794,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Personalizada",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008116794-Log%C3%ADstica-Personalizada"
+    },
+    {
+      "id": 9805381500567,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 268 - 03/11/2022",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/9805381500567-Vers%C3%A3o-268-03-11-2022"
+    },
+    {
+      "id": 1500000078481,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Serviços Logísticos",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/1500000078481-Servi%C3%A7os-Log%C3%ADsticos"
+    },
+    {
+      "id": 360008060554,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "All Nations",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060554-All-Nations"
+    },
+    {
+      "id": 19488274290583,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Logística Reversa",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/19488274290583-Log%C3%ADstica-Reversa"
+    },
+    {
+      "id": 9302415733527,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 267 - 13/10/2022",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/9302415733527-Vers%C3%A3o-267-13-10-2022"
+    },
+    {
+      "id": 1500000018942,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Amazon FBA Classic (Logística da Amazon)",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/1500000018942-Amazon-FBA-Classic-Log%C3%ADstica-da-Amazon"
+    },
+    {
+      "id": 8864524039575,
+      "categoryId": 8864522791191,
+      "parentSectionId": null,
+      "name": "Versão 266 - 21/09/2022",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8864524039575-Vers%C3%A3o-266-21-09-2022"
+    },
+    {
+      "id": 1500000018381,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Amazon FBA Onsite (Fulfillment by Amazon Onsite) ",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/1500000018381-Amazon-FBA-Onsite-Fulfillment-by-Amazon-Onsite"
+    },
+    {
+      "id": 360006727254,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Embalagens",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006727254-Embalagens"
+    },
+    {
+      "id": 360006250893,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "Integrações Logísticas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360006250893-Integra%C3%A7%C3%B5es-Log%C3%ADsticas"
+    },
+    {
+      "id": 4422580786199,
+      "categoryId": 360002349373,
+      "parentSectionId": null,
+      "name": "[DESCONTINUADA] Logística Kangu",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4422580786199--DESCONTINUADA-Log%C3%ADstica-Kangu"
+    },
+    {
+      "id": 4410034061591,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Bagy",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4410034061591-Bagy"
+    },
+    {
+      "id": 9375691830295,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Balaroti",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/9375691830295-Balaroti"
+    },
+    {
+      "id": 25313256678935,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Beleza na Web",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/25313256678935-Beleza-na-Web"
+    },
+    {
+      "id": 360008145293,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Bling Integração",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008145293-Bling-Integra%C3%A7%C3%A3o"
+    },
+    {
+      "id": 360008060774,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Bling Planilha Integração",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060774-Bling-Planilha-Integra%C3%A7%C3%A3o"
+    },
+    {
+      "id": 360008116513,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Bis2Bis",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008116513-Bis2Bis"
+    },
+    {
+      "id": 360007827133,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Carrefour",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007827133-Carrefour"
+    },
+    {
+      "id": 8081810151959,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Casa&Vídeo",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8081810151959-Casa-V%C3%ADdeo"
+    },
+    {
+      "id": 4414423296791,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Cassol",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4414423296791-Cassol"
+    },
+    {
+      "id": 1500001721421,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "C&A",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/1500001721421-C-A"
+    },
+    {
+      "id": 360009147114,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Centauro",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009147114-Centauro"
+    },
+    {
+      "id": 360008148194,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Colombo",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008148194-Colombo"
+    },
+    {
+      "id": 8081624312983,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Conecta Lá",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8081624312983-Conecta-L%C3%A1"
+    },
+    {
+      "id": 14549047555735,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Loja Sicredi",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/14549047555735-Loja-Sicredi"
+    },
+    {
+      "id": 360008060514,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Linx Commerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060514-Linx-Commerce"
+    },
+    {
+      "id": 8081845014295,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Coopera",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8081845014295-Coopera"
+    },
+    {
+      "id": 4413641854615,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Integração com a CPlug",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4413641854615-Integra%C3%A7%C3%A3o-com-a-CPlug"
+    },
+    {
+      "id": 360007965253,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Dafiti WS",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007965253-Dafiti-WS"
+    },
+    {
+      "id": 8081726986391,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Decathlon",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8081726986391-Decathlon"
+    },
+    {
+      "id": 360008060814,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "DLoja Virtual",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060814-DLoja-Virtual"
+    },
+    {
+      "id": 360008241133,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Desativação Fulfillment Mercado Livre",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008241133-Desativa%C3%A7%C3%A3o-Fulfillment-Mercado-Livre"
+    },
+    {
+      "id": 360008145273,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Dotstore",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008145273-Dotstore"
+    },
+    {
+      "id": 4408849396887,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Droga Raia (Descontinuada)",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4408849396887-Droga-Raia-Descontinuada"
+    },
+    {
+      "id": 11899796514839,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Dropify",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/11899796514839-Dropify"
+    },
+    {
+      "id": 360008145133,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Ezcommerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008145133-Ezcommerce"
+    },
+    {
+      "id": 1500000387202,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Facebook",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/1500000387202-Facebook"
+    },
+    {
+      "id": 360008145073,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "FastCommerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008145073-FastCommerce"
+    },
+    {
+      "id": 360008241393,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Faturador e Mercado Livre Fulfillment",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008241393-Faturador-e-Mercado-Livre-Fulfillment"
+    },
+    {
+      "id": 9680677739031,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Ri Happy Conecta",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/9680677739031-Ri-Happy-Conecta"
+    },
+    {
+      "id": 360008145253,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Get Commerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008145253-Get-Commerce"
+    },
+    {
+      "id": 360008060694,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "GoCommerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060694-GoCommerce"
+    },
+    {
+      "id": 4406689315223,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Google Shopping",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4406689315223-Google-Shopping"
+    },
+    {
+      "id": 360012209493,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "GPA - Grupo Pão de Açúcar",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360012209493-GPA-Grupo-P%C3%A3o-de-A%C3%A7%C3%BAcar"
+    },
+    {
+      "id": 360008027433,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Groupon",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008027433-Groupon"
+    },
+    {
+      "id": 360008060714,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Ind e-Commerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060714-Ind-e-Commerce"
+    },
+    {
+      "id": 360008060614,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Interspire",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060614-Interspire"
+    },
+    {
+      "id": 360008144873,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "iSET WS",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008144873-iSET-WS"
+    },
+    {
+      "id": 360009774314,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Kabum",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009774314-Kabum"
+    },
+    {
+      "id": 360007958694,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Kanui WS (Descontinuada)",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007958694-Kanui-WS-Descontinuada"
+    },
+    {
+      "id": 18032168159639,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Kwai",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/18032168159639-Kwai"
+    },
+    {
+      "id": 360007966893,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Leroy Merlin",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007966893-Leroy-Merlin"
+    },
+    {
+      "id": 360008060734,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Likestore",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060734-Likestore"
+    },
+    {
+      "id": 360008060334,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Loja Mestre",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060334-Loja-Mestre"
+    },
+    {
+      "id": 360008060854,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Loja Modular",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060854-Loja-Modular"
+    },
+    {
+      "id": 360009049394,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Loja Que Vende",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009049394-Loja-Que-Vende"
+    },
+    {
+      "id": 8081773704855,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Lojas MM",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8081773704855-Lojas-MM"
+    },
+    {
+      "id": 360008097553,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "MadeiraMadeira",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008097553-MadeiraMadeira"
+    },
+    {
+      "id": 360007968174,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Magento (Multiloja)",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007968174-Magento-Multiloja"
+    },
+    {
+      "id": 360007968234,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Magento v.2",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007968234-Magento-v-2"
+    },
+    {
+      "id": 4404717779991,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Marketplace Loja Vivo",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4404717779991-Marketplace-Loja-Vivo"
+    },
+    {
+      "id": 360008060754,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Maxima Web",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060754-Maxima-Web"
+    },
+    {
+      "id": 360008060794,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Maxistore",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060794-Maxistore"
+    },
+    {
+      "id": 360008037253,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Mercos",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008037253-Mercos"
+    },
+    {
+      "id": 360008060634,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "MKX e-commerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060634-MKX-e-commerce"
+    },
+    {
+      "id": 360008144953,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Neo",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008144953-Neo"
+    },
+    {
+      "id": 360007966613,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Netshoes",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007966613-Netshoes"
+    },
+    {
+      "id": 360007905373,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Olist",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007905373-Olist"
+    },
+    {
+      "id": 360007968194,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Opencart",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007968194-Opencart"
+    },
+    {
+      "id": 360008151794,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "OpenCart para Desenvolvedores",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008151794-OpenCart-para-Desenvolvedores"
+    },
+    {
+      "id": 8081765045911,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Ortobom",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8081765045911-Ortobom"
+    },
+    {
+      "id": 4414423625623,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Pangeia",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4414423625623-Pangeia"
+    },
+    {
+      "id": 16911935417367,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Peça Brás",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/16911935417367"
+    },
+    {
+      "id": 360008060834,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Peras Loja",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060834-Peras-Loja"
+    },
+    {
+      "id": 360008145793,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Pluga - Integração API",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008145793-Pluga-Integra%C3%A7%C3%A3o-API"
+    },
+    {
+      "id": 8081780609431,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Polishop",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8081780609431-Polishop"
+    },
+    {
+      "id": 360008037133,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "PrestaShop",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008037133-PrestaShop"
+    },
+    {
+      "id": 9649118763927,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Raia Drogasil",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/9649118763927-Raia-Drogasil"
+    },
+    {
+      "id": 8081767964567,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Reserva",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8081767964567-Reserva"
+    },
+    {
+      "id": 5678547083543,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Riachuelo",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/5678547083543-Riachuelo"
+    },
+    {
+      "id": 4406900912791,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Ri Happy VTEX Marketplace",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4406900912791-Ri-Happy-VTEX-Marketplace"
+    },
+    {
+      "id": 360012631833,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "SAC Skyhub",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360012631833-SAC-Skyhub"
+    },
+    {
+      "id": 360008145333,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "ShopDelivery",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008145333-ShopDelivery"
+    },
+    {
+      "id": 8081748588055,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Shophub",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8081748588055-Shophub"
+    },
+    {
+      "id": 360008037093,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Shopify",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008037093-Shopify"
+    },
+    {
+      "id": 8129348701591,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "SomaPlace",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/8129348701591-SomaPlace"
+    },
+    {
+      "id": 12898817042839,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Stellar",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/12898817042839-Stellar"
+    },
+    {
+      "id": 360008027493,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Toro",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008027493-Toro"
+    },
+    {
+      "id": 360007959114,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Tricae WS (Descontinuada)",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007959114-Tricae-WS-Descontinuada"
+    },
+    {
+      "id": 360008060574,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Vendas Externas",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008060574-Vendas-Externas"
+    },
+    {
+      "id": 18032003855895,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Ventureshop",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/18032003855895-Ventureshop"
+    },
+    {
+      "id": 4905568622615,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Virtuol Pro",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/4905568622615-Virtuol-Pro"
+    },
+    {
+      "id": 360008037153,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "VTex",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008037153-VTex"
+    },
+    {
+      "id": 1500001721982,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "VTex Marketplace",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/1500001721982-VTex-Marketplace"
+    },
+    {
+      "id": 360008144853,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Wake Commerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008144853-Wake-Commerce"
+    },
+    {
+      "id": 9597111088151,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "WBuy",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/9597111088151-WBuy"
+    },
+    {
+      "id": 360008039594,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "WebStore",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008039594-WebStore"
+    },
+    {
+      "id": 360012463793,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Wish",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360012463793-Wish"
+    },
+    {
+      "id": 360009516733,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Wix",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360009516733-Wix"
+    },
+    {
+      "id": 360008037073,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Xtech",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008037073-Xtech"
+    },
+    {
+      "id": 17566465699991,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Yampi",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/17566465699991-Yampi"
+    },
+    {
+      "id": 360008145353,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Z3 E-Commerce",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008145353-Z3-E-Commerce"
+    },
+    {
+      "id": 360007969433,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Zattini",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360007969433-Zattini"
+    },
+    {
+      "id": 19996309101719,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Zax",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/19996309101719-Zax"
+    },
+    {
+      "id": 360008027513,
+      "categoryId": 360002186374,
+      "parentSectionId": null,
+      "name": "Zoom",
+      "url": "https://ajuda.bling.com.br/hc/pt-br/sections/360008027513-Zoom"
+    }
+  ]
+}

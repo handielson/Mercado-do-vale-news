@@ -18,6 +18,7 @@ import {
     Building2, Loader2, FileText, Smartphone, Mail
 } from 'lucide-react';
 import { Company } from '../../types/company';
+import type { ReceitaFederalData } from '../../utils/cnpjHelper';
 import { ImageUploader } from '../ui/ImageUploader';
 
 interface CompanyIdentitySectionProps {
@@ -25,6 +26,7 @@ interface CompanyIdentitySectionProps {
     onChange: (updates: Partial<Company>) => void;
     onCNPJSearch: () => Promise<void>;
     isLoadingCNPJ: boolean;
+    consultedActivities: Pick<ReceitaFederalData, 'atividade_principal' | 'atividades_secundarias'> | null;
     formatPhone: (value: string) => string;
     formatCNPJ: (value: string) => string;
 }
@@ -34,6 +36,7 @@ export const CompanyIdentitySection: React.FC<CompanyIdentitySectionProps> = ({
     onChange,
     onCNPJSearch,
     isLoadingCNPJ,
+    consultedActivities,
     formatPhone,
     formatCNPJ
 }) => {
@@ -269,6 +272,11 @@ export const CompanyIdentitySection: React.FC<CompanyIdentitySectionProps> = ({
                             readOnly
                         />
                     </div>
+                    {consultedActivities && <div className="md:col-span-2 rounded-lg border border-blue-200 bg-white p-3 text-sm">
+                        <p className="font-semibold text-slate-700">Atividades econômicas retornadas pelo CNPJ</p>
+                        <ul className="mt-2 list-disc pl-5">{[...consultedActivities.atividade_principal.map(item => ({ ...item, primary: true })), ...consultedActivities.atividades_secundarias.map(item => ({ ...item, primary: false }))].map(item => <li key={`${item.primary}-${item.code}`}>{item.primary ? 'Principal' : 'Secundária'}: {item.code} — {item.text}</li>)}</ul>
+                        <p className="mt-2 text-xs text-slate-500">Para guardar a lista completa por empresa, use “Atualizar dados tributários” e “Usar todos os CNAEs consultados” no cadastro fiscal acima. As notas explicativas da <a className="underline" href="https://concla.ibge.gov.br/busca-online-cnae.html" target="_blank" rel="noopener noreferrer">CNAE no IBGE</a> detalham o alcance de cada atividade.</p>
+                    </div>}
                 </div>
             </div>
             {/* Integrações */}

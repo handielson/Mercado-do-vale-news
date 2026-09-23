@@ -1,0 +1,196 @@
+# Evidências — início da migração em 2026-09-22
+
+Progresso canônico: [checklist](../../CHECKLIST-MIGRACAO-BLING.md). Todas as chamadas comerciais desta etapa foram GET; não houve emissão, cancelamento, baixa, migration de banco, publicação, commit ou push.
+
+## E01 — Inspeção local
+
+Checkout primário, branch main. Havia alterações preexistentes em AGENTS.md, API, Android, integrações e testes; foram preservadas. Inspecionados rotas, contratos de empresa/produtos, serviços Bling fiscal/financeiro, venda, estoque e compras. Limite: não é auditoria integral do banco/runtime de todos os módulos.
+
+## E02 — Empresa
+
+Consulta autenticada ao `/company-settings` da API própria: HTTP 200. Validada presença dos campos cadastrais e endereço; valores sensíveis não registrados. Consulta GET `https://api.bling.com.br/Api/v3/empresas/me/dados-basicos`: HTTP 200, CNPJ comparado em memória e coincidente. Token existente utilizado somente em memória; nenhuma renovação foi solicitada.
+
+Resultado: aprovado para identificação inicial. Ausência dos campos fiscais na resposta local é lacuna de cadastro observado, não prova de inexistência de certificado em outro local.
+
+## E03 — Amostras fiscais
+
+GET de naturezas: HTTP 200, quatro registros na primeira página com limite 100. GET de listagem/detalhe NF-e e NFC-e: HTTP 200. Nova seleção com `situacao=5` em cada modelo encontrou amostra autorizada. Download via link oficial do documento: HTTP 200 em ambos.
+
+Comparação em memória: emitente/CNPJ e IE iguais ao cadastro local, CRT 1, UF PE, cMun 2611101; XML com estrutura nfeProc e protocolo cStat 100. NF-e de setembro/2026 e NFC-e de junho/2026, série 1 nas amostras. Não foram salvos XMLs nem identificadores de clientes em arquivos versionados.
+
+Resultado: aprovado para existência e consistência cadastral das amostras. Não equivale a auditoria do histórico completo, confirmação fiscal atual, teste de assinatura digital ou autenticação independente na SEFAZ.
+
+## E04 — Catálogo público
+
+Comando: `node scripts/inspect-bling-catalog.cjs`.
+
+Resultado: aprovado. 165 caminhos, 263 operações, 49 grupos, 23 categorias e 348 seções. Asserções executadas: HTTP bem-sucedido, paginação completa versus total declarado, ausência de IDs/operações duplicados, categorias referenciadas existentes e endpoint de empresa presente. Fontes, horário e hash registrados nos JSONs.
+
+## E05 — Testes locais existentes
+
+| Comando | Resultado | Interpretação |
+|---|---|---|
+| `node tmp-tests/company-service-vps-only-static.test.mjs` | PASSOU | Guarda estática do transporte de empresa |
+| `node tmp-tests/bling-finance-service-url-static.test.mjs` | PASSOU | Guarda estática da URL financeira |
+| `npm.cmd run test:money` | PASSOU | Normalização monetária coberta pelo teste existente |
+| `node tmp-tests/vps-bling-nf-fastify-static.test.mjs` | FALHOU | Assertion em vps_server.js: espera domínio www.bling.com.br no detalhe; código inspecionado usa api.bling.com.br |
+
+A falha foi registrada, não corrigida silenciosamente. Nenhum desses testes demonstra emissão própria, estoque sincronizado com Shopee ou impressão. Não houve build porque não houve alteração de frontend/runtime comercial.
+
+## E06 — Documentos e ferramenta de coleta
+
+Na primeira validação, a comparação de contagens revelou que o OpenAPI declara 165 caminhos, mas um deles (`/`) é vazio, sem operação. O coletor foi ajustado para representar explicitamente 164 caminhos operacionais e um caminho vazio, sem omitir informação. Nova coleta e validação final registradas abaixo. Os testes de comportamento da nova emissão permanecem pendentes.
+
+- Nova coleta: PASSOU, com asserções de paginação e identidade.
+- Links relativos dos documentos e parse/contagens dos índices: PASSOU.
+- `node --check scripts/inspect-bling-catalog.cjs`: PASSOU.
+- Validador `quick_validate.py` da skill `bling-erp-migration`: PASSOU após atualização da referência ao checklist.
+- `git diff --check` global: FALHOU por espaços finais em `pages/catalog/index.tsx` e linha em branco final em `vps_server.js`, arquivos com alterações preexistentes e não editados nesta tarefa. Não foram limpos para evitar interferência em outro trabalho.
+- Arquivos criados nesta tarefa foram conferidos separadamente quanto a espaços finais e existência das referências.
+
+## E07 — Cadastro fiscal e consulta por CNPJ (22/09/2026)
+
+Ambiente: desenvolvimento local, dados sintéticos nos testes; nenhuma gravação em produção. Estado anterior: cadastro principal único, sem consulta tributária e sem tabela companies disponível. Alteração: perfis fiscais separados por CNPJ, regime e CRT manuais, consulta informativa, auditoria, bloqueio de versões obsoletas e seletor/cadastro de empresa. F01a aprovado localmente; F01/F01b permanecem abertos.
+
+| Procedimento | Esperado e obtido | Resultado |
+|---|---|---|
+| npm run test:company-fiscal | Oito testes: CNPJ numérico/alfanumérico, campos desconhecidos, alternativa de fonte, validação manual, autenticação/flag, identidade principal, isolamento/concorrência e falha sem perda dos dados | 8/8 passaram |
+| node --check nos novos serviços CJS e vps_server.cjs | Sintaxe válida | Passou |
+| company-service-vps-only-static.test.mjs e company-settings-service-vps-only-static.test.mjs | Contratos existentes preservados | Passaram |
+| npm run build | Compilação e pré-build sem dependência Supabase runtime | Passou |
+| Chrome via agent-browser, fixture company-fiscal-ui-server.mjs | Atualizar consulta preserva Lucro Real/CRT 3 em A; adicionar B como MEI/CRT 4; selecionar A restaura configurações de A e resultado anterior | Passou, API em memória |
+| git diff --check restrito à página e package.json | Sem erros de whitespace nas alterações verificadas | Passou |
+
+O harness de navegador teve inicialmente erro de JSX virtual/configuração do Vite, corrigido antes de repetir os passos aprovados. Os testes de rotas usam adaptador SQL em memória: não comprovam compatibilidade da migration em MySQL real. A fixture de navegador não valida o layout completo nem a integração navegador→backend→banco real. A consulta real do CNPJ realizada na preparação usou fonte pública alternativa após bloqueio HTTP 403 da primeira fonte; nenhuma escolha tributária foi gravada automaticamente.
+
+Pendências: aplicar/testar migration em homologação, ativação e persistência real; confirmar perfil/vigência com contabilidade; completar emitente/endereço/IE; ligar cada venda ao emitente; emissão SEFAZ posterior. Roteiro em cadastro-fiscal.md.
+
+## E08 — Ampliação da validação (22/09/2026)
+
+Continuação de F01a/F01b. npm run test:company-fiscal passou 11/11 testes. Os três casos adicionais comprovam bloqueio após mudança externa do CNPJ principal, consulta em andamento rejeitada quando uma edição posterior muda a versão (incluindo consulta simultânea 429) e exigência de administrador em todas as mutações, descartando resultado tributário forjado no payload.
+
+Criado test:company-fiscal:mysql para banco local descartável. Primeira execução falhou no preflight: pipe dockerDesktopLinuxEngine ausente. A tentativa de iniciar Docker Desktop não manteve o backend em execução. Nenhuma migration foi executada e nenhum banco externo foi acessado. Sintaxe do teste validada; seus cenários MySQL ainda não foram aprovados. F01b segue pendente de ambiente, seguido de homologação integrada e publicação.
+
+## E09 — MySQL real aprovado (22/09/2026)
+
+Após o usuário iniciar Docker Desktop, executado npm run test:company-fiscal:mysql: 1/1 teste de integração passou (aproximadamente 83 segundos). Ambiente: MySQL 8.4 em container local descartável, banco mdv_fiscal_test e empresas fictícias; nenhum .env operacional carregado.
+
+Comprovados: migration aplicada duas vezes; gravação/leitura de duas empresas; rejeição de CNPJ duplicado; preservação de regime/CRT após consulta simulada; consulta de B não altera A; duas edições na mesma versão resultam em 200 e 409; falha induzida por trigger na auditoria reverte os dados e a versão do perfil; quatro eventos válidos persistidos; identificação principal preservada. Container de teste removido ao finalizar.
+
+F01b aprovado para banco real isolado. F01c mantém pendentes homologação integrada navegador/API/autenticação/fonte externa e publicação. O teste usa Fastify.inject e autenticação/consulta simuladas: não demonstra sessão real, rede HTTP completa nem emissão fiscal. Nenhuma alteração em produção, commit, push ou deploy nesta retomada.
+
+## E10 — Fluxo integrado local aprovado (22/09/2026)
+
+Com Docker ativo, executado `npm run test:company-fiscal:browser`: 1/1 passou. O teste reaplica a migration duas vezes em MySQL 8.4 descartável; abre a tela real no Chrome, passa pelo proxy HTTP e pelas rotas Fastify, usa as funções canônicas de assinatura/verificação do token do backend com administrador sintético e salva uma empresa adicional. A consulta de CNPJ público foi respondida pela Minha Receita após indisponibilidade da primeira fonte. Depois do recarregamento, a empresa adicional manteve Lucro Real/CRT 3 e seu resultado de consulta; a empresa principal permaneceu sem esse resultado. Consultas sem token, com usuário comum e com token alterado retornaram 401. Registro final confirmado por SELECT em MySQL. Container removido ao término.
+
+Tentativas anteriores falharam por configuração do proxy do teste, seletor do navegador e espera de carregamento. O harness foi corrigido e a execução completa foi repetida com sucesso. O teste não criou venda, não transmitiu nota, não usou credencial operacional nem escreveu no banco da VPS. F01c concluído apenas no ambiente local; F01d e F01 geral continuam pendentes.
+
+## E11 — Pré-validação inicial do emitente (22/09/2026)
+
+Adicionada função pura `validateIssuerReadiness` em companyFiscalCore.cjs. Entrada: perfil fiscal escolhido, endereço e data de emissão. Saída: prontidão e lista de campos ausentes/incompatíveis, sem alterar dados. Verifica CNPJ, razão social, inscrição estadual informada, UF, município IBGE, CEP, logradouro, número, bairro, cidade, regime, CRT e vigência; bloqueia perfil com conflito de identidade. `npm run test:company-fiscal` passou 12/12, incluindo perfil completo e ausência/incompatibilidade. Não valida cálculo estadual de IE, regras por operação ou certificado, e ainda não está conectada ao transmissor SEFAZ. Para empresas adicionais, endereço específico ainda requer modelagem e cadastro antes de atingir prontidão real.
+
+## E12 — Endereço por empresa fiscal (22/09/2026)
+
+Incluídos campos de endereço na migration 020 ainda não aplicada fora dos testes, no formulário e nas rotas fiscais. A loja principal lê o endereço atual de company_settings e não o duplica no perfil fiscal. Empresas adicionais persistem endereço próprio, com normalização de CEP e limites de texto; cadastro incompleto continua possível, mas a pré-validação sinaliza campos faltantes antes da emissão.
+
+Validação: `npm run test:company-fiscal` 12/12; `npm run build` aprovado; `npm run test:company-fiscal:browser` 1/1 após alteração final. O teste MySQL confirmou aplicação da migration, endereço próprio de B e endereço canônico da loja A; o Chrome salvou endereço de outra empresa, recarregou e confirmou UI e registro MySQL, além de consulta pública preservando escolhas manuais. Container removido ao término. Não houve escrita externa, commit, push ou deploy.
+
+## E13 — Pré-validação visível por empresa (22/09/2026)
+
+Adicionada rota autenticada, somente leitura, `GET /admin/fiscal-companies/:id/readiness`, e botão Verificar dados para emissão no painel. A rota lê o perfil selecionado do banco e retorna apenas resultado de prontidão cadastral e campos pendentes; exige administrador e respeita a flag de ativação. A função pura agora compara os dois primeiros dígitos do município IBGE com a UF; [a regra de composição consta no IBGE](https://www.ibge.gov.br/explica/codigos-dos-municipios.php). Uma combinação PE/5300108 fica pendente. A lista da UI esclarece que IE informada não é IE validada e que emissão exige análise fiscal, certificado e regras tributárias.
+
+Verificação: `npm run test:company-fiscal` 13/13, incluindo isolamento e rota sem escrita; `npm run build` aprovado; `npm run test:company-fiscal:browser` 1/1 com MySQL real, autenticação canônica em ambiente isolado e CNPJ público. O navegador mostrou a pendência de IE na empresa adicional; acessos sem token, com usuário comum ou token alterado foram recusados. Nenhum container de teste permaneceu ativo. F01 ainda aberto: validação da IE por UF, município completo/cidade, dados fiscais por operação e integração ao emissor.
+
+## E14 — Município completo no IBGE e limite dos dados Bling (22/09/2026)
+
+Consulta oficial: [API de localidades do IBGE](https://servicodados.ibge.gov.br/api/docs/localidades), rota pública `GET /api/v1/localidades/municipios/{id}`. A rota de prontidão cadastral agora confere id, cidade e UF do perfil salvo com os dados oficiais. Município divergente, inexistente ou fonte indisponível aparecem como pendência; só os campos oficiais necessários são devolvidos. Consulta explícita, sem alterar cadastro. A leitura de Bling da etapa D02/E02 mostrou CNPJ no endpoint de dados básicos; esse endpoint não retornou IE. XML histórico permitiu comparar IE e emitente, mas não fornece validação atual da inscrição estadual. Por isso, nenhum valor de IE foi inferido ou copiado.
+
+`npm run test:company-fiscal`: 14/14, incluindo divergência, 404 e falha da fonte sem aprovação. `npm run build`: passou. `npm run test:company-fiscal:browser`: 1/1 após ajuste de seletor do harness, com MySQL isolado, Chrome, API fiscal, CNPJ público e API real do IBGE; Brasília/DF foi confirmada pelo código 5300108 enquanto a IE ausente permaneceu pendente. Container removido. F01 continua aberto para validação estadual de IE e integração ao emissor; nenhuma nota transmitida e nenhuma escrita em produção.
+
+## E15 — Dígitos da inscrição estadual de Pernambuco (22/09/2026)
+
+Fonte primária: [SEFAZ-PE, cálculo do dígito verificador da nova inscrição](https://www.sefaz.pe.gov.br/Servicos/Sintegra/Paginas/calculo-do-digito-verificador.aspx), exemplo público 0321418-40; [Portaria SF 087/2007](https://www.sefaz.pe.gov.br/Legislacao/Tributaria/Documents/legislacao/Portarias/2007/Port087_2007orig.htm), que descreve a inscrição de nove dígitos. `verifyStateRegistration` remove pontuação, valida formato e aplica os dois cálculos somente para PE. Número de outra UF fica com estado `unsupported` e mantém a pré-validação pendente, mesmo quando o formato é numérico. IE ausente ou com dígito inválido recebe pendência específica. Isto não consulta a situação ativa do cadastro estadual.
+
+Leitura somente da API operacional `/company-settings`, sem exibir ou gravar a IE: empresa principal em PE, nove dígitos e resultado `valid`. Os XMLs históricos do Bling já haviam permitido comparar a IE, mas não demonstram a situação cadastral atual. `npm run test:company-fiscal`: 15/15; `npm run build`: passou; `npm run test:company-fiscal:browser`: 1/1 em MySQL isolado com consulta pública. Nenhuma migration aplicada fora do teste; nenhum container permaneceu ativo. F01 segue aberto para situação da IE e emissão SEFAZ.
+
+## E16 — Inscrição municipal por empresa (22/09/2026)
+
+Estado anterior: a captura fornecida da tela Dados da empresa no Bling mostra inscrição municipal e opção Simples Nacional, mas o cadastro fiscal local não tinha campo para inscrição municipal. A captura é evidência da interface, não validação oficial de situação ou vigência; o número exibido não foi transcrito para código, fixture ou cadastro operacional.
+
+Alteração local: coluna `municipal_registration` na migration 020 ainda não publicada; API e formulário preservam valor opcional por empresa. A loja principal mantém CNPJ, IE e endereço canônicos em `company_settings`; apenas a inscrição municipal fica em seu perfil fiscal. Regime, CRT e vigência continuam de escolha manual, sem importação automática da captura.
+
+Esperado: gravar e reler inscrições municipais distintas sem afetar identidade, regime ou outra empresa. Obtido: `npm run test:company-fiscal` 15/15; `npm run build` aprovado; `npm run test:company-fiscal:browser` 1/1 com MySQL 8.4 descartável, Chrome, API autenticada e consulta pública. Fixtures sintéticas `IM-123` e `IM-456` foram lidas em resposta/API, após recarregar a tela e por SELECT no banco. Container removido. A migration ainda precisa de homologação e implantação; emissão SEFAZ e confirmação contábil do regime continuam pendentes.
+
+## E17 — Pré-validação pura de item fiscal (22/09/2026)
+
+Estado anterior: `Product` e a gravação em `services/products.ts` já continham NCM, CEST, origem e EANs, mas não havia verificador para preparar uma linha de NF-e/NFC-e. Unidade comercial, CFOP, aplicabilidade do CEST e regra tributária por operação não estavam definidos no cadastro canônico; o schema de produto aceita valores fiscais incompletos. Fonte consultada: [MOC 7.0, Anexo I do portal oficial NF-e](https://hom.nfe.fazenda.gov.br/PORTAL/exibirArquivo.aspx?conteudo=DQFCIFUzszw%3D), com campos NCM, CEST, CFOP, uCom, qCom e vUnCom; [GS1, cálculo do dígito do GTIN](https://www.gs1.org/services/how-calculate-check-digit-manually).
+
+Alteração local: `services/fiscalItemReadiness.cjs` produz lista de pendências sem alterar produto, venda, estoque ou documento. Exige decisão explícita da operação para CEST, unidade, CFOP, regra tributária e GTIN/SEM GTIN. Preço é recebido como centavos inteiros do sistema; quantidade admite até quatro casas. Não confere se o NCM existe ou está vigente, se o CEST é tributariamente aplicável, se CFOP/regra estão corretos ou se o GTIN pertence oficialmente ao item; essas verificações exigem tabelas/regras vigentes e validação contábil.
+
+Teste: `node --test tmp-tests/fiscal-item-readiness.test.cjs`, 5/5 aprovados com item completo, lacunas, CEST condicional, GTIN inválido, serviço e precisão. Verificador ainda não conectado à emissão ou ao cadastro de produto; F02 geral permanece aberto. Nenhuma gravação operacional ou publicação.
+
+## E18 — Campos cadastrais complementares por empresa (22/09/2026)
+
+Marco ativo: Dados da Empresa/F01. Antes, o cadastro principal já tinha nome, CNPJ, IE, CNAE, porte, endereço, telefone, e-mail e site; o perfil fiscal local tinha inscrição municipal, regime, CRT e município IBGE. A captura fornecida do Bling mostra também Suframa, atividade principal, segmentos, faixas de faturamento e funcionários, pessoa de contato, celular e e-mail de cobrança. Esses campos estavam sem representação no perfil por empresa. Nenhum valor real foi transcrito.
+
+Foram adicionados campos opcionais à migration 020 ainda não aplicada operacionalmente, à validação de entrada, API e formulário. A empresa principal continua lendo CNAE, porte, telefone, e-mail e site de `company_settings`; o perfil permite os campos complementares. Empresas adicionais guardam seu próprio cadastro. O tipo de pessoa fica implícito como pessoa jurídica, porque este fluxo exige CNPJ. Faixas são texto cadastral, sem uso como regra fiscal ou inferência de tributação.
+
+Resultado local: `npm run test:company-fiscal` 15/15; `npm run build` aprovado; `npm run test:company-fiscal:browser` 1/1 com migration aplicada duas vezes em MySQL 8.4 descartável, Chrome, API autenticada, empresa principal e adicional, persistência após recarga, concorrência e rollback. O teste usa apenas valores fictícios e confirmou Suframa, segmentos e e-mail de cobrança no banco. Container de teste removido. D06–D10/F01d ainda impedem concluir o marco e seguir para F02.
+
+## E19 — Conferência complementar no Bling e IE substituta (22/09/2026)
+
+Consulta somente leitura à página Dados da empresa no Bling: há seção adicional de inscrições estaduais dos substitutos tributários por UF, além de logo já coberto pelo cadastro operacional. Nenhuma IE substituta estava preenchida na tabela visível. A faixa de faturamento selecionada na interface consultada diferiu da captura anterior fornecida; por isso, nenhum valor foi copiado ou tratado como definitivo. O Bling apresenta Simples Nacional na interface, mas não informa vigência contábil comprovada.
+
+Consulta somente leitura a Preferências → Certificado Digital: há certificado A1 no servidor do Bling com validade exibida até 02/03/2027 e opção de exportação para administrador. Não foi exportado, baixado, alterado ou excluído certificado; senha, chave privada e nome do titular não foram registrados aqui. Essa leitura comprova presença no Bling, não acesso independente ao certificado nem armazenamento seguro para o emissor próprio.
+
+Incluído `substitute_state_registrations` JSON opcional por empresa na migration 020 ainda não aplicada operacionalmente, com UF única e inscrição não vazia; há controles de adicionar/remover no formulário. `npm run test:company-fiscal` 15/15 e `npm run build` aprovados. A primeira execução integrada falhou ao localizar o seletor novo no teste de navegador; foi dado nome acessível explícito e a execução completa `npm run test:company-fiscal:browser` passou 1/1, incluindo persistência MySQL da IE substituta fictícia. A validade do número na UF não é inferida. Nenhuma escrita no Bling ou na VPS.
+
+## E20 — Requisitos oficiais e preflight de publicação (22/09/2026)
+
+Leitura oficial da [SEFAZ-PE para NF-e](https://www.sefaz.pe.gov.br/Servicos/nota-fiscal-eletronica/Paginas/credenciamento-de-contribuintes.aspx): o credenciamento é controlado por homologação e produção; a página descreve testes em homologação antes da produção. A [SEFAZ-PE para NFC-e](https://www.sefaz.pe.gov.br/Servicos/Nota-Fiscal-de-Consumidor-Eletronica/Paginas/Credenciamento-de-Contribuintes.aspx) descreve os dois credenciamentos e CSC próprio por ambiente, com orientação específica para solicitação simultânea. Essas páginas não revelam a situação desta empresa. Nenhum credenciamento ou CSC foi criado, consultado com login ou alterado nesta etapa.
+
+Preflight somente leitura `npm run publish:vps-plan -- --slug cadastro-fiscal-empresa --summary "Cadastro fiscal multiempresa"`: repositório local em `main`, quatro commits à frente e 26 atrás de `origin/main`, com dezenas de alterações alheias e arquivos não rastreados. O plano amplo sugeriu inclusive ações de n8n fora do escopo; não foi executado. Publicação do cadastro requer isolamento e reconciliação do Git, backup/restauração de homologação, aplicação controlada da migration e testes com sessão real. Nenhum commit, push, migration operacional ou deploy feito.
+
+## E21 — Tentativa autorizada de exportação do A1 no Bling (22/09/2026)
+
+Após autorização do responsável, acionado **Exportar certificado** em Preferências → Certificado Digital. O Bling abriu uma janela com dois campos obrigatórios: senha do administrador da conta e senha do certificado. A tentativa parou nessa etapa porque as senhas não estão disponíveis para o agente. Nenhum arquivo foi baixado, nenhuma senha foi digitada ou registrada e o certificado do Bling não foi alterado. D07 permanece aberto até o responsável completar a exportação e ser possível conferir a cópia e seu armazenamento seguro fora do repositório.
+
+## E22 — Isenção de IE, segmentos e todos os CNAEs (22/09/2026)
+
+O cadastro fiscal já permitia escolher os quatro segmentos vistos no Bling, mas não tinha marcador próprio de isenção de IE. Adicionado marcador por empresa, mutuamente exclusivo com número de IE; a prontidão fiscal fica pendente de validação externa quando há isenção, sem presumir que o emitente pode transmitir nota. A consulta de CNPJ agora preserva CNAE principal e secundários com código e descrição, mostra todos para conferência e permite gravá-los no perfil selecionado. A busca de CNPJ no cadastro principal também exibe a lista consultada. A fonte [BrasilAPI documenta `cnae_fiscal`, `cnae_fiscal_descricao` e `cnaes_secundarios`](https://github.com/BrasilAPI/BrasilAPI/blob/main/pages/docs/doc/cnpj.json); a [Concla/IBGE oferece notas explicativas](https://concla.ibge.gov.br/busca-online-cnae.html). Uma descrição cadastral não define sozinha tributação ou autorização de operação.
+
+Verificação: `npm run test:company-fiscal` 17/17 e `npm run build` aprovados. Primeira integração MySQL falhou porque o fixture da empresa principal marcava isenção e trazia IE simultaneamente; o fixture foi corrigido, mantendo a regra de bloqueio. `npm run test:company-fiscal:browser` passou 1/1, aplicando a migration duas vezes em MySQL 8.4 descartável, salvando isenção e lista de CNAEs principal/secundário obtida de CNPJ público, recarregando a tela e conferindo a persistência no banco. `tsc --noEmit` segue com erros preexistentes em outros módulos; filtragem dos arquivos alterados não mostrou erros deste escopo. Nenhuma migration operacional, cadastro real ou emissão foi alterado.
+
+## E23 — Cópia local do certificado A1 (22/09/2026)
+
+O responsável informou que concluiu a exportação para `cert.pfx` na raiz do repositório sincronizado. Localizado arquivo de 8.963 bytes, não rastreado pelo Git. Movido para `%LOCALAPPDATA%\MercadoDoVale\certificates\cert.pfx`, fora do repositório e do SynologyDrive, com SHA-256 idêntico antes/depois da movimentação e ausência confirmada no caminho original. ACL do arquivo e da pasta restrita ao usuário Nitro, SYSTEM e Administradores. `.gitignore` atualizado para bloquear `*.pfx` e `*.p12`. O arquivo não foi aberto, importado ou enviado a nenhum serviço. Extensão e tamanho não comprovam que contém chave privada válida nem que pertence ao CNPJ correto; D07 fica aberto até validação com senha em ambiente controlado e backup seguro.
+
+Adicionado `scripts/verify-fiscal-certificate.ps1` para solicitar a senha sem exibi-la, importar o PFX apenas em memória, conferir CNPJ/validade/chave privada e fazer uma assinatura local de teste. A análise sintática passou sem erros. Um teste funcional com certificado sintético local foi rejeitado automaticamente pela política de execução do ambiente, sem razão mais específica; não foi tentado por outro meio. O PFX real ainda não foi testado por esse script.
+
+Correção após tentativa do operador: `pwsh` não está no PATH do Windows PowerShell interativo dele. O script agora usa a sobrecarga disponível no Windows PowerShell 5.1; a senha é convertida temporariamente apenas em memória, e o buffer BSTR é apagado após a importação. Sintaxe e disponibilidade das APIs conferidas no Windows PowerShell 5.1. Validação real ainda aguarda execução pelo operador.
+
+Nova correção: o PowerShell do operador não encontrou o arquivo no caminho `%LOCALAPPDATA%` visto pela sessão de trabalho, embora a sessão de trabalho o encontrasse ali. O arquivo de 8.963 bytes foi devolvido à raiz original do repositório sincronizado sem sobrescrever outro arquivo; SHA-256 antes/depois da devolução coincidiu e `git check-ignore cert.pfx` confirmou exclusão do Git. A causa exata da diferença de visibilidade entre sessões não foi comprovada. A retirada definitiva da pasta sincronizada deve ser feita no PowerShell do operador, usando o `%LOCALAPPDATA%` daquela sessão; até lá, não considerar o armazenamento seguro concluído.
+
+## E24 — Retirada da pasta sincronizada pelo operador (22/09/2026)
+
+O operador informou que executou os comandos de movimentação e validação. Conferência independente da localização: não há mais `cert.pfx` na raiz do repositório; arquivo de 8.963 bytes está visível em `%LOCALAPPDATA%\MercadoDoVale\certificates\cert.pfx`; ACL lida no arquivo mostra acesso apenas de Nitro, SYSTEM e Administradores. `git check-ignore cert.pfx` continua ativo. O resultado do verificador de senha/chave/assinatura ainda não foi informado, portanto não está marcado como aprovado.
+
+## E25 — Validação local do A1 comunicada pelo operador (22/09/2026)
+
+O operador executou `scripts/verify-fiscal-certificate.ps1` no seu Windows PowerShell e informou: `CnpjCorresponde=True`, `ValidoNestaData=True`, `ValidoAte=2027-03-02`, `ChavePrivadaPresente=True` e `AssinaturaLocalFuncionou=True`. A data coincide com a validade exibida no Bling. Nenhuma senha, chave privada ou conteúdo do PFX foi transmitido na conversa. Isso comprova abertura do arquivo e assinatura local conforme o verificador, não credenciamento SEFAZ, autorização de emissão nem recuperação de uma cópia de backup. D07 permanece aberto apenas para backup/recuperação seguros; F07 cobre assinatura XML e comunicação fiscal posterior.
+
+O operador escolheu adiar a segunda cópia e o ensaio de recuperação e pediu que permaneçam como pendência no checklist. Não foi criada cópia adicional nem alterado o PFX validado.
+
+## E26 — Tela do certificado e aviso em pop-up (22/09/2026)
+
+Incluído painel **Certificado digital** em Dados da Empresa, com seleção de empresa, tipo A1 servidor/A1 cliente/A3/Gerenciador do Windows, validade e antecedência configurável de 1 a 365 dias. O backend guarda apenas metadados em `company_certificate_settings`, isolados por perfil fiscal; nenhuma chave privada, PFX ou senha passa pela página. Um endpoint autenticado de administrador retorna certificados dentro da janela de aviso. O `AdminLayout` consulta esse endpoint ao abrir o painel e a cada hora enquanto estiver aberto; mostra pop-up para vencidos e próximos do vencimento. Fechar com “Lembrar na próxima sessão” suprime repetição naquela sessão/dia. Não envia e-mail/WhatsApp nem executa verificação sem sessão administrativa aberta.
+
+## E27 — Cofre A1, operações controladas e status SEFAZ-PE (22/09/2026)
+
+Estado anterior: o painel guardava somente validade e antecedência; não recebia o PFX, não instalava no servidor e não comunicava com a SEFAZ. Alteração: upload multipart de até 5 MB aceita `.pfx`/`.p12`, abre o PKCS#12 com a senha, exige chave privada e confere o CNPJ do titular com a empresa selecionada. O PFX original e a senha ficam em registro AES-256-GCM com IV aleatório e chave mestra exclusiva do ambiente, em diretório privado com permissões 0700/0600; MySQL guarda apenas metadados, estado e auditoria. A chave mestra não é enviada ao navegador nem versionada.
+
+Exportação exige novamente a senha do PFX e registra evento. Exclusão exige senha e confirmação do CNPJ, remove o cofre e limpa metadados operacionais. Renovação substitui atomicamente o arquivo. O painel mostra titular, emissor, serial e SHA-256, mantém aviso configurável e inclui guia HTML e vídeo próprios. A consulta `NFeStatusServico4` usa mTLS com o A1 armazenado e endpoints oficiais da SEFAZ-PE para homologação e produção; código 107 é apresentado como operacional. Isto comprova o transporte/certificado quando executado com o A1 real, mas ainda não gera, assina nem transmite XML de NF-e.
+
+Validações locais: `npm run test:company-fiscal` 19/19, incluindo PFX sintético, CNPJ divergente, cifra em repouso, senha errada, exportação, exclusão e resposta SEFAZ simulada; `npm run test:company-fiscal:mysql` 1/1 com migration aplicada duas vezes e ciclo upload/status/export/delete; `npm run test:company-fiscal:browser` 1/1 pela tela real, HTTP autenticado e MySQL 8.4 descartável; `npm run build` e verificações de sintaxe aprovados. Nenhum segredo real foi usado nos testes automatizados. Pendente publicar, instalar o A1 real pela tela e executar homologação para registrar o retorno oficial.
+
+Validação: `npm run test:company-fiscal` 17/17; `npm run build` aprovado; `npm run test:company-fiscal:mysql` 1/1, incluindo configuração e leitura de aviso; `npm run test:company-fiscal:browser` 1/1 com cadastro e recarga da tela. Houve falhas intermediárias no teste de navegador por seletor e por corrida entre consulta e edição; o painel passou a bloquear edição durante carregamento e o teste final passou. A migration permanece sem aplicação operacional; nenhum certificado foi instalado no servidor ou apresentado como pronto para emitir.

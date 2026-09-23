@@ -42,6 +42,11 @@ const tiktokShopAutomationPaths = [
   'services/tiktokShopFulfillmentAutomation.cjs',
   'services/tiktokShopPrintServer.cjs',
 ];
+const companyFiscalServicePaths = [
+  'services/companyFiscalCore.cjs',
+  'services/companyFiscalServer.cjs',
+  'services/fiscalCertificateVault.cjs',
+];
 const autoresponderEngineFiles = [
   'services/autoresponder/engine/types.js',
   'services/autoresponder/engine/state.js',
@@ -250,6 +255,9 @@ async function ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath = null)
       META_OAUTH_REDIRECT_URI: process.env.META_OAUTH_REDIRECT_URI || readEnvValue(current, 'META_OAUTH_REDIRECT_URI') || 'https://api.xiaomipetrolina.com.br/integrations/meta/oauth/callback',
       META_TOKEN_ENCRYPTION_KEY: process.env.META_TOKEN_ENCRYPTION_KEY || currentMetaEncryptionKey || crypto.randomBytes(32).toString('hex'),
       BULK_IMAGE_CONCURRENCY: process.env.BULK_IMAGE_CONCURRENCY || readEnvValue(current, 'BULK_IMAGE_CONCURRENCY') || '3',
+      MDV_COMPANY_FISCAL_ENABLED: '1',
+      FISCAL_CERTIFICATE_MASTER_KEY: process.env.FISCAL_CERTIFICATE_MASTER_KEY || readEnvValue(current, 'FISCAL_CERTIFICATE_MASTER_KEY') || crypto.randomBytes(32).toString('hex'),
+      FISCAL_CERTIFICATE_VAULT_DIR: process.env.FISCAL_CERTIFICATE_VAULT_DIR || readEnvValue(current, 'FISCAL_CERTIFICATE_VAULT_DIR') || `${appDir}/.secrets/fiscal-certificates`,
     };
     const pexelsKey = process.env.PEXELS_API_KEY || readEnvValue(current, 'PEXELS_API_KEY');
     if (pexelsKey) entries.PEXELS_API_KEY = pexelsKey;
@@ -316,6 +324,67 @@ async function ensureRemoteMobileSalesDependencies(appDir) {
     console.log('Installing remote Firebase Admin dependency');
   }
   await exec(`cd ${appDir} && npm install firebase-admin@13.10.0 --omit=dev`);
+}
+
+async function ensureRemoteFiscalDependencies(appDir) {
+  try {
+    await exec(`cd ${appDir} && node -e "require.resolve('node-forge')"`);
+  } catch {
+    await exec(`cd ${appDir} && npm install node-forge@1.4.0 --omit=dev`);
+  }
+  await exec(`mkdir -p ${appDir}/.secrets/fiscal-certificates && chmod 700 ${appDir}/.secrets ${appDir}/.secrets/fiscal-certificates`);
+  console.log('Remote fiscal certificate vault dependency and directory ready');
+}
+
+async function applyCompanyFiscalMigration({ appDir, apiProc }) {
+  if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+  const migrationPath = 'migrations/020_company_fiscal_profiles.sql';
+  await exec(`mkdir -p ${appDir}/migrations`);
+  await upload(path.join(__dirname, migrationPath), remotePathJoin(appDir, migrationPath));
+  const source = `
+    const fs = require('fs'); require('dotenv').config();
+    (async () => {
+      const db = await require('mysql2/promise').createConnection({host:process.env.DB_HOST,user:process.env.DB_USER,password:process.env.DB_PASS,database:process.env.DB_NAME,multipleStatements:true});
+      const sql=fs.readFileSync('${migrationPath}','utf8').replace(/--[^\\n]*/g,'');
+      for (const statement of sql.split(';').map(value=>value.trim()).filter(Boolean)) await db.query(statement);
+      const expected=['company_fiscal_profiles','company_fiscal_events','company_certificate_settings'];
+      for (const table of expected) { const [rows]=await db.query('SHOW TABLES LIKE ?',[table]); if(!rows.length) throw new Error('Missing table '+table); }
+      const [columns]=await db.query("SHOW COLUMNS FROM company_certificate_settings LIKE 'fingerprint_sha256'"); if(!columns.length) throw new Error('Certificate metadata columns missing');
+      console.log('Company fiscal migration applied and validated.'); await db.end();
+    })().catch(error=>{console.error(error.message);process.exit(1)});
+  `;
+  const encoded = Buffer.from(source).toString('base64');
+  console.log((await exec(`cd ${appDir} && node -e "eval(Buffer.from('${encoded}','base64').toString())"`)).trim());
+}
+
+async function deployCompanyFiscalOnly(appDir, apiProc) {
+  if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+  const backupDir = `${appDir}/backups/company-fiscal-${Date.now()}`;
+  await exec(`mkdir -p ${backupDir} ${appDir}/services`);
+  for (const file of companyFiscalServicePaths) {
+    await exec(`if test -f ${appDir}/${file}; then cp -p ${appDir}/${file} ${backupDir}/${path.basename(file)}; fi`);
+    await upload(path.join(__dirname, file), remotePathJoin(appDir, file));
+  }
+  await applyCompanyFiscalMigration({ appDir, apiProc });
+  await ensureRemoteAdminEnv(appDir);
+  await ensureRemoteFiscalDependencies(appDir);
+  const patchSource = `
+    const fs=require('fs');
+    for(const file of ['vps_server.js','vps_server.cjs']){
+      const target='${appDir}/'+file; let source=fs.readFileSync(target,'utf8');
+      const route="require('./services/companyFiscalServer.cjs').registerCompanyFiscalRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });";
+      if(!source.includes(route)){
+        const anchor="require('./services/centralPrintingServer.cjs').registerCentralPrintingRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });";
+        if(!source.includes(anchor)) throw new Error('Company fiscal route anchor missing in '+file);
+        fs.copyFileSync(target,'${backupDir}/'+file); source=source.replace(anchor,anchor+'\\n'+route); fs.writeFileSync(target,source);
+      }
+    }
+  `;
+  const encoded = Buffer.from(patchSource).toString('base64');
+  await exec(`node -e "eval(Buffer.from('${encoded}','base64').toString())"`);
+  await exec(`node --check ${appDir}/services/companyFiscalServer.cjs && node --check ${appDir}/services/fiscalCertificateVault.cjs && node --check ${appDir}/vps_server.js && node --check ${appDir}/vps_server.cjs`);
+  console.log((await exec(`pm2 restart ${apiProc.name} --update-env`)).trim());
+  console.log(`Company fiscal backup: ${backupDir}`);
 }
 
 async function applyMarketingScenesMigration({ appDir, apiProc, exec, upload, root }) {
@@ -410,6 +479,12 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--company-fiscal-migration-only')) {
+    await applyCompanyFiscalMigration({ appDir, apiProc }); conn.end(); return;
+  }
+  if (process.argv.includes('--company-fiscal-only')) {
+    await deployCompanyFiscalOnly(appDir, apiProc); conn.end(); return;
+  }
   if (process.argv.includes('--marketing-scenes-only')) {
     if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
     const backupDir = `${appDir}/backups/marketing-scenes-${Date.now()}`;
@@ -465,6 +540,10 @@ async function main() {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }
+  for (const file of companyFiscalServicePaths) {
+    await upload(path.join(__dirname, file), remotePathJoin(appDir, file));
+    console.log(`Uploaded ${file}`);
+  }
   await upload(path.join(__dirname, 'services/customerDebtReminderCore.cjs'), remotePathJoin(appDir, 'services/customerDebtReminderCore.cjs'));
   console.log('Uploaded services/customerDebtReminderCore.cjs');
   await upload(path.join(__dirname, 'utils/installmentCalculations.cjs'), remotePathJoin(appDir, 'utils/installmentCalculations.cjs'));
@@ -473,6 +552,7 @@ async function main() {
   await ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath);
   await ensureRemoteMediaDocumentDependencies(appDir);
   await ensureRemoteMobileSalesDependencies(appDir);
+  await ensureRemoteFiscalDependencies(appDir);
   const restartOutput = await exec(`pm2 restart ${apiProc.name} --update-env`);
   console.log(restartOutput.trim());
   conn.end();

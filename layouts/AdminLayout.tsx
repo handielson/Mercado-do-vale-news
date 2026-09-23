@@ -7,6 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { vpsClient } from '../services/vpsClient';
+import { companyFiscalService, type FiscalCertificateStatus } from '../services/companyFiscalService';
 
 function isLikelyCredentialAutofill(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -36,6 +37,25 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const [search, setSearch] = useState('');
   const [appVersion, setAppVersion] = useState<AppVersionInfo | null>(null);
   const [botHealth, setBotHealth] = useState<BotHealth | null>(null);
+  const [certificateAlerts, setCertificateAlerts] = useState<Array<FiscalCertificateStatus & { companyId: string; companyName: string }>>([]);
+  const [certificatePopupOpen, setCertificatePopupOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const check = async () => {
+      try {
+        const result = await companyFiscalService.certificateAlerts();
+        if (!active) return;
+        setCertificateAlerts(result.alerts);
+        const today = new Date().toISOString().slice(0, 10);
+        const fingerprint = result.alerts.map(item => `${item.companyId}:${item.validUntil}`).join('|');
+        if (fingerprint && sessionStorage.getItem('mdv-certificate-alert-dismissed') !== `${today}:${fingerprint}`) setCertificatePopupOpen(true);
+      } catch { /* Fiscal registration may be disabled or not yet migrated. */ }
+    };
+    void check();
+    const timer = window.setInterval(check, 60 * 60 * 1000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
 
   usePageTitle();
 
@@ -210,6 +230,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50" data-admin-layout-build="2026-06-14-assets-refresh">
+      {certificatePopupOpen && certificateAlerts.length > 0 && <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/60 p-4" role="presentation"><div role="alertdialog" aria-modal="true" aria-labelledby="certificate-alert-title" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><h2 id="certificate-alert-title" className="text-xl font-bold text-amber-900">Certificado digital próximo do vencimento</h2><p className="mt-2 text-sm text-slate-700">Revise a renovação dos certificados destas empresas:</p><ul className="mt-3 space-y-2">{certificateAlerts.map(item => <li key={item.companyId} className="rounded-lg bg-amber-50 p-3 text-sm"><strong>{item.companyName}</strong> · {item.daysRemaining! < 0 ? 'vencido' : `faltam ${item.daysRemaining} dia(s)`} · validade {new Date(item.validUntil + 'T12:00:00').toLocaleDateString('pt-BR')}</li>)}</ul><div className="mt-5 flex flex-wrap gap-3"><Link to="/admin/settings/company" onClick={() => setCertificatePopupOpen(false)} className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white">Ver certificados</Link><button type="button" className="rounded-lg border px-4 py-2 text-sm" onClick={() => { const today = new Date().toISOString().slice(0, 10); const fingerprint = certificateAlerts.map(item => `${item.companyId}:${item.validUntil}`).join('|'); sessionStorage.setItem('mdv-certificate-alert-dismissed', `${today}:${fingerprint}`); setCertificatePopupOpen(false); }}>Lembrar na próxima sessão</button></div></div></div>}
       {DEV_MODE && (
         <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black px-4 py-2 text-center text-sm font-bold z-[100] shadow-lg">
           🔧 MODO DESENVOLVIMENTO - Autenticação Mock Ativa

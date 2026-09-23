@@ -24,6 +24,7 @@ export interface ReceitaFederalData {
         code: string;
         text: string;
     }>;
+    atividades_secundarias: Array<{ code: string; text: string }>;
 }
 
 /**
@@ -69,9 +70,12 @@ export const searchCNPJ = async (cnpj: string): Promise<ReceitaFederalData | nul
             email: data.email || '',
             telefone: data.ddd_telefone_1 || '',
             atividade_principal: data.cnae_fiscal ? [{
-                code: data.cnae_fiscal,
+                code: String(data.cnae_fiscal),
                 text: data.cnae_fiscal_descricao || ''
-            }] : []
+            }] : [],
+            atividades_secundarias: Array.isArray(data.cnaes_secundarios)
+                ? data.cnaes_secundarios.filter((entry: any) => /^\d{7}$/.test(String(entry?.codigo || '')) && typeof entry?.descricao === 'string').map((entry: any) => ({ code: String(entry.codigo), text: entry.descricao }))
+                : []
         };
     } catch (error) {
         console.error('Error searching CNPJ:', error);
