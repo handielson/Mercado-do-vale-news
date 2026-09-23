@@ -1,6 +1,6 @@
 # Migração do Bling — checklist principal
 
-Atualizado em 2026-09-22. Objetivo aprovado: eliminar a dependência operacional do Bling, começando pelo fiscal com integração direta à SEFAZ. Evoluir por etapas e testar o ciclo de venda inteiro. Este arquivo é a fonte única do progresso; os documentos vinculados guardam detalhes e evidências.
+Atualizado em 2026-09-23. Objetivo aprovado: eliminar a dependência operacional do Bling, começando pelo fiscal com integração direta à SEFAZ. Evoluir por etapas e testar o ciclo de venda inteiro. Este arquivo é a fonte única do progresso; os documentos vinculados guardam detalhes e evidências.
 
 ## Estado e próxima entrega
 
@@ -30,9 +30,9 @@ Se um teste falhar, manter o item aberto, corrigir dentro do escopo e repetir o 
 - [x] D04 — Catalogar API pública e índice de ajuda. E04: 263 operações, 165 caminhos, 49 grupos; 23 categorias e 348 seções.
 - [x] D05 — Executar verificações iniciais e registrar inclusive falhas. E05; isto não significa aprovação da migração.
 - [ ] D06 — Confirmar regime atual/vigência e operações fiscais com o contador; histórico é referência, não configuração automaticamente vigente.
-- [ ] D07 — A1 exportado e removido do repositório sincronizado (E19/E21/E23–E25). O operador executou validação local com a senha: CNPJ corresponde, certificado vigente até 02/03/2027, chave privada presente e assinatura local aprovada. A ACL do arquivo local permite apenas Nitro, SYSTEM e Administradores. **Pendente por escolha do operador em 22/09/2026:** criar segunda cópia segura fora deste computador e ensaiar a recuperação depois. Comunicação/assinatura com SEFAZ será testada no marco fiscal próprio.
+- [ ] D07 — A1 exportado e removido do repositório sincronizado (E19/E21/E23–E25). O operador executou validação local com a senha: CNPJ corresponde, certificado vigente até 02/03/2027, chave privada presente e assinatura local aprovada. A ACL do arquivo local permite apenas Nitro, SYSTEM e Administradores. **Pendente por escolha do operador em 22/09/2026:** criar segunda cópia segura fora deste computador e ensaiar a recuperação depois. A autenticação mTLS e a consulta de status na SEFAZ-PE foram aprovadas em E28; a assinatura de XML fiscal continua em F07.
 - [x] D07a — Tela de metadados do certificado por empresa e aviso configurável em pop-up no painel administrativo implementados localmente (E26). Não guarda PFX/senha; só dispara ao usar o painel e após migration/publicação. Testes locais aprovados; não equivale à instalação do A1 no servidor nem ao backup pendente em D07.
-- [ ] D07b — Gestão real do A1 pelo painel implementada e testada localmente (E27): instalar/renovar, exportar e excluir com controles, cofre AES-256-GCM, auditoria, guia/vídeo e consulta de status SEFAZ-PE. Pendente aplicar/publicar e o operador instalar o A1 pela tela para comprovar mTLS real; o backup externo de D07 continua separado.
+- [x] D07b — Gestão real do A1 pelo painel implantada e validada (E27/E28): instalação real, cofre AES-256-GCM, metadados, auditoria, exportação/exclusão controladas, guia/vídeo, alerta e consulta autenticada. O A1 da empresa foi aceito e a SEFAZ-PE homologação respondeu `107 — Serviço em Operação`; o backup externo de D07 continua separado.
 - [ ] D08 — Conferir no e-Fisco PE credenciamento NF-e/NFC-e por modelo e ambiente e CSC por ambiente se NFC-e for aplicável. Requisitos oficiais revistos em E20; situação desta empresa ainda não comprovada.
 - [ ] D09 — Definir empresas, modelos, canais e tipos de operação usados; classificar funções do inventário como necessárias, futuras ou não aplicáveis.
 - [ ] D10 — Preparar ambiente isolado, fixtures sintéticas e backup com teste de restauração.
