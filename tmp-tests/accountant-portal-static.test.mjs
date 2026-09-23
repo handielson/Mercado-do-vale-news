@@ -40,6 +40,15 @@ test('migração cria concessão, documentos e conciliação isolados por perfil
   assert.match(migration, /uniq_company_fiscal_source_document/);
 });
 
+test('migration alinha collation do contador com customers e deploy valida o schema', () => {
+  const migration = read('migrations/023_accountant_customer_collation.sql');
+  const deploy = read('deploy-vps-server-only.cjs');
+  assert.match(migration, /MODIFY customer_id VARCHAR\(80\)/);
+  assert.match(migration, /COLLATE utf8mb4_unicode_ci/);
+  assert.match(deploy, /023_accountant_customer_collation\.sql/);
+  assert.match(deploy, /Accountant customer ID collation mismatch/);
+});
+
 test('importação fiscal do Bling ocorre no servidor e o painel usa total documental', () => {
   const server = read('vps_server.js');
   const routes = read('services/accountantPortalServer.cjs');
