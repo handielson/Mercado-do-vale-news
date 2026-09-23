@@ -2,9 +2,18 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const { PDFDocument } = require('pdf-lib');
 const { createMercadoLivreSummaryPdf } = require('./mercado-livre-print-core.cjs');
 const { prepareMercadoLivreSummaryPrinter } = require('./mercado-livre-print-agent.cjs');
+
+async function listWindowsPrinters(run = promisify(execFile)) {
+  const { stdout } = await run('powershell.exe', [
+    '-NoProfile', '-NonInteractive', '-Command', 'Get-Printer | Select-Object -ExpandProperty Name',
+  ], { timeout: 10000, windowsHide: true });
+  return String(stdout).split(/\r?\n/).map(name => name.trim()).filter(Boolean).map(name => ({ name }));
+}
 
 function requestFactory(apiUrl, syncKey, requestFetch = global.fetch) {
   const base = new URL(apiUrl);
@@ -107,7 +116,7 @@ async function executeTikTokPrintJob({ job, settings, request, print, getStockLo
 
 function startTikTokPrintAgent({ apiUrl, syncKey, getSettings, getStockLocations,
   request = requestFactory(apiUrl, syncKey), print = (...args) => require('pdf-to-printer').print(...args),
-  listPrinters = () => require('pdf-to-printer').getPrinters(),
+  listPrinters = listWindowsPrinters,
   directory = path.join(__dirname, 'Etiquetas de envio'),
   journalDirectory = path.join(__dirname, 'tiktok_shop_printed'), logger = console, intervalMs = 60000 } = {}) {
   if (!syncKey) throw new Error('Chave da API ausente');
@@ -140,4 +149,4 @@ function startTikTokPrintAgent({ apiUrl, syncKey, getSettings, getStockLocations
   return { tick, stop: () => clearInterval(timer) };
 }
 
-module.exports = { requestFactory, executeTikTokPrintJob, startTikTokPrintAgent, separationLocation };
+module.exports = { requestFactory, executeTikTokPrintJob, startTikTokPrintAgent, separationLocation, listWindowsPrinters };

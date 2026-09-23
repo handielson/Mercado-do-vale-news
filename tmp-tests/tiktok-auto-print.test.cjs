@@ -4,10 +4,18 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { PDFDocument } = require('pdf-lib');
-const { executeTikTokPrintJob, startTikTokPrintAgent, separationLocation } = require('../scripts/tiktok-shop-print-agent.cjs');
+const { executeTikTokPrintJob, startTikTokPrintAgent, separationLocation, listWindowsPrinters } = require('../scripts/tiktok-shop-print-agent.cjs');
 const { summaryFromOrder, isPrintableOrder } = require('../services/tiktokShopPrintServer.cjs');
 
 async function main() {
+  const listed = await listWindowsPrinters(async (file, args, options) => {
+    assert.equal(file, 'powershell.exe');
+    assert.ok(args.includes('Get-Printer | Select-Object -ExpandProperty Name'));
+    assert.equal(options.timeout, 10000);
+    return { stdout: 'ZDesigner ZD220-203dpi ZPL\r\nComprovante\r\n' };
+  });
+  assert.deepEqual(listed, [{ name: 'ZDesigner ZD220-203dpi ZPL' }, { name: 'Comprovante' }]);
+  await assert.rejects(listWindowsPrinters(async () => { throw new Error('spooler unavailable'); }), /spooler unavailable/);
   let claims = 0;
   const settings = { shopee_printer_thermal: 'Zebra', shopee_printer_a4: 'Comprovante' };
   const wrongComputer = startTikTokPrintAgent({ syncKey: 'test', getSettings: async () => settings,
