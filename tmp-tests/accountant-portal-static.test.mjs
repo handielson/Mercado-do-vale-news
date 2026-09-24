@@ -120,3 +120,15 @@ test('importação fiscal do Bling ocorre no servidor e o painel usa total docum
   assert.match(page, /Notas fiscais por canal de venda/);
   assert.match(page, /Canal não identificado/);
 });
+
+test('prévia fiscal começa em um dia e orienta divisão quando passa de 120 notas', () => {
+  const panel = read('components/company/CompanyAccountantAccessPanel.tsx');
+  const core = read('services/blingFiscalImportCore.cjs');
+  assert.match(panel, /\[importFrom, setImportFrom\] = useState\(localToday\)/);
+  assert.match(panel, /\[importTo, setImportTo\] = useState\(localToday\)/);
+  assert.match(panel, /detail\.includes\('Período com notas demais'\)/);
+  assert.match(panel, /setImportTo\(importFrom\)/);
+  assert.match(panel, /Ir para o próximo dia/);
+  assert.match(panel, /setPreview\(null\)/);
+  assert.match(core, /maxDocuments = 120/);
+});

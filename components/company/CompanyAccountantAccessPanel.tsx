@@ -4,6 +4,15 @@ import { companyFiscalService, type FiscalCompany } from '../../services/company
 import { accountantAccessAdminService, type AccountantAccess, type BlingFiscalPreview } from '../../services/accountantPortalService';
 
 const money = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+const localToday = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+const nextDay = (isoDate: string) => {
+  const date = new Date(`${isoDate}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+};
 
 export function CompanyAccountantAccessPanel() {
   const [companies, setCompanies] = useState<FiscalCompany[]>([]);
@@ -13,8 +22,10 @@ export function CompanyAccountantAccessPanel() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [importFrom, setImportFrom] = useState(new Date().toISOString().slice(0, 7) + '-01');
-  const [importTo, setImportTo] = useState(new Date().toISOString().slice(0, 10));
+  const [importFrom, setImportFrom] = useState(localToday);
+  const [importTo, setImportTo] = useState(localToday);
+  const [oversizedPeriod, setOversizedPeriod] = useState(false);
+  const [lastImportedDay, setLastImportedDay] = useState('');
   const [preview, setPreview] = useState<(BlingFiscalPreview & { companyId: string }) | null>(null);
   const selectedCompany = companies.find(company => company.id === selected);
   const previewMatches = preview?.companyId === selected && preview.from === importFrom && preview.to === importTo;
@@ -43,6 +54,7 @@ export function CompanyAccountantAccessPanel() {
     try {
       const result = await accountantAccessAdminService.importBlingDocuments(selected, importFrom, importTo, preview.fingerprint);
       setMessage(`${result.imported} documento(s) conferido(s): ${result.authorized} autorizado(s) e ${result.cancelled} cancelado(s). Repetir a importação atualiza os mesmos documentos sem duplicar.`);
+      setLastImportedDay(importFrom === importTo ? importTo : '');
       setPreview(null);
     } catch (err) { setPreview(null); setError(err instanceof Error ? err.message : 'Falha ao importar documentos fiscais.'); }
     finally { setBusy(false); }
@@ -50,19 +62,28 @@ export function CompanyAccountantAccessPanel() {
   const previewBling = async () => {
     if (!selected || !importFrom || !importTo || importFrom > importTo) return;
     setBusy(true); setError(''); setMessage(''); setPreview(null);
-    try { setPreview({ ...await accountantAccessAdminService.previewBlingDocuments(selected, importFrom, importTo), companyId: selected }); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Falha ao conferir documentos fiscais no Bling.'); }
+    try { setPreview({ ...await accountantAccessAdminService.previewBlingDocuments(selected, importFrom, importTo), companyId: selected }); setOversizedPeriod(false); }
+    catch (err) {
+      const detail = err instanceof Error ? err.message : 'Falha ao conferir documentos fiscais no Bling.';
+      const exceeded = detail.includes('Período com notas demais');
+      setOversizedPeriod(exceeded);
+      setError(exceeded ? importFrom === importTo
+        ? 'Este dia ultrapassou o limite de 120 notas por conferência. Não foi importado; mantenha esta data como pendência para subdivisão por horário.'
+        : 'Este período ultrapassou o limite de 120 notas por conferência. Selecione um dia e confira novamente; nenhum documento foi importado.' : detail);
+    }
     finally { setBusy(false); }
   };
 
   return <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4" aria-labelledby="accountant-access-title">
     <div><h2 id="accountant-access-title" className="text-lg font-bold text-slate-800">Espaço do Contador</h2><p className="mt-1 text-sm text-slate-600">Conceda acesso somente à validação fiscal e ao faturamento desta empresa. O contador não recebe acesso ao painel administrativo.</p></div>
-    <label className="block text-sm font-semibold">Empresa fiscal<select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" value={selected} onChange={event => { setSelected(event.target.value); setPreview(null); }}>{companies.map(company => <option key={company.id} value={company.id}>{company.name} — {company.cnpj}</option>)}</select></label>
+    <label className="block text-sm font-semibold">Empresa fiscal<select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" value={selected} onChange={event => { setSelected(event.target.value); setPreview(null); setOversizedPeriod(false); setLastImportedDay(''); }}>{companies.map(company => <option key={company.id} value={company.id}>{company.name} — {company.cnpj}</option>)}</select></label>
     <div className="flex flex-col gap-2 sm:flex-row"><input type="email" className="flex-1 rounded-lg border border-slate-300 px-3 py-2" placeholder="E-mail da conta do contador" value={email} onChange={event => setEmail(event.target.value)} /><button type="button" disabled={busy || !email.trim()} onClick={grant} className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"><UserPlus size={17}/>Conceder acesso</button></div>
     <p className="text-xs text-slate-500">Se a conta ainda não existir, o contador deve criá-la em “Criar conta” na página de login. Depois, conceda o acesso pelo e-mail cadastrado.</p>
     <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
-      <div><h3 className="font-bold text-blue-950">Copiar histórico fiscal do Bling</h3><p className="text-sm text-blue-900">Importa NF-e e NFC-e de saída, autorizadas e canceladas, para a nossa base. Valores e situação são conferidos no detalhe de cada nota. Importe em períodos pequenos (até 25 notas por operação). A operação apenas consulta o Bling: não altera nem exclui documentos lá. A conexão atual pertence à empresa principal; cada empresa adicional precisará da própria conexão.</p></div>
-      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto]"><label className="text-sm font-semibold text-slate-800">De<input type="date" value={importFrom} onChange={event => { setImportFrom(event.target.value); setPreview(null); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label><label className="text-sm font-semibold text-slate-800">Até<input type="date" value={importTo} onChange={event => { setImportTo(event.target.value); setPreview(null); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label><button type="button" disabled={busy || !selected || !selectedCompany?.primary || !importFrom || !importTo || importFrom > importTo} onClick={previewBling} className="mt-6 inline-flex h-10 items-center justify-center rounded-lg border border-blue-700 px-4 font-semibold text-blue-800 disabled:opacity-50">Conferir prévia</button><button type="button" disabled={busy || !previewMatches || !preview?.count || !selectedCompany?.primary} onClick={importBling} className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 font-semibold text-white disabled:opacity-50"><DownloadCloud size={17}/>Importar notas</button></div>
+      <div><h3 className="font-bold text-blue-950">Copiar histórico fiscal do Bling</h3><p className="text-sm text-blue-900">Importa NF-e e NFC-e de saída, autorizadas e canceladas, para a nossa base. Valores e situação são conferidos no detalhe de cada nota. Comece por um dia; o limite de segurança é 120 notas por conferência. A operação apenas consulta o Bling: não altera nem exclui documentos lá. A conexão atual pertence à empresa principal; cada empresa adicional precisará da própria conexão.</p></div>
+      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto]"><label className="text-sm font-semibold text-slate-800">De<input type="date" value={importFrom} onChange={event => { setImportFrom(event.target.value); setPreview(null); setOversizedPeriod(false); setLastImportedDay(''); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label><label className="text-sm font-semibold text-slate-800">Até<input type="date" value={importTo} onChange={event => { setImportTo(event.target.value); setPreview(null); setOversizedPeriod(false); setLastImportedDay(''); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label><button type="button" disabled={busy || !selected || !selectedCompany?.primary || !importFrom || !importTo || importFrom > importTo} onClick={previewBling} className="mt-6 inline-flex h-10 items-center justify-center rounded-lg border border-blue-700 px-4 font-semibold text-blue-800 disabled:opacity-50">Conferir prévia</button><button type="button" disabled={busy || !previewMatches || !preview?.count || !selectedCompany?.primary} onClick={importBling} className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 font-semibold text-white disabled:opacity-50"><DownloadCloud size={17}/>Importar notas</button></div>
+      {oversizedPeriod && importFrom < importTo && <button type="button" disabled={busy} onClick={() => { setImportTo(importFrom); setPreview(null); setError(''); setOversizedPeriod(false); }} className="rounded-lg border border-blue-700 px-3 py-2 text-sm font-semibold text-blue-800 disabled:opacity-50">Conferir somente {importFrom}</button>}
+      {lastImportedDay === importFrom && importFrom === importTo && nextDay(importTo) <= localToday() && <button type="button" disabled={busy} onClick={() => { const day = nextDay(importTo); setImportFrom(day); setImportTo(day); setPreview(null); setError(''); setMessage(''); setLastImportedDay(''); }} className="rounded-lg border border-blue-700 px-3 py-2 text-sm font-semibold text-blue-800 disabled:opacity-50">Ir para o próximo dia ({nextDay(importTo)})</button>}
       {previewMatches && preview && <div className="rounded-lg border border-blue-200 bg-white p-3 text-sm text-blue-950" role="status"><p className="font-bold">Prévia sem gravação: {preview.count} documento(s) de {preview.from} a {preview.to}</p><p>Autorizadas: {preview.totals.authorizedDocumentCount} · {money(preview.totals.authorizedDocumentCents)}. Canceladas: {preview.totals.cancelledDocumentCount} · {money(preview.totals.cancelledDocumentCents)}.</p><p>{preview.byModel.map(item => `${item.model === '55' ? 'NF-e' : 'NFC-e'}: ${item.authorizedDocumentCount} autorizada(s), ${item.cancelledDocumentCount} cancelada(s)`).join(' · ')}</p><p className="mt-1 text-blue-800">A importação consulta o Bling novamente; confira o resultado após gravar, pois as notas podem mudar entre as duas consultas.</p></div>}
     </div>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}{message && <p role="status" className="text-sm text-green-700">{message}</p>}
