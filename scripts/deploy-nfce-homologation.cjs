@@ -51,8 +51,9 @@ async function deployNfceHomologation({ appDir, apiProc, exec, upload, root, che
   })().catch(e=>{console.error(e.message);process.exit(1)});`);
   for (const file of files) {
     const target = `${appDir}/${file}`;
-    await upload(path.join(root,file),`${target}.next`);
-    if (file.endsWith('.cjs')) await exec(`node --check ${target}.next`);
+    const staged = file.endsWith('.cjs') ? `${target}.next.cjs` : `${target}.next`;
+    await upload(path.join(root,file),staged);
+    if (file.endsWith('.cjs')) await exec(`node --check ${staged}`);
   }
   await upload(path.join(root,migration),`${appDir}/${migration}.next`);
   await exec(`cd ${appDir} && npm install --save-exact xmllint-wasm@5.3.0 --omit=dev --no-audit --no-fund`);
@@ -63,7 +64,7 @@ async function deployNfceHomologation({ appDir, apiProc, exec, upload, root, che
     await db.end();console.log('NFC-e tables ready');
   })().catch(e=>{console.error(e.message);process.exit(1)});`);
   try {
-    for (const file of files) await exec(`mv ${appDir}/${file}.next ${appDir}/${file}`);
+    for (const file of files) await exec(`mv ${appDir}/${file}${file.endsWith('.cjs') ? '.next.cjs' : '.next'} ${appDir}/${file}`);
     await exec(`mv ${appDir}/${migration}.next ${appDir}/${migration}`);
     await runNode(exec, appDir, `const fs=require('fs');const p='.env';const original=fs.readFileSync(p,'utf8');let next=original;for(const key of ['MDV_NFCE_HOMOLOGATION_PREPARE_ENABLED','MDV_NFCE_HOMOLOGATION_TRANSMIT_ENABLED']){const re=new RegExp('^'+key+'=.*$','m');next=re.test(next)?next.replace(re,key+'=1'):next.replace(/\\s*$/,'\\n'+key+'=1\\n');}fs.writeFileSync(p,next,{mode:0o600});console.log('Homologation flags enabled');`);
     await exec('pm2 restart mdv-api --update-env');
