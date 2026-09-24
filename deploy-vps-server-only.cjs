@@ -456,6 +456,22 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--tax-validation-only')) {
+    if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+    const files = ['services/fiscalTaxValidationCore.cjs', 'services/companyFiscalServer.cjs', 'services/accountantPortalServer.cjs'];
+    const backupDir = `${appDir}/backups/tax-validation-${Date.now()}`;
+    await exec(`mkdir -p ${backupDir}`);
+    for (const file of files) {
+      await exec(`cp -p ${appDir}/${file} ${backupDir}/${path.basename(file)}`);
+      await upload(path.join(__dirname, file), `${appDir}/${file}.next.cjs`);
+      await exec(`node --check ${appDir}/${file}.next.cjs`);
+    }
+    for (const file of files) await exec(`mv ${appDir}/${file}.next.cjs ${appDir}/${file}`);
+    console.log((await exec('pm2 restart mdv-api')).trim());
+    console.log(`Tax validation backup: ${backupDir}`);
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--bling-stock-reconcile-only')) {
     await withSftp(sftp => require('./scripts/deploy-bling-stock-reconcile.cjs')({
       appDir, apiProc, exec, root: __dirname,

@@ -1,6 +1,6 @@
 const { createHash, randomUUID } = require('node:crypto');
 const { problem } = require('./companyFiscalCore.cjs');
-const { blingReference, normalizeTaxValidation, taxValidationView } = require('./fiscalTaxValidationCore.cjs');
+const { blingReference, normalizeTaxValidation, taxValidationView, applyOperationReviews } = require('./fiscalTaxValidationCore.cjs');
 const { buildRevenueReport, validPeriod } = require('./accountantPortalCore.cjs');
 const { fiscalDocumentTotals } = require('./blingFiscalImportCore.cjs');
 const certificateVault = require('./fiscalCertificateVault.cjs');
@@ -107,6 +107,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
         throw problem('A validação foi alterada em outra sessão. Recarregue antes de salvar.', 409);
       }
       const reviewedAt = data.reviewedAt || null;
+      applyOperationReviews(data, current, req.body?.reviewRuleId, req.accountantActor);
       const rulesJson = JSON.stringify({ rules: data.rules, generalDecisions: data.generalDecisions, productRules: data.productRules });
       if (current) {
         await db.query('UPDATE company_fiscal_tax_validations SET status=?,reviewer_name=?,reviewer_registration=?,reviewed_at=?,notes=?,rules_json=?,version=version+1,updated_by=? WHERE profile_id=?', [data.status,data.reviewerName,data.reviewerRegistration,reviewedAt,data.notes,rulesJson,req.accountantActor,req.accountantProfile.id]);

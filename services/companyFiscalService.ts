@@ -36,11 +36,13 @@ export interface FiscalCertificateStatus {
     sefaz: SefazStatus | null; daysRemaining: number | null; alert: boolean;
 }
 export interface FiscalTaxRule {
+    review?: { reviewerName: string; reviewerRegistration: string; reviewedAt: string; actor: string; outdated: boolean } | null;
     id: string; scenario: string; used: boolean; model: string; destinationUf: string; recipient: string; finality: string;
     cfop: string; icmsCode: string; icmsTreatment: string; pisCofins: string; ipi: string; benefit: string; effectiveFrom: string; notes: string;
     source: 'bling_reference' | 'scope' | 'accountant';
 }
 export interface FiscalTaxValidation {
+    reviewRuleId?: string;
     status: 'draft' | 'reviewed' | 'approved'; reviewerName: string; reviewerRegistration: string; reviewedAt: string; notes: string;
     rules: FiscalTaxRule[]; blingReference: { observedAt: string; source: string; natures: Array<{ name: string; defaultUse: string }>; sale: Record<string, unknown> };
     generalDecisions: { taxRegime: string; crt: string; effectiveFrom: string; simplesBasis: string; freightTreatment: string; productExceptions: 'none' | 'listed' | 'pending'; productExceptionsNotes: string };

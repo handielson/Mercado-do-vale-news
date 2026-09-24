@@ -1,4 +1,5 @@
 const { problem } = require('./companyFiscalCore.cjs');
+const { isDeepStrictEqual } = require('node:util');
 
 const TEXT_LIMIT = 2000;
 const DOCUMENT_IDS = new Set(['OP01','OP02','OP03','OP04','OP05','OP06','OP07','OP08']);
@@ -146,4 +147,27 @@ function taxValidationView(row) {
   };
 }
 
-module.exports = { defaultRules, defaultGeneralDecisions, blingReference, reviewIssues, approvalIssues, normalizeTaxValidation, taxValidationView };
+// Review metadata is trusted only from storage; clients request a review by rule ID.
+function applyOperationReviews(data, currentRow, reviewRuleId, actor, now = new Date()) {
+  const previous = taxValidationView(currentRow);
+  const normalizedPrevious = normalizeTaxValidation({ ...previous, status: 'draft' });
+  const contextChanged = !isDeepStrictEqual(data.generalDecisions, normalizedPrevious.generalDecisions)
+    || !isDeepStrictEqual(data.productRules, normalizedPrevious.productRules);
+  if (reviewRuleId && !data.rules.some(rule => rule.id === reviewRuleId)) throw problem('Operação inválida para revisão.');
+  if (reviewRuleId && !data.reviewerName) throw problem('Informe o responsável/contador antes de revisar a operação.', 409);
+  const content = ({ source, review, ...rule }) => rule;
+  data.rules = data.rules.map(rule => {
+    const old = previous.rules.find(item => item.id === rule.id);
+    const oldContent = normalizedPrevious.rules.find(item => item.id === rule.id);
+    const changed = contextChanged || !isDeepStrictEqual(content(rule), content(oldContent));
+    let review = old?.review ? { ...old.review, outdated: !!old.review.outdated || changed } : null;
+    if (rule.id === reviewRuleId) review = {
+      reviewerName: data.reviewerName, reviewerRegistration: data.reviewerRegistration,
+      reviewedAt: now.toISOString(), actor: String(actor), outdated: false,
+    };
+    return { ...rule, review };
+  });
+  return data;
+}
+
+module.exports = { defaultRules, defaultGeneralDecisions, blingReference, reviewIssues, approvalIssues, normalizeTaxValidation, taxValidationView, applyOperationReviews };

@@ -1,7 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const { problem, normalizeCnpj, validateProfile, inspectIssuerReadiness, lookupCnpj } = require('./companyFiscalCore.cjs');
 const defaultCertificateVault = require('./fiscalCertificateVault.cjs');
-const { blingReference, normalizeTaxValidation, taxValidationView } = require('./fiscalTaxValidationCore.cjs');
+const { blingReference, normalizeTaxValidation, taxValidationView, applyOperationReviews } = require('./fiscalTaxValidationCore.cjs');
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const SETTINGS_SQL = 'SELECT id,cnpj,name,company_name,razao_social,state_registration,cnae,porte,phone,email,social_website,address_state,address_zip_code,address_street,address_number,address_complement,address_neighborhood,address_city FROM company_settings LIMIT 1';
 const parse = value => typeof value === 'string' ? JSON.parse(value) : value;
@@ -148,6 +148,7 @@ function registerCompanyFiscalRoutes(app, { pool, getBearerAuthContext, enabled 
       const [rows] = await db.query('SELECT * FROM company_fiscal_tax_validations WHERE profile_id=? FOR UPDATE', [found.row.id]);
       const current = rows[0];
       if (Number(current?.version || 0) !== expectedVersion) throw problem('A validação foi alterada em outra sessão. Recarregue antes de salvar.', 409);
+      applyOperationReviews(data, current, req.body?.reviewRuleId, req.fiscalActor);
       const reviewedAt = data.reviewedAt || null;
       if (current) {
         await db.query('UPDATE company_fiscal_tax_validations SET status=?,reviewer_name=?,reviewer_registration=?,reviewed_at=?,notes=?,rules_json=?,version=version+1,updated_by=? WHERE profile_id=?', [data.status,data.reviewerName,data.reviewerRegistration,reviewedAt,data.notes,JSON.stringify({ rules:data.rules, generalDecisions:data.generalDecisions, productRules:data.productRules }),req.fiscalActor,found.row.id]);

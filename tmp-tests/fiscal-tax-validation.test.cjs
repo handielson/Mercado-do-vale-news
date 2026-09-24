@@ -4,6 +4,47 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { defaultRules, defaultGeneralDecisions, blingReference, normalizeTaxValidation, taxValidationView } = require('../services/fiscalTaxValidationCore.cjs');
 
+const { applyOperationReviews } = require('../services/fiscalTaxValidationCore.cjs');
+
+test('revisão individual usa identidade e horário do servidor, persiste e invalida mudanças', () => {
+  const input = { ...taxValidationView(null), reviewerName: 'Contador teste', reviewerRegistration: 'CRC-TESTE' };
+  input.rules[1].review = { reviewerName: 'Forjado', reviewedAt: '2000-01-01' };
+  const first = applyOperationReviews(normalizeTaxValidation(input), null, 'OP01', 'user-1', new Date('2026-09-24T20:00:00Z'));
+  assert.equal(first.rules[0].review.reviewedAt, '2026-09-24T20:00:00.000Z');
+  assert.equal(first.rules[0].review.actor, 'user-1');
+  assert.equal(first.rules[1].review, null);
+  const row = { status: 'draft', reviewer_name: input.reviewerName, rules_json: JSON.stringify(first), version: 1 };
+  const loaded = taxValidationView(row);
+  assert.equal(loaded.rules[0].review.reviewerName, 'Contador teste');
+  const second = applyOperationReviews(normalizeTaxValidation(loaded), row, 'OP02', 'user-2');
+  assert.deepEqual(second.rules[0].review, first.rules[0].review);
+  assert.equal(second.rules[1].review.actor, 'user-2');
+  const changed = structuredClone(loaded);
+  changed.rules[0].cfop = '5103';
+  const invalidated = applyOperationReviews(normalizeTaxValidation(changed), row, undefined, 'user-2');
+  assert.equal(invalidated.rules[0].review.outdated, true);
+  assert.equal(invalidated.rules[0].review.reviewedAt, first.rules[0].review.reviewedAt);
+  const general = structuredClone(loaded);
+  general.generalDecisions.freightTreatment = 'Nova decisão';
+  assert.equal(applyOperationReviews(normalizeTaxValidation(general), row, undefined, 'user-2').rules[0].review.outdated, true);
+  assert.throws(() => applyOperationReviews(normalizeTaxValidation(input), row, 'OP99', 'user-1'), /Operação inválida/);
+  assert.throws(() => applyOperationReviews(normalizeTaxValidation({ ...input, reviewerName: '' }), row, 'OP01', 'user-1'), /responsável/);
+});
+
+test('deploy da revisão envia somente seus três módulos sem migrations ou alteração de ambiente', () => {
+  const script = fs.readFileSync(path.join(__dirname, '../deploy-vps-server-only.cjs'), 'utf8');
+  const start = script.indexOf("if (process.argv.includes('--tax-validation-only'))");
+  assert.ok(start > 0);
+  const mode = script.slice(start, script.indexOf("if (process.argv.includes('--bling-stock-reconcile-only'))", start));
+  assert.match(mode, /fiscalTaxValidationCore\.cjs/);
+  assert.match(mode, /companyFiscalServer\.cjs/);
+  assert.match(mode, /accountantPortalServer\.cjs/);
+  assert.match(mode, /node --check/);
+  assert.match(mode, /backups\/tax-validation/);
+  assert.match(mode, /pm2 restart mdv-api/);
+  assert.doesNotMatch(mode, /applyCompanyFiscalMigration|ensureRemoteAdminEnv|update-env/);
+});
+
 test('cria os dez cenários e identifica valores do Bling apenas como referência', () => {
   const rules = defaultRules();
   assert.equal(rules.length, 10);

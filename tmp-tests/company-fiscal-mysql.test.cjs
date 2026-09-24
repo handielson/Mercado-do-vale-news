@@ -108,6 +108,22 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   assert.equal(savedTaxDraft.json().reviewerName,'Contador de teste');
   const staleTaxDraft = await call('PUT',`/${company.id}/tax-validation`,{...taxDraft.json(),notes:'Versão antiga'});
   assert.equal(staleTaxDraft.statusCode,409,staleTaxDraft.body);
+  const operationReview = await call('PUT',`/${company.id}/tax-validation`,{...savedTaxDraft.json(),reviewRuleId:'OP01'});
+  assert.equal(operationReview.statusCode,200,operationReview.body);
+  assert.equal(operationReview.json().rules[0].review.reviewerName,'Contador de teste');
+  assert.equal(operationReview.json().rules[0].review.outdated,false);
+  assert.ok(operationReview.json().rules[0].review.reviewedAt);
+  const accountantReview = await app.inject({method:'PUT',url:`/accountant/companies/${company.id}/tax-validation`,headers:{authorization:'Bearer fixture'},payload:{...operationReview.json(),reviewRuleId:'OP02'}});
+  assert.equal(accountantReview.statusCode,200,accountantReview.body);
+  const persistedReview = await call('GET',`/${company.id}/tax-validation`);
+  assert.deepEqual(persistedReview.json().rules[0].review,operationReview.json().rules[0].review);
+  assert.equal(persistedReview.json().rules[1].review.outdated,false);
+  const changedRules = persistedReview.json().rules;
+  changedRules[0].cfop = '5103';
+  const changedReview = await call('PUT',`/${company.id}/tax-validation`,{...persistedReview.json(),rules:changedRules});
+  assert.equal(changedReview.statusCode,200,changedReview.body);
+  assert.equal(changedReview.json().rules[0].review.outdated,true);
+  assert.equal(changedReview.json().rules[1].review.outdated,false);
   const reviewDocumentId = randomUUID();
   await pool.query('INSERT INTO company_fiscal_documents (id,profile_id,channel,external_sale_id,model,status,document_number,issued_at,total_cents,source,source_reference) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
     [reviewDocumentId,company.id,'shopee','synthetic-order','55','authorized','TESTE-1','2026-09-23 12:00:00',5791,'test','test-review-1']);
@@ -153,7 +169,7 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   assert.equal(rejected.statusCode,500);
   const [after]=await pool.query('SELECT * FROM company_fiscal_profiles WHERE id=?',[company.id]);
   assert.equal(after[0].version,before[0].version);assert.equal(after[0].notes,before[0].notes);
-  const [events]=await pool.query('SELECT COUNT(*) AS count FROM company_fiscal_events');assert.equal(events[0].count,10);
+  const [events]=await pool.query('SELECT COUNT(*) AS count FROM company_fiscal_events');assert.equal(events[0].count,13);
   const [settings]=await pool.query('SELECT name FROM company_settings');assert.equal(settings[0].name,'Empresa A');
   await pool.query('DROP TRIGGER fiscal_test_reject_event');
 
