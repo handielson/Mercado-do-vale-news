@@ -241,7 +241,19 @@ async function consultInvoice(profileId, accessKey, environment = 'production', 
   if (!cStat || returnedEnvironment !== (environment === 'production' ? '1' : '2')) {
     throw Object.assign(new Error('A SEFAZ não retornou uma consulta de protocolo válida para o ambiente solicitado.'), { statusCode: 502 });
   }
-  return { environment, cStat, reason, situation: ({ '100': 'authorized', '101': 'cancelled', '110': 'denied' })[cStat] || 'unconfirmed', checkedAt: new Date().toISOString() };
+  const protocol = result.match(/<(?:\w+:)?protNFe\b[^>]*>([\s\S]*?)<\/(?:\w+:)?protNFe>/i)?.[1] || '';
+  const protocolInfo = protocol.match(/<(?:\w+:)?infProt\b[^>]*>([\s\S]*?)<\/(?:\w+:)?infProt>/i)?.[1] || '';
+  const protocolStatus = xmlValue(protocolInfo, 'cStat');
+  const protocolKey = xmlValue(protocolInfo, 'chNFe');
+  if (cStat === '101' && protocolKey !== accessKey) {
+    throw Object.assign(new Error('A SEFAZ retornou cancelamento para uma chave diferente da consultada.'), { statusCode: 502 });
+  }
+  const authorizationProtocol = protocolStatus === '100' && protocolKey === accessKey ? xmlValue(protocolInfo, 'nProt') : '';
+  const authorizedAt = authorizationProtocol ? xmlValue(protocolInfo, 'dhRecbto') : '';
+  return { environment, cStat, reason, situation: ({ '100': 'authorized', '101': 'cancelled', '110': 'denied' })[cStat] || 'unconfirmed',
+    authorizationProtocol: /^\d{15}$/.test(authorizationProtocol) ? authorizationProtocol : '',
+    authorizedAt: /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:[+-]\d\d:\d\d|Z)$/.test(authorizedAt) ? authorizedAt : '',
+    checkedAt: new Date().toISOString() };
 }
 
 function requestSoap(endpoint, body, pfx, passphrase, soapAction = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF') {
@@ -257,4 +269,4 @@ function requestSoap(endpoint, body, pfx, passphrase, soapAction = 'http://www.p
   });
 }
 
-module.exports = { MAX_PFX_BYTES, SEFAZ_PE, SEFAZ_PE_CONSULTA, ICP_BRASIL_V10_ROOT, trustedAuthorities, inspectPfx, installCertificate, readCertificate, exportCertificate, deleteCertificate, testSefaz, consultInvoice, statusSoap, invoiceStatusSoap, xmlValue };
+module.exports = { MAX_PFX_BYTES, SEFAZ_PE, SEFAZ_PE_CONSULTA, ICP_BRASIL_V10_ROOT, trustedAuthorities, inspectPfx, installCertificate, readCertificate, exportCertificate, deleteCertificate, testSefaz, consultInvoice, statusSoap, invoiceStatusSoap, xmlValue, requestSoap };

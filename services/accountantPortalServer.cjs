@@ -4,6 +4,7 @@ const { blingReference, normalizeTaxValidation, taxValidationView } = require('.
 const { buildRevenueReport, validPeriod } = require('./accountantPortalCore.cjs');
 const { fiscalDocumentTotals } = require('./blingFiscalImportCore.cjs');
 const certificateVault = require('./fiscalCertificateVault.cjs');
+const { marketplaceCancellationEvidence, assessNfeCancellation } = require('./fiscalCancellationCore.cjs');
 const { normalizeDocumentReview, documentReviewView } = require('./fiscalDocumentReviewCore.cjs');
 
 const parseJson = value => {
@@ -41,7 +42,7 @@ function companyView(profile) {
   };
 }
 
-function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabled = process.env.MDV_COMPANY_FISCAL_ENABLED === '1', importBlingDocuments, consultSefazInvoice = certificateVault.consultInvoice }) {
+function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabled = process.env.MDV_COMPANY_FISCAL_ENABLED === '1', importBlingDocuments, consultSefazInvoice = certificateVault.consultInvoice, getLiveMarketplaceOrder }) {
   const auth = async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     const context = await getBearerAuthContext(req);
@@ -230,6 +231,45 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     return consultSefazInvoice(profile.id, document.access_key, 'production');
   });
 
+  app.get('/admin/fiscal-companies/:id/fiscal-documents/:documentId/cancellation-assessment', {
+    preHandler: admin, config: { rateLimit: { max: 6, timeWindow: '10 minutes' } },
+  }, async req => {
+    if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
+    const profile = await findProfile(pool, req.params.id);
+    const [rows] = await pool.query(
+      'SELECT id,model,channel,external_sale_id,access_key,status FROM company_fiscal_documents WHERE id=? AND profile_id=? LIMIT 1',
+      [req.params.documentId, profile.id]
+    );
+    const document = rows[0];
+    if (!document) throw problem('Documento fiscal não encontrado nesta empresa.', 404);
+    if (profile.uf !== 'PE' || String(document.model) !== '55' || !['shopee', 'tiktok'].includes(document.channel) ||
+        !/^[0-9]{44}$/.test(String(document.access_key || '')) ||
+        String(document.access_key).slice(6, 20) !== String(profile.cnpj || '').replace(/\D/g, '')) {
+      throw problem('A conferência exige NF-e de PE vinculada a um pedido Shopee ou TikTok da mesma empresa.', 422);
+    }
+    if (typeof getLiveMarketplaceOrder !== 'function') throw problem('Consulta atual do marketplace indisponível.', 503);
+    const order = await getLiveMarketplaceOrder(document.channel, document.external_sale_id);
+    const marketplace = marketplaceCancellationEvidence(document.channel, order, document.external_sale_id);
+    const sefaz = await consultSefazInvoice(profile.id, document.access_key, 'production');
+    return { documentId: document.id, channel: document.channel, orderReference: document.external_sale_id,
+      marketplace, sefaz, assessment: assessNfeCancellation({ document, profile, sefaz, marketplace }),
+      action: 'read_only' };
+  });
+
+  app.get('/admin/fiscal-companies/:id/fiscal-cancellation-alerts', { preHandler: admin }, async req => {
+    if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
+    const profile = await findProfile(pool, req.params.id);
+    if (process.env.MDV_FISCAL_AUTO_CANCEL_ENABLED !== '1' || process.env.MDV_FISCAL_AUTO_CANCEL_HOMOLOGATED !== '1') return { enabled: false, alerts: [] };
+    const [rows] = await pool.query(`SELECT m.document_id,m.state,m.marketplace_status,m.reason,m.checked_at,
+        d.channel,d.external_sale_id,d.document_number,d.access_key
+      FROM company_fiscal_cancellation_monitor m JOIN company_fiscal_documents d ON d.id=m.document_id
+      WHERE m.profile_id=? AND m.state IN ('open_alert','uncertain','rejected','blocked','accepted_pending_confirmation')
+      ORDER BY m.checked_at DESC LIMIT 100`, [profile.id]);
+    return { enabled: true, alerts: rows.map(row => ({ documentId: row.document_id, state: row.state,
+      channel: row.channel, orderReference: row.external_sale_id, documentNumber: row.document_number,
+      marketplaceStatus: row.marketplace_status, reason: row.reason, checkedAt: row.checked_at })) };
+  });
+
   const findReviewDocument = async (db, profileId, documentId) => {
     const [rows] = await db.query('SELECT id,model,document_number,channel,external_sale_id,status,total_cents FROM company_fiscal_documents WHERE id=? AND profile_id=? LIMIT 1', [documentId, profileId]);
     if (!rows[0]) throw problem('Documento fiscal não encontrado nesta empresa.', 404);
@@ -323,7 +363,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
           `INSERT INTO company_fiscal_documents
             (id,profile_id,channel,external_sale_id,model,status,access_key,document_number,series,issued_at,total_cents,source,source_reference,created_by)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-           ON DUPLICATE KEY UPDATE channel=VALUES(channel),external_sale_id=VALUES(external_sale_id),status=VALUES(status),access_key=COALESCE(VALUES(access_key),access_key),document_number=VALUES(document_number),series=VALUES(series),issued_at=VALUES(issued_at),total_cents=VALUES(total_cents),updated_at=CURRENT_TIMESTAMP`,
+           ON DUPLICATE KEY UPDATE channel=VALUES(channel),external_sale_id=VALUES(external_sale_id),status=IF(status='cancelled','cancelled',VALUES(status)),access_key=COALESCE(VALUES(access_key),access_key),document_number=VALUES(document_number),series=VALUES(series),issued_at=VALUES(issued_at),total_cents=VALUES(total_cents),updated_at=CURRENT_TIMESTAMP`,
           [randomUUID(),profile.id,channel,externalSaleId,document.model,document.status,document.accessKey,document.documentNumber,document.series,document.issuedAt,document.totalCents,document.source,document.sourceReference,String(req.accountantAuth.userId)]
         );
         imported += 1;

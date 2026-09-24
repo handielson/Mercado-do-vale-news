@@ -5,6 +5,42 @@ const { registerAccountantPortalRoutes } = require('../services/accountantPortal
 const { majorToCents, blingFiscalEmissionPeriod, normalizeBlingFiscalDocument, collectBlingFiscalDocuments, fiscalDocumentTotals } = require('../services/blingFiscalImportCore.cjs');
 const { normalizeDocumentReview, documentReviewView } = require('../services/fiscalDocumentReviewCore.cjs');
 
+test('conferência de cancelamento lê pedido atual e SEFAZ sem gravar nem cancelar', async () => {
+  const routes = new Map();
+  const app = {};
+  for (const method of ['get','put','post','delete']) app[method] = (path, options, handler) => routes.set(`${method}:${path}`, { preHandler:options.preHandler, handler });
+  const cnpj = '11222333000181';
+  const accessKey = `262609${cnpj}550010000006991123456780`;
+  const queries = [];
+  const pool = { query: async (sql, params) => {
+    queries.push(sql);
+    if (sql.includes('FROM company_settings')) return [[{ id:'settings-1', cnpj, name:'Empresa' }]];
+    if (sql.includes('FROM company_fiscal_profiles WHERE settings_id=')) return [[{ id:'profile-1', settings_id:'settings-1', cnpj, uf:'PE' }]];
+    if (sql.includes('FROM company_fiscal_documents')) return [[{ id:'note-1', model:'55', channel:'shopee', external_sale_id:'ORDER-1', access_key:accessKey, status:'authorized' }]];
+    throw new Error(`SQL inesperado: ${sql}`);
+  } };
+  let marketplaceReads = 0;
+  let sefazReads = 0;
+  registerAccountantPortalRoutes(app, { pool, enabled:true,
+    getBearerAuthContext:async () => ({ customerId:'admin', userId:'admin', isAdmin:true }),
+    getLiveMarketplaceOrder:async (channel, id) => { marketplaceReads++; assert.equal(channel,'shopee'); assert.equal(id,'ORDER-1'); return { order_sn:id, order_status:'CANCELLED' }; },
+    consultSefazInvoice:async () => { sefazReads++; return { situation:'authorized', cStat:'100', authorizationProtocol:'126260000000001', authorizedAt:'2026-09-24T10:00:00-03:00' }; },
+  });
+  const route = routes.get('get:/admin/fiscal-companies/:id/fiscal-documents/:documentId/cancellation-assessment');
+  const req = { params:{ id:'primary', documentId:'note-1' } };
+  const reply = { sent:false, header(){}, code(){return this;}, send(){this.sent=true;} };
+  await route.preHandler(req,reply);
+  assert.equal(reply.sent,false);
+  const result = await route.handler(req);
+  assert.equal(result.action,'read_only');
+  assert.equal(result.marketplace.cancelled,true);
+  assert.equal(result.assessment.eligible,true);
+  assert.equal(result.assessment.alert,null);
+  assert.equal(marketplaceReads,1);
+  assert.equal(sefazReads,1);
+  assert(queries.every(sql => /^SELECT/u.test(sql)));
+});
+
 test('revisão da NF-e aceita rascunho e exige decisão, fonte e contador para concluir', () => {
   const draft = normalizeDocumentReview({ reviewState:'draft', fiscalAction:'pending', valueTreatment:'Em análise.' });
   assert.equal(draft.reviewState, 'draft');

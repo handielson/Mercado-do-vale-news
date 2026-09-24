@@ -281,7 +281,7 @@ export const CompanyDataPage: React.FC = () => {
                     <button type="button" onClick={() => setAccountantArea('validation')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${accountantArea === 'validation' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}><ClipboardCheck size={17} /> Validação contábil</button>
                     <button type="button" onClick={() => setAccountantArea('access')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${accountantArea === 'access' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}><UserRoundCog size={17} /> Acessos e importação</button>
                 </nav>
-                {accountantArea === 'revenue' && <RevenuePanel />}
+                {accountantArea === 'revenue' && <RevenuePanel adminMode />}
                 {accountantArea === 'validation' && <CompanyTaxValidationPanel />}
                 {accountantArea === 'access' && <CompanyAccountantAccessPanel />}
             </div>}

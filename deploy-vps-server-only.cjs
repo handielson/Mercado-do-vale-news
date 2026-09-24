@@ -51,6 +51,9 @@ const companyFiscalServicePaths = [
   'services/accountantPortalServer.cjs',
   'services/fiscalDocumentReviewCore.cjs',
   'services/blingFiscalImportCore.cjs',
+  'services/fiscalCancellationCore.cjs',
+  'services/fiscalCancellationSefaz.cjs',
+  'services/fiscalCancellationAutomation.cjs',
 ];
 const autoresponderEngineFiles = [
   'services/autoresponder/engine/types.js',
@@ -333,9 +336,9 @@ async function ensureRemoteMobileSalesDependencies(appDir) {
 
 async function ensureRemoteFiscalDependencies(appDir) {
   try {
-    await exec(`cd ${appDir} && node -e "require.resolve('node-forge')"`);
+    await exec(`cd ${appDir} && node -e "require.resolve('node-forge'); require.resolve('xml-crypto'); require.resolve('@xmldom/xmldom')"`);
   } catch {
-    await exec(`cd ${appDir} && npm install node-forge@1.4.0 --omit=dev`);
+    await exec(`cd ${appDir} && npm install node-forge@1.4.0 xml-crypto@6.3.1 @xmldom/xmldom@0.9.12 --omit=dev`);
   }
   await exec(`mkdir -p ${appDir}/.secrets/fiscal-certificates && chmod 700 ${appDir}/.secrets ${appDir}/.secrets/fiscal-certificates`);
   console.log('Remote fiscal certificate vault dependency and directory ready');
@@ -390,7 +393,7 @@ async function deployCompanyFiscalOnly(appDir, apiProc) {
   `;
   const encoded = Buffer.from(patchSource).toString('base64');
   await exec(`node -e "eval(Buffer.from('${encoded}','base64').toString())"`);
-  await exec(`node --check ${appDir}/services/companyFiscalServer.cjs && node --check ${appDir}/services/fiscalCertificateVault.cjs && node --check ${appDir}/services/fiscalTaxValidationCore.cjs && node --check ${appDir}/services/accountantPortalCore.cjs && node --check ${appDir}/services/accountantPortalServer.cjs && node --check ${appDir}/services/fiscalDocumentReviewCore.cjs && node --check ${appDir}/services/blingFiscalImportCore.cjs && node --check ${appDir}/vps_server.js && node --check ${appDir}/vps_server.cjs`);
+  await exec(`node --check ${appDir}/services/companyFiscalServer.cjs && node --check ${appDir}/services/fiscalCertificateVault.cjs && node --check ${appDir}/services/fiscalTaxValidationCore.cjs && node --check ${appDir}/services/accountantPortalCore.cjs && node --check ${appDir}/services/accountantPortalServer.cjs && node --check ${appDir}/services/fiscalDocumentReviewCore.cjs && node --check ${appDir}/services/blingFiscalImportCore.cjs && node --check ${appDir}/services/fiscalCancellationCore.cjs && node --check ${appDir}/services/fiscalCancellationSefaz.cjs && node --check ${appDir}/services/fiscalCancellationAutomation.cjs && node --check ${appDir}/vps_server.js && node --check ${appDir}/vps_server.cjs`);
   console.log((await exec(`pm2 restart ${apiProc.name} --update-env`)).trim());
   console.log(`Company fiscal backup: ${backupDir}`);
 }

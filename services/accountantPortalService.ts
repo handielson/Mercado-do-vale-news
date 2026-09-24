@@ -78,6 +78,27 @@ export interface FiscalDocumentReviewResponse {
   review: FiscalDocumentReview;
 }
 
+export interface FiscalCancellationAssessment {
+  documentId: string;
+  channel: string;
+  orderReference: string;
+  marketplace: { cancelled: boolean; open: boolean; shipped: boolean; status: string; buyerInitiated?: boolean; reason: string };
+  sefaz: { cStat: string; reason: string; situation: string; authorizationProtocol: string; authorizedAt: string; checkedAt: string };
+  assessment: { eligible: boolean; blockers: string[]; alert: string | null; internalDeadline: string | null };
+  action: 'read_only';
+}
+
+export interface FiscalCancellationAlert {
+  documentId: string;
+  state: 'open_alert' | 'uncertain' | 'rejected' | 'blocked' | 'accepted_pending_confirmation';
+  channel: string;
+  orderReference: string;
+  documentNumber: string | null;
+  marketplaceStatus: string;
+  reason: string | null;
+  checkedAt: string | null;
+}
+
 const BASE = '/accountant/companies';
 
 export const accountantPortalService = {
@@ -121,6 +142,8 @@ export interface BlingFiscalPreview {
 }
 
 export const accountantAccessAdminService = {
+  cancellationAssessment: (companyId: string, documentId: string) => vpsClient.get<FiscalCancellationAssessment>(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/fiscal-documents/${encodeURIComponent(documentId)}/cancellation-assessment`),
+  cancellationAlerts: (companyId: string) => vpsClient.get<{ enabled: boolean; alerts: FiscalCancellationAlert[] }>(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/fiscal-cancellation-alerts`),
   list: (companyId: string) => vpsClient.get<{ company: AccountantCompany; access: AccountantAccess[] }>(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/accountant-access`),
   grant: (companyId: string, email: string) => vpsClient.post(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/accountant-access`, { email, canEditTaxValidation: true, canViewRevenue: true }),
   revoke: (companyId: string, customerId: string) => vpsClient.delete(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/accountant-access/${encodeURIComponent(customerId)}`),

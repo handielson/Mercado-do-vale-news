@@ -79,14 +79,32 @@ test('consulta de protocolo usa o A1, a chave e o ambiente de produção sem alt
       assert(body.includes(`<chNFe>${accessKey}</chNFe>`));
       assert.match(action, /NFeConsultaProtocolo4\/nfeConsultaNF$/);
       assert(pfx.length > 0); assert.equal(password, 'senha-segura');
-      return { statusCode: 200, body: '<retConsSitNFe><tpAmb>1</tpAmb><cStat>101</cStat><xMotivo>Cancelamento homologado</xMotivo></retConsSitNFe>' };
+      return { statusCode: 200, body: `<retConsSitNFe><tpAmb>1</tpAmb><cStat>101</cStat><xMotivo>Cancelamento homologado</xMotivo><protNFe><infProt><chNFe>${accessKey}</chNFe><cStat>100</cStat></infProt></protNFe></retConsSitNFe>` };
     },
   });
   assert.equal(result.cStat, '101');
   assert.equal(result.situation, 'cancelled');
   assert.equal(result.reason, 'Cancelamento homologado');
+  await assert.rejects(() => vault.consultInvoice(PROFILE, accessKey, 'production', { ...options,
+    request: async () => ({ body: '<retConsSitNFe><tpAmb>1</tpAmb><cStat>101</cStat><protNFe><infProt><chNFe>' + '9'.repeat(44) + '</chNFe></infProt></protNFe></retConsSitNFe>' }),
+  }), /chave diferente/);
   await assert.rejects(() => vault.consultInvoice(PROFILE, '123', 'production', options), /Chave de acesso/);
   await assert.rejects(() => vault.consultInvoice(PROFILE, accessKey, 'production', { ...options, request: async () => ({ body: '<soap:Fault>erro</soap:Fault>' }) }), /consulta de protocolo válida/);
+});
+
+test('consulta devolve protocolo e hora apenas quando o XML da SEFAZ confirma a mesma chave', async t => {
+  const vaultDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-vault-protocol-details-'));
+  t.after(() => fs.rm(vaultDir, { recursive: true, force: true }));
+  const options = { vaultDir, masterKey: crypto.randomBytes(32).toString('hex') };
+  await vault.installCertificate(PROFILE, fixture(), 'senha-segura', CNPJ, options);
+  const accessKey = '26' + '2609' + CNPJ + '55' + '001' + '000000699' + '1' + '12345678' + '0';
+  const body = key => `<retConsSitNFe><tpAmb>1</tpAmb><cStat>100</cStat><xMotivo>Autorizado</xMotivo><protNFe><infProt><chNFe>${key}</chNFe><dhRecbto>2026-09-24T10:00:00-03:00</dhRecbto><nProt>126260000000001</nProt><cStat>100</cStat></infProt></protNFe></retConsSitNFe>`;
+  const good = await vault.consultInvoice(PROFILE, accessKey, 'production', { ...options, request: async () => ({ body: body(accessKey) }) });
+  assert.equal(good.authorizationProtocol, '126260000000001');
+  assert.equal(good.authorizedAt, '2026-09-24T10:00:00-03:00');
+  const wrong = await vault.consultInvoice(PROFILE, accessKey, 'production', { ...options, request: async () => ({ body: body('9'.repeat(44)) }) });
+  assert.equal(wrong.authorizationProtocol, '');
+  assert.equal(wrong.authorizedAt, '');
 });
 
 test('cliente SEFAZ confia na raiz SSL oficial da ICP-Brasil sem remover as raízes padrão', () => {

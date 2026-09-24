@@ -7999,6 +7999,7 @@ async function recordMobileTikTokSaleVps(orderId) {
   return mobileSalesPushService.recordSaleEvent(sale);
 }
 
+let wakeFiscalCancellationVps = async () => {};
 async function handleShopeeWebhookVps(request, reply) {
   if (request.method !== 'POST') return reply.code(405).send({ error: 'Method Not Allowed' });
 
@@ -8007,6 +8008,7 @@ async function handleShopeeWebhookVps(request, reply) {
     const data = body.data && typeof body.data === 'object' ? body.data : body;
     const orderSn = String(data.ordersn || data.order_sn || data.orderSn || '').trim();
     if (orderSn) {
+      void wakeFiscalCancellationVps('shopee', orderSn).catch(error => console.error('[fiscal-cancellation] Shopee wake failed:', error.message));
       await recordMobileShopeeSaleVps(orderSn);
     }
     return reply.code(200).send({ message: 'success' });
@@ -8033,6 +8035,7 @@ async function handleTikTokShopWebhookVps(request, reply) {
       // determined by fresh authenticated TikTok API reads in the poller.
     }
     if (orderId) {
+      void wakeFiscalCancellationVps('tiktok', orderId).catch(error => console.error('[fiscal-cancellation] TikTok wake failed:', error.message));
       await recordMobileTikTokSaleVps(orderId);
     }
     return reply.code(200).send({ message: 'success' });
@@ -42211,14 +42214,47 @@ const tiktokFulfillment = createTikTokFulfillmentAutomation({
 });
 require('./services/centralPrintingServer.cjs').registerCentralPrintingRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 require('./services/companyFiscalServer.cjs').registerCompanyFiscalRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
+const getLiveFiscalMarketplaceOrder = async (channel, orderId) => {
+    if (channel === 'shopee') {
+      const credentials = await getShopeeCatalogCredentialsVps();
+      const result = await shopeeCatalogGetVps('/api/v2/order/get_order_detail', credentials,
+        encodeShopeeCatalogParamsVps({ order_sn_list: String(orderId), response_optional_fields: 'pickup_done_time,actual_shipping_time,package_list,cancel_by,cancel_reason' }));
+      if (!result?.ok || result?.data?.error) throw new Error('Falha ao consultar o pedido atual na Shopee.');
+      return (result.data.response?.order_list || []).find(order => String(order.order_sn) === String(orderId)) || null;
+    }
+    if (channel === 'tiktok') {
+      const settings = await loadTikTokShopOAuthSettingsVps();
+      const result = await callTikTokShopOpenApiVps(settings, { pathname: '/order/202309/orders', query: { ids: String(orderId) } });
+      if (Number(result?.payload?.code) !== 0) throw new Error('Falha ao consultar o pedido atual no TikTok Shop.');
+      return (result.payload?.data?.orders || []).find(order => String(order.id) === String(orderId)) || null;
+    }
+    return null;
+  };
 require('./services/accountantPortalServer.cjs').registerAccountantPortalRoutes(fastify, {
   pool,
   getBearerAuthContext: getVpsBearerAuthContext,
   importBlingDocuments: fetchBlingFiscalDocumentsForMigrationVps,
+  getLiveMarketplaceOrder: getLiveFiscalMarketplaceOrder,
 });
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {
+  if (process.env.MDV_FISCAL_AUTO_CANCEL_ENABLED === '1' && process.env.MDV_FISCAL_AUTO_CANCEL_HOMOLOGATED === '1') {
+    const fiscalCancellation = require('./services/fiscalCancellationAutomation.cjs').createFiscalCancellationAutomation({
+      pool, getLiveMarketplaceOrder: getLiveFiscalMarketplaceOrder,
+    });
+    wakeFiscalCancellationVps = (channel, orderId) => fiscalCancellation.processOrder(channel, orderId);
+    let fiscalCancellationRunning = false;
+    const pollFiscalCancellation = async () => {
+      if (fiscalCancellationRunning) return;
+      fiscalCancellationRunning = true;
+      try { await fiscalCancellation.tick(); }
+      catch (error) { console.error('[fiscal-cancellation] monitor failed:', error.message); }
+      finally { fiscalCancellationRunning = false; }
+    };
+    void pollFiscalCancellation();
+    setInterval(() => void pollFiscalCancellation(), 60_000).unref?.();
+  }
   scheduleSignedWarrantySync();
   startFacebookMarketplaceAutomationVps();
   startWhatsAppStatusAutomationVps();

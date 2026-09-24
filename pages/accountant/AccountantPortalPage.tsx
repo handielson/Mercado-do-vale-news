@@ -3,7 +3,7 @@ import { Building2, FileCheck2, LogOut, ReceiptText, RefreshCw } from 'lucide-re
 import { useVpsAuth } from '../../contexts/VpsAuthContext';
 import { CompanyTaxValidationPanel } from '../../components/company/CompanyTaxValidationPanel';
 import { FiscalDocumentReviewPanel } from '../../components/company/FiscalDocumentReviewPanel';
-import { accountantPortalService, type AccountantCompany, type AccountantRevenueReport } from '../../services/accountantPortalService';
+import { accountantPortalService, accountantAccessAdminService, type AccountantCompany, type AccountantRevenueReport, type FiscalCancellationAssessment, type FiscalCancellationAlert } from '../../services/accountantPortalService';
 
 const money = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((Number(cents) || 0) / 100);
 const reportDate = (value: string) => new Date(value).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
@@ -21,7 +21,7 @@ const reviewLabel: Record<string, string> = {
   sale_outside_period: 'Pedido criado fora do período selecionado; exibido somente para conferência',
 };
 
-export function RevenuePanel() {
+export function RevenuePanel({ adminMode = false }: { adminMode?: boolean }) {
   const [companies, setCompanies] = useState<AccountantCompany[]>([]);
   const [companyId, setCompanyId] = useState('');
   const [from, setFrom] = useState(yearStart);
@@ -33,11 +33,21 @@ export function RevenuePanel() {
   const [sefazBusy, setSefazBusy] = useState(false);
   const [sefazError, setSefazError] = useState('');
   const [sefazResult, setSefazResult] = useState<{ cStat: string; reason: string; situation: string; checkedAt: string } | null>(null);
+  const [cancellationResult, setCancellationResult] = useState<FiscalCancellationAssessment | null>(null);
+  const [cancellationBusy, setCancellationBusy] = useState(false);
+  const [cancellationError, setCancellationError] = useState('');
+  const [cancellationAlerts, setCancellationAlerts] = useState<FiscalCancellationAlert[]>([]);
   useEffect(() => { accountantPortalService.list().then(result => { setCompanies(result.companies); setCompanyId(result.companies[0]?.id || ''); }).catch(err => setError(err.message)).finally(() => setBusy(false)); }, []);
   const load = async () => {
     if (!companyId) return;
-    setBusy(true); setError(''); setSelectedDocumentId(''); setSefazResult(null); setSefazError('');
-    try { setReport(await accountantPortalService.revenue(companyId, from, to)); } catch (err) { setError(err instanceof Error ? err.message : 'Falha ao carregar faturamento.'); } finally { setBusy(false); }
+    setBusy(true); setError(''); setSelectedDocumentId(''); setSefazResult(null); setSefazError(''); setCancellationResult(null); setCancellationError('');
+    try {
+      setReport(await accountantPortalService.revenue(companyId, from, to));
+      if (adminMode) {
+        const alerts = await accountantAccessAdminService.cancellationAlerts(companyId);
+        setCancellationAlerts(alerts.alerts);
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Falha ao carregar faturamento.'); } finally { setBusy(false); }
   };
   useEffect(() => { if (companyId) void load(); }, [companyId]);
   const consultSefaz = async () => {
@@ -47,6 +57,13 @@ export function RevenuePanel() {
     catch (err) { setSefazError(err instanceof Error ? err.message : 'Falha ao consultar a SEFAZ.'); }
     finally { setSefazBusy(false); }
   };
+  const assessCancellation = async () => {
+    if (!adminMode || !companyId || !selectedDocumentId) return;
+    setCancellationBusy(true); setCancellationError(''); setCancellationResult(null);
+    try { setCancellationResult(await accountantAccessAdminService.cancellationAssessment(companyId, selectedDocumentId)); }
+    catch (err) { setCancellationError(err instanceof Error ? err.message : 'Falha ao conferir o cancelamento.'); }
+    finally { setCancellationBusy(false); }
+  };
   const cards = useMemo(() => report ? [
     ['Vendas concluídas', report.totals.operationalCents, 'text-slate-900'],
     ['Notas autorizadas', report.documentTotals.authorizedDocumentCents, 'text-emerald-700'],
@@ -55,6 +72,8 @@ export function RevenuePanel() {
     ['Pendente de conciliação', report.totals.reconciliationPendingCents, 'text-blue-700'],
   ] as const : [], [report]);
   return <section className="space-y-5">
+    {adminMode && cancellationAlerts.length > 0 && <aside role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950"><h2 className="font-bold">Atenção a pedidos com NF-e emitida</h2><p className="text-sm">Pedidos em aberto não são cancelados automaticamente. Falhas e situações incertas exigem conferência.</p><ul className="mt-2 list-inside list-disc text-sm">{cancellationAlerts.map(alert => <li key={alert.documentId}>{channelLabel[alert.channel] || alert.channel} · pedido {alert.orderReference} · NF-e {alert.documentNumber || 's/n'} · {alert.state === 'open_alert' ? `em aberto (${alert.marketplaceStatus})` : `conferir ${alert.state}: ${alert.reason || 'sem detalhe'}`}</li>)}</ul></aside>}
+    {adminMode && report?.reviewSales.some(sale => sale.reviewReasons?.includes('operational_pending_with_document')) && <aside role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950"><h2 className="font-bold">Pedidos registrados em aberto com nota emitida</h2><p className="text-sm">Este aviso usa o último status salvo no sistema. Confira a situação atual no marketplace antes de qualquer ação fiscal; não há cancelamento automático para pedido em aberto.</p></aside>}
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="grid gap-3 md:grid-cols-4"><label className="text-sm font-semibold">Empresa<select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" value={companyId} onChange={event => setCompanyId(event.target.value)}>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><label className="text-sm font-semibold">De<input type="date" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" value={from} onChange={event => setFrom(event.target.value)} /></label><label className="text-sm font-semibold">Até<input type="date" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" value={to} onChange={event => setTo(event.target.value)} /></label><button type="button" onClick={load} disabled={busy || !companyId || from > to} className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 font-semibold text-white disabled:opacity-50"><RefreshCw size={17} className={busy ? 'animate-spin' : ''}/>Atualizar</button></div></div>
     {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>}
     {report && <>
@@ -69,15 +88,18 @@ export function RevenuePanel() {
         <p className="mt-1 text-sm text-slate-600">Consulta de protocolo em produção com o A1 da empresa. A resposta não altera a nota importada nem a classificação do pedido.</p>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <label className="min-w-64 flex-1 text-sm font-semibold">NF-e
-            <select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" value={selectedDocumentId} onChange={event => { setSelectedDocumentId(event.target.value); setSefazResult(null); setSefazError(''); }}>
+            <select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" value={selectedDocumentId} onChange={event => { setSelectedDocumentId(event.target.value); setSefazResult(null); setSefazError(''); setCancellationResult(null); setCancellationError(''); }}>
               <option value="">Selecione uma nota</option>
               {report.documents.filter(document => document.model === '55').map(document => <option key={document.id} value={document.id}>NF-e {document.number || 's/n'} · {channelLabel[document.channel] || 'Canal não identificado'} · {reportDate(document.issuedAt)}</option>)}
             </select>
           </label>
           <button type="button" onClick={() => void consultSefaz()} disabled={!selectedDocumentId || sefazBusy} className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{sefazBusy ? 'Consultando…' : 'Consultar SEFAZ'}</button>
+          {adminMode && <button type="button" onClick={() => void assessCancellation()} disabled={!selectedDocumentId || cancellationBusy || !report.documents.some(document => document.id === selectedDocumentId && document.model === '55' && ['shopee','tiktok'].includes(document.channel))} className="rounded-lg border border-amber-500 px-4 py-2 font-semibold text-amber-900 disabled:opacity-50">{cancellationBusy ? 'Conferindo…' : 'Conferir cancelamento'}</button>}
         </div>
         {sefazError && <p role="alert" className="mt-3 text-sm text-red-700">{sefazError}</p>}
         {sefazResult && <p className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-950">SEFAZ produção: {sefazResult.cStat} — {sefazResult.reason}. Consulta em {new Date(sefazResult.checkedAt).toLocaleString('pt-BR')}. Confira qualquer divergência com o contador antes de alterar a nota.</p>}
+        {cancellationError && <p role="alert" className="mt-3 text-sm text-red-700">{cancellationError}</p>}
+        {cancellationResult && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><strong>Conferência somente de leitura:</strong> pedido {cancellationResult.marketplace.status || 'sem status'} no {channelLabel[cancellationResult.channel] || cancellationResult.channel}; {cancellationResult.marketplace.shipped ? 'há sinal de envio; cancelamento automático bloqueado' : cancellationResult.marketplace.open ? 'pedido em aberto; manter alerta sem cancelar' : 'sem sinal positivo de envio na resposta atual'}. SEFAZ: {cancellationResult.sefaz.cStat} — {cancellationResult.sefaz.reason}. {cancellationResult.assessment.eligible ? 'Critérios da regra atendidos; esta conferência não enviou evento.' : `Envio bloqueado: ${cancellationResult.assessment.blockers.join(', ')}.`}</div>}
       </section>
       <FiscalDocumentReviewPanel companyId={companyId} documentId={selectedDocumentId} />
     </>}

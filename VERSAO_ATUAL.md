@@ -1,9 +1,15 @@
-# Versao Atual
+# Versão Atual
 
-version: v1.2.464-accountant-top-navigation
-date: 2026-09-23
+version: v1.2.465-fiscal-cancellation-alerts
+
+date: 2026-09-24
+
 status: ready
-release_vps: /var/www/mdv-site/releases/20260924-011349-accountant-top-navigation
+
+release_vps: /var/www/mdv-site/releases/20260924-150424-fiscal-cancellation-alerts
+
 branch: main
-summary: Separa o Espaço do Contador no topo dos Dados da Empresa e mostra faturamento e notas primeiro.
-tag: v1.2.464-accountant-top-navigation
+
+summary: Alerta para pedido aberto com NF-e e preparação controlada do cancelamento fiscal Shopee/TikTok.
+
+tag: v1.2.465-fiscal-cancellation-alerts
