@@ -2,7 +2,7 @@ const { problem } = require('./companyFiscalCore.cjs');
 const { isDeepStrictEqual } = require('node:util');
 
 const TEXT_LIMIT = 2000;
-const DOCUMENT_IDS = new Set(['OP01','OP02','OP03','OP04','OP05','OP06','OP07','OP08']);
+const DOCUMENT_IDS = new Set(['OP01','OP02','OP03','OP04','OP05','OP06','OP07','OP08','OP11','OP12','OP13']);
 const scenarios = [
   ['OP01','Venda presencial interna no PDV','65 ou 55','PE','Consumidor final não contribuinte','Normal','5102'],
   ['OP02','Site próprio com entrega em PE','55 ou 65','PE','Consumidor final não contribuinte','Normal','5102'],
@@ -14,10 +14,14 @@ const scenarios = [
   ['OP08','Entrada por devolução de cliente','55','Conforme documento original','Conforme documento original','Devolução/entrada',''],
   ['OP09','Cancelamento dentro do prazo','Evento','—','—','Cancelamento',''],
   ['OP10','Inutilização de numeração','Evento','—','—','Inutilização',''],
+  ['OP11','Full Shopee — remessa de estoque ao armazém','55','','Armazém Full','Remessa',''],
+  ['OP12','Full Shopee — venda ao comprador','55','','Comprador','Venda',''],
+  ['OP13','Full Shopee — retorno do armazém/devolução','55','','Conforme documento original','Retorno/devolução',''],
+  ['OP14','Full Shopee — entrega não concluída','Evento/documentos','','Conforme documento original','Anulação/retorno',''],
 ];
 
 const defaultRules = () => scenarios.map(([id,scenario,model,destinationUf,recipient,finality,cfop]) => ({
-  id, scenario, used: true, model, destinationUf, recipient, finality, cfop,
+  id, scenario, used: !['OP11','OP12','OP13','OP14'].includes(id), model, destinationUf, recipient, finality, cfop,
   nfce: { unit: '', csosn: '', pisCst: '', cofinsCst: '', icmsRate: '', pisRate: '', cofinsRate: '', cestApplicability: '', gtinDecision: '' },
   icmsCode: id <= 'OP06' ? 'CSOSN 400' : '',
   icmsTreatment: id <= 'OP06' ? 'Alíquota 0%; base 0%. Confirmar ST, FCP e DIFAL.' : '',
@@ -43,6 +47,11 @@ const defaultGeneralDecisions = () => ({
   freightTreatment: '', productExceptions: 'pending', productExceptionsNotes: '',
 });
 
+const defaultShopeeFull = () => ({
+  status: 'pending', nfeSeries: '', warehouseUf: '', freightOnInvoice: '', saleCfopInState: '', saleCfopOutOfState: '',
+  certificateChecked: '', fiscalRuleName: '', xmlReconciliation: '', notes: '',
+});
+
 const text = (value, label, max = TEXT_LIMIT) => {
   const result = String(value ?? '').trim();
   if (result.length > max) throw problem(`${label} excede ${max} caracteres.`);
@@ -58,12 +67,19 @@ const reviewIssues = data => {
 
 const approvalIssues = data => {
   const missing = reviewIssues(data);
-  const { generalDecisions, productRules, rules } = data;
+  const { generalDecisions, productRules, rules, shopeeFull } = data;
   for (const [field,label] of [['taxRegime','regime tributário'],['crt','CRT'],['effectiveFrom','vigência geral'],['simplesBasis','regime de apuração do Simples'],['freightTreatment','frete, desconto e despesas'],['productExceptionsNotes','decisão sobre exceções por produto']]) if (!generalDecisions[field]) missing.push(label);
   if (generalDecisions.productExceptions === 'pending') missing.push('situação das exceções por produto');
   if (generalDecisions.productExceptions === 'listed' && !productRules.length) missing.push('ao menos uma regra por produto');
-  if (generalDecisions.productExceptions === 'listed') for (const [index,rule] of productRules.entries()) {
+  if (generalDecisions.productExceptions === 'listed' || shopeeFull.status === 'in_use') for (const [index,rule] of productRules.entries()) {
     for (const [field,label] of [['group','grupo/produto'],['ncm','NCM'],['origin','origem'],['unit','unidade'],['taxTreatment','tributação'],['operations','operações'],['effectiveFrom','vigência']]) if (!rule[field]) missing.push(`PR${index + 1}: ${label}`);
+  }
+  if (shopeeFull.status === 'in_use') {
+    for (const [field,label] of [['nfeSeries','série NF-e exclusiva'],['warehouseUf','UF do armazém'],['freightOnInvoice','inclusão do frete na NF-e'],['saleCfopInState','CFOP venda interna'],['saleCfopOutOfState','CFOP venda interestadual'],['fiscalRuleName','regra fiscal cadastrada na Shopee'],['xmlReconciliation','conciliação dos XMLs']]) if (!shopeeFull[field]) missing.push(`Full Shopee: ${label}`);
+    if (shopeeFull.certificateChecked !== 'yes') missing.push('Full Shopee: certificado A1 conferido na Shopee');
+    if (!productRules.length) missing.push('Full Shopee: ao menos uma regra por grupo/produto');
+    productRules.forEach((rule,index) => { if (!rule.totalTaxRate) missing.push(`PR${index + 1}: percentual total de tributos no Full`); });
+    for (const id of ['OP11','OP12','OP13','OP14']) if (!rules.find(rule => rule.id === id)?.used) missing.push(`${id}: marcar operação Full como utilizada e revisar`);
   }
   for (const rule of rules.filter(rule => rule.used)) {
     if (DOCUMENT_IDS.has(rule.id)) {
@@ -133,11 +149,28 @@ function normalizeTaxValidation(input = {}) {
     origin: text(rule.origin, `Regra de produto ${index + 1}: origem`, 80),
     unit: text(rule.unit, `Regra de produto ${index + 1}: unidade`, 80),
     taxTreatment: text(rule.taxTreatment, `Regra de produto ${index + 1}: tributação`, 1000),
+    totalTaxRate: rate(rule.totalTaxRate, `Regra de produto ${index + 1}: percentual total de tributos`),
     operations: text(rule.operations, `Regra de produto ${index + 1}: operações`, 255),
     effectiveFrom: text(rule.effectiveFrom, `Regra de produto ${index + 1}: vigência`, 10),
     notes: text(rule.notes, `Regra de produto ${index + 1}: observações`, 1000),
   }));
-  const normalized = { status, reviewerName, reviewerRegistration, reviewedAt, notes, generalDecisions, productRules, rules };
+  const rawFull = input.shopeeFull || {};
+  const shopeeFull = {
+    status: ['pending','not_applicable','in_use'].includes(rawFull.status) ? rawFull.status : 'pending',
+    nfeSeries: text(rawFull.nfeSeries, 'Full Shopee: série NF-e', 20),
+    warehouseUf: text(rawFull.warehouseUf, 'Full Shopee: UF do armazém', 2).toUpperCase(),
+    freightOnInvoice: ['yes','no'].includes(rawFull.freightOnInvoice) ? rawFull.freightOnInvoice : '',
+    saleCfopInState: text(rawFull.saleCfopInState, 'Full Shopee: CFOP venda interna', 4),
+    saleCfopOutOfState: text(rawFull.saleCfopOutOfState, 'Full Shopee: CFOP venda interestadual', 4),
+    certificateChecked: ['yes','no'].includes(rawFull.certificateChecked) ? rawFull.certificateChecked : '',
+    fiscalRuleName: text(rawFull.fiscalRuleName, 'Full Shopee: regra fiscal', 255),
+    xmlReconciliation: text(rawFull.xmlReconciliation, 'Full Shopee: conciliação XML', 500),
+    notes: text(rawFull.notes, 'Full Shopee: observações', 1000),
+  };
+  if (shopeeFull.nfeSeries && !/^\d{1,3}$/.test(shopeeFull.nfeSeries)) throw problem('Full Shopee: série NF-e inválida.');
+  if (shopeeFull.warehouseUf && !/^[A-Z]{2}$/.test(shopeeFull.warehouseUf)) throw problem('Full Shopee: UF do armazém inválida.');
+  for (const field of ['saleCfopInState','saleCfopOutOfState']) if (shopeeFull[field] && !/^\d{4}$/.test(shopeeFull[field])) throw problem(`Full Shopee: ${field} inválido.`);
+  const normalized = { status, reviewerName, reviewerRegistration, reviewedAt, notes, generalDecisions, productRules, shopeeFull, rules };
   const reviewMissing = reviewIssues(normalized);
   const approvalMissing = approvalIssues(normalized);
   if (status === 'reviewed' && reviewMissing.length) throw problem(`Para marcar como revisado, informe: ${reviewMissing.join(', ')}.`, 409);
@@ -147,16 +180,17 @@ function normalizeTaxValidation(input = {}) {
 
 function taxValidationView(row) {
   if (!row) {
-    const data = { status: 'draft', reviewerName: '', reviewerRegistration: '', reviewedAt: '', notes: '', generalDecisions: defaultGeneralDecisions(), productRules: [], rules: defaultRules() };
+    const data = { status: 'draft', reviewerName: '', reviewerRegistration: '', reviewedAt: '', notes: '', generalDecisions: defaultGeneralDecisions(), productRules: [], shopeeFull: defaultShopeeFull(), rules: defaultRules() };
     return { ...data, reviewIssues: reviewIssues(data), approvalIssues: approvalIssues(data), blingReference: blingReference(), version: 0, updatedAt: '' };
   }
   const storedRules = JSON.parse(typeof row.rules_json === 'string' ? row.rules_json : JSON.stringify(row.rules_json || {}));
   const data = {
     status: row.status || 'draft', reviewerName: row.reviewer_name || '', reviewerRegistration: row.reviewer_registration || '',
     reviewedAt: row.reviewed_at ? String(row.reviewed_at instanceof Date ? row.reviewed_at.toISOString() : row.reviewed_at).slice(0,10) : '',
-    notes: row.notes || '', rules: Array.isArray(storedRules) ? storedRules : (storedRules.rules || defaultRules()),
+    notes: row.notes || '', rules: defaultRules().map(base => (Array.isArray(storedRules) ? storedRules : storedRules.rules || []).find(rule => rule.id === base.id) || base),
     generalDecisions: Array.isArray(storedRules) ? defaultGeneralDecisions() : { ...defaultGeneralDecisions(), ...(storedRules.generalDecisions || {}) },
     productRules: Array.isArray(storedRules) ? [] : (storedRules.productRules || []),
+    shopeeFull: Array.isArray(storedRules) ? defaultShopeeFull() : { ...defaultShopeeFull(), ...(storedRules.shopeeFull || {}) },
   };
   return {
     ...data, reviewIssues: reviewIssues(data), approvalIssues: approvalIssues(data),
@@ -170,7 +204,8 @@ function applyOperationReviews(data, currentRow, reviewRuleId, actor, now = new 
   const previous = taxValidationView(currentRow);
   const normalizedPrevious = normalizeTaxValidation({ ...previous, status: 'draft' });
   const contextChanged = !isDeepStrictEqual(data.generalDecisions, normalizedPrevious.generalDecisions)
-    || !isDeepStrictEqual(data.productRules, normalizedPrevious.productRules);
+    || !isDeepStrictEqual(data.productRules, normalizedPrevious.productRules)
+    || !isDeepStrictEqual(data.shopeeFull, normalizedPrevious.shopeeFull);
   if (reviewRuleId && !data.rules.some(rule => rule.id === reviewRuleId)) throw problem('Operação inválida para revisão.');
   if (reviewRuleId && !data.reviewerName) throw problem('Informe o responsável/contador antes de revisar a operação.', 409);
   const content = ({ review, ...rule }) => rule;
@@ -188,4 +223,4 @@ function applyOperationReviews(data, currentRow, reviewRuleId, actor, now = new 
   return data;
 }
 
-module.exports = { defaultRules, defaultGeneralDecisions, blingReference, reviewIssues, approvalIssues, normalizeTaxValidation, taxValidationView, applyOperationReviews };
+module.exports = { defaultRules, defaultGeneralDecisions, defaultShopeeFull, blingReference, reviewIssues, approvalIssues, normalizeTaxValidation, taxValidationView, applyOperationReviews };

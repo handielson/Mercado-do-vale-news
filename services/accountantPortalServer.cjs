@@ -128,7 +128,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       }
       const reviewedAt = data.reviewedAt || null;
       applyOperationReviews(data, current, req.body?.reviewRuleId, req.accountantActor);
-      const rulesJson = JSON.stringify({ rules: data.rules, generalDecisions: data.generalDecisions, productRules: data.productRules });
+      const rulesJson = JSON.stringify({ rules: data.rules, generalDecisions: data.generalDecisions, productRules: data.productRules, shopeeFull: data.shopeeFull });
       if (current) {
         await db.query('UPDATE company_fiscal_tax_validations SET status=?,reviewer_name=?,reviewer_registration=?,reviewed_at=?,notes=?,rules_json=?,version=version+1,updated_by=? WHERE profile_id=?', [data.status,data.reviewerName,data.reviewerRegistration,reviewedAt,data.notes,rulesJson,req.accountantActor,req.accountantProfile.id]);
       } else {

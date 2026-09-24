@@ -44,9 +44,11 @@ test('deploy da revisão envia somente seus três módulos sem migrations ou alt
   assert.doesNotMatch(mode, /applyCompanyFiscalMigration|ensureRemoteAdminEnv|update-env/);
 });
 
-test('cria os dez cenários e identifica valores do Bling apenas como referência', () => {
+test('cria cenários do Full desativados e identifica valores do Bling apenas como referência', () => {
   const rules = defaultRules();
-  assert.equal(rules.length, 10);
+  assert.equal(rules.length, 14);
+  assert.equal(rules.find(rule => rule.id === 'OP11').used, false);
+  assert.equal(rules.find(rule => rule.id === 'OP12').cfop, '');
   assert.equal(rules.find(rule => rule.id === 'OP01').cfop, '5102');
   assert.equal(rules.find(rule => rule.id === 'OP04').cfop, '6108');
   assert.equal(rules.find(rule => rule.id === 'OP01').source, 'bling_reference');
@@ -87,8 +89,24 @@ test('aprova somente matriz completa e preserva campos do contador', () => {
   assert.equal(approved.reviewerName, 'Contador responsável');
   const view = taxValidationView({ status: 'approved', reviewer_name: approved.reviewerName, reviewer_registration: approved.reviewerRegistration, reviewed_at: approved.reviewedAt, notes: '', rules_json: JSON.stringify(approved.rules), bling_reference_json: JSON.stringify(blingReference()), version: 2, updated_at: '2026-09-23T12:00:00Z' });
   assert.equal(view.version, 2);
-  assert.equal(view.rules.length, 10);
+  assert.equal(view.rules.length, 14);
   assert.equal(view.generalDecisions.productExceptions,'pending');
+});
+
+test('dados do Full são persistidos e exigidos apenas quando o Full estiver em uso', () => {
+  const input = { ...taxValidationView(null), shopeeFull: { ...taxValidationView(null).shopeeFull, status: 'in_use', warehouseUf: 'PE', nfeSeries: '2' } };
+  const draft = normalizeTaxValidation(input);
+  assert.equal(draft.shopeeFull.warehouseUf, 'PE');
+  assert(draft.approvalIssues.includes('Full Shopee: CFOP venda interna'));
+  assert(draft.approvalIssues.includes('Full Shopee: certificado A1 conferido na Shopee'));
+  const row = { status: 'draft', rules_json: JSON.stringify({ rules: draft.rules, shopeeFull: draft.shopeeFull }) };
+  assert.equal(taxValidationView(row).shopeeFull.nfeSeries, '2');
+  assert.throws(() => normalizeTaxValidation({ ...input, shopeeFull: { ...input.shopeeFull, saleCfopInState: 'ABC' } }), /inválido/);
+  const legacy = taxValidationView({ status: 'draft', rules_json: JSON.stringify(defaultRules().slice(0,10)) });
+  assert.equal(legacy.shopeeFull.status, 'pending');
+  assert.equal(legacy.rules.length, 14);
+  const accountantServer = fs.readFileSync(path.join(__dirname, '../services/accountantPortalServer.cjs'), 'utf8');
+  assert.match(accountantServer, /const rulesJson = JSON\.stringify\(\{[^\n]*shopeeFull: data\.shopeeFull/);
 });
 
 test('exige regras detalhadas quando o contador declarar exceções por produto', () => {

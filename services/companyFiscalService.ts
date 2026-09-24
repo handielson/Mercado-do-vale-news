@@ -67,11 +67,12 @@ export interface FiscalTaxValidation {
     status: 'draft' | 'reviewed' | 'approved'; reviewerName: string; reviewerRegistration: string; reviewedAt: string; notes: string;
     rules: FiscalTaxRule[]; blingReference: { observedAt: string; source: string; natures: Array<{ name: string; defaultUse: string }>; sale: Record<string, unknown> };
     generalDecisions: { taxRegime: string; crt: string; effectiveFrom: string; simplesBasis: string; freightTreatment: string; productExceptions: 'none' | 'listed' | 'pending'; productExceptionsNotes: string };
-    productRules: Array<{ id: string; group: string; ncm: string; cest: string; origin: string; unit: string; taxTreatment: string; operations: string; effectiveFrom: string; notes: string }>;
+    productRules: Array<{ id: string; group: string; ncm: string; cest: string; origin: string; unit: string; taxTreatment: string; totalTaxRate: string; operations: string; effectiveFrom: string; notes: string }>;
+    shopeeFull: { status: 'pending' | 'not_applicable' | 'in_use'; nfeSeries: string; warehouseUf: string; freightOnInvoice: '' | 'yes' | 'no'; saleCfopInState: string; saleCfopOutOfState: string; certificateChecked: '' | 'yes' | 'no'; fiscalRuleName: string; xmlReconciliation: string; notes: string };
     reviewIssues: string[]; approvalIssues: string[];
     version: number; updatedAt: string;
 }
-const documentOperationIds = new Set(['OP01','OP02','OP03','OP04','OP05','OP06','OP07','OP08']);
+const documentOperationIds = new Set(['OP01','OP02','OP03','OP04','OP05','OP06','OP07','OP08','OP11','OP12','OP13']);
 export function fiscalTaxValidationIssues(data: FiscalTaxValidation) {
     const review: string[] = [];
     if (!data.reviewerName.trim()) review.push('responsável/contador');
@@ -81,9 +82,16 @@ export function fiscalTaxValidationIssues(data: FiscalTaxValidation) {
     for (const [value,label] of [[general.taxRegime,'regime tributário'],[general.crt,'CRT'],[general.effectiveFrom,'vigência geral'],[general.simplesBasis,'regime de apuração do Simples'],[general.freightTreatment,'frete, desconto e despesas'],[general.productExceptionsNotes,'decisão sobre exceções por produto']]) if (!value.trim()) approval.push(label);
     if (general.productExceptions === 'pending') approval.push('situação das exceções por produto');
     if (general.productExceptions === 'listed' && data.productRules.length === 0) approval.push('ao menos uma regra por produto');
-    if (general.productExceptions === 'listed') data.productRules.forEach((rule,index) => {
+    if (general.productExceptions === 'listed' || data.shopeeFull.status === 'in_use') data.productRules.forEach((rule,index) => {
         for (const [value,label] of [[rule.group,'grupo/produto'],[rule.ncm,'NCM'],[rule.origin,'origem'],[rule.unit,'unidade'],[rule.taxTreatment,'tributação'],[rule.operations,'operações'],[rule.effectiveFrom,'vigência']]) if (!value.trim()) approval.push(`PR${index + 1}: ${label}`);
     });
+    if (data.shopeeFull.status === 'in_use') {
+        for (const [value,label] of [[data.shopeeFull.nfeSeries,'série NF-e exclusiva'],[data.shopeeFull.warehouseUf,'UF do armazém'],[data.shopeeFull.freightOnInvoice,'inclusão do frete na NF-e'],[data.shopeeFull.saleCfopInState,'CFOP venda interna'],[data.shopeeFull.saleCfopOutOfState,'CFOP venda interestadual'],[data.shopeeFull.fiscalRuleName,'regra fiscal cadastrada na Shopee'],[data.shopeeFull.xmlReconciliation,'conciliação dos XMLs']]) if (!value.trim()) approval.push(`Full Shopee: ${label}`);
+        if (data.shopeeFull.certificateChecked !== 'yes') approval.push('Full Shopee: certificado A1 conferido na Shopee');
+        if (!data.productRules.length) approval.push('Full Shopee: ao menos uma regra por grupo/produto');
+        data.productRules.forEach((rule,index) => { if (!rule.totalTaxRate?.trim()) approval.push(`PR${index + 1}: percentual total de tributos no Full`); });
+        for (const id of ['OP11','OP12','OP13','OP14']) if (!data.rules.find(rule => rule.id === id)?.used) approval.push(`${id}: marcar operação Full como utilizada e revisar`);
+    }
     data.rules.filter(rule=>rule.used).forEach(rule => {
         if (documentOperationIds.has(rule.id)) for (const [value,label] of [[rule.model,'modelo'],[rule.cfop,'CFOP'],[rule.icmsCode,'CSOSN/CST ICMS'],[rule.icmsTreatment,'tratamento ICMS'],[rule.pisCofins,'PIS/COFINS'],[rule.ipi,'IPI'],[rule.effectiveFrom,'vigência']]) if (!value.trim()) approval.push(`${rule.id}: ${label}`);
         else { if (!rule.notes.trim()) approval.push(`${rule.id}: procedimento/observação`); if (!rule.effectiveFrom.trim()) approval.push(`${rule.id}: vigência`); }
