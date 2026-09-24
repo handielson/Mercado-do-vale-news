@@ -28,6 +28,13 @@ function createFiscalCancellationAutomation({ pool, getLiveMarketplaceOrder, con
       await pool.query("UPDATE company_fiscal_cancellation_monitor SET state='open_alert',marketplace_status=?,checked_at=NOW(),reason='open_order_with_authorized_nfe' WHERE document_id=? AND state IN ('pending','open_alert')", [marketplace.status || '', document.id]);
       return 'open_alert';
     }
+    // A marketplace may return an interim or unfamiliar state. Keep checking it;
+    // absence of CANCELLED is not evidence that a later cancellation is impossible.
+    if (!marketplace.cancelled && !marketplace.shipped &&
+        assessment.blockers.length === 1 && assessment.blockers[0] === 'marketplace_cancellation_unverified') {
+      await pool.query("UPDATE company_fiscal_cancellation_monitor SET state='pending',marketplace_status=?,checked_at=NOW(),reason='marketplace_cancellation_unverified' WHERE document_id=? AND state IN ('pending','open_alert')", [marketplace.status || '', document.id]);
+      return 'pending';
+    }
     if (!assessment.eligible) {
       await pool.query("UPDATE company_fiscal_cancellation_monitor SET state='blocked',marketplace_status=?,checked_at=NOW(),reason=? WHERE document_id=? AND state IN ('pending','open_alert')", [marketplace.status || '', assessment.blockers.join(','), document.id]);
       return 'blocked';
@@ -64,7 +71,7 @@ function createFiscalCancellationAutomation({ pool, getLiveMarketplaceOrder, con
       LEFT JOIN company_fiscal_cancellation_monitor m ON m.document_id=d.id
       WHERE d.status='authorized' AND d.model='55' AND d.channel IN ('shopee','tiktok') AND p.uf='PE'
         AND d.created_at>=NOW()-INTERVAL 2 DAY
-        AND (m.state IS NULL OR m.state IN ('open_alert','accepted_pending_confirmation','uncertain','sending'))
+        AND (m.state IS NULL OR m.state IN ('pending','open_alert','accepted_pending_confirmation','uncertain','sending'))
       ORDER BY CASE WHEN m.state IN ('accepted_pending_confirmation','uncertain','sending') THEN 0 WHEN m.state IS NULL THEN 1 ELSE 2 END,
         d.created_at ASC LIMIT 30`);
     const results = [];
@@ -80,7 +87,7 @@ function createFiscalCancellationAutomation({ pool, getLiveMarketplaceOrder, con
       FROM company_fiscal_documents d JOIN company_fiscal_profiles p ON p.id=d.profile_id
       LEFT JOIN company_fiscal_cancellation_monitor m ON m.document_id=d.id
       WHERE d.channel=? AND d.external_sale_id=? AND d.status='authorized' AND d.model='55' AND p.uf='PE'
-        AND (m.state IS NULL OR m.state IN ('open_alert','accepted_pending_confirmation','uncertain','sending'))
+        AND (m.state IS NULL OR m.state IN ('pending','open_alert','accepted_pending_confirmation','uncertain','sending'))
       LIMIT 5`, [channel, String(orderId)]);
     const results = [];
     for (const document of documents) {

@@ -1,15 +1,15 @@
 # Versão Atual
 
-version: v1.2.465-fiscal-cancellation-alerts
+version: v1.2.466-fiscal-cancellation-pending
 
 date: 2026-09-24
 
 status: ready
 
-release_vps: /var/www/mdv-site/releases/20260924-150424-fiscal-cancellation-alerts
+release_vps: /var/www/mdv-site/releases/20260924-152252-fiscal-cancellation-pending
 
 branch: main
 
-summary: Alerta para pedido aberto com NF-e e preparação controlada do cancelamento fiscal Shopee/TikTok.
+summary: Preserva monitoramento fiscal de status transitórios Shopee/TikTok; migration 025 validada localmente, sem ativar cancelamento.
 
-tag: v1.2.465-fiscal-cancellation-alerts
+tag: v1.2.466-fiscal-cancellation-pending
