@@ -59,6 +59,20 @@ test('consulta da situação de NF-e na SEFAZ passa pela concessão do contador 
   assert.match(page, /A resposta não altera a nota importada/);
 });
 
+test('revisão do contador fica por documento, com auditoria e sem efeito fiscal automático', () => {
+  const route = read('services/accountantPortalServer.cjs');
+  const component = read('components/company/FiscalDocumentReviewPanel.tsx');
+  const migration = read('migrations/024_fiscal_document_review.sql');
+  const deploy = read('deploy-vps-server-only.cjs');
+  assert.match(route, /fiscal-documents\/:documentId\/review/);
+  assert.match(route, /preHandler: requireCompanyAccess\('edit'\)/);
+  assert.match(route, /document_review_save/);
+  assert.match(component, /A revisão não cancela, devolve ou corrige a nota/);
+  assert.match(migration, /UNIQUE KEY uniq_company_document_review \(profile_id, document_id\)/);
+  assert.match(deploy, /024_fiscal_document_review\.sql/);
+  assert.match(deploy, /services\/fiscalDocumentReviewCore\.cjs/);
+});
+
 test('migração cria concessão, documentos e conciliação isolados por perfil', () => {
   const migration = read('migrations/022_accountant_portal.sql');
   assert.match(migration, /company_accountant_access/);

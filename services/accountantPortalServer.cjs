@@ -4,6 +4,7 @@ const { blingReference, normalizeTaxValidation, taxValidationView } = require('.
 const { buildRevenueReport, validPeriod } = require('./accountantPortalCore.cjs');
 const { fiscalDocumentTotals } = require('./blingFiscalImportCore.cjs');
 const certificateVault = require('./fiscalCertificateVault.cjs');
+const { normalizeDocumentReview, documentReviewView } = require('./fiscalDocumentReviewCore.cjs');
 
 const parseJson = value => {
   if (!value) return null;
@@ -227,6 +228,46 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       throw problem('O CNPJ da chave não corresponde ao emitente selecionado.', 409);
     }
     return consultSefazInvoice(profile.id, document.access_key, 'production');
+  });
+
+  const findReviewDocument = async (db, profileId, documentId) => {
+    const [rows] = await db.query('SELECT id,model,document_number,channel,external_sale_id,status,total_cents FROM company_fiscal_documents WHERE id=? AND profile_id=? LIMIT 1', [documentId, profileId]);
+    if (!rows[0]) throw problem('Documento fiscal não encontrado nesta empresa.', 404);
+    return rows[0];
+  };
+  const reviewPath = '/accountant/companies/:id/fiscal-documents/:documentId/review';
+  app.get(reviewPath, { preHandler: requireCompanyAccess('edit') }, async req => {
+    const document = await findReviewDocument(pool, req.accountantProfile.id, req.params.documentId);
+    const [rows] = await pool.query('SELECT * FROM company_fiscal_document_reviews WHERE profile_id=? AND document_id=? LIMIT 1', [req.accountantProfile.id, document.id]);
+    return { document: { id: document.id, model: document.model, number: document.document_number, channel: document.channel, orderReference: document.external_sale_id, status: document.status, totalCents: Number(document.total_cents || 0) }, review: documentReviewView(rows[0]) };
+  });
+  app.post(reviewPath, { preHandler: requireCompanyAccess('edit') }, async req => {
+    const data = normalizeDocumentReview(req.body || {});
+    if (!Number.isSafeInteger(req.body?.version) || req.body.version < 0) throw problem('Versão da revisão inválida.', 400);
+    const db = await pool.getConnection();
+    try {
+      await db.beginTransaction();
+      const document = await findReviewDocument(db, req.accountantProfile.id, req.params.documentId);
+      const [rows] = await db.query('SELECT * FROM company_fiscal_document_reviews WHERE profile_id=? AND document_id=? FOR UPDATE', [req.accountantProfile.id, document.id]);
+      const current = rows[0];
+      if (Number(req.body?.version) !== Number(current?.version || 0)) throw problem('Esta revisão foi alterada em outra sessão. Recarregue antes de salvar.', 409);
+      const reviewedAt = data.reviewState === 'reviewed' ? new Date() : null;
+      if (current) {
+        await db.query('UPDATE company_fiscal_document_reviews SET review_state=?,value_treatment=?,fiscal_action=?,justification=?,evidence_notes=?,reviewer_name=?,reviewer_registration=?,reviewed_at=?,version=version+1,updated_by=? WHERE id=?',
+          [data.reviewState,data.valueTreatment,data.fiscalAction,data.justification,data.evidenceNotes,data.reviewerName,data.reviewerRegistration,reviewedAt,req.accountantActor,current.id]);
+      } else {
+        await db.query('INSERT INTO company_fiscal_document_reviews (id,profile_id,document_id,review_state,value_treatment,fiscal_action,justification,evidence_notes,reviewer_name,reviewer_registration,reviewed_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+          [randomUUID(),req.accountantProfile.id,document.id,data.reviewState,data.valueTreatment,data.fiscalAction,data.justification,data.evidenceNotes,data.reviewerName,data.reviewerRegistration,reviewedAt,req.accountantActor,req.accountantActor]);
+      }
+      await db.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)',
+        [req.accountantProfile.id,req.accountantActor,'document_review_save',JSON.stringify({ documentId:document.id, reviewState:data.reviewState, fiscalAction:data.fiscalAction })]);
+      const [saved] = await db.query('SELECT * FROM company_fiscal_document_reviews WHERE profile_id=? AND document_id=? LIMIT 1', [req.accountantProfile.id, document.id]);
+      await db.commit();
+      return { document: { id: document.id, model: document.model, number: document.document_number, channel: document.channel, orderReference: document.external_sale_id, status: document.status, totalCents: Number(document.total_cents || 0) }, review: documentReviewView(saved[0]) };
+    } catch (error) {
+      await db.rollback();
+      throw error;
+    } finally { db.release(); }
   });
 
   const collectFiscalDocuments = async req => {

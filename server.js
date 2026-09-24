@@ -2162,9 +2162,9 @@ function isVpsProxySensitiveGetPath(proxyPath) {
   );
 }
 
-function isVpsProxyAccountantInvoiceStatusPath(proxyPath, method) {
+function isVpsProxyAccountantDocumentPath(proxyPath, method) {
   return String(method).toUpperCase() === 'POST' &&
-    /^\/accountant\/companies\/[^/?]+\/fiscal-documents\/[^/?]+\/sefaz-status$/u.test(proxyPath.split('?')[0]);
+    /^\/accountant\/companies\/[^/?]+\/fiscal-documents\/[^/?]+\/(?:sefaz-status|review)$/u.test(proxyPath.split('?')[0]);
 }
 
 function isVpsProxyPublicProductReadPath(pathname) {
@@ -9485,7 +9485,7 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
     if (!auth.isAdmin && (!bodyCustomerId || auth.customerId !== bodyCustomerId)) {
       return reply.code(403).send({ error: 'Forbidden for this customer' });
     }
-  } else if (isVpsProxyAccountantInvoiceStatusPath(vpsProxyTargetPath, method)) {
+  } else if (isVpsProxyAccountantDocumentPath(vpsProxyTargetPath, method)) {
     if (!auth.userId) return reply.code(401).send({ error: 'Auth required' });
   } else if (!isPublicPath && (isWrite || isVpsProxySensitiveGetPath(vpsProxyTargetPath)) && !auth.isAdmin) {
     return reply.code(403).send({ error: 'Admin required' });

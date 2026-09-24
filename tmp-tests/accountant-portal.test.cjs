@@ -3,6 +3,60 @@ const assert = require('node:assert/strict');
 const { buildRevenueReport, normalizeOperationalSale, reconcileSale, validPeriod } = require('../services/accountantPortalCore.cjs');
 const { registerAccountantPortalRoutes } = require('../services/accountantPortalServer.cjs');
 const { majorToCents, blingFiscalEmissionPeriod, normalizeBlingFiscalDocument, collectBlingFiscalDocuments, fiscalDocumentTotals } = require('../services/blingFiscalImportCore.cjs');
+const { normalizeDocumentReview, documentReviewView } = require('../services/fiscalDocumentReviewCore.cjs');
+
+test('revisão da NF-e aceita rascunho e exige decisão, fonte e contador para concluir', () => {
+  const draft = normalizeDocumentReview({ reviewState:'draft', fiscalAction:'pending', valueTreatment:'Em análise.' });
+  assert.equal(draft.reviewState, 'draft');
+  assert.equal(documentReviewView(null).version, 0);
+  assert.throws(() => normalizeDocumentReview({ reviewState:'reviewed', fiscalAction:'pending' }), /tratamento dos valores/);
+  assert.throws(() => normalizeDocumentReview({ reviewState:'invalid', fiscalAction:'pending' }), /Estado da revisão inválido/);
+  assert.throws(() => normalizeDocumentReview({ reviewState:'draft', fiscalAction:'cancel_now' }), /Providência fiscal inválida/);
+  const reviewed = normalizeDocumentReview({ reviewState:'reviewed', fiscalAction:'assess_return', valueTreatment:'Frete e desconto conferidos.', justification:'Verificar devolução.', evidenceNotes:'Consulta SEFAZ e pedido.', reviewerName:'Contador teste', reviewerRegistration:'CRC teste' });
+  assert.equal(reviewed.fiscalAction, 'assess_return');
+});
+
+test('decisão por documento exige concessão e empresa, usa versão e não altera nota nem venda', async () => {
+  const routes = new Map();
+  const app = {};
+  for (const method of ['get','put','post','delete']) app[method] = (path, options, handler) => routes.set(`${method}:${path}`, { preHandler:options.preHandler, handler });
+  let grant = true;
+  let documentVisible = true;
+  let stored = null;
+  const writes = [];
+  const query = async (sql, params = []) => {
+    if (sql.includes('FROM company_settings')) return [[{ id:'settings-1', cnpj:'123', name:'Empresa' }]];
+    if (sql.includes('FROM company_fiscal_profiles WHERE settings_id=')) return [[{ id:'profile-1', settings_id:'settings-1', cnpj:'123' }]];
+    if (sql.includes('FROM company_accountant_access')) return [grant ? [{ id:'grant-1' }] : []];
+    if (sql.includes('FROM company_fiscal_documents')) return [documentVisible ? [{ id:'note-1', model:'55', document_number:'000699', channel:'shopee', external_sale_id:'order-1', status:'authorized', total_cents:5791 }] : []];
+    if (sql.includes('FROM company_fiscal_document_reviews')) return [stored ? [stored] : []];
+    writes.push({ sql, params });
+    if (sql.startsWith('INSERT INTO company_fiscal_document_reviews')) stored = { id:params[0], review_state:params[3], value_treatment:params[4], fiscal_action:params[5], justification:params[6], evidence_notes:params[7], reviewer_name:params[8], reviewer_registration:params[9], reviewed_at:params[10], version:1 };
+    if (sql.startsWith('UPDATE company_fiscal_document_reviews')) stored = { ...stored, review_state:params[0], value_treatment:params[1], fiscal_action:params[2], justification:params[3], evidence_notes:params[4], reviewer_name:params[5], reviewer_registration:params[6], reviewed_at:params[7], version:stored.version+1 };
+    return [[]];
+  };
+  const pool = { query, getConnection:async () => ({ query, beginTransaction:async()=>{}, commit:async()=>{}, rollback:async()=>{}, release(){} }) };
+  registerAccountantPortalRoutes(app, { pool, enabled:true, getBearerAuthContext:async () => ({ customerId:'accountant-1', userId:'accountant-1', isAdmin:false }) });
+  const path = '/accountant/companies/:id/fiscal-documents/:documentId/review';
+  const get = routes.get(`get:${path}`);
+  const post = routes.get(`post:${path}`);
+  const req = { params:{ id:'primary', documentId:'note-1' }, body:{ reviewState:'draft', fiscalAction:'pending', valueTreatment:'Em análise.', version:0 } };
+  const reply = () => ({ sent:false, header(){}, code(){ return this; }, send(){ this.sent=true; } });
+  let res = reply(); await get.preHandler(req,res); assert.equal(res.sent,false);
+  assert.equal((await get.handler(req)).review.version,0);
+  res = reply(); await post.preHandler(req,res); assert.equal(res.sent,false);
+  assert.equal((await post.handler(req)).review.version,1);
+  assert.deepEqual(writes.map(item => item.sql.split(' ')[0]), ['INSERT','INSERT']);
+  assert(writes.every(item => !/company_fiscal_documents|company_fiscal_sale_reconciliations|\bsales\b/u.test(item.sql)));
+  await assert.rejects(() => post.handler(req), /alterada em outra sessão/);
+  req.body = { reviewState:'reviewed', fiscalAction:'assess_return', valueTreatment:'Cupom conferido.', justification:'Análise documentada.', evidenceNotes:'Pedido e SEFAZ.', reviewerName:'Contador teste', reviewerRegistration:'CRC teste', version:1 };
+  assert.equal((await post.handler(req)).review.reviewState,'reviewed');
+  assert.equal(stored.version,2);
+  documentVisible = false;
+  await assert.rejects(() => get.handler(req), /não encontrado nesta empresa/);
+  grant = false;
+  res = reply(); await post.preHandler(req,res); assert.equal(res.sent,true);
+});
 
 test('filtra o dia completo na consulta fiscal do Bling', () => {
   assert.deepEqual(blingFiscalEmissionPeriod('2026-09-22', '2026-09-22'), { initial:'2026-09-22 00:00:00', final:'2026-09-22 23:59:59' });

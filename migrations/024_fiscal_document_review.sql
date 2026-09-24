@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS company_fiscal_document_reviews (
+  id CHAR(36) NOT NULL PRIMARY KEY,
+  profile_id CHAR(36) NOT NULL,
+  document_id CHAR(36) NOT NULL,
+  review_state VARCHAR(16) NOT NULL DEFAULT 'draft',
+  value_treatment TEXT NULL,
+  fiscal_action VARCHAR(24) NOT NULL DEFAULT 'pending',
+  justification TEXT NULL,
+  evidence_notes TEXT NULL,
+  reviewer_name VARCHAR(255) NULL,
+  reviewer_registration VARCHAR(100) NULL,
+  reviewed_at DATETIME NULL,
+  version INT UNSIGNED NOT NULL DEFAULT 1,
+  created_by VARCHAR(80) NOT NULL,
+  updated_by VARCHAR(80) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_company_document_review (profile_id, document_id),
+  CONSTRAINT fk_document_review_profile FOREIGN KEY (profile_id) REFERENCES company_fiscal_profiles(id) ON DELETE CASCADE,
+  CONSTRAINT fk_document_review_document FOREIGN KEY (document_id) REFERENCES company_fiscal_documents(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

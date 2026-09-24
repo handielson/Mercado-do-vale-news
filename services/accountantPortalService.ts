@@ -62,6 +62,22 @@ export interface AccountantRevenueReport {
   reviewSales: AccountantRevenueSale[];
 }
 
+export interface FiscalDocumentReview {
+  reviewState: 'draft' | 'reviewed';
+  valueTreatment: string;
+  fiscalAction: 'pending' | 'no_action' | 'assess_cancellation' | 'assess_return' | 'other';
+  justification: string;
+  evidenceNotes: string;
+  reviewerName: string;
+  reviewerRegistration: string;
+  reviewedAt: string;
+  version: number;
+}
+export interface FiscalDocumentReviewResponse {
+  document: { id: string; model: string; number: string | null; channel: string; orderReference: string; status: string; totalCents: number };
+  review: FiscalDocumentReview;
+}
+
 const BASE = '/accountant/companies';
 
 export const accountantPortalService = {
@@ -70,6 +86,8 @@ export const accountantPortalService = {
   saveTaxValidation: (id: string, data: FiscalTaxValidation) => vpsClient.put<FiscalTaxValidation>(`${BASE}/${encodeURIComponent(id)}/tax-validation`, data),
   revenue: (id: string, from: string, to: string) => vpsClient.get<AccountantRevenueReport>(`${BASE}/${encodeURIComponent(id)}/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   sefazStatus: (id: string, documentId: string) => vpsClient.post<{ environment: string; cStat: string; reason: string; situation: string; checkedAt: string }>(`${BASE}/${encodeURIComponent(id)}/fiscal-documents/${encodeURIComponent(documentId)}/sefaz-status`, {}),
+  documentReview: (id: string, documentId: string) => vpsClient.get<FiscalDocumentReviewResponse>(`${BASE}/${encodeURIComponent(id)}/fiscal-documents/${encodeURIComponent(documentId)}/review`),
+  saveDocumentReview: (id: string, documentId: string, review: FiscalDocumentReview) => vpsClient.post<FiscalDocumentReviewResponse>(`${BASE}/${encodeURIComponent(id)}/fiscal-documents/${encodeURIComponent(documentId)}/review`, review),
 };
 
 export async function resolveAccountantLandingPath(requestedPath: string, customerType: string | undefined): Promise<string> {

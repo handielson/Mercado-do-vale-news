@@ -65,7 +65,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
     `${file} must not require admin auth for public write proxy paths such as banner tracking`,
   );
 
-  assert.match(source, /isVpsProxyAccountantInvoiceStatusPath\(vpsProxyTargetPath, method\)[\s\S]*?if\s*\(!auth\.userId\)\s*return reply\.code\(401\)/,
+  assert.match(source, /isVpsProxyAccountantDocumentPath\(vpsProxyTargetPath, method\)[\s\S]*?if\s*\(!auth\.userId\)\s*return reply\.code\(401\)/,
     `${file} must pass only authenticated accountant status consultations to the route's company grant check`);
 
   assert.match(
@@ -77,10 +77,12 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 
 for (const file of ['server.js', 'vps_server.js', 'vps_server.cjs']) {
   const source = readFileSync(file, 'utf8');
-  const functionSource = source.match(/function isVpsProxyAccountantInvoiceStatusPath\(proxyPath, method\) \{[\s\S]*?\n\}/u)?.[0];
+  const functionSource = source.match(/function isVpsProxyAccountantDocumentPath\(proxyPath, method\) \{[\s\S]*?\n\}/u)?.[0];
   assert.ok(functionSource, `${file} must classify the accountant consultation precisely`);
-  const matches = vm.runInNewContext(`${functionSource}\nisVpsProxyAccountantInvoiceStatusPath`);
+  const matches = vm.runInNewContext(`${functionSource}\nisVpsProxyAccountantDocumentPath`);
   assert.equal(matches('/accountant/companies/primary/fiscal-documents/nfe-1/sefaz-status', 'POST'), true);
+  assert.equal(matches('/accountant/companies/primary/fiscal-documents/nfe-1/review', 'POST'), true);
+  assert.equal(matches('/accountant/companies/primary/fiscal-documents/nfe-1/review', 'PUT'), false);
   assert.equal(matches('/accountant/companies/primary/fiscal-documents/nfe-1/sefaz-status', 'GET'), false);
   assert.equal(matches('/accountant/companies/primary/tax-validation', 'POST'), false);
   assert.equal(matches('/admin/fiscal-companies/primary/certificate/upload', 'POST'), false);

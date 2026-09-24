@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Building2, FileCheck2, LogOut, ReceiptText, RefreshCw } from 'lucide-react';
 import { useVpsAuth } from '../../contexts/VpsAuthContext';
 import { CompanyTaxValidationPanel } from '../../components/company/CompanyTaxValidationPanel';
+import { FiscalDocumentReviewPanel } from '../../components/company/FiscalDocumentReviewPanel';
 import { accountantPortalService, type AccountantCompany, type AccountantRevenueReport } from '../../services/accountantPortalService';
 
 const money = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((Number(cents) || 0) / 100);
@@ -78,6 +79,7 @@ function RevenuePanel() {
         {sefazError && <p role="alert" className="mt-3 text-sm text-red-700">{sefazError}</p>}
         {sefazResult && <p className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-950">SEFAZ produção: {sefazResult.cStat} — {sefazResult.reason}. Consulta em {new Date(sefazResult.checkedAt).toLocaleString('pt-BR')}. Confira qualquer divergência com o contador antes de alterar a nota.</p>}
       </section>
+      <FiscalDocumentReviewPanel companyId={companyId} documentId={selectedDocumentId} />
     </>}
   </section>;
 }
