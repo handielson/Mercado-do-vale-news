@@ -435,3 +435,9 @@ Item: D06b.9, em andamento. Ambiente: erro HTTP 422 informado pelo operador na r
 Validação local: `test:accountant-portal` 34/34, build e `git diff --check` aprovados. Não houve nova consulta ao Bling nem importação real nesta correção. Pendente: publicar o site, conferir o formulário em produção e acompanhar um lote real pequeno quando o operador decidir importá-lo.
 
 Publicação: v1.2.463, commit `d90f3d3c`, tag enviada para `main`, site ativo em `/var/www/mdv-site/releases/20260924-010004-bling-preview-daily`. `/VERSION.json` confirmou versão e release; homepage e URL administrativa retornaram HTTP 200, API `/status` manteve `mysql.ok=true`. A sessão disponível no navegador tinha somente acesso de contador e redirecionou `/admin/settings/company` à loja; por isso não foi possível conferir visualmente o formulário administrativo autenticado nem repetir a prévia real. D06b.9 permanece aberto para esse teste operacional. Nenhuma nota foi importada nesta validação.
+
+## E56 — Espaço do Contador no topo de Dados da Empresa (23/09/2026)
+
+Item: D06b.10, em andamento. Estado anterior observado na captura do operador: a área Fiscal e certificado reunia cadastro, matriz contábil, importação e acessos numa página longa; a lista de notas e faturamento existia apenas no portal separado `/contador`, sem entrada clara na tela administrativa. A nova terceira aba superior Espaço do Contador abre primeiro Faturamento e notas, reutilizando o relatório da API já autorizado para administrador. Validação contábil e Acessos e importação são seções distintas; Fiscal e certificado mantém cadastro e A1. Nenhuma nota ou empresa foi alterada.
+
+Validação local: `test:company-fiscal` 36/36, `test:accountant-portal` 34/34, build e `git diff --check` aprovados. Pendente: publicar o site e validar a navegação autenticada na página administrativa.

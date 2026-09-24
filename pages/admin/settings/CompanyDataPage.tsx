@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Building2, FileKey2, Save, Loader2 } from 'lucide-react';
+import { Building2, FileKey2, Save, Loader2, ReceiptText, UserRoundCog, ClipboardCheck } from 'lucide-react';
 import { Company, defaultCompany } from '../../../types/company';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { formatCep, searchCep } from '../../../utils/customerFormUtils';
@@ -34,9 +34,11 @@ import { CompanyFiscalPanel } from '../../../components/company/CompanyFiscalPan
 import { CompanyCertificatePanel } from '../../../components/company/CompanyCertificatePanel';
 import { CompanyTaxValidationPanel } from '../../../components/company/CompanyTaxValidationPanel';
 import { CompanyAccountantAccessPanel } from '../../../components/company/CompanyAccountantAccessPanel';
+import { RevenuePanel } from '../../accountant/AccountantPortalPage';
 
 export const CompanyDataPage: React.FC = () => {
-    const [activeArea, setActiveArea] = useState<'general' | 'fiscal'>(() => window.location.hash === '#fiscal' ? 'fiscal' : 'general');
+    const [activeArea, setActiveArea] = useState<'general' | 'fiscal' | 'accountant'>(() => window.location.hash === '#contador' ? 'accountant' : window.location.hash === '#fiscal' ? 'fiscal' : 'general');
+    const [accountantArea, setAccountantArea] = useState<'revenue' | 'validation' | 'access'>('revenue');
     const [form, setForm] = useState<Company>(defaultCompany);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingCep, setIsLoadingCep] = useState(false);
@@ -79,15 +81,15 @@ export const CompanyDataPage: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const syncHash = () => setActiveArea(window.location.hash === '#fiscal' ? 'fiscal' : 'general');
+        const syncHash = () => setActiveArea(window.location.hash === '#contador' ? 'accountant' : window.location.hash === '#fiscal' ? 'fiscal' : 'general');
         window.addEventListener('hashchange', syncHash);
         return () => window.removeEventListener('hashchange', syncHash);
     }, []);
 
-    const selectArea = (area: 'general' | 'fiscal') => {
+    const selectArea = (area: 'general' | 'fiscal' | 'accountant') => {
         setActiveArea(area);
         const baseUrl = window.location.pathname + window.location.search;
-        window.history.replaceState(null, '', area === 'fiscal' ? `${baseUrl}#fiscal` : baseUrl);
+        window.history.replaceState(null, '', area === 'general' ? baseUrl : `${baseUrl}#${area === 'accountant' ? 'contador' : 'fiscal'}`);
     };
 
     const handleCNPJSearch = async () => {
@@ -252,12 +254,15 @@ export const CompanyDataPage: React.FC = () => {
                 </button>}
             </div>
 
-            <div className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-2 sm:grid-cols-2" role="tablist" aria-label="Áreas dos dados da empresa">
+            <div className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-2 sm:grid-cols-3" role="tablist" aria-label="Áreas dos dados da empresa">
                 <button type="button" role="tab" aria-selected={activeArea === 'general'} aria-controls="company-general-panel" onClick={() => selectArea('general')} className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeArea === 'general' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
                     <Building2 size={18} /> Dados gerais e operacionais
                 </button>
                 <button type="button" role="tab" aria-selected={activeArea === 'fiscal'} aria-controls="company-fiscal-panel" onClick={() => selectArea('fiscal')} className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeArea === 'fiscal' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
                     <FileKey2 size={18} /> Fiscal e certificado
+                </button>
+                <button type="button" role="tab" aria-selected={activeArea === 'accountant'} aria-controls="company-accountant-panel" onClick={() => selectArea('accountant')} className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeArea === 'accountant' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
+                    <ReceiptText size={18} /> Espaço do Contador
                 </button>
             </div>
 
@@ -266,9 +271,19 @@ export const CompanyDataPage: React.FC = () => {
                     <strong>Cadastro fiscal separado.</strong> Para a empresa principal, CNPJ, nomes, IE, CNAE, porte, contato e endereço são somente leitura aqui e continuam vindo dos dados gerais usados pelo restante do sistema. Esta área salva regime, CRT, vigência, inscrições complementares, CNAEs consultados e certificado.
                 </div>
                 <CompanyFiscalPanel />
-                <CompanyTaxValidationPanel />
-                <CompanyAccountantAccessPanel />
                 <CompanyCertificatePanel />
+            </div>}
+
+            {activeArea === 'accountant' && <div id="company-accountant-panel" role="tabpanel" className="space-y-6" aria-label="Espaço do Contador">
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">Consulte aqui o faturamento e as notas já importadas. A validação contábil e a gestão de acesso ficam em seções separadas; importar notas exige uma prévia e confirmação.</div>
+                <nav className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2" aria-label="Seções do Espaço do Contador">
+                    <button type="button" onClick={() => setAccountantArea('revenue')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${accountantArea === 'revenue' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}><ReceiptText size={17} /> Faturamento e notas</button>
+                    <button type="button" onClick={() => setAccountantArea('validation')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${accountantArea === 'validation' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}><ClipboardCheck size={17} /> Validação contábil</button>
+                    <button type="button" onClick={() => setAccountantArea('access')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${accountantArea === 'access' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}><UserRoundCog size={17} /> Acessos e importação</button>
+                </nav>
+                {accountantArea === 'revenue' && <RevenuePanel />}
+                {accountantArea === 'validation' && <CompanyTaxValidationPanel />}
+                {accountantArea === 'access' && <CompanyAccountantAccessPanel />}
             </div>}
 
             {activeArea === 'general' && <div id="company-general-panel" role="tabpanel" className="space-y-6" aria-label="Dados gerais e operacionais">

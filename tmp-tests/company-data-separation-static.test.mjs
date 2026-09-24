@@ -16,6 +16,20 @@ test('dados gerais e fiscais ficam em áreas exclusivas da mesma página', () =>
   assert.match(page, /activeArea === 'general' && <button[\s\S]*Salvar Alterações/);
 });
 
+test('Espaço do Contador fica na navegação superior e abre faturamento e notas primeiro', () => {
+  const portal = fs.readFileSync(new URL('../pages/accountant/AccountantPortalPage.tsx', import.meta.url), 'utf8');
+  assert.match(page, /role="tab" aria-selected=\{activeArea === 'accountant'\}/);
+  assert.match(page, /Espaço do Contador/);
+  assert.match(page, /company-accountant-panel/);
+  assert.match(page, /accountantArea === 'revenue' && <RevenuePanel \/>/);
+  assert.match(page, /accountantArea === 'validation' && <CompanyTaxValidationPanel \/>/);
+  assert.match(page, /accountantArea === 'access' && <CompanyAccountantAccessPanel \/>/);
+  assert.match(page, /#contador/);
+  assert.ok(page.indexOf('Faturamento e notas') < page.indexOf('Validação contábil'));
+  assert.match(portal, /export function RevenuePanel\(\)/);
+  assert.match(portal, /Notas fiscais por canal de venda/);
+});
+
 test('interface identifica a fonte canônica e alerta abre diretamente a área fiscal', () => {
   assert.match(panel, /Fonte: Dados gerais e operacionais/);
   assert.match(panel, /o salvamento fiscal não substitui esses valores/);

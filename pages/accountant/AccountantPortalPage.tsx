@@ -21,7 +21,7 @@ const reviewLabel: Record<string, string> = {
   sale_outside_period: 'Pedido criado fora do período selecionado; exibido somente para conferência',
 };
 
-function RevenuePanel() {
+export function RevenuePanel() {
   const [companies, setCompanies] = useState<AccountantCompany[]>([]);
   const [companyId, setCompanyId] = useState('');
   const [from, setFrom] = useState(yearStart);
