@@ -22,7 +22,7 @@ test('Espaço do Contador fica na navegação superior e abre faturamento e nota
   assert.match(page, /Espaço do Contador/);
   assert.match(page, /company-accountant-panel/);
   assert.match(page, /accountantArea === 'revenue' && <RevenuePanel adminMode \/>/);
-  assert.match(page, /accountantArea === 'validation' && <CompanyTaxValidationPanel \/>/);
+  assert.match(page, /accountantArea === 'validation' && <><AccountantNfceSequencePanel \/><CompanyTaxValidationPanel \/><\/>/);
   assert.match(page, /accountantArea === 'access' && <CompanyAccountantAccessPanel \/>/);
   assert.match(page, /#contador/);
   assert.ok(page.indexOf('Faturamento e notas') < page.indexOf('Validação contábil'));

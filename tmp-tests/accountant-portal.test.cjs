@@ -5,6 +5,34 @@ const { registerAccountantPortalRoutes } = require('../services/accountantPortal
 const { majorToCents, blingFiscalEmissionPeriod, normalizeBlingFiscalDocument, collectBlingFiscalDocuments, fiscalDocumentTotals } = require('../services/blingFiscalImportCore.cjs');
 const { normalizeDocumentReview, documentReviewView } = require('../services/fiscalDocumentReviewCore.cjs');
 
+test('contador com permissão fiscal cadastra série NFC-e sem ativar emissão ou retroceder sequência', async () => {
+  const routes=new Map();const app={};
+  for(const method of ['get','put','post','delete'])app[method]=(path,options,handler)=>routes.set(`${method}:${path}`,{preHandler:options.preHandler,handler});
+  let granted=true;const events=[];const sequences=[];const configured=[];
+  const pool={query:async(sql,params=[])=>{
+    if(sql.includes('FROM company_settings'))return [[{id:'settings-1',cnpj:'11222333000181',name:'Empresa'}]];
+    if(sql.includes('FROM company_fiscal_profiles WHERE settings_id='))return [[{id:'profile-1',settings_id:'settings-1',cnpj:'11222333000181'}]];
+    if(sql.includes('FROM company_accountant_access'))return [granted?[{id:'access-1'}]:[]];
+    if(sql.includes('FROM company_fiscal_nfce_sequences'))return [sequences];
+    if(sql.startsWith('INSERT INTO company_fiscal_events')){events.push(params);return [{affectedRows:1}];}
+    throw new Error(`SQL inesperado: ${sql}`);
+  }};
+  registerAccountantPortalRoutes(app,{pool,enabled:true,getBearerAuthContext:async()=>({customerId:'contador-1',userId:'contador-1',isAdmin:false}),
+    configureSequence:async(_pool,args)=>{configured.push(args);sequences.push({series:args.series,next_number:args.blingLastNumber+1,checked_at:'2026-09-24'});return {series:args.series,nextNumber:args.blingLastNumber+1};}});
+  const path='/accountant/companies/:id/nfce/production/sequence';const get=routes.get(`get:${path}`),post=routes.get(`post:${path}`);
+  const reply=()=>({sent:false,header(){},code(){return this;},send(){this.sent=true;}});
+  const req={params:{id:'primary'},body:{series:2,lastNumber:0,reason:'Série própria para NFC-e',confirmation:'CONFERI A SERIE E NUMERACAO'}};
+  let res=reply();await get.preHandler(req,res);assert.equal(res.sent,false);
+  assert.deepEqual(await get.handler(req),{environment:'production',issuanceEnabled:false,sequences:[]});
+  res=reply();await post.preHandler(req,res);assert.equal(res.sent,false);
+  await post.handler(req);
+  assert.deepEqual(configured[0],{profileId:'profile-1',environment:'production',series:2,blingLastNumber:0,actor:'contador-1',cutoverConfirmed:true});
+  assert.equal((await get.handler(req)).sequences[0].nextNumber,1);
+  assert.equal(events[0][2],'nfce_production_sequence');
+  req.body={...req.body,series:1};await assert.rejects(()=>post.handler(req),/Informe série/);
+  granted=false;res=reply();await post.preHandler(req,res);assert.equal(res.sent,true);
+});
+
 test('conferência de cancelamento lê pedido atual e SEFAZ sem gravar nem cancelar', async () => {
   const routes = new Map();
   const app = {};

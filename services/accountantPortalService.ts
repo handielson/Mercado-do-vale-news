@@ -1,6 +1,11 @@
 import { vpsClient } from './vpsClient';
 import type { FiscalTaxValidation } from './companyFiscalService';
 
+export interface NfceProductionSequenceStatus {
+  environment: 'production'; issuanceEnabled: false;
+  sequences: Array<{ series: number; nextNumber: number; checkedBy: string; checkedAt: string }>;
+}
+
 export interface AccountantCompany {
   id: string;
   profileId: string;
@@ -120,6 +125,8 @@ export const accountantPortalService = {
   archiveXml: (id: string, documentId: string, xml: string) => vpsClient.post(`${BASE}/${encodeURIComponent(id)}/fiscal-documents/${encodeURIComponent(documentId)}/archive-xml`, { xml }),
   list: () => vpsClient.get<{ enabled: boolean; companies: AccountantCompany[] }>(BASE),
   taxValidation: (id: string) => vpsClient.get<FiscalTaxValidation>(`${BASE}/${encodeURIComponent(id)}/tax-validation`),
+  nfceProductionSequenceStatus: (id: string) => vpsClient.get<NfceProductionSequenceStatus>(`${BASE}/${encodeURIComponent(id)}/nfce/production/sequence`),
+  configureNfceProductionSequence: (id: string, series: number, lastNumber: number, reason: string) => vpsClient.post(`${BASE}/${encodeURIComponent(id)}/nfce/production/sequence`, { series,lastNumber,reason,confirmation:'CONFERI A SERIE E NUMERACAO' }),
   saveTaxValidation: (id: string, data: FiscalTaxValidation) => vpsClient.put<FiscalTaxValidation>(`${BASE}/${encodeURIComponent(id)}/tax-validation`, data),
   revenue: (id: string, from: string, to: string) => vpsClient.get<AccountantRevenueReport>(`${BASE}/${encodeURIComponent(id)}/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   sefazStatus: (id: string, documentId: string) => vpsClient.post<{ environment: string; cStat: string; reason: string; situation: string; checkedAt: string }>(`${BASE}/${encodeURIComponent(id)}/fiscal-documents/${encodeURIComponent(documentId)}/sefaz-status`, {}),

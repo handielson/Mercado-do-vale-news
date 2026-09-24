@@ -8,6 +8,7 @@ const { validateArchivedXml, readArchivedXml, renderFiscalPdf } = require('./fis
 const certificateVault = require('./fiscalCertificateVault.cjs');
 const { marketplaceCancellationEvidence, assessNfeCancellation } = require('./fiscalCancellationCore.cjs');
 const { normalizeDocumentReview, documentReviewView } = require('./fiscalDocumentReviewCore.cjs');
+const { configureNfceSequence } = require('./fiscalNfceNumbering.cjs');
 
 const parseJson = value => {
   if (!value) return null;
@@ -44,7 +45,7 @@ function companyView(profile) {
   };
 }
 
-function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabled = process.env.MDV_COMPANY_FISCAL_ENABLED === '1', importBlingDocuments, consultSefazInvoice = certificateVault.consultInvoice, getLiveMarketplaceOrder }) {
+function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabled = process.env.MDV_COMPANY_FISCAL_ENABLED === '1', importBlingDocuments, consultSefazInvoice = certificateVault.consultInvoice, getLiveMarketplaceOrder, configureSequence = configureNfceSequence }) {
   const auth = async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     const context = await getBearerAuthContext(req);
@@ -90,6 +91,23 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       operational_company_id: row.settings_id && row.settings_id === settings[0]?.id ? settings[0].id : null,
     }));
     return { enabled: true, companies };
+  });
+  const productionSequencePath = '/accountant/companies/:id/nfce/production/sequence';
+  app.get(productionSequencePath, { preHandler: requireCompanyAccess('edit') }, async req => {
+    const [sequences] = await pool.query("SELECT series,next_number,checked_by,checked_at FROM company_fiscal_nfce_sequences WHERE profile_id=? AND environment='production' ORDER BY checked_at DESC,series DESC",[req.accountantProfile.id]);
+    return { environment:'production', issuanceEnabled:false,
+      sequences:sequences.map(row=>({series:row.series,nextNumber:row.next_number,checkedBy:row.checked_by,checkedAt:row.checked_at})) };
+  });
+  app.post(productionSequencePath, { preHandler: requireCompanyAccess('edit'), config:{ rateLimit:{ max:3,timeWindow:'10 minutes' } } }, async req => {
+    const { series,lastNumber,confirmation,reason } = req.body || {};
+    if (!Number.isSafeInteger(series) || series < 2 || series > 889 || !Number.isSafeInteger(lastNumber) || lastNumber < 0 || lastNumber > 999999998 ||
+      confirmation !== 'CONFERI A SERIE E NUMERACAO' || String(reason || '').trim().length < 10)
+      throw problem('Informe série, último número e justificativa após conferência fiscal.',400);
+    const result = await configureSequence(pool,{profileId:req.accountantProfile.id,environment:'production',
+      series,blingLastNumber:lastNumber,actor:req.accountantActor,cutoverConfirmed:true});
+    await pool.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)',
+      [req.accountantProfile.id,req.accountantActor,'nfce_production_sequence',JSON.stringify({series:result.series,nextNumber:result.nextNumber,reason:String(reason).trim()})]);
+    return result;
   });
 
   app.get('/accountant/companies/:id/tax-validation', { preHandler: requireCompanyAccess('edit') }, async req => {
