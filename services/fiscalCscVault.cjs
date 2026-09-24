@@ -16,7 +16,9 @@ function validateCsc(identifier, code) {
   const id = String(identifier ?? '').trim();
   const secret = String(code ?? '').trim();
   if (!/^\d{1,6}$/.test(id)) throw problem('O identificador do CSC deve ter de 1 a 6 dígitos.');
-  if (!/^[A-Za-z0-9]{16,64}$/.test(secret)) throw problem('O CSC deve conter de 16 a 64 caracteres alfanuméricos.');
+  if (!/^[A-Za-z0-9]{16,64}$/.test(secret) && !UUID.test(secret)) {
+    throw problem('O CSC deve conter de 16 a 64 caracteres alfanuméricos ou seguir o formato com hífens do e-Fisco.');
+  }
   return { identifier: id, code: secret };
 }
 

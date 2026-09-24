@@ -20,6 +20,7 @@ const API_PATTERNS = [
   /^services\/autoresponder\/engine\//,
   /^services\/marketingCampaignApi\.cjs$/,
   /^services\/mobileSalesPushService\.cjs$/,
+  /^services\/.*Vault\.cjs$/,
   /^services\/.*Server\.(?:js|cjs|ts)$/i,
   /^tools\/install-autoresponder/,
 ];
@@ -332,6 +333,8 @@ function runSelfTest() {
 
   const serviceServer = classifyFiles(['pages/admin/products/SmartphonePhotoIntakePage.tsx', 'services/smartphonePhotoIntakeServer.cjs']);
   assert(serviceServer.target === 'multiple', 'server modules inside services must deploy site and API');
+  const fiscalVault = classifyFiles(['services/fiscalCscVault.cjs']);
+  assert(fiscalVault.target === 'multiple', 'server-side vault modules must deploy site and API');
 
   const n8n = classifyFiles(['tmp-tests/n8n-ai-natural-sales-responses.cjs']);
   assert(n8n.target === 'n8n', 'n8n workflow mutator classification failed');

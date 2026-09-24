@@ -37,7 +37,20 @@ test('CSC rejeita ambiente, identificador e código inválidos sem gravar', asyn
   try {
     assert.throws(() => validateCsc('abc', 'ABCDEF0123456789'), /identificador/);
     assert.throws(() => validateCsc('1', 'curto'), /CSC/);
+    assert.throws(() => validateCsc('1', 'ABCD-EF0123456789'), /CSC/);
     await assert.rejects(installCsc(crypto.randomUUID(), 'unknown', '1', 'ABCDEF0123456789', options), /ambiente/);
     assert.equal((await fs.readdir(vaultDir)).length, 0);
+  } finally { await removeTestVault(vaultDir); }
+});
+
+test('CSC no formato UUID do e-Fisco mantém hífens e maiúsculas no cofre', async () => {
+  const vaultDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-csc-'));
+  const options = { vaultDir, masterKey: crypto.randomBytes(32).toString('hex') };
+  const profileId = crypto.randomUUID();
+  const secret = 'ABCDEF01-2345-6789-ABCD-EF0123456789';
+  try {
+    assert.deepEqual(validateCsc('1', secret), { identifier: '1', code: secret });
+    await installCsc(profileId, 'homologation', '1', secret, options);
+    assert.equal((await readCsc(profileId, 'homologation', options)).code, secret);
   } finally { await removeTestVault(vaultDir); }
 });
