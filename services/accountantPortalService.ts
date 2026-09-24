@@ -22,6 +22,7 @@ export interface AccountantRevenueSale {
   operationalState: 'completed' | 'cancelled' | 'pending';
   fiscalState: 'invoiced' | 'no_invoice_confirmed' | 'reconciliation_pending' | 'cancelled' | 'operational_pending';
   customerName: string;
+  authorizedModels?: string[];
   document?: { model: string; number?: string; accessKey?: string; status: string; issuedAt?: string; totalCents: number; source: string };
   documentTotalCents?: number;
   amountDifferenceCents?: number;
@@ -100,8 +101,23 @@ export interface FiscalCancellationAlert {
 }
 
 const BASE = '/accountant/companies';
+export interface AccountantFiscalFile { filename: string; mimeType: string; base64: string }
+
+export interface AccountantSaleDetails {
+  channel: string; saleId: string; customerName: string; occurredAt: string | null; capturedAt: string | null;
+  status: string; paymentStatus: string;
+  totalCents: number | null; subtotalCents: number | null; discountCents: number | null; shippingCents: number | null;
+  items: Array<{ name: string; sku: string; quantity: number; unitPriceCents: number | null; totalCents: number | null }>;
+  payments: Array<{ method: string; amountCents: number | null; installments: number | null }>;
+  documents: Array<{ id: string; model: string; status: string; number: string | null; series: string | null; accessKey: string | null; issuedAt: string | null }>;
+  receipt: { status: string; number: string; series: string; authorizedAt: string | null; accessKey: string | null; available: boolean } | null;
+}
 
 export const accountantPortalService = {
+  saleDetails: (id: string, channel: string, saleId: string) => vpsClient.get<AccountantSaleDetails>(`${BASE}/${encodeURIComponent(id)}/sales/${encodeURIComponent(channel)}/${encodeURIComponent(saleId)}`),
+  saleReceipt: (id: string, saleId: string, format: 'pdf' | 'xml') => vpsClient.get<AccountantFiscalFile>(`${BASE}/${encodeURIComponent(id)}/sales/pdv/${encodeURIComponent(saleId)}/receipt?format=${format}`),
+  documentFile: (id: string, documentId: string, format: 'pdf' | 'xml') => vpsClient.get<AccountantFiscalFile>(`${BASE}/${encodeURIComponent(id)}/fiscal-documents/${encodeURIComponent(documentId)}/file?format=${format}`),
+  archiveXml: (id: string, documentId: string, xml: string) => vpsClient.post(`${BASE}/${encodeURIComponent(id)}/fiscal-documents/${encodeURIComponent(documentId)}/archive-xml`, { xml }),
   list: () => vpsClient.get<{ enabled: boolean; companies: AccountantCompany[] }>(BASE),
   taxValidation: (id: string) => vpsClient.get<FiscalTaxValidation>(`${BASE}/${encodeURIComponent(id)}/tax-validation`),
   saveTaxValidation: (id: string, data: FiscalTaxValidation) => vpsClient.put<FiscalTaxValidation>(`${BASE}/${encodeURIComponent(id)}/tax-validation`, data),

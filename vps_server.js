@@ -9726,7 +9726,7 @@ async function getBlingProductDetailAuthHeaderVps(request) {
   return accessToken ? `Bearer ${accessToken}` : '';
 }
 
-async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to }) {
+async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to, includeXml = false }) {
   const authHeader = await getBlingProductDetailAuthHeaderVps(request);
   if (!authHeader) {
     const error = new Error('Conecte o Bling antes de importar o histórico fiscal.');
@@ -9763,6 +9763,7 @@ async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to }) {
   return collectBlingFiscalDocuments({
     listPage: (type, status, page) => read(type, status, page),
     getDetail: (type, id) => read(type, null, null, id),
+    getXml: includeXml ? async detail => (await downloadBlingNfeXmlVps(detail)).toString('utf8') : undefined,
     pause: () => sleepBlingReconcileVps(450),
     maxDocuments: 25,
   });

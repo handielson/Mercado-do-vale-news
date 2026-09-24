@@ -41,7 +41,7 @@ function invalidImport(message) {
   return error;
 }
 
-async function collectBlingFiscalDocuments({ listPage, getDetail, pause = async () => {}, maxDocuments = 120 }) {
+async function collectBlingFiscalDocuments({ listPage, getDetail, getXml, pause = async () => {}, maxDocuments = 120 }) {
   const documents = [];
   for (const type of ['nfe', 'nfce']) {
     for (const status of [5, 2]) {
@@ -59,6 +59,7 @@ async function collectBlingFiscalDocuments({ listPage, getDetail, pause = async 
           }
           const document = normalizeBlingFiscalDocument(detail, type);
           if (!document) throw invalidImport(`Detalhe fiscal incompleto em ${type}, página ${page}; importação interrompida.`);
+          if (getXml) document.authorizedXml = await getXml(detail);
           documents.push(document);
         }
         if (items.length < 100) break;

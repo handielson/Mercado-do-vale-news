@@ -21,6 +21,7 @@ const { ensureTikTokPrintTable, registerTikTokPrintRoutes } = require('./service
 const { ensureTikTokFulfillmentTable, createTikTokFulfillmentAutomation } = require('./services/tiktokShopFulfillmentAutomation.cjs');
 const { normalizeRelayCommand, ensureSchema: ensureN8nAdminHandoffSchema, notifyAdmins: notifyN8nHandoffAdmins, handleRelayCommand } = require('./services/n8nAdminHandoffRelay.cjs');
 const { normalizeProductSpecsRam } = require('./services/physicalRamCore.cjs');
+const { blingFiscalEmissionPeriod, collectBlingFiscalDocuments } = require('./services/blingFiscalImportCore.cjs');
 const {
   CATALOG_PREFERENCE_HANDOFF_MESSAGE,
   PHONE_LIST_FOLLOWUP_MESSAGE,
@@ -2202,6 +2203,8 @@ function isVpsProxyCustomerOrderWritePath(proxyPath, method = 'GET') {
 function isVpsProxyCustomerSelfServicePath(proxyPath, method = 'GET') {
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const pathname = proxyPath.split('?')[0] || '/';
+  if (pathname === '/accountant/companies' && ['GET', 'HEAD'].includes(normalizedMethod)) return true;
+  if (/^\/accountant\/companies\/[^/]+\/(?:tax-validation|revenue)$/u.test(pathname) && ['GET', 'HEAD', 'PUT'].includes(normalizedMethod)) return true;
   if (normalizedMethod !== 'POST') return false;
   return pathname === '/customer/checkin'
     || pathname === '/customer/reviews'
@@ -7996,6 +7999,7 @@ async function recordMobileTikTokSaleVps(orderId) {
   return mobileSalesPushService.recordSaleEvent(sale);
 }
 
+let wakeFiscalCancellationVps = async () => {};
 async function handleShopeeWebhookVps(request, reply) {
   if (request.method !== 'POST') return reply.code(405).send({ error: 'Method Not Allowed' });
 
@@ -8004,6 +8008,7 @@ async function handleShopeeWebhookVps(request, reply) {
     const data = body.data && typeof body.data === 'object' ? body.data : body;
     const orderSn = String(data.ordersn || data.order_sn || data.orderSn || '').trim();
     if (orderSn) {
+      void wakeFiscalCancellationVps('shopee', orderSn).catch(error => console.error('[fiscal-cancellation] Shopee wake failed:', error.message));
       await recordMobileShopeeSaleVps(orderSn);
     }
     return reply.code(200).send({ message: 'success' });
@@ -8025,16 +8030,12 @@ async function handleTikTokShopWebhookVps(request, reply) {
     const eventType = Number(body.type || data.type || 0);
     if (eventType === 36 || String(body.event_type || '').toUpperCase() === 'INVOICE_STATUS_CHANGE') {
       const status = String(data.invoice_status || '').toUpperCase();
-      console.info('[tiktok-shop] invoice status change', JSON.stringify({
-        package_id: String(data.package_id || ''),
-        order_ids: Array.isArray(data.order_ids) ? data.order_ids.map(String).slice(0, 20) : [],
-        invoice_status: status,
-        invalid_reason: String(data.invalid_reason || ''),
-      }));
+      console.info('[tiktok-shop] invoice status change', JSON.stringify({ package_id: String(data.package_id || ''), order_ids: Array.isArray(data.order_ids) ? data.order_ids.map(String).slice(0, 20) : [], invoice_status: status, invalid_reason: String(data.invalid_reason || '') }));
       // Webhook data is a wake-up hint only. Shipping and print eligibility are
       // determined by fresh authenticated TikTok API reads in the poller.
     }
     if (orderId) {
+      void wakeFiscalCancellationVps('tiktok', orderId).catch(error => console.error('[fiscal-cancellation] TikTok wake failed:', error.message));
       await recordMobileTikTokSaleVps(orderId);
     }
     return reply.code(200).send({ message: 'success' });
@@ -9723,6 +9724,49 @@ async function getBlingProductDetailAuthHeaderVps(request) {
     ? await refreshBlingStoredAccessTokenVps(settings)
     : settings.bling_access_token;
   return accessToken ? `Bearer ${accessToken}` : '';
+}
+
+async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to, includeXml = false }) {
+  const authHeader = await getBlingProductDetailAuthHeaderVps(request);
+  if (!authHeader) {
+    const error = new Error('Conecte o Bling antes de importar o histórico fiscal.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const emissionPeriod = blingFiscalEmissionPeriod(from, to);
+  const read = async (type, status, page, id) => {
+      const path = id == null ? type : `${type}/${encodeURIComponent(String(id))}`;
+      const params = new URLSearchParams({
+        ...(id == null ? {
+          pagina: String(page), limite: '100', dataEmissaoInicial: emissionPeriod.initial,
+          dataEmissaoFinal: emissionPeriod.final, situacao: String(status),
+          ...(type === 'nfe' ? { tipo: '1' } : {}),
+        } : {}),
+      });
+      const response = await fetch(`https://api.bling.com.br/Api/v3/${path}${id == null ? `?${params}` : ''}`, {
+        headers: { Authorization: authHeader, Accept: 'application/json' },
+        signal: AbortSignal.timeout(30000),
+      });
+      const body = await readBlingProxyResponse(response);
+      if (!response.ok) {
+        const message = body.json?.error?.description
+          || body.json?.error?.message
+          || body.json?.message
+          || `Falha ao consultar ${type.toUpperCase()} no Bling (${response.status}).`;
+        const error = new Error(String(message).slice(0, 500));
+        error.statusCode = response.status === 401 ? 409 : 502;
+        throw error;
+      }
+      return body.json?.data;
+  };
+  return collectBlingFiscalDocuments({
+    listPage: (type, status, page) => read(type, status, page),
+    getDetail: (type, id) => read(type, null, null, id),
+    getXml: includeXml ? async detail => (await downloadBlingNfeXmlVps(detail)).toString('utf8') : undefined,
+    pause: () => sleepBlingReconcileVps(450),
+    maxDocuments: 25,
+  });
 }
 
 function readBlingStockQuantityVps(item) {
@@ -27602,7 +27646,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
     return {
       ok: true,
       already_refunded: true,
-      payment_status: 'refunded',
+      payment_status: fullyRefunded ? 'refunded' : 'paid',
       refund_id: order.refund_id ? String(order.refund_id) : undefined,
       refunded_at: order.refunded_at || order.updated_at || undefined,
       refund_amount: Number(order.refund_amount) || Number(order.total) || 0,
@@ -27641,9 +27685,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
   const paidAmount = Number(payment.transaction_amount) || 0;
   const refundedAmount = Number(payment.transaction_amount_refunded) || 0;
   const requestedAmount = req.body?.amount == null ? paidAmount - refundedAmount : Number(req.body.amount);
-  if (!Number.isFinite(requestedAmount) || requestedAmount <= 0 || requestedAmount > (paidAmount - refundedAmount) + 0.01) {
-    return reply.code(400).send({ error: 'O valor do estorno deve ser maior que zero e nao pode exceder o saldo do pagamento.' });
-  }
+  if (!Number.isFinite(requestedAmount) || requestedAmount <= 0 || requestedAmount > (paidAmount - refundedAmount) + 0.01) return reply.code(400).send({ error: 'O valor do estorno deve ser maior que zero e nao pode exceder o saldo do pagamento.' });
   const alreadyRefundedAtGateway = String(payment.status || '').toLowerCase() === 'refunded'
     || (paidAmount > 0 && refundedAmount >= paidAmount);
 
@@ -42173,16 +42215,53 @@ const tiktokFulfillment = createTikTokFulfillmentAutomation({
 });
 require('./services/centralPrintingServer.cjs').registerCentralPrintingRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 require('./services/companyFiscalServer.cjs').registerCompanyFiscalRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
+const getLiveFiscalMarketplaceOrder = async (channel, orderId) => {
+    if (channel === 'shopee') {
+      const credentials = await getShopeeCatalogCredentialsVps();
+      const result = await shopeeCatalogGetVps('/api/v2/order/get_order_detail', credentials,
+        encodeShopeeCatalogParamsVps({ order_sn_list: String(orderId), response_optional_fields: 'pickup_done_time,actual_shipping_time,package_list,cancel_by,cancel_reason' }));
+      if (!result?.ok || result?.data?.error) throw new Error('Falha ao consultar o pedido atual na Shopee.');
+      return (result.data.response?.order_list || []).find(order => String(order.order_sn) === String(orderId)) || null;
+    }
+    if (channel === 'tiktok') {
+      const settings = await loadTikTokShopOAuthSettingsVps();
+      const result = await callTikTokShopOpenApiVps(settings, { pathname: '/order/202309/orders', query: { ids: String(orderId) } });
+      if (Number(result?.payload?.code) !== 0) throw new Error('Falha ao consultar o pedido atual no TikTok Shop.');
+      return (result.payload?.data?.orders || []).find(order => String(order.id) === String(orderId)) || null;
+    }
+    return null;
+  };
+require('./services/accountantPortalServer.cjs').registerAccountantPortalRoutes(fastify, {
+  pool,
+  getBearerAuthContext: getVpsBearerAuthContext,
+  importBlingDocuments: fetchBlingFiscalDocumentsForMigrationVps,
+  getLiveMarketplaceOrder: getLiveFiscalMarketplaceOrder,
+});
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {
+  if (process.env.MDV_FISCAL_AUTO_CANCEL_ENABLED === '1' && process.env.MDV_FISCAL_AUTO_CANCEL_HOMOLOGATED === '1') {
+    const fiscalCancellation = require('./services/fiscalCancellationAutomation.cjs').createFiscalCancellationAutomation({
+      pool, getLiveMarketplaceOrder: getLiveFiscalMarketplaceOrder,
+    });
+    wakeFiscalCancellationVps = (channel, orderId) => fiscalCancellation.processOrder(channel, orderId);
+    let fiscalCancellationRunning = false;
+    const pollFiscalCancellation = async () => {
+      if (fiscalCancellationRunning) return;
+      fiscalCancellationRunning = true;
+      try { await fiscalCancellation.tick(); }
+      catch (error) { console.error('[fiscal-cancellation] monitor failed:', error.message); }
+      finally { fiscalCancellationRunning = false; }
+    };
+    void pollFiscalCancellation();
+    setInterval(() => void pollFiscalCancellation(), 60_000).unref?.();
+  }
   scheduleSignedWarrantySync();
   startFacebookMarketplaceAutomationVps();
   startWhatsAppStatusAutomationVps();
   startShopeeReviewAutomationVps();
   startN8nBotHealthMonitorVps();
   startN8nPhoneCatalogFollowupScheduler();
-  // Poll recent orders as well as webhooks: no event can be lost permanently.
   let tiktokPrintPollRunning = false;
   const pollTikTokPrint = async () => {
     if (tiktokPrintPollRunning) return;

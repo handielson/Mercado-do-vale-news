@@ -48,7 +48,7 @@ function reconcileSale(sale, fiscal = {}) {
     if (sale.operationalState === 'pending') reviewReasons.push('operational_pending_with_document');
     if (sale.operationalState === 'cancelled') reviewReasons.push('cancelled_with_document');
   }
-  const details = authorizedDocument ? { document: authorizedDocument, documentTotalCents, amountDifferenceCents, reviewReasons } : {};
+  const details = authorizedDocument ? { document: authorizedDocument, authorizedModels: [...new Set(authorizedDocuments.map(document => document.model))], documentTotalCents, amountDifferenceCents, reviewReasons } : {};
   if (sale.operationalState === 'cancelled') return { ...sale, fiscalState: 'cancelled', ...details };
   if (sale.operationalState !== 'completed') return { ...sale, fiscalState: 'operational_pending', ...details };
   if (authorizedDocument) return { ...sale, fiscalState: 'invoiced', ...details };
@@ -100,7 +100,7 @@ function buildRevenueReport(rows, fiscalBySale = new Map()) {
     reviewSales: sales.filter(sale => sale.reviewReasons?.length > 0) };
 }
 
-function validPeriod(from, to) {
+function validPeriod(from, to, maxDays = 366) {
   const pattern = /^\d{4}-\d{2}-\d{2}$/;
   if (!pattern.test(String(from || '')) || !pattern.test(String(to || ''))) return false;
   const fromDate = new Date(`${from}T00:00:00.000Z`);
@@ -108,7 +108,7 @@ function validPeriod(from, to) {
   if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) return false;
   if (fromDate.toISOString().slice(0, 10) !== from || toDate.toISOString().slice(0, 10) !== to) return false;
   const days = (toDate.getTime() - fromDate.getTime()) / 86400000;
-  return days >= 0 && days <= 366;
+  return days >= 0 && days <= maxDays;
 }
 
 module.exports = { buildRevenueReport, normalizeOperationalSale, reconcileSale, validPeriod };

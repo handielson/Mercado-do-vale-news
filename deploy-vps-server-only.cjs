@@ -49,6 +49,11 @@ const companyFiscalServicePaths = [
   'services/fiscalTaxValidationCore.cjs',
   'services/accountantPortalCore.cjs',
   'services/accountantPortalServer.cjs',
+  'services/accountantSaleDetails.cjs',
+  'services/fiscalDocumentArchive.cjs',
+  'services/fiscalNfceAccessKey.cjs',
+  'services/danfeNfceCore.cjs',
+  'services/fiscalNfceDanfeRead.cjs',
   'services/fiscalDocumentReviewCore.cjs',
   'services/blingFiscalImportCore.cjs',
   'services/fiscalCancellationCore.cjs',
@@ -336,9 +341,9 @@ async function ensureRemoteMobileSalesDependencies(appDir) {
 
 async function ensureRemoteFiscalDependencies(appDir) {
   try {
-    await exec(`cd ${appDir} && node -e "require.resolve('node-forge'); require.resolve('xml-crypto'); require.resolve('@xmldom/xmldom')"`);
+    await exec(`cd ${appDir} && node -e "require.resolve('node-forge'); require.resolve('xml-crypto'); require.resolve('@xmldom/xmldom'); require.resolve('@alexssmusica/node-pdf-nfe')"`);
   } catch {
-    await exec(`cd ${appDir} && npm install node-forge@1.4.0 xml-crypto@6.3.1 @xmldom/xmldom@0.9.12 --omit=dev`);
+    await exec(`cd ${appDir} && npm install node-forge@1.4.0 xml-crypto@6.3.1 @xmldom/xmldom@0.9.12 @alexssmusica/node-pdf-nfe@1.2.24 --omit=dev`);
   }
   await exec(`mkdir -p ${appDir}/.secrets/fiscal-certificates && chmod 700 ${appDir}/.secrets ${appDir}/.secrets/fiscal-certificates`);
   console.log('Remote fiscal certificate vault dependency and directory ready');
@@ -346,14 +351,14 @@ async function ensureRemoteFiscalDependencies(appDir) {
 
 async function applyCompanyFiscalMigration({ appDir, apiProc }) {
   if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
-  const migrationPaths = ['migrations/020_company_fiscal_profiles.sql', 'migrations/021_company_fiscal_tax_validation.sql', 'migrations/022_accountant_portal.sql', 'migrations/023_accountant_customer_collation.sql', 'migrations/024_fiscal_document_review.sql'];
+  const migrationPaths = ['migrations/020_company_fiscal_profiles.sql', 'migrations/021_company_fiscal_tax_validation.sql', 'migrations/022_accountant_portal.sql', 'migrations/023_accountant_customer_collation.sql', 'migrations/024_fiscal_document_review.sql', 'migrations/027_fiscal_document_xml_archive.sql'];
   await exec(`mkdir -p ${appDir}/migrations`);
   for (const migrationPath of migrationPaths) await upload(path.join(__dirname, migrationPath), remotePathJoin(appDir, migrationPath));
   const source = `
     const fs = require('fs'); require('dotenv').config();
     (async () => {
       const db = await require('mysql2/promise').createConnection({host:process.env.DB_HOST,user:process.env.DB_USER,password:process.env.DB_PASS,database:process.env.DB_NAME,multipleStatements:true});
-      for (const migrationPath of ${JSON.stringify(['migrations/020_company_fiscal_profiles.sql', 'migrations/021_company_fiscal_tax_validation.sql', 'migrations/022_accountant_portal.sql', 'migrations/023_accountant_customer_collation.sql', 'migrations/024_fiscal_document_review.sql'])}) {
+      for (const migrationPath of ${JSON.stringify(['migrations/020_company_fiscal_profiles.sql', 'migrations/021_company_fiscal_tax_validation.sql', 'migrations/022_accountant_portal.sql', 'migrations/023_accountant_customer_collation.sql', 'migrations/024_fiscal_document_review.sql', 'migrations/027_fiscal_document_xml_archive.sql'])}) {
         const sql=fs.readFileSync(migrationPath,'utf8').replace(/--[^\\n]*/g,'');
         for (const statement of sql.split(';').map(value=>value.trim()).filter(Boolean)) await db.query(statement);
       }
@@ -456,6 +461,11 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--accountant-portal-only') || process.argv.includes('--accountant-portal-check')) {
+    await require('./scripts/deploy-accountant-portal.cjs').deployAccountantPortal({appDir,apiProc,exec,upload,root:__dirname,checkOnly:process.argv.includes('--accountant-portal-check')});
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--tax-validation-only')) {
     if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
     const files = ['services/fiscalTaxValidationCore.cjs', 'services/companyFiscalServer.cjs', 'services/accountantPortalServer.cjs'];

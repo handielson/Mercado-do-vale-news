@@ -18,7 +18,7 @@ const normalizeBackupRows = rows => rows.map(row => Object.fromEntries(
 ));
 
 async function snapshotFiscalDatabase(pool, database) {
-  const tables = ['company_settings','company_fiscal_profiles','company_fiscal_events','company_certificate_settings','company_fiscal_tax_validations','company_accountant_access','company_fiscal_documents','company_fiscal_sale_reconciliations','company_fiscal_document_reviews','company_fiscal_cancellation_monitor'];
+  const tables = ['company_settings','company_fiscal_profiles','company_fiscal_events','company_certificate_settings','company_fiscal_tax_validations','company_accountant_access','company_fiscal_documents','company_fiscal_sale_reconciliations','company_fiscal_document_reviews','company_fiscal_cancellation_monitor','company_fiscal_document_xmls'];
   const snapshot = {};
   for (const table of tables) {
     const [rows] = await pool.query(`SELECT * FROM \`${database}\`.\`${table}\` ORDER BY 1`);
@@ -56,7 +56,7 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   pool = mysql.createPool(config);
   await pool.query(`CREATE TABLE company_settings (id CHAR(36) PRIMARY KEY, cnpj VARCHAR(14),name VARCHAR(255),company_name VARCHAR(255),razao_social VARCHAR(255),state_registration VARCHAR(30),cnae VARCHAR(255),porte VARCHAR(80),phone VARCHAR(30),email VARCHAR(255),social_website VARCHAR(255),address_state CHAR(2),address_zip_code VARCHAR(8),address_street VARCHAR(255),address_number VARCHAR(30),address_complement VARCHAR(255),address_neighborhood VARCHAR(255),address_city VARCHAR(255))`);
   await pool.query('INSERT INTO company_settings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[randomUUID(),'11222333000181','Empresa A','Empresa A','Empresa A Ltda','123','4751201','Micro','0000000000','principal@example.test','https://loja.example.test','PE','56300000','Rua Loja','1','','Centro','Petrolina']);
-  const migrations = ['020_company_fiscal_profiles.sql','021_company_fiscal_tax_validation.sql','022_accountant_portal.sql','024_fiscal_document_review.sql','025_fiscal_cancellation_monitor.sql'].flatMap(file => readFileSync(path.join(__dirname,'../migrations',file),'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean));
+  const migrations = ['020_company_fiscal_profiles.sql','021_company_fiscal_tax_validation.sql','022_accountant_portal.sql','024_fiscal_document_review.sql','025_fiscal_cancellation_monitor.sql','027_fiscal_document_xml_archive.sql'].flatMap(file => readFileSync(path.join(__dirname,'../migrations',file),'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean));
   for(let round=0;round<2;round++) for(const sql of migrations) await pool.query(sql);
   const profile = {cnpj:'11444777000161',name:'Empresa B',legalName:'',stateRegistration:'',stateRegistrationExempt:true,municipalRegistration:'IM-123',suframaRegistration:'SUF-123',cnae:'4751201',cnaeActivities:[{code:'4751201',description:'Comércio especializado',primary:true},{code:'4789001',description:'Comércio de outros produtos',primary:false}],companySize:'Micro',mainActivity:'Comércio',segments:['comercio','ecommerce'],annualRevenueBand:'Maior que R$ 360.000,00',employeesBand:'Até 5 funcionários',contactPerson:'Contato fictício',phone:'0000000000',mobilePhone:'00000000000',email:'empresa@example.test',billingEmail:'cobranca@example.test',website:'https://example.test',substituteStateRegistrations:[{uf:'SP',registration:'123456789'}],uf:'PE',municipalityCode:'2611101',address:{zipCode:'56300-000',street:'Rua Empresa B',number:'12',complement:'Sala 1',neighborhood:'Centro',city:'Petrolina'},regime:'lucro_real',crt:'3',effectiveFrom:'2026-01-01',notes:'',version:0};
   app=Fastify();
@@ -172,6 +172,18 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   const [events]=await pool.query('SELECT COUNT(*) AS count FROM company_fiscal_events');assert.equal(events[0].count,13);
   const [settings]=await pool.query('SELECT name FROM company_settings');assert.equal(settings[0].name,'Empresa A');
   await pool.query('DROP TRIGGER fiscal_test_reject_event');
+
+  const originalXml=readFileSync(path.join(__dirname,'fixtures/accountant-nfce.xml'),'utf8');
+  const accessKey=originalXml.match(/<chNFe>(\d{44})<\/chNFe>/)[1];
+  const [primaryProfiles]=await pool.query("SELECT id FROM company_fiscal_profiles WHERE settings_id IS NOT NULL");
+  const archiveId=randomUUID();
+  await pool.query('INSERT INTO company_fiscal_documents (id,profile_id,channel,external_sale_id,model,status,access_key,document_number,series,issued_at,total_cents,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',[archiveId,primaryProfiles[0].id,'pdv','fixture-sale','65','authorized',accessKey,'1','1','2026-09-24 14:00:00',500,'fixture']);
+  const archiveUrl='/accountant/companies/primary/fiscal-documents/'+archiveId;
+  const api=(method,url,payload)=>app.inject({method,url,payload,headers:{authorization:'Bearer fixture'}});
+  const archived=await api('POST',archiveUrl+'/archive-xml',{xml:originalXml});assert.equal(archived.statusCode,200,archived.body);
+  const xmlDownload=await api('GET',archiveUrl+'/file?format=xml');assert.equal(xmlDownload.statusCode,200,xmlDownload.body);assert.equal(Buffer.from(xmlDownload.json().base64,'base64').toString(),originalXml);
+  const other=await api('GET','/accountant/companies/'+company.id+'/fiscal-documents/'+archiveId+'/file?format=xml');assert.equal(other.statusCode,404,other.body);
+  const changedXml=await api('POST',archiveUrl+'/archive-xml',{xml:originalXml.replace('PRODUTO TESTE','OUTRO PRODUTO')});assert.equal(changedXml.statusCode,409,changedXml.body);
 
   const sourceSnapshot = await snapshotFiscalDatabase(pool,'mdv_fiscal_test');
   const dump = docker('exec',container,'mysqldump','-uroot',`-p${password}`,'--single-transaction','--skip-lock-tables','--no-tablespaces','mdv_fiscal_test');
