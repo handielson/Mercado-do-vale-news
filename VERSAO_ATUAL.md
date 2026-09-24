@@ -1,72 +1,29 @@
-# v1.2.468-accountant-revenue
+# v1.2.469-nfce-homologation
 
 Data: 24/09/2026
 Status: ready
 Branch: main
-Tag: v1.2.468-accountant-revenue
-Release VPS: /var/www/mdv-site/releases/20260924-210955-accountant-revenue
+Tag: v1.2.469-nfce-homologation
+Release VPS: /var/www/mdv-site/releases/20260924-214500-nfce-homologation
 
 ## Alterações
 
-- Contador consulta itens, quantidades, valores e pagamentos de cada venda.
-- NF-e e NFC-e: visualizar PDF, baixar PDF e baixar XML original, com permissão por empresa.
-- XML original e SHA-256 persistidos; PDF gerado em memória. Importação Bling arquiva XML; administrador pode anexar o original a notas antigas.
-- Faturamento inicia nos últimos 12 meses de calendário (mês atual até hoje), com período livre e filtros NF-e/NFC-e, NF-e, NFC-e, sem nota confirmado, pendente e todas as vendas.
-- Total e evolução mensal respeitam emissão/autorização nos filtros fiscais; vendas concluídas compõem o total operacional sem duplicar notas. Cancelados excluídos dos totais fiscais.
-- Ausência de nota não implica isenção; relatório não calcula impostos.
-- Migração 027 aditiva para company_fiscal_document_xmls; sem ativar emissão ou migrar a fundação NFC-e 026.
-- Deploy --accountant-portal-only limita módulos, confere schema e âncoras, salva código e snapshot fiscal protegido, valida sintaxe, reinicia PM2 e confere saúde. Entrada CJS sincronizada com o servidor canônico já publicado.
+- NFC-e modelo 65 apenas em homologação: prévia da venda, sequência própria, XML assinado e validado, transmissão manual única, consulta de tentativa incerta e DANFE de teste após autorização.
+- CSC de homologação criptografado e separado do ambiente de produção.
+- OP01 da matriz exige ICMS, PIS e COFINS confirmados explicitamente. A preparação fiscal exige revisão atual por contador com acesso ativo; o recorte atual só aceita CSOSN 400, PIS 07, COFINS 07 e alíquotas zero.
+- PDV distingue comprovante comercial do DANFE fiscal e permite imprimir apenas a NFC-e de homologação já autorizada.
+- Migração 026 cria sequência e tentativas separadas por ambiente sem alterar vendas ou números do Bling.
 
 ## Limites
 
-- Notas antigas sem XML precisam de reimportação do período ou anexação do original pelo administrador.
-- Validação do arquivo confere identidade e integridade; não substitui verificação de assinatura ou consulta à SEFAZ.
-- Consulta automática de CRC permanece adiada. Alterações locais de emissão/PDV e outras frentes não entram nesta release.
+- Emissão real continua bloqueada. Depende de credenciamento e CSC de produção, implementação fiscal para as alíquotas efetivas, homologação da operação e corte controlado da numeração.
+- O emissor de testes atende apenas venda presencial paga da empresa principal, sem descontos, com pagamento em dinheiro e itens com cadastro fiscal completo.
+- A revisão e os códigos ainda estão pendentes na base de produção. Nenhuma nota foi enviada à SEFAZ nesta publicação.
 
-## Arquivos
+## Validação
 
-- components/company/AccountantFiscalFileActions.tsx
-- components/company/AccountantSaleDetailsPanel.tsx
-- migrations/027_fiscal_document_xml_archive.sql
-- pages/accountant/AccountantPortalPage.tsx
-- services/accountantPortalCore.cjs
-- services/accountantPortalServer.cjs
-- services/accountantPortalService.ts
-- services/accountantRevenueView.ts
-- services/accountantSaleDetails.cjs
-- services/blingFiscalImportCore.cjs
-- services/danfeNfceCore.cjs
-- services/fiscalDocumentArchive.cjs
-- services/fiscalNfceAccessKey.cjs
-- services/fiscalNfceDanfeRead.cjs
-- tmp-tests/accountant-revenue-browser.mjs
-- tmp-tests/accountant-revenue-view.test.mjs
-- tmp-tests/accountant-sale-browser.mjs
-- tmp-tests/accountant-sale-details.test.cjs
-- tmp-tests/danfe-nfce.test.cjs
-- tmp-tests/fiscal-nfce-access-key.test.cjs
-- vps_server.js
-- vps_server.cjs
-- deploy-vps-server-only.cjs
-- scripts/deploy-accountant-portal.cjs
-- tmp-tests/accountant-deploy.test.cjs
-- tmp-tests/company-fiscal-mysql.test.cjs
-- tmp-tests/fixtures/accountant-nfce.xml
-- package.json
-- package-lock.json
-- public/VERSION.json
-- VERSAO_ATUAL.md
-- docs/versoes/2026-09-24-v1.2.468-accountant-revenue.md
-
-## Validações
-
-- npm.cmd run test:accountant-portal
-- npm.cmd run test:company-fiscal
-- npm.cmd run test:company-fiscal:mysql
-- node --test tmp-tests/accountant-deploy.test.cjs tmp-tests/danfe-nfce.test.cjs tmp-tests/fiscal-nfce-access-key.test.cjs
-- node tmp-tests/accountant-sale-browser.mjs
-- node tmp-tests/accountant-revenue-browser.mjs
-- node deploy-vps-server-only.cjs --accountant-portal-check
-- node --check (entradas do servidor e scripts de deploy)
-- npm.cmd run build
-- git diff --check
+- `npm run test:company-fiscal`
+- `npm run test:company-fiscal:mysql`
+- `node deploy-vps-server-only.cjs --nfce-homologation-check`
+- `npm run build`
+- `git diff --check`

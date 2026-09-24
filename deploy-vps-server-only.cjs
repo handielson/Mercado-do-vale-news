@@ -461,6 +461,11 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--nfce-homologation-only') || process.argv.includes('--nfce-homologation-check')) {
+    await require('./scripts/deploy-nfce-homologation.cjs').deployNfceHomologation({appDir,apiProc,exec,upload,root:__dirname,checkOnly:process.argv.includes('--nfce-homologation-check')});
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--accountant-portal-only') || process.argv.includes('--accountant-portal-check')) {
     await require('./scripts/deploy-accountant-portal.cjs').deployAccountantPortal({appDir,apiProc,exec,upload,root:__dirname,checkOnly:process.argv.includes('--accountant-portal-check')});
     conn.end();

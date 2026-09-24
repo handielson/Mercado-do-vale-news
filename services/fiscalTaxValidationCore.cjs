@@ -18,6 +18,7 @@ const scenarios = [
 
 const defaultRules = () => scenarios.map(([id,scenario,model,destinationUf,recipient,finality,cfop]) => ({
   id, scenario, used: true, model, destinationUf, recipient, finality, cfop,
+  nfce: { unit: '', csosn: '', pisCst: '', cofinsCst: '', icmsRate: '', pisRate: '', cofinsRate: '', cestApplicability: '', gtinDecision: '' },
   icmsCode: id <= 'OP06' ? 'CSOSN 400' : '',
   icmsTreatment: id <= 'OP06' ? 'Alíquota 0%; base 0%. Confirmar ST, FCP e DIFAL.' : '',
   pisCofins: id <= 'OP06' ? 'PIS CST 07 e COFINS CST 07; alíquota 0%; base 100%.' : '',
@@ -72,7 +73,18 @@ const approvalIssues = data => {
       if (!rule.effectiveFrom) missing.push(`${rule.id}: vigência`);
     }
   }
+  const counterSale = rules.find(rule => rule.id === 'OP01' && rule.used);
+  if (counterSale) for (const [field,label] of [['icmsRate','ICMS'],['pisRate','PIS'],['cofinsRate','COFINS']]) {
+    if (!counterSale.nfce?.[field]) missing.push(`OP01: alíquota ${label} confirmada pelo contador`);
+  }
+  if (!data.reviewerRegistration) missing.push('CRC/registro do contador');
   return missing;
+};
+
+const rate = (value, label) => {
+  const result = text(value, label, 7).replace(',', '.');
+  if (result && (!/^(?:\d{1,2}(?:\.\d{1,4})?|100(?:\.0{1,4})?)$/.test(result) || Number(result) > 100)) throw problem(`${label} inválida.`);
+  return result;
 };
 
 function normalizeTaxValidation(input = {}) {
@@ -91,6 +103,12 @@ function normalizeTaxValidation(input = {}) {
       ipi: text(rule.ipi, `${base.id}: IPI`, 300), benefit: text(rule.benefit, `${base.id}: benefício`, 500),
       effectiveFrom: text(rule.effectiveFrom, `${base.id}: vigência`, 10), notes: text(rule.notes, `${base.id}: observações`),
       source: ['bling_reference','scope','accountant'].includes(rule.source) ? rule.source : 'accountant',
+      nfce: { ...Object.fromEntries(Object.entries({ unit: /^[A-Z0-9]{1,6}$/, csosn: /^\d{3}$/, pisCst: /^\d{2}$/, cofinsCst: /^\d{2}$/, cestApplicability: /^(required|not_applicable)$/, gtinDecision: /^(from_product|sem_gtin)$/ }).map(([field,pattern]) => {
+        const value = text(rule.nfce?.[field], `${base.id}: NFC-e ${field}`, 20).toUpperCase();
+        const normalized = ['cestApplicability','gtinDecision'].includes(field) ? value.toLowerCase() : value;
+        if (normalized && !pattern.test(normalized)) throw problem(`${base.id}: NFC-e ${field} inválido.`);
+        return [field, normalized];
+      })), icmsRate:rate(rule.nfce?.icmsRate, `${base.id}: alíquota ICMS`), pisRate:rate(rule.nfce?.pisRate, `${base.id}: alíquota PIS`), cofinsRate:rate(rule.nfce?.cofinsRate, `${base.id}: alíquota COFINS`) },
     };
   });
   const reviewerName = text(input.reviewerName, 'Responsável', 255);
@@ -155,7 +173,7 @@ function applyOperationReviews(data, currentRow, reviewRuleId, actor, now = new 
     || !isDeepStrictEqual(data.productRules, normalizedPrevious.productRules);
   if (reviewRuleId && !data.rules.some(rule => rule.id === reviewRuleId)) throw problem('Operação inválida para revisão.');
   if (reviewRuleId && !data.reviewerName) throw problem('Informe o responsável/contador antes de revisar a operação.', 409);
-  const content = ({ source, review, ...rule }) => rule;
+  const content = ({ review, ...rule }) => rule;
   data.rules = data.rules.map(rule => {
     const old = previous.rules.find(item => item.id === rule.id);
     const oldContent = normalizedPrevious.rules.find(item => item.id === rule.id);

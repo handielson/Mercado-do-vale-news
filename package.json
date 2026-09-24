@@ -7,7 +7,7 @@
     "dev": "vite",
     "prebuild": "node scripts/assert-no-supabase-runtime.cjs",
     "build": "vite build",
-    "test:company-fiscal": "node --test tmp-tests/company-fiscal.test.cjs tmp-tests/fiscal-certificate-vault.test.cjs tmp-tests/company-data-separation-static.test.mjs tmp-tests/fiscal-tax-validation.test.cjs",
+    "test:company-fiscal": "node --test tmp-tests/company-fiscal.test.cjs tmp-tests/fiscal-certificate-vault.test.cjs tmp-tests/fiscal-csc-vault.test.cjs tmp-tests/danfe-nfce.test.cjs tmp-tests/fiscal-nfce-numbering.test.cjs tmp-tests/fiscal-nfce-access-key.test.cjs tmp-tests/fiscal-nfce-schema.test.cjs tmp-tests/fiscal-nfce-draft.test.cjs tmp-tests/fiscal-nfce-signing.test.cjs tmp-tests/fiscal-nfce-authorization.test.cjs tmp-tests/fiscal-nfce-persistence.test.cjs tmp-tests/fiscal-nfce-transmission.test.cjs tmp-tests/fiscal-nfce-routes.test.cjs tmp-tests/fiscal-nfce-sale-preflight.test.cjs tmp-tests/fiscal-nfce-sale-preparation.test.cjs tmp-tests/fiscal-nfce-danfe-read.test.cjs tmp-tests/bling-fiscal-tax-reference.test.cjs tmp-tests/company-data-separation-static.test.mjs tmp-tests/fiscal-tax-validation.test.cjs",
     "test:accountant-portal": "node --test tmp-tests/accountant-portal.test.cjs tmp-tests/accountant-portal-static.test.mjs tmp-tests/accountant-sale-details.test.cjs tmp-tests/accountant-revenue-view.test.mjs",
     "test:company-fiscal:mysql": "node --test tmp-tests/company-fiscal-mysql.test.cjs",
     "test:company-fiscal:sandbox": "node --test tmp-tests/company-fiscal-mysql.test.cjs",
@@ -96,7 +96,8 @@
     "xml-crypto": "6.3.1",
     "zod": "^3.25.76",
     "zustand": "^4.5.0",
-    "@alexssmusica/node-pdf-nfe": "1.2.24"
+    "@alexssmusica/node-pdf-nfe": "1.2.24",
+    "xmllint-wasm": "5.3.0"
   },
   "devDependencies": {
     "playwright": "^1.59.1"

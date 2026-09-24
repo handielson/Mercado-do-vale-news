@@ -302,3 +302,28 @@ test('todas as mutações exigem administrador e ignoram resultado de consulta f
   assert.equal(saved.statusCode, 201);
   assert.equal(saved.json().lookup, null);
 });
+
+test('CSC da NFC-e exige administrador, separa ambientes e nunca devolve o código', async t => {
+  const saved = new Map();
+  const cscVault = {
+    cscStatus: async (id, environment) => ({ configured: saved.has(`${id}:${environment}`), environment, identifier: saved.get(`${id}:${environment}`)?.identifier || '', updatedAt: '' }),
+    installCsc: async (id, environment, identifier, code) => {
+      saved.set(`${id}:${environment}`, { identifier, code });
+      return { configured: true, environment, identifier, updatedAt: '2026-09-24T12:00:00.000Z' };
+    },
+  };
+  const { app, call, state } = await setup(t, { cscVault });
+  const company = (await call('POST', '', profile())).json();
+  const url = `/${company.id}/nfce-csc/homologation`;
+  const payload = { identifier: '000001', code: 'SECRET0123456789' };
+  assert.equal((await app.inject({ method: 'PUT', url: '/admin/fiscal-companies' + url, payload })).statusCode, 401);
+  assert.equal(saved.size, 0);
+  assert.equal((await call('PUT', `/${company.id}/nfce-csc/invalid`, payload)).statusCode, 400);
+  const response = await call('PUT', url, payload);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().identifier, '000001');
+  assert(!response.body.includes(payload.code));
+  assert.equal((await call('GET', url)).json().configured, true);
+  assert.equal((await call('GET', `/${company.id}/nfce-csc/production`)).json().configured, false);
+  assert(!JSON.stringify(state.events).includes(payload.code));
+});

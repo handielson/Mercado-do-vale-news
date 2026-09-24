@@ -1,6 +1,12 @@
 const { randomUUID } = require('node:crypto');
 const { problem, normalizeCnpj, validateProfile, inspectIssuerReadiness, lookupCnpj } = require('./companyFiscalCore.cjs');
 const defaultCertificateVault = require('./fiscalCertificateVault.cjs');
+const defaultCscVault = require('./fiscalCscVault.cjs');
+const defaultNfceTransmission = require('./fiscalNfceTransmission.cjs');
+const { inspectNfceSale } = require('./fiscalNfceSalePreflight.cjs');
+const defaultNfceSalePreparation = require('./fiscalNfceSalePreparation.cjs');
+const defaultNfceDanfeRead = require('./fiscalNfceDanfeRead.cjs');
+const { configureNfceSequence } = require('./fiscalNfceNumbering.cjs');
 const { blingReference, normalizeTaxValidation, taxValidationView, applyOperationReviews } = require('./fiscalTaxValidationCore.cjs');
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const SETTINGS_SQL = 'SELECT id,cnpj,name,company_name,razao_social,state_registration,cnae,porte,phone,email,social_website,address_state,address_zip_code,address_street,address_number,address_complement,address_neighborhood,address_city FROM company_settings LIMIT 1';
@@ -33,7 +39,10 @@ function primaryView(settings, row) {
   // Operational identity stays canonical in company_settings; never overwrite it here.
   return { ...base, cnpj: normalizeCnpj(settings.cnpj), name: settings.name || settings.company_name || '', legalName: settings.razao_social || '', stateRegistration: settings.state_registration || '', cnae: settings.cnae || '', companySize: settings.porte || '', phone: settings.phone || '', email: settings.email || '', website: settings.social_website || '', uf: settings.address_state || '', address: addressFrom(settings), identityConflict: !!row && row.cnpj !== normalizeCnpj(settings.cnpj) };
 }
-function registerCompanyFiscalRoutes(app, { pool, getBearerAuthContext, enabled = process.env.MDV_COMPANY_FISCAL_ENABLED === '1', lookup = lookupCnpj, municipalityLookupFetch = fetch, certificateVault = defaultCertificateVault }) {
+function registerCompanyFiscalRoutes(app, { pool, getBearerAuthContext, enabled = process.env.MDV_COMPANY_FISCAL_ENABLED === '1', lookup = lookupCnpj, municipalityLookupFetch = fetch, certificateVault = defaultCertificateVault, cscVault = defaultCscVault,
+  nfceTransmission = defaultNfceTransmission, nfceHomologationEnabled = process.env.MDV_NFCE_HOMOLOGATION_TRANSMIT_ENABLED === '1',
+  nfceSalePreparation = defaultNfceSalePreparation, nfceHomologationPrepareEnabled = process.env.MDV_NFCE_HOMOLOGATION_PREPARE_ENABLED === '1',
+  nfceDanfeRead = defaultNfceDanfeRead }) {
   const admin = async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     const auth = await getBearerAuthContext(req);
@@ -81,6 +90,22 @@ function registerCompanyFiscalRoutes(app, { pool, getBearerAuthContext, enabled 
     await admin(req, reply); if (reply.sent) return;
     if (!enabled) return reply.code(503).send({ error: 'Cadastro fiscal ainda não ativado no servidor.' });
   };
+  app.get('/admin/fiscal-companies/:id/nfce-csc/:environment', { preHandler: admin }, async req => {
+    if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
+    if (!['homologation', 'production'].includes(req.params.environment)) throw problem('Ambiente fiscal inválido.');
+    const found = await locate(pool, req.params.id);
+    if (!found.row) throw problem('Salve primeiro o cadastro fiscal da empresa.');
+    return cscVault.cscStatus(found.row.id, req.params.environment);
+  });
+  app.put('/admin/fiscal-companies/:id/nfce-csc/:environment', { preHandler: write, config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } }, async req => {
+    if (!['homologation', 'production'].includes(req.params.environment)) throw problem('Ambiente fiscal inválido.');
+    const found = await locate(pool, req.params.id);
+    if (!found.row) throw problem('Salve primeiro o cadastro fiscal da empresa.');
+    const { identifier, code } = req.body || {};
+    const result = await cscVault.installCsc(found.row.id, req.params.environment, identifier, code);
+    await pool.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)', [found.row.id, req.fiscalActor, 'nfce_csc_install', JSON.stringify({ environment: result.environment, identifier: result.identifier })]);
+    return result;
+  });
   const transaction = async fn => {
     const db = await pool.getConnection();
     try { await db.beginTransaction(); const result = await fn(db); await db.commit(); return result; }
@@ -213,6 +238,85 @@ function registerCompanyFiscalRoutes(app, { pool, getBearerAuthContext, enabled 
       await db.query('UPDATE company_certificate_settings SET last_sefaz_checked_at=?,last_sefaz_environment=?,last_sefaz_status=?,last_sefaz_reason=?,updated_by=? WHERE profile_id=?', [result.checkedAt.slice(0, 19).replace('T',' '), result.environment, result.cStat, result.reason, req.fiscalActor, found.row.id]);
       await db.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)', [found.row.id, req.fiscalActor, 'sefaz_status', JSON.stringify(result)]);
     });
+    return result;
+  });
+  async function nfceAttempt(req) {
+    if (!UUID.test(req.params.issuanceId || '')) throw problem('Tentativa NFC-e inválida.');
+    const found = await locate(pool, req.params.id);
+    if (!found.row) throw problem('Empresa fiscal não encontrada.', 404);
+    const [rows] = await pool.query(`SELECT id,profile_id,sale_id,environment,series,document_number,status,access_key,
+      authorization_protocol,authorized_at,authorized_xml_sha256,last_error,created_at,updated_at
+      FROM company_fiscal_nfce_issuances WHERE id=? AND profile_id=?`, [req.params.issuanceId, found.row.id]);
+    if (!rows[0]) throw problem('Tentativa NFC-e não encontrada para esta empresa.', 404);
+    return { row:rows[0], profileId:found.row.id };
+  }
+  app.get('/admin/fiscal-companies/:id/nfce/homologation', { preHandler:admin }, async req => {
+    if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.',503);
+    const found = await locate(pool,req.params.id);
+    if (!found.row) throw problem('Empresa fiscal não encontrada.',404);
+    const [sequences] = await pool.query("SELECT series,next_number,checked_at FROM company_fiscal_nfce_sequences WHERE profile_id=? AND environment='homologation' ORDER BY series",[found.row.id]);
+    const [certificates] = await pool.query('SELECT installed_at,valid_until FROM company_certificate_settings WHERE profile_id=? LIMIT 1',[found.row.id]);
+    const [validations] = await pool.query('SELECT status FROM company_fiscal_tax_validations WHERE profile_id=? LIMIT 1',[found.row.id]);
+    return { environment:'homologation', prepareEnabled:nfceHomologationPrepareEnabled, transmitEnabled:nfceHomologationEnabled,
+      certificateInstalled:!!certificates[0]?.installed_at, certificateValidUntil:certificates[0]?.valid_until || null,
+      csc:await cscVault.cscStatus(found.row.id,'homologation'), validationStatus:validations[0]?.status || 'draft',
+      sequences:sequences.map(row=>({series:row.series,nextNumber:row.next_number,checkedAt:row.checked_at})) };
+  });
+  app.post('/admin/fiscal-companies/:id/nfce/homologation/sequence', { preHandler:write, config:{ rateLimit:{ max:3,timeWindow:'10 minutes' } } }, async req => {
+    const found = await locate(pool,req.params.id);
+    if (!found.row) throw problem('Empresa fiscal não encontrada.',404);
+    if (req.body?.confirmation !== 'CONFERI A SERIE DE HOMOLOGACAO') throw problem('Confirme a série e o último número de homologação antes de reservar.',409);
+    const result = await configureNfceSequence(pool,{profileId:found.row.id,environment:'homologation',
+      series:req.body?.series,blingLastNumber:req.body?.lastNumber,actor:req.fiscalActor});
+    await pool.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)',
+      [found.row.id,req.fiscalActor,'nfce_homologation_sequence',JSON.stringify({series:result.series,nextNumber:result.nextNumber})]);
+    return result;
+  });
+  app.get('/admin/fiscal-companies/:id/nfce/sales/:saleId/preflight', { preHandler:admin, config:{ rateLimit:{ max:12, timeWindow:'1 minute' } } }, async req => {
+    if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
+    const found = await locate(pool, req.params.id);
+    if (!found.row) throw problem('Empresa fiscal não encontrada.', 404);
+    return inspectNfceSale(pool, { profileId:found.row.id, settingsId:found.row.settings_id, saleId:req.params.saleId });
+  });
+  app.get('/admin/fiscal-companies/:id/nfce/sales/:saleId/authorized-danfe', { preHandler:admin, config:{ rateLimit:{ max:12,timeWindow:'1 minute' } } }, async req => {
+    if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.',503);
+    const found = await locate(pool,req.params.id);
+    if (!found.row) throw problem('Empresa fiscal não encontrada.',404);
+    return nfceDanfeRead.authorizedDanfeForSale(pool,{profileId:found.row.id,saleId:req.params.saleId,cnpj:found.current.cnpj});
+  });
+  app.post('/admin/fiscal-companies/:id/nfce/sales/:saleId/prepare-homologation', { preHandler:write, config:{ rateLimit:{ max:2, timeWindow:'10 minutes' } } }, async req => {
+    if (!nfceHomologationPrepareEnabled) throw problem('Preparação NFC-e de homologação ainda não habilitada no servidor.', 503);
+    const found = await locate(pool,req.params.id);
+    if (!found.row) throw problem('Empresa fiscal não encontrada.',404);
+    if (!(await cscVault.cscStatus(found.row.id,'homologation')).configured) throw problem('Cadastre o CSC de homologação antes de preparar a NFC-e.',409);
+    const result = await nfceSalePreparation.prepareHomologationNfceForSale(pool,{
+      profileId:found.row.id,settingsId:found.row.settings_id,saleId:req.params.saleId,company:found.current,series:req.body?.series,
+    });
+    await pool.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)',
+      [found.row.id,req.fiscalActor,'nfce_homologation_prepare',JSON.stringify({issuanceId:result.issuanceId,status:result.status,existing:result.existing})]);
+    return result;
+  });
+  const nfceRoute = '/admin/fiscal-companies/:id/nfce/issuances/:issuanceId';
+  app.get(nfceRoute, { preHandler: admin }, async req => {
+    if (!enabled) throw problem('Cadastro fiscal ainda não ativado no servidor.', 503);
+    const { row } = await nfceAttempt(req);
+    return row;
+  });
+  app.post(`${nfceRoute}/transmit`, { preHandler: write, config: { rateLimit: { max: 2, timeWindow: '10 minutes' } } }, async req => {
+    if (!nfceHomologationEnabled) throw problem('Transmissão NFC-e de homologação ainda não habilitada no servidor.', 503);
+    const { row, profileId } = await nfceAttempt(req);
+    if (row.environment !== 'homologation' || row.status !== 'prepared') throw problem('Somente tentativa preparada de homologação pode ser transmitida.', 409);
+    const result = await nfceTransmission.transmitPreparedNfce(pool, row.id);
+    await pool.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)',
+      [profileId, req.fiscalActor, 'nfce_homologation_transmit', JSON.stringify({ issuanceId:row.id, state:result.state })]);
+    return result;
+  });
+  app.post(`${nfceRoute}/reconcile`, { preHandler: write, config: { rateLimit: { max: 6, timeWindow: '10 minutes' } } }, async req => {
+    const { row, profileId } = await nfceAttempt(req);
+    if (row.environment !== 'homologation' || !['sending','uncertain'].includes(row.status)) throw problem('Somente tentativa inconclusiva de homologação pode ser consultada.', 409);
+    const result = await nfceTransmission.reconcileNfceByKey(pool, row.id);
+    await pool.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)',
+      [profileId, req.fiscalActor, 'nfce_homologation_reconcile', JSON.stringify({ issuanceId:row.id, state:result.state })]);
     return result;
   });
   const refreshing = new Map();

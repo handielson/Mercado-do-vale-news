@@ -13,6 +13,8 @@ import ReceiptPreview from '../../components/pdv/ReceiptPreview';
 import InstallmentCalculator from '../../components/pdv/InstallmentCalculator';
 import { WarrantyTermModal } from '../../components/warranty/WarrantyTermModal';
 import { printSaleReceipt } from '../../utils/printSaleReceipt';
+import { printDanfeNfce } from '../../utils/printDanfeNfce';
+import { companyFiscalService } from '../../services/companyFiscalService';
 import { printPixQr } from '../../utils/printPixQr';
 import { createSale } from '../../services/saleService';
 import { pdvDisplayService } from '../../services/pdvDisplayService';
@@ -263,6 +265,8 @@ export default function PDVPage() {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastSaleId, setLastSaleId] = useState<string>('');
     const [lastSaleData, setLastSaleData] = useState<any>(null);
+    const [isPrintingAuthorizedNfce, setIsPrintingAuthorizedNfce] = useState(false);
+    const [nfcePaperWidth, setNfcePaperWidth] = useState<'58mm' | '80mm' | '100mm'>('80mm');
     const [warrantyContents, setWarrantyContents] = useState<string[]>([]);
     const [warrantyDeliveryType, setWarrantyDeliveryType] = useState<DeliveryTypeWarranty>('store_pickup');
     const [warrantyTemplate, setWarrantyTemplate] = useState('');
@@ -1376,6 +1380,24 @@ export default function PDVPage() {
         }
     };
 
+    const handlePrintAuthorizedNfce = async () => {
+        if (!lastSaleId || isPrintingAuthorizedNfce) return;
+        // A janela precisa nascer do clique; abri-la após a consulta assíncrona aciona bloqueadores de pop-up.
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) { toast.error('Permita a janela de impressão do DANFE NFC-e neste navegador.'); return; }
+        printWindow.opener = null;
+        setIsPrintingAuthorizedNfce(true);
+        try {
+            const document = await companyFiscalService.authorizedNfceDanfe('primary', lastSaleId);
+            if (document.saleId !== lastSaleId || document.environment !== 'homologation') throw new Error('A NFC-e recebida não corresponde à venda selecionada.');
+            printDanfeNfce(document.authorizedXml, nfcePaperWidth, printWindow);
+        } catch (error) {
+            printWindow.close();
+            const message = error instanceof Error ? error.message : 'Falha ao buscar DANFE NFC-e.';
+            toast.error(/\[VPS\] 404/.test(message) ? 'Esta venda ainda não tem NFC-e autorizada em homologação.' : message);
+        } finally { setIsPrintingAuthorizedNfce(false); }
+    };
+
     // Salvar termo de garantia
     const handleGenerateWarranty = async (signature: string) => {
         if (!lastSaleData) return;
@@ -1672,6 +1694,7 @@ export default function PDVPage() {
                                     : 'Venda registrada com sucesso'}
                             </h2>
                             <p className="text-sm text-slate-500 mb-6 font-mono text-center">Código: #{lastSaleId?.slice(0, 8).toUpperCase()}</p>
+                            {lastSaleId && <button type="button" onClick={() => void navigator.clipboard.writeText(lastSaleId).then(() => toast.success('ID da venda copiado para a homologação NFC-e.')).catch(() => toast.error('Não foi possível copiar o ID da venda.'))} className="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600"><Copy size={14}/>Copiar ID completo da venda</button>}
 
                             <div className="w-full space-y-3">
                                 {lastSaleData.finalizationLog && (
@@ -1699,8 +1722,22 @@ export default function PDVPage() {
                                     className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-xl transition-colors"
                                 >
                                     <Printer size={18} />
-                                    Imprimir Comprovante
+                                    Imprimir comprovante comercial
                                 </button>
+                                <button type="button" disabled aria-describedby="nfce-pdv-pending" className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-50 text-slate-500 font-semibold rounded-xl border border-slate-200 cursor-not-allowed">
+                                    <Printer size={18} />
+                                    Emitir e imprimir DANFE NFC-e
+                                </button>
+                                <button type="button" onClick={handlePrintAuthorizedNfce} disabled={isPrintingAuthorizedNfce || !lastSaleId} className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-50 hover:bg-blue-100 text-blue-800 font-semibold rounded-xl border border-blue-200 disabled:opacity-50">
+                                    <Printer size={18} />
+                                    {isPrintingAuthorizedNfce ? 'Consultando NFC-e autorizada...' : 'Imprimir DANFE NFC-e já autorizada (homologação)'}
+                                </button>
+                                <label className="flex items-center justify-between gap-3 text-xs text-slate-600">Largura do papel do DANFE
+                                    <select value={nfcePaperWidth} onChange={event=>setNfcePaperWidth(event.target.value as '58mm' | '80mm' | '100mm')} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-800"><option value="58mm">58 mm</option><option value="80mm">80 mm</option><option value="100mm">100 mm</option></select>
+                                </label>
+                                <p id="nfce-pdv-pending" className="text-xs text-slate-500 text-center">
+                                    Este comprovante não é fiscal. A opção NFC-e será liberada após validação do contador e autorização de emissão em homologação pela SEFAZ.
+                                </p>
 
                                 {lastSaleData.items.some((it: any) => it.serialized_unit?.unitId) && (
                                     <button

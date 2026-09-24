@@ -6,10 +6,19 @@ const { createHash, randomUUID } = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const mysql = require('mysql2/promise');
+const forge = require('node-forge');
 const Fastify = require('fastify');
 const { registerCompanyFiscalRoutes } = require('../services/companyFiscalServer.cjs');
 const { registerAccountantPortalRoutes } = require('../services/accountantPortalServer.cjs');
 const { normalizeLookup } = require('../services/companyFiscalCore.cjs');
+const { configureNfceSequence, reserveNfceForSale } = require('../services/fiscalNfceNumbering.cjs');
+const { makeNfceAccessKey } = require('../services/fiscalNfceAccessKey.cjs');
+const { prepareReservedNfce } = require('../services/fiscalNfcePersistence.cjs');
+const { buildHomologationNfceDraft } = require('../services/fiscalNfceDraft.cjs');
+const { prepareHomologationNfceForSale } = require('../services/fiscalNfceSalePreparation.cjs');
+const { authorizedDanfeForSale } = require('../services/fiscalNfceDanfeRead.cjs');
+const { defaultRules, defaultGeneralDecisions } = require('../services/fiscalTaxValidationCore.cjs');
+const { transmitPreparedNfce, reconcileNfceByKey } = require('../services/fiscalNfceTransmission.cjs');
 const docker = (...args) => execFileSync('docker', ['--context','desktop-linux',...args], { encoding:'utf8', timeout:args[0]==='run'?180000:15000, windowsHide:true, stdio:['ignore','pipe','pipe'] }).trim();
 const dockerWithInput = (input, ...args) => execFileSync('docker', ['--context','desktop-linux',...args], { input, encoding:'utf8', timeout:60000, windowsHide:true, stdio:['pipe','pipe','pipe'] });
 
@@ -18,7 +27,7 @@ const normalizeBackupRows = rows => rows.map(row => Object.fromEntries(
 ));
 
 async function snapshotFiscalDatabase(pool, database) {
-  const tables = ['company_settings','company_fiscal_profiles','company_fiscal_events','company_certificate_settings','company_fiscal_tax_validations','company_accountant_access','company_fiscal_documents','company_fiscal_sale_reconciliations','company_fiscal_document_reviews','company_fiscal_cancellation_monitor','company_fiscal_document_xmls'];
+  const tables = ['company_settings','company_fiscal_profiles','company_fiscal_events','company_certificate_settings','company_fiscal_tax_validations','company_accountant_access','company_fiscal_documents','company_fiscal_sale_reconciliations','company_fiscal_document_reviews','company_fiscal_cancellation_monitor','company_fiscal_nfce_sequences','company_fiscal_nfce_issuances','company_fiscal_document_xmls'];
   const snapshot = {};
   for (const table of tables) {
     const [rows] = await pool.query(`SELECT * FROM \`${database}\`.\`${table}\` ORDER BY 1`);
@@ -56,7 +65,7 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   pool = mysql.createPool(config);
   await pool.query(`CREATE TABLE company_settings (id CHAR(36) PRIMARY KEY, cnpj VARCHAR(14),name VARCHAR(255),company_name VARCHAR(255),razao_social VARCHAR(255),state_registration VARCHAR(30),cnae VARCHAR(255),porte VARCHAR(80),phone VARCHAR(30),email VARCHAR(255),social_website VARCHAR(255),address_state CHAR(2),address_zip_code VARCHAR(8),address_street VARCHAR(255),address_number VARCHAR(30),address_complement VARCHAR(255),address_neighborhood VARCHAR(255),address_city VARCHAR(255))`);
   await pool.query('INSERT INTO company_settings VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[randomUUID(),'11222333000181','Empresa A','Empresa A','Empresa A Ltda','123','4751201','Micro','0000000000','principal@example.test','https://loja.example.test','PE','56300000','Rua Loja','1','','Centro','Petrolina']);
-  const migrations = ['020_company_fiscal_profiles.sql','021_company_fiscal_tax_validation.sql','022_accountant_portal.sql','024_fiscal_document_review.sql','025_fiscal_cancellation_monitor.sql','027_fiscal_document_xml_archive.sql'].flatMap(file => readFileSync(path.join(__dirname,'../migrations',file),'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean));
+  const migrations = ['020_company_fiscal_profiles.sql','021_company_fiscal_tax_validation.sql','022_accountant_portal.sql','024_fiscal_document_review.sql','025_fiscal_cancellation_monitor.sql','026_nfce_issuance_foundation.sql','027_fiscal_document_xml_archive.sql'].flatMap(file => readFileSync(path.join(__dirname,'../migrations',file),'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean));
   for(let round=0;round<2;round++) for(const sql of migrations) await pool.query(sql);
   const profile = {cnpj:'11444777000161',name:'Empresa B',legalName:'',stateRegistration:'',stateRegistrationExempt:true,municipalRegistration:'IM-123',suframaRegistration:'SUF-123',cnae:'4751201',cnaeActivities:[{code:'4751201',description:'Comércio especializado',primary:true},{code:'4789001',description:'Comércio de outros produtos',primary:false}],companySize:'Micro',mainActivity:'Comércio',segments:['comercio','ecommerce'],annualRevenueBand:'Maior que R$ 360.000,00',employeesBand:'Até 5 funcionários',contactPerson:'Contato fictício',phone:'0000000000',mobilePhone:'00000000000',email:'empresa@example.test',billingEmail:'cobranca@example.test',website:'https://example.test',substituteStateRegistrations:[{uf:'SP',registration:'123456789'}],uf:'PE',municipalityCode:'2611101',address:{zipCode:'56300-000',street:'Rua Empresa B',number:'12',complement:'Sala 1',neighborhood:'Centro',city:'Petrolina'},regime:'lucro_real',crt:'3',effectiveFrom:'2026-01-01',notes:'',version:0};
   app=Fastify();
@@ -135,6 +144,94 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   assert.equal(reviewSaved.statusCode,200,reviewSaved.body);
   assert.equal(reviewSaved.json().review.version,1);
   assert.equal((await pool.query('SELECT status,total_cents FROM company_fiscal_documents WHERE id=?',[reviewDocumentId]))[0][0].status,'authorized');
+  const [primaryProfileRows] = await pool.query('SELECT id,settings_id FROM company_fiscal_profiles WHERE settings_id IS NOT NULL LIMIT 1');
+  const primaryProfile = primaryProfileRows[0];
+  await pool.query('CREATE TABLE sales (id CHAR(36) PRIMARY KEY, company_id CHAR(36) NULL, status VARCHAR(30), payment_status VARCHAR(30))');
+  const saleA = randomUUID(), saleB = randomUUID(), saleC = randomUUID();
+  for (const saleId of [saleA,saleB,saleC]) await pool.query('INSERT INTO sales VALUES (?,?,?,?)',[saleId,primaryProfile.settings_id,'completed','paid']);
+  await pool.query('INSERT INTO company_fiscal_documents (id,profile_id,channel,external_sale_id,model,status,document_number,series,total_cents,source,source_reference) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+    [randomUUID(),primaryProfile.id,'bling','nfce:fixture','65','authorized','124','1',900,'bling_import','fixture-nfce']);
+  await assert.rejects(configureNfceSequence(pool,{profileId:primaryProfile.id,environment:'production',series:1,blingLastNumber:124,actor:'fiscal-test'}),/conferência final/);
+  await assert.rejects(configureNfceSequence(pool,{profileId:primaryProfile.id,environment:'production',series:1,blingLastNumber:123,actor:'fiscal-test',cutoverConfirmed:true}),/menor que o histórico/);
+  const productionSequence=await configureNfceSequence(pool,{profileId:primaryProfile.id,environment:'production',series:1,blingLastNumber:124,actor:'fiscal-test',cutoverConfirmed:true});
+  assert.equal(productionSequence.nextNumber,125);
+  const configured=await configureNfceSequence(pool,{profileId:primaryProfile.id,environment:'homologation',series:1,blingLastNumber:0,actor:'fiscal-test'});
+  assert.equal(configured.nextNumber,1);
+  await assert.rejects(reserveNfceForSale(pool,{profileId:primaryProfile.id,saleId:saleA,environment:'production',series:2}),/ainda não conferida/);
+  const reservationA=await reserveNfceForSale(pool,{profileId:primaryProfile.id,saleId:saleA,environment:'homologation',series:1});
+  assert.equal(reservationA.document_number,1);
+  const [issuerRows] = await pool.query('SELECT cnpj FROM company_fiscal_profiles WHERE id=?',[primaryProfile.id]);
+  const accessKey = makeNfceAccessKey({ ufCode:'26', issuedAt:'2026-09-24T14:00:00-03:00', cnpj:issuerRows[0].cnpj,
+    series:1, number:reservationA.document_number, numericCode:12345678 }).key;
+  const syntheticDraft = { xml:'<NFe>fixture</NFe>', accessKey, environment:'homologation' };
+  const persistenceOptions = { readCertificate:async () => ({ pfx:Buffer.from('fixture'), password:'fixture' }),
+    sign:async input => ({ accessKey:input.accessKey, xml:`<NFe Id="NFe${input.accessKey}">fixture assinada apenas para persistência MySQL</NFe>` }) };
+  assert.equal((await prepareReservedNfce(pool,{issuanceId:reservationA.id,draft:syntheticDraft},persistenceOptions)).existing,false);
+  assert.equal((await prepareReservedNfce(pool,{issuanceId:reservationA.id,draft:syntheticDraft},persistenceOptions)).existing,true);
+  const [storedNfce] = await pool.query('SELECT status,access_key,signed_xml FROM company_fiscal_nfce_issuances WHERE id=?',[reservationA.id]);
+  assert.equal(storedNfce[0].status,'prepared');
+  assert.equal(storedNfce[0].access_key,accessKey);
+  assert.match(storedNfce[0].signed_xml,/fixture assinada/);
+  assert.equal((await reserveNfceForSale(pool,{profileId:primaryProfile.id,saleId:saleA,environment:'homologation',series:1})).id,reservationA.id);
+  const concurrent=await Promise.all([saleB,saleC].map(saleId=>reserveNfceForSale(pool,{profileId:primaryProfile.id,saleId,environment:'homologation',series:1})));
+  assert.deepEqual(concurrent.map(row=>row.document_number).sort(),[2,3]);
+  const reserveB = concurrent.find(row => row.document_number === 2);
+  const keys = forge.pki.rsa.generateKeyPair(1024);
+  const cert = forge.pki.createCertificate(); cert.publicKey=keys.publicKey; cert.serialNumber='01';
+  cert.validity.notBefore=new Date('2025-01-01T00:00:00Z'); cert.validity.notAfter=new Date('2027-01-01T00:00:00Z');
+  cert.setSubject([{name:'commonName',value:`EMPRESA TESTE:${issuerRows[0].cnpj}`}]); cert.setIssuer(cert.subject.attributes);
+  cert.sign(keys.privateKey,forge.md.sha256.create());
+  const pfx=Buffer.from(forge.asn1.toDer(forge.pkcs12.toPkcs12Asn1(keys.privateKey,[cert],'senha-teste',{algorithm:'3des'})).getBytes(),'binary');
+  const fiscalDraft=buildHomologationNfceDraft({ issuer:{ufCode:'26',cnpj:issuerRows[0].cnpj,name:'EMPRESA TESTE',stateRegistration:'123456789',
+    address:{street:'RUA TESTE',number:'10',district:'CENTRO',municipalityCode:'2611101',city:'PETROLINA',state:'PE',postalCode:'56310150'}},
+    series:1,number:reserveB.document_number,issuedAt:'2026-09-24T14:00:00-03:00',numericCode:12345678,nature:'VENDA',
+    items:[{sku:'A',description:'PRODUTO',ncm:'85444200',cest:'1200700',gtin:'SEM GTIN',unit:'UND',quantity:1,unitPriceCents:500,
+      cfop:'5102',origin:'0',csosn:'400',pisCst:'07',cofinsCst:'07'}],payments:[{method:'01',amountCents:500}]});
+  const mtlsOptions={readCertificate:async()=>({pfx,password:'senha-teste'})};
+  await prepareReservedNfce(pool,{issuanceId:reserveB.id,draft:fiscalDraft},mtlsOptions);
+  const timeoutState=await transmitPreparedNfce(pool,reserveB.id,{...mtlsOptions,request:async()=>{throw new Error('timeout simulado');}});
+  assert.equal(timeoutState.state,'uncertain');
+  await assert.rejects(transmitPreparedNfce(pool,reserveB.id,mtlsOptions),/não reenviar/);
+  const protocol=`<protNFe xmlns="http://www.portalfiscal.inf.br/nfe"><infProt><tpAmb>2</tpAmb><chNFe>${fiscalDraft.accessKey}</chNFe><dhRecbto>2026-09-24T14:00:03-03:00</dhRecbto><nProt>126260000000001</nProt><cStat>100</cStat><xMotivo>Autorizado</xMotivo></infProt></protNFe>`;
+  const reconciled=await reconcileNfceByKey(pool,reserveB.id,{...mtlsOptions,request:async()=>({statusCode:200,
+    body:`<retConsSitNFe><tpAmb>2</tpAmb><cStat>100</cStat><xMotivo>Autorizado</xMotivo>${protocol}</retConsSitNFe>`})});
+  assert.equal(reconciled.state,'authorized');
+  const [authorizedRows]=await pool.query('SELECT status,authorized_xml_sha256,authorization_protocol FROM company_fiscal_nfce_issuances WHERE id=?',[reserveB.id]);
+  assert.equal(authorizedRows[0].status,'authorized');
+  assert.match(authorizedRows[0].authorized_xml_sha256,/^[a-f0-9]{64}$/);
+  assert.equal(authorizedRows[0].authorization_protocol,'126260000000001');
+  const danfeFromSale=await authorizedDanfeForSale(pool,{profileId:primaryProfile.id,saleId:saleB,cnpj:issuerRows[0].cnpj});
+  assert.equal(danfeFromSale.authorizationProtocol,'126260000000001');
+  assert.equal(danfeFromSale.accessKey,fiscalDraft.accessKey);
+  await assert.rejects(configureNfceSequence(pool,{profileId:primaryProfile.id,environment:'homologation',series:1,blingLastNumber:1,actor:'fiscal-test'}),/não pode retroceder/);
+  await assert.rejects(reserveNfceForSale(pool,{profileId:company.id,saleId:saleA,environment:'homologation',series:1}),/empresas adicionais/);
+  assert.equal((await pool.query('SELECT next_number FROM company_fiscal_nfce_sequences WHERE profile_id=? AND environment=? AND series=?',[primaryProfile.id,'homologation',1]))[0][0].next_number,4);
+  await pool.query("ALTER TABLE sales ADD COLUMN finalization_status VARCHAR(30) DEFAULT 'success', ADD COLUMN total INT DEFAULT 0, ADD COLUMN discount INT DEFAULT 0, ADD COLUMN discount_total INT DEFAULT 0, ADD COLUMN promotional_discount INT DEFAULT 0, ADD COLUMN delivery_cost_store INT DEFAULT 0, ADD COLUMN delivery_cost_customer INT DEFAULT 0, ADD COLUMN final_adjustment_discount INT DEFAULT 0, ADD COLUMN delivery_type VARCHAR(30) NULL, ADD COLUMN payment_methods JSON NULL");
+  await pool.query('CREATE TABLE products (id CHAR(36) PRIMARY KEY,ncm VARCHAR(8),cest VARCHAR(7),origin VARCHAR(1),ean VARCHAR(14),alternative_eans JSON,is_virtual TINYINT DEFAULT 0)');
+  await pool.query('CREATE TABLE sale_items (id CHAR(36) PRIMARY KEY,sale_id CHAR(36),product_id CHAR(36),product_sku VARCHAR(60),product_name VARCHAR(120),quantity INT,unit_price INT,total INT,discount INT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)');
+  const fiscalSaleId=randomUUID(),fiscalProductId=randomUUID();
+  await pool.query('INSERT INTO sales (id,company_id,status,payment_status,total,payment_methods) VALUES (?,?,?,?,?,?)',[fiscalSaleId,primaryProfile.settings_id,'completed','paid',500,JSON.stringify([{method:'money',amount:500}])]);
+  await pool.query('INSERT INTO products (id,ncm,cest,origin,alternative_eans) VALUES (?,?,?,?,?)',[fiscalProductId,'85444200','1200700','0','[]']);
+  await pool.query('INSERT INTO sale_items (id,sale_id,product_id,product_sku,product_name,quantity,unit_price,total,discount) VALUES (?,?,?,?,?,?,?,?,?)',[randomUUID(),fiscalSaleId,fiscalProductId,'SKU','PRODUTO',1,500,500,0]);
+  await pool.query('CREATE TABLE customers (id VARCHAR(80) PRIMARY KEY,user_id VARCHAR(80),customer_type VARCHAR(30))');
+  await pool.query('INSERT INTO customers VALUES (?,?,?)',['fixture-accountant','accountant-user','ACCOUNTANT']);
+  await pool.query('INSERT INTO company_accountant_access (id,profile_id,customer_id,can_edit_tax_validation,can_view_revenue,is_active,created_by) VALUES (?,?,?,?,?,?,?)',
+    [randomUUID(),primaryProfile.id,'fixture-accountant',1,1,1,'fixture']);
+  const fiscalRules=defaultRules();
+  Object.assign(fiscalRules[0],{source:'accountant',model:'65',review:{actor:'accountant-user',reviewerRegistration:'CRC-TESTE',reviewedAt:'2026-09-24T17:00:00.000Z',outdated:false},nfce:{unit:'UND',csosn:'400',pisCst:'07',cofinsCst:'07',icmsRate:'0',pisRate:'0',cofinsRate:'0',cestApplicability:'required',gtinDecision:'sem_gtin'}});
+  await pool.query('INSERT INTO company_fiscal_tax_validations (profile_id,status,reviewer_registration,rules_json,bling_reference_json,updated_by) VALUES (?,?,?,?,?,?)',
+    [primaryProfile.id,'approved','CRC-TESTE',JSON.stringify({rules:fiscalRules,generalDecisions:{...defaultGeneralDecisions(),productExceptions:'none'}}),'{}','fixture']);
+  const preparedFromSale=await prepareHomologationNfceForSale(pool,{profileId:primaryProfile.id,settingsId:primaryProfile.settings_id,saleId:fiscalSaleId,series:1,
+    company:{cnpj:issuerRows[0].cnpj,legalName:'EMPRESA TESTE',stateRegistration:'123456789',municipalityCode:'2611101',uf:'PE',address:{street:'RUA TESTE',number:'10',neighborhood:'CENTRO',city:'PETROLINA',zipCode:'56310150'}}},
+    {now:new Date('2026-09-24T17:00:00Z'),randomInt:()=>12345678,persistenceOptions:mtlsOptions});
+  assert.equal(preparedFromSale.status,'prepared');
+  const [preparedSaleRows]=await pool.query('SELECT sale_id,status,document_number,signed_xml FROM company_fiscal_nfce_issuances WHERE id=?',[preparedFromSale.issuanceId]);
+  assert.equal(preparedSaleRows[0].sale_id,fiscalSaleId);
+  assert.equal(preparedSaleRows[0].document_number,4);
+  assert.match(preparedSaleRows[0].signed_xml,/<vNF>5\.00<\/vNF>/);
+  assert.equal((await prepareHomologationNfceForSale(pool,{profileId:primaryProfile.id,settingsId:primaryProfile.settings_id,saleId:fiscalSaleId,series:1,
+    company:{cnpj:issuerRows[0].cnpj,legalName:'EMPRESA TESTE',stateRegistration:'123456789',municipalityCode:'2611101',uf:'PE',address:{street:'RUA TESTE',number:'10',neighborhood:'CENTRO',city:'PETROLINA',zipCode:'56310150'}}},
+    {now:new Date('2026-09-24T17:01:00Z'),randomInt:()=>87654321,persistenceOptions:mtlsOptions})).issuanceId,preparedFromSale.issuanceId);
   assert.equal((await pool.query('SELECT review_state FROM company_fiscal_document_reviews WHERE document_id=?',[reviewDocumentId]))[0][0].review_state,'draft');
   await pool.query('INSERT INTO company_fiscal_cancellation_monitor (document_id,profile_id,state,marketplace_status,reason) VALUES (?,?,?,?,?)',
     [reviewDocumentId,company.id,'open_alert','READY_TO_SHIP','open_order_with_authorized_nfe']);
@@ -173,18 +270,8 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   const [settings]=await pool.query('SELECT name FROM company_settings');assert.equal(settings[0].name,'Empresa A');
   await pool.query('DROP TRIGGER fiscal_test_reject_event');
 
-  const originalXml=readFileSync(path.join(__dirname,'fixtures/accountant-nfce.xml'),'utf8');
-  const accessKey=originalXml.match(/<chNFe>(\d{44})<\/chNFe>/)[1];
-  const [primaryProfiles]=await pool.query("SELECT id FROM company_fiscal_profiles WHERE settings_id IS NOT NULL");
-  const archiveId=randomUUID();
-  await pool.query('INSERT INTO company_fiscal_documents (id,profile_id,channel,external_sale_id,model,status,access_key,document_number,series,issued_at,total_cents,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',[archiveId,primaryProfiles[0].id,'pdv','fixture-sale','65','authorized',accessKey,'1','1','2026-09-24 14:00:00',500,'fixture']);
-  const archiveUrl='/accountant/companies/primary/fiscal-documents/'+archiveId;
-  const api=(method,url,payload)=>app.inject({method,url,payload,headers:{authorization:'Bearer fixture'}});
-  const archived=await api('POST',archiveUrl+'/archive-xml',{xml:originalXml});assert.equal(archived.statusCode,200,archived.body);
-  const xmlDownload=await api('GET',archiveUrl+'/file?format=xml');assert.equal(xmlDownload.statusCode,200,xmlDownload.body);assert.equal(Buffer.from(xmlDownload.json().base64,'base64').toString(),originalXml);
-  const other=await api('GET','/accountant/companies/'+company.id+'/fiscal-documents/'+archiveId+'/file?format=xml');assert.equal(other.statusCode,404,other.body);
-  const changedXml=await api('POST',archiveUrl+'/archive-xml',{xml:originalXml.replace('PRODUTO TESTE','OUTRO PRODUTO')});assert.equal(changedXml.statusCode,409,changedXml.body);
-
+  // Original XML archive is included in backup/restore, without storing PDF blobs.
+  await pool.query('INSERT INTO company_fiscal_document_xmls (document_id,profile_id,authorized_xml,xml_sha256,archived_by) VALUES (?,?,?,?,?)',[randomUUID(),primaryProfile.id,danfeFromSale.authorizedXml,danfeFromSale.authorizedXmlSha256,'fixture']);
   const sourceSnapshot = await snapshotFiscalDatabase(pool,'mdv_fiscal_test');
   const dump = docker('exec',container,'mysqldump','-uroot',`-p${password}`,'--single-transaction','--skip-lock-tables','--no-tablespaces','mdv_fiscal_test');
   assert.match(dump,/CREATE TABLE `company_fiscal_profiles`/);
@@ -195,6 +282,8 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   assert.match(dump,/INSERT INTO `company_fiscal_document_reviews`/);
   assert.match(dump,/CREATE TABLE `company_fiscal_cancellation_monitor`/);
   assert.match(dump,/INSERT INTO `company_fiscal_cancellation_monitor`/);
+  assert.match(dump,/CREATE TABLE `company_fiscal_nfce_sequences`/);
+  assert.match(dump,/INSERT INTO `company_fiscal_nfce_issuances`/);
   const dumpSha256 = createHash('sha256').update(dump).digest('hex');
   assert.match(dumpSha256,/^[a-f0-9]{64}$/);
 
@@ -202,6 +291,9 @@ test('MySQL real: migration, isolamento, persistência, concorrência e rollback
   dockerWithInput(dump,'exec','-i',container,'mysql','-uroot',`-p${password}`,'mdv_fiscal_restore');
   const restoredSnapshot = await snapshotFiscalDatabase(pool,'mdv_fiscal_restore');
   assert.deepEqual(restoredSnapshot,sourceSnapshot,'A restauração deve preservar integralmente cadastros, eventos e metadados fiscais');
+  const restoredPool=mysql.createPool({...config,database:'mdv_fiscal_restore'});
+  try { assert.equal((await authorizedDanfeForSale(restoredPool,{profileId:primaryProfile.id,saleId:saleB,cnpj:issuerRows[0].cnpj})).authorizedXmlSha256,danfeFromSale.authorizedXmlSha256); }
+  finally { await restoredPool.end(); }
 
   await pool.query('UPDATE company_fiscal_profiles SET notes=? WHERE id=?',['alteração posterior ao backup',company.id]);
   const [restoredRows] = await pool.query('SELECT notes FROM mdv_fiscal_restore.company_fiscal_profiles WHERE id=?',[company.id]);

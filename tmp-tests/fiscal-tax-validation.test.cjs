@@ -3,7 +3,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { defaultRules, defaultGeneralDecisions, blingReference, normalizeTaxValidation, taxValidationView } = require('../services/fiscalTaxValidationCore.cjs');
-
 const { applyOperationReviews } = require('../services/fiscalTaxValidationCore.cjs');
 
 test('revisão individual usa identidade e horário do servidor, persiste e invalida mudanças', () => {
@@ -62,6 +61,15 @@ test('salva rascunho incompleto, mas recusa aprovação sem responsável e vigê
   assert.throws(() => normalizeTaxValidation({ status: 'approved', rules: defaultRules() }), /campos pendentes/);
 });
 
+test('preserva códigos NFC-e explícitos e recusa valores malformados', () => {
+  const rules=defaultRules();
+  rules[0]={...rules[0],source:'accountant',nfce:{unit:'UND',csosn:'400',pisCst:'07',cofinsCst:'07',cestApplicability:'required',gtinDecision:'sem_gtin'}};
+  const draft=normalizeTaxValidation({status:'draft',rules});
+  assert.equal(draft.rules[0].nfce.csosn,'400');
+  assert.equal(draft.rules[0].nfce.gtinDecision,'sem_gtin');
+  assert.throws(()=>normalizeTaxValidation({status:'draft',rules:[{...rules[0],nfce:{...rules[0].nfce,csosn:'40x'}}]}),/inválido/);
+});
+
 test('permite marcar revisado somente com responsável e data, ainda mantendo pendências fiscais', () => {
   const reviewed = normalizeTaxValidation({ status:'reviewed', reviewerName:'Contador responsável', reviewedAt:'2026-09-23', rules:defaultRules() });
   assert.equal(reviewed.status,'reviewed');
@@ -71,6 +79,7 @@ test('permite marcar revisado somente com responsável e data, ainda mantendo pe
 
 test('aprova somente matriz completa e preserva campos do contador', () => {
   const rules = defaultRules().map(rule => ({ ...rule, effectiveFrom: '2026-09-23', notes: rule.notes || 'Procedimento confirmado.' }));
+  rules[0].nfce = { ...rules[0].nfce,icmsRate:'0',pisRate:'0',cofinsRate:'0' };
   for (const rule of rules.filter(rule => ['OP07','OP08'].includes(rule.id))) Object.assign(rule, { cfop: 'Confirmado', icmsCode: 'Confirmado', icmsTreatment: 'Confirmado', pisCofins: 'Confirmado', ipi: 'Confirmado' });
   const generalDecisions = { ...defaultGeneralDecisions(), effectiveFrom:'2026-09-23', simplesBasis:'cash', freightTreatment:'Rateio proporcional confirmado.', productExceptions:'none', productExceptionsNotes:'O contador confirmou que não há exceções adicionais.' };
   const approved = normalizeTaxValidation({ status: 'approved', reviewerName: 'Contador responsável', reviewerRegistration: 'CRC-TESTE', reviewedAt: '2026-09-23', generalDecisions, rules });

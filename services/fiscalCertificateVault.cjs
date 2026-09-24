@@ -269,4 +269,4 @@ function requestSoap(endpoint, body, pfx, passphrase, soapAction = 'http://www.p
   });
 }
 
-module.exports = { MAX_PFX_BYTES, SEFAZ_PE, SEFAZ_PE_CONSULTA, ICP_BRASIL_V10_ROOT, trustedAuthorities, inspectPfx, installCertificate, readCertificate, exportCertificate, deleteCertificate, testSefaz, consultInvoice, statusSoap, invoiceStatusSoap, xmlValue, requestSoap };
+module.exports = { MAX_PFX_BYTES, SEFAZ_PE, SEFAZ_PE_CONSULTA, ICP_BRASIL_V10_ROOT, trustedAuthorities, inspectPfx, installCertificate, readCertificate, exportCertificate, deleteCertificate, testSefaz, consultInvoice, statusSoap, invoiceStatusSoap, xmlValue, requestSoap, fiscalVaultConfig: config, encryptVaultRecord: encrypt, decryptVaultRecord: decrypt };

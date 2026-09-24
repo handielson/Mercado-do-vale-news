@@ -32,6 +32,7 @@ import { BusinessHoursPanel } from '../../../components/settings/BusinessHoursPa
 import { BusinessHoursTextPanel } from '../../../components/settings/BusinessHoursTextPanel';
 import { CompanyFiscalPanel } from '../../../components/company/CompanyFiscalPanel';
 import { CompanyCertificatePanel } from '../../../components/company/CompanyCertificatePanel';
+import { CompanyNfceHomologationPanel } from '../../../components/company/CompanyNfceHomologationPanel';
 import { CompanyTaxValidationPanel } from '../../../components/company/CompanyTaxValidationPanel';
 import { CompanyAccountantAccessPanel } from '../../../components/company/CompanyAccountantAccessPanel';
 import { RevenuePanel } from '../../accountant/AccountantPortalPage';
@@ -272,6 +273,7 @@ export const CompanyDataPage: React.FC = () => {
                 </div>
                 <CompanyFiscalPanel />
                 <CompanyCertificatePanel />
+                <CompanyNfceHomologationPanel />
             </div>}
 
             {activeArea === 'accountant' && <div id="company-accountant-panel" role="tabpanel" className="space-y-6" aria-label="Espaço do Contador">
