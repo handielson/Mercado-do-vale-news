@@ -1,24 +1,18 @@
 {
-  "version": "v1.2.478-synology-backup-primary",
+  "version": "v1.2.479-synology-quickconnect",
   "date": "2026-09-25",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260925-053941-v12478-synology-backup-primary",
+  "release_vps": "/var/www/mdv-site/releases/20260925-054739-v12479-synology-quickconnect",
   "branch": "main",
-  "summary": "Backup principal no Synology, VPS como fallback, validação antes de liberar o pacote local e retenção de 30 dias no NAS.",
-  "tag": "v1.2.478-synology-backup-primary",
+  "summary": "Corrige a rota de envio do backup Synology com QuickConnect sem alterar as demais integrações NAS.",
+  "tag": "v1.2.479-synology-quickconnect",
   "changed_files": [
     "vps_server.js",
     "vps_server.cjs",
-    "services/systemBackupPolicy.cjs",
-    "services/systemBackupService.ts",
-    "pages/admin/settings/SystemBackupPage.tsx",
-    "deploy-vps-server-only.cjs",
-    "package.json",
-    "tmp-tests/system-backup-policy.test.cjs",
     "tmp-tests/system-backup-admin-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-25-v1.2.478-synology-backup-primary.md"
+    "docs/versoes/2026-09-25-v1.2.479-synology-quickconnect.md"
   ],
   "validations": [
     "npm.cmd run test:system-backup-admin",

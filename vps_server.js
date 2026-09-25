@@ -35968,6 +35968,7 @@ const SYNO_CDN = {
 const SYSTEM_BACKUP_DEFAULT_TIME = '00:00';
 const SYSTEM_BACKUP_TIMEZONE = 'America/Sao_Paulo';
 const SYSTEM_BACKUP_ROOT = process.env.MDV_SYSTEM_BACKUP_ROOT || '/var/backups/mdv-system';
+const SYSTEM_BACKUP_SYNOLOGY_URL = normalizeSynologyUrl(process.env.MDV_SYSTEM_BACKUP_SYNOLOGY_URL || SYNO_URL);
 const SYSTEM_BACKUP_STATE_FILE = process.env.MDV_SYSTEM_BACKUP_STATE_FILE || path.join(__dirname, 'system-backup-state.json');
 const { backupPartRanges, localBackupNamesToPrune, synologyArtifactsToPrune } = require('./services/systemBackupPolicy.cjs');
 const SYSTEM_BACKUP_VPS_KEEP = Math.max(1, Number(process.env.MDV_SYSTEM_BACKUP_VPS_KEEP || 3));
@@ -36302,11 +36303,25 @@ function stopSystemBackupHeartbeat() {
   systemBackupHeartbeat = null;
 }
 
+async function synoBackupLogin(timeoutMs = 30000) {
+  const query = new URLSearchParams({
+    api: 'SYNO.API.Auth', version: '7', method: 'login',
+    account: SYNO_USER, passwd: SYNO_PASS, session: 'FileStation', format: 'sid',
+  });
+  const result = await synoHttpGet(new URL(SYSTEM_BACKUP_SYNOLOGY_URL), '/webapi/auth.cgi?' + query.toString(), timeoutMs);
+  if (!result.success || !result.data?.sid) throw new Error('Synology backup login failed: ' + JSON.stringify(result.error || result));
+  return result.data.sid;
+}
+
+function synoBackupApiGet(apiPath) {
+  return synoHttpGet(new URL(SYSTEM_BACKUP_SYNOLOGY_URL), apiPath, 30000);
+}
+
 async function verifySystemBackupOnSynology(fileName, expectedSize) {
   const remotePath = `${SYNO_FOLDERS.backups}/${fileName}`;
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const sid = await synoLogin(30000);
-    const result = await synoApiGet(
+    const sid = await synoBackupLogin(30000);
+    const result = await synoBackupApiGet(
       `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(remotePath)}&additional=${encodeURIComponent('["size"]')}&_sid=${encodeURIComponent(sid)}`
     );
     if (!result.success && [106, 107, 119].includes(Number(result.error?.code)) && attempt === 0) continue;
@@ -36329,10 +36344,10 @@ async function uploadSystemBackupToSynology(filePath, fileName, { start = 0, end
   if (!Number.isSafeInteger(size) || size <= 0) throw new Error('Tamanho invalido de parte do backup');
   const folderPath = SYNO_FOLDERS.backups;
   const https = require('https');
-  const urlObj = new URL(SYNO_URL);
+  const urlObj = new URL(SYSTEM_BACKUP_SYNOLOGY_URL);
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const sid = await synoLogin(30000);
+    const sid = await synoBackupLogin(30000);
     const boundary = `MDVSystemBackupBoundary${Date.now()}`;
     const textFields = [
       ['api', 'SYNO.FileStation.Upload'],
@@ -36505,9 +36520,9 @@ function removeVerifiedSynologyBackupFromVps(backupTar, mirror) {
 async function synoBackupApi(params) {
   let result = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const sid = await synoLogin(30000);
+    const sid = await synoBackupLogin(30000);
     const query = new URLSearchParams({ ...params, _sid: sid });
-    result = await synoApiGet('/webapi/entry.cgi?' + query.toString());
+    result = await synoBackupApiGet('/webapi/entry.cgi?' + query.toString());
     if (!result.success && [106, 107, 119].includes(Number(result.error?.code)) && attempt === 0) continue;
     return result;
   }

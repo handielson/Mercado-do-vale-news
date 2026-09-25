@@ -1,17 +1,16 @@
-# v1.2.478-synology-backup-primary
+# v1.2.479-synology-quickconnect
 
 Data: 25/09/2026
 Status: ready
 Branch: main
-Tag: v1.2.478-synology-backup-primary
-Release VPS: /var/www/mdv-site/releases/20260925-053941-v12478-synology-backup-primary
+Tag: v1.2.479-synology-quickconnect
+Release VPS: /var/www/mdv-site/releases/20260925-054739-v12479-synology-quickconnect
 
 ## Alterações
 
-- O backup confirma integridade na VPS e envia o pacote ao Synology sem criar outra cópia temporária do arquivo grande.
-- Cada parte, manifesto e hash são verificados no NAS antes de excluir o pacote da VPS. Se o envio falhar, o pacote local permanece para nova tentativa.
-- Retenção de 30 dias no Synology, com pelo menos três conjuntos recentes protegidos; a VPS mantém até três pacotes completos de contingência.
-- O painel informa se a cópia local ainda existe. O deploy da API é restrito a esses arquivos, sem migrations fiscais.
+- O backup pode usar `MDV_SYSTEM_BACKUP_SYNOLOGY_URL` sem alterar o endereço Synology das outras integrações.
+- A VPS usa o QuickConnect funcional para o backup, pois o túnel anterior retorna erro 1033 antes do envio.
+- O pacote local permanece intacto até confirmação dos arquivos no NAS. A política de retenção da versão anterior continua em vigor.
 
 ## Validação
 
