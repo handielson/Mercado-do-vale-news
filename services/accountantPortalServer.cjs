@@ -263,7 +263,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       orderReference: /^(?:nfe|nfce):/u.test(String(row.external_sale_id || '')) ? null : row.external_sale_id,
       number: row.document_number, series: row.series, issuedAt: row.issued_at, totalCents: Number(row.total_cents || 0),
       fileAvailable: ['authorized', 'cancelled'].includes(row.status) && Boolean(Number(row.has_archived_xml)),
-    })).sort((left, right) => String(right.issuedAt || '').localeCompare(String(left.issuedAt || '')));
+    })).sort((left, right) => new Date(right.issuedAt).getTime() - new Date(left.issuedAt).getTime());
     return {
       company: companyView(profile), period: { from, to },
       coverage: { available: true, sources: ['sales','orders','mobile_sale_events'], note: 'PDV e site vêm das bases operacionais. Shopee e TikTok usam eventos capturados no momento da sincronização; o status mostrado pode não ser o atual no marketplace. Vendas sem XML histórico permanecem pendentes de conciliação.' },

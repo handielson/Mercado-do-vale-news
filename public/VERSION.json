@@ -1,36 +1,20 @@
 {
-  "version": "v1.2.473-contador-navegacao",
+  "version": "v1.2.474-fiscal-datas",
   "date": "2026-09-25",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260925-020811-v12473-contador-navegacao",
+  "release_vps": "/var/www/mdv-site/releases/20260925-024500-v12474-fiscal-datas",
   "branch": "main",
-  "summary": "O faturamento distingue vendas de notas importadas, mostra tipo e canal e abre detalhes em painel fechável.",
-  "tag": "v1.2.473-contador-navegacao",
+  "summary": "As notas do contador seguem a data real de emissão e a cobertura mostra o primeiro e o último documento do período.",
+  "tag": "v1.2.474-fiscal-datas",
   "changed_files": [
-    "components/company/AccountantFiscalFileActions.tsx",
-    "components/company/AccountantSaleDetailsPanel.tsx",
-    "layouts/AdminLayout.tsx",
     "pages/accountant/AccountantPortalPage.tsx",
     "services/accountantPortalServer.cjs",
-    "services/accountantPortalService.ts",
-    "services/accountantRevenueView.ts",
-    "services/accountantSaleDetails.cjs",
-    "tmp-tests/accountant-portal-static.test.mjs",
-    "tmp-tests/accountant-portal.test.cjs",
-    "tmp-tests/accountant-revenue-browser.mjs",
-    "tmp-tests/accountant-revenue-view.test.mjs",
-    "tmp-tests/accountant-sale-details.test.cjs",
-    "tmp-tests/company-data-separation-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-25-v1.2.473-contador-navegacao.md"
+    "docs/versoes/2026-09-25-v1.2.474-fiscal-datas.md"
   ],
   "validations": [
     "npm.cmd run test:accountant-portal",
-    "npm.cmd run test:company-fiscal",
-    "node tmp-tests/accountant-revenue-browser.mjs",
-    "node --check vps_server.js",
-    "node --check vps_server.cjs",
     "npm.cmd run build",
     "git diff --check"
   ]
