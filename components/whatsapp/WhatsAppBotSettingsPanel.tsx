@@ -6,6 +6,8 @@ import type { AutoResponderSettings } from '../../types/autoResponder';
 
 type ResponseToneMode = NonNullable<AutoResponderSettings['response_tone_mode']>;
 
+const DEFAULT_PAYJOY_ANALYSIS_URL = 'https://app.payjoy.com/br/d2c?utm_source=payjoysite&utm_medium=website&utm_campaign=payjoywebsitetraffic&utm_term=traffic&utm_content=payjoywebsitetraffic&click_source=payjoysite';
+
 const toneOptions: Array<{ value: ResponseToneMode; label: string; description: string }> = [
   { value: 'auto_abc', label: 'Auto A/B/C', description: 'Distribui um tom fixo por conversa para comparar resultados.' },
   { value: 'a', label: 'A - Direto', description: 'Respostas curtas, comerciais e objetivas.' },
@@ -27,10 +29,20 @@ function normalizeEnabled(value: unknown): boolean {
   return value === true || Number(value) === 1 || String(value) === 'true';
 }
 
+function isOfficialPayJoyUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && (url.hostname === 'payjoy.com' || url.hostname.endsWith('.payjoy.com'));
+  } catch {
+    return false;
+  }
+}
+
 export function WhatsAppBotSettingsPanel() {
   const [botEnabled, setBotEnabled] = React.useState(false);
   const [finishPauseDays, setFinishPauseDays] = React.useState(30);
   const [responseToneMode, setResponseToneMode] = React.useState<ResponseToneMode>('auto_abc');
+  const [payjoyAnalysisUrl, setPayjoyAnalysisUrl] = React.useState(DEFAULT_PAYJOY_ANALYSIS_URL);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -43,6 +55,7 @@ export function WhatsAppBotSettingsPanel() {
         setBotEnabled(normalizeEnabled(settings?.enabled));
         setFinishPauseDays(normalizeFinishPauseDays(settings?.manual_finish_pause_days));
         setResponseToneMode(normalizeToneMode(settings?.response_tone_mode));
+        setPayjoyAnalysisUrl(settings?.payjoy_analysis_url || DEFAULT_PAYJOY_ANALYSIS_URL);
       })
       .catch((err) => {
         if (mounted) setError(err instanceof Error ? err.message : 'Falha ao carregar configuracoes do bot.');
@@ -56,6 +69,11 @@ export function WhatsAppBotSettingsPanel() {
   }, []);
 
   async function saveSettings() {
+    const analysisUrl = payjoyAnalysisUrl.trim();
+    if (!isOfficialPayJoyUrl(analysisUrl)) {
+      setError('Informe um link HTTPS oficial da PayJoy para a analise.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -65,10 +83,12 @@ export function WhatsAppBotSettingsPanel() {
         days_paused_after_finish: normalizeFinishPauseDays(finishPauseDays),
         finish_pause_days: normalizeFinishPauseDays(finishPauseDays),
         response_tone_mode: responseToneMode,
+        payjoy_analysis_url: analysisUrl,
       });
       setBotEnabled(normalizeEnabled(settings.enabled));
       setFinishPauseDays(normalizeFinishPauseDays(settings.manual_finish_pause_days));
       setResponseToneMode(normalizeToneMode(settings.response_tone_mode));
+      setPayjoyAnalysisUrl(settings.payjoy_analysis_url || analysisUrl);
       toast.success('Configuracoes do bot salvas');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao salvar configuracoes do bot.');
@@ -215,6 +235,22 @@ export function WhatsAppBotSettingsPanel() {
           </div>
           <span className="mt-2 block text-xs font-medium normal-case leading-5 text-slate-500">
             A conversa fica pausada na VPS por esse periodo ate alguem clicar em Retomar.
+          </span>
+        </label>
+
+        <label className="text-xs font-semibold uppercase text-slate-500 lg:col-span-2">
+          Link de analise PayJoy
+          <input
+            type="url"
+            value={payjoyAnalysisUrl}
+            onChange={(event) => setPayjoyAnalysisUrl(event.target.value)}
+            disabled={loading || saving}
+            spellCheck={false}
+            placeholder="https://app.payjoy.com/br/d2c"
+            className="mt-2 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+          />
+          <span className="mt-2 block text-xs font-medium normal-case leading-5 text-slate-500">
+            Link enviado ao cliente para iniciar a analise. Troque pelo link da loja quando a PayJoy disponibilizar.
           </span>
         </label>
       </div>

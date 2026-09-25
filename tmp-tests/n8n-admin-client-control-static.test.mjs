@@ -170,7 +170,9 @@ assert.match(patch, /pix_key/, 'payment flow must be able to use the company Pix
 assert.match(patch, /formas_pagamento/, 'entry classifier must recognize random payment-policy questions');
 assert.match(patch, /Pagamento - Politica/, 'workflow must route payment-policy questions to a dedicated payment specialist');
 assert.match(patch, /nao aceitamos aparelho usado como entrada/, 'payment policy must politely reject used products as trade-in');
-assert.match(patch, /No boleto a gente nao trabalha/, 'payment policy must politely reject boleto payments');
+const payjoyWorkflowPatch = readFileSync(new URL('./n8n-payjoy-workflow-patch.cjs', import.meta.url), 'utf8');
+assert.match(payjoyWorkflowPatch, /Aceita boleto|financiar celular pela PayJoy/, 'current payment policy must offer PayJoy for boleto');
+assert.doesNotMatch(payjoyWorkflowPatch, /No boleto a gente nao trabalha/, 'current payment policy must not reject boleto');
 assert.match(patch, /ate 12x/, 'payment policy must answer how many installments are available');
 assert.match(patch, /pagamento por link/, 'payment policy must explain card payment is only in person');
 assert.match(patch, /paymentPolicyReply/, 'payment policy must answer by specific payment topic');

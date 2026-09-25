@@ -3076,6 +3076,14 @@ async function upsertN8nBotClientControl(identity, patch = {}) {
       Number(patch.reset_count || 0),
     ]
   );
+  if (patch.blocked) {
+    await pool.query(
+      `UPDATE n8n_phone_catalog_followups
+          SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason='cliente_bloqueado'
+        WHERE remote_jid=? AND followup_kind IN ('analysis_check','retry_check') AND status IN ('pending','claimed')`,
+      [identity.remoteJid]
+    );
+  }
   return getN8nBotClientControl(identity);
 }
 
@@ -3354,7 +3362,15 @@ async function insertN8nBotMessage(input = {}) {
     await pool.query(
       `UPDATE n8n_phone_catalog_followups
           SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason='nova_atividade'
-        WHERE remote_jid=? AND status IN ('pending','claimed')`,
+        WHERE remote_jid=? AND followup_kind='phone_catalog' AND status IN ('pending','claimed')`,
+      [identity.remoteJid]
+    );
+  }
+  if (direction === 'inbound' || (direction === 'outbound' && /manual|atendente|admin|human/i.test(sourceNode))) {
+    await pool.query(
+      `UPDATE n8n_phone_catalog_followups
+          SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason='nova_atividade'
+        WHERE remote_jid=? AND followup_kind IN ('analysis_check','retry_check') AND status IN ('pending','claimed')`,
       [identity.remoteJid]
     );
   }
@@ -20592,6 +20608,24 @@ fastify.get('/autoresponder/settings', { preHandler: requireSyncKey }, async () 
   return sanitizeAutoresponderSettings(rows[0] || null);
 });
 
+const PAYJOY_DEFAULT_ANALYSIS_URL = 'https://app.payjoy.com/br/d2c?utm_source=payjoysite&utm_medium=website&utm_campaign=payjoywebsitetraffic&utm_term=traffic&utm_content=payjoywebsitetraffic&click_source=payjoysite';
+const PAYJOY_FOLLOWUP_MESSAGES = Object.freeze({
+  analysis_check: 'Oi! Conseguiu fazer a análise da PayJoy? Se já apareceu o resultado, me conte por aqui que ajudo você a dar sequência à compra no Mercado do Vale. 😊',
+  retry_check: 'Oi! Passando para saber se você gostaria de verificar se já é possível fazer uma nova análise pela PayJoy. Que tal tentar novamente? Quem sabe dessa vez dá certo! 🤞📱',
+});
+
+function normalizePayJoyAnalysisUrl(value) {
+  const text = String(value || '').trim();
+  if (text.length > 2048) return null;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== 'https:' || !/(^|\.)payjoy\.com$/i.test(url.hostname)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (req, reply) => {
   const body = req.body || {};
   if (!Object.prototype.hasOwnProperty.call(body, 'manual_finish_pause_days')) {
@@ -20640,6 +20674,7 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
     ai_conversation_memory_limit: (v) => normalizeAutoresponderAiConversationMemoryLimit(v),
     ai_conversation_memory_days: (v) => normalizeAutoresponderAiConversationMemoryDays(v),
     ai_context_memory: (v) => String(v ?? '').slice(0, 6000),
+    payjoy_analysis_url: (v) => normalizePayJoyAnalysisUrl(v),
     openai_api_key: (v) => String(v || '').trim(),
     openai_admin_api_key: (v) => String(v || '').trim(),
   };
@@ -20651,6 +20686,9 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
     if (key === 'openai_api_key' && !String(body[key] || '').trim()) continue;
     if (key === 'openai_admin_api_key' && !String(body[key] || '').trim()) continue;
     const value = normalize(body[key]);
+    if (key === 'payjoy_analysis_url' && !value) {
+      return reply.code(400).send({ error: 'Link PayJoy deve ser HTTPS no domínio payjoy.com' });
+    }
     if (typeof value === 'number' && !Number.isFinite(value)) {
       return reply.code(400).send({ error: `Invalid numeric value for ${key}` });
     }
@@ -31396,6 +31434,12 @@ fastify.post('/n8n-bot/client-control/handoff', { preHandler: requireSyncKey }, 
       handoffBy,
     ]
   );
+  await pool.query(
+    `UPDATE n8n_phone_catalog_followups
+        SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason='atendimento_humano'
+      WHERE remote_jid=? AND followup_kind IN ('analysis_check','retry_check') AND status IN ('pending','claimed')`,
+    [identity.remoteJid]
+  );
 
   if (message) {
     const [duplicateRows] = waMessageId
@@ -31679,11 +31723,48 @@ async function scheduleN8nPhoneCatalogFollowup(input = {}) {
   const id = crypto.randomUUID();
   await pool.query(
     `INSERT INTO n8n_phone_catalog_followups
-      (id, remote_jid, phone, baseline_message_id, anchor_wa_message_id, message_text, due_at, status)
-     VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'pending')`,
+      (id, remote_jid, phone, baseline_message_id, anchor_wa_message_id, message_text, followup_kind, due_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, 'phone_catalog', DATE_ADD(NOW(), INTERVAL ? MINUTE), 'pending')`,
     [id, identity.remoteJid, identity.phone, baselineMessageId, anchorWaMessageId, PHONE_LIST_FOLLOWUP_MESSAGE, delayMinutes]
   );
   return { ok: true, id, remoteJid: identity.remoteJid, delayMinutes, baselineMessageId };
+}
+
+async function scheduleN8nPayJoyFollowup(input = {}) {
+  const identity = normalizeN8nBotClientIdentity(input);
+  if (!identity) throw Object.assign(new Error('phone ou remoteJid obrigatorio'), { statusCode: 400 });
+  const kind = String(input.kind || '');
+  if (!Object.prototype.hasOwnProperty.call(PAYJOY_FOLLOWUP_MESSAGES, kind)) {
+    throw Object.assign(new Error('kind deve ser analysis_check ou retry_check'), { statusCode: 400 });
+  }
+  const [controls] = await pool.query(
+    `SELECT blocked, (human_handoff_until IS NOT NULL AND human_handoff_until > CURRENT_TIMESTAMP) AS human_handoff_active
+       FROM n8n_bot_client_controls WHERE remote_jid=? LIMIT 1`,
+    [identity.remoteJid]
+  );
+  if (Number(controls?.[0]?.blocked || 0) === 1 || Number(controls?.[0]?.human_handoff_active || 0) === 1) {
+    throw Object.assign(new Error('Cliente bloqueado ou em atendimento humano'), { statusCode: 409 });
+  }
+  const [messageRows] = await pool.query(
+    'SELECT COALESCE(MAX(id), 0) AS baseline_message_id FROM n8n_bot_messages WHERE remote_jid=?',
+    [identity.remoteJid]
+  );
+  const baselineMessageId = Number(messageRows?.[0]?.baseline_message_id || 0);
+  await pool.query(
+    `UPDATE n8n_phone_catalog_followups
+        SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason='nova_etapa_payjoy'
+      WHERE remote_jid=? AND followup_kind IN ('analysis_check','retry_check') AND status IN ('pending','claimed')`,
+    [identity.remoteJid]
+  );
+  const id = crypto.randomUUID();
+  const delayMinutes = kind === 'analysis_check' ? 30 : 15 * 24 * 60;
+  await pool.query(
+    `INSERT INTO n8n_phone_catalog_followups
+      (id, remote_jid, phone, baseline_message_id, message_text, followup_kind, due_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'pending')`,
+    [id, identity.remoteJid, identity.phone, baselineMessageId, PAYJOY_FOLLOWUP_MESSAGES[kind], kind, delayMinutes]
+  );
+  return { ok: true, id, remoteJid: identity.remoteJid, kind, delayMinutes, baselineMessageId };
 }
 
 async function runDueN8nPhoneCatalogFollowups({ limit = 30 } = {}) {
@@ -31695,6 +31776,7 @@ async function runDueN8nPhoneCatalogFollowups({ limit = 30 } = {}) {
             EXISTS(
               SELECT 1 FROM n8n_bot_messages later
                WHERE later.remote_jid=jobs.remote_jid AND later.id>jobs.baseline_message_id
+                 AND (jobs.followup_kind='phone_catalog' OR later.direction='inbound' OR later.source_node REGEXP 'manual|atendente|admin|human')
             ) AS has_later_activity
        FROM n8n_phone_catalog_followups jobs
        LEFT JOIN n8n_bot_client_controls controls ON controls.remote_jid=jobs.remote_jid
@@ -31724,6 +31806,12 @@ async function runDueN8nPhoneCatalogFollowups({ limit = 30 } = {}) {
       continue;
     }
 
+    // PayJoy reminders wait for the next store opening if their due time is outside service hours.
+    if (job.followup_kind !== 'phone_catalog'
+      && !isAutoresponderStoreInHumanHours(await getCachedAutoresponderStoreStatus())) {
+      continue;
+    }
+
     const claimToken = crypto.randomUUID();
     const [claim] = await pool.query(
       `UPDATE n8n_phone_catalog_followups jobs
@@ -31732,6 +31820,7 @@ async function runDueN8nPhoneCatalogFollowups({ limit = 30 } = {}) {
           AND NOT EXISTS(
             SELECT 1 FROM n8n_bot_messages later
              WHERE later.remote_jid=jobs.remote_jid AND later.id>jobs.baseline_message_id
+               AND (jobs.followup_kind='phone_catalog' OR later.direction='inbound' OR later.source_node REGEXP 'manual|atendente|admin|human')
           )`,
       [claimToken, job.id]
     );
@@ -31744,6 +31833,7 @@ async function runDueN8nPhoneCatalogFollowups({ limit = 30 } = {}) {
               EXISTS(
                 SELECT 1 FROM n8n_bot_messages later
                  WHERE later.remote_jid=jobs.remote_jid AND later.id>jobs.baseline_message_id
+                   AND (jobs.followup_kind='phone_catalog' OR later.direction='inbound' OR later.source_node REGEXP 'manual|atendente|admin|human')
               ) AS has_later_activity
          FROM n8n_phone_catalog_followups jobs
          LEFT JOIN n8n_bot_client_controls controls ON controls.remote_jid=jobs.remote_jid
@@ -31780,7 +31870,7 @@ async function runDueN8nPhoneCatalogFollowups({ limit = 30 } = {}) {
         messageType: 'text',
         sourceNode: 'phone-catalog-followup',
         waMessageId,
-        payload: { followupId: job.id, baselineMessageId: job.baseline_message_id },
+        payload: { followupId: job.id, followupKind: job.followup_kind, baselineMessageId: job.baseline_message_id },
       });
       await pool.query(
         `UPDATE n8n_phone_catalog_followups
@@ -31816,6 +31906,28 @@ fastify.post('/n8n-bot/phone-catalog-followups/schedule', { preHandler: requireS
     return await scheduleN8nPhoneCatalogFollowup(req.body || {});
   } catch (error) {
     return reply.code(error.statusCode || 500).send({ error: error.message || 'Falha ao agendar follow-up' });
+  }
+});
+
+fastify.get('/n8n-bot/payjoy/config', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [[settings], [companies]] = await Promise.all([
+    pool.query('SELECT payjoy_analysis_url FROM autoresponder_settings WHERE id=1 LIMIT 1'),
+    pool.query('SELECT address, address_street, address_number, address_complement, address_neighborhood, address_city, address_state, address_zip_code FROM company_settings LIMIT 1'),
+  ]);
+  const storeAddress = buildPublicCompanyAddress(companies?.[0] || {});
+  reply.header('Cache-Control', 'no-store');
+  return {
+    payjoy_analysis_url: normalizePayJoyAnalysisUrl(settings?.[0]?.payjoy_analysis_url) || PAYJOY_DEFAULT_ANALYSIS_URL,
+    store_address: storeAddress,
+    store_maps_url: storeAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(storeAddress)}` : '',
+  };
+});
+
+fastify.post('/n8n-bot/payjoy/followups/schedule', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    return await scheduleN8nPayJoyFollowup(req.body || {});
+  } catch (error) {
+    return reply.code(error.statusCode || 500).send({ error: error.message || 'Falha ao agendar lembrete PayJoy' });
   }
 });
 
@@ -39717,6 +39829,7 @@ async function runMigrations() {
 
   await addColumnIfMissing('autoresponder_settings', 'signature_enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('autoresponder_settings', 'manual_finish_pause_days', 'INT NOT NULL DEFAULT 30');
+  await addColumnIfMissing('autoresponder_settings', 'payjoy_analysis_url', 'TEXT NULL');
   await addColumnIfMissing('autoresponder_settings', 'response_tone_mode', "VARCHAR(16) NOT NULL DEFAULT 'auto_abc'");
   await addColumnIfMissing('autoresponder_settings', 'signature_message', 'TEXT NULL');
   await addColumnIfMissing('autoresponder_settings', 'ai_enabled', 'TINYINT(1) NOT NULL DEFAULT 0');
@@ -39783,6 +39896,7 @@ async function runMigrations() {
       '${jsonStr(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES)}'
     );
   `);
+  await pool.query('UPDATE autoresponder_settings SET payjoy_analysis_url = ? WHERE id = 1 AND (payjoy_analysis_url IS NULL OR TRIM(payjoy_analysis_url) = ?)', [PAYJOY_DEFAULT_ANALYSIS_URL, '']);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_rules (
@@ -41198,6 +41312,7 @@ async function runMigrations() {
       baseline_message_id BIGINT NOT NULL DEFAULT 0,
       anchor_wa_message_id VARCHAR(160) NULL,
       message_text TEXT NOT NULL,
+      followup_kind VARCHAR(32) NOT NULL DEFAULT 'phone_catalog',
       due_at DATETIME NOT NULL,
       status ENUM('pending','claimed','sent','cancelled','failed') NOT NULL DEFAULT 'pending',
       claim_token CHAR(36) NULL,
@@ -41214,6 +41329,7 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   await addColumnIfMissing('n8n_phone_catalog_followups', 'baseline_message_id', 'BIGINT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('n8n_phone_catalog_followups', 'followup_kind', "VARCHAR(32) NOT NULL DEFAULT 'phone_catalog'");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_delivery_job_logs (

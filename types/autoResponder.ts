@@ -19,6 +19,7 @@ export interface AutoResponderSettings {
     days_paused_after_finish?: number;
     finish_pause_days?: number;
     response_tone_mode?: 'a' | 'b' | 'c' | 'auto_abc';
+    payjoy_analysis_url?: string;
     auto_pause_fallback_threshold: number;
     auto_pause_fallback_minutes: number;
     auto_pause_fallback_message: string;

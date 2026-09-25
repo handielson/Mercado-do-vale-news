@@ -1,24 +1,23 @@
-# v1.2.480-synology-tunnel-compact
+# v1.2.481-payjoy-boleto
 
 Data: 25/09/2026
 Status: ready
 Branch: main
-Tag: v1.2.480-synology-tunnel-compact
-Release VPS: /var/www/mdv-site/releases/20260925-055744-v12480-synology-tunnel-compact
+Tag: v1.2.481-payjoy-boleto
+Release VPS: /var/www/mdv-site/releases/20260925-110100-v12481-payjoy-boleto
 
 ## Alterações
 
-- O backup tenta primeiro o túnel local autenticado até o NAS e usa QuickConnect se esse caminho não responder.
-- Uma transferência interrompida após validar o pacote volta a ficar pendente, preservando a cópia na VPS para reenvio.
-- Novos pacotes incluem as releases atual e anterior do site e os dados da API, mas deixam de aninhar releases e backups históricos já preservados por outros meios.
-- A política anterior continua: 30 dias no Synology e até três pacotes de contingência na VPS.
+- O bot oferece financiamento PayJoy para clientes que perguntam sobre boleto e usa o link configurável no painel.
+- Após a análise, convida os aprovados à loja com a localização em outra mensagem; acolhe os não aprovados e orienta verificar nova tentativa em cerca de 15 dias.
+- Perguntas sem resposta confirmada passam para atendimento humano. Lembretes únicos de 30 minutos e 15 dias respeitam respostas do cliente e o horário da loja.
 
 ## Validação
 
-- `npm.cmd run test:system-backup-admin`
 - `node --check vps_server.js`
 - `node --check vps_server.cjs`
-- `node --check deploy-vps-server-only.cjs`
-- `node scripts/assert-no-supabase-runtime.cjs`
+- `node tmp-tests/payjoy-server-static.test.cjs`
+- `node tmp-tests/n8n-payjoy-workflow-patch.test.cjs`
+- `node tmp-tests/n8n-admin-client-control-static.test.mjs`
 - `npm.cmd run build`
 - `git diff --check`

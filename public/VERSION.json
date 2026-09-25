@@ -1,24 +1,31 @@
 {
-  "version": "v1.2.480-synology-tunnel-compact",
+  "version": "v1.2.481-payjoy-boleto",
   "date": "2026-09-25",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260925-055744-v12480-synology-tunnel-compact",
+  "release_vps": "/var/www/mdv-site/releases/20260925-110100-v12481-payjoy-boleto",
   "branch": "main",
-  "summary": "Backup por tunel local com fallback QuickConnect, retomada apos reinicio e pacote sem historicos duplicados.",
-  "tag": "v1.2.480-synology-tunnel-compact",
+  "summary": "Atendimento PayJoy para boleto com link configurável, retorno da análise, loja e lembretes.",
+  "tag": "v1.2.481-payjoy-boleto",
   "changed_files": [
-    "vps_server.js",
+    "components/whatsapp/WhatsAppBotSettingsPanel.tsx",
+    "types/autoResponder.ts",
     "vps_server.cjs",
-    "tmp-tests/system-backup-admin-static.test.mjs",
+    "vps_server.js",
+    "tmp-tests/n8n-admin-client-control-static.test.mjs",
+    "tmp-tests/n8n-payjoy-workflow-patch.cjs",
+    "tmp-tests/n8n-payjoy-workflow-patch.test.cjs",
+    "tmp-tests/n8n-deploy-payjoy-workflow.cjs",
+    "tmp-tests/payjoy-server-static.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-25-v1.2.480-synology-tunnel-compact.md"
+    "docs/versoes/2026-09-25-v1.2.481-payjoy-boleto.md"
   ],
   "validations": [
-    "npm.cmd run test:system-backup-admin",
     "node --check vps_server.cjs",
-    "node --check deploy-vps-server-only.cjs",
-    "node scripts/assert-no-supabase-runtime.cjs",
+    "node --check vps_server.js",
+    "node tmp-tests/payjoy-server-static.test.cjs",
+    "node tmp-tests/n8n-payjoy-workflow-patch.test.cjs",
+    "node tmp-tests/n8n-admin-client-control-static.test.mjs",
     "npm.cmd run build",
     "git diff --check"
   ]
