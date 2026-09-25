@@ -1,32 +1,22 @@
 {
-  "version": "v1.2.481-payjoy-boleto",
+  "version": "v1.2.482-parcelamento-cartao-12x",
   "date": "2026-09-25",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260925-110100-v12481-payjoy-boleto",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Atendimento PayJoy para boleto com link configurável, retorno da análise, loja e lembretes.",
-  "tag": "v1.2.481-payjoy-boleto",
+  "summary": "Corrige perguntas de parcelamento após a escolha do celular e envia a tabela de 1x a 12x no cartão.",
+  "tag": "v1.2.482-parcelamento-cartao-12x",
   "changed_files": [
-    "components/whatsapp/WhatsAppBotSettingsPanel.tsx",
-    "types/autoResponder.ts",
-    "vps_server.cjs",
     "vps_server.js",
-    "tmp-tests/n8n-admin-client-control-static.test.mjs",
-    "tmp-tests/n8n-payjoy-workflow-patch.cjs",
-    "tmp-tests/n8n-payjoy-workflow-patch.test.cjs",
-    "tmp-tests/n8n-deploy-payjoy-workflow.cjs",
-    "tmp-tests/payjoy-server-static.test.cjs",
+    "tmp-tests/autoresponder-installment-inquiry-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-25-v1.2.481-payjoy-boleto.md"
+    "docs/versoes/2026-09-25-v1.2.482-parcelamento-cartao-12x.md"
   ],
   "validations": [
-    "node --check vps_server.cjs",
     "node --check vps_server.js",
-    "node tmp-tests/payjoy-server-static.test.cjs",
-    "node tmp-tests/n8n-payjoy-workflow-patch.test.cjs",
-    "node tmp-tests/n8n-admin-client-control-static.test.mjs",
-    "npm.cmd run build",
+    "node --check vps_server.cjs",
+    "node tmp-tests/autoresponder-installment-inquiry-static.test.mjs",
     "git diff --check"
   ]
 }
