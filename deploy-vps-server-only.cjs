@@ -461,6 +461,28 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--system-backup-only')) {
+    if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+    const backupDir = appDir + '/backups/system-backup-' + Date.now();
+    const policyPath = 'services/systemBackupPolicy.cjs';
+    await exec('mkdir -p ' + backupDir + ' ' + appDir + '/services');
+    for (const file of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
+      await exec('cp -p ' + appDir + '/' + file + ' ' + backupDir + '/' + file);
+    }
+    await upload(localServer, appDir + '/vps_server.js.next.cjs');
+    await upload(localServerCjs, appDir + '/vps_server.cjs.next.cjs');
+    await upload(localServer, appDir + '/server.js.next.cjs');
+    await upload(path.join(__dirname, policyPath), appDir + '/services/systemBackupPolicy.cjs.next.cjs');
+    await exec('node --check ' + appDir + '/vps_server.js.next.cjs && node --check ' + appDir + '/vps_server.cjs.next.cjs && node --check ' + appDir + '/server.js.next.cjs && node --check ' + appDir + '/services/systemBackupPolicy.cjs.next.cjs');
+    for (const file of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
+      await exec('mv ' + appDir + '/' + file + '.next.cjs ' + appDir + '/' + file);
+    }
+    await exec('mv ' + appDir + '/services/systemBackupPolicy.cjs.next.cjs ' + appDir + '/services/systemBackupPolicy.cjs');
+    console.log((await exec('pm2 restart mdv-api --update-env')).trim());
+    console.log('System backup API rollback files: ' + backupDir);
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--nfce-homologation-only') || process.argv.includes('--nfce-homologation-check')) {
     await require('./scripts/deploy-nfce-homologation.cjs').deployNfceHomologation({appDir,apiProc,exec,upload,root:__dirname,checkOnly:process.argv.includes('--nfce-homologation-check')});
     conn.end();
@@ -560,6 +582,7 @@ async function main() {
   await upload(localServer, `${appDir}/vps_server.js`);
   await upload(localServerCjs, `${appDir}/vps_server.cjs`);
   await upload(localServer, `${appDir}/server.js`);
+  await upload(path.join(__dirname, 'services/systemBackupPolicy.cjs'), remotePathJoin(appDir, 'services/systemBackupPolicy.cjs'));
   await uploadAutoresponderEngineFiles(appDir);
   await uploadSignedWarrantyFiles(appDir);
   await uploadMobileSalesPushFiles(appDir);

@@ -14,10 +14,10 @@ const serverCjs = read('vps_server.cjs');
 const deploy = read('deploy-vps-server-only.cjs');
 const pkg = JSON.parse(read('package.json'));
 
-assert.equal(
-  pkg.scripts['test:system-backup-admin'],
-  'node tmp-tests/system-backup-admin-static.test.mjs',
-  'package.json must expose the system backup admin regression guard',
+assert.match(
+  pkg.scripts['test:system-backup-admin'] || '',
+  /system-backup-admin-static\.test\.mjs.*system-backup-policy\.test\.cjs/,
+  'package.json must expose both backup regression guards',
 );
 
 assert.match(layout, /Backup Sistema/, 'admin menu must expose Backup Sistema');
@@ -39,8 +39,9 @@ assert.match(page, /showSynologyRetryPanel/, 'page must keep the retry panel vis
 assert.match(page, /disabled=\{!isSynologyPending \|\| isSynologyRetryActive\}/, 'retry button must be disabled while another Synology retry is running');
 assert.match(page, /Ja existe uma tentativa em andamento/, 'page must explain when duplicate retries are blocked');
 assert.match(page, /Lista de detalhes do backup/, 'page must render a detailed backup step list after backup starts or finishes');
-assert.match(page, /Backups realizados na VPS/, 'page must render a persistent VPS backup history list');
-assert.match(page, /Pacote salvo na VPS/, 'page history must show where the VPS package was stored');
+assert.match(page, /Historico dos backups do sistema/, 'page must render persistent backup history');
+assert.match(page, /Copia na VPS/, 'page history must show whether a fallback remains on the VPS');
+assert.match(page, /Synology: 30 dias/, 'page must explain NAS retention');
 assert.match(page, /SHA256:/, 'page history must show the checksum for each VPS backup when available');
 assert.match(page, /Manifesto das partes/, 'page history must show the Synology parts manifest when package is chunked');
 assert.match(page, /Pacote dividido em/, 'page history must show the number of Synology package parts when chunked');
@@ -89,7 +90,8 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   assert.match(source, /SYSTEM_BACKUP_DEFAULT_TIME = '00:00'/, `${name} must default to midnight`);
   assert.match(source, /Estado running antigo foi invalidado/, `${name} must invalidate stale running backups after restart`);
   assert.match(source, /state: synologyMirror\?\.ok \? 'success' : 'partial'/, `${name} must not mark Synology mirror failures as full success`);
-  assert.match(source, /SYSTEM_BACKUP_RETENTION_DAYS/, `${name} must define backup retention`);
+  assert.match(source, /SYSTEM_BACKUP_VPS_KEEP/, `${name} must limit local fallback packages`);
+  assert.match(source, /SYSTEM_BACKUP_SYNOLOGY_RETENTION_DAYS/, `${name} must define NAS retention`);
   assert.match(source, /SYSTEM_BACKUP_HISTORY_LIMIT/, `${name} must cap the backup history list`);
   assert.match(source, /discoverSystemBackupHistoryFiles/, `${name} must discover backup packages already stored on the VPS`);
   assert.match(source, /mergeSystemBackupHistory/, `${name} must merge persisted history with discovered VPS packages`);
@@ -102,7 +104,12 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   assert.match(source, /splitSystemBackupPackage/, `${name} must split large backup packages before Synology upload`);
   assert.match(source, /\.parts\.json/, `${name} must upload a manifest for chunked Synology backups`);
   assert.match(source, /Synology retornou resposta nao JSON no upload/, `${name} must preserve useful diagnostics when Synology returns HTML`);
-  assert.match(source, /-mtime \+\$\{SYSTEM_BACKUP_RETENTION_DAYS\}/, `${name} must clean old backup files`);
+  assert.match(source, /pruneLocalSystemBackups/, `${name} must clean old local fallback packages`);
+  assert.match(source, /pruneSynologySystemBackups/, `${name} must clean NAS system backups beyond retention`);
+  assert.match(source, /removeVerifiedSynologyBackupFromVps/, `${name} must release temporary VPS archive after NAS verification`);
+  assert.match(source, /if \(!mirror\?\.ok \|\| !mirror\.verified\) return false/, `${name} must never delete an unverified VPS backup`);
+  assert.match(source, /fs\.createReadStream\(filePath, end === null \? \{ start \} : \{ start, end \}\)/, `${name} must stream chunks directly without duplicating archives in tmp`);
+  assert.doesNotMatch(source, /mdv-system-backup-parts-/, `${name} must not create full-sized temporary split directories`);
   assert.match(source, /normalizeSystemBackupSynologyFolder\(process\.env\.SYNOLOGY_BACKUP_FOLDER\)/, `${name} must resolve the configured Synology backup channel through FileStation-safe normalization`);
   assert.match(source, /uploadSystemBackupArtifactsToSynology/, `${name} must mirror package and checksum to Synology`);
   assert.match(source, /retrySystemBackupSynologyMirror/, `${name} must allow retrying a partial Synology mirror`);

@@ -1,20 +1,29 @@
 {
-  "version": "v1.2.477-whatsapp-blueprint",
+  "version": "v1.2.478-synology-backup-primary",
   "date": "2026-09-25",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260925-045703-v12477-whatsapp-blueprint",
+  "release_vps": "/var/www/mdv-site/releases/20260925-053941-v12478-synology-backup-primary",
   "branch": "main",
-  "summary": "Atendimento WhatsApp envia a lista antes da escolha de fotos e anexa o blueprint cadastrado às características de um modelo identificado.",
-  "tag": "v1.2.477-whatsapp-blueprint",
+  "summary": "Backup principal no Synology, VPS como fallback, validação antes de liberar o pacote local e retenção de 30 dias no NAS.",
+  "tag": "v1.2.478-synology-backup-primary",
   "changed_files": [
-    "tmp-tests/n8n-fix-generic-photo-catalog.cjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "services/systemBackupPolicy.cjs",
+    "services/systemBackupService.ts",
+    "pages/admin/settings/SystemBackupPage.tsx",
+    "deploy-vps-server-only.cjs",
+    "package.json",
+    "tmp-tests/system-backup-policy.test.cjs",
+    "tmp-tests/system-backup-admin-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-25-v1.2.477-whatsapp-blueprint.md"
+    "docs/versoes/2026-09-25-v1.2.478-synology-backup-primary.md"
   ],
   "validations": [
-    "node --check tmp-tests/n8n-fix-generic-photo-catalog.cjs",
-    "node tmp-tests/n8n-fix-generic-photo-catalog.cjs --dry-run-production",
+    "npm.cmd run test:system-backup-admin",
+    "node --check vps_server.cjs",
+    "node --check deploy-vps-server-only.cjs",
     "node scripts/assert-no-supabase-runtime.cjs",
     "npm.cmd run build",
     "git diff --check"

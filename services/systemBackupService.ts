@@ -18,8 +18,12 @@ export interface SystemBackupStatus {
   progress?: number | null;
   step?: string | null;
   vpsPackage?: string | null;
+  vpsPackageSize?: number | null;
+  vpsSha256?: string | null;
+  vpsAvailable?: boolean;
   synologyMirror?: {
     ok: boolean;
+    verified?: boolean;
     path?: string | null;
     hashPath?: string | null;
     manifestPath?: string | null;
@@ -49,10 +53,14 @@ export interface SystemBackupHistoryRecord {
   vpsPackage?: string | null;
   vpsPackageSize?: number | null;
   vpsSha256?: string | null;
+  vpsAvailable?: boolean;
   synologyMirror?: {
     ok: boolean;
+    verified?: boolean;
     path?: string | null;
     hashPath?: string | null;
+    manifestPath?: string | null;
+    parts?: number | null;
     error?: string | null;
   } | null;
   events?: SystemBackupEvent[];

@@ -35969,7 +35969,9 @@ const SYSTEM_BACKUP_DEFAULT_TIME = '00:00';
 const SYSTEM_BACKUP_TIMEZONE = 'America/Sao_Paulo';
 const SYSTEM_BACKUP_ROOT = process.env.MDV_SYSTEM_BACKUP_ROOT || '/var/backups/mdv-system';
 const SYSTEM_BACKUP_STATE_FILE = process.env.MDV_SYSTEM_BACKUP_STATE_FILE || path.join(__dirname, 'system-backup-state.json');
-const SYSTEM_BACKUP_RETENTION_DAYS = Math.max(1, Number(process.env.MDV_SYSTEM_BACKUP_RETENTION_DAYS || 14));
+const { backupPartRanges, localBackupNamesToPrune, synologyArtifactsToPrune } = require('./services/systemBackupPolicy.cjs');
+const SYSTEM_BACKUP_VPS_KEEP = Math.max(1, Number(process.env.MDV_SYSTEM_BACKUP_VPS_KEEP || 3));
+const SYSTEM_BACKUP_SYNOLOGY_RETENTION_DAYS = Math.max(1, Number(process.env.MDV_SYSTEM_BACKUP_SYNOLOGY_RETENTION_DAYS || 30));
 const SYSTEM_BACKUP_HISTORY_LIMIT = Math.max(5, Number(process.env.MDV_SYSTEM_BACKUP_HISTORY_LIMIT || 20));
 const SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB = Math.max(8, Number(process.env.MDV_SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB || 48));
 const SYSTEM_BACKUP_SYNOLOGY_DIRECT_UPLOAD_LIMIT = SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB * 1024 * 1024;
@@ -35993,6 +35995,9 @@ let systemBackupStatus = {
   progress: null,
   step: null,
   vpsPackage: null,
+  vpsPackageSize: null,
+  vpsSha256: null,
+  vpsAvailable: false,
   synologyMirror: null,
   events: [],
 };
@@ -36118,7 +36123,7 @@ function buildSystemBackupHistoryRecord(status) {
   let packageMtime = null;
   try {
     const stat = fs.existsSync(vpsPackage) ? fs.statSync(vpsPackage) : null;
-    packageSize = stat?.size || null;
+    packageSize = stat?.size || status.vpsPackageSize || null;
     packageMtime = stat?.mtime?.toISOString?.() || null;
   } catch {
     packageSize = null;
@@ -36134,7 +36139,8 @@ function buildSystemBackupHistoryRecord(status) {
     error: status.error || null,
     vpsPackage,
     vpsPackageSize: packageSize,
-    vpsSha256: readSystemBackupSha256(vpsPackage),
+    vpsSha256: readSystemBackupSha256(vpsPackage) || status.vpsSha256 || null,
+    vpsAvailable: fs.existsSync(vpsPackage),
     synologyMirror: status.synologyMirror || null,
     events: Array.isArray(status.events) ? status.events.slice(-12) : [],
   };
@@ -36160,6 +36166,7 @@ function discoverSystemBackupHistoryFiles() {
           vpsPackage: fullPath,
           vpsPackageSize: stat.size,
           vpsSha256: readSystemBackupSha256(fullPath),
+          vpsAvailable: true,
           synologyMirror: null,
           events: [],
         };
@@ -36183,7 +36190,11 @@ function mergeSystemBackupHistory(state, currentStatus = systemBackupStatus) {
   add(buildSystemBackupHistoryRecord(currentStatus));
   return [...byName.values()]
     .sort((a, b) => new Date(b.finishedAt || b.updatedAt || b.startedAt || 0).getTime() - new Date(a.finishedAt || a.updatedAt || a.startedAt || 0).getTime())
-    .slice(0, SYSTEM_BACKUP_HISTORY_LIMIT);
+    .slice(0, SYSTEM_BACKUP_HISTORY_LIMIT)
+    .map(record => ({
+      ...record,
+      vpsAvailable: Boolean(record.vpsPackage && fs.existsSync(record.vpsPackage)),
+    }));
 }
 
 function writeSystemBackupStatusWithHistory() {
@@ -36216,7 +36227,10 @@ function getSystemBackupSnapshot() {
   return {
     ok: true,
     config,
-    status: systemBackupStatus,
+    status: {
+      ...systemBackupStatus,
+      vpsAvailable: Boolean(systemBackupStatus.vpsPackage && fs.existsSync(systemBackupStatus.vpsPackage)),
+    },
     history: mergeSystemBackupHistory(state, systemBackupStatus),
     nextRunAt: config.enabled ? nextSystemBackupRunAt(config.scheduleTime).toISOString() : null,
     locations: systemBackupLocations(),
@@ -36288,70 +36302,97 @@ function stopSystemBackupHeartbeat() {
   systemBackupHeartbeat = null;
 }
 
-async function uploadSystemBackupToSynology(filePath, fileName) {
+async function verifySystemBackupOnSynology(fileName, expectedSize) {
+  const remotePath = `${SYNO_FOLDERS.backups}/${fileName}`;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const sid = await synoLogin(30000);
+    const result = await synoApiGet(
+      `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(remotePath)}&additional=${encodeURIComponent('["size"]')}&_sid=${encodeURIComponent(sid)}`
+    );
+    if (!result.success && [106, 107, 119].includes(Number(result.error?.code)) && attempt === 0) continue;
+    const file = result.success ? result.data?.files?.[0] : null;
+    const actualSize = Number(file?.additional?.size ?? file?.size);
+    return Boolean(file && file.path === remotePath && !file.isdir && actualSize === expectedSize);
+  }
+  return false;
+}
+
+async function uploadSystemBackupToSynology(filePath, fileName, { start = 0, end = null, buffer = null } = {}) {
   if (!SYNO_USER || !SYNO_PASS) {
     return { ok: false, path: SYNO_FOLDERS.backups, error: 'Credenciais Synology nao configuradas' };
   }
-  if (!fs.existsSync(filePath)) {
+  if (!buffer && !fs.existsSync(filePath)) {
     return { ok: false, path: SYNO_FOLDERS.backups, error: 'Pacote local do backup nao encontrado' };
   }
-
-  const sid = await synoLogin(30000);
-  const boundary = `MDVSystemBackupBoundary${Date.now()}`;
+  const fileSize = buffer ? buffer.length : fs.statSync(filePath).size;
+  const size = buffer ? fileSize : (end === null ? fileSize - start : end - start + 1);
+  if (!Number.isSafeInteger(size) || size <= 0) throw new Error('Tamanho invalido de parte do backup');
   const folderPath = SYNO_FOLDERS.backups;
-  const stat = fs.statSync(filePath);
-  const textFields = [
-    ['api', 'SYNO.FileStation.Upload'],
-    ['version', '2'],
-    ['method', 'upload'],
-    ['path', folderPath],
-    ['create_parents', 'true'],
-    ['overwrite', 'true'],
-    ['_sid', sid],
-  ].map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join('');
-  const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/gzip\r\n\r\n`;
-  const closing = `\r\n--${boundary}--\r\n`;
   const https = require('https');
   const urlObj = new URL(SYNO_URL);
 
-  const result = await new Promise((resolve, reject) => {
-    const request = https.request({
-      hostname: urlObj.hostname,
-      port: getSynologyRequestPort(urlObj),
-      path: `/webapi/entry.cgi?_sid=${encodeURIComponent(sid)}`,
-      method: 'POST',
-      rejectUnauthorized: false,
-      headers: {
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': Buffer.byteLength(textFields) + Buffer.byteLength(fileHeader) + stat.size + Buffer.byteLength(closing),
-      },
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch (err) {
-          reject(new Error(`Synology retornou resposta nao JSON no upload (${res.statusCode}, ${res.headers['content-type'] || 'sem content-type'}): ${data.slice(0, 160)}`));
-        }
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const sid = await synoLogin(30000);
+    const boundary = `MDVSystemBackupBoundary${Date.now()}`;
+    const textFields = [
+      ['api', 'SYNO.FileStation.Upload'],
+      ['version', '2'],
+      ['method', 'upload'],
+      ['path', folderPath],
+      ['create_parents', 'true'],
+      ['overwrite', 'true'],
+      ['_sid', sid],
+    ].map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join('');
+    const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`;
+    const closing = `\r\n--${boundary}--\r\n`;
+    const result = await new Promise((resolve, reject) => {
+      const request = https.request({
+        hostname: urlObj.hostname,
+        port: getSynologyRequestPort(urlObj),
+        path: `/webapi/entry.cgi?_sid=${encodeURIComponent(sid)}`,
+        method: 'POST',
+        rejectUnauthorized: false,
+        headers: {
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': Buffer.byteLength(textFields) + Buffer.byteLength(fileHeader) + size + Buffer.byteLength(closing),
+        },
+      }, (res) => {
+        let responseText = '';
+        res.on('data', chunk => { responseText += chunk; });
+        res.on('end', () => {
+          try { resolve(JSON.parse(responseText)); }
+          catch {
+            reject(new Error(`Synology retornou resposta nao JSON no upload (${res.statusCode}, ${res.headers['content-type'] || 'sem content-type'}): ${responseText.slice(0, 160)}`));
+          }
+        });
       });
-    });
-    request.on('error', reject);
-    request.setTimeout(120000, () => request.destroy(new Error('Synology backup upload timeout')));
-    request.write(textFields);
-    request.write(fileHeader);
-    fs.createReadStream(filePath)
-      .on('error', reject)
-      .on('end', () => {
+      request.on('error', reject);
+      request.setTimeout(120000, () => request.destroy(new Error('Synology backup upload timeout')));
+      request.write(textFields);
+      request.write(fileHeader);
+      const input = buffer
+        ? require('stream').Readable.from([buffer])
+        : fs.createReadStream(filePath, end === null ? { start } : { start, end });
+      input.on('error', error => request.destroy(error));
+      input.on('end', () => {
         request.write(closing);
         request.end();
-      })
-      .pipe(request, { end: false });
-  });
-
-  if (!result.success) {
-    return { ok: false, path: folderPath, error: JSON.stringify(result.error || result) };
+      });
+      input.pipe(request, { end: false });
+    });
+    if (!result.success && [106, 107, 119].includes(Number(result.error?.code)) && attempt === 0) continue;
+    if (!result.success) {
+      return { ok: false, path: folderPath, error: JSON.stringify(result.error || result) };
+    }
+    const verified = await verifySystemBackupOnSynology(fileName, size);
+    return {
+      ok: verified,
+      verified,
+      path: `${folderPath}/${fileName}`,
+      error: verified ? null : 'Arquivo enviado mas tamanho/presenca nao confirmados no Synology',
+    };
   }
-  return { ok: true, path: `${folderPath}/${fileName}` };
+  return { ok: false, path: folderPath, error: 'Sessao Synology invalida apos nova autenticacao' };
 }
 
 function runSystemBackupCommand(command, args) {
@@ -36367,28 +36408,14 @@ function runSystemBackupCommand(command, args) {
   });
 }
 
-async function splitSystemBackupPackage(backupTar) {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-system-backup-parts-'));
+function splitSystemBackupPackage(backupTar) {
+  const size = fs.statSync(backupTar).size;
+  const ranges = backupPartRanges(size, SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB * 1024 * 1024);
   const baseName = path.basename(backupTar);
-  const prefix = path.join(tempDir, `${baseName}.part-`);
-  await runSystemBackupCommand('split', ['-b', `${SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB}M`, '-d', '-a', '3', backupTar, prefix]);
-  const parts = fs.readdirSync(tempDir)
-    .filter((file) => file.startsWith(`${baseName}.part-`))
-    .sort()
-    .map((file, index) => {
-      const filePath = path.join(tempDir, file);
-      return {
-        index: index + 1,
-        file,
-        size: fs.statSync(filePath).size,
-        path: filePath,
-      };
-    });
-  if (!parts.length) {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-    throw new Error('Nao foi possivel dividir o pacote para envio ao Synology.');
-  }
-  return { tempDir, parts };
+  return ranges.map(({ start, end, size: partSize, index }) => ({
+    start, end, size: partSize, index: index + 1,
+    file: `${baseName}.part-${String(index).padStart(3, '0')}`,
+  }));
 }
 
 async function uploadSystemBackupArtifactsToSynology(backupTar) {
@@ -36399,55 +36426,122 @@ async function uploadSystemBackupArtifactsToSynology(backupTar) {
     packageUpload = await uploadSystemBackupToSynology(backupTar, path.basename(backupTar));
   } else {
     updateSystemBackupProgress(91, 'Dividindo pacote grande para Synology');
-    const splitResult = await splitSystemBackupPackage(backupTar);
-    try {
-      const uploadedParts = [];
-      for (const part of splitResult.parts) {
-        const progress = Math.min(97, 92 + Math.floor((part.index / splitResult.parts.length) * 5));
-        updateSystemBackupProgress(progress, `Enviando parte ${part.index}/${splitResult.parts.length} para Synology`);
-        const upload = await uploadSystemBackupToSynology(part.path, part.file);
-        if (!upload.ok) {
-          packageUpload = upload;
-          break;
-        }
-        uploadedParts.push({ file: part.file, size: part.size, path: upload.path });
+    const parts = splitSystemBackupPackage(backupTar);
+    const uploadedParts = [];
+    for (const part of parts) {
+      const progress = Math.min(97, 92 + Math.floor((part.index / parts.length) * 5));
+      updateSystemBackupProgress(progress, `Enviando parte ${part.index}/${parts.length} para Synology`);
+      const upload = await uploadSystemBackupToSynology(backupTar, part.file, { start: part.start, end: part.end });
+      if (!upload.ok) {
+        packageUpload = upload;
+        break;
       }
-      if (!packageUpload) {
-        const manifestPath = path.join(splitResult.tempDir, `${path.basename(backupTar)}.parts.json`);
-        fs.writeFileSync(manifestPath, JSON.stringify({
-          originalFile: path.basename(backupTar),
-          originalSize: stat.size,
-          chunkSizeMb: SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB,
-          sha256File: `${path.basename(backupTar)}.sha256`,
-          restore: `cat ${path.basename(backupTar)}.part-* > ${path.basename(backupTar)}`,
-          parts: uploadedParts,
-        }, null, 2), 'utf8');
-        updateSystemBackupProgress(98, 'Enviando manifesto das partes para Synology');
-        const manifestUpload = await uploadSystemBackupToSynology(manifestPath, path.basename(manifestPath));
-        packageUpload = {
-          ok: Boolean(manifestUpload.ok),
-          path: `${SYNO_FOLDERS.backups}/${path.basename(backupTar)}.part-*`,
-          manifestPath: manifestUpload.path,
-          parts: uploadedParts.length,
-          error: manifestUpload.error || null,
-        };
-      }
-    } finally {
-      fs.rmSync(splitResult.tempDir, { recursive: true, force: true });
+      uploadedParts.push({ file: part.file, size: part.size, path: upload.path });
+    }
+    if (!packageUpload) {
+      const manifestName = `${path.basename(backupTar)}.parts.json`;
+      const manifest = Buffer.from(JSON.stringify({
+        originalFile: path.basename(backupTar),
+        originalSize: stat.size,
+        chunkSizeMb: SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB,
+        sha256File: `${path.basename(backupTar)}.sha256`,
+        restore: `cat ${path.basename(backupTar)}.part-* > ${path.basename(backupTar)}`,
+        parts: uploadedParts,
+      }, null, 2), 'utf8');
+      updateSystemBackupProgress(98, 'Enviando manifesto das partes para Synology');
+      const manifestUpload = await uploadSystemBackupToSynology(null, manifestName, { buffer: manifest });
+      packageUpload = {
+        ok: Boolean(manifestUpload.ok),
+        verified: Boolean(manifestUpload.verified),
+        path: `${SYNO_FOLDERS.backups}/${path.basename(backupTar)}.part-*`,
+        manifestPath: manifestUpload.path,
+        parts: uploadedParts.length,
+        error: manifestUpload.error || null,
+      };
     }
   }
+  if (!packageUpload?.ok) return packageUpload;
   const hashPath = `${backupTar}.sha256`;
-  if (!fs.existsSync(hashPath)) return packageUpload;
+  if (!fs.existsSync(hashPath)) {
+    return { ...packageUpload, ok: false, verified: false, error: 'Hash SHA256 local ausente' };
+  }
   updateSystemBackupProgress(99, 'Enviando hash para Synology');
   const hashUpload = await uploadSystemBackupToSynology(hashPath, path.basename(hashPath));
   return {
-    ok: Boolean(packageUpload.ok && hashUpload.ok),
+    ok: Boolean(packageUpload.ok && hashUpload.ok && hashUpload.verified),
+    verified: Boolean(packageUpload.ok && hashUpload.ok && hashUpload.verified),
     path: packageUpload.path,
     manifestPath: packageUpload.manifestPath || null,
     parts: packageUpload.parts || null,
     hashPath: hashUpload.path,
     error: packageUpload.error || hashUpload.error || null,
   };
+}
+
+function pruneLocalSystemBackups(activeName = null) {
+  const names = fs.readdirSync(SYSTEM_BACKUP_ROOT);
+  const obsolete = localBackupNamesToPrune(names, { keep: SYSTEM_BACKUP_VPS_KEEP, activeName });
+  for (const name of obsolete) {
+    const archive = path.join(SYSTEM_BACKUP_ROOT, name + '.tar.gz');
+    const hash = archive + '.sha256';
+    if (!fs.existsSync(archive) || !fs.existsSync(hash)) continue;
+    fs.unlinkSync(archive);
+    fs.unlinkSync(hash);
+  }
+  return obsolete.length;
+}
+
+function removeVerifiedSynologyBackupFromVps(backupTar, mirror) {
+  if (!mirror?.ok || !mirror.verified) return false;
+  const expected = path.join(SYSTEM_BACKUP_ROOT, path.basename(backupTar));
+  if (path.resolve(backupTar) !== path.resolve(expected) || !/^mdv-system-v[0-9.]+-[0-9]{8}-[0-9]{6}[.]tar[.]gz$/.test(path.basename(backupTar))) {
+    throw new Error('Caminho de backup fora do diretorio permitido');
+  }
+  fs.unlinkSync(backupTar);
+  fs.unlinkSync(backupTar + '.sha256');
+  return true;
+}
+
+async function synoBackupApi(params) {
+  let result = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const sid = await synoLogin(30000);
+    const query = new URLSearchParams({ ...params, _sid: sid });
+    result = await synoApiGet('/webapi/entry.cgi?' + query.toString());
+    if (!result.success && [106, 107, 119].includes(Number(result.error?.code)) && attempt === 0) continue;
+    return result;
+  }
+  return result;
+}
+
+async function pruneSynologySystemBackups(confirmedName) {
+  const files = [];
+  for (let offset = 0; offset < 20000; offset += 1000) {
+    const result = await synoBackupApi({
+      api: 'SYNO.FileStation.List', version: '2', method: 'list',
+      folder_path: SYNO_FOLDERS.backups, limit: '1000', offset: String(offset),
+    });
+    if (!result?.success) throw new Error('Falha ao listar backups no Synology: ' + JSON.stringify(result?.error || result));
+    files.push(...(result.data?.files || []).filter(file => !file.isdir).map(file => file.name));
+    if (offset + 1000 >= Number(result.data?.total || 0)) break;
+  }
+  const obsolete = synologyArtifactsToPrune(files, {
+    days: SYSTEM_BACKUP_SYNOLOGY_RETENTION_DAYS,
+    keep: 3,
+    confirmedName,
+    limit: 300,
+  });
+  let deleted = 0;
+  for (let index = 0; index < obsolete.length; index += 10) {
+    const paths = obsolete.slice(index, index + 10).map(name => SYNO_FOLDERS.backups + '/' + name);
+    const result = await synoBackupApi({
+      api: 'SYNO.FileStation.Delete', version: '2', method: 'delete',
+      path: JSON.stringify(paths),
+    });
+    if (!result?.success) throw new Error('Falha na retencao Synology: ' + JSON.stringify(result?.error || result));
+    deleted += paths.length;
+  }
+  return deleted;
 }
 
 function createSystemBackupShell(name) {
@@ -36483,10 +36577,24 @@ sha256sum ${shellQuote(`${backupDir}`)}/* > ${shellQuote(`${backupDir}/SHA256SUM
 echo "__MDV_PROGRESS__:85:Compactando pacote final"
 tar -C ${shellQuote(SYSTEM_BACKUP_ROOT)} -czf ${shellQuote(backupTar)} ${shellQuote(name)}
 sha256sum ${shellQuote(backupTar)} > ${shellQuote(`${backupTar}.sha256`)}
-find ${shellQuote(SYSTEM_BACKUP_ROOT)} -maxdepth 1 -type f -name 'mdv-system-*.tar.gz' -mtime +${SYSTEM_BACKUP_RETENTION_DAYS} -delete
-find ${shellQuote(SYSTEM_BACKUP_ROOT)} -maxdepth 1 -type f -name 'mdv-system-*.tar.gz.sha256' -mtime +${SYSTEM_BACKUP_RETENTION_DAYS} -delete
-find ${shellQuote(SYSTEM_BACKUP_ROOT)} -maxdepth 1 -type d -name 'mdv-system-*' -mtime +${SYSTEM_BACKUP_RETENTION_DAYS} -exec rm -rf {} +
 `;
+}
+
+async function validateAndReleaseSystemBackupStaging(name, backupTar) {
+  await runSystemBackupCommand('sha256sum', ['-c', backupTar + '.sha256']);
+  await runSystemBackupCommand('tar', ['-tzf', backupTar]);
+  const backupDir = path.join(SYSTEM_BACKUP_ROOT, name);
+  if (backupDir !== path.join(SYSTEM_BACKUP_ROOT, path.basename(name)) || !/^mdv-system-v[0-9.]+-[0-9]{8}-[0-9]{6}$/.test(name)) {
+    throw new Error('Caminho temporario de backup invalido');
+  }
+  if (fs.existsSync(backupDir)) {
+    if (fs.lstatSync(backupDir).isSymbolicLink()) throw new Error('Pasta temporaria de backup e link simbolico');
+    fs.rmSync(backupDir, { recursive: true });
+  }
+  return {
+    size: fs.statSync(backupTar).size,
+    sha256: readSystemBackupSha256(backupTar),
+  };
 }
 
 function startSystemBackup({ trigger = 'manual' } = {}) {
@@ -36505,12 +36613,15 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
     finishedAt: null,
     name,
     trigger,
-    message: 'Backup iniciado na VPS',
+    message: 'Gerando pacote temporario na VPS para armazenamento principal no Synology',
     error: null,
     updatedAt: new Date().toISOString(),
     progress: 5,
     step: 'Preparando backup',
     vpsPackage: backupTar,
+    vpsPackageSize: null,
+    vpsSha256: null,
+    vpsAvailable: false,
     synologyMirror: null,
     events: [{
       at: new Date().toISOString(),
@@ -36571,6 +36682,32 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
       return;
     }
 
+    let packageInfo;
+    try {
+      updateSystemBackupProgress(87, 'Validando pacote e liberando pasta temporaria');
+      packageInfo = await validateAndReleaseSystemBackupStaging(name, backupTar);
+      systemBackupStatus = {
+        ...systemBackupStatus,
+        vpsPackageSize: packageInfo.size,
+        vpsSha256: packageInfo.sha256,
+        vpsAvailable: true,
+      };
+      writeSystemBackupState({ status: systemBackupStatus });
+    } catch (err) {
+      stopSystemBackupHeartbeat();
+      systemBackupStatus = {
+        ...systemBackupStatus,
+        state: 'failed',
+        finishedAt: new Date().toISOString(),
+        message: 'Pacote local falhou na verificacao',
+        error: err.message,
+        step: 'Falha na verificacao',
+      };
+      appendSystemBackupEvent('Falha na verificacao', systemBackupStatus.progress || 87, 'failed', err.message);
+      writeSystemBackupStatusWithHistory();
+      return;
+    }
+
     updateSystemBackupProgress(90, 'Enviando para Synology');
     let synologyMirror = null;
     try {
@@ -36578,16 +36715,41 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
     } catch (err) {
       synologyMirror = { ok: false, path: SYNO_FOLDERS.backups, error: err.message };
     }
+    let vpsAvailable = true;
+    let retentionWarning = null;
+    if (synologyMirror?.ok && synologyMirror.verified) {
+      try {
+        removeVerifiedSynologyBackupFromVps(backupTar, synologyMirror);
+        vpsAvailable = false;
+      } catch (err) {
+        retentionWarning = 'Synology verificado, mas falha ao liberar pacote da VPS: ' + err.message;
+      }
+    }
+    try {
+      pruneLocalSystemBackups(vpsAvailable ? name : null);
+    } catch (err) {
+      retentionWarning = 'Falha na retencao local: ' + err.message;
+    }
+    if (synologyMirror?.ok && synologyMirror.verified) {
+      try {
+        await pruneSynologySystemBackups(name);
+      } catch (err) {
+        retentionWarning = 'Falha na retencao Synology: ' + err.message;
+      }
+    }
     systemBackupStatus = {
       ...systemBackupStatus,
       state: synologyMirror?.ok ? 'success' : 'partial',
       finishedAt: new Date().toISOString(),
-      message: synologyMirror?.ok ? 'Backup concluido e espelhado no Synology' : 'Backup concluido na VPS; espelho Synology pendente',
-      error: synologyMirror?.ok ? null : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
+      message: synologyMirror?.ok
+        ? (vpsAvailable ? 'Backup confirmado no Synology; liberacao da copia VPS pendente' : 'Backup confirmado no Synology; copia temporaria VPS liberada')
+        : 'Backup salvo na VPS; Synology pendente',
+      error: synologyMirror?.ok ? retentionWarning : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
       updatedAt: new Date().toISOString(),
       progress: 100,
       step: synologyMirror?.ok ? 'Concluido' : 'Synology pendente',
       synologyMirror,
+      vpsAvailable,
     };
     appendSystemBackupEvent(
       synologyMirror?.ok ? 'Espelho Synology concluido' : 'Synology pendente',
@@ -36650,15 +36812,29 @@ async function retrySystemBackupSynologyMirror() {
     systemBackupSynologyRetryInFlight = false;
   }
 
+  let vpsAvailable = true;
+  let retentionWarning = null;
+  if (synologyMirror?.ok && synologyMirror.verified) {
+    try {
+      removeVerifiedSynologyBackupFromVps(systemBackupStatus.vpsPackage, synologyMirror);
+      vpsAvailable = false;
+      pruneLocalSystemBackups();
+      await pruneSynologySystemBackups(systemBackupStatus.name);
+    } catch (err) {
+      retentionWarning = 'Backup verificado, mas retencao pendente: ' + err.message;
+      vpsAvailable = fs.existsSync(systemBackupStatus.vpsPackage);
+    }
+  }
   systemBackupStatus = {
     ...systemBackupStatus,
     state: synologyMirror?.ok ? 'success' : 'partial',
-    message: synologyMirror?.ok ? 'Backup espelhado no Synology' : 'Backup salvo na VPS; Synology continua pendente',
-    error: synologyMirror?.ok ? null : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
+    message: synologyMirror?.ok ? 'Backup confirmado no Synology' : 'Backup salvo na VPS; Synology continua pendente',
+    error: synologyMirror?.ok ? retentionWarning : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
     updatedAt: new Date().toISOString(),
     progress: 100,
     step: synologyMirror?.ok ? 'Concluido' : 'Synology pendente',
     synologyMirror,
+    vpsAvailable,
   };
   appendSystemBackupEvent(
     synologyMirror?.ok ? 'Espelho Synology concluido' : 'Synology ainda pendente',

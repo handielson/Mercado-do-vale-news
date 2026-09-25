@@ -73,7 +73,7 @@ function historyTone(state: SystemBackupHistoryRecord['state']): string {
 }
 
 function historyLabel(record: SystemBackupHistoryRecord): string {
-  if (record.state === 'success') return 'VPS e Synology OK';
+  if (record.state === 'success') return record.vpsAvailable ? 'VPS e Synology OK' : 'Synology OK';
   if (record.state === 'partial') return 'VPS OK / Synology pendente';
   if (record.state === 'vps_saved') return 'Encontrado na VPS';
   if (record.state === 'failed') return 'Falhou';
@@ -298,7 +298,7 @@ export const SystemBackupPage: React.FC = () => {
             Backup do Sistema
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Backup geral da VPS com espelho no canal Synology.
+            Synology e o destino principal. A VPS conserva o pacote somente quando o envio ainda nao foi confirmado.
           </p>
         </div>
 
@@ -486,8 +486,8 @@ export const SystemBackupPage: React.FC = () => {
               <p className="text-slate-700">{formatDateTime(snapshot?.status.finishedAt)}</p>
             </div>
             <div>
-              <p className="text-xs font-bold uppercase text-slate-400">Pacote VPS</p>
-              <p className="text-slate-700 break-all">{snapshot?.status.vpsPackage || 'Ainda nao criado'}</p>
+              <p className="text-xs font-bold uppercase text-slate-400">Copia temporaria na VPS</p>
+              <p className="text-slate-700 break-all">{snapshot?.status.vpsAvailable ? snapshot.status.vpsPackage : 'Sem copia local apos confirmacao no Synology'}</p>
             </div>
           </div>
         </aside>
@@ -524,8 +524,8 @@ export const SystemBackupPage: React.FC = () => {
       <section className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Backups realizados na VPS</h2>
-            <p className="text-sm text-slate-500">Pacotes encontrados ou registrados pela VPS, com resultado do espelhamento no Synology.</p>
+            <h2 className="text-lg font-bold text-slate-900">Historico dos backups do sistema</h2>
+            <p className="text-sm text-slate-500">Synology: 30 dias. VPS: ate 3 pacotes de fallback, removidos apos confirmacao no NAS.</p>
           </div>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-500">
             {history.length} registro{history.length === 1 ? '' : 's'}
@@ -571,8 +571,8 @@ export const SystemBackupPage: React.FC = () => {
 
                   <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
                     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                      <p className="text-xs font-bold uppercase text-slate-400">Pacote salvo na VPS</p>
-                      <p className="mt-1 break-all text-xs font-semibold text-slate-700">{record.vpsPackage || 'Caminho nao registrado'}</p>
+                      <p className="text-xs font-bold uppercase text-slate-400">Copia na VPS</p>
+                      <p className="mt-1 break-all text-xs font-semibold text-slate-700">{record.vpsAvailable ? record.vpsPackage : 'Removida ou nao disponivel na VPS'}</p>
                       <p className="mt-1 break-all text-xs text-slate-500">SHA256: {record.vpsSha256 || 'Hash nao encontrado'}</p>
                     </div>
                     <div className={`rounded-lg border px-3 py-2 ${synologyOk ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
