@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { accountantPortalService, type AccountantFiscalFile } from '../../services/accountantPortalService';
 
-export function AccountantFiscalFileActions({ companyId, documentId, saleId, fileAvailable = false, adminMode = false }: { companyId: string; documentId?: string; saleId?: string; fileAvailable?: boolean; adminMode?: boolean }) {
+export function AccountantFiscalFileActions({ companyId, documentId, saleId, fileAvailable = false, adminMode = false, onArchived }: { companyId: string; documentId?: string; saleId?: string; fileAvailable?: boolean; adminMode?: boolean; onArchived?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -30,7 +30,7 @@ export function AccountantFiscalFileActions({ companyId, documentId, saleId, fil
     if (!file || !documentId) return;
     if (file.size > 2000000) { setError('Selecione um XML de até 2 MB.'); return; }
     setBusy(true); setError('');
-    try { await accountantPortalService.archiveXml(companyId, documentId, await file.text()); setSaved(true); }
+    try { await accountantPortalService.archiveXml(companyId, documentId, await file.text()); setSaved(true); onArchived?.(); }
     catch (err) { setError(err instanceof Error ? err.message : 'Falha ao guardar XML.'); }
     finally { setBusy(false); }
   };

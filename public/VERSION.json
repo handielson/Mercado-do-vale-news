@@ -1,21 +1,27 @@
 {
-  "version": "v1.2.475-notas-navegacao",
+  "version": "v1.2.476-notas-contador",
   "date": "2026-09-25",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260925-025000-v12475-notas-navegacao",
+  "release_vps": "/var/www/mdv-site/releases/20260925-031424-v12476-notas-contador",
   "branch": "main",
-  "summary": "A lista de notas do contador tem busca e carregamento gradual; o aviso fiscal orienta a conferência da cobertura.",
-  "tag": "v1.2.475-notas-navegacao",
+  "summary": "O contador abre qualquer nota do período em um painel com PDF, consulta SEFAZ e análise reunidos.",
+  "tag": "v1.2.476-notas-contador",
   "changed_files": [
+    "components/company/AccountantFiscalDocumentDrawer.tsx",
+    "components/company/AccountantFiscalFileActions.tsx",
+    "components/company/FiscalDocumentReviewPanel.tsx",
     "pages/accountant/AccountantPortalPage.tsx",
     "tmp-tests/accountant-portal-static.test.mjs",
     "tmp-tests/accountant-revenue-browser.mjs",
+    "tmp-tests/company-data-separation-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-25-v1.2.475-notas-navegacao.md"
+    "docs/versoes/2026-09-25-v1.2.476-notas-contador.md"
   ],
   "validations": [
     "npm.cmd run test:accountant-portal",
+    "npm.cmd run test:company-fiscal",
+    "node tmp-tests/company-data-separation-static.test.mjs",
     "node tmp-tests/accountant-revenue-browser.mjs",
     "npm.cmd run build",
     "git diff --check"

@@ -52,11 +52,12 @@ test('fila distingue pedido fora do período dos totais operacionais', () => {
 
 test('consulta da situação de NF-e na SEFAZ passa pela concessão do contador e mantém a resposta somente para leitura', () => {
   const server = read('services/accountantPortalServer.cjs');
-  const page = read('pages/accountant/AccountantPortalPage.tsx');
+  const drawer = read('components/company/AccountantFiscalDocumentDrawer.tsx');
   assert.match(server, /fiscal-documents\/:documentId\/sefaz-status/);
   assert.match(server, /preHandler: requireCompanyAccess\('revenue'\)/);
-  assert.match(page, /Consultar situação da NF-e na SEFAZ-PE/);
-  assert.match(page, /A resposta não altera a nota importada/);
+  assert.match(drawer, /accountantPortalService\.sefazStatus\(companyId, document\.id\)/);
+  assert.match(drawer, /A resposta não altera a nota nem o pedido/);
+  assert.match(drawer, /Visualizar nota/);
 });
 
 test('revisão do contador fica por documento, com auditoria e sem efeito fiscal automático', () => {
@@ -119,7 +120,8 @@ test('importação fiscal do Bling ocorre no servidor e o painel não apresenta 
   assert.match(routes, /documents\/import-bling/);
   assert.match(page, /documentTotals\.authorizedDocumentCount/);
   assert.match(page, /Confirme com o contador se todos os documentos do Bling e dos demais emissores foram importados/);
-  assert.match(page, /Notas fiscais cadastradas neste sistema/);
+  assert.match(page, /Todas as notas do período/);
+  assert.match(page, /report\?\.documents\.filter/);
   assert.match(page, /Canal não identificado/);
   assert.match(page, /aria-modal="true"/);
   assert.match(page, /event\.key === 'Escape'/);
