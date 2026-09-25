@@ -1,28 +1,21 @@
 {
-  "version": "v1.2.476-notas-contador",
+  "version": "v1.2.477-whatsapp-blueprint",
   "date": "2026-09-25",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260925-031424-v12476-notas-contador",
+  "release_vps": "/var/www/mdv-site/releases/20260925-045703-v12477-whatsapp-blueprint",
   "branch": "main",
-  "summary": "O contador abre qualquer nota do período em um painel com PDF, consulta SEFAZ e análise reunidos.",
-  "tag": "v1.2.476-notas-contador",
+  "summary": "Atendimento WhatsApp envia a lista antes da escolha de fotos e anexa o blueprint cadastrado às características de um modelo identificado.",
+  "tag": "v1.2.477-whatsapp-blueprint",
   "changed_files": [
-    "components/company/AccountantFiscalDocumentDrawer.tsx",
-    "components/company/AccountantFiscalFileActions.tsx",
-    "components/company/FiscalDocumentReviewPanel.tsx",
-    "pages/accountant/AccountantPortalPage.tsx",
-    "tmp-tests/accountant-portal-static.test.mjs",
-    "tmp-tests/accountant-revenue-browser.mjs",
-    "tmp-tests/company-data-separation-static.test.mjs",
+    "tmp-tests/n8n-fix-generic-photo-catalog.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-25-v1.2.476-notas-contador.md"
+    "docs/versoes/2026-09-25-v1.2.477-whatsapp-blueprint.md"
   ],
   "validations": [
-    "npm.cmd run test:accountant-portal",
-    "npm.cmd run test:company-fiscal",
-    "node tmp-tests/company-data-separation-static.test.mjs",
-    "node tmp-tests/accountant-revenue-browser.mjs",
+    "node --check tmp-tests/n8n-fix-generic-photo-catalog.cjs",
+    "node tmp-tests/n8n-fix-generic-photo-catalog.cjs --dry-run-production",
+    "node scripts/assert-no-supabase-runtime.cjs",
     "npm.cmd run build",
     "git diff --check"
   ]
