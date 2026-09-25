@@ -1,25 +1,22 @@
 {
-  "version": "v1.2.480-synology-tunnel-compact",
+  "version": "v1.2.481-parcelamento-cartao-12x",
   "date": "2026-09-25",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260925-055744-v12480-synology-tunnel-compact",
+  "release_vps": "pendente",
   "branch": "main",
-  "summary": "Backup por tunel local com fallback QuickConnect, retomada apos reinicio e pacote sem historicos duplicados.",
-  "tag": "v1.2.480-synology-tunnel-compact",
+  "summary": "Corrige perguntas de parcelamento após a escolha do celular e envia a tabela de 1x a 12x no cartão.",
+  "tag": "v1.2.481-parcelamento-cartao-12x",
   "changed_files": [
     "vps_server.js",
-    "vps_server.cjs",
-    "tmp-tests/system-backup-admin-static.test.mjs",
+    "tmp-tests/autoresponder-installment-inquiry-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-25-v1.2.480-synology-tunnel-compact.md"
+    "docs/versoes/2026-09-25-v1.2.481-parcelamento-cartao-12x.md"
   ],
   "validations": [
-    "npm.cmd run test:system-backup-admin",
+    "node --check vps_server.js",
     "node --check vps_server.cjs",
-    "node --check deploy-vps-server-only.cjs",
-    "node scripts/assert-no-supabase-runtime.cjs",
-    "npm.cmd run build",
+    "node tmp-tests/autoresponder-installment-inquiry-static.test.mjs",
     "git diff --check"
   ]
 }
