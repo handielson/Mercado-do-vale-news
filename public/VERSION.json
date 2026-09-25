@@ -1,20 +1,22 @@
 {
-  "version": "v1.2.474-fiscal-datas",
+  "version": "v1.2.475-notas-navegacao",
   "date": "2026-09-25",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260925-024500-v12474-fiscal-datas",
+  "release_vps": "/var/www/mdv-site/releases/20260925-025000-v12475-notas-navegacao",
   "branch": "main",
-  "summary": "As notas do contador seguem a data real de emissão e a cobertura mostra o primeiro e o último documento do período.",
-  "tag": "v1.2.474-fiscal-datas",
+  "summary": "A lista de notas do contador tem busca e carregamento gradual; o aviso fiscal orienta a conferência da cobertura.",
+  "tag": "v1.2.475-notas-navegacao",
   "changed_files": [
     "pages/accountant/AccountantPortalPage.tsx",
-    "services/accountantPortalServer.cjs",
+    "tmp-tests/accountant-portal-static.test.mjs",
+    "tmp-tests/accountant-revenue-browser.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-25-v1.2.474-fiscal-datas.md"
+    "docs/versoes/2026-09-25-v1.2.475-notas-navegacao.md"
   ],
   "validations": [
     "npm.cmd run test:accountant-portal",
+    "node tmp-tests/accountant-revenue-browser.mjs",
     "npm.cmd run build",
     "git diff --check"
   ]

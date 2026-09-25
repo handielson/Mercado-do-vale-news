@@ -118,7 +118,7 @@ test('importação fiscal do Bling ocorre no servidor e o painel não apresenta 
   assert.match(server, /dataEmissaoFinal: emissionPeriod\.final/);
   assert.match(routes, /documents\/import-bling/);
   assert.match(page, /documentTotals\.authorizedDocumentCount/);
-  assert.match(page, /Esse número não representa todas as notas emitidas no Bling/);
+  assert.match(page, /Confirme com o contador se todos os documentos do Bling e dos demais emissores foram importados/);
   assert.match(page, /Notas fiscais cadastradas neste sistema/);
   assert.match(page, /Canal não identificado/);
   assert.match(page, /aria-modal="true"/);
