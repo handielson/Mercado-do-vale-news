@@ -1,18 +1,18 @@
 {
-  "version": "v1.2.479-synology-quickconnect",
+  "version": "v1.2.480-synology-tunnel-compact",
   "date": "2026-09-25",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260925-054739-v12479-synology-quickconnect",
+  "release_vps": "/var/www/mdv-site/releases/20260925-055744-v12480-synology-tunnel-compact",
   "branch": "main",
-  "summary": "Corrige a rota de envio do backup Synology com QuickConnect sem alterar as demais integrações NAS.",
-  "tag": "v1.2.479-synology-quickconnect",
+  "summary": "Backup por tunel local com fallback QuickConnect, retomada apos reinicio e pacote sem historicos duplicados.",
+  "tag": "v1.2.480-synology-tunnel-compact",
   "changed_files": [
     "vps_server.js",
     "vps_server.cjs",
     "tmp-tests/system-backup-admin-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-25-v1.2.479-synology-quickconnect.md"
+    "docs/versoes/2026-09-25-v1.2.480-synology-tunnel-compact.md"
   ],
   "validations": [
     "npm.cmd run test:system-backup-admin",

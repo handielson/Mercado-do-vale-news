@@ -107,8 +107,11 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   assert.match(source, /pruneLocalSystemBackups/, `${name} must clean old local fallback packages`);
   assert.match(source, /pruneSynologySystemBackups/, `${name} must clean NAS system backups beyond retention`);
   assert.match(source, /MDV_SYSTEM_BACKUP_SYNOLOGY_URL/, `${name} must allow a backup-only NAS route`);
+  assert.match(source, /MDV_SYSTEM_BACKUP_SYNOLOGY_FALLBACK_URL/, `${name} must retain QuickConnect fallback`);
   assert.match(source, /synoBackupLogin/, `${name} must authenticate via the backup-only NAS route`);
   assert.match(source, /synoBackupApiGet/, `${name} must verify files via the backup-only NAS route`);
+  assert.match(source, /resumableMirror \? 'partial' : 'failed'/, `${name} must preserve retry after an interrupted mirror`);
+  assert.match(source, /--exclude='mdv-api\/backups'/, `${name} must not nest old backup packages inside a new package`);
   assert.match(source, /removeVerifiedSynologyBackupFromVps/, `${name} must release temporary VPS archive after NAS verification`);
   assert.match(source, /if \(!mirror\?\.ok \|\| !mirror\.verified\) return false/, `${name} must never delete an unverified VPS backup`);
   assert.match(source, /fs\.createReadStream\(filePath, end === null \? \{ start \} : \{ start, end \}\)/, `${name} must stream chunks directly without duplicating archives in tmp`);

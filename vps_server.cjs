@@ -35969,6 +35969,8 @@ const SYSTEM_BACKUP_DEFAULT_TIME = '00:00';
 const SYSTEM_BACKUP_TIMEZONE = 'America/Sao_Paulo';
 const SYSTEM_BACKUP_ROOT = process.env.MDV_SYSTEM_BACKUP_ROOT || '/var/backups/mdv-system';
 const SYSTEM_BACKUP_SYNOLOGY_URL = normalizeSynologyUrl(process.env.MDV_SYSTEM_BACKUP_SYNOLOGY_URL || SYNO_URL);
+const SYSTEM_BACKUP_SYNOLOGY_FALLBACK_URL = process.env.MDV_SYSTEM_BACKUP_SYNOLOGY_FALLBACK_URL
+  ? normalizeSynologyUrl(process.env.MDV_SYSTEM_BACKUP_SYNOLOGY_FALLBACK_URL) : null;
 const SYSTEM_BACKUP_STATE_FILE = process.env.MDV_SYSTEM_BACKUP_STATE_FILE || path.join(__dirname, 'system-backup-state.json');
 const { backupPartRanges, localBackupNamesToPrune, synologyArtifactsToPrune } = require('./services/systemBackupPolicy.cjs');
 const SYSTEM_BACKUP_VPS_KEEP = Math.max(1, Number(process.env.MDV_SYSTEM_BACKUP_VPS_KEEP || 3));
@@ -36212,13 +36214,17 @@ function getSystemBackupSnapshot() {
   const persistedStatus = state.status || {};
   if (systemBackupStatus.state === 'idle' && persistedStatus.state) {
     if (persistedStatus.state === 'running') {
+      const resumableMirror = Boolean(persistedStatus.vpsPackage && persistedStatus.vpsSha256
+        && persistedStatus.vpsPackageSize && fs.existsSync(persistedStatus.vpsPackage));
       systemBackupStatus = {
         ...systemBackupStatus,
         ...persistedStatus,
-        state: 'failed',
+        state: resumableMirror ? 'partial' : 'failed',
         finishedAt: new Date().toISOString(),
-        message: 'Backup anterior ficou incompleto apos reinicio da API',
-        error: 'Estado running antigo foi invalidado no boot para liberar novo backup.',
+        message: resumableMirror ? 'Pacote VPS preservado apos reinicio; Synology pendente'
+          : 'Backup anterior ficou incompleto apos reinicio da API',
+        error: resumableMirror ? 'Envio Synology interrompido; pacote local disponivel para nova tentativa.'
+          : 'Estado running antigo foi invalidado no boot para liberar novo backup.',
       };
       writeSystemBackupState({ status: systemBackupStatus });
     } else {
@@ -36308,21 +36314,29 @@ async function synoBackupLogin(timeoutMs = 30000) {
     api: 'SYNO.API.Auth', version: '7', method: 'login',
     account: SYNO_USER, passwd: SYNO_PASS, session: 'FileStation', format: 'sid',
   });
-  const result = await synoHttpGet(new URL(SYSTEM_BACKUP_SYNOLOGY_URL), '/webapi/auth.cgi?' + query.toString(), timeoutMs);
-  if (!result.success || !result.data?.sid) throw new Error('Synology backup login failed: ' + JSON.stringify(result.error || result));
-  return result.data.sid;
+  const urls = [...new Set([SYSTEM_BACKUP_SYNOLOGY_URL, SYSTEM_BACKUP_SYNOLOGY_FALLBACK_URL].filter(Boolean))];
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      const result = await synoHttpGet(new URL(url), '/webapi/auth.cgi?' + query.toString(), timeoutMs);
+      if (result.success && result.data?.sid) return { sid: result.data.sid, url };
+      lastError = new Error('Synology backup login failed: ' + JSON.stringify(result.error || result));
+    } catch (error) { lastError = error; }
+  }
+  throw lastError || new Error('Synology backup URL unavailable');
 }
 
-function synoBackupApiGet(apiPath) {
-  return synoHttpGet(new URL(SYSTEM_BACKUP_SYNOLOGY_URL), apiPath, 30000);
+function synoBackupApiGet(apiPath, url) {
+  return synoHttpGet(new URL(url), apiPath, 30000);
 }
 
 async function verifySystemBackupOnSynology(fileName, expectedSize) {
   const remotePath = `${SYNO_FOLDERS.backups}/${fileName}`;
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const sid = await synoBackupLogin(30000);
+    const { sid, url } = await synoBackupLogin(30000);
     const result = await synoBackupApiGet(
-      `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(remotePath)}&additional=${encodeURIComponent('["size"]')}&_sid=${encodeURIComponent(sid)}`
+      `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(remotePath)}&additional=${encodeURIComponent('["size"]')}&_sid=${encodeURIComponent(sid)}`,
+      url,
     );
     if (!result.success && [106, 107, 119].includes(Number(result.error?.code)) && attempt === 0) continue;
     const file = result.success ? result.data?.files?.[0] : null;
@@ -36344,10 +36358,10 @@ async function uploadSystemBackupToSynology(filePath, fileName, { start = 0, end
   if (!Number.isSafeInteger(size) || size <= 0) throw new Error('Tamanho invalido de parte do backup');
   const folderPath = SYNO_FOLDERS.backups;
   const https = require('https');
-  const urlObj = new URL(SYSTEM_BACKUP_SYNOLOGY_URL);
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const sid = await synoBackupLogin(30000);
+    const { sid, url } = await synoBackupLogin(30000);
+    const urlObj = new URL(url);
     const boundary = `MDVSystemBackupBoundary${Date.now()}`;
     const textFields = [
       ['api', 'SYNO.FileStation.Upload'],
@@ -36520,9 +36534,9 @@ function removeVerifiedSynologyBackupFromVps(backupTar, mirror) {
 async function synoBackupApi(params) {
   let result = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const sid = await synoBackupLogin(30000);
+    const { sid, url } = await synoBackupLogin(30000);
     const query = new URLSearchParams({ ...params, _sid: sid });
-    result = await synoBackupApiGet('/webapi/entry.cgi?' + query.toString());
+    result = await synoBackupApiGet('/webapi/entry.cgi?' + query.toString(), url);
     if (!result.success && [106, 107, 119].includes(Number(result.error?.code)) && attempt === 0) continue;
     return result;
   }
@@ -36572,9 +36586,16 @@ echo "__MDV_PROGRESS__:10:Preparando arquivos"
 readlink /var/www/mdv-site/current > ${shellQuote(`${backupDir}/site-current.txt`)} 2>/dev/null || true
 ls -la /var/www/mdv-site/releases > ${shellQuote(`${backupDir}/site-releases.txt`)} 2>/dev/null || true
 echo "__MDV_PROGRESS__:25:Empacotando site publicado"
-tar -C /var/www/mdv-site -czf ${shellQuote(`${backupDir}/mdv-site.tar.gz`)} current previous releases 2>/tmp/mdv-system-site-tar.err || tar -C /var/www/mdv-site -czf ${shellQuote(`${backupDir}/mdv-site.tar.gz`)} current
+site_current_release="$(readlink -f /var/www/mdv-site/current)"
+case "$site_current_release" in /var/www/mdv-site/releases/*) ;; *) echo "Current release invalido" >&2; exit 12;; esac
+site_members=(current "releases/$(basename "$site_current_release")")
+site_previous_release="$(readlink -f /var/www/mdv-site/previous 2>/dev/null || true)"
+if [[ "$site_previous_release" == /var/www/mdv-site/releases/* && -d "$site_previous_release" ]]; then
+  site_members+=(previous "releases/$(basename "$site_previous_release")")
+fi
+tar -C /var/www/mdv-site -czf ${shellQuote(`${backupDir}/mdv-site.tar.gz`)} "\${site_members[@]}"
 echo "__MDV_PROGRESS__:45:Empacotando API da VPS"
-tar -C /var/www --exclude='mdv-api/node_modules' --exclude='mdv-api/.git' --exclude='mdv-api/system-backup-state.json' -czf ${shellQuote(`${backupDir}/mdv-api.tar.gz`)} mdv-api
+tar -C /var/www --exclude='mdv-api/node_modules' --exclude='mdv-api/.git' --exclude='mdv-api/backups' --exclude='mdv-api/.codex-backups' --exclude='mdv-api/system-backup-state.json' -czf ${shellQuote(`${backupDir}/mdv-api.tar.gz`)} mdv-api
 echo "__MDV_PROGRESS__:60:Exportando banco MySQL"
 if command -v mysqldump >/dev/null 2>&1; then
   MYSQL_PWD="$DB_PASS" mysqldump --single-transaction --routines --triggers --events -h ${shellQuote(dbHost)} -u ${shellQuote(dbUser)} ${shellQuote(dbName)} > ${shellQuote(`${backupDir}/mysql.sql`)}
