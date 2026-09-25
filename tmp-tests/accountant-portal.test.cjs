@@ -526,7 +526,7 @@ test('nota emitida no dia mostra pedido de outro dia para revisão sem alterar t
     if (sql.includes('FROM sales WHERE') || sql.includes('FROM orders WHERE')) return [[]];
     if (sql.includes('FROM company_fiscal_documents')) return [[{
       id:'note-1', profile_id:'profile-1', channel:'shopee', external_sale_id:'order-1',
-      model:'55', status:'authorized', document_number:'000693', issued_at:'2026-09-22 05:52:12', total_cents:2438, source:'bling_import',
+      model:'55', status:'authorized', document_number:'000693', issued_at:'2026-09-22 05:52:12', total_cents:2438, source:'bling_import', has_archived_xml:1,
     }]];
     if (sql.includes('FROM company_fiscal_sale_reconciliations')) return [[]];
     throw new Error(`SQL inesperado: ${sql}`);
@@ -538,6 +538,8 @@ test('nota emitida no dia mostra pedido de outro dia para revisão sem alterar t
   await route.preHandler(req, reply);
   const report = await route.handler(req);
   assert.equal(report.documentTotals.authorizedDocumentCents, 2438);
+  assert.equal(report.documents[0].fileAvailable, true);
+  assert.match(queries.find(entry => entry.sql.includes('FROM company_fiscal_documents')).sql, /LEFT JOIN company_fiscal_document_xmls/);
   assert.equal(report.totals.operationalCents, 0);
   assert.deepEqual(report.sales, []);
   assert.equal(report.reviewSales.length, 1);

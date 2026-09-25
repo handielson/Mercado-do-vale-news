@@ -36,7 +36,7 @@ async function readAccountantSale(pool, profile, channel, saleId) {
     payments = [{ method:details.payment, amount:null }];
     discount = details.discount_cents; capturedAt = date(row.created_at);
   }
-  const [documents] = await pool.query('SELECT id,model,status,document_number,series,access_key,issued_at FROM company_fiscal_documents WHERE profile_id=? AND channel=? AND external_sale_id=? ORDER BY issued_at DESC', [profile.id, channel, saleId]);
+  const [documents] = await pool.query('SELECT d.id,d.model,d.status,d.document_number,d.series,d.access_key,d.issued_at,(x.document_id IS NOT NULL) AS has_archived_xml FROM company_fiscal_documents d LEFT JOIN company_fiscal_document_xmls x ON x.document_id=d.id AND x.profile_id=d.profile_id WHERE d.profile_id=? AND d.channel=? AND d.external_sale_id=? ORDER BY d.issued_at DESC', [profile.id, channel, saleId]);
   let receipt = null;
   if (channel === 'pdv') {
     try {
@@ -50,7 +50,7 @@ async function readAccountantSale(pool, profile, channel, saleId) {
     totalCents:cents(channel === 'shopee' || channel === 'tiktok' ? row.total_cents : row.total,moneyScale), subtotalCents:cents(subtotal,moneyScale), discountCents:cents(discount,moneyScale), shippingCents:cents(shipping,moneyScale),
     items:items.map(item => ({ name:String(item.product_name || ''), sku:String(item.product_sku || ''), quantity:Number(item.quantity), unitPriceCents:cents(item.unit_price,moneyScale), totalCents:cents(item.total,moneyScale) })),
     payments:(Array.isArray(payments) ? payments : []).map(payment => ({ method:String(payment.method || ''), amountCents:cents(payment.total_with_fee ?? payment.amount,moneyScale), installments:payment.installments == null ? null : Number(payment.installments) })),
-    documents:documents.map(doc => ({ id:doc.id, model:doc.model, status:doc.status, number:doc.document_number, series:doc.series, accessKey:doc.access_key, issuedAt:date(doc.issued_at) })), receipt,
+    documents:documents.map(doc => ({ id:doc.id, model:doc.model, status:doc.status, number:doc.document_number, series:doc.series, accessKey:doc.access_key, issuedAt:date(doc.issued_at), fileAvailable:['authorized','cancelled'].includes(doc.status) && Boolean(Number(doc.has_archived_xml)) })), receipt,
   };
 }
 module.exports = { readAccountantSale };

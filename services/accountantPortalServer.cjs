@@ -222,7 +222,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       const key = `${String(row.channel).toLowerCase()}:${row.external_sale_id}`;
       if (!byKey.has(key)) byKey.set(key, row);
     }
-    const [documentRows] = await pool.query('SELECT * FROM company_fiscal_documents WHERE profile_id=? AND issued_at>=? AND issued_at<?', [profile.id, `${from} 00:00:00`, `${exclusiveDate} 00:00:00`]);
+    const [documentRows] = await pool.query('SELECT d.*, (x.document_id IS NOT NULL) AS has_archived_xml FROM company_fiscal_documents d LEFT JOIN company_fiscal_document_xmls x ON x.document_id=d.id AND x.profile_id=d.profile_id WHERE d.profile_id=? AND d.issued_at>=? AND d.issued_at<?', [profile.id, `${from} 00:00:00`, `${exclusiveDate} 00:00:00`]);
     const [reconciliationRows] = await pool.query('SELECT * FROM company_fiscal_sale_reconciliations WHERE profile_id=?', [profile.id]);
     const fiscalBySale = new Map();
     for (const row of reconciliationRows) fiscalBySale.set(`${row.channel}:${row.external_sale_id}`, { classification: row.classification, documents: [] });
@@ -259,9 +259,10 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
       .map(sale => ({ ...sale, reviewReasons: [...new Set([...(sale.reviewReasons || []), 'sale_outside_period'])] }));
     const documentTotals = fiscalDocumentTotals(documentRows);
     const documents = documentRows.map(row => ({
-      id: row.id, model: row.model, status: row.status, channel: ['shopee', 'tiktok'].includes(row.channel) ? row.channel : 'unidentified',
+      id: row.id, model: row.model, status: row.status, channel: ['pdv', 'online', 'shopee', 'tiktok'].includes(row.channel) ? row.channel : 'unidentified',
       orderReference: /^(?:nfe|nfce):/u.test(String(row.external_sale_id || '')) ? null : row.external_sale_id,
       number: row.document_number, series: row.series, issuedAt: row.issued_at, totalCents: Number(row.total_cents || 0),
+      fileAvailable: ['authorized', 'cancelled'].includes(row.status) && Boolean(Number(row.has_archived_xml)),
     })).sort((left, right) => String(right.issuedAt || '').localeCompare(String(left.issuedAt || '')));
     return {
       company: companyView(profile), period: { from, to },

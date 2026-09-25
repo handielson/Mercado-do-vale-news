@@ -2,7 +2,7 @@ import type { AccountantRevenueReport } from './accountantPortalService';
 
 export type RevenueFilter = 'fiscal' | 'nfe' | 'nfce' | 'no_invoice' | 'pending' | 'all';
 export const revenueFilterLabels: Record<RevenueFilter, string> = {
-  fiscal: 'Com NF-e e NFC-e', nfe: 'Somente NF-e', nfce: 'Somente NFC-e',
+  fiscal: 'Notas importadas: NF-e e NFC-e', nfe: 'Notas importadas: NF-e', nfce: 'Notas importadas: NFC-e',
   no_invoice: 'Sem nota confirmado', pending: 'Pendente de conciliação', all: 'Todas as vendas',
 };
 
@@ -26,18 +26,18 @@ export function revenueView(report: AccountantRevenueReport, filter: RevenueFilt
     const models = sale.authorizedModels || (sale.document ? [sale.document.model] : []);
     return sale.fiscalState === 'invoiced' && (model ? models.includes(model) : models.some(value => ['55','65'].includes(value)));
   });
-  const months = new Map<string, { month: string; totalCents: number; count: number }>();
-  const start = new Date(`${report.period.from.slice(0,7)}-01T00:00:00Z`);
-  const last = report.period.to.slice(0,7);
-  for (; start.toISOString().slice(0,7) <= last; start.setUTCMonth(start.getUTCMonth()+1)) {
-    const month = start.toISOString().slice(0,7); months.set(month,{month,totalCents:0,count:0});
-  }
-  const entries = fiscal ? documents.map(doc => ({ date: doc.issuedAt, cents: doc.totalCents }))
-    : sales.filter(sale => sale.operationalState === 'completed').map(sale => ({ date: sale.occurredAt, cents: sale.totalCents }));
+  const months = new Map<string, { month: string; type: string; channel: string; totalCents: number; count: number }>();
+  const entries = fiscal ? documents.map(doc => ({ date: doc.issuedAt, cents: doc.totalCents, type: doc.model === '65' ? 'NFC-e' : 'NF-e', channel: doc.channel }))
+    : sales.filter(sale => sale.operationalState === 'completed').map(sale => ({ date: sale.occurredAt, cents: sale.totalCents, type: filter === 'no_invoice' ? 'Sem nota' : filter === 'pending' ? 'A conciliar' : 'Venda', channel: sale.channel }));
   for (const entry of entries) {
-    const month = months.get(entry.date.slice(0,7));
-    if (month) { month.totalCents += entry.cents; month.count++; }
+    const month = entry.date.slice(0,7);
+    if (month < report.period.from.slice(0,7) || month > report.period.to.slice(0,7)) continue;
+    const key = `${month}:${entry.type}:${entry.channel}`;
+    if (!months.has(key)) months.set(key, { month, type: entry.type, channel: entry.channel, totalCents: 0, count: 0 });
+    const row = months.get(key)!;
+    row.totalCents += entry.cents;
+    row.count++;
   }
-  const rows = [...months.values()];
+  const rows = [...months.values()].sort((left, right) => right.month.localeCompare(left.month) || left.type.localeCompare(right.type) || left.channel.localeCompare(right.channel));
   return { sales, documents, months: rows, totalCents: rows.reduce((sum,row) => sum+row.totalCents,0), count: rows.reduce((sum,row) => sum+row.count,0), fiscal };
 }

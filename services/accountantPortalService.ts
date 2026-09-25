@@ -56,12 +56,13 @@ export interface AccountantRevenueReport {
     id: string;
     model: string;
     status: string;
-    channel: 'shopee' | 'tiktok' | 'unidentified';
+    channel: 'pdv' | 'online' | 'shopee' | 'tiktok' | 'unidentified';
     orderReference: string | null;
     number: string | null;
     series: string | null;
     issuedAt: string;
     totalCents: number;
+    fileAvailable: boolean;
   }>;
   months: Array<AccountantRevenueReport['totals'] & { competence: string }>;
   sales: AccountantRevenueSale[];
@@ -114,7 +115,7 @@ export interface AccountantSaleDetails {
   totalCents: number | null; subtotalCents: number | null; discountCents: number | null; shippingCents: number | null;
   items: Array<{ name: string; sku: string; quantity: number; unitPriceCents: number | null; totalCents: number | null }>;
   payments: Array<{ method: string; amountCents: number | null; installments: number | null }>;
-  documents: Array<{ id: string; model: string; status: string; number: string | null; series: string | null; accessKey: string | null; issuedAt: string | null }>;
+  documents: Array<{ id: string; model: string; status: string; number: string | null; series: string | null; accessKey: string | null; issuedAt: string | null; fileAvailable: boolean }>;
   receipt: { status: string; number: string; series: string; authorizedAt: string | null; accessKey: string | null; available: boolean } | null;
 }
 

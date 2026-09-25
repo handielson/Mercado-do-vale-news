@@ -39,6 +39,22 @@ test('empresa secundária e pedidos de outra empresa não têm detalhes',async()
   await assert.rejects(readAccountantSale({query:async(sql,args)=>{assert.match(sql,/company_id=\?/);assert.deepEqual(args,[saleId,'company']);return [[]];}},profile,'online',saleId),{statusCode:404});
 });
 
+test('documentos vinculados indicam disponibilidade somente com XML arquivado', async () => {
+  const result = await readAccountantSale({ query:async sql => {
+    if (sql.includes('FROM mobile_sale_events')) return [[{total_cents:1000,created_at:'2026-09-24'}]];
+    if (sql.includes('FROM company_fiscal_documents')) {
+      assert.match(sql,/LEFT JOIN company_fiscal_document_xmls/);
+      return [[
+        {id:'archived',status:'authorized',has_archived_xml:1},
+        {id:'pending',status:'authorized',has_archived_xml:0},
+        {id:'draft',status:'draft',has_archived_xml:1},
+      ]];
+    }
+    throw new Error(sql);
+  } },profile,'shopee','ORDER');
+  assert.deepEqual(result.documents.map(doc => doc.fileAvailable),[true,false,false]);
+});
+
 test('venda legada em reais mantém os valores de itens e pagamento',async()=>{
   const result=await readAccountantSale({query:async sql=>{
     if(sql.includes('FROM sales s'))return [[{total:'9.50',payment_method:'pix'}]];

@@ -28,7 +28,7 @@ test('relatório nunca chama ausência de vínculo de venda sem nota', () => {
   const page = read('pages/accountant/AccountantPortalPage.tsx');
   assert.match(core, /reconciliation_pending/);
   assert.match(core, /no_invoice_confirmed/);
-  assert.match(page, /não significa venda sem nota/);
+  assert.match(page, /não confirma venda sem nota/);
 });
 
 test('portal identifica data e limite do status capturado do marketplace', () => {
@@ -107,18 +107,24 @@ test('migration alinha collation do contador com customers e deploy valida o sch
   assert.match(deploy, /Accountant customer ID collation mismatch/);
 });
 
-test('importação fiscal do Bling ocorre no servidor e o painel usa total documental', () => {
+test('importação fiscal do Bling ocorre no servidor e o painel não apresenta cobertura parcial como total', () => {
   const server = read('vps_server.js');
   const routes = read('services/accountantPortalServer.cjs');
   const page = read('pages/accountant/AccountantPortalPage.tsx');
+  const layout = read('layouts/AdminLayout.tsx');
   assert.match(server, /fetchBlingFiscalDocumentsForMigrationVps/);
   assert.match(server, /importBlingDocuments: fetchBlingFiscalDocumentsForMigrationVps/);
   assert.match(server, /dataEmissaoInicial: emissionPeriod\.initial/);
   assert.match(server, /dataEmissaoFinal: emissionPeriod\.final/);
   assert.match(routes, /documents\/import-bling/);
-  assert.match(page, /documentTotals\.authorizedDocumentCents/);
-  assert.match(page, /Notas fiscais por canal de venda/);
+  assert.match(page, /documentTotals\.authorizedDocumentCount/);
+  assert.match(page, /Esse número não representa todas as notas emitidas no Bling/);
+  assert.match(page, /Notas fiscais cadastradas neste sistema/);
   assert.match(page, /Canal não identificado/);
+  assert.match(page, /aria-modal="true"/);
+  assert.match(page, /event\.key === 'Escape'/);
+  assert.match(page, /matchingSales\.slice\(0, visibleSaleCount\)/);
+  assert.match(layout, /import \{[^}]*AlertTriangle[^}]*\} from 'lucide-react'/);
 });
 
 test('prévia fiscal começa em um dia e orienta divisão quando passa de 120 notas', () => {

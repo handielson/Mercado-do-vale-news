@@ -27,7 +27,7 @@ test('Espaço do Contador fica na navegação superior e abre faturamento e nota
   assert.match(page, /#contador/);
   assert.ok(page.indexOf('Faturamento e notas') < page.indexOf('Validação contábil'));
   assert.match(portal, /export function RevenuePanel\(\{ adminMode = false \}/);
-  assert.match(portal, /Notas fiscais por canal de venda/);
+  assert.match(portal, /Notas fiscais cadastradas neste sistema/);
 });
 
 test('interface identifica a fonte canônica e alerta abre diretamente a área fiscal', () => {
