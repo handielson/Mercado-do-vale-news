@@ -9,6 +9,21 @@ const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
 const dollar = (value, tag) => `$${tag}$${String(value)}$${tag}$`;
 
+function replicaCount(output, service) {
+  const line = String(output).split(/\r?\n/).find((entry) => entry.startsWith(`${service} `));
+  return line?.split(/\s+/)[1] || '';
+}
+
+function decodeWorkflowExport(raw) {
+  const encoded = JSON.parse(String(raw).trim());
+  const { nodesHex, connectionsHex, ...metadata } = encoded;
+  return {
+    ...metadata,
+    nodes: JSON.parse(Buffer.from(nodesHex, 'hex').toString('utf8')),
+    connections: JSON.parse(Buffer.from(connectionsHex, 'hex').toString('utf8')),
+  };
+}
+
 function remote(conn, command, input = null) {
   return new Promise((resolve, reject) => {
     conn.exec(command, (error, stream) => {
@@ -25,7 +40,7 @@ function remote(conn, command, input = null) {
 
 async function replicas(conn, service, count) {
   for (let i = 0; i < 48; i++) {
-    const value = (await remote(conn, `docker service ls --filter name=${quote(service)} --format '{{.Replicas}}'`)).trim();
+    const value = replicaCount(await remote(conn, `docker service ls --filter name=${quote(service)} --format '{{.Name}} {{.Replicas}}'`), service);
     if (value === `${count}/${count}`) return;
     await new Promise((resolve) => setTimeout(resolve, 2500));
   }
@@ -46,8 +61,8 @@ async function main() {
     await replicas(conn, 'n8n_n8n', 0);
 
     const psql = (sql) => remote(conn, `docker exec -i ${container} psql -U postgres -d n8n -X -q -t -A -v ON_ERROR_STOP=1`, sql);
-    const raw = await psql(`COPY (SELECT json_build_object('id',id,'nodes',nodes,'connections',connections,'versionId',"versionId",'activeVersionId',"activeVersionId") FROM workflow_entity WHERE id=${quote(WORKFLOW_ID)}) TO STDOUT;`);
-    const current = JSON.parse(raw.trim());
+    const raw = await psql(`COPY (SELECT json_build_object('id',id,'nodesHex',encode(convert_to(nodes::text,'UTF8'),'hex'),'connectionsHex',encode(convert_to(connections::text,'UTF8'),'hex'),'versionId',"versionId",'activeVersionId',"activeVersionId") FROM workflow_entity WHERE id=${quote(WORKFLOW_ID)}) TO STDOUT;`);
+    const current = decodeWorkflowExport(raw);
     if (current.id !== WORKFLOW_ID || !current.activeVersionId) throw new Error('Active workflow could not be verified');
     const backupPath = path.join(os.tmpdir(), `mdv-payjoy-workflow-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
     fs.writeFileSync(backupPath, JSON.stringify(current));
@@ -92,3 +107,5 @@ COPY (SELECT json_build_object('versionAligned',"versionId"="activeVersionId",'p
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 1; });
+
+module.exports = { replicaCount, decodeWorkflowExport };
