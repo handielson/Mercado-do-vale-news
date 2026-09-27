@@ -6,6 +6,8 @@ import { bannerService, type BannerStats } from '@/services/bannerService';
 import type { CatalogBanner } from '@/types/catalog';
 
 const BannerManagementPage: React.FC = () => {
+    const [storefront, setStorefront] = useState<'mercado_do_vale' | 'loja_3d'>('mercado_do_vale');
+    const loadVersion = useRef(0);
     const [banners, setBanners] = useState<CatalogBanner[]>([]);
     const [stats, setStats] = useState<BannerStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -19,23 +21,26 @@ const BannerManagementPage: React.FC = () => {
 
     // ── Data loading ────────────────────────────────────────────────────────
 
-    useEffect(() => { loadAll(); }, []);
+    useEffect(() => { loadAll(); return () => { loadVersion.current++; }; }, [storefront]);
 
     const loadAll = async () => {
+        const version = ++loadVersion.current;
         try {
             setLoading(true);
             setError(null);
             const [data, statsData] = await Promise.all([
-                bannerService.getAllBanners(),
-                bannerService.getBannerStats(),
+                bannerService.getAllBanners(storefront),
+                bannerService.getBannerStats(storefront),
             ]);
+            if (version !== loadVersion.current) return;
             setBanners(data);
             setStats(statsData);
         } catch (err: any) {
+            if (version !== loadVersion.current) return;
             console.error('Erro ao carregar banners:', err);
             setError(err.message || 'Erro ao carregar banners');
         } finally {
-            setLoading(false);
+            if (version === loadVersion.current) setLoading(false);
         }
     };
 
@@ -137,6 +142,11 @@ const BannerManagementPage: React.FC = () => {
     return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-6xl mx-auto">
+                <label className="mb-6 block font-medium">Banners do site
+                    <select aria-label="Banners do site" value={storefront} onChange={e => { setBanners([]); setStats(null); setStorefront(e.target.value as 'mercado_do_vale' | 'loja_3d'); }} className="ml-3 rounded-lg border p-2">
+                        <option value="mercado_do_vale">Mercado do Vale</option><option value="loja_3d">Loja 3D</option>
+                    </select>
+                </label>
 
                 {/* Header */}
                 <div className="mb-8">
@@ -281,6 +291,7 @@ const BannerManagementPage: React.FC = () => {
                 {/* Form modal */}
                 {showForm && (
                     <BannerForm
+                        storefront={storefront}
                         banner={editingBanner}
                         onSave={handleSave}
                         onClose={() => setShowForm(false)}

@@ -7,6 +7,7 @@ import type { Product } from './product';
  * Campos verificados em 2026-02-19 contra information_schema.
  */
 export interface Banner {
+    storefront?: 'mercado_do_vale' | 'loja_3d';
     id: string;
     title: string;
     subtitle?: string;   // texto exibido abaixo do título no carrossel
@@ -111,6 +112,10 @@ export interface ShareOptions {
 
 // Extended Product type with catalog fields
 export interface CatalogProduct extends Product {
+    image_url?: string | null;
+    tags?: string[];
+    created_at?: string;
+    updated_at?: string;
     featured?: boolean;
     is_new?: boolean;
     discount_percentage?: number;

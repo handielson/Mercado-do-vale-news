@@ -1,5 +1,6 @@
 import { vpsClient } from './vpsClient';
 import { vpsApiService } from './vpsApiService';
+import { productStorefrontOffersService } from './productStorefrontOffers';
 import type { Banner } from '@/types/catalog';
 import { toBrowserSafeMediaUrl } from '@/utils/media-url';
 
@@ -128,6 +129,11 @@ function hasSellableStock(product: any): boolean {
 async function hasAvailableLinkedProduct(banner: Banner): Promise<boolean> {
     const productIdentifier = getLinkedProductIdentifier(banner);
     if (!productIdentifier) return true;
+    if (banner.storefront === 'loja_3d') {
+        const products = await productStorefrontOffersService.publicProducts('loja_3d');
+        return products.some(product => (product.id === productIdentifier || product.slug === productIdentifier)
+            && (Number(product.stock_quantity) > 0 || product.print3d_preorder_enabled && Number(product.production_days) > 0));
+    }
 
     const product = PRODUCT_ID_PATTERN.test(productIdentifier)
         ? await vpsApiService.getProductById(productIdentifier, true)
@@ -158,7 +164,7 @@ async function filterBannersByLinkedProductAvailability(banners: Banner[]): Prom
             };
         } catch (error) {
             console.warn('[bannerService] Falha ao checar estoque do produto vinculado ao banner:', error);
-            return { banner, visible: true };
+            return { banner, visible: banner.storefront !== 'loja_3d' };
         }
     }));
 
@@ -171,8 +177,8 @@ export const bannerService = {
      * Buscar banners ativos (uso público — catálogo)
      * Filtra por is_active + datas de agendamento + tipo de cliente.
      */
-    getActiveBanners: async (customerType?: CustomerType): Promise<Banner[]> => {
-        const cacheKey = getActiveBannersCacheKey(customerType);
+    getActiveBanners: async (customerType?: CustomerType, storefront: 'mercado_do_vale' | 'loja_3d' = 'mercado_do_vale'): Promise<Banner[]> => {
+        const cacheKey = storefront + ':' + getActiveBannersCacheKey(customerType);
         const cached = activeBannersCache.get(cacheKey);
 
         if (cached && cached.expiresAt > Date.now()) {
@@ -180,7 +186,7 @@ export const bannerService = {
             if (cached.promise) return cached.promise;
         }
 
-        const promise = bannerService.getAllBanners()
+        const promise = bannerService.getAllBanners(storefront)
             .then(async allBanners => {
                 const banners = filterActiveBanners(allBanners, customerType);
                 const availableBanners = await filterBannersByLinkedProductAvailability(banners);
@@ -212,9 +218,9 @@ export const bannerService = {
     /**
      * Buscar todos os banners (uso admin — sem filtro de ativo/data)
      */
-    getAllBanners: async (): Promise<Banner[]> => {
-        const data = await vpsClient.get<any[]>('/banners');
-        return data.map(mapFromVPS);
+    getAllBanners: async (storefront: 'mercado_do_vale' | 'loja_3d' = 'mercado_do_vale'): Promise<Banner[]> => {
+        const data = await vpsClient.get<any[]>(`/banners?storefront=${storefront}`);
+        return data.filter(banner => (banner.storefront || 'mercado_do_vale') === storefront).map(mapFromVPS);
     },
 
     /**
@@ -232,6 +238,7 @@ export const bannerService = {
         banner: Omit<Banner, 'id' | 'created_at' | 'updated_at' | 'clicks_count' | 'views_count'>
     ): Promise<Banner> => {
         const data = await vpsClient.post<any>('/banners', mapToVPS(banner));
+        activeBannersCache.clear();
         return mapFromVPS(data);
     },
 
@@ -240,6 +247,7 @@ export const bannerService = {
      */
     updateBanner: async (id: string, updates: Partial<Banner>): Promise<Banner> => {
         const data = await vpsClient.patch<any>(`/banners/${id}`, mapToVPS(updates));
+        activeBannersCache.clear();
         return mapFromVPS(data);
     },
 
@@ -247,7 +255,8 @@ export const bannerService = {
      * Deletar banner
      */
     deleteBanner: async (id: string): Promise<void> => {
-        return vpsClient.delete(`/banners/${id}`);
+        await vpsClient.delete(`/banners/${id}`);
+        activeBannersCache.clear();
     },
 
     /**
@@ -267,15 +276,16 @@ export const bannerService = {
         };
 
         const data = await vpsClient.post<any>('/banners', mapToVPS(payload));
+        activeBannersCache.clear();
         return mapFromVPS(data);
     },
 
     /**
      * Estatísticas consolidadas de banners (uso admin)
      */
-    getBannerStats: async (): Promise<BannerStats> => {
+    getBannerStats: async (storefront: 'mercado_do_vale' | 'loja_3d' = 'mercado_do_vale'): Promise<BannerStats> => {
         // Usa a source of truth correta (VPS ou VPS)
-        const banners = await bannerService.getAllBanners();
+        const banners = await bannerService.getAllBanners(storefront);
         const now = new Date();
 
         const sorted_clicks = [...banners].sort(
@@ -304,6 +314,7 @@ export const bannerService = {
         await Promise.all(
             updates.map(u => vpsClient.patch(`/banners/${u.id}`, { display_order: u.display_order }))
         );
+        activeBannersCache.clear();
     },
 
     /**
@@ -320,4 +331,3 @@ export const bannerService = {
         await vpsClient.post(`/banners/${bannerId}/view`, {});
     },
 };
-

@@ -96,9 +96,10 @@ export interface OrderItemInput {
 export interface Order {
     id: string;
     company_id: string;
-
+    storefront?: 'mercado_do_vale' | 'loja_3d'; // Ausente nos pedidos legados do Mercado do Vale.
     // Dados do cliente (pode ser anônimo)
     customer_id?: string;             // null se compra anônima
+    print3d_customer_id?: string;     // conta independente da loja 3D
     customer_name: string;
     customer_phone: string;
     customer_email?: string;

@@ -42,6 +42,37 @@ const tiktokShopAutomationPaths = [
   'services/tiktokShopFulfillmentAutomation.cjs',
   'services/tiktokShopPrintServer.cjs',
 ];
+const print3dRecipeRuntimePaths = [
+  'services/print3dProductOffer.cjs',
+  'services/productStorefrontOffer.cjs',
+  'services/productStorefrontOffersServer.cjs',
+  'services/print3dStorefrontQuote.cjs',
+  'services/print3dShippingServer.cjs',
+  'services/print3dShippingQuoteToken.cjs',
+  'services/print3dCheckout.cjs',
+  'services/print3dCheckoutServer.cjs',
+  'services/print3dPayments.cjs',
+  'services/print3dPaymentsServer.cjs',
+  'services/print3dPaymentTerms.cjs',
+  'services/print3dOrderPlan.cjs',
+  'services/print3dProduction.cjs',
+  'services/print3dProductionServer.cjs',
+  'services/orderStorefront.cjs',
+  'services/print3dCustomerSession.cjs',
+  'services/print3dCustomerAccountsServer.cjs',
+  'services/print3dAuthSecurity.cjs',
+  'services/print3dGoogleAuthServer.cjs',
+  'services/storefrontAuthSecurity.cjs',
+  'services/customerAuthProtection.cjs',
+  'services/print3dWhatsAppSender.cjs',
+  'services/print3dRecipesServer.cjs',
+  'services/print3dActiveRecipeServer.cjs',
+  'services/priorityStockReservation.cjs',
+  'services/print3dRecipeFilesServer.cjs',
+  'utils/print3dRecipeDraft.mjs',
+  'utils/print3dCost.mjs',
+  'utils/print3dImport.mjs',
+];
 const companyFiscalServicePaths = [
   'services/companyFiscalCore.cjs',
   'services/companyFiscalServer.cjs',
@@ -461,6 +492,15 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--print3d-only') || process.argv.includes('--print3d-check')) {
+    const result = await require('./scripts/deploy-print3d.cjs').deployPrint3d({
+      appDir, apiProc, exec, upload, root: __dirname,
+      checkOnly: process.argv.includes('--print3d-check'), runtimeFiles: print3dRecipeRuntimePaths,
+    });
+    console.log(JSON.stringify(result));
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--system-backup-only')) {
     if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
     const backupDir = appDir + '/backups/system-backup-' + Date.now();
@@ -602,6 +642,10 @@ async function main() {
   await uploadMercadoLivreFiles(appDir);
   await exec(`mkdir -p ${appDir}/services ${appDir}/utils`);
   for (const relativePath of tiktokShopAutomationPaths) {
+    await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
+    console.log(`Uploaded ${relativePath}`);
+  }
+  for (const relativePath of print3dRecipeRuntimePaths) {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }

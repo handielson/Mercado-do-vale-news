@@ -67,6 +67,7 @@ export default function OnlineOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('');
+    const [filterStorefront, setFilterStorefront] = useState<string>('');
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
     const [warrantyModalOrder, setWarrantyModalOrder] = useState<OrderWithItems | null>(null);
@@ -338,6 +339,8 @@ export default function OnlineOrdersPage() {
     };
 
     const filtered = orders.filter(o => {
+        const storefront = o.storefront == null ? 'mercado_do_vale' : o.storefront;
+        if (filterStorefront && storefront !== filterStorefront) return false;
         if (!search) return true;
         const s = search.toLowerCase();
         return (
@@ -387,6 +390,16 @@ export default function OnlineOrdersPage() {
                         <option key={value} value={value}>{label}</option>
                     ))}
                 </select>
+                <select
+                    value={filterStorefront}
+                    onChange={e => setFilterStorefront(e.target.value)}
+                    aria-label="Filtrar pedidos por site"
+                    className="border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                    <option value="">Todos os sites</option>
+                    <option value="mercado_do_vale">Mercado do Vale</option>
+                    <option value="loja_3d">Loja 3D</option>
+                </select>
             </div>
 
             {/* Lista */}
@@ -407,6 +420,9 @@ export default function OnlineOrdersPage() {
                                 {/* Info principal */}
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap mb-1">
+                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${order.storefront === 'loja_3d' ? 'bg-orange-100 text-orange-800' : 'bg-slate-100 text-slate-700'}`}>
+                                            {order.storefront === 'loja_3d' ? 'Loja 3D' : order.storefront != null && order.storefront !== 'mercado_do_vale' ? 'Origem desconhecida' : 'Mercado do Vale'}
+                                        </span>
                                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[order.status] ?? 'bg-gray-100 text-gray-700'}`}>
                                             {STATUS_LABELS[order.status] ?? order.status}
                                         </span>
@@ -489,8 +505,12 @@ export default function OnlineOrdersPage() {
                                 </div>
                             </div>
 
-                            {/* Status dinâmico + Comprovante */}
-                            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 flex-wrap">
+                            {/* Fluxo legado: mensagens, comprovantes e ações ainda são da marca Mercado do Vale. */}
+                            {order.storefront != null && order.storefront !== 'mercado_do_vale' ? (
+                                <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-amber-800">
+                                    Ações deste site aguardam o fluxo operacional próprio. Consulte o pedido sem usar as comunicações do Mercado do Vale.
+                                </p>
+                            ) : <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 flex-wrap">
                                 <div className="flex items-center gap-2">
                                     <label className="text-xs text-gray-500 font-medium">Situação:</label>
                                     <select
@@ -589,7 +609,7 @@ export default function OnlineOrdersPage() {
                                     <AlertCircle className="w-3 h-3" />
                                     Ver página do cliente
                                 </a>
-                            </div>
+                            </div>}
                         </div>
                     ))}
                 </div>

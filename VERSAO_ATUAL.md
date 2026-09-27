@@ -1,26 +1,35 @@
-# v1.2.482-parcelamento-cartao-12x
+# v1.2.483-loja-3d-teste
 
-Data: 25/09/2026
-Status: ready
-Branch: main
-Tag: v1.2.482-parcelamento-cartao-12x
-Release VPS: pendente
+Data: 27/09/2026. Status: preparada para publicacao. Branch destino: main.
 
-## Alterações
+Release: /var/www/mdv-site/releases/20260927-125730-v1483-loja-3d-teste
 
-- Perguntas como “Em 10x sairia a quanto?” são tratadas antes da busca de produtos.
-- Quando o cliente já escolheu o celular, o sistema usa o produto salvo e envia a tabela de 1x a 12x no cartão.
-- A escolha posterior da parcela é registrada no fluxo de compra.
-- Sem produto selecionado, o bot pede o modelo antes de calcular, evitando respostas aleatórias.
+Tag: v1.2.483-loja-3d-teste
 
-## Arquivos
+Loja 3D para testes, catalogo por site, entrada de 50 a 100 por cento e frete escolhido; checkout real desativado.
 
-- vps_server.js
-- tmp-tests/autoresponder-installment-inquiry-static.test.mjs
+## Escopo
 
-## Validações
+Vitrine /loja-3d, contas independentes preparadas, pedidos e producao em demonstracao, calculadora, campos3D e ofertas comerciais por site, banners isolados e protecoes entre canais. Entrada 50–100% de todos os produtos, frete no saldo/integral/proporcional.
 
-- node --check vps_server.js
-- node --check vps_server.cjs
-- node tmp-tests/autoresponder-installment-inquiry-static.test.mjs
-- git diff --check
+## Banco e ativacao
+
+Deploy seletivo com backup remoto privado aplica somente031/032/039, aditivas. Sem criar dados comerciais. Demais migrations aguardam homologacao/ativacao. Checkout/pagamento/producao/contas reais desligados; falta cancelamento e expiracao de reservas antes da ativacao financeira. Nao altera DNS, n8n, credenciais ou operacao fiscal.
+
+Teste publico: https://www.mercadodovale.com.br/loja-3d?demo=1 e /loja-3d/pedidos?demo=1.
+
+## Validacao
+
+- testes focados 3D/auth/catalogo/estoque com banco e provedor simulados
+- browser local isolado checkout e producao
+- node --check entradas API e deploy
+- assert-no-supabase-runtime
+- npm run build
+- regressoes publicadas: parcelamento e backup
+- preflight VPS somente leitura e schema031/032/039
+
+## Limitacoes
+
+- TypeScript completo tem erros em areas legadas fora do escopo; build e testes focados passam.
+- Contas, Google, WhatsApp, fichas privadas, producao e pagamento reais permanecem desligados.
+- Migrations028-030,033-038,040-044 apenas preparadas; sem ativacao comercial ou DNS.

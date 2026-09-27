@@ -14,6 +14,14 @@ import { bannerService } from './services/bannerService';
 
 const LazyToaster = React.lazy(() => import('sonner').then((module) => ({ default: module.Toaster })));
 
+const subscribeStorefrontRoute = (notify: () => void) => router.subscribe(() => notify());
+const currentStorefrontPath = () => router.state.location.pathname;
+function MercadoDoValeCompareBar() {
+  const pathname = React.useSyncExternalStore(subscribeStorefrontRoute, currentStorefrontPath, () => '/');
+  if (pathname === '/loja-3d' || pathname.startsWith('/loja-3d/')) return null;
+  return <CompareBar />;
+}
+
 function isCatalogRouteFallback() {
   if (typeof window === 'undefined') return false;
   const pathname = window.location.pathname;
@@ -223,7 +231,7 @@ const App: React.FC = () => {
             <React.Suspense fallback={<RouteFallback />}>
               <RouterProvider router={router} />
             </React.Suspense>
-            <CompareBar />
+            <MercadoDoValeCompareBar />
             <DeferredToaster />
           </CompareProvider>
         </ThemeProvider>

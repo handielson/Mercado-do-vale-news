@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -282,6 +283,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             price_wholesale: 0,
             track_inventory: true,
             stock_quantity: 0,
+            is_print3d: false,
+            print3d_preorder_enabled: false,
+            print3d_preorder_limit: null,
             warranty_type: 'brand', // Default to brand warranty
             warranty_template_id: '',
             ...initialData // Spread initialData AFTER defaults to override with actual values
@@ -1406,6 +1410,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             mergedData.production_days = currentProductionDays != null && currentProductionDays !== '' as any
                 ? parseInt(String(currentProductionDays))
                 : null;
+            mergedData.is_print3d = Boolean(watch('is_print3d'));
+            mergedData.print3d_preorder_enabled = Boolean(watch('print3d_preorder_enabled'));
+            mergedData.print3d_preorder_limit = watch('print3d_preorder_limit') ?? null;
 
             if (data.model) {
                 try {
@@ -2196,7 +2203,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                                 Monitorar Estoque
                             </label>
                             <p className="text-xs text-slate-500 mt-1">
-                                Desmarque para produtos sem controle de estoque (serviços, sob encomenda)
+                                Desmarque apenas para serviços sem estoque físico. Para impressão 3D, mantenha o controle das peças prontas; o prazo de produção não libera encomendas automaticamente.
                             </p>
                         </div>
                     </div>
@@ -2319,6 +2326,44 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         </button>
                     )}
                 </div>
+            </div>
+
+            {/* Política por SKU para a futura loja de impressão 3D. */}
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="font-semibold text-slate-800">Sites e preços</h3>
+                <p className="mt-1 text-sm text-slate-600">Após salvar o SKU, configure separadamente preço, nome, descrição e visibilidade do Mercado do Vale e da Loja 3D. Fotos, características e estoque são compartilhados.</p>
+                {initialData?.sku ? <Link to={`/admin/products/storefronts?sku=${encodeURIComponent(initialData.sku)}`} className="mt-3 inline-flex rounded-md border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Configurar publicação nos sites</Link> : <p className="mt-2 text-xs text-slate-500">Salve o produto primeiro para configurar as ofertas.</p>}
+            </div>
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="font-semibold text-slate-800">Impressão 3D</h3>
+                <label className="flex items-start gap-3 text-sm text-slate-700">
+                    <input type="checkbox" className="mt-0.5 h-4 w-4" checked={Boolean(watch('is_print3d'))}
+                        onChange={(event) => {
+                            setValue('is_print3d', event.target.checked, { shouldValidate: true });
+                            if (!event.target.checked) setValue('print3d_preorder_enabled', false, { shouldValidate: true });
+                        }} />
+                    <span>Este SKU pertence à linha de impressão 3D</span>
+                </label>
+                {watch('is_print3d') && <div className="space-y-3 rounded-lg border border-blue-100 bg-blue-50 p-4">
+                    <p className="text-xs text-slate-600">A quantidade pronta fica no estoque central acima. Encomenda é uma demanda de fabricação, não saldo negativo.</p>
+                    <label className="flex items-start gap-3 text-sm text-slate-700">
+                        <input type="checkbox" className="mt-0.5 h-4 w-4" checked={Boolean(watch('print3d_preorder_enabled'))}
+                            onChange={(event) => setValue('print3d_preorder_enabled', event.target.checked, { shouldValidate: true })} />
+                        <span>Aceitar encomendas deste SKU</span>
+                    </label>
+                    {watch('print3d_preorder_enabled') && <div className="grid gap-3 md:grid-cols-2">
+                        <label className="text-sm text-slate-700">Limite de unidades pendentes sob encomenda
+                            <input type="number" min="1" max="10000" step="1" className="mt-1 w-full rounded-lg border border-slate-300 p-2"
+                                value={watch('print3d_preorder_limit') ?? ''}
+                                onChange={(event) => setValue('print3d_preorder_limit', event.target.value ? Number(event.target.value) : null, { shouldValidate: true })} />
+                            {errors.print3d_preorder_limit && <span className="text-xs text-red-700">{errors.print3d_preorder_limit.message}</span>}
+                        </label>
+                        <p className="self-center text-xs text-slate-600">Informe também, no campo acima, o prazo individual de produção em dias úteis. O limite controla encomendas pendentes, sem alterar as peças prontas.</p>
+                    </div>}
+                    {errors.print3d_preorder_enabled && <p className="text-xs text-red-700">{errors.print3d_preorder_enabled.message}</p>}
+                    {errors.production_days && <p className="text-xs text-red-700">{errors.production_days.message}</p>}
+                    <p className="text-xs text-amber-800">O cadastro desta opção não libera a venda sob encomenda até a integração segura do checkout e da ficha de produção.</p>
+                </div>}
             </div>
 
             <div className="flex flex-col gap-3 pt-4 border-t border-slate-200">

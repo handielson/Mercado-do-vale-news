@@ -8,6 +8,15 @@ const zlib = require('zlib');
 const { spawn } = require('child_process');
 const ffmpegStaticPath = require('ffmpeg-static');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
+const { normalizePrint3dProductOffer } = require('./services/print3dProductOffer.cjs');
+const { registerProductStorefrontOfferRoutes } = require('./services/productStorefrontOffersServer.cjs');
+const { registerPrint3dCustomerAccountRoutes } = require('./services/print3dCustomerAccountsServer.cjs');
+const { registerPrint3dProductionRoutes } = require('./services/print3dProductionServer.cjs');
+const { registerPrint3dCheckoutRoutes } = require('./services/print3dCheckoutServer.cjs');
+const { registerPrint3dPaymentRoutes } = require('./services/print3dPaymentsServer.cjs');
+const { paymentsConfigured } = require('./services/print3dPayments.cjs');
+const { verifyShippingQuote } = require('./services/print3dShippingQuoteToken.cjs');
+const { createPrint3dWhatsAppSender } = require('./services/print3dWhatsAppSender.cjs');
 const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
 const { registerSmartphonePriceGroupRoutes, withSmartphonePriceWrite, patchProductWithGroupPrices, insertProductRecordsWithGroupPrices } = require('./services/smartphonePriceGroupsServer.cjs');
 const {
@@ -17,6 +26,7 @@ const {
 } = require('./services/mercadoLivreServer.cjs');
 const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
 const { registerCustomerGoogleAuthRoutes } = require('./services/customerGoogleAuthServer.cjs');
+const { registerCustomerAuthProtection } = require('./services/customerAuthProtection.cjs');
 const { ensureTikTokPrintTable, registerTikTokPrintRoutes } = require('./services/tiktokShopPrintServer.cjs');
 const { ensureTikTokFulfillmentTable, createTikTokFulfillmentAutomation } = require('./services/tiktokShopFulfillmentAutomation.cjs');
 const { normalizeRelayCommand, ensureSchema: ensureN8nAdminHandoffSchema, notifyAdmins: notifyN8nHandoffAdmins, handleRelayCommand } = require('./services/n8nAdminHandoffRelay.cjs');
@@ -782,7 +792,7 @@ async function sendSmtpMail(config, message) {
     await smtpWrite(socket, state, 'DATA', 354);
     const boundary = `mdv-${crypto.randomBytes(12).toString('hex')}`;
     const raw = [
-      `From: ${encodeSmtpHeader(process.env.SMTP_FROM_NAME || 'Mercado do Vale')} <${config.from}>`,
+      `From: ${encodeSmtpHeader(message.fromName || process.env.SMTP_FROM_NAME || 'Mercado do Vale')} <${config.from}>`,
       `To: <${message.to}>`,
       `Subject: ${encodeSmtpHeader(message.subject)}`,
       'MIME-Version: 1.0',
@@ -1326,6 +1336,12 @@ function getPdvReceiptPublicBaseUrl(req) {
   return 'https://www.mercadodovale.com.br';
 }
 
+const customerAuthProtection = registerCustomerAuthProtection(fastify, {
+  pool, secret: VPS_AUTH_SECRET, publicUrl: getPublicAppUrl(),
+  enabled: process.env.MDV_CUSTOMER_AUTH_SECURITY_ENABLED === '1',
+  turnstileSecret: process.env.MDV_TURNSTILE_SECRET_KEY,
+});
+
 registerCustomerGoogleAuthRoutes(fastify, {
   pool,
   authSecret: VPS_AUTH_SECRET,
@@ -1335,13 +1351,13 @@ registerCustomerGoogleAuthRoutes(fastify, {
   normalizeAuthCustomerType,
 });
 
-fastify.post('/auth/login', async (request, reply) => {
+fastify.post('/auth/login', { config: { rateLimit: { max: 60, timeWindow: '1 hour', keyGenerator: verificationClientIp } } }, async (request, reply) => {
   await ensureCustomerAuthTable();
   const body = request.body || {};
   const email = normalizeAuthEmail(body.email);
   const cpfCnpj = normalizeAuthDocument(body.cpf_cnpj || body.cpf || body.document);
   const password = String(body.password || '');
-  if ((!email && !cpfCnpj) || !password) {
+  if ((!email && !cpfCnpj) || !password || password.length > 128) {
     return reply.code(400).send({ error: 'Email/CPF e senha sao obrigatorios' });
   }
 
@@ -1365,7 +1381,17 @@ fastify.post('/auth/login', async (request, reply) => {
     params
   );
   const row = rows?.[0] || null;
-  if (!row || !(await verifyVpsPassword(password, row.salt, row.password_hash))) {
+  const attempt = await customerAuthProtection.login(request, {
+    accountId: row?.id, identifier: email ? `email:${email}` : `document:${cpfCnpj}`,
+    check: async () => {
+      const valid = await verifyVpsPassword(password, row?.salt || '0'.repeat(32), row?.password_hash || '0'.repeat(128));
+      return Boolean(row && valid);
+    },
+  });
+  if (attempt.blocked) {
+    return reply.header('Retry-After', '900').code(429).send({ error: 'Muitas tentativas. Aguarde 15 minutos ou recupere sua senha pelo e-mail ou WhatsApp cadastrado.' });
+  }
+  if (!attempt.valid) {
     return reply.code(401).send({ error: 'Credenciais invalidas' });
   }
   if (row.is_active === 0 || row.account_status === 'pending') {
@@ -1682,7 +1708,7 @@ fastify.post('/auth/password', async (request, reply) => {
   return { ok: true };
 });
 
-fastify.post('/auth/password-reset/request', async (request, reply) => {
+fastify.post('/auth/password-reset/request', { config: { rateLimit: { max: 5, timeWindow: '1 hour', keyGenerator: verificationClientIp } } }, async (request, reply) => {
   await ensureCustomerAuthTable();
   await ensurePasswordResetTable();
   const channel = request.body?.channel === 'whatsapp' ? 'whatsapp' : 'email';
@@ -1752,7 +1778,7 @@ fastify.post('/auth/password-reset/request', async (request, reply) => {
   return genericResponse;
 });
 
-fastify.post('/auth/password-reset/confirm', async (request, reply) => {
+fastify.post('/auth/password-reset/confirm', { config: { rateLimit: { max: 10, timeWindow: '1 hour', keyGenerator: verificationClientIp } } }, async (request, reply) => {
   await ensureCustomerAuthTable();
   await ensurePasswordResetTable();
   const token = String(request.body?.token || '').trim();
@@ -1762,33 +1788,30 @@ fastify.post('/auth/password-reset/confirm', async (request, reply) => {
   }
 
   const tokenHash = hashAuthResetToken(token);
-  const [rows] = await pool.query(
-    `SELECT customer_id, expires_at, used_at
-     FROM customer_auth_password_resets
-     WHERE token_hash = ?
-     LIMIT 1`,
-    [tokenHash]
-  );
-  const reset = rows?.[0] || null;
-  if (!reset || reset.used_at || new Date(reset.expires_at).getTime() < Date.now()) {
-    return reply.code(400).send({ error: 'Link de recuperacao invalido ou expirado' });
-  }
-
-  const [customers] = await pool.query('SELECT id, email, cpf_cnpj FROM customers WHERE id = ? LIMIT 1', [reset.customer_id]);
-  const customer = customers?.[0] || null;
-  if (!customer) return reply.code(400).send({ error: 'Link de recuperacao invalido ou expirado' });
-
   const { salt, hash } = await hashVpsPassword(password);
-  await pool.query(
-    `UPDATE customer_auth
-     SET password_hash = ?, salt = ?, updated_at = NOW()
-     WHERE customer_id = ?`,
-    [hash, salt, customer.id]
-  );
-  await pool.query(
-    'UPDATE customer_auth_password_resets SET used_at = NOW() WHERE token_hash = ?',
-    [tokenHash]
-  );
+  const connection = await pool.getConnection();
+  let customer;
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      `SELECT customer_id, expires_at, used_at FROM customer_auth_password_resets
+       WHERE token_hash = ? LIMIT 1 FOR UPDATE`, [tokenHash]);
+    const reset = rows?.[0];
+    if (!reset || reset.used_at || new Date(reset.expires_at).getTime() < Date.now()) {
+      await connection.rollback();
+      return reply.code(400).send({ error: 'Link de recuperacao invalido ou expirado' });
+    }
+    const [customers] = await connection.query('SELECT id, email, cpf_cnpj FROM customers WHERE id = ? LIMIT 1', [reset.customer_id]);
+    customer = customers?.[0];
+    if (!customer) {
+      await connection.rollback();
+      return reply.code(400).send({ error: 'Link de recuperacao invalido ou expirado' });
+    }
+    await connection.query('UPDATE customer_auth SET password_hash = ?, salt = ?, updated_at = NOW() WHERE customer_id = ?', [hash, salt, customer.id]);
+    await connection.query('UPDATE customer_auth_password_resets SET used_at = NOW() WHERE customer_id = ? AND used_at IS NULL', [customer.id]);
+    await customerAuthProtection.clearAccount(connection, customer.id);
+    await connection.commit();
+  } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
 
   try {
     const email = normalizeAuthEmail(customer.email);
@@ -2078,6 +2101,15 @@ const VPS_PROXY_PUBLIC_TABLE_DATA_READ_TABLES = new Set([
   'product_reviews',
   'promotions',
 ]);
+const VPS_PROXY_PUBLIC_PRINT3D_AUTH_POST_PATHS = new Set([
+  '/print3d/auth/register', '/print3d/auth/verification/request', '/print3d/auth/verify-email',
+  '/print3d/auth/login', '/print3d/auth/password/request', '/print3d/auth/password/reset',
+  '/print3d/auth/phone/register/request', '/print3d/auth/phone/register/verify',
+  '/print3d/auth/phone/request', '/print3d/auth/phone/verify', '/print3d/auth/phone/confirm',
+  '/print3d/auth/password/phone/request', '/print3d/auth/password/phone/verify',
+  '/print3d/auth/password/phone/confirm',
+  '/print3d/auth/google/prepare', '/print3d/auth/google/exchange',
+]);
 
 function isVpsProxyPublicTableDataReadPath(pathname) {
   const match = pathname.match(/^\/table-data\/([a-zA-Z0-9_]+)$/u);
@@ -2087,6 +2119,14 @@ function isVpsProxyPublicTableDataReadPath(pathname) {
 function isVpsProxyPublicPath(proxyPath, method = 'GET') {
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const pathname = proxyPath.split('?')[0] || '/';
+  if (normalizedMethod === 'GET' && pathname === '/print3d/production') return true;
+  if (['GET', 'POST'].includes(normalizedMethod) && pathname === '/print3d/checkout') return true;
+  if (normalizedMethod === 'GET' && /^\/print3d\/orders(?:\/[0-9a-f-]{36}(?:\/payment)?)?$/i.test(pathname)) return true;
+  if (normalizedMethod === 'POST' && /^\/print3d\/orders\/[0-9a-f-]{36}\/payment(?:\/refresh)?$/i.test(pathname)) return true;
+  if (normalizedMethod === 'POST' && pathname === '/print3d/payments/webhook') return true;
+  if (normalizedMethod === 'POST' && VPS_PROXY_PUBLIC_PRINT3D_AUTH_POST_PATHS.has(pathname)) return true;
+  if (normalizedMethod === 'GET' && (pathname === '/print3d/auth/me' || pathname === '/print3d/auth/phone/status')) return true;
+  if (normalizedMethod === 'GET' && pathname === '/print3d/auth/google/config') return true;
   if (normalizedMethod === 'PATCH' && pathname === '/auth/profile') return true;
   if (normalizedMethod === 'GET' && pathname === '/auth/me') return true;
 
@@ -2116,6 +2156,7 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
   }
 
   if (normalizedMethod === 'POST' && pathname === '/public/feedback') return true;
+  if (normalizedMethod === 'POST' && pathname === '/storefronts/loja_3d/shipping/quote') return true;
 
   if (normalizedMethod === 'GET' && pathname === '/pdv/display-state') {
     return true;
@@ -3945,6 +3986,9 @@ async function notifyOnlineOrderCreatedWhatsAppVps(orderId) {
   );
   const order = orders?.[0] || null;
   if (!order) return { status: 'failed', error: 'order_not_found' };
+  if (!require('./services/orderStorefront.cjs').canUseMercadoDoValeOrderAutomation(order)) {
+    return { status: 'skipped', reason: 'storefront_not_mercado_do_vale' };
+  }
 
   const [sentRows] = await pool.query(
     `SELECT id FROM whatsapp_automation_logs
@@ -4001,6 +4045,9 @@ async function notifyOnlineOrderCreatedWhatsAppVps(orderId) {
 
 async function notifyOnlineOrderStatusWhatsAppVps(order, situationOverride = '') {
   if (!order?.id) return { status: 'failed', error: 'order_not_found' };
+  if (!require('./services/orderStorefront.cjs').canUseMercadoDoValeOrderAutomation(order)) {
+    return { status: 'skipped', reason: 'storefront_not_mercado_do_vale' };
+  }
   const status = String(order.status || '').trim();
   const situation = String(situationOverride || ONLINE_ORDER_STATUS_LABELS_VPS[status] || status || 'Atualizado');
   return sendWhatsAppAutomationMessageVps({
@@ -5073,6 +5120,10 @@ async function handleMercadoPagoWebhookVps(body) {
       };
     }
 
+    if (!require('./services/orderStorefront.cjs').canUseMercadoDoValeOrderAutomation(order)) {
+      return { status: 200, body: { message: 'ignored', reason: 'storefront_not_mercado_do_vale', order_id: order.id } };
+    }
+
     if (String(order.status || '') === 'cancelled') {
       return { status: 200, body: { message: 'ignored', reason: 'order cancelled', order_id: order.id } };
     }
@@ -5188,6 +5239,7 @@ async function handleShippingApiVps(query, body = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', token: body.token },
       body: JSON.stringify(buildFrenetShippingBody(body)),
+      signal: body.signal,
     });
     const data = await readShippingJsonResponse(apiRes);
     if (!apiRes.ok) return shippingError(apiRes.status, data, { provider, action, step: 'frenet quote', upstreamStatus: apiRes.status });
@@ -5219,6 +5271,7 @@ async function handleShippingApiVps(query, body = {}) {
         'User-Agent': 'MercadoDoVale/1.0 (suporte@mercadodovale.com)',
       },
       body: JSON.stringify(melhorEnvioBody),
+      signal: body.signal,
     });
     const data = await readShippingJsonResponse(apiRes);
     if (!apiRes.ok) return shippingError(apiRes.status, data, { provider, action, step: 'melhor-envio calculate', upstreamStatus: apiRes.status, sandbox: !!body.sandbox });
@@ -20638,6 +20691,62 @@ fastify.get('/autoresponder/settings', { preHandler: requireSyncKey }, async () 
   return sanitizeAutoresponderSettings(rows[0] || null);
 });
 
+registerProductStorefrontOfferRoutes(fastify, {
+  pool,
+  calculateShipping: handleShippingApiVps,
+  requireSyncKeyOrAdmin,
+  enrichProducts: (products, req) => attachCatalogModelColorImages(products, buildSeoBaseUrl(req)),
+});
+
+const print3dWhatsAppSender = createPrint3dWhatsAppSender({
+  webhookUrl: process.env.MDV_PRINT3D_N8N_VERIFY_URL,
+  webhookToken: process.env.MDV_PRINT3D_N8N_VERIFY_TOKEN,
+  evolutionInstance: process.env.MDV_PRINT3D_EVOLUTION_INSTANCE,
+  senderPhone: process.env.MDV_PRINT3D_WHATSAPP_NUMBER,
+  mercadoDoValePhone: process.env.MDV_MARKET_WHATSAPP_NUMBER,
+});
+const print3dAccounts = registerPrint3dCustomerAccountRoutes(fastify, {
+  pool,
+  enabled: process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig()),
+  authSecret: process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET,
+  publicUrl: process.env.MDV_PRINT3D_PUBLIC_URL,
+  fromEmail: process.env.MDV_PRINT3D_SMTP_FROM,
+  brandName: process.env.MDV_PRINT3D_BRAND_NAME,
+  phoneEnabled: process.env.MDV_PRINT3D_PHONE_ENABLED === '1' && print3dWhatsAppSender.configured,
+  turnstileSecret: process.env.MDV_PRINT3D_TURNSTILE_SECRET_KEY,
+  google: {
+    enabled: process.env.MDV_PRINT3D_GOOGLE_ENABLED === '1',
+    clientId: process.env.MDV_PRINT3D_GOOGLE_CLIENT_ID,
+    clientSecret: process.env.MDV_PRINT3D_GOOGLE_CLIENT_SECRET,
+    redirectUri: process.env.MDV_PRINT3D_GOOGLE_REDIRECT_URI,
+    mdvClientId: process.env.GOOGLE_LOGIN_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID,
+  },
+  sendWhatsApp: print3dWhatsAppSender,
+  sendEmail: async message => {
+    const config = getSmtpConfig();
+    if (!config) return { sent: false, reason: 'smtp_not_configured' };
+    return sendSmtpMail({ ...config, from: message.from }, message);
+  },
+});
+registerPrint3dCheckoutRoutes(fastify, {
+  pool, getCustomer: print3dAccounts.getCustomer,
+  loadQuote: require('./services/productStorefrontOffersServer.cjs').loadPrint3dQuote,
+  verifyShipping: input => verifyShippingQuote(input, process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET),
+  companyId: process.env.MDV_PRINT3D_COMPANY_ID,
+  enabled: process.env.MDV_PRINT3D_CHECKOUT_ENABLED === '1'
+    && process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig())
+    && process.env.MDV_PRINT3D_PRODUCTION_ENABLED === '1'
+    && process.env.MDV_PRINT3D_SHIPPING_ENABLED === '1'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(process.env.MDV_PRINT3D_COMPANY_ID || '')
+    && paymentsConfigured(process.env),
+});
+registerPrint3dPaymentRoutes(fastify, { pool, getCustomer: print3dAccounts.getCustomer });
+registerPrint3dProductionRoutes(fastify, {
+  pool, getBearerAuthContext: getVpsBearerAuthContext,
+  getCustomer: print3dAccounts.getCustomer,
+  enabled: process.env.MDV_PRINT3D_PRODUCTION_ENABLED === '1',
+});
+
 const PAYJOY_DEFAULT_ANALYSIS_URL = 'https://app.payjoy.com/br/d2c?utm_source=payjoysite&utm_medium=website&utm_campaign=payjoywebsitetraffic&utm_term=traffic&utm_content=payjoywebsitetraffic&click_source=payjoysite';
 const PAYJOY_FOLLOWUP_MESSAGES = Object.freeze({
   analysis_check: 'Oi! Conseguiu fazer a análise da PayJoy? Se já apareceu o resultado, me conte por aqui que ajudo você a dar sequência à compra no Mercado do Vale. 😊',
@@ -25888,7 +25997,8 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
-       exclude_from_seo, hide_from_catalog, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`
+       exclude_from_seo, hide_from_catalog, meta_title, meta_description, keywords, view_count, production_days,
+       is_print3d, print3d_preorder_enabled, print3d_preorder_limit, created_at, updated_at`
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans, description,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
@@ -25902,7 +26012,8 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
-       exclude_from_seo, hide_from_catalog, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
+       exclude_from_seo, hide_from_catalog, meta_title, meta_description, keywords, view_count, production_days,
+       is_print3d, print3d_preorder_enabled, print3d_preorder_limit, created_at, updated_at`;
 
 
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
@@ -27320,50 +27431,9 @@ fastify.post('/stock-locations/priority-decrements', { preHandler: requireSyncKe
 });
 
 fastify.post('/stock-locations/priority-reservations', { preHandler: requireSyncKey }, async (req, reply) => {
-  const input = req.body || {};
-  const quantity = stockNumber(input.quantity);
-  if (!input.product_id || quantity <= 0) return reply.code(400).send({ error: 'Produto e quantidade sao obrigatorios.' });
-  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
-  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
-  const sources = await getPriorityStockSources(input.product_id);
-  const totalAvailable = sources.reduce((sum, row) => sum + Math.max(0, stockNumber(row.quantity) - stockNumber(row.reserved_quantity)), 0);
-  if (totalAvailable < quantity) return reply.code(400).send({ error: 'insufficient_stock_by_location' });
-
-  let remaining = quantity;
-  const result = [];
-  for (const source of sources) {
-    if (remaining <= 0) break;
-    const previousReserved = stockNumber(source.reserved_quantity);
-    const available = Math.max(0, stockNumber(source.quantity) - previousReserved);
-    const reserve = Math.min(remaining, available);
-    if (reserve <= 0) continue;
-    const nextReserved = previousReserved + reserve;
-    await upsertStockLocationBalance({
-      companyId: source.company_id || product.company_id,
-      productId: input.product_id,
-      depositId: source.deposit_id,
-      locationId: source.location_id,
-      quantity: stockNumber(source.quantity),
-      reservedQuantity: nextReserved,
-    });
-    await insertStockMovement({
-      company_id: source.company_id || product.company_id,
-      product_id: input.product_id,
-      from_deposit_id: source.deposit_id,
-      from_location_id: source.location_id,
-      quantity: reserve,
-      movement_type: 'reservation',
-      reason: String(input.reason || '').trim() || 'Reserva por prioridade',
-      reference_type: input.reference_type || 'order_reservation',
-      reference_id: input.reference_id || null,
-      previous_from_quantity: stockNumber(source.quantity),
-      new_from_quantity: stockNumber(source.quantity),
-      notes: input.notes || null,
-    });
-    result.push({ stock_location_id: source.id, deposit_id: source.deposit_id, location_id: source.location_id, quantity_reserved: reserve, previous_reserved_quantity: previousReserved, new_reserved_quantity: nextReserved });
-    remaining -= reserve;
-  }
-  return result;
+  const outcome = await require('./services/priorityStockReservation.cjs').reservePriorityStock(pool, req.body || {});
+  if (outcome.error) return reply.code(outcome.status).send({ error: outcome.error });
+  return outcome.reservations;
 });
 
 async function processOrderReservation(orderId, mode, reason, notes) {
@@ -27472,6 +27542,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/card', { preHandler: requir
   const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
   const order = orders?.[0] || null;
   if (!order) return reply.code(404).send({ error: 'Pedido não encontrado.' });
+  if (!require('./services/orderStorefront.cjs').canUseMercadoDoValeOrderAutomation(order)) return reply.code(409).send({ error: 'Pagamento deste site exige fluxo próprio.' });
   if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) {
     return reply.code(403).send({ error: 'Forbidden for this order' });
   }
@@ -27578,6 +27649,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/pix', { preHandler: require
   const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
   const order = orders?.[0] || null;
   if (!order) return reply.code(404).send({ error: 'Pedido não encontrado.' });
+  if (!require('./services/orderStorefront.cjs').canUseMercadoDoValeOrderAutomation(order)) return reply.code(409).send({ error: 'Pagamento deste site exige fluxo próprio.' });
   if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) {
     return reply.code(403).send({ error: 'Forbidden for this order' });
   }
@@ -27658,6 +27730,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/preference', { preHandler: 
   const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
   const order = orders?.[0] || null;
   if (!order) return reply.code(404).send({ error: 'Pedido não encontrado.' });
+  if (!require('./services/orderStorefront.cjs').canUseMercadoDoValeOrderAutomation(order)) return reply.code(409).send({ error: 'Pagamento deste site exige fluxo próprio.' });
   if (!access.isSync && !access.isAdmin && String(order.customer_id || '') !== String(access.customerId || '')) {
     return reply.code(403).send({ error: 'Forbidden for this order' });
   }
@@ -27857,6 +27930,7 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
   const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
   const order = orders?.[0] || null;
   if (!order) return reply.code(404).send({ error: 'Pedido nao encontrado.' });
+  if (!require('./services/orderStorefront.cjs').canUseMercadoDoValeOrderAutomation(order)) return reply.code(409).send({ error: 'Estorno deste site exige fluxo próprio.' });
   if (String(order.status || '') !== 'cancelled') {
     return reply.code(409).send({ error: 'Cancele o pedido antes de estornar o pagamento.' });
   }
@@ -28299,6 +28373,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
   for (const rawProduct of products) {
     const p = { ...rawProduct };
     try {
+      normalizePrint3dProductOffer(p);
       let matchedExisting = false;
       const requestedId = p.id || null;
       if (p.bling_id) {
@@ -28341,8 +28416,9 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           warranty_type, warranty_template_id, company_id, kits,
           offer_type, offer_parent_product_id, offer_visibility,
           shopee_strategy, shopee_offer_status, shopee_offer_error,
-          hide_from_catalog, meta_title, meta_description, keywords
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          hide_from_catalog, meta_title, meta_description, keywords,
+          production_days, is_print3d, print3d_preorder_enabled, print3d_preorder_limit
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
           name=IF(VALUES(name) IS NULL, name, VALUES(name)),
           slug=IF(VALUES(slug) IS NULL, slug, VALUES(slug)),
@@ -28391,6 +28467,10 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           meta_title=IF(VALUES(meta_title) IS NULL, meta_title, VALUES(meta_title)),
           meta_description=IF(VALUES(meta_description) IS NULL, meta_description, VALUES(meta_description)),
           keywords=IF(VALUES(keywords) IS NULL, keywords, VALUES(keywords)),
+          production_days=IF(VALUES(production_days) IS NULL, production_days, VALUES(production_days)),
+          is_print3d=IF(? IS NULL, is_print3d, VALUES(is_print3d)),
+          print3d_preorder_enabled=IF(? IS NULL, print3d_preorder_enabled, VALUES(print3d_preorder_enabled)),
+          print3d_preorder_limit=IF(? = 0, print3d_preorder_limit, VALUES(print3d_preorder_limit)),
           updated_at=CURRENT_TIMESTAMP`,
         [
           p.id, p.name, p.slug || null, p.sku || null,
@@ -28412,7 +28492,10 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.shopee_strategy || 'variation', p.shopee_offer_status || null, p.shopee_offer_error || null,
           optionalBool(p.hide_from_catalog),
           p.meta_title || null, p.meta_description || null, p.keywords || null,
+          p.production_days ?? null, optionalBool(p.is_print3d) ?? 0,
+          optionalBool(p.print3d_preorder_enabled) ?? 0, p.print3d_preorder_limit ?? null,
           optionalBool(p.is_parent),
+          optionalBool(p.is_print3d), optionalBool(p.print3d_preorder_enabled), Object.hasOwn(p, 'print3d_preorder_limit') ? 1 : 0,
         ]
       );
       if ('marketing_background_url' in p || 'marketing_background_no_price_url' in p || 'marketing_video_url' in p) {
@@ -28539,6 +28622,7 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
 // Single product update
 fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   let p = req.body;
+  normalizePrint3dProductOffer(p);
   const conflict = await findProductSerializedIdentifierConflict(
     collectProductSerializedIdentifiers(p),
     req.params.id
@@ -28559,7 +28643,9 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       video_url=?, marketing_background_url=?, marketing_background_no_price_url=?, marketing_video_url=?, track_inventory=?, is_gift=?,
       warranty_type=?, warranty_template_id=?, kits=?,
       hide_from_catalog=?, meta_title=?, meta_description=?, keywords=?,
-      production_days=?,
+      production_days=?, is_print3d=COALESCE(?,is_print3d),
+      print3d_preorder_enabled=COALESCE(?,print3d_preorder_enabled),
+      print3d_preorder_limit=CASE WHEN ? = 1 THEN ? ELSE print3d_preorder_limit END,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?`,
     [
@@ -28581,6 +28667,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.hide_from_catalog ? 1 : 0,
       p.meta_title || null, p.meta_description || null, p.keywords || null,
       p.production_days != null ? parseInt(p.production_days) : null,
+      optionalBool(p.is_print3d), optionalBool(p.print3d_preorder_enabled), Object.hasOwn(p, 'print3d_preorder_limit') ? 1 : 0, p.print3d_preorder_limit ?? null,
       req.params.id,
     ]
   );
@@ -29700,6 +29787,13 @@ async function getPrimaryKey(pool, tableName) {
 // Validação de nome de tabela
 const TABLE_DATA_BLOCKED_TABLES = new Set([
   'customer_phone_verifications', 'customer_phone_verification_limits',
+  'print3d_customer_auth', 'print3d_customer_tokens',
+  'print3d_phone_verifications', 'print3d_phone_verification_limits',
+  'print3d_login_limits', 'customer_login_limits',
+  'print3d_customer_google', 'print3d_google_handoffs',
+  'print3d_production_jobs', 'print3d_production_events',
+  'print3d_order_plans', 'print3d_order_item_plans', 'print3d_order_payment_receipts',
+  'print3d_checkout_requests', 'print3d_order_shipping', 'print3d_order_stock_reservations', 'print3d_payment_charges',
   'pdv_cash_sessions', 'pdv_cash_closings', 'pdv_cash_movements',
   'pdv_cash_events', 'pdv_cash_rectifications', 'pdv_cash_documents',
 ]);
@@ -29862,6 +29956,9 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return reply.code(400).send({ error: 'Body must be a JSON object' });
   }
+  if (name === 'orders' && !require('./services/orderStorefront.cjs').isLegacyMdvOrderCreate(body)) {
+    return reply.code(403).send({ error: 'Pedidos de outro site exigem checkout próprio.' });
+  }
 
   const pk = await getPrimaryKey(pool, name);
   const insertBody = { ...body };
@@ -29925,6 +30022,9 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
   const rows = req.body;
   if (!Array.isArray(rows) || rows.length === 0) {
     return reply.code(400).send({ error: 'Body must be a non-empty array' });
+  }
+  if (name === 'orders' && !rows.every(row => require('./services/orderStorefront.cjs').isLegacyMdvOrderCreate(row))) {
+    return reply.code(403).send({ error: 'Pedidos de outro site exigem checkout próprio.' });
   }
 
   const pk = await getPrimaryKey(pool, name);
@@ -32367,6 +32467,16 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
   const body = req.body;
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return reply.code(400).send({ error: 'Body must be a JSON object' });
+  }
+  if (name === 'orders') {
+    if (pkCol !== 'id' || !require('./services/orderStorefront.cjs').isLegacyMdvOrderPatch(body)) {
+      return reply.code(403).send({ error: 'Origem do pedido é imutável nesta rota.' });
+    }
+    const [existingOrders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [pkValue]);
+    if (!existingOrders?.[0]) return reply.code(404).send({ error: 'Not found' });
+    if (!require('./services/orderStorefront.cjs').canUseMercadoDoValeOrderAutomation(existingOrders[0])) {
+      return reply.code(403).send({ error: 'Pedido de outro site exige fluxo próprio.' });
+    }
   }
 
   if (name === 'products') {
@@ -35867,10 +35977,18 @@ async function ensureBannerBackgroundColorColumn() {
 }
 
 fastify.get('/banners', async (req, reply) => {
-  const where = req.query.active === 'true' ? 'WHERE active=1' : '';
-  const [rows] = await pool.query(
-    `SELECT * FROM banners ${where} ORDER BY display_order ASC, created_at DESC`
-  );
+  const storefront = req.query.storefront || 'mercado_do_vale';
+  if (!['mercado_do_vale', 'loja_3d'].includes(storefront)) return reply.code(400).send({ error: 'Site inválido.' });
+  const where = req.query.active === 'true' ? ' AND active=1' : '';
+  let rows;
+  try {
+    [rows] = await pool.query(
+      `SELECT * FROM banners WHERE storefront=?${where} ORDER BY display_order ASC, created_at DESC`, [storefront]);
+  } catch (error) {
+    if (error.code !== 'ER_BAD_FIELD_ERROR') throw error;
+    if (storefront === 'loja_3d') return reply.code(503).send({ error: 'Banners por loja aguardam ativação.' });
+    [rows] = await pool.query(`SELECT * FROM banners WHERE 1=1${where} ORDER BY display_order ASC, created_at DESC`);
+  }
   reply.header('Cache-Control', 'public, max-age=120');
   return rows.map(mapBannerRow);
 });
@@ -35884,12 +36002,14 @@ fastify.get('/banners/:id', async (req, reply) => {
 
 fastify.post('/banners', { preHandler: requireSyncKey }, async (req, reply) => {
   const b = req.body;
+  const storefront = b.storefront || 'mercado_do_vale';
+  if (!['mercado_do_vale', 'loja_3d'].includes(storefront)) return reply.code(400).send({ error: 'Site inválido.' });
   const id = require('crypto').randomUUID();
   await ensureBannerBackgroundColorColumn();
   await pool.query(
-    `INSERT INTO banners (id,title,image_url,background_color,link_url,active,display_order,start_date,end_date)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-    [id,b.title||null,b.image_url||null,b.background_color||null,b.link_url||b.link_target||null,b.active?1:0,b.display_order||0,b.start_date||null,b.end_date||null]
+    `INSERT INTO banners (id,title,image_url,background_color,link_url,active,display_order,start_date,end_date,storefront)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [id,b.title||null,b.image_url||null,b.background_color||null,b.link_url||b.link_target||null,b.active?1:0,b.display_order||0,b.start_date||null,b.end_date||null,storefront]
   );
   const [rows] = await pool.query('SELECT * FROM banners WHERE id=?', [id]);
   return mapBannerRow(rows[0]);
@@ -35897,7 +36017,8 @@ fastify.post('/banners', { preHandler: requireSyncKey }, async (req, reply) => {
 
 fastify.patch('/banners/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   const b = req.body;
-  const allowedBannerFields = ['title', 'image_url', 'background_color', 'link_url', 'link_target', 'active', 'display_order', 'start_date', 'end_date'];
+  if (b.storefront !== undefined && !['mercado_do_vale', 'loja_3d'].includes(b.storefront)) return reply.code(400).send({ error: 'Site inválido.' });
+  const allowedBannerFields = ['title', 'image_url', 'background_color', 'link_url', 'link_target', 'active', 'display_order', 'start_date', 'end_date', 'storefront'];
   const sets = [];
   const params = [];
   await ensureBannerBackgroundColorColumn();
@@ -37360,7 +37481,7 @@ async function synoApiGet(apiPath) {
   return synoHttpGet(urlObj, apiPath);
 }
 
-function normalizePrivateSynologyPath(value, label) {
+function normalizePrivateSynologyPath(value, label, allowedRoot = SIGNED_WARRANTY_SYNOLOGY_FOLDER) {
   const normalizeAbsolutePath = (candidate) => {
     const raw = String(candidate || '').trim();
     if (!raw.startsWith('/') || /[\\\x00-\x1f\x7f]/.test(raw)) return null;
@@ -37370,7 +37491,7 @@ function normalizePrivateSynologyPath(value, label) {
     }
     return raw.length > 1 ? raw.replace(/\/+$/, '') : raw;
   };
-  const root = normalizeAbsolutePath(SIGNED_WARRANTY_SYNOLOGY_FOLDER);
+  const root = normalizeAbsolutePath(allowedRoot);
   const normalized = normalizeAbsolutePath(value);
   if (!root || !normalized || (normalized !== root && !normalized.startsWith(`${root}/`))) {
     throw new Error(`invalid_synology_${label}`);
@@ -37378,8 +37499,8 @@ function normalizePrivateSynologyPath(value, label) {
   return normalized;
 }
 
-function joinPrivateSynologyPath(folderPath, fileName) {
-  const folder = normalizePrivateSynologyPath(folderPath, 'folder');
+function joinPrivateSynologyPath(folderPath, fileName, allowedRoot = SIGNED_WARRANTY_SYNOLOGY_FOLDER) {
+  const folder = normalizePrivateSynologyPath(folderPath, 'folder', allowedRoot);
   const name = String(fileName || '').trim();
   if (!name || name === '.' || name === '..' || /[\\/\x00-\x1f\x7f]/.test(name)) {
     throw new Error('invalid_synology_file_name');
@@ -37464,8 +37585,10 @@ async function listPrivateSynologyFolder(folderPath, { limit = 1000, offset = 0 
   };
 }
 
-async function downloadBufferFromSynologyPrivateFolder(filePath) {
-  const normalizedPath = normalizePrivateSynologyPath(filePath, 'file_path');
+async function downloadBufferFromSynologyPrivateFolder(filePath, { allowedRoot, maxBytes = SIGNED_WARRANTY_MAX_DOWNLOAD_BYTES } = {}) {
+  const normalizedPath = allowedRoot
+    ? normalizePrivateSynologyPath(filePath, 'file_path', allowedRoot)
+    : normalizePrivateSynologyPath(filePath, 'file_path');
   const sid = await synoLogin();
   const urlObj = new URL(SYNO_URL);
   const https = require('https');
@@ -37499,7 +37622,7 @@ async function downloadBufferFromSynologyPrivateFolder(filePath) {
         .toLowerCase()
         .includes('application/json')
         ? SIGNED_WARRANTY_MAX_JSON_BYTES
-        : SIGNED_WARRANTY_MAX_DOWNLOAD_BYTES;
+        : maxBytes;
       response.on('data', (chunk) => {
         if (settled) return;
         const buffer = Buffer.from(chunk);
@@ -37546,10 +37669,10 @@ async function uploadBufferToSynologyPrivateFolder(
   folderPath,
   fileName,
   fileBuffer,
-  { overwrite = true, contentType = 'application/octet-stream' } = {}
+  { overwrite = true, contentType = 'application/octet-stream', allowedRoot = SIGNED_WARRANTY_SYNOLOGY_FOLDER } = {}
 ) {
-  const folder = normalizePrivateSynologyPath(folderPath, 'folder');
-  const fullPath = joinPrivateSynologyPath(folder, fileName);
+  const folder = normalizePrivateSynologyPath(folderPath, 'folder', allowedRoot);
+  const fullPath = joinPrivateSynologyPath(folder, fileName, allowedRoot);
   if (!Buffer.isBuffer(fileBuffer) || fileBuffer.length === 0) {
     throw new Error('empty_synology_upload');
   }
@@ -42723,6 +42846,13 @@ const tiktokFulfillment = createTikTokFulfillmentAutomation({
   callApi: callTikTokShopOpenApiVps, loadSettings: loadTikTokShopOAuthSettingsVps,
 });
 require('./services/centralPrintingServer.cjs').registerCentralPrintingRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
+require('./services/print3dRecipesServer.cjs').registerPrint3dRecipeRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
+require('./services/print3dActiveRecipeServer.cjs').registerPrint3dActiveRecipeRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
+require('./services/print3dRecipeFilesServer.cjs').registerPrint3dRecipeFileRoutes(fastify, {
+  pool, getBearerAuthContext: getVpsBearerAuthContext,
+  uploadPrivate: ({ folderPath, fileName, fileBuffer, allowedRoot }) => uploadBufferToSynologyPrivateFolder(folderPath, fileName, fileBuffer, { overwrite: false, allowedRoot }),
+  downloadPrivate: ({ filePath, allowedRoot, maxBytes }) => downloadBufferFromSynologyPrivateFolder(filePath, { allowedRoot, maxBytes }),
+});
 require('./services/companyFiscalServer.cjs').registerCompanyFiscalRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 const getLiveFiscalMarketplaceOrder = async (channel, orderId) => {
     if (channel === 'shopee') {

@@ -2,6 +2,7 @@ import { buildVpsUrl, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
 import type { Customer } from '../types/customer';
 import type { CreateAccountData, PasswordResetChannel, VpsUser } from '../types/auth';
 import { normalizeCustomerFromVps } from './customers';
+import { protectAuthRequest } from './customerAuthCaptcha';
 
 export interface VpsAuthSession {
   token: string;
@@ -76,6 +77,7 @@ function buildAuthRequestUrl(path: string, method: string = 'GET'): string {
 }
 
 async function requestAuth(path: string, options: RequestInit = {}): Promise<VpsAuthSession> {
+  options = await protectAuthRequest(path, options);
   const session = readStoredSession();
   const response = await fetch(buildAuthRequestUrl(path, options.method || 'GET'), {
     ...options,
@@ -97,6 +99,7 @@ async function requestAuth(path: string, options: RequestInit = {}): Promise<Vps
 }
 
 async function requestAuthJson(path: string, options: RequestInit = {}): Promise<any> {
+  options = await protectAuthRequest(path, options);
   const response = await fetch(buildAuthRequestUrl(path, options.method || 'GET'), {
     ...options,
     headers: {

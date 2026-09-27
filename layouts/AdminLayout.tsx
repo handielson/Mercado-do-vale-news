@@ -111,6 +111,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       title: 'Produtos & Estoque',
       items: [
         { to: '/admin/products', icon: <Package size={18} />, label: 'Produtos', keywords: 'catalogo itens mercadoria' },
+        { to: '/admin/products/print3d-cost', icon: <Printer size={18} />, label: 'Calculadora 3D', keywords: 'filamento impressao custo energia insumos' },
+        { to: '/admin/products/print3d-production', icon: <Printer size={18} />, label: 'Produção 3D', keywords: 'ordens fila progresso lotes aprovadas rejeitadas encomenda' },
         { to: '/admin/inventory', icon: <ClipboardList size={18} />, label: 'Estoque', keywords: 'quantidade inventario' },
         { to: '/admin/inventory/locations', icon: <Boxes size={18} />, label: 'Locais de Estoque', keywords: 'depositos locais prateleira caixa balcao almoxarifado' },
         { to: '/admin/products/labels', icon: <Barcode size={18} />, label: 'Etiquetas', keywords: 'imprimir etiqueta codigo barras ean sku' },

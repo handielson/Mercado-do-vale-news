@@ -36,12 +36,17 @@ function pendingPhoneVerification(customer) {
 }
 
 // A prova é opaca, ligada ao telefone e ao propósito, consumida na transação do cadastro.
-function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Date.now }) {
+function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Date.now,
+  scope = 'mercado_do_vale', createTables = true }) {
+  if (!['mercado_do_vale', 'loja_3d'].includes(scope)) throw new Error('Escopo de verificação inválido');
+  const verificationTable = scope === 'loja_3d' ? 'print3d_phone_verifications' : 'customer_phone_verifications';
+  const limitsTable = scope === 'loja_3d' ? 'print3d_phone_verification_limits' : 'customer_phone_verification_limits';
   const hash = (value) => crypto.createHmac('sha256', secret).update(value).digest('hex');
   let ready;
   async function ensure() {
     if (!ready) ready = (async () => {
-      await pool.query(`CREATE TABLE IF NOT EXISTS customer_phone_verifications (
+      if (!createTables) return;
+      await pool.query(`CREATE TABLE IF NOT EXISTS ${verificationTable} (
         phone VARCHAR(13) NOT NULL PRIMARY KEY,
         challenge_id VARCHAR(64) NOT NULL UNIQUE,
         owner_key VARCHAR(100) NOT NULL,
@@ -53,7 +58,7 @@ function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Da
         proof_expires_at BIGINT NULL,
         consumed TINYINT NOT NULL DEFAULT 0
       ) ENGINE=InnoDB`);
-      await pool.query(`CREATE TABLE IF NOT EXISTS customer_phone_verification_limits (
+      await pool.query(`CREATE TABLE IF NOT EXISTS ${limitsTable} (
         bucket_key CHAR(64) NOT NULL PRIMARY KEY,
         window_start BIGINT NOT NULL,
         last_request BIGINT NOT NULL,
@@ -76,6 +81,11 @@ function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Da
   }
   async function owner(request) {
     if (request.body?.purpose === 'registration') return 'registration';
+    if (request.body?.purpose === 'password_reset' && scope === 'loja_3d') {
+      const phone = normalizeVerificationPhone(request.body?.phone);
+      if (!phone) throw verificationError('Informe um WhatsApp válido');
+      return 'reset:' + phone;
+    }
     if (request.body?.purpose !== 'profile') throw verificationError('Finalidade de confirmação inválida');
     const auth = await getAuth(request);
     if (!auth.customerId) throw verificationError('Entre na sua conta para confirmar o telefone', 401);
@@ -84,17 +94,17 @@ function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Da
   async function limit(connection, key, max, cooldown) {
     const at = now();
     await connection.query(
-      'INSERT IGNORE INTO customer_phone_verification_limits (bucket_key, window_start, last_request, requests) VALUES (?, ?, 0, 0)',
+      `INSERT IGNORE INTO ${limitsTable} (bucket_key, window_start, last_request, requests) VALUES (?, ?, 0, 0)`,
       [key, at]);
     const [[row]] = await connection.query(
-      'SELECT * FROM customer_phone_verification_limits WHERE bucket_key = ? FOR UPDATE', [key]);
+      `SELECT * FROM ${limitsTable} WHERE bucket_key = ? FOR UPDATE`, [key]);
     const fresh = at - Number(row.window_start) >= 3600000;
     const count = fresh ? 0 : Number(row.requests);
     if (count >= max || (row.last_request && at - Number(row.last_request) < cooldown)) {
       throw verificationError('Aguarde antes de pedir outro código. Há um limite de envios por hora.', 429);
     }
     await connection.query(
-      'UPDATE customer_phone_verification_limits SET window_start = ?, last_request = ?, requests = ? WHERE bucket_key = ?',
+      `UPDATE ${limitsTable} SET window_start = ?, last_request = ?, requests = ? WHERE bucket_key = ?`,
       [fresh ? at : row.window_start, at, count + 1, key]);
   }
   async function requestCode(request) {
@@ -109,7 +119,7 @@ function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Da
       await limit(connection, hash('ip:' + verificationClientIp(request)), 10, 0);
       await limit(connection, hash('phone:' + phone), 5, 60000);
       await connection.query(
-        `INSERT INTO customer_phone_verifications
+        `INSERT INTO ${verificationTable}
          (phone, challenge_id, owner_key, code_hash, attempts, expires_at, sent, proof_hash, proof_expires_at, consumed)
          VALUES (?, ?, ?, ?, 0, ?, 0, NULL, NULL, 0)
          ON DUPLICATE KEY UPDATE challenge_id = VALUES(challenge_id), owner_key = VALUES(owner_key),
@@ -120,17 +130,20 @@ function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Da
     let result;
     try {
       result = await send(phone, [
-        'Mercado do Vale 🔐',
-        'Seu código para confirmar este WhatsApp é: ' + code,
-        'Válido por 10 minutos. Digite o código somente no site do Mercado do Vale.',
+        scope === 'loja_3d' ? '3D do Vale 🔐' : 'Mercado do Vale 🔐',
+        scope === 'loja_3d' && request.body?.purpose === 'password_reset'
+          ? 'Seu código para redefinir a senha é: ' + code
+          : 'Seu código para confirmar este WhatsApp é: ' + code,
+        scope === 'loja_3d' ? 'Válido por 10 minutos. Digite o código somente no site 3D do Vale.'
+          : 'Válido por 10 minutos. Digite o código somente no site do Mercado do Vale.',
         'Não compartilhe este código. Se não foi você, ignore esta mensagem.',
       ].join('\n'));
     } catch { result = null; }
     if (!result?.ok) {
-      await pool.query('UPDATE customer_phone_verifications SET consumed = 1 WHERE challenge_id = ?', [challenge]);
+      await pool.query(`UPDATE ${verificationTable} SET consumed = 1 WHERE challenge_id = ?`, [challenge]);
       throw verificationError('Não foi possível enviar o código. Confira se o número tem WhatsApp e tente novamente em um minuto.', 503);
     }
-    await pool.query('UPDATE customer_phone_verifications SET sent = 1 WHERE challenge_id = ?', [challenge]);
+    await pool.query(`UPDATE ${verificationTable} SET sent = 1 WHERE challenge_id = ?`, [challenge]);
     return { challenge_id: challenge, expires_in: TTL_MS / 1000, retry_after: 60 };
   }
   async function verifyCode(request) {
@@ -143,18 +156,18 @@ function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Da
     await ensure();
     const result = await transaction(async (connection) => {
       const [[row]] = await connection.query(
-        'SELECT * FROM customer_phone_verifications WHERE challenge_id = ? FOR UPDATE', [challenge]);
+        `SELECT * FROM ${verificationTable} WHERE challenge_id = ? FOR UPDATE`, [challenge]);
       if (!row || row.owner_key !== ownerKey || !row.sent || row.consumed || row.proof_hash
         || Number(row.expires_at) <= now() || Number(row.attempts) >= MAX_ATTEMPTS) return null;
       const expected = Buffer.from(row.code_hash, 'hex');
       const actual = Buffer.from(hash(challenge + ':' + code), 'hex');
       if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
-        await connection.query('UPDATE customer_phone_verifications SET attempts = attempts + 1 WHERE challenge_id = ?', [challenge]);
+        await connection.query(`UPDATE ${verificationTable} SET attempts = attempts + 1 WHERE challenge_id = ?`, [challenge]);
         return null;
       }
       const proof = crypto.randomBytes(32).toString('hex');
       await connection.query(
-        'UPDATE customer_phone_verifications SET proof_hash = ?, proof_expires_at = ? WHERE challenge_id = ?',
+        `UPDATE ${verificationTable} SET proof_hash = ?, proof_expires_at = ? WHERE challenge_id = ?`,
         [hash(proof), now() + TTL_MS, challenge]);
       return { phone_verification_token: proof, expires_in: TTL_MS / 1000 };
     });
@@ -167,12 +180,12 @@ function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Da
     }
     const canonical = normalizeVerificationPhone(phone);
     const [[row]] = await connection.query(
-      'SELECT * FROM customer_phone_verifications WHERE phone = ? FOR UPDATE', [canonical]);
+      `SELECT * FROM ${verificationTable} WHERE phone = ? FOR UPDATE`, [canonical]);
     if (!row || row.owner_key !== ownerKey || row.consumed || !row.sent || !row.proof_hash
       || Number(row.proof_expires_at) <= now() || row.proof_hash !== hash(token)) {
       throw verificationError('Confirmação do WhatsApp inválida ou expirada. Confirme o número novamente.');
     }
-    await connection.query('UPDATE customer_phone_verifications SET consumed = 1 WHERE phone = ?', [canonical]);
+    await connection.query(`UPDATE ${verificationTable} SET consumed = 1 WHERE phone = ?`, [canonical]);
   }
   function register(fastify) {
     fastify.post('/auth/phone/request', { config: { rateLimit: { max: 10, timeWindow: '1 hour', keyGenerator: verificationClientIp } } }, requestCode);

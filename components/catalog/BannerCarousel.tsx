@@ -6,6 +6,7 @@ import { buildResponsiveImageSources } from '@/utils/responsive-image-sources.js
 import { ImageZoomModal } from './ImageZoomModal';
 
 interface BannerCarouselProps {
+    storefront?: 'mercado_do_vale' | 'loja_3d';
     banners?: Banner[];       // Modo preview (editor de catálogo)
     customerType?: CustomerType;   // Filtra por tipo de cliente (varejo/revenda/atacado)
     autoPlayInterval?: number;
@@ -34,6 +35,7 @@ function getBannerProductHref(destination: string): string {
 }
 
 export function BannerCarousel({
+    storefront = 'mercado_do_vale',
     banners: externalBanners,
     customerType,
     autoPlayInterval = 5000,
@@ -63,7 +65,7 @@ export function BannerCarousel({
 
     const loadBanners = async () => {
         try {
-            const data = await bannerService.getActiveBanners(customerType);
+            const data = await bannerService.getActiveBanners(customerType, storefront);
             setBanners(data);
 
             // Registrar views
@@ -116,9 +118,14 @@ export function BannerCarousel({
         const destination = banner.link_target ?? banner.link_url;
 
         if (banner.link_type === 'product' && destination) {
-            window.location.href = getBannerProductHref(destination);
+            if (storefront === 'loja_3d') {
+                const identifier = getBannerProductHref(destination).split('/produto/')[1]?.split(/[?#]/)[0] || '';
+                window.location.href = '/loja-3d?produto=' + identifier;
+            } else {
+                window.location.href = getBannerProductHref(destination);
+            }
         } else if (banner.link_type === 'category' && destination) {
-            window.location.href = `/catalog?category=${destination}`;
+            window.location.href = storefront === 'loja_3d' ? '/loja-3d?categoria=' + encodeURIComponent(destination) : `/catalog?category=${destination}`;
         } else if (banner.link_type === 'external' && destination) {
             window.open(destination, '_blank');
         } else {

@@ -41,6 +41,7 @@ function transformFromDB(row: any): Product {
         description: row.description,
         eans: row.alternative_eans?.length ? row.alternative_eans : (row.ean ? [row.ean] : []),
         specs: row.specs || {},
+        custom_fields: row.custom_fields || {},
         price_cost: row.price_cost,
         price_retail: row.price_retail,
         price_reseller: row.price_reseller,
@@ -82,6 +83,9 @@ function transformFromDB(row: any): Product {
         tag_ids: parseProductTagIds(row.tag_ids),
         kits: row.kits || [],
         production_days: row.production_days ?? null,
+        is_print3d: Number(row.is_print3d) === 1,
+        print3d_preorder_enabled: Number(row.print3d_preorder_enabled) === 1,
+        print3d_preorder_limit: row.print3d_preorder_limit == null ? null : Number(row.print3d_preorder_limit),
         created: row.created_at,
         updated: row.updated_at,
     };
@@ -302,6 +306,15 @@ async function getByEan(ean: string): Promise<Product | null> {
     return data.map(transformFromDB).find(isActiveProductForCatalog) || null;
 }
 
+async function getBySku(sku: string): Promise<Product | null> {
+    const normalized = sku.trim();
+    if (!normalized) return null;
+    const rows = await vpsApiService.getProducts({ sku: normalized, status: 'all', compact: true, limit: 2, noCache: true });
+    if (!rows) throw new Error('Não foi possível consultar o produto na VPS.');
+    if (rows.length !== 1 || rows[0].sku !== normalized) return null;
+    return transformFromDB(rows[0]);
+}
+
 async function search(query: string): Promise<Product[]> {
     const data = await vpsApiService.getProducts({ search: query, status: 'all', limit: 50, noCache: true });
     return (data || []).map(transformFromDB);
@@ -442,6 +455,9 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
         keywords: input.keywords ? input.keywords.join(',') : null,
         kits: input.kits && input.kits.length > 0 ? input.kits : null,
         production_days: input.production_days != null ? input.production_days : null,
+        is_print3d: input.is_print3d ?? false,
+        print3d_preorder_enabled: input.print3d_preorder_enabled ?? false,
+        print3d_preorder_limit: input.print3d_preorder_limit ?? null,
     };
 
     // Auto-tag: garante que a marca apareça em specs.tags_venda (cross-sell).
@@ -586,6 +602,9 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
         keywords: input.keywords ? input.keywords.join(',') : null,
         kits: input.kits && input.kits.length > 0 ? input.kits : null,
         production_days: input.production_days != null ? input.production_days : null,
+        is_print3d: input.is_print3d ?? oldProduct.is_print3d ?? false,
+        print3d_preorder_enabled: input.print3d_preorder_enabled ?? oldProduct.print3d_preorder_enabled ?? false,
+        print3d_preorder_limit: input.print3d_preorder_limit !== undefined ? input.print3d_preorder_limit : (oldProduct.print3d_preorder_limit ?? null),
     };
 
     // Auto-tag: garante que a marca atual apareça em specs.tags_venda.
@@ -654,6 +673,7 @@ async function deleteProduct(id: string): Promise<void> {
 export const productService = {
     list,
     getById,
+    getBySku,
     getByEan,
     create,
     update,

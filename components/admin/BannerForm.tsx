@@ -21,6 +21,7 @@ const LINK_OPTIONS = [
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface BannerFormProps {
+    storefront?: 'mercado_do_vale' | 'loja_3d';
     banner?: CatalogBanner;
     onSave: (data: Partial<CatalogBanner>) => Promise<void>;
     onClose: () => void;
@@ -28,17 +29,18 @@ interface BannerFormProps {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose }) => {
+export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'mercado_do_vale', onSave, onClose }) => {
     // Bug fix: start_date e end_date armazenados como string diretamente
     // (sem dupla conversão via new Date())
     const [formData, setFormData] = useState({
+        storefront: banner?.storefront ?? storefront,
         title: banner?.title ?? '',
         subtitle: banner?.subtitle ?? '',
         image_url: banner?.image_url ?? '',
         background_color: banner?.background_color ?? '#020617',
         link_type: (banner?.link_type ?? 'none') as 'none' | 'product' | 'category' | 'external',
         // Bug fix: unificar link_target e link_value (campo canônico = link_target)
-        link_target: banner?.link_target ?? banner?.link_value ?? '',
+        link_target: banner?.link_target ?? banner?.link_url ?? '',
         is_active: banner?.is_active ?? true,
         display_order: banner?.display_order ?? 0,
         target_audience: banner?.target_audience ?? ([] as string[]),
@@ -102,6 +104,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose 
         try {
             // Bug fix: strings vazias → undefined (VPS espera null/undefined, não '')
             const payload: Partial<CatalogBanner> = {
+                storefront: formData.storefront,
                 title: formData.title.trim(),
                 subtitle: formData.subtitle.trim() || undefined,
                 image_url: formData.image_url,
@@ -141,6 +144,12 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose 
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                    <label className="block text-sm font-medium">Site de exibição
+                        <select aria-label="Site de exibição" value={formData.storefront} onChange={e => setFormData(p => ({ ...p, storefront: e.target.value as 'mercado_do_vale' | 'loja_3d' }))} className="mt-2 w-full rounded-lg border p-3">
+                            <option value="mercado_do_vale">Mercado do Vale</option>
+                            <option value="loja_3d">Loja 3D</option>
+                        </select>
+                    </label>
 
                     {/* Live Preview */}
                     {imagePreview && (

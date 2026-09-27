@@ -93,6 +93,7 @@ export interface Product {
     // - Phone: { display: '6.1"', storage: '128GB', color: 'Azul', network: '5G' }
     // - Tablet: { display: '10.2"', storage: '64GB', wifi_only: true }
     specs: Record<string, any>;
+    custom_fields?: Record<string, any>;
 
     // Status using Enum (NO magic strings)
     status: ProductStatus;
@@ -178,6 +179,9 @@ export interface Product {
 
     // Production Lead Time (Encomenda)
     production_days?: number | null;  // Dias úteis de fabricação (null = usar padrão da categoria)
+    is_print3d?: boolean;             // Produto pertence à linha de impressão 3D
+    print3d_preorder_enabled?: boolean; // Intenção de aceitar encomendas deste SKU
+    print3d_preorder_limit?: number | null; // Máximo de unidades pendentes, não estoque físico
 
     // Timestamps
     created: string;
@@ -264,4 +268,7 @@ export interface ProductInput {
 
     // Production Lead Time (Encomenda)
     production_days?: number | null;  // Dias úteis (null = herdar da categoria)
+    is_print3d?: boolean;
+    print3d_preorder_enabled?: boolean;
+    print3d_preorder_limit?: number | null;
 }

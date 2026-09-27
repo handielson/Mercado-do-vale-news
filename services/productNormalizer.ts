@@ -17,6 +17,8 @@
  */
 
 import { toBrowserSafeMediaUrl } from '@/utils/media-url';
+import type { CatalogProduct } from '@/types/catalog';
+import { ProductStatus } from '@/utils/field-standards';
 
 export interface NormalizedProduct {
   id: string;
@@ -210,6 +212,34 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
  */
 export function normalizeProducts(products: Record<string, any>[]): NormalizedProduct[] {
   return products.map(normalizeProduct);
+}
+
+/** Adapta a resposta VPS ao contrato usado pelos componentes do catálogo. */
+export function normalizeCatalogProduct(raw: Record<string, any>): CatalogProduct {
+  const product = normalizeProduct(raw);
+  const eans = Array.isArray(raw.eans) ? raw.eans
+    : Array.isArray(raw.alternative_eans) ? raw.alternative_eans
+      : product.ean ? [product.ean] : [];
+  const warrantyType = raw.warranty_type === 'category' || raw.warranty_type === 'custom'
+    ? raw.warranty_type : 'brand';
+  const blingId = Number(product.bling_id);
+  const blingParentId = Number(product.bling_parent_id);
+  return {
+    ...product,
+    model_id: String(product.model_id || ''),
+    model: String(raw.model || raw.model_name || ''),
+    eans: eans.map(String),
+    specs: (product.specs || {}) as Record<string, any>,
+    price_cost: product.price_cost ?? 0,
+    price_reseller: product.price_reseller ?? 0,
+    price_wholesale: product.price_wholesale ?? 0,
+    status: product.status === 'active' ? ProductStatus.ACTIVE : ProductStatus.INACTIVE,
+    warranty_type: warrantyType,
+    bling_id: Number.isSafeInteger(blingId) && blingId > 0 ? blingId : undefined,
+    bling_parent_id: Number.isSafeInteger(blingParentId) && blingParentId > 0 ? blingParentId : undefined,
+    created: String(raw.created || raw.created_at || ''),
+    updated: String(raw.updated || raw.updated_at || ''),
+  };
 }
 
 /**

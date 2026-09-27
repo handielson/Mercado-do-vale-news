@@ -1,0 +1,37 @@
+'use strict';
+
+const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+const invalid = (message) => Object.assign(new Error(message), { statusCode: 400 });
+
+function normalizeFlag(value, field) {
+  if (value === undefined || value === null) return null;
+  if (value === true || value === 1) return 1;
+  if (value === false || value === 0) return 0;
+  throw invalid(`${field} deve ser verdadeiro ou falso.`);
+}
+
+function normalizePrint3dProductOffer(input) {
+  const body = input || {};
+  const isPrint3d = normalizeFlag(body.is_print3d, 'Produto 3D');
+  const preorderEnabled = normalizeFlag(body.print3d_preorder_enabled, 'Aceitar encomendas');
+  const limit = body.print3d_preorder_limit == null ? null : Number(body.print3d_preorder_limit);
+  const days = body.production_days == null ? null : Number(body.production_days);
+  if (has(body, 'print3d_preorder_limit') && limit !== null && (!Number.isSafeInteger(limit) || limit < 1 || limit > 10000)) {
+    throw invalid('O limite sob encomenda deve ficar entre 1 e 10000 unidades.');
+  }
+  if (has(body, 'production_days') && days !== null && (!Number.isSafeInteger(days) || days < 0 || days > 365)) {
+    throw invalid('O prazo de produção deve ficar entre 0 e 365 dias úteis.');
+  }
+  if (preorderEnabled === 1) {
+    if (isPrint3d !== 1) throw invalid('Marque o produto como impressão 3D antes de aceitar encomendas.');
+    if (body.track_inventory !== true && body.track_inventory !== 1) throw invalid('Mantenha o controle de estoque ativo para encomendas 3D.');
+    if (body.is_virtual === true || body.is_virtual === 1 || body.is_parent === true || body.is_parent === 1) {
+      throw invalid('Encomenda 3D exige uma variante física vendável.');
+    }
+    if (!Number.isSafeInteger(days) || days < 1 || days > 365) throw invalid('Informe o prazo individual de produção em dias úteis.');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10000) throw invalid('Informe o limite de unidades pendentes sob encomenda.');
+  }
+  return { isPrint3d, preorderEnabled, limit, days };
+}
+
+module.exports = { normalizePrint3dProductOffer };

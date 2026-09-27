@@ -33,6 +33,7 @@ function isPublicReadPath(path: string): boolean {
         path.startsWith('/categories') ||
         path.startsWith('/payment-fees') ||
         path.startsWith('/products') ||
+        path.startsWith('/storefronts/') ||
         path.startsWith('/public/') ||
         path.startsWith('/shipping/') ||
         path.startsWith('/status')
@@ -42,7 +43,7 @@ function isPublicReadPath(path: string): boolean {
 function getPublicStorefrontSignal(path: string): AbortSignal | undefined {
     if (!isPublicStorefrontRuntime() || !isPublicReadPath(path)) return undefined;
     if (typeof AbortSignal === 'undefined' || !('timeout' in AbortSignal)) return undefined;
-    return AbortSignal.timeout(PUBLIC_STOREFRONT_READ_TIMEOUT_MS);
+    return AbortSignal.timeout(path === '/storefronts/loja_3d/shipping/quote' ? 20000 : PUBLIC_STOREFRONT_READ_TIMEOUT_MS);
 }
 
 function isCheckpointBlockedNow(): boolean {
