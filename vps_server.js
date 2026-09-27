@@ -20728,17 +20728,23 @@ const print3dAccounts = registerPrint3dCustomerAccountRoutes(fastify, {
     return sendSmtpMail({ ...config, from: message.from }, message);
   },
 });
+const print3dCheckoutEnabled = process.env.MDV_PRINT3D_CHECKOUT_ENABLED === '1'
+    && process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig())
+    && process.env.MDV_PRINT3D_PRODUCTION_ENABLED === '1'
+    && process.env.MDV_PRINT3D_SHIPPING_ENABLED === '1'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(process.env.MDV_PRINT3D_COMPANY_ID || '')
+    && paymentsConfigured(process.env);
+require('./services/print3dAdminServer.cjs').registerPrint3dAdminRoutes(fastify, {
+  pool, getBearerAuthContext: getVpsBearerAuthContext,
+  customersEnabled: process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig()),
+  ordersEnabled: print3dCheckoutEnabled,
+});
 registerPrint3dCheckoutRoutes(fastify, {
   pool, getCustomer: print3dAccounts.getCustomer,
   loadQuote: require('./services/productStorefrontOffersServer.cjs').loadPrint3dQuote,
   verifyShipping: input => verifyShippingQuote(input, process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET),
   companyId: process.env.MDV_PRINT3D_COMPANY_ID,
-  enabled: process.env.MDV_PRINT3D_CHECKOUT_ENABLED === '1'
-    && process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig())
-    && process.env.MDV_PRINT3D_PRODUCTION_ENABLED === '1'
-    && process.env.MDV_PRINT3D_SHIPPING_ENABLED === '1'
-    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(process.env.MDV_PRINT3D_COMPANY_ID || '')
-    && paymentsConfigured(process.env),
+  enabled: print3dCheckoutEnabled,
 });
 registerPrint3dPaymentRoutes(fastify, { pool, getCustomer: print3dAccounts.getCustomer });
 registerPrint3dProductionRoutes(fastify, {

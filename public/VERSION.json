@@ -1,20 +1,19 @@
 {
-  "version": "v1.2.484-producao-3d-disponibilidade",
+  "version": "v1.2.485-admin-3d-api",
   "date": "2026-09-27",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260927-163321-producao-3d-disponibilidade",
+  "release_vps": "/var/www/mdv-site/releases/20260927-171109-admin-3d-api",
   "branch": "main",
-  "summary": "Painel informa produção real desativada e oferece simulação sem erro 503 na consulta administrativa.",
-  "tag": "v1.2.484-producao-3d-disponibilidade",
+  "summary": "Corrige 404 nas consultas administrativas isoladas de clientes e pedidos 3D.",
+  "tag": "v1.2.485-admin-3d-api",
   "changed_files": [
-    "pages/admin/products/Print3dProductionPage.tsx",
-    "services/print3dProductionClient.ts",
-    "services/print3dProductionServer.cjs",
-    "tmp-tests/print3d-production-browser.cjs",
-    "tmp-tests/print3d-production-integration.test.cjs",
-    "tmp-tests/print3d-production.test.cjs",
+    "services/print3dAdminServer.cjs",
+    "tmp-tests/print3d-admin.test.cjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-27-v1.2.484-producao-3d-disponibilidade.md"
+    "docs/versoes/2026-09-27-v1.2.485-admin-3d-api.md"
   ]
 }
