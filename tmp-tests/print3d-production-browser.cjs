@@ -6,15 +6,26 @@ const baseUrl = process.env.PRINT3D_TEST_BASE_URL || 'http://127.0.0.1:3000';
  try {
  const context = await browser.newContext({viewport:{width:390,height:844}});
  let apiCalls=0;
+ let disabledProbe=true;
  await context.route('**/*', route => {
    const url=new URL(route.request().url());
-   if(url.pathname.includes('vps-proxy') || url.pathname.startsWith('/api/')) {
+   if(url.hostname==='api.xiaomipetrolina.com.br' || url.pathname.includes('vps-proxy') || url.pathname.startsWith('/api/')) {
+     if(disabledProbe && decodeURIComponent(url.href).includes('/admin/print3d/production') && route.request().method()==='GET') {
+       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({enabled:false,jobs:[]})});
+     }
      if (decodeURIComponent(url.href).includes('/print3d/production')) apiCalls++;
      return route.abort();
    }
    return url.hostname==='127.0.0.1' ? route.continue() : route.abort();
  });
  const admin=await context.newPage();
+ await admin.goto(`${baseUrl}/tmp-tests/print3d-production-preview.html?view=admin`);
+ await admin.getByRole('heading',{name:'Produção real ainda não habilitada'}).waitFor();
+ assert.equal(await admin.getByRole('alert').count(),0);
+ assert.equal(await admin.getByText('Nenhuma ordem de produção encontrada.',{exact:false}).count(),0);
+ await admin.getByRole('button',{name:'Testar simulação de produção'}).click();
+ await admin.getByRole('button',{name:'Reiniciar exemplo em 20 de 100'}).waitFor();
+ disabledProbe=false;
  await admin.goto(`${baseUrl}/tmp-tests/print3d-production-preview.html?view=admin&demo=1`);
  await admin.getByRole('button',{name:'Reiniciar exemplo em 20 de 100'}).click();
  assert.equal(await admin.getByRole('progressbar').getAttribute('aria-valuenow'),'20');

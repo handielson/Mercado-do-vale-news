@@ -10,7 +10,7 @@ export type ProductionJob = {
 };
 export type ProductionProgress = { idempotency_key: string; approved_quantity: number; rejected_quantity: number; note: string };
 export const print3dProductionClient = {
-  adminList: () => vpsClient.get<{ jobs: ProductionJob[] }>('/admin/print3d/production'),
+  adminList: () => vpsClient.get<{ enabled?: boolean; jobs: ProductionJob[] }>('/admin/print3d/production'),
   customerList: () => print3dAccountClient.requestStore<{ jobs: ProductionJob[] }>('/print3d/production'),
   record: (id: string, progress: ProductionProgress) => vpsClient.post<{ job: ProductionJob; replayed: boolean }>(
     '/admin/print3d/production/' + encodeURIComponent(id) + '/progress', progress),

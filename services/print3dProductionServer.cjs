@@ -22,7 +22,10 @@ function registerPrint3dProductionRoutes(app, { pool,getBearerAuthContext,getCus
       return reply.code(500).send({ error:'Não foi possível consultar ou registrar a produção.' });
     }
   };
-  app.get('/admin/print3d/production',{ preHandler:admin },run(async () => ({ jobs:await listProductionJobs(pool,{ admin:true }) })));
+  app.get('/admin/print3d/production',{ preHandler:admin },async (req, reply) => {
+    if (!enabled) return { enabled:false, jobs:[] };
+    return run(async () => ({ enabled:true, jobs:await listProductionJobs(pool,{ admin:true }) }))(req, reply);
+  });
   app.get('/print3d/production',{ preHandler:customer },run(async req => ({ jobs:await listProductionJobs(pool,{ customerId:req.print3dProductionCustomer }) })));
   app.post('/admin/print3d/production/:id/progress',{ preHandler:admin,bodyLimit:8192 },run(req =>
     recordProductionProgress(pool,{ jobId:req.params.id,actorId:req.print3dProductionActor,body:req.body })));

@@ -6,6 +6,24 @@ const vm=require('node:vm');
 const {registerPrint3dCustomerAccountRoutes}=require('../services/print3dCustomerAccountsServer.cjs');
 const {registerPrint3dProductionRoutes}=require('../services/print3dProductionServer.cjs');
 const {signPrint3dCustomerSession}=require('../services/print3dCustomerSession.cjs');
+
+test('produção desligada informa disponibilidade sem consultar banco, preservando autenticação e bloqueio de escrita',async t=>{
+ const app=Fastify();t.after(()=>app.close());
+ registerPrint3dProductionRoutes(app,{enabled:false,pool:{query:async()=>{throw Error('Banco não deve ser consultado');}},getCustomer:async()=>null,
+   getBearerAuthContext:async req=>req.headers.authorization==='Bearer admin-test'?{isAdmin:true,userId:'admin-test'}:null});
+ assert.equal((await app.inject('/admin/print3d/production')).statusCode,401);
+ const headers={authorization:'Bearer admin-test'};
+ const result=await app.inject({url:'/admin/print3d/production',headers});
+ assert.equal(result.statusCode,200);assert.deepEqual(result.json(),{enabled:false,jobs:[]});
+ assert.equal(result.headers['cache-control'],'no-store');
+ assert.equal((await app.inject({method:'POST',url:'/admin/print3d/production/job/progress',headers,payload:{approved_quantity:20}})).statusCode,503);
+});
+
+test('produção habilitada mantém erros reais de banco visíveis',async t=>{
+ const app=Fastify();t.after(()=>app.close());
+ registerPrint3dProductionRoutes(app,{enabled:true,pool:{query:async()=>{throw Error('offline');}},getCustomer:async()=>null,getBearerAuthContext:async()=>({isAdmin:true,userId:'admin-test'})});
+ assert.equal((await app.inject('/admin/print3d/production')).statusCode,500);
+});
 test('rota de produção usa autenticação real da conta 3D e revoga sessão antiga',async t=>{
  const app=Fastify();t.after(()=>app.close());
  const secret='local-fixture-secret-longer-than-32-characters',customerId='11111111-1111-4111-8111-111111111111';

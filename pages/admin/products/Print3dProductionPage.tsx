@@ -62,11 +62,12 @@ export default function Print3dProductionPage() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
+  const [enabled, setEnabled] = useState(true);
   useEffect(() => {
     let active = true;
-    setBusy(true); setError('');
-    const load = demo ? Promise.resolve({ jobs: [readProductionDemo()] }) : print3dProductionClient.adminList();
-    void load.then(data => { if (active) setJobs(data.jobs); }).catch(err => { if (active) setError(err instanceof Error ? err.message : 'Não foi possível carregar a produção.'); }).finally(() => { if (active) setBusy(false); });
+    setBusy(true); setError(''); setJobs([]); setEnabled(true);
+    const load = demo ? Promise.resolve({ enabled:true, jobs: [readProductionDemo()] }) : print3dProductionClient.adminList();
+    void load.then(data => { if (active) { setEnabled(data.enabled !== false); setJobs(data.enabled === false ? [] : data.jobs); } }).catch(err => { if (active) setError(err instanceof Error ? err.message : 'Não foi possível carregar a produção.'); }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
   }, [demo, reload]);
   return <div className="mx-auto max-w-5xl p-4 sm:p-6">
@@ -74,7 +75,8 @@ export default function Print3dProductionPage() {
       <button disabled={busy} onClick={() => setReload(n => n + 1)} className="rounded-xl border bg-white px-4 py-2 text-sm disabled:opacity-50">{busy ? 'Carregando…' : 'Atualizar'}</button></div>
     {demo && <div className="mb-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-900"><p>Simulação local: pedido fictício de 100 unidades. Os registros não alteram pedidos, estoque ou pagamentos reais.</p><button onClick={() => { const job = initialProductionDemo(); saveProductionDemo(job); setJobs([job]); }} className="mt-2 underline">Reiniciar exemplo em 20 de 100</button></div>}
     {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">{error}</p>}
+    {!busy && !error && !enabled && <div role="status" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950"><h2 className="font-semibold">Produção real ainda não habilitada</h2><p className="mt-2 text-sm">Você pode testar o acompanhamento por lotes na simulação. Nenhum pedido, estoque ou pagamento real será alterado.</p><button onClick={() => { const next = new URLSearchParams(params); next.set('demo', '1'); window.location.search = next.toString(); }} className="mt-3 rounded-xl bg-[#254a39] px-4 py-2 text-sm font-semibold text-white">Testar simulação de produção</button></div>}
     <div className="grid gap-5 lg:grid-cols-2">{jobs.map(job => <ProductionProgressCard key={job.id} job={job} admin><ProgressForm job={job} demo={demo} onSaved={updated => setJobs(current => current.map(item => item.id === updated.id ? updated : item))} /></ProductionProgressCard>)}</div>
-    {!busy && !error && !jobs.length && <p className="rounded-xl border bg-white p-6 text-stone-600">Nenhuma ordem de produção encontrada. As ordens serão vinculadas às encomendas e à confirmação da entrada.</p>}
+    {!busy && !error && enabled && !jobs.length && <p className="rounded-xl border bg-white p-6 text-stone-600">Nenhuma ordem de produção encontrada. As ordens serão vinculadas às encomendas e à confirmação da entrada.</p>}
   </div>;
 }

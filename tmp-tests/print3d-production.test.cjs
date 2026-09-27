@@ -134,6 +134,8 @@ test('production routes default disabled even for authorized admin',async()=>{
   const routes=[];const app={get:(url,opts,handler)=>routes.push({url,opts,handler}),post:()=>{}};
   registerPrint3dProductionRoutes(app,{pool:{query:()=>{throw Error('must not query')}},getBearerAuthContext:async()=>({isAdmin:true,userId:'admin'}),getCustomer:async()=>({id:'client-a'})});
   const reply={header(){return this},code(n){this.status=n;return this},send(){return this}};
-  await routes[0].opts.preHandler({},reply);await routes[0].handler({},reply);
+  await routes[0].opts.preHandler({},reply);
+  assert.deepEqual(await routes[0].handler({},reply),{enabled:false,jobs:[]});
+  await routes[1].opts.preHandler({},reply);await routes[1].handler({},reply);
   assert.equal(reply.status,503);
 });
