@@ -1,6 +1,6 @@
 # Checkout e PIX 3D — implementação local
 
-Nenhuma migration, configuração externa, cobrança real ou publicação foi executada. Rotas desligadas por padrão. Testes usam banco e provedor simulados.
+As migrations 028–051 já foram preparadas no banco operacional com backup e todas as funções 3D desligadas. Em 27/09/2026, `MDV_PRINT3D_COMPANY_ID` foi gravado na configuração da VPS para reutilizar a empresa operacional do Mercado do Vale; a alteração aguarda o próximo reinício planejado da API para entrar no ambiente do processo. Nenhuma cobrança real foi executada. Rotas continuam desligadas por padrão e os testes usam banco e provedor simulados.
 
 Validação local usa testes focados e cenário de navegador móvel com APIs externas bloqueadas. O cenário verifica retry com a mesma chave, escolha de entrada/frete, PIX simulado, confirmação da entrada e prévia sem chamadas à API da loja. Isso não substitui homologação em MySQL e provedor reais.
 
@@ -36,7 +36,7 @@ Em 27/09/2026, os testes em MySQL 8.4 descartável confirmaram concorrência e r
 
 - Configurar e homologar a varredura de vencimentos, o cancelamento do PIX no provedor e a fila de revisão/estorno de pagamentos tardios. O trabalhador local só inicia com `MDV_PRINT3D_EXPIRY_ENABLED=1`, checkout totalmente pronto e intervalo de 1 a 60 minutos; ele permanece desligado sem essas condições. **Não ativar operação real antes disso.**
 - As migrations 040–048 e dependências já foram homologadas na cópia fiel e aplicadas com as funções desligadas. Antes da ativação, preencher e conferir os saldos físicos, repetir a concorrência em operação piloto controlada e validar reinício/recuperação.
-- Configurar empresa central por `MDV_PRINT3D_COMPANY_ID`; habilitações separadas de clientes, frete, produção e checkout. Checkout usa `MDV_PRINT3D_CHECKOUT_ENABLED=1` somente depois das dependências.
+- Empresa central já configurada por `MDV_PRINT3D_COMPANY_ID`, apontando para a empresa operacional que concentra o catálogo e possui pagamento ativo. A configuração foi feita sem reiniciar a API e será carregada no próximo reinício planejado. Habilitações de clientes, frete, produção e checkout continuam separadas e desligadas. Checkout usa `MDV_PRINT3D_CHECKOUT_ENABLED=1` somente depois das dependências.
 - PIX exclusivo: `MDV_PRINT3D_PAYMENTS_ENABLED`, `MDV_PRINT3D_MP_ACCESS_TOKEN`, `MDV_PRINT3D_MP_COLLECTOR_ID`, `MDV_PRINT3D_MP_WEBHOOK_SECRET` e `MDV_PRINT3D_MP_NOTIFICATION_URL` HTTPS terminando em `/print3d/payments/webhook`. Segredos só no servidor. Nenhuma reutilização automática das credenciais MDV.
 - Homologar webhook, timeout/repetição, pagamento tardio e reembolso no provedor. Reembolso/chargeback exige revisão operacional; não libera produção.
 - Integrar trava da expedição, controle físico de acessórios e demais insumos, e fluxo fiscal. O filamento já é baixado por cor no apontamento local; as peças aprovadas ficam reservadas ao pedido, sem entrar no estoque vendável. A expedição deve consumir essa alocação somente depois da quitação.

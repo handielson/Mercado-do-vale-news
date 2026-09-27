@@ -162,6 +162,69 @@ function remoteSource() {
         'MDV_PRINT3D_SHIPPING_ENABLED','MDV_PRINT3D_CHECKOUT_ENABLED','MDV_PRINT3D_PRODUCTION_ENABLED',
         'MDV_PRINT3D_PAYMENTS_ENABLED','MDV_PRINT3D_EXPIRY_ENABLED','MDV_PRINT3D_DISPATCH_ENABLED','MDV_PRINT3D_RECIPES_ENABLED'];
       const features = Object.fromEntries(featureKeys.map(key => [key, env[key] === '1']));
+      let company = null;
+      if (tables.has('company_settings')) {
+        const [[settings]] = await db.query(`SELECT COUNT(*) total,
+          SUM(CASE WHEN id IS NULL OR TRIM(id)='' THEN 1 ELSE 0 END) missing_id,
+          SUM(CASE WHEN cnpj IS NULL OR TRIM(cnpj)='' THEN 1 ELSE 0 END) missing_cnpj
+          FROM company_settings`);
+        const [primaryRows] = await db.query('SELECT id FROM company_settings ORDER BY id LIMIT 2');
+        const primaryId = primaryRows.length === 1 ? String(primaryRows[0].id || '') : '';
+        const operationalId = String(env.COMPANY_ID || env.VITE_COMPANY_ID || '9717131e-7b14-4aec-84a4-4317c0489985');
+        const [[productCompanies]] = await db.query(`SELECT COUNT(DISTINCT company_id) total,
+          SUM(CASE WHEN company_id=? THEN 1 ELSE 0 END) products_in_primary,
+          SUM(CASE WHEN company_id=? THEN 1 ELSE 0 END) products_in_operational,
+          SUM(CASE WHEN company_id IS NULL OR TRIM(company_id)='' THEN 1 ELSE 0 END) products_without_company
+          FROM products`, [primaryId, operationalId]);
+        const [companyGroups] = await db.query(`SELECT company_id,COUNT(*) products FROM products
+          WHERE company_id IS NOT NULL AND TRIM(company_id)<>'' GROUP BY company_id ORDER BY products DESC`);
+        let payment = { configured:false, active:false };
+        if (tables.has('payment_integrations')) {
+          const [[payments]] = await db.query(`SELECT COUNT(*) configured,
+            SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) active
+            FROM payment_integrations WHERE company_id=?`, [operationalId]);
+          payment = { configured:Number(payments.configured || 0) > 0, active:Number(payments.active || 0) > 0 };
+        }
+        let fiscal = null;
+        if (tables.has('company_fiscal_profiles')) {
+          const [[profiles]] = await db.query(`SELECT COUNT(*) total,
+            SUM(CASE WHEN settings_id=? THEN 1 ELSE 0 END) primary_links
+            FROM company_fiscal_profiles`, [primaryId]);
+          let certificate = { configured:false, verified_locally:false, valid:false };
+          if (tables.has('company_certificate_settings')) {
+            const [[cert]] = await db.query(`SELECT COUNT(*) configured,
+              SUM(CASE WHEN c.verified_locally=1 THEN 1 ELSE 0 END) verified_locally,
+              SUM(CASE WHEN c.verified_locally=1 AND c.valid_until>=CURRENT_DATE THEN 1 ELSE 0 END) valid
+              FROM company_certificate_settings c
+              JOIN company_fiscal_profiles p ON p.id=c.profile_id WHERE p.settings_id=?`, [primaryId]);
+            certificate = { configured:Number(cert.configured || 0) === 1,
+              verified_locally:Number(cert.verified_locally || 0) === 1, valid:Number(cert.valid || 0) === 1 };
+          }
+          let taxValidation = { configured:false, approved:false };
+          if (tables.has('company_fiscal_tax_validations')) {
+            const [[tax]] = await db.query(`SELECT COUNT(*) configured,
+              SUM(CASE WHEN v.status='approved' THEN 1 ELSE 0 END) approved
+              FROM company_fiscal_tax_validations v
+              JOIN company_fiscal_profiles p ON p.id=v.profile_id WHERE p.settings_id=?`, [primaryId]);
+            taxValidation = { configured:Number(tax.configured || 0) === 1, approved:Number(tax.approved || 0) === 1 };
+          }
+          fiscal = { profiles:Number(profiles.total || 0), primary_links:Number(profiles.primary_links || 0),
+            certificate, tax_validation:taxValidation };
+        }
+        company = {
+          settings_rows:Number(settings.total || 0), settings_missing_id:Number(settings.missing_id || 0),
+          settings_missing_cnpj:Number(settings.missing_cnpj || 0), exactly_one_primary:Boolean(primaryId),
+          reference:primaryId ? require('node:crypto').createHash('sha256').update(primaryId).digest('hex').slice(0,12) : null,
+          product_company_count:Number(productCompanies.total || 0), products_in_primary:Number(productCompanies.products_in_primary || 0),
+          operational_reference:require('node:crypto').createHash('sha256').update(operationalId).digest('hex').slice(0,12),
+          products_in_operational:Number(productCompanies.products_in_operational || 0),
+          product_company_groups:companyGroups.map(row => ({ reference:require('node:crypto').createHash('sha256').update(String(row.company_id)).digest('hex').slice(0,12), products:Number(row.products) })),
+          products_without_company:Number(productCompanies.products_without_company || 0),
+          print3d_company_configured:String(env.MDV_PRINT3D_COMPANY_ID || '') === operationalId,
+          payment,
+          fiscal,
+        };
+      }
       const dbHost = String(env.DB_HOST || '').trim().toLowerCase();
       const connectionConfig = {
         host_kind: ['localhost','127.0.0.1','::1'].includes(dbHost) ? 'loopback' : dbHost.startsWith('/') ? 'socket' : 'network',
@@ -186,7 +249,7 @@ function remoteSource() {
         }) : [];
       console.log(JSON.stringify({
         database: { products:Number(products.total), print3d_products:Number(products.print3d || 0), negative_product_stock:Number(products.negative_stock || 0) },
-        sku, stock_locations:stockLocations, migrations, features, connection:connectionConfig, backups,
+        sku, stock_locations:stockLocations, migrations, features, company, connection:connectionConfig, backups,
       }));
     } finally { await db.end(); }
   })().catch(error => { console.error(error.code || error.message); process.exit(1); });

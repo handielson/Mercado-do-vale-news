@@ -99,7 +99,7 @@ Antes de criar estrutura, pesquisar equivalentes no projeto inteiro. Reaproveita
 ## 1. Fechar regras e escopo inicial
 
 - [ ] Definir nome, domínio e identidade visual da loja 3D.
-- [ ] Confirmar empresa/CNPJ responsável e vínculo com o fluxo fiscal central.
+- [x] Confirmar empresa/CNPJ responsável e vínculo com o fluxo fiscal central. Decisão de 27/09/2026: usar a mesma empresa operacional, o mesmo CNPJ e o cadastro fiscal principal do Mercado do Vale. A VPS recebeu `MDV_PRINT3D_COMPANY_ID` apontando para a empresa que concentra o catálogo e possui integração de pagamento ativa; nenhuma função 3D foi ligada.
 - [ ] Listar impressoras e programa que gera o JSON; obter um exemplo real da saída.
 - [ ] Definir variantes iniciais: tamanho, material, cor, acabamento e acessórios.
 - [ ] Separar variantes que geram SKU de personalizações específicas do pedido.
@@ -285,7 +285,7 @@ Contrato solicitado ao programa de impressão, a validar com uma exportação re
 - [x] Preparar no painel de pedidos o filtro e identificador visual da loja de origem. Pedidos legados sem campo de origem aparecem como Mercado do Vale; um futuro pedido 3D fica somente para consulta até que suas ações de produção, cobrança, comunicação e expedição sejam implementadas. As mensagens de criação/status e as rotas legadas de cobrança, estorno e webhook do Mercado do Vale passam a recusar origem 3D ou desconhecida no servidor. Após consulta somente leitura ao schema real, a migration local `033_order_storefront.sql` foi preparada com padrão Mercado do Vale, sem aplicação. A rota genérica de pedidos recusa criação com origem 3D e mudança de origem; falta o checkout 3D gravar a origem na rota própria e validar com dados de teste.
 - [ ] Substituir no fechamento da loja 3D a criação atual em três chamadas separadas (pedido, itens e reserva) por uma operação transacional no servidor que recalcule a oferta `loja_3d`, registre a origem e grave o preço por SKU. O checkout atual monta valores no navegador; não reutilizá-lo diretamente para este canal.
 - [ ] Configurar identificação da loja nos documentos e comunicações pertinentes.
-- [ ] Verificar prontidão do módulo fiscal, empresa emitente e dados fiscais dos produtos antes de prometer emissão.
+- [x] Verificar prontidão do módulo fiscal, empresa emitente e dados fiscais dos produtos antes de prometer emissão. Perfil fiscal principal vinculado e certificado A1 validado/localmente vigente. A validação tributária do contador ainda não está aprovada e o emissor atual cobre NFC-e de venda presencial do PDV, não o pedido 3D com entrega; portanto emissão 3D continua bloqueada.
 - [ ] Validar o fluxo fiscal aplicável à venda/expedição, sem pressupor que a emissão está pronta por haver campos no cadastro.
 - [ ] Validar experiência em celular, filtros, URLs e acesso a pedidos pela loja de origem.
 

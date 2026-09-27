@@ -10,6 +10,7 @@
 - Migrations previamente presentes 031, 032 e 039 foram preservadas.
 - API e MySQL permaneceram saudáveis.
 - Todas as flags `MDV_PRINT3D_*_ENABLED` permaneceram desligadas.
+- A empresa operacional da Loja 3D foi vinculada posteriormente por `MDV_PRINT3D_COMPANY_ID`, sem reiniciar a API nem habilitar funções.
 
 ## Proteções e evidências
 
@@ -41,3 +42,12 @@ Essas divergências não foram corrigidas automaticamente. Antes de cadastrar sa
 - `scripts/audit-print3d-production.cjs`: auditoria agregada sem retornar produtos ou dados pessoais.
 - `scripts/prepare-print3d-database.cjs`: backup integral e restauração efêmera para homologação.
 - `scripts/apply-print3d-production-migrations.cjs`: plano/aplicação protegida com backup obrigatório, trava e comparação antes/depois.
+- `scripts/configure-print3d-company.cjs`: identifica a empresa operacional pelo mesmo contexto da API, exige catálogo dominante, pagamento ativo e perfil fiscal principal único, cria backup do `.env` e altera somente `MDV_PRINT3D_COMPANY_ID`.
+
+## Empresa e fiscal
+
+- O banco possui uma empresa operacional dominante, responsável por 2.765 dos 2.771 produtos, e uma integração de pagamento ativa vinculada a ela.
+- O cadastro fiscal principal está ligado ao único `company_settings`; o certificado está instalado, verificado localmente e vigente.
+- A validação tributária do contador existe, mas ainda não está aprovada.
+- O fluxo fiscal implementado atualmente prepara NFC-e de venda presencial a partir de `sales`/`sale_items` e rejeita entrega. Pedidos 3D usam `orders`/`order_items` e entrega, portanto precisam de fluxo fiscal próprio, em princípio NF-e modelo 55, antes da expedição real. Não reutilizar a NFC-e do PDV por adaptação implícita.
+- Backup da configuração anterior: `/var/www/mdv-api/.deploy-backups/print3d-company-20260927232650804-96a0ed.env`.
