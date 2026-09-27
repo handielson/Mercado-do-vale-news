@@ -38,6 +38,14 @@ export type StorefrontOffer = {
 };
 
 export const productStorefrontOffersService = {
+  async publicProductIds(storefront: StorefrontCode): Promise<Set<string>> {
+    const ids = new Set<string>();
+    for (let offset = 0; ; offset += 500) {
+      const page = await vpsClient.get<CatalogProduct[]>(`/storefronts/${storefront}/products?limit=500&offset=${offset}&compact=true`);
+      for (const product of page) ids.add(product.id);
+      if (page.length < 500) return ids;
+    }
+  },
   list: (productId: string) => vpsClient.get<{ offers: StorefrontOffer[] }>(
     `/admin/products/${encodeURIComponent(productId)}/storefront-offers`
   ),

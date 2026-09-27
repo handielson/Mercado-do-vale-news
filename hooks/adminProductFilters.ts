@@ -167,8 +167,16 @@ function collectSerializedSearchValues(product: Product): string[] {
     return values.map(normalizeSearchValue).filter(Boolean);
 }
 
-export function filterAdminProducts(products: Product[], filters: ProductFiltersState): Product[] {
+export function filterAdminProducts(products: Product[], filters: ProductFiltersState, channelIds: ReadonlySet<string> | null = null): Product[] {
     let filtered = products.filter(product => !isArchivedProductRecord(product));
+    if (filters.salesChannel && filters.salesChannel !== 'all' && filters.channelStatus && filters.channelStatus !== 'all') {
+        // Unknown or failed channel data must never classify products as unlinked.
+        if (channelIds === null) return [];
+        filtered = filtered.filter(product => {
+            const linked = channelIds.has(product.id) || (filters.salesChannel === 'tiktok' && Boolean(product.parent_id && channelIds.has(product.parent_id)));
+            return filters.channelStatus === 'linked' ? linked : !linked;
+        });
+    }
 
     if (filters.search.trim() !== '') {
         const searchLower = filters.search.toLowerCase();

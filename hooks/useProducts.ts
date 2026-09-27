@@ -9,6 +9,9 @@ import { unitService } from '../services/units';
 import { ProductFiltersState } from '../components/products/ProductFilters';
 import { prefetchModelImages } from '../services/modelImageCache';
 import { filterAdminProducts, mergeProductsById } from './adminProductFilters';
+import { mercadoLivreService } from '../services/mercadoLivreService';
+import { tiktokShopService, TIKTOK_PRODUCT_LINKS_UPDATED_EVENT } from '../services/tiktokShopService';
+import { productStorefrontOffersService } from '../services/productStorefrontOffers';
 
 /** Converte resposta do VPS MySQL para o tipo Product */
 function mapVpsProduct(row: any): Product {
@@ -158,6 +161,7 @@ export const useProducts = () => {
     const [error, setError] = useState<string | null>(null);
     const [cacheAge, setCacheAge] = useState<string | null>(getCacheAge);
     const [filters, setFilters] = useState<ProductFiltersState>({
+        salesChannel: 'all', channelStatus: 'all',
         search: '',
         status: 'all',
         sortBy: 'newest',
@@ -168,6 +172,32 @@ export const useProducts = () => {
         shopeeStatus: 'all',
         videoStatus: 'all',
     });
+
+    const [channelState, setChannelState] = useState<{ channel: string; ids: Set<string> | null; error: string | null }>({ channel: '', ids: null, error: null });
+    const [channelRevision, setChannelRevision] = useState(0);
+    const channel = filters.salesChannel || 'all';
+    const needsChannel = channel !== 'all' && filters.channelStatus !== 'all';
+    useEffect(() => {
+        let cancelled = false;
+        if (!needsChannel) return;
+        setChannelState({ channel, ids: null, error: null });
+        const load = async (): Promise<Set<string>> => {
+            if (channel === 'mercado_livre') return new Set((await mercadoLivreService.getProductLinks()).items.map(link => link.product_id));
+            if (channel === 'tiktok') return new Set((await tiktokShopService.getProductLinks(products.flatMap(product => [product.id, product.parent_id].filter(Boolean) as string[]))).links.filter(link => link.tiktok_product_id).map(link => link.product_id));
+            if (channel === 'shopee') return new Set([...(await shopeeProductService.getItemIdByProductIdMap()).entries()].filter(([, id]) => Number(id) > 0).map(([id]) => id).concat(products.filter(product => Number(product.shopee_item_id) > 0).map(product => product.id)));
+            if (channel === 'bling') return new Set(products.filter(product => product.bling_id && String(product.bling_id) !== '0').map(product => product.id));
+            return productStorefrontOffersService.publicProductIds(channel as 'loja_3d' | 'mercado_do_vale');
+        };
+        void load().then(ids => { if (!cancelled) setChannelState({ channel, ids, error: null }); })
+            .catch(() => { if (!cancelled) setChannelState({ channel, ids: null, error: 'Não foi possível consultar este canal. Clique em Atualizar para tentar novamente.' }); });
+        return () => { cancelled = true; };
+    }, [channel, needsChannel, products, channelRevision]);
+    useEffect(() => {
+        const update = () => setChannelRevision(value => value + 1);
+        window.addEventListener('focus', update);
+        window.addEventListener(TIKTOK_PRODUCT_LINKS_UPDATED_EVENT, update);
+        return () => { window.removeEventListener('focus', update); window.removeEventListener(TIKTOK_PRODUCT_LINKS_UPDATED_EVENT, update); };
+    }, []);
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -219,9 +249,9 @@ export const useProducts = () => {
      * Apply client-side filters
      */
     const applyFilters = useCallback(() => {
-        setFilteredProducts(filterAdminProducts(products, filters));
+        setFilteredProducts(filterAdminProducts(products, filters, channelState.channel === channel ? channelState.ids : null));
         setCurrentPage(1); // Reset to first page when filters change
-    }, [products, filters]);
+    }, [products, filters, channelState, channel]);
 
     /**
      * Handle filter changes
@@ -234,6 +264,7 @@ export const useProducts = () => {
      * Force-refresh data (used by the refresh button in the UI)
      */
     const refresh = useCallback(() => {
+        setChannelRevision(value => value + 1);
         fetchProducts('refresh');
     }, [fetchProducts]);
 
@@ -344,6 +375,8 @@ export const useProducts = () => {
         products: paginatedProducts,
         allFilteredProducts: filteredProducts,
         allProducts: products,
+        channelLoading: needsChannel && (channelState.channel !== channel || (!channelState.ids && !channelState.error)),
+        channelError: needsChannel && channelState.channel === channel ? channelState.error : null,
         isLoading,
         isRefreshing,
         error,

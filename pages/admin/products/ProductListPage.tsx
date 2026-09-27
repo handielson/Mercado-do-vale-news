@@ -51,6 +51,8 @@ export const ProductListPage: React.FC = () => {
         totalPages,
         allFilteredProducts,
         cacheAge,
+        channelLoading,
+        channelError,
     } = useProducts();
     const visibleProductIdsKey = Array.from(new Set(
         products.flatMap((product) => [product.id, product.parent_id].filter(Boolean) as string[]),
@@ -414,6 +416,8 @@ export const ProductListPage: React.FC = () => {
 
             {/* Filters */}
             <ProductFilters onFilterChange={handleFilterChange} />
+            {channelLoading && <p role="status" className="mt-3 text-sm text-slate-600">Consultando situação dos produtos no canal…</p>}
+            {channelError && <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{channelError}</p>}
 
             {/* Products List */}
             <ProductList

@@ -6,6 +6,8 @@ import { brandService } from '../../services/brands';
 import { categoryService } from '../../services/categories';
 
 export interface ProductFiltersState {
+    salesChannel?: 'all' | 'shopee' | 'tiktok' | 'mercado_livre' | 'loja_3d' | 'mercado_do_vale' | 'bling';
+    channelStatus?: 'all' | 'linked' | 'unlinked';
     search: string;
     status: ProductStatus | 'all';
     sortBy: 'newest' | 'oldest' | 'name_asc' | 'name_desc';
@@ -22,6 +24,8 @@ interface ProductFiltersProps {
 }
 
 const INITIAL_FILTERS: ProductFiltersState = {
+    salesChannel: 'all',
+    channelStatus: 'all',
     search: '',
     status: 'all',
     sortBy: 'newest',
@@ -77,6 +81,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
     };
 
     const hasActiveFilters =
+        filters.salesChannel !== 'all' ||
         filters.search !== '' ||
         filters.status !== 'all' ||
         filters.imageStatus !== 'all' ||
@@ -170,18 +175,32 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
                     </select>
                 </div>
 
-                {/* Shopee Status Select */}
+                {/* Sales channel and situation */}
                 <div className="w-full md:w-48">
                     <select
-                        value={filters.shopeeStatus}
-                        onChange={(e) => applyChange({ shopeeStatus: e.target.value as ProductFiltersState['shopeeStatus'] })}
+                        aria-label="Canal de venda"
+                        value={filters.salesChannel}
+                        onChange={(e) => applyChange({ salesChannel: e.target.value as ProductFiltersState['salesChannel'], channelStatus: e.target.value === 'all' ? 'all' : 'linked' })}
                         className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                     >
-                        <option value="all">Shopee: Todos</option>
-                        <option value="synced">Já enviado</option>
-                        <option value="not_synced">Não enviado</option>
+                        <option value="all">Canais: Todos</option>
+                        <option value="shopee">Shopee</option>
+                        <option value="tiktok">TikTok Shop</option>
+                        <option value="mercado_livre">Mercado Livre</option>
+                        <option value="loja_3d">Loja 3D</option>
+                        <option value="mercado_do_vale">Mercado do Vale</option>
+                        <option value="bling">Bling</option>
                     </select>
                 </div>
+                {filters.salesChannel !== 'all' && <div className="w-full md:w-56">
+                    <select aria-label="Situação no canal" value={filters.channelStatus}
+                        onChange={event => applyChange({ channelStatus: event.target.value as ProductFiltersState['channelStatus'] })}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500">
+                        <option value="all">Todas as situações</option>
+                        <option value="linked">{['loja_3d', 'mercado_do_vale'].includes(filters.salesChannel || '') ? 'No catálogo do site' : 'Com vínculo'}</option>
+                        <option value="unlinked">{['loja_3d', 'mercado_do_vale'].includes(filters.salesChannel || '') ? 'Fora do catálogo do site' : 'Sem vínculo'}</option>
+                    </select>
+                </div>}
 
                 {/* Parent Visibility Select */}
                 <div className="w-full md:w-48">

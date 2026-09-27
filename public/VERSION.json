@@ -1,16 +1,20 @@
 {
-  "version": "v1.2.487-ml-link",
+  "version": "v1.2.488-filtros-canais",
   "date": "2026-09-27",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.487-ml-link",
-  "release_vps": "/var/www/mdv-site/releases/20260927-181611-ml-link",
-  "summary": "Link de conferencia do anuncio Mercado Livre em nova aba.",
+  "tag": "v1.2.488-filtros-canais",
+  "release_vps": "/var/www/mdv-site/releases/20260927-182806-filtros-canais",
+  "summary": "Filtros de produtos por canal de venda e situacao.",
   "changed_files": [
-    "pages/admin/settings/components/MercadoLivreLinkReview.tsx",
-    "tmp-tests/mercado-livre-integration-static.test.mjs",
+    "components/products/ProductFilters.tsx",
+    "hooks/adminProductFilters.ts",
+    "hooks/useProducts.ts",
+    "pages/admin/products/ProductListPage.tsx",
+    "services/productStorefrontOffers.ts",
+    "tmp-tests/admin-product-channel-filter.test.ts",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-27-v1.2.487-ml-link.md"
+    "docs/versoes/2026-09-27-v1.2.488-filtros-canais.md"
   ]
 }
