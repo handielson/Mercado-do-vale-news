@@ -5,6 +5,7 @@ import { vpsClient } from './vpsClient';
 export type Print3dFileKind = 'model' | 'project' | 'gcode' | 'print-json' | 'preview' | 'instructions';
 export type Print3dRecipeFile = {
   id: string;
+  asset_id: string;
   recipe_id: string;
   kind: Print3dFileKind;
   printer_profile?: string | null;
@@ -12,6 +13,7 @@ export type Print3dRecipeFile = {
   byte_size: number;
   sha256: string;
   created_at: string;
+  shared: boolean;
 };
 
 export const print3dRecipeFilesService = {
@@ -19,6 +21,11 @@ export const print3dRecipeFilesService = {
   list: (recipeId: string) => vpsClient.get<{ files: Print3dRecipeFile[] }>(
     `/admin/print3d/recipes/${encodeURIComponent(recipeId)}/files`
   ),
+  verifyIntegrity: (recipeId: string) => vpsClient.get<{
+    recipe_id: string;
+    verified: boolean;
+    files: Array<Pick<Print3dRecipeFile, 'id' | 'kind' | 'original_name' | 'byte_size' | 'sha256'> & { valid: boolean }>;
+  }>(`/admin/print3d/recipes/${encodeURIComponent(recipeId)}/files/integrity`),
   upload: (recipeId: string, kind: Print3dFileKind, file: File, printerProfile = '') => {
     const form = new FormData();
     form.append('file', file);

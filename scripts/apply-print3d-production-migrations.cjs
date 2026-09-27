@@ -18,7 +18,7 @@ const privateKey = privateKeyPath ? fs.readFileSync(privateKeyPath) : undefined;
 const apply = process.argv.includes('--apply');
 const backupArg = process.argv.find(value => value.startsWith('--backup-dir='));
 const backupDir = backupArg ? backupArg.slice('--backup-dir='.length) : '';
-const migrationNumbers = ['028','029','030','033','034','035','036','037','038','040','041','042','043','044','045','046','047','048','049','050','051'];
+const migrationNumbers = ['028','029','030','033','034','035','036','037','038','040','041','042','043','044','045','046','047','048','049','050','051','052'];
 const ssh = new Client();
 
 if (!host || !username || (!password && !privateKey)) throw new Error('Missing VPS SSH configuration');
@@ -105,14 +105,19 @@ function remoteMigrationSource() {
       const partial = Object.entries(before.migrations).filter(([,state]) => state.partial).map(([number]) => number);
       if (partial.length) throw new Error('Partial migration state: '+partial.join(','));
       const alreadyPresent = migrationList.filter(item => before.migrations[item.number]?.present).map(item => item.number);
-      if (alreadyPresent.length && alreadyPresent.length !== migrationList.length) throw new Error('Unexpected partially applied operational migration set: '+alreadyPresent.join(','));
+      let missingSeen = false;
+      for (const migration of migrationList) {
+        const present = Boolean(before.migrations[migration.number]?.present);
+        if (!present) missingSeen = true;
+        else if (missingSeen) throw new Error('Operational migration gap before '+migration.number);
+      }
       if (!shouldApply) {
         console.log(JSON.stringify({ mode:'plan', backup_valid:true, pending:migrationList.filter(item => !before.migrations[item.number]?.present).map(item => item.number), before }));
         return;
       }
       const applied = [];
-      if (!alreadyPresent.length) {
-        for (const migration of migrationList) {
+      for (const migration of migrationList) {
+        if (!before.migrations[migration.number]?.present) {
           await db.query(migration.sql);
           applied.push(migration.number);
         }
@@ -145,6 +150,7 @@ const migrationMarkers = {
   '048':['table:print3d_filament_stock','table:print3d_filament_movements'],
   '049':['table:print3d_order_dispatches'], '050':['table:print3d_supply_stock','table:print3d_supply_movements'],
   '051':['column:print3d_order_item_plans.variant_snapshot'],
+  '052':['table:print3d_file_assets','column:print3d_recipe_files.asset_id'],
 };
 
 async function main() {

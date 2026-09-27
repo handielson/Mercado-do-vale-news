@@ -4,13 +4,14 @@ const {randomUUID}=require('node:crypto');
 const {quoteProduct,quotePaymentSchedule}=require('../services/print3dStorefrontQuote.cjs');
 const {quoteItemsFingerprint}=require('../services/print3dShippingQuoteToken.cjs');
 module.exports=async function installAccountCheckout({pool,app,getCustomer}){
- const productId=randomUUID(),companyId=randomUUID(),recipeId=randomUUID(),fileId=randomUUID(),sku='ACCOUNT-'+randomUUID().slice(0,8);
+ const productId=randomUUID(),companyId=randomUUID(),recipeId=randomUUID(),fileId=randomUUID(),assetId=randomUUID(),sku='ACCOUNT-'+randomUUID().slice(0,8);
  const [[deposit]]=await pool.query('SELECT id FROM stock_deposits LIMIT 1');const [[location]]=await pool.query('SELECT id FROM stock_locations LIMIT 1');
  await pool.query('INSERT INTO products (id,company_id,sku,stock_quantity) VALUES (?,?,?,1)',[productId,companyId,sku]);
  await pool.query('INSERT INTO product_storefront_offers (product_id,storefront,publication_status,title,price_retail) VALUES (?,\'loja_3d\',\'published\',\'Peça conta local\',1000)',[productId]);
  await pool.query('INSERT INTO product_stock_locations (id,company_id,product_id,deposit_id,location_id,quantity) VALUES (?,?,?,?,?,1)',[randomUUID(),companyId,productId,deposit.id,location.id]);
  await pool.query('INSERT INTO print3d_recipe_revisions (id,product_id,sku_snapshot,revision,draft_json,draft_sha256,created_by) VALUES (?,?,?,\'local-v1\',?, ?,\'local-test\')',[recipeId,productId,sku,JSON.stringify({productId,sku,piecesPerBatch:1,printSummary:{material_gramas:10,tempo_impressao_minutos:30},filaments:[{id:'pla',name:'PLA',color:'Preto',consumedGrams:10}],supplies:[]}),'d'.repeat(64)]);
- await pool.query('INSERT INTO print3d_recipe_files (id,recipe_id,kind,original_name,storage_name,synology_path,byte_size,sha256,created_by) VALUES (?,?,\'model\',\'local.stl\',\'local.stl\',\'/local-fixture-only\',10,?,\'local-test\')',[fileId,recipeId,'e'.repeat(64)]);
+ await pool.query('INSERT INTO print3d_file_assets (id,sha256,storage_name,synology_path,byte_size,created_by) VALUES (?,?,\'local.stl\',\'/local-fixture-only\',10,\'local-test\')',[assetId,'e'.repeat(64)]);
+ await pool.query('INSERT INTO print3d_recipe_files (id,asset_id,recipe_id,kind,original_name,storage_name,synology_path,byte_size,sha256,created_by) VALUES (?,?,?,\'model\',\'local.stl\',\'local.stl\',\'/local-fixture-only\',10,?,\'local-test\')',[fileId,assetId,recipeId,'e'.repeat(64)]);
  await pool.query('INSERT INTO print3d_active_recipes (product_id,recipe_id,primary_file_id,selected_by) VALUES (?,?,?,\'local-test\')',[productId,recipeId,fileId]);
  const originalVariant={material:'PLA',color:'Preto',size:'Grande',finish:'Fosco'};
  await pool.query('UPDATE products SET specs=? WHERE id=?',[JSON.stringify({...originalVariant,internal_note:'private-test',imei1:'not-for-3d'}),productId]);

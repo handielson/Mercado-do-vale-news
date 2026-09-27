@@ -155,30 +155,26 @@ Antes de criar estrutura, pesquisar equivalentes no projeto inteiro. Reaproveita
 ## 4. Arquivos e revisões no Synology
 
 - [x] Ler `Synology.md` e identificar o serviço de upload privado existente antes de ampliar a integração.
-- [ ] Definir organização por SKU e revisão, com vínculo interno por identificador permanente.
-- [ ] Prever referência compartilhada para arquivos usados por várias variantes, evitando duplicações desnecessárias.
-- [ ] Implementar upload de modelo, projeto, prévia, instruções opcionais e JSON.
-- [ ] Definir formatos e limites de tamanho; validar caminhos e impedir acesso fora da pasta autorizada.
-- [ ] Manter arquivos de fabricação privados e separar sua autorização das mídias públicas do catálogo.
-- [ ] Registrar versão, nome, tamanho e hash dos arquivos.
-- [ ] Exigir associação de arquivos de máquina a impressora/perfil compatíveis quando houver G-code.
-- [ ] Permitir selecionar uma revisão aprovada para novas produções sem sobrescrever revisões antigas.
-- [ ] Preservar arquivos e revisões usados em pedidos; bloquear exclusão que quebre o histórico.
-- [ ] Tratar upload parcial e NAS indisponível sem marcar arquivos ausentes como prontos.
+- [x] Definir organização por SKU e revisão, com vínculo interno por identificador permanente; as relações ficam no banco e cada ativo físico recebe ID próprio.
+- [x] Prever referência compartilhada para arquivos usados por várias variantes, evitando duplicações desnecessárias por meio do SHA-256 único.
+- [x] Implementar upload de modelo, projeto, prévia, instruções opcionais e JSON.
+- [x] Definir formatos e limite de 50 MB; validar caminhos e impedir acesso fora da pasta privada autorizada.
+- [x] Manter arquivos de fabricação privados e separar sua autorização das mídias públicas do catálogo.
+- [x] Registrar revisão, nome original, tamanho, hash e responsável pelo envio.
+- [x] Exigir associação de arquivos de máquina a impressora/perfil compatíveis quando houver G-code.
+- [x] Permitir selecionar uma revisão aprovada para novas produções sem sobrescrever revisões antigas.
+- [x] Preservar arquivos e revisões usados em pedidos; a relação com o ativo é protegida e não há exclusão destrutiva pela API.
+- [x] Tratar upload parcial e NAS indisponível sem marcar arquivos ausentes como prontos; o vínculo só é gravado após o envio confirmado.
 - [ ] Definir backup e verificar restauração de uma ficha com seus arquivos.
 
 Estrutura sugerida, a ajustar ao armazenamento existente:
 
 ```text
 producao-3d/
-  produtos/<SKU>/revisoes/<REVISAO>/
-    modelo.stl
-    projeto.3mf
-    previa.png
-    impressao.json
-    instrucoes.txt
-  pedidos/<PEDIDO>/<ITEM>/personalizacao/
+  arquivos/<2 primeiros do SHA-256>/<SHA-256>.<extensão>
 ```
+
+SKU, variante, revisão e finalidade são mantidos no banco. Essa separação permite compartilhar um mesmo arquivo entre várias variantes sem duplicá-lo. A migration 052 foi aplicada ao banco operacional com as funções desligadas. O diagnóstico do NAS, a autenticação DSM e o acesso da VPS passaram; o painel também possui conferência de tamanho e hash. O procedimento está em `docs/print3d-synology.md`. Permanece pendente configurar o Hyper Backup e executar uma restauração real antes da ativação pública.
 
 **Conclusão:** o operador abre a revisão correta pelo painel, inclusive para pedidos antigos, sem expor os arquivos ao público.
 

@@ -50,7 +50,7 @@ test('MySQL local: migrations 3D, checkout concorrente, reserva central e rollba
     product_name VARCHAR(255) NOT NULL,product_sku VARCHAR(191),quantity INT NOT NULL,unit_price BIGINT NOT NULL,subtotal BIGINT NOT NULL,
     INDEX idx_order_items_order (order_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
   await pool.query('CREATE TABLE banners (id CHAR(36) NOT NULL PRIMARY KEY, display_order INT NOT NULL DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
-  for(let number=28;number<=51;number++) {
+  for(let number=28;number<=52;number++) {
     const file=path.join(__dirname,'../migrations',require('node:fs').readdirSync(path.join(__dirname,'../migrations')).find(name=>name.startsWith(String(number).padStart(3,'0')+'_')));
     const statements=readFileSync(file,'utf8').replace(/--[^\n]*/g,'').split(';').map(value=>value.trim()).filter(Boolean);
     for(let index=0;index<statements.length;index++) {

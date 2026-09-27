@@ -7,6 +7,7 @@ const multipart = require('@fastify/multipart');
 const { registerPrint3dRecipeFileRoutes, isPrivatePrint3dRoot } = require('../services/print3dRecipeFilesServer.cjs');
 
 const recipeId = '11111111-1111-4111-8111-111111111111';
+const UUIDS = new Set([recipeId, '22222222-2222-4222-8222-222222222222']);
 const root = '/home/SynologyDrive/producao-3d';
 const headers = { authorization: 'Bearer admin' };
 const recipe = { id: recipeId, sku_snapshot: 'CHAVEIRO-01', revision: 'r1', draft_json: {
@@ -27,18 +28,26 @@ async function fixture({ enabled = true, privateRoot = root, nasFails = false } 
   const app = Fastify();
   await app.register(multipart);
   const files = [];
+  const assets = [];
   let uploads = 0;
   const pool = { async query(sql, params) {
-    if (sql === 'SELECT id FROM print3d_recipe_revisions WHERE id=? LIMIT 1') return [[params[0] === recipeId ? { id: recipeId } : null].filter(Boolean)];
-    if (sql.startsWith('SELECT id,sku_snapshot,revision,draft_json FROM print3d_recipe_revisions')) return [[params[0] === recipeId ? recipe : null].filter(Boolean)];
+    if (sql === 'SELECT id FROM print3d_recipe_revisions WHERE id=? LIMIT 1') return [[UUIDS.has(params[0]) ? { id:params[0] } : null].filter(Boolean)];
+    if (sql.startsWith('SELECT id,sku_snapshot,revision,draft_json FROM print3d_recipe_revisions')) return [[UUIDS.has(params[0]) ? { ...recipe,id:params[0] } : null].filter(Boolean)];
     if (sql.includes('FROM print3d_recipe_files WHERE recipe_id=? AND kind=? AND sha256=?')) return [[files.find(f => f.recipe_id === params[0] && f.kind === params[1] && f.sha256 === params[2])].filter(Boolean)];
+    if (sql.includes('FROM print3d_file_assets WHERE sha256=?')) return [[assets.find(asset => asset.sha256 === params[0])].filter(Boolean)];
+    if (sql.startsWith('INSERT INTO print3d_file_assets')) {
+      const [id,sha256,storage_name,synology_path,byte_size] = params;
+      assets.push({ id,sha256,storage_name,synology_path,byte_size });
+      return [{ affectedRows:1 }];
+    }
     if (sql.startsWith('INSERT INTO print3d_recipe_files')) {
-      const [id, recipe_id, kind, printer_profile, original_name, storage_name, synology_path, byte_size, sha256] = params;
-      files.push({ id, recipe_id, kind, printer_profile, original_name, storage_name, synology_path, byte_size, sha256 });
+      const [id,asset_id,recipe_id,kind,printer_profile,original_name,storage_name,synology_path,byte_size,sha256] = params;
+      files.push({ id,asset_id,recipe_id,kind,printer_profile,original_name,storage_name,synology_path,byte_size,sha256 });
       return [{ affectedRows: 1 }];
     }
-    if (sql.includes('FROM print3d_recipe_files WHERE recipe_id=? ORDER BY')) return [files.filter(f => f.recipe_id === params[0])];
-    if (sql.includes('FROM print3d_recipe_files WHERE id=? LIMIT 1')) return [[files.find(f => f.id === params[0])].filter(Boolean)];
+    if (sql.includes('FROM print3d_recipe_files f WHERE f.recipe_id=?')) return [files.filter(f => f.recipe_id === params[0]).map(file => ({ ...file,asset_references:files.filter(other => other.asset_id === file.asset_id).length }))];
+    if (sql.includes('FROM print3d_recipe_files f JOIN print3d_file_assets a') && sql.includes('WHERE f.recipe_id=?')) return [files.filter(f => f.recipe_id === params[0]).map(file => ({ ...assets.find(asset => asset.id === file.asset_id),...file }))];
+    if (sql.includes('FROM print3d_recipe_files f JOIN print3d_file_assets a') && sql.includes('WHERE f.id=?')) return [[files.find(f => f.id === params[0])].filter(Boolean).map(file => ({ ...assets.find(asset => asset.id === file.asset_id),...file }))];
     throw new Error(`SQL inesperado: ${sql}`);
   } };
   registerPrint3dRecipeFileRoutes(app, {
@@ -46,7 +55,8 @@ async function fixture({ enabled = true, privateRoot = root, nasFails = false } 
     getBearerAuthContext: async req => req.headers.authorization === 'Bearer admin' ? { isAdmin: true, userId: 'admin-test' } : null,
     uploadPrivate: async ({ folderPath, fileName, fileBuffer, allowedRoot }) => {
       assert.equal(allowedRoot, root);
-      assert.equal(folderPath, `${root}/produtos/CHAVEIRO-01/revisoes/r1`);
+      const digest = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+      assert.equal(folderPath, `${root}/arquivos/${digest.slice(0,2)}`);
       assert.ok(fileBuffer.length > 0);
       uploads++;
       if (nasFails) throw new Error('NAS indisponível');
@@ -55,12 +65,12 @@ async function fixture({ enabled = true, privateRoot = root, nasFails = false } 
     downloadPrivate: async ({ filePath, allowedRoot }) => {
       if (nasFails) throw new Error('NAS indisponível');
       assert.equal(allowedRoot, root);
-      assert.ok(filePath.startsWith(`${root}/produtos/`));
+      assert.ok(filePath.startsWith(`${root}/arquivos/`));
       return Buffer.from('{"material_gramas":20,"tempo_impressao_minutos":120}');
     },
   });
   await app.ready();
-  return { app, files, uploads: () => uploads };
+  return { app, files, assets, uploads: () => uploads };
 }
 
 test('pasta privada não admite caminhos públicos ou travessia', () => {
@@ -77,6 +87,7 @@ test('upload exige administrador e só registra arquivo após NAS confirmar', as
   const first = await f.app.inject({ method: 'POST', url, ...payload });
   assert.equal(first.statusCode, 201, first.body);
   assert.equal(f.files.length, 1);
+  assert.equal(f.assets.length, 1);
   assert.equal(f.uploads(), 1);
   const repeat = await f.app.inject({ method: 'POST', url, ...payload });
   assert.equal(repeat.statusCode, 200, repeat.body);
@@ -87,6 +98,9 @@ test('upload exige administrador e só registra arquivo após NAS confirmar', as
   const downloaded = await f.app.inject({ method: 'GET', url: `/admin/print3d/files/${f.files[0].id}/download`, headers });
   assert.equal(downloaded.statusCode, 200, downloaded.body);
   assert.equal(crypto.createHash('sha256').update(downloaded.rawPayload).digest('hex'), f.files[0].sha256);
+  const integrity = await f.app.inject({ method:'GET',url:`/admin/print3d/recipes/${recipeId}/files/integrity`,headers });
+  assert.equal(integrity.statusCode,200,integrity.body);
+  assert.equal(integrity.json().verified,true);
 });
 
 test('JSON divergente e NAS indisponível não geram metadados de arquivo pronto', async t => {
@@ -98,6 +112,21 @@ test('JSON divergente e NAS indisponível não geram metadados de arquivo pronto
   const failed = await f.app.inject({ method: 'POST', url, ...uploadPayload('impressao.json', '{"material_gramas":20,"tempo_impressao_minutos":120}') });
   assert.equal(failed.statusCode, 502, failed.body);
   assert.equal(f.files.length, 0);
+  assert.equal(f.assets.length, 0);
+});
+
+test('mesmo conteúdo em outra revisão reutiliza um asset e não envia novamente ao NAS', async t => {
+  const f = await fixture(); t.after(() => f.app.close());
+  const payload = uploadPayload('impressao.json', '{"material_gramas":20,"tempo_impressao_minutos":120}');
+  const first = await f.app.inject({ method:'POST',url:`/admin/print3d/recipes/${recipeId}/files?kind=print-json`,...payload });
+  assert.equal(first.statusCode,201,first.body);
+  const secondRecipe = '22222222-2222-4222-8222-222222222222';
+  const second = await f.app.inject({ method:'POST',url:`/admin/print3d/recipes/${secondRecipe}/files?kind=print-json`,...payload });
+  assert.equal(second.statusCode,201,second.body);
+  assert.equal(f.assets.length,1);
+  assert.equal(f.files.length,2);
+  assert.equal(f.files[0].asset_id,f.files[1].asset_id);
+  assert.equal(f.uploads(),1);
 });
 
 test('flag desligada não consulta banco nem NAS', async t => {

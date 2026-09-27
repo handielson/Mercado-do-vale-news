@@ -65,6 +65,7 @@ function remoteSource() {
     '049': ['table:print3d_order_dispatches'],
     '050': ['table:print3d_supply_stock', 'table:print3d_supply_movements'],
     '051': ['column:print3d_order_item_plans.variant_snapshot'],
+    '052': ['table:print3d_file_assets', 'column:print3d_recipe_files.asset_id'],
   };
 
   const fs = require('node:fs');
@@ -162,6 +163,12 @@ function remoteSource() {
         'MDV_PRINT3D_SHIPPING_ENABLED','MDV_PRINT3D_CHECKOUT_ENABLED','MDV_PRINT3D_PRODUCTION_ENABLED',
         'MDV_PRINT3D_PAYMENTS_ENABLED','MDV_PRINT3D_EXPIRY_ENABLED','MDV_PRINT3D_DISPATCH_ENABLED','MDV_PRINT3D_RECIPES_ENABLED'];
       const features = Object.fromEntries(featureKeys.map(key => [key, env[key] === '1']));
+      const storage = {
+        synology_url_configured:Boolean(env.SYNOLOGY_URL),
+        synology_credentials_configured:Boolean(env.SYNOLOGY_USER && env.SYNOLOGY_PASS),
+        print3d_folder_configured:Boolean(env.MDV_PRINT3D_SYNOLOGY_FOLDER),
+        print3d_folder_valid:/^\/(?:home|volume\d+)\/[A-Za-z0-9._/-]+\/producao-3d$/.test(String(env.MDV_PRINT3D_SYNOLOGY_FOLDER || '')),
+      };
       let company = null;
       if (tables.has('company_settings')) {
         const [[settings]] = await db.query(`SELECT COUNT(*) total,
@@ -249,7 +256,7 @@ function remoteSource() {
         }) : [];
       console.log(JSON.stringify({
         database: { products:Number(products.total), print3d_products:Number(products.print3d || 0), negative_product_stock:Number(products.negative_stock || 0) },
-        sku, stock_locations:stockLocations, migrations, features, company, connection:connectionConfig, backups,
+        sku, stock_locations:stockLocations, migrations, features, storage, company, connection:connectionConfig, backups,
       }));
     } finally { await db.end(); }
   })().catch(error => { console.error(error.code || error.message); process.exit(1); });

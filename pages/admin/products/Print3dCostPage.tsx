@@ -71,6 +71,7 @@ export function Print3dCostPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [verifyingFiles, setVerifyingFiles] = useState(false);
   const [stockSnapshot, setStockSnapshot] = useState<StockSnapshot | null>(null);
   const [loadingStock, setLoadingStock] = useState(false);
   const packagingSupplies = () => settings.packagingCentsPerPiece > 0
@@ -409,6 +410,22 @@ export function Print3dCostPage() {
     }
   };
 
+  const verifyRecipeFiles = async () => {
+    if (!selectedRecipeId) return;
+    setError('');
+    setNotice('');
+    setVerifyingFiles(true);
+    try {
+      const response = await print3dRecipeFilesService.verifyIntegrity(selectedRecipeId);
+      if (!response.verified) throw new Error('Um ou mais arquivos não conferem com o registro da ficha.');
+      setNotice(`${response.files.length} arquivo(s) conferido(s) no Synology por tamanho e SHA-256.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível verificar os arquivos no Synology.');
+    } finally {
+      setVerifyingFiles(false);
+    }
+  };
+
   const selectActiveRecipe = async () => {
     if (!listedProductId || !selectedRecipeId || !primaryFileId) return;
     setError('');
@@ -558,8 +575,11 @@ export function Print3dCostPage() {
         </div>)}
       </div>}
       {selectedRecipeId && <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
-        <h3 className="font-semibold">Arquivos privados desta revisão</h3>
-        <p className="text-xs text-slate-600">Limite inicial: 50 MB por arquivo. Os arquivos ficam associados à revisão salva e são baixados somente por administrador.</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-semibold">Arquivos privados desta revisão</h3>
+          <button disabled={!recipeFiles.length || verifyingFiles} className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={() => void verifyRecipeFiles()}>{verifyingFiles ? 'Verificando...' : 'Verificar integridade'}</button>
+        </div>
+        <p className="text-xs text-slate-600">Limite inicial: 50 MB por arquivo. Os binários são privados, identificados pelo SHA-256 e reutilizados sem duplicação quando duas fichas usam o mesmo conteúdo.</p>
         <div className="grid gap-2 md:grid-cols-[1fr_2fr_auto]">
           <select aria-label="Tipo de arquivo 3D" className={numberClass} value={fileKind} onChange={(event) => setFileKind(event.target.value as Print3dFileKind)}>
             <option value="model">Modelo</option><option value="project">Projeto</option><option value="gcode">G-code</option><option value="print-json">JSON da impressão</option><option value="preview">Prévia</option><option value="instructions">Instruções</option>
@@ -569,7 +589,7 @@ export function Print3dCostPage() {
         </div>
         {fileKind === 'gcode' && <label className="block text-sm">Impressora e perfil compatíveis<input className={numberClass} maxLength={120} value={printerProfile} onChange={(event) => setPrinterProfile(event.target.value)} placeholder="Ex.: Bambu X1C · PLA · bico 0,4 mm" /></label>}
         {recipeFiles.length === 0 ? <p className="text-sm text-slate-600">Nenhum arquivo vinculado.</p> : recipeFiles.map((file) => <div key={file.id} className="flex flex-wrap items-center justify-between gap-2 rounded border bg-white p-2 text-sm">
-          <span>{file.kind} · {file.original_name}{file.printer_profile ? ` · ${file.printer_profile}` : ''} · {(Number(file.byte_size) / 1024 / 1024).toFixed(2)} MB</span>
+          <span>{file.kind} · {file.original_name}{file.printer_profile ? ` · ${file.printer_profile}` : ''} · {(Number(file.byte_size) / 1024 / 1024).toFixed(2)} MB{file.shared ? ' · compartilhado' : ''}</span>
           <button className="text-blue-700 underline" onClick={() => void downloadRecipeFile(file)}>Baixar</button>
         </div>)}
         <div className="space-y-2 border-t pt-3">
