@@ -10,6 +10,7 @@ import { getModelImageWithCache } from '../../services/modelImageCache';
 import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
 import { ProductQuickTagsModal } from './ProductQuickTagsModal';
+import { ProductPublicationChannels } from './ProductPublicationChannels';
 import { getAuthSessionToken } from '../../services/authSession';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
@@ -1545,6 +1546,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             <p className="font-mono text-[10px] text-slate-400 mt-0.5">SKU: {product.sku}</p>
                         )}
                         {/* Badge Pai / Variação */}
+                        <ProductPublicationChannels product={product} shopeeLinked={shopeeVisualState.isSynced} tiktokStatus={hasTikTokLink ? currentTikTokStatus : ''} onShopee={handleOpenShopeeModal} onTikTok={() => setIsTikTokModalOpen(true)} />
                         {product.parent_id ? (
                             <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200">
                                 ↳ Variação

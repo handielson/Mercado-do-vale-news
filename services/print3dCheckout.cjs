@@ -1,6 +1,6 @@
 'use strict';
 const { randomUUID, createHash } = require('node:crypto');
-const { validateQuoteItems } = require('./print3dStorefrontQuote.cjs');
+const { validateQuoteItems, normalizeVariantSnapshot } = require('./print3dStorefrontQuote.cjs');
 const { reservePriorityStockOnConnection } = require('./priorityStockReservation.cjs');
 const { savePrint3dOrderPlanOnConnection } = require('./print3dOrderPlan.cjs');
 const { createProductionJobsOnConnection } = require('./print3dProduction.cjs');
@@ -45,12 +45,14 @@ function projectOrder(row,items) {
   const confirmed = Number(row.confirmed_cents || 0);
   return {
     id:row.id,order_number:'3D-' + String(row.public_number),status:row.status,payment_status:row.payment_status,
+    tracking_code:row.tracking_code || null,
     created_at:row.created_at,subtotal_cents:subtotal,shipping_cents:shipping,total_cents:total,
     shipping_address:parseJson(row.shipping_address),shipping_option:parseJson(row.option_snapshot),
     items:items.map(item => ({ product_id:item.product_id,product_name:item.product_name,product_sku:item.product_sku,
       quantity:Number(item.quantity),unit_price_cents:Number(item.unit_price),subtotal_cents:Number(item.subtotal),
       ready_quantity:Number(item.ready_quantity),preorder_quantity:Number(item.preorder_quantity),
-      production_days:item.production_days == null ? null : Number(item.production_days) })),
+      production_days:item.production_days == null ? null : Number(item.production_days),
+      variant_snapshot:normalizeVariantSnapshot(item.variant_snapshot) })),
     payment_schedule:{due_on_confirmation_cents:Number(row.due_on_confirmation_cents),due_before_shipping_cents:Number(row.due_before_shipping_cents),
       shipping_cents:shipping,initial_cents:initial,balance_cents:total-initial,
       payment_terms_version:Number(row.payment_terms_version || 0),
@@ -59,19 +61,21 @@ function projectOrder(row,items) {
     confirmed_cents:confirmed,outstanding_cents:Math.max(0,total-confirmed),
   };
 }
-async function listPrint3dOrders(connection,{customerId,orderId}) {
+async function listPrint3dOrders(connection,{customerId,orderId,includeDispatch=false}) {
   if (!UUID.test(customerId || '')) fail(401,'Entre na sua conta 3D.');
   if (orderId && !UUID.test(orderId)) fail(404,'Pedido não encontrado.');
   const [rows] = await connection.query(`SELECT o.*,p.public_number,p.preorder_amount_cents,p.due_on_confirmation_cents,p.due_before_shipping_cents,
     p.payment_terms_version,p.initial_payment_bps,p.shipping_payment_mode,p.shipping_initial_cents,p.minimum_initial_cents,s.option_snapshot,
+    ${includeDispatch ? 'd.tracking_code' : 'NULL AS tracking_code'},
     (SELECT COALESCE(SUM(r.amount_cents),0) FROM print3d_order_payment_receipts r WHERE r.order_id=o.id AND r.status='confirmed') AS confirmed_cents
     FROM orders o JOIN print3d_order_plans p ON p.order_id=o.id
     JOIN print3d_order_shipping s ON s.order_id=o.id
+    ${includeDispatch ? 'LEFT JOIN print3d_order_dispatches d ON d.order_id=o.id' : ''}
     WHERE o.storefront='loja_3d' AND o.customer_id IS NULL AND o.print3d_customer_id=? ${orderId ? 'AND o.id=?' : ''}
     ORDER BY o.created_at DESC,o.id DESC LIMIT 100`,orderId ? [customerId,orderId] : [customerId]);
   if (orderId && !rows.length) fail(404,'Pedido não encontrado.');
   if (!rows.length) return [];
-  const [items] = await connection.query(`SELECT i.*,p.ready_quantity,p.preorder_quantity,p.production_days FROM order_items i
+  const [items] = await connection.query(`SELECT i.*,p.ready_quantity,p.preorder_quantity,p.production_days,p.variant_snapshot FROM order_items i
     JOIN print3d_order_item_plans p ON p.order_item_id=i.id AND p.order_id=i.order_id
     WHERE i.order_id IN (${rows.map(() => '?').join(',')}) ORDER BY i.id`,rows.map(row => row.id));
   return rows.map(row => projectOrder(row,items.filter(item => item.order_id === row.id)));

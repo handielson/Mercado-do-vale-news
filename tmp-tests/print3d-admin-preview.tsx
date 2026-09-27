@@ -1,0 +1,10 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import Print3dRecordsPage from '../pages/admin/print3d/Print3dRecordsPage';
+import BannerManagementPage from '../pages/admin/settings/BannerManagementPage';
+import '../index.css';
+import { QuickCostSimulator } from '../components/print3d/QuickCostSimulator';
+import { emptyPrint3dCostSettings } from '../services/print3dCostSettings';
+const kind = new URLSearchParams(location.search).get('kind');
+createRoot(document.getElementById('root')!).render(<BrowserRouter>{kind === 'quick-cost' ? <QuickCostSimulator settings={{ ...emptyPrint3dCostSettings(), printerWatts: 200, energyCentsPerKwh: 100, filaments: [{ id: 'test-pla', name: 'PLA teste', color: 'Azul', spoolGrams: 1000, spoolCostCents: 8000 }] }} /> : kind === 'banners' ? <BannerManagementPage fixedStorefront="loja_3d" /> : <Print3dRecordsPage kind={kind === 'orders' ? 'orders' : 'customers'} />}</BrowserRouter>);

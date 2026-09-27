@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const {buildPaymentTerms} = require('../services/print3dPaymentTerms.cjs');
-const {paymentsConfigured,verifyWebhook,verifyPayment,stageAmount,publicCharge,createMpAdapter,createCharge,settlePayment,refreshCharge} = require('../services/print3dPayments.cjs');
+const {paymentsConfigured,verifyWebhook,verifyPayment,stageAmount,publicCharge,createMpAdapter,createCharge,settlePayment,refreshCharge,cancelPrint3dProviderCharges} = require('../services/print3dPayments.cjs');
 const orderId='11111111-1111-4111-8111-111111111111', chargeId='22222222-2222-4222-8222-222222222222';
 const charge={id:chargeId,order_id:orderId,amount_cents:500,stage:'initial',status:'creating'};
 const payment={id:123,collector_id:456,currency_id:'BRL',payment_method_id:'pix',external_reference:`print3d:${chargeId}`,transaction_amount:5,status:'approved',date_approved:'2026-09-27T12:00:00Z'};
@@ -60,6 +60,31 @@ test('adapter sends cent conversion and durable UUID to isolated official endpoi
   assert.equal(request.headers['X-Idempotency-Key'],chargeId);
   assert.equal(JSON.parse(request.body).transaction_amount,5);
   assert.equal(JSON.parse(request.body).external_reference,`print3d:${chargeId}`);
+});
+test('adapter cancela somente o pagamento identificado na API oficial com chave própria',async()=>{
+  let request;
+  const adapter=createMpAdapter({MDV_PRINT3D_MP_ACCESS_TOKEN:'fake-only',MDV_PRINT3D_MP_NOTIFICATION_URL:'https://example.invalid/print3d/payments/webhook'},async(url,opts)=>{
+    request={url,...opts};return {ok:true,json:async()=>({...payment,status:'cancelled'})};
+  });
+  await adapter.cancel(123);
+  assert.equal(request.url,'https://api.mercadopago.com/v1/payments/123'); assert.equal(request.method,'PUT');
+  assert.equal(JSON.parse(request.body).status,'cancelled'); assert.match(request.headers['X-Idempotency-Key'],/^[0-9a-f-]{36}$/);
+});
+test('cancelamento local tenta encerrar somente PIX pendente no provedor e mantém pedido cancelado',async()=>{
+  const state={order:{id:orderId,storefront:'loja_3d',print3d_customer_id:'customer',customer_id:null,status:'cancelled',payment_status:'cancelled'},
+    charge:{...charge,status:'cancelled',provider_payment_id:'123'}};
+  const connection={beginTransaction:async()=>{},commit:async()=>{},rollback:async()=>{},release(){},query:async(sql,args=[])=>{
+    if(sql.startsWith('SELECT order_id FROM print3d_payment_charges')) return [[{order_id:orderId}]];
+    if(sql.startsWith('SELECT * FROM orders')) return [[state.order]];
+    if(sql.startsWith('SELECT * FROM print3d_payment_charges')) return [[state.charge]];
+    if(sql.startsWith("UPDATE print3d_payment_charges SET status='provider_cancelled'")) {state.charge.status='provider_cancelled';return [{}];}
+    throw new Error('SQL inesperado no cancelamento do provedor: '+sql);
+  }};
+  const calls=[]; const adapter={get:async id=>{calls.push(['get',id]);return {...payment,status:'pending'};},cancel:async id=>{calls.push(['cancel',id]);return {...payment,status:'cancelled'};}};
+  const pool={query:async sql=>{if(sql.startsWith('SELECT * FROM print3d_payment_charges')) return [[state.charge]];throw new Error(sql);},getConnection:async()=>connection};
+  const result=await cancelPrint3dProviderCharges(pool,{orderId,adapter,collectorId:'456'});
+  assert.deepEqual(calls,[['get','123'],['cancel','123']]); assert.deepEqual(result,[{charge_id:chargeId,status:'cancelled',review_required:false}]);
+  assert.equal(state.order.status,'cancelled');
 });
 function fixture() {
   const state={charges:[],receipts:[],commits:0,rollbacks:0,released:0,unfinished:false,
@@ -159,5 +184,32 @@ for (const scenario of [
     const remaining=await createCharge(pool,{...input,body:{stage:'balance',idempotency_key:'33333333-3333-4333-8333-333333333333'},
       adapter:{async create(row){assert.equal(row.amount_cents,100);return {...payment,id:789,transaction_amount:1,external_reference:`print3d:${row.id}`};}}});
     assert.equal(remaining.coverage.fully_paid,true);
+  }
+});
+
+
+test('reference search is read-only and requires a single unambiguous result',async()=>{
+  let response={paging:{total:1},results:[payment]};const calls=[];
+  const adapter=createMpAdapter({MDV_PRINT3D_MP_ACCESS_TOKEN:'local-fake'},async(url,options)=>{
+    calls.push({url,options});return {ok:true,json:async()=>response};
+  });
+  assert.deepEqual(await adapter.findByReference(chargeId),payment);
+  assert.equal(new URL(calls[0].url).pathname,'/v1/payments/search');
+  assert.equal(new URL(calls[0].url).searchParams.get('external_reference'),'print3d:'+chargeId);
+  assert.equal(calls[0].options.method,undefined);assert.equal(calls[0].options.body,undefined);
+  response={paging:{total:0},results:[]};assert.equal(await adapter.findByReference(chargeId),null);
+  for (const invalid of [{results:[payment]}, {paging:{total:2},results:[payment]},
+    {paging:{total:1},results:[]},{paging:{total:0},results:[payment]}]) {
+    response=invalid;await assert.rejects(adapter.findByReference(chargeId));
+  }
+});
+
+test('unresolved or foreign reference never reaches provider cancellation',async()=>{
+  for (const found of [null,{...payment,collector_id:999},{...payment,transaction_amount:6},
+    {...payment,external_reference:'other'}]) {
+    const pool={query:async sql=>sql.startsWith('SELECT *')?[[{...charge,status:'cancelled'}]]:[{}]};
+    const adapter={findByReference:async()=>found,get:async()=>assert.fail('must not fetch'),cancel:async()=>assert.fail('must not cancel')};
+    const result=await cancelPrint3dProviderCharges(pool,{orderId,adapter,collectorId:'456'});
+    assert.equal(result[0].status,'review_required');
   }
 });

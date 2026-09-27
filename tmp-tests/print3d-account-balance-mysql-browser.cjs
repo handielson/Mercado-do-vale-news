@@ -1,0 +1,38 @@
+'use strict';
+const assert=require('node:assert/strict');
+module.exports=async function verifyBalanceAndDispatch({page,base,app,pool,orderId,approvePayment}){
+ const tracking='LOCAL-3D-TEST-001';
+ const dispatch=()=>app.inject({method:'POST',url:`/admin/print3d/orders/${orderId}/dispatch`,headers:{authorization:'Bearer local-production-admin'},payload:{tracking_code:tracking}});
+ const blocked=await dispatch();assert.equal(blocked.statusCode,409,blocked.body);
+ await page.goto(base+'/loja-3d/pedidos');
+ await page.getByRole('heading',{name:'Pagamento do saldo',exact:true}).waitFor();
+ await page.getByLabel('E-mail para o pagamento (se não cadastrado)',{exact:true}).fill('local-payer@example.test');
+ const creating=page.waitForResponse(r=>decodeURIComponent(r.url()).endsWith(`/print3d/orders/${orderId}/payment`)&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Gerar PIX',exact:true}).click();
+ const response=await creating;assert.equal(response.status(),200,await response.text());
+ const {charge}=await response.json();assert.equal(charge.stage,'balance');assert.equal(charge.amount_cents,750);
+ await page.getByText('PIX de R$ 7,50',{exact:true}).waitFor();
+ const confirmation=()=>page.waitForResponse(r=>decodeURIComponent(r.url()).endsWith(`/print3d/orders/${orderId}/payment/refresh`)&&r.request().method()==='POST');
+ let checking=confirmation();
+ await page.getByRole('button',{name:'Já paguei: verificar confirmação',exact:true}).click();
+ let check=await checking;assert.equal(check.status(),200);assert.equal((await check.json()).coverage.fully_paid,false);
+ assert.equal((await dispatch()).statusCode,409,'clicking already paid does not authorize dispatch');
+ approvePayment(charge.id); // Local provider fixture only, no external money movement.
+ checking=confirmation();
+ await page.getByRole('button',{name:'Já paguei: verificar confirmação',exact:true}).click();
+ check=await checking;assert.equal(check.status(),200);assert.equal((await check.json()).coverage.fully_paid,true);
+ await page.getByText('Pagamento completo',{exact:true}).waitFor();
+ const sent=await dispatch();assert.equal(sent.statusCode,200,sent.body);assert.equal(sent.json().produced_quantity,2);
+ const replay=await dispatch();assert.equal(replay.statusCode,200,replay.body);assert.equal(replay.json().replayed,true);
+ const refreshed=page.waitForResponse(r=>decodeURIComponent(r.url()).endsWith('/print3d/orders')&&r.request().method()==='GET');
+ await page.getByRole('button',{name:'Atualizar',exact:true}).click();
+ const result=await refreshed;assert.equal(result.status(),200);
+ const orders=(await result.json()).orders;assert.equal(orders.length,1);assert.equal(orders[0].tracking_code,tracking);assert.equal(orders[0].outstanding_cents,0);
+ await page.getByText(`Pedido enviado · código de rastreio: ${tracking}`,{exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'Gerar PIX',exact:true}).count(),0);
+ assert.equal(await page.getByRole('alert').count(),0);
+ const [[outputs]]=await pool.query("SELECT SUM(quantity) quantity FROM print3d_production_outputs WHERE order_id=? AND status='dispatched'",[orderId]);assert.equal(Number(outputs.quantity),2);
+ const [[receipts]]=await pool.query('SELECT COUNT(*) total,SUM(amount_cents) paid FROM print3d_order_payment_receipts WHERE order_id=?',[orderId]);
+ assert.equal(receipts.total,2);assert.equal(Number(receipts.paid),2500);
+ console.log('PASS: balance PIX created/refreshed through real browser routes; dispatch blocked until simulated provider approval; unique dispatch and customer tracking verified in MySQL.');
+};

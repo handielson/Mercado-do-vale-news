@@ -30,7 +30,7 @@ async function loadModel(db, id, lock = false) {
   return rows[0];
 }
 async function loadPeers(db, config, model, lock = false) {
-  const [rows] = await db.query(`SELECT id,model_id,company_id,name,sku,specs,is_parent,is_combo,offer_type,status,stock_quantity,
+  const [rows] = await db.query(`SELECT id,model_id,company_id,name,sku,specs,is_print3d,is_parent,is_combo,offer_type,status,stock_quantity,
     price_cost,price_retail,price_reseller,price_wholesale FROM products
     WHERE model_id=?${lock ? ' FOR UPDATE' : ''}`, [config.model_id]);
   return rows.filter(p => core.configuration(p, model)?.id === config.id);
@@ -48,7 +48,7 @@ async function saveGroup(db, config, prices) {
 
 // Caller owns the transaction and must lock the model before writing products.
 async function inheritSmartphonePrices(db, product, model, existing = null) {
-  if (!core.isSmartphoneCategory(model?.category_name)) return { product, controlled: false };
+  if (Number(product.is_print3d) === 1 || !core.isSmartphoneCategory(model?.category_name)) return { product, controlled: false };
   const config = core.configuration(product, model);
   if (!config) {
     if (Number(product.is_parent) === 1 || Number(product.is_combo) === 1 || product.offer_type) return { product, controlled: false };
@@ -71,7 +71,7 @@ async function inheritSmartphonePrices(db, product, model, existing = null) {
   return { product: { ...product, ...salePrices }, controlled: true, group_id: config.id };
 }
 
-async function withSmartphonePriceWrite(pool, incoming, write) {
+async function withSmartphonePriceWrite(pool, incoming, write, { transactional = false } = {}) {
   await ensureSmartphonePriceGroupsSchema(pool);
   let existing;
   if (incoming.id || incoming.sku) {
@@ -80,9 +80,18 @@ async function withSmartphonePriceWrite(pool, incoming, write) {
     existing = rows[0];
   }
   const candidate = { ...existing, ...incoming, model_id: incoming.model_id || existing?.model_id };
-  if (!candidate.model_id) return write(pool, incoming);
-  const model = await loadModel(pool, candidate.model_id);
-  if (!core.isSmartphoneCategory(model?.category_name)) return write(pool, incoming);
+  const model = candidate.model_id ? await loadModel(pool, candidate.model_id) : null;
+  if (!candidate.model_id || !core.isSmartphoneCategory(model?.category_name)) {
+    if (!transactional) return write(pool, incoming);
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const output = await write(connection, incoming);
+      await connection.commit();
+      return output;
+    } catch (error) { await connection.rollback(); throw error; }
+    finally { connection.release(); }
+  }
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -118,7 +127,7 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey }) {
   fastify.post('/models/:id/smartphone-price-reference', { preHandler: requireSyncKey }, async (req) => {
     await ensureSmartphonePriceGroupsSchema(pool);
     const model = await loadModel(pool, req.params.id);
-    if (!core.isSmartphoneCategory(model?.category_name)) return { controlled: false };
+    if (Number(req.body?.is_print3d) === 1 || !core.isSmartphoneCategory(model?.category_name)) return { controlled: false };
     const config = core.configuration({ ...req.body, model_id: req.params.id }, model);
     if (!config) return { controlled: true, prices: null, incomplete: true };
     const saved = await loadGroup(pool, config.id);
@@ -132,7 +141,7 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey }) {
     const model = await loadModel(pool, req.params.id);
     if (!model) return reply.code(404).send({ error: 'Modelo não encontrado' });
     if (!core.isSmartphoneCategory(model.category_name)) return { enabled: false, groups: [], unresolved: [] };
-    const [products] = await pool.query(`SELECT id,model_id,company_id,name,sku,specs,is_parent,is_combo,offer_type,status,stock_quantity,
+    const [products] = await pool.query(`SELECT id,model_id,company_id,name,sku,specs,is_print3d,is_parent,is_combo,offer_type,status,stock_quantity,
       price_cost,price_retail,price_reseller,price_wholesale FROM products WHERE model_id=? AND COALESCE(is_parent,0)=0 AND COALESCE(is_combo,0)=0 AND offer_type IS NULL`, [model.id]);
     const [saved] = await pool.query('SELECT * FROM smartphone_price_groups WHERE model_id=?', [model.id]);
     const [units] = await pool.query(`SELECT u.product_id,u.cost_price FROM units u JOIN products p ON p.id=u.product_id
@@ -146,6 +155,7 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey }) {
     const groups = new Map();
     const unresolved = [];
     for (const p of products) {
+      if (Number(p.is_print3d) === 1) continue;
       const config = core.configuration(p, model);
       if (!config) { unresolved.push({ id: p.id, sku: p.sku, name: p.name }); continue; }
       if (!groups.has(config.id)) groups.set(config.id, { config, products: [] });

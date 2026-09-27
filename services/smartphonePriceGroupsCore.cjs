@@ -15,7 +15,7 @@ function capacity(value) {
   return gb > 0 ? `${gb}GB` : '';
 }
 function configuration(product, model = {}) {
-  if (!product?.model_id || Number(product.is_parent) === 1 || Number(product.is_combo) === 1 || product.offer_type) return null;
+  if (!product?.model_id || Number(product.is_print3d) === 1 || Number(product.is_parent) === 1 || Number(product.is_combo) === 1 || product.offer_type) return null;
   const specs = object(product.specs);
   const template = object(model.template_values);
   const spec = (...keys) => keys.map(k => specs[k]).find(v => v != null && v !== '') ?? keys.map(k => template[k]).find(v => v != null && v !== '');

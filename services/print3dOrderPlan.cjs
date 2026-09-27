@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { quoteProduct, quotePaymentSchedule } = require('./print3dStorefrontQuote.cjs');
+const { quoteProduct, quotePaymentSchedule, normalizeVariantSnapshot } = require('./print3dStorefrontQuote.cjs');
 const { buildPaymentTerms } = require('./print3dPaymentTerms.cjs');
 
 function fail(message, statusCode = 409) { const error = new Error(message); error.statusCode = statusCode; throw error; }
@@ -49,6 +49,7 @@ function buildPrint3dOrderPlan(order, persistedItems, quoteItems, paymentTerms) 
       || integer(persisted.subtotal) !== canonical.subtotal) fail('Preço ou quantidade difere do pedido persistido.');
     canonicalQuotes.push(canonical);
     return { order_item_id: persisted.id, order_id: order.id, product_id: persisted.product_id, quantity,
+      ...(quote.variant_snapshot === undefined ? {} : { variant_snapshot: JSON.stringify(normalizeVariantSnapshot(quote.variant_snapshot)) }),
       ready_quantity: ready, preorder_quantity: preorder, production_days: canonical.production_days,
       unit_price_cents: unitPrice, subtotal_cents: canonical.subtotal, deposit_amount_cents: canonical.deposit_amount,
       balance_before_shipping_cents: canonical.balance_before_shipping };

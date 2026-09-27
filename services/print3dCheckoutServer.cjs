@@ -1,6 +1,6 @@
 'use strict';
 const { createPrint3dCheckout,listPrint3dOrders } = require('./print3dCheckout.cjs');
-function registerPrint3dCheckoutRoutes(app,{pool,getCustomer,loadQuote,verifyShipping,enabled=false,companyId}) {
+function registerPrint3dCheckoutRoutes(app,{pool,getCustomer,loadQuote,verifyShipping,enabled=false,dispatchEnabled=false,companyId}) {
   const customer = async (req,reply) => {
     reply.header('Cache-Control','no-store');
     const account = await getCustomer(req);
@@ -25,9 +25,9 @@ function registerPrint3dCheckoutRoutes(app,{pool,getCustomer,loadQuote,verifyShi
     createPrint3dCheckout(pool,{customerId:req.print3dCheckoutCustomer,authVersion:req.print3dCheckoutAuthVersion,
       body:req.body,companyId,loadQuote,verifyShipping})));
   app.get('/print3d/orders',{preHandler:customer},run(async req =>
-    ({orders:await listPrint3dOrders(pool,{customerId:req.print3dCheckoutCustomer})})));
+    ({orders:await listPrint3dOrders(pool,{customerId:req.print3dCheckoutCustomer,includeDispatch:dispatchEnabled})})));
   app.get('/print3d/orders/:id',{preHandler:customer},run(async req => {
-    const [order] = await listPrint3dOrders(pool,{customerId:req.print3dCheckoutCustomer,orderId:req.params.id});
+    const [order] = await listPrint3dOrders(pool,{customerId:req.print3dCheckoutCustomer,orderId:req.params.id,includeDispatch:dispatchEnabled});
     return {order};
   }));
 }

@@ -1,4 +1,7 @@
 export const CATEGORY_SPEC_FIELD_METADATA = {
+    material: { label: 'Material', type: 'text', placeholder: 'Ex: PLA, PETG, resina' },
+    size: { label: 'Tamanho', type: 'text', placeholder: 'Ex: Pequeno, 15 cm' },
+    finish: { label: 'Acabamento', type: 'text', placeholder: 'Ex: Fosco, brilhante, pintado' },
     iks: {
         label: 'IKS',
         type: 'select',
@@ -15,6 +18,19 @@ export const CATEGORY_SPEC_FIELD_METADATA = {
         options: ['Sim', 'Não', 'Consulte'],
     },
 };
+
+// Fill only gaps: category/custom definitions and model-provided values win.
+export function getPrint3dDefaultSpecFields(categoryConfig = {}, customFields = [], templateValues = {}) {
+    const normalize = value => String(value || '').trim().replace(/^specs\./i, '').toLowerCase();
+    const configured = new Set([
+        ...Object.keys(categoryConfig || {}), ...Object.keys(templateValues || {}),
+        ...[...(categoryConfig?.custom_fields || []), ...(customFields || [])].map(field =>
+            field.key ?? field.field_key ?? field.technicalName ?? field.technical_name ?? field.name),
+    ].map(normalize));
+    return [['material'], ['size', 'tamanho'], ['finish', 'acabamento']]
+        .filter(aliases => !aliases.some(key => configured.has(key)))
+        .map(([key]) => ({ key, requirement: 'optional' }));
+}
 
 const IGNORED_CATEGORY_CONFIG_KEYS = new Set([
     'custom_fields',

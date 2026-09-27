@@ -67,7 +67,6 @@ export default function OnlineOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('');
-    const [filterStorefront, setFilterStorefront] = useState<string>('');
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
     const [warrantyModalOrder, setWarrantyModalOrder] = useState<OrderWithItems | null>(null);
@@ -340,7 +339,7 @@ export default function OnlineOrdersPage() {
 
     const filtered = orders.filter(o => {
         const storefront = o.storefront == null ? 'mercado_do_vale' : o.storefront;
-        if (filterStorefront && storefront !== filterStorefront) return false;
+        if (storefront !== 'mercado_do_vale') return false;
         if (!search) return true;
         const s = search.toLowerCase();
         return (
@@ -355,7 +354,7 @@ export default function OnlineOrdersPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Pedidos Online</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">Pedidos Online · Mercado do Vale</h1>
                     <p className="text-gray-500 text-sm mt-1">
                         {filtered.length} pedido{filtered.length !== 1 ? 's' : ''}
                     </p>
@@ -389,16 +388,6 @@ export default function OnlineOrdersPage() {
                     {Object.entries(STATUS_LABELS).map(([value, label]) => (
                         <option key={value} value={value}>{label}</option>
                     ))}
-                </select>
-                <select
-                    value={filterStorefront}
-                    onChange={e => setFilterStorefront(e.target.value)}
-                    aria-label="Filtrar pedidos por site"
-                    className="border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                    <option value="">Todos os sites</option>
-                    <option value="mercado_do_vale">Mercado do Vale</option>
-                    <option value="loja_3d">Loja 3D</option>
                 </select>
             </div>
 

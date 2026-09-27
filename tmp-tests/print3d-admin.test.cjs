@@ -12,7 +12,7 @@ function fixture(options={}) {
     return [[{id:'3d-only',name:'Cliente 3D',email:'sample@example.test',phone:null,is_active:1,
       email_verified_at:null,phone_verified_at:null,created_at:'2026-09-27',password_hash:'NEVER',
       cpf_cnpj:'NEVER',salt:'NEVER',public_number:42,total:11000,subtotal:10000,shipping_cost:1000,
-      confirmed_cents:5000,print3d_customer_id:'3d-only',customer_name:'Cliente 3D',
+      pending_cancellations:'2',late_payments:'1',late_amount_cents:'5000',confirmed_cents:5000,print3d_customer_id:'3d-only',customer_name:'Cliente 3D',
       status:'pending',payment_status:'pending',due_on_confirmation_cents:5000,due_before_shipping_cents:6000,
       initial_payment_bps:5000,shipping_payment_mode:'later'}]];
   }};
@@ -39,7 +39,7 @@ for(const kind of ['customers','orders']) {
     }
     const f=fixture(),response=await f.get(kind);
     assert.equal(response.status,200);assert.equal(response.headers['Cache-Control'],'no-store');
-    assert.deepEqual(response.body,{enabled:false,storefront:'loja_3d',items:[],total:0,page:1,page_size:25});
+    assert.deepEqual(response.body,{enabled:false,dispatch_enabled:false,storefront:'loja_3d',items:[],total:0,page:1,page_size:25});
     assert.equal(f.queries.length,0);
   });
   test(kind+': bounded pagination and parameterized search',async()=>{
@@ -77,6 +77,7 @@ test('3D order count and data always enforce the same storefront and isolated cu
   assert.equal(order.order_number,'3D-42');
   assert.equal(order.total_cents,11000);assert.equal(order.confirmed_cents,5000);
   assert.equal(order.outstanding_cents,6000);
+  assert.deepEqual(order.payment_review,{pending_cancellations:2,refunded_payments:0,late_payments:1,late_amount_cents:5000});
   assert.equal(order.customer.id,'3d-only');
   assert.equal(order.payment_schedule.shipping_payment_mode,'later');
 });

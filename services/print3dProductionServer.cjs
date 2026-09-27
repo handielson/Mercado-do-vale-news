@@ -1,6 +1,9 @@
 'use strict';
 const { listProductionJobs,recordProductionProgress } = require('./print3dProduction.cjs');
-function registerPrint3dProductionRoutes(app, { pool,getBearerAuthContext,getCustomer,enabled = false }) {
+const { listPrint3dFilamentStock,receivePrint3dFilament } = require('./print3dMaterialStock.cjs');
+const { listPrint3dSupplyStock,receivePrint3dSupply } = require('./print3dSupplyStock.cjs');
+const { dispatchPrint3dOrder } = require('./print3dDispatch.cjs');
+function registerPrint3dProductionRoutes(app, { pool,getBearerAuthContext,getCustomer,enabled = false,dispatchEnabled = false }) {
   const admin = async (req, reply) => {
     reply.header('Cache-Control','no-store');
     const auth = await getBearerAuthContext(req);
@@ -29,5 +32,20 @@ function registerPrint3dProductionRoutes(app, { pool,getBearerAuthContext,getCus
   app.get('/print3d/production',{ preHandler:customer },run(async req => ({ jobs:await listProductionJobs(pool,{ customerId:req.print3dProductionCustomer }) })));
   app.post('/admin/print3d/production/:id/progress',{ preHandler:admin,bodyLimit:8192 },run(req =>
     recordProductionProgress(pool,{ jobId:req.params.id,actorId:req.print3dProductionActor,body:req.body })));
+  app.get('/admin/print3d/materials',{ preHandler:admin },run(async () => ({ materials:await listPrint3dFilamentStock(pool) })));
+  app.post('/admin/print3d/materials/receipts',{ preHandler:admin,bodyLimit:4096 },run(req =>
+    receivePrint3dFilament(pool,{ body:req.body,actorId:req.print3dProductionActor })));
+  app.get('/admin/print3d/supplies',{ preHandler:admin },run(async () => ({ supplies:await listPrint3dSupplyStock(pool) })));
+  app.post('/admin/print3d/supplies/receipts',{ preHandler:admin,bodyLimit:4096 },run(req =>
+    receivePrint3dSupply(pool,{body:req.body,actorId:req.print3dProductionActor})));
+  app.post('/admin/print3d/orders/:id/dispatch',{ preHandler:admin,bodyLimit:4096 },async (req,reply) => {
+    if (!enabled || !dispatchEnabled) return reply.code(503).send({ error:'Expedição 3D ainda não habilitada.' });
+    try { return await dispatchPrint3dOrder(pool,{ orderId:req.params.id,actorId:req.print3dProductionActor,trackingCode:req.body?.tracking_code }); }
+    catch (error) {
+      if (error.statusCode) return reply.code(error.statusCode).send({ error:error.message });
+      req.log?.error({err:error},'print3d-dispatch');
+      return reply.code(500).send({ error:'Não foi possível registrar a expedição 3D.' });
+    }
+  });
 }
 module.exports = { registerPrint3dProductionRoutes };

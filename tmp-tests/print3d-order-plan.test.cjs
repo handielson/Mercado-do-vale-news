@@ -2,6 +2,25 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+test('variante pública é normalizada, fixada no plano e incluída no frete', async () => {
+  const { normalizeVariantSnapshot } = require('../services/print3dStorefrontQuote.cjs');
+  const { quoteItemsFingerprint } = require('../services/print3dShippingQuoteToken.cjs');
+  const specs = { Material:' PETG ', Cor:'Preto', Tamanho:15, Acabamento:'Fosco', imei1:'privado', nas_path:'/privado', cost:100 };
+  const expected = {material:'PETG',color:'Preto',size:'15',finish:'Fosco'};
+  assert.deepEqual(normalizeVariantSnapshot(JSON.stringify(specs)),expected);
+  for (const value of [null, 'invalid', [], {material:{internal:true}}]) assert.deepEqual(normalizeVariantSnapshot(value),{});
+  const {state,connection} = fakeConnection();
+  state.quote.variant_snapshot = normalizeVariantSnapshot(specs);
+  const result = await savePrint3dOrderPlanOnConnection(connection,{orderId:state.order.id,quoteItems:[state.quote]});
+  assert.deepEqual(JSON.parse(result.plan.items[0].variant_snapshot),expected);
+  assert.equal((await savePrint3dOrderPlanOnConnection(connection,{orderId:state.order.id,quoteItems:[state.quote]})).replayed,true);
+  const originalFingerprint=quoteItemsFingerprint([state.quote]);
+  state.quote.variant_snapshot.color='Azul';
+  assert.notEqual(quoteItemsFingerprint([state.quote]),originalFingerprint);
+  await assert.rejects(savePrint3dOrderPlanOnConnection(connection,{orderId:state.order.id,quoteItems:[state.quote]}),/imutável/);
+  assert.deepEqual(JSON.parse(result.plan.items[0].variant_snapshot),expected);
+});
+
 test('plano registra percentual escolhido e frete dentro das duas etapas', async () => {
   for (const [mode,initial,balance] of [['later',283,201],['full_now',363,121],['split',339,145]]) {
     const {state,connection} = fakeConnection();

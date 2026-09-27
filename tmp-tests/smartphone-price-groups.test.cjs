@@ -67,6 +67,23 @@ test('colors, numeric memory and physical RAM identify the same configuration', 
   assert.equal(core.configuration(phone('A'), { ...model, template_values: { ram_fisica: '12GB' } }).ram, '8GB');
 });
 
+test('3D products never inherit or change phone group prices even with inherited phone specs', async t => {
+  const piece = phone('PIECE', {is_print3d:1,price_retail:2500});
+  const f = fixture(t, {products:[phone('PHONE'),piece]});
+  assert.equal(core.configuration(piece,model),null);
+  const listing=await f.list();assert.equal(listing.groups.length,1);
+  assert.deepEqual(listing.groups[0].products.map(p=>p.id),['PHONE']);assert.deepEqual(listing.unresolved,[]);
+  const reference=await f.request('POST',`/models/${model.id}/smartphone-price-reference`,piece);
+  assert.equal(reference.json().controlled,false);
+  const saved=await f.save(listing.groups[0],{...sale,price_retail:120000});assert.equal(saved.statusCode,200,saved.body);
+  assert.equal(f.state().products.find(p=>p.id==='PIECE').price_retail,2500);
+  let written;
+  await withSmartphonePriceWrite(f.pool,{id:'PIECE',price_retail:2900},async(_db,p)=>{written=p;});
+  assert.equal(written.price_retail,2900);
+  await withSmartphonePriceWrite(f.pool,{...piece,id:'NEW-3D',specs:{material:'PLA'},price_retail:3500},async(_db,p)=>{written=p;});
+  assert.equal(written.price_retail,3500,'no RAM/storage required for a manufactured part');
+});
+
 test('memory, commercial version, network, company and condition never merge', () => {
   const base = core.configuration(phone('A'), model).id;
   for (const specs of [{ ram: '6GB' }, { storage: '128GB' }, { version: 'India' }, { network: '5G' }, { condition: 'used' }]) {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const server = readFileSync('vps_server.cjs', 'utf8');
+const stock = readFileSync('services/externalStockReconciliation.cjs', 'utf8');
 
 assert.ok(
   server.includes('async function ensureIncomingStockLocation'),
@@ -15,18 +16,14 @@ const reconcileStart = server.indexOf('async function reconcileProductStockLocat
 const reconcileEnd = server.indexOf('async function getStockLocationRow', reconcileStart);
 assert.ok(reconcileStart > -1 && reconcileEnd > reconcileStart, 'reconcile function must exist before stock row helpers');
 const reconcileBody = server.slice(reconcileStart, reconcileEnd);
-const positiveDeltaStart = reconcileBody.indexOf('if (delta > 0)');
-const negativeDeltaStart = reconcileBody.indexOf('} else {', positiveDeltaStart);
-assert.ok(positiveDeltaStart > -1 && negativeDeltaStart > positiveDeltaStart, 'reconcile must have a positive delta branch');
-const positiveDeltaBody = reconcileBody.slice(positiveDeltaStart, negativeDeltaStart);
-assert.ok(
-  positiveDeltaBody.includes('ensureIncomingStockLocation(companyId)'),
-  'positive external stock deltas must be assigned to Entrada / Conferencia'
-);
-assert.ok(
-  !positiveDeltaBody.includes('ensureDefaultStockLocation(companyId)'),
-  'positive external stock deltas must not be assigned to Loja Principal / Estoque Geral'
-);
+assert.match(reconcileBody, /getIncoming: ensureIncomingStockLocation/,
+  'the wrapper must inject Entrada / Conferencia into the shared reconciler');
+assert.match(stock, /if\(target>currentTotal\|\|resetToIncoming\)\s*\{\s*const incoming=await getIncoming\(companyId\)/,
+  'positive deltas must use the injected incoming location');
+assert.match(stock, /materializeUndistributed&&target<=currentTotal/,
+  'materialization must skip balances already distributed');
+assert.match(stock, /SELECT id,company_id,stock_quantity FROM products.*FOR UPDATE/,
+  'materialization must read its source balance under the product lock');
 
 assert.ok(
   server.includes('async function materializeProductUndistributedStock'),
@@ -46,14 +43,14 @@ assert.ok(
 );
 assert.ok(
   server.includes('resetProductStockLocationsToIncoming(row.id, qty'),
-  'Bling stock reentries must recreate the whole balance in Entrada / Conferencia'
+  'Bling stock reentries must reconcile through Entrada / Conferencia while preserving reservations'
 );
 assert.ok(
-  server.includes("reference_type, previous_to_quantity, new_to_quantity, notes)"),
+  stock.includes("INSERT INTO stock_location_movements"),
   'materialized stock must write a movement history row'
 );
 assert.ok(
-  server.includes("'undistributed_stock'"),
+  stock.includes("'undistributed_stock'"),
   'materialized stock movement must be tagged as undistributed_stock'
 );
 

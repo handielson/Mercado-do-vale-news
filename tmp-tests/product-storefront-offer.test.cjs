@@ -26,9 +26,12 @@ test('preços e publicação são independentes por site, com mesmo estoque e m�
 
 test('publicação exige preço em centavos positivo e não altera a ficha compartilhada', () => {
   assert.throws(() => validateStorefrontOffer('loja_3d', { publication_status: 'published', price_retail: 0 }), /maior que zero/);
-  assert.throws(() => validateStorefrontOffer('loja_3d', { publication_status: 'published', price_retail: 49.9 }), /inteiro em centavos/);
+  assert.throws(() => validateStorefrontOffer('loja_3d', { publication_status: 'published', price_retail: 49.9, category_label: 'Decoração' }), /inteiro em centavos/);
+  assert.throws(() => validateStorefrontOffer('loja_3d', { publication_status: 'published', price_retail: 4900 }), /categoria deste site/);
   assert.throws(() => validateStorefrontOffer('outro', { publication_status: 'draft' }), /Site desconhecido/);
-  const offer = validateStorefrontOffer('loja_3d', { publication_status: 'published', title: 'Vaso', price_retail: 4900 });
+  const offer = validateStorefrontOffer('loja_3d', { publication_status: 'published', title: 'Vaso', category_label: 'Decoração', price_retail: 4900 });
   assert.equal(offer.price_retail, 4900);
+  assert.equal(offer.category_label, 'Decoração');
+  assert.equal(validateStorefrontOffer('loja_3d', { publication_status: 'draft' }).category_label, null);
   assert.equal(Object.hasOwn(offer, 'stock_quantity'), false);
 });

@@ -14,7 +14,7 @@ assert.match(blingService, /stock_quantity:\s*data\.stock_quantity|stock_quantit
 assert.match(orderService, /syncStockToBling\(/, 'online orders must synchronize stock with Bling');
 assert.match(orderService, /comboSelections: item\.combo_selections/, 'combo stock deductions must retain their selected components');
 
-assert.match(vpsServer, /fastify\.patch\('\/products\/stock'[\s\S]*UPDATE products SET stock_quantity=/,
+assert.match(vpsServer, /fastify\.patch\('\/products\/stock'[\s\S]*await reconcileProductStockLocationsToTotal\(row\.id,\s*qty,/,
   'VPS must expose a stock update endpoint for Bling webhooks');
 assert.match(vpsServer, /fastify\.post\('\/stock-locations\/priority-decrements'/,
   'VPS must keep stock-location deductions as the source of product stock changes');

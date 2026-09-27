@@ -24,12 +24,15 @@ function order(row) {
     status:row.status,payment_status:row.payment_status,created_at:row.created_at,
     subtotal_cents:Number(row.subtotal),shipping_cents:Number(row.shipping_cost),total_cents:total,
     confirmed_cents:confirmed,outstanding_cents:Math.max(0,total-confirmed),
+    tracking_code:row.tracking_code || null,
+    payment_review:{pending_cancellations:Number(row.pending_cancellations || 0),
+      refunded_payments:Number(row.refunded_payments || 0),late_payments:Number(row.late_payments || 0),late_amount_cents:Number(row.late_amount_cents || 0)},
     customer:{id:row.print3d_customer_id,name:row.customer_name,email:row.customer_email,phone:row.customer_phone},
     payment_schedule:row.public_number == null ? null : {
       due_on_confirmation_cents:Number(row.due_on_confirmation_cents),due_before_shipping_cents:Number(row.due_before_shipping_cents),
       initial_payment_bps:Number(row.initial_payment_bps),shipping_payment_mode:row.shipping_payment_mode } };
 }
-function registerPrint3dAdminRoutes(app,{pool,getBearerAuthContext,customersEnabled=false,ordersEnabled=false}) {
+function registerPrint3dAdminRoutes(app,{pool,getBearerAuthContext,customersEnabled=false,ordersEnabled=false,dispatchEnabled=false}) {
   const admin = async (request,reply) => {
     reply.header('Cache-Control','no-store');
     const auth = await getBearerAuthContext(request);
@@ -40,12 +43,13 @@ function registerPrint3dAdminRoutes(app,{pool,getBearerAuthContext,customersEnab
       try {
         const {page,page_size,search} = pagination(request.query);
         const enabled = kind === 'customers' ? customersEnabled === true : ordersEnabled === true;
-        const result = {enabled,storefront:'loja_3d',items:[],total:0,page,page_size};
+        const result = {enabled,dispatch_enabled:kind === 'orders' && dispatchEnabled === true,storefront:'loja_3d',items:[],total:0,page,page_size};
         if (!enabled) return result;
         const isCustomer = kind === 'customers';
         const from = isCustomer ? 'FROM print3d_customers c' : `FROM orders o
           LEFT JOIN print3d_customers c ON c.id=o.print3d_customer_id
-          LEFT JOIN print3d_order_plans p ON p.order_id=o.id`;
+          LEFT JOIN print3d_order_plans p ON p.order_id=o.id
+          ${dispatchEnabled ? 'LEFT JOIN print3d_order_dispatches d ON d.order_id=o.id' : ''}`;
         const where = [isCustomer ? '1=1' : "o.storefront='loja_3d' AND o.customer_id IS NULL"];
         const params = [];
         if (search) {
@@ -57,8 +61,14 @@ function registerPrint3dAdminRoutes(app,{pool,getBearerAuthContext,customersEnab
         const [[count]] = await pool.query(`SELECT COUNT(*) AS total ${filtered}`,params);
         const projection = isCustomer ? 'c.id,c.name,c.email,c.phone,c.is_active,c.email_verified_at,c.phone_verified_at,c.created_at' : `o.id,o.status,o.payment_status,o.created_at,o.subtotal,o.shipping_cost,o.total,o.print3d_customer_id,
           c.name AS customer_name,c.email AS customer_email,c.phone AS customer_phone,p.public_number,
+          ${dispatchEnabled ? 'd.tracking_code' : 'NULL AS tracking_code'},
           p.due_on_confirmation_cents,p.due_before_shipping_cents,p.initial_payment_bps,p.shipping_payment_mode,
-          (SELECT COALESCE(SUM(r.amount_cents),0) FROM print3d_order_payment_receipts r WHERE r.order_id=o.id AND r.status='confirmed') AS confirmed_cents`;
+          (SELECT COALESCE(SUM(r.amount_cents),0) FROM print3d_order_payment_receipts r WHERE r.order_id=o.id AND r.status='confirmed') AS confirmed_cents,
+          (SELECT COUNT(*) FROM print3d_payment_charges pc WHERE pc.order_id=o.id AND o.status='cancelled'
+            AND pc.status IN ('creating','pending','in_process','authorized','approved','cancelled')) AS pending_cancellations,
+          (SELECT COUNT(*) FROM print3d_payment_charges pc WHERE pc.order_id=o.id AND pc.status='late_payment') AS late_payments,
+          (SELECT COUNT(*) FROM print3d_payment_charges pc WHERE pc.order_id=o.id AND o.status='cancelled' AND pc.status='refunded') AS refunded_payments,
+          (SELECT COALESCE(SUM(pc.amount_cents),0) FROM print3d_payment_charges pc WHERE pc.order_id=o.id AND pc.status='late_payment') AS late_amount_cents`;
         const alias = isCustomer ? 'c' : 'o';
         const [rows] = await pool.query(`SELECT ${projection} ${filtered} ORDER BY ${alias}.created_at DESC,${alias}.id DESC LIMIT ? OFFSET ?`,[...params,page_size,(page-1)*page_size]);
         return {...result,total:Number(count.total),items:rows.map(isCustomer ? customer : order)};

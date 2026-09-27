@@ -39,6 +39,13 @@ test('billing uses the isolated 3D session API and sends explicit payer email on
   api.print3dCheckoutClient.pay('order-2', 'balance', 'key-2');
   assert.equal(Object.hasOwn(requests[1][1], 'payer_email'), false);
 });
+test('cancelamento usa somente a sessão 3D e não reutiliza a API ou sessão MDV', () => {
+  const { api, requests } = fixture();
+  api.print3dCheckoutClient.cancel('order-3', 'Cliente desistiu antes do PIX.');
+  assert.deepEqual(JSON.parse(JSON.stringify(requests[0])), [
+    '/print3d/orders/order-3/cancel', { reason:'Cliente desistiu antes do PIX.' },
+  ]);
+});
 test('percentage input preserves two decimal places as integer basis points and refuses less than 50%', () => {
   const { api } = fixture();
   for (const [text, expected] of [['50', 5000], ['70', 7000], ['100', 10000], ['50,01', 5001], ['70.25', 7025], ['49', null], ['49.99', null], ['100.01', null], ['70.255', null], ['', null], ['1e2', null]]) assert.equal(api.percentageToBps(text), expected);

@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const { readPrint3dPaymentCoverageOnConnection: readCoverage, recordVerifiedPrint3dPaymentOnConnection: recordReceipt } = require('./print3dOrderPlan.cjs');
 const { releaseProductionJobsOnConnection: releaseJobs, UUID } = require('./print3dProduction.cjs');
+const { recordLatePrint3dPaymentOnConnection } = require('./print3dCancellation.cjs');
 function fail(code, message) { throw Object.assign(new Error(message), { statusCode:code }); }
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function paymentsConfigured(env = process.env) {
@@ -13,7 +14,7 @@ function paymentsConfigured(env = process.env) {
     && notificationUrl.pathname === '/print3d/payments/webhook' && !notificationUrl.search && !notificationUrl.hash;
 }
 function publicCharge(row) {
-  return { id:row.id, stage:row.stage, amount_cents:Number(row.amount_cents), status:row.status,
+  return { id:row.id, stage:row.stage, amount_cents:Number(row.amount_cents), status:row.status === 'provider_cancelled' ? 'cancelled' : row.status,
     pix_code:row.status === 'pending' ? row.pix_code || '' : '',
     pix_qr_base64:row.status === 'pending' ? row.pix_qr_base64 || '' : '', expires_at:row.expires_at || null };
 }
@@ -30,7 +31,7 @@ function verifyPayment(payment, charge, collectorId) {
     || payment.currency_id !== 'BRL' || payment.payment_method_id !== 'pix'
     || payment.external_reference !== `print3d:${charge.id}` || moneyCents(payment.transaction_amount) !== Number(charge.amount_cents)
     || (charge.provider_payment_id && String(payment.id) !== String(charge.provider_payment_id))) fail(409, 'Pagamento não corresponde à cobrança 3D.');
-  if (!['pending','in_process','approved','rejected','cancelled','refunded','charged_back'].includes(payment.status)) fail(409, 'Estado de pagamento desconhecido.');
+  if (!['pending','in_process','authorized','approved','rejected','cancelled','refunded','charged_back'].includes(payment.status)) fail(409, 'Estado de pagamento desconhecido.');
   return payment;
 }
 function verifyWebhook({ headers,query,body }, secret, now = Date.now()) {
@@ -62,12 +63,26 @@ function createMpAdapter(env, fetchImpl = globalThis.fetch) {
       transaction_amount:Number(charge.amount_cents)/100,description:`Loja 3D - ${charge.stage === 'initial' ? 'pagamento inicial' : 'saldo e frete'}`,
       payment_method_id:'pix',external_reference:`print3d:${charge.id}`,notification_url:env.MDV_PRINT3D_MP_NOTIFICATION_URL,
       payer:{email:charge.payer_email} }) }),
+    findByReference:async chargeId=>{
+      if (!UUID.test(chargeId || '')) fail(400,'Cobrança inválida.');
+      const query = new URLSearchParams({external_reference:`print3d:${chargeId}`,sort:'date_created',criteria:'desc'});
+      const data = await request(`/search?${query}`);
+      if (!Array.isArray(data?.results) || !Number.isSafeInteger(data?.paging?.total)
+        || data.paging.total < 0) fail(502,'Resposta inválida da busca PIX.');
+      if (data.paging.total === 0 && data.results.length === 0) return null;
+      if (data.paging.total !== 1 || data.results.length !== 1) fail(409,'Busca PIX requer conferência.');
+      return data.results[0];
+    },
     get:id=>{ if (!/^\d+$/.test(String(id))) fail(400,'Pagamento inválido.'); return request(`/${id}`); },
+    cancel:id=>{
+      if (!/^\d+$/.test(String(id))) fail(400,'Pagamento inválido.');
+      return request(`/${id}`, { method:'PUT',headers:{'X-Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({status:'cancelled'}) });
+    },
   };
 }
-async function transaction(pool, fn) {
+async function transaction(pool, fn, beforeBegin) {
   const c = await pool.getConnection();
-  try { await c.beginTransaction(); const value = await fn(c); await c.commit(); return value; }
+  try { const context = beforeBegin ? await beforeBegin(c) : undefined; await c.beginTransaction(); const value = await fn(c,context); await c.commit(); return value; }
   catch (error) { await c.rollback(); throw error; } finally { c.release(); }
 }
 async function ownOrder(c, orderId, customerId, allowRefundReview = false) {
@@ -124,10 +139,8 @@ async function createCharge(pool, {orderId,customer,body,adapter,collectorId}) {
   return settlePayment(pool,{payment,chargeId:charge.id,collectorId});
 }
 async function settlePayment(pool,{payment,chargeId,collectorId}) {
-  return transaction(pool,async c=>{
-    const [refs] = await c.query('SELECT order_id FROM print3d_payment_charges WHERE id=?',[chargeId]);
-    if (!refs[0]) fail(404,'Cobrança não encontrada.');
-    const order = await ownOrder(c,refs[0].order_id,null,true);
+  return transaction(pool,async (c,orderId)=>{
+    const order = await ownOrder(c,orderId,null,true);
     const [rows] = await c.query('SELECT * FROM print3d_payment_charges WHERE id=? FOR UPDATE',[chargeId]);
     const charge = rows[0];
     verifyPayment(payment,charge,collectorId);
@@ -135,7 +148,41 @@ async function settlePayment(pool,{payment,chargeId,collectorId}) {
     // before acknowledging retries (including stale approval notifications).
     // Creation/refresh still use the strict order guard before external I/O.
     if (order.payment_status === 'refunded') return {charge:publicCharge({...charge,status:'refunded'}),review_required:true};
-    if (order.status === 'cancelled') fail(409,'Pedido indisponível para pagamento.');
+    // Never resurrect a locally cancelled order. A delayed provider approval is
+    // retained for refund review, but does not create a receipt or unlock work.
+    if (order.status === 'cancelled') {
+      // A full, verified provider refund resolves this charge only. Other
+      // charges on the same cancelled order may still need reconciliation.
+      if (charge.status === 'refunded') return {charge:publicCharge(charge),review_required:false};
+      if (payment.status === 'refunded'
+        && moneyCents(payment.transaction_amount_refunded) === Number(charge.amount_cents)) {
+        await c.query("UPDATE print3d_payment_charges SET status='refunded',provider_payment_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",[String(payment.id),charge.id]);
+        return {charge:publicCharge({...charge,status:'refunded'}),review_required:false};
+      }
+      // Late approvals cannot be erased by stale pending/cancelled snapshots.
+      if (charge.status === 'late_payment' && payment.status !== 'approved') {
+        await c.query('UPDATE print3d_payment_charges SET updated_at=CURRENT_TIMESTAMP WHERE id=?',[charge.id]);
+        return {charge:publicCharge(charge),review_required:true};
+      }
+      if (payment.status === 'approved') {
+        const approvedAt = new Date(payment.date_approved);
+        if (!payment.date_approved || !Number.isFinite(approvedAt.valueOf())) fail(409,'Pagamento sem data de liquidação.');
+        await recordLatePrint3dPaymentOnConnection(c,{orderId:charge.order_id,chargeId:charge.id,providerPaymentId:payment.id,
+          amountCents:Number(charge.amount_cents),occurredAt:approvedAt});
+        await c.query("UPDATE print3d_payment_charges SET status='late_payment',provider_payment_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+          [String(payment.id),charge.id]);
+        return {charge:publicCharge({...charge,status:'late_payment'}),review_required:true,late_payment:true};
+      }
+      if (['cancelled','rejected'].includes(payment.status)) {
+        await c.query("UPDATE print3d_payment_charges SET status='provider_cancelled',provider_payment_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",[String(payment.id),charge.id]);
+        return {charge:publicCharge({...charge,status:'provider_cancelled'}),review_required:false};
+      }
+      // Creation may finish after local cancellation. Keep the verified remote
+      // identity so the cancellation worker can find and close this PIX later.
+      // Preserve terminal local state if this is a stale provider snapshot.
+      await c.query('UPDATE print3d_payment_charges SET provider_payment_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',[String(payment.id),charge.id]);
+      return {charge:publicCharge({...charge,status:'cancelled'}),review_required:true};
+    }
     // A refund/chargeback blocks production/dispatch rather than being silently ignored.
     if (['refunded','charged_back'].includes(payment.status) || Number(payment.transaction_amount_refunded || 0) > 0) {
       await c.query("UPDATE orders SET payment_status='refunded',updated_at=CURRENT_TIMESTAMP WHERE id=?",[charge.order_id]);
@@ -160,6 +207,13 @@ async function settlePayment(pool,{payment,chargeId,collectorId}) {
     await c.query('UPDATE print3d_payment_charges SET status=?,provider_payment_id=?,pix_code=?,pix_qr_base64=?,expires_at=? WHERE id=?',
       [row.status,row.provider_payment_id,row.pix_code,row.pix_qr_base64,row.expires_at,row.id]);
     return {charge:publicCharge(row),coverage};
+  },async c=>{
+    // Read the immutable reference before BEGIN. A consistent read inside the
+    // transaction would pin an old snapshot before waiting for the order lock,
+    // hiding receipts committed by the preceding notification.
+    const [refs] = await c.query('SELECT order_id FROM print3d_payment_charges WHERE id=?',[chargeId]);
+    if (!refs[0]) fail(404,'Cobrança não encontrada.');
+    return refs[0].order_id;
   });
 }
 async function listCharges(pool,{orderId,customerId}) {
@@ -178,4 +232,41 @@ async function refreshCharge(pool,{orderId,customerId,chargeId,adapter,collector
   const payment = charge.provider_payment_id ? await adapter.get(charge.provider_payment_id) : await adapter.create(charge);
   return settlePayment(pool,{payment,chargeId:charge.id,collectorId});
 }
-module.exports = {paymentsConfigured,publicCharge,moneyCents,verifyPayment,verifyWebhook,createMpAdapter,stageAmount,createCharge,settlePayment,listCharges,refreshCharge};
+// Runs only after the order was already cancelled and its local reservation was
+// released.  A gateway race is reconciled through settlePayment: an approval is
+// recorded as late_payment and never resurrects the order or its production.
+async function cancelPrint3dProviderCharges(pool,{orderId,adapter,collectorId}) {
+  if (!UUID.test(orderId || '') || !adapter?.get || !adapter?.cancel) fail(400,'Solicitação de cancelamento inválida.');
+  const [charges] = await pool.query(`SELECT * FROM print3d_payment_charges
+    WHERE order_id=? AND status NOT IN ('provider_cancelled','refunded')
+      AND EXISTS (SELECT 1 FROM orders o WHERE o.id=print3d_payment_charges.order_id
+        AND o.storefront='loja_3d' AND o.status='cancelled' AND o.customer_id IS NULL
+        AND o.print3d_customer_id IS NOT NULL) ORDER BY created_at,id`,[orderId]);
+  const outcomes=[];
+  for (const charge of charges) {
+    try {
+      let providerId=charge.provider_payment_id;
+      if (!providerId) {
+        // Search is read-only: never recreate a PIX for a cancelled order.
+        const found=await adapter.findByReference?.(charge.id);
+        if (!found) fail(409,'PIX ainda não localizado; requer nova conferência.');
+        verifyPayment(found,charge,collectorId);
+        providerId=String(found.id);
+      }
+      const current=await adapter.get(providerId);
+      verifyPayment(current,{...charge,provider_payment_id:providerId},collectorId);
+      const payment=charge.status !== 'late_payment' && ['pending','in_process','authorized'].includes(current.status) ? await adapter.cancel(providerId) : current;
+      verifyPayment(payment,{...charge,provider_payment_id:providerId},collectorId);
+      const settled=await settlePayment(pool,{payment,chargeId:charge.id,collectorId});
+      if (settled.review_required) await pool.query("UPDATE print3d_payment_charges SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('cancelled','late_payment')",[charge.id]);
+      outcomes.push({charge_id:charge.id,status:payment.status,review_required:Boolean(settled.review_required)});
+    } catch (error) {
+      // The order stays cancelled locally. Do not disclose provider data to the
+      // customer, and leave the event for administrative reconciliation.
+      await pool.query("UPDATE print3d_payment_charges SET updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('cancelled','late_payment')",[charge.id]);
+      outcomes.push({charge_id:charge.id,status:'review_required'});
+    }
+  }
+  return outcomes;
+}
+module.exports = {paymentsConfigured,publicCharge,moneyCents,verifyPayment,verifyWebhook,createMpAdapter,stageAmount,createCharge,settlePayment,listCharges,refreshCharge,cancelPrint3dProviderCharges};

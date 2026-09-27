@@ -242,6 +242,10 @@ class VpsApiService {
         const errorText = await res.text().catch(() => '');
         throw new Error(`[VPS ${method} ${path}] ${res.status} ${errorText}`.trim());
       }
+      if (path === '/products/batch') {
+        const result = await res.json();
+        if (result.errors?.length || result.ok === false) return false;
+      }
       return true;
     } catch (error) {
       console.error('[vpsApiService.writeSafe] erro:', error);
@@ -794,7 +798,15 @@ class VpsApiService {
           signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
         });
         if (res.ok) {
-          sent += chunk.length;
+          const result = await res.json();
+          const failed = result.ok === false || result.errors?.length > 0 || result.skipped > 0
+            || result.locationSync?.some((sync: { ok: boolean }) => !sync.ok);
+          if (failed) {
+            allOk = false;
+            console.warn('[vpsApiService] Sincronização parcial de preços/estoque:', result.errors);
+          } else {
+            sent += chunk.length;
+          }
         } else {
           allOk = false;
           console.warn(`[vpsApiService] bulkSyncPricesStock chunk ${i / CHUNK} → HTTP ${res.status}`);

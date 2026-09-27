@@ -28,10 +28,10 @@ export function paymentTermsPreview(subtotal: number, shipping: number, terms: P
 export type ShippingAddress = { cep: string; street: string; number: string; complement: string; neighborhood: string; city: string; state: string };
 export type ShippingQuote = { quote_token: string; subtotal_cents: number; production_days: number; handling_business_days: number; options: Array<{ id: string; carrier: string; name: string; price_cents: number; transport_business_days: number }> };
 export type Print3dOrder = {
-  id: string; order_number: string; status: string; payment_status: string; created_at: string;
+  id: string; order_number: string; status: string; payment_status: string; created_at: string; tracking_code?: string | null;
   subtotal_cents: number; shipping_cents: number; total_cents: number; confirmed_cents: number; outstanding_cents: number;
   shipping_address: ShippingAddress; shipping_option: { carrier?: string; name?: string };
-  items: Array<{ product_id: string; product_name: string; product_sku: string; quantity: number; unit_price_cents: number; subtotal_cents: number; ready_quantity: number; preorder_quantity: number; production_days: number }>;
+  items: Array<{ product_id: string; product_name: string; product_sku: string; variant_snapshot?: Record<string,string>; quantity: number; unit_price_cents: number; subtotal_cents: number; ready_quantity: number; preorder_quantity: number; production_days: number }>;
   payment_schedule: { initial_cents: number; balance_cents: number; due_on_confirmation_cents: number; due_before_shipping_cents: number; shipping_cents: number; initial_payment_bps?: number; shipping_payment_mode?: PaymentTerms['shipping_payment_mode']; minimum_initial_cents?: number };
 };
 export type PixCharge = { id: string; stage: 'initial' | 'balance'; amount_cents: number; status: string; pix_code: string | null; pix_qr_base64: string | null; expires_at: string | null };
@@ -56,4 +56,5 @@ export const print3dCheckoutClient = {
   payments: (id: string) => print3dAccountClient.requestStore<{ charges: PixCharge[]; coverage: PaymentCoverage }>(`/print3d/orders/${encodeURIComponent(id)}/payment`),
   pay: (id: string, stage: 'initial' | 'balance', key: string, email?: string) => print3dAccountClient.requestStore<{ charge: PixCharge; coverage: PaymentCoverage }>(`/print3d/orders/${encodeURIComponent(id)}/payment`, { stage, idempotency_key: key, ...(email ? { payer_email: email } : {}) }),
   refreshPayment: (id: string, chargeId: string) => print3dAccountClient.requestStore<{ charge: PixCharge; coverage: PaymentCoverage }>(`/print3d/orders/${encodeURIComponent(id)}/payment/refresh`, { charge_id: chargeId }),
+  cancel: (id: string, reason: string) => print3dAccountClient.requestStore<{ order_id: string; cancelled: boolean; already_cancelled: boolean }>(`/print3d/orders/${encodeURIComponent(id)}/cancel`, { reason }),
 };

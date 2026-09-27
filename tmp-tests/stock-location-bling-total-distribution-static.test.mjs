@@ -19,10 +19,12 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
     `${file} /products/stock must distribute Bling total changes into stock locations`
   );
   assert.match(
-    source,
-    /reference_type,\s*previous_to_quantity,\s*new_to_quantity,\s*notes\)[\s\S]*'sync', \?, \?/,
+    fs.readFileSync('services/externalStockReconciliation.cjs', 'utf8'),
+    /INSERT INTO stock_location_movements[\s\S]*'sync'/,
     `${file} must record sync movements when stock is added to a default location`
   );
+  assert.match(source, /require\('\.\/services\/externalStockReconciliation\.cjs'\)\.reconcileExternalStock/);
+  assert.doesNotMatch(route, /UPDATE products SET stock_quantity=/, 'stock total must be committed together with location changes');
 }
 
 console.log('stock location Bling total distribution static checks passed');

@@ -21,20 +21,20 @@ async function request<T>(path: string, body?: unknown, token?: string): Promise
     credentials: 'omit',
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(
+  if (!response.ok) throw Object.assign(new Error(
     response.status === 503 ? 'As contas da loja 3D ainda não estão disponíveis.'
       : typeof data.error === 'string' ? data.error : 'Não foi possível concluir a solicitação.'
-  );
+  ), { statusCode: response.status });
   return data as T;
 }
 
 export const print3dAccountClient = {
   requestStore: async <T>(path: string, body?: unknown): Promise<T> => {
     const method = body === undefined ? 'GET' : 'POST';
-    const orderPath = /^\/print3d\/orders\/[0-9a-f-]{36}(?:\/payment(?:\/refresh)?)?$/i.test(path);
+    const orderPath = /^\/print3d\/orders\/[0-9a-f-]{36}(?:\/(?:payment(?:\/refresh)?|cancel))?$/i.test(path);
     const allowed = method === 'GET'
       ? ['/print3d/production', '/print3d/checkout', '/print3d/orders'].includes(path) || orderPath && !path.endsWith('/refresh')
-      : path === '/print3d/checkout' || orderPath && /\/payment(?:\/refresh)?$/.test(path);
+      : path === '/print3d/checkout' || orderPath && /\/(?:payment(?:\/refresh)?|cancel)$/.test(path);
     if (!allowed) throw new Error('Área da loja inválida.');
     const token = sessionStorage.getItem(SESSION_KEY);
     if (!token && path !== '/print3d/checkout') throw new Error('Entre na sua conta 3D para continuar.');
@@ -109,7 +109,14 @@ export const print3dAccountClient = {
     const token = sessionStorage.getItem(SESSION_KEY);
     if (!token) return null;
     try { return (await request<{ customer: Customer }>('/me', undefined, token)).customer; }
-    catch { sessionStorage.removeItem(SESSION_KEY); return null; }
+    catch (cause) {
+      if ((cause as { statusCode?: number })?.statusCode === 401) {
+        // A response for a previous session must not erase a newer login.
+        if (sessionStorage.getItem(SESSION_KEY) === token) sessionStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      throw cause;
+    }
   },
   logout: () => sessionStorage.removeItem(SESSION_KEY),
 };

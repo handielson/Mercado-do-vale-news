@@ -2334,8 +2334,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 <p className="mt-1 text-sm text-slate-600">Após salvar o SKU, configure separadamente preço, nome, descrição e visibilidade do Mercado do Vale e da Loja 3D. Fotos, características e estoque são compartilhados.</p>
                 {initialData?.sku ? <Link to={`/admin/products/storefronts?sku=${encodeURIComponent(initialData.sku)}`} className="mt-3 inline-flex rounded-md border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Configurar publicação nos sites</Link> : <p className="mt-2 text-xs text-slate-500">Salve o produto primeiro para configurar as ofertas.</p>}
             </div>
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="font-semibold text-slate-800">Impressão 3D</h3>
+            <div className="bg-violet-50 p-5 rounded-xl border border-violet-200 shadow-sm space-y-4">
+                <h3 className="font-semibold text-violet-900">Impressão 3D</h3>
                 <label className="flex items-start gap-3 text-sm text-slate-700">
                     <input type="checkbox" className="mt-0.5 h-4 w-4" checked={Boolean(watch('is_print3d'))}
                         onChange={(event) => {
@@ -2344,7 +2344,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         }} />
                     <span>Este SKU pertence à linha de impressão 3D</span>
                 </label>
-                {watch('is_print3d') && <div className="space-y-3 rounded-lg border border-blue-100 bg-blue-50 p-4">
+                {watch('is_print3d') && <div className="space-y-3 rounded-lg border border-violet-200 bg-white p-4">
                     <p className="text-xs text-slate-600">A quantidade pronta fica no estoque central acima. Encomenda é uma demanda de fabricação, não saldo negativo.</p>
                     <label className="flex items-start gap-3 text-sm text-slate-700">
                         <input type="checkbox" className="mt-0.5 h-4 w-4" checked={Boolean(watch('print3d_preorder_enabled'))}

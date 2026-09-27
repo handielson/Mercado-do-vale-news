@@ -48,7 +48,7 @@ export default function Print3dCheckoutPage() {
     } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível confirmar. Tente novamente para recuperar a mesma solicitação.'); }
     finally { pending.current = false; setBusy(false); }
   }
-  return <main className="min-h-screen bg-[#f7f7f2] px-4 py-8 text-stone-800"><div className="mx-auto max-w-3xl">
+  return <main className="min-h-screen bg-[var(--print3d-surface)] px-4 py-8 text-stone-800"><div className="mx-auto max-w-3xl">
     <Link to={'/loja-3d' + (demo ? '?demo=1' : '')} className="text-sm text-stone-600">← Continuar comprando</Link>
     <h1 className="my-6 text-3xl font-semibold tracking-tight">Finalizar pedido</h1>
     {demo && <div className="mb-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Simulação local, sem pedido ou cobrança real. <Link className="underline" to="/loja-3d/pedidos?demo=1">Ver exemplo: 100 unidades, 20 produzidas.</Link></div>}

@@ -11,7 +11,7 @@ function sortedItems(items) {
   return validateQuoteItems(items).sort((a,b) => a.product_id.localeCompare(b.product_id));
 }
 function quoteItemsFingerprint(items) {
-  const fields = ['product_id','quantity','ready_quantity','preorder_quantity','production_days','unit_price','subtotal','ready_subtotal','preorder_subtotal','deposit_amount','balance_before_shipping','status'];
+  const fields = ['product_id','variant_snapshot','quantity','ready_quantity','preorder_quantity','production_days','unit_price','subtotal','ready_subtotal','preorder_subtotal','deposit_amount','balance_before_shipping','status'];
   const sorted = [...items].sort((a,b) => a.product_id.localeCompare(b.product_id));
   return crypto.createHash('sha256').update(JSON.stringify(sorted.map(item => Object.fromEntries(fields.map(field => [field,item[field] ?? null]))))).digest('hex');
 }

@@ -88,6 +88,7 @@ export const isSpecialField = (key: string): boolean => {
  * Fields NOT listed here (e.g., battery_mah, display) belong to the model template.
  */
 const PRODUCT_LEVEL_FIELDS = [
+    'material', 'size', 'finish',
     'imei1', 'imei2', 'serial',
     'color', 'storage', 'ram',
     'version', 'battery_health'

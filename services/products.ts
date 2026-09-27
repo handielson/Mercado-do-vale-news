@@ -162,6 +162,8 @@ function salePricesDiffer(product: Product, source: Product): boolean {
 }
 
 async function syncVariationPrices(source: Product): Promise<VariationPriceAdjustment | null> {
+    // Each manufactured variant has its own costs and selling prices.
+    if (source.is_print3d) return null;
     // Smartphone prices belong to the server-side configuration group, never to the last edited color.
     if (source.model_id) {
         const { smartphonePriceGroups } = await import('./smartphonePriceGroups');
@@ -184,6 +186,7 @@ async function syncVariationPrices(source: Product): Promise<VariationPriceAdjus
         .map(transformFromDB)
         .filter((product) =>
             product.id !== source.id &&
+            !product.is_print3d &&
             hasSellableStock(product) &&
             normalizeVariationSpec(product.specs?.ram) === ram &&
             normalizeVariationSpec(product.specs?.storage) === storage &&
@@ -359,7 +362,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
     const dimensions = input.dimensions || modelData.template_values?.dimensions;
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
 
-    const isSerializedCategory = await isSerializedProductCategory(category_id);
+    const isSerializedCategory = !input.is_print3d && await isSerializedProductCategory(category_id);
 
     // SKU uniqueness check — busca exata na VPS (fonte da verdade)
     // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
@@ -517,7 +520,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
     const dimensions = input.dimensions || modelData?.template_values?.dimensions || oldProduct.dimensions;
     const weight_kg = input.weight_kg || modelData?.template_values?.weight_kg || oldProduct.weight_kg;
 
-    const isSerializedCategory = await isSerializedProductCategory(category_id);
+    const isSerializedCategory = !(input.is_print3d ?? oldProduct.is_print3d) && await isSerializedProductCategory(category_id);
 
     // SKU uniqueness check — busca exata na VPS (fonte da verdade), excluindo o próprio produto editado
     // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais

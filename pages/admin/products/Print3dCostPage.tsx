@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
+import { QuickCostSimulator } from '../../../components/print3d/QuickCostSimulator';
 import {
   emptyPrint3dCostSettings,
   print3dCostSettingsService,
@@ -72,6 +73,9 @@ export function Print3dCostPage() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [stockSnapshot, setStockSnapshot] = useState<StockSnapshot | null>(null);
   const [loadingStock, setLoadingStock] = useState(false);
+  const packagingSupplies = () => settings.packagingCentsPerPiece > 0
+    ? [{ id: 'packaging-per-piece', name: 'Embalagem por peça', unitLabel:'un', quantity: pieces, unitCostCents: settings.packagingCentsPerPiece }]
+    : [];
 
   useEffect(() => {
     let mounted = true;
@@ -141,9 +145,11 @@ export function Print3dCostPage() {
     if (!(settings.printerWatts > 0) || !(settings.energyCentsPerKwh > 0) ||
         !Number.isFinite(settings.machineCentsPerHour) || settings.machineCentsPerHour < 0 ||
         !Number.isFinite(settings.laborCentsPerHour) || settings.laborCentsPerHour < 0 ||
+        !Number.isSafeInteger(settings.packagingCentsPerPiece) || settings.packagingCentsPerPiece < 0 ||
+        !Number.isFinite(settings.taxPercent) || settings.taxPercent < 0 || settings.taxPercent >= 100 ||
         settings.filaments.some((item) => !item.name.trim() || !item.color.trim() || !(item.spoolGrams > 0) || !(item.spoolCostCents > 0)) ||
-        settings.supplies.some((item) => !item.name.trim() || !(item.unitCostCents > 0))) {
-      setError('Preencha potência, energia, filamentos e preços dos demais insumos.');
+        settings.supplies.some((item) => !item.name.trim() || !(item.unitCostCents > 0) || !String(item.unitLabel || 'un').trim() || String(item.unitLabel || 'un').length > 40)) {
+      setError('Confira potência, energia, insumos, embalagem e imposto (de 0 a menos de 100%).');
       return;
     }
     setSaving(true);
@@ -181,7 +187,8 @@ export function Print3dCostPage() {
         return { quantity: item.quantity, unitCostCents: source.unitCostCents };
       });
       setResult(calculatePrint3dCost({
-        pieces, printMinutes, filaments, supplies, laborMinutes,
+        pieces, printMinutes, filaments, supplies: [...supplies, ...packagingSupplies()], laborMinutes,
+        taxPercent: settings.taxPercent,
         printerWatts: settings.printerWatts,
         energyCentsPerKwh: settings.energyCentsPerKwh,
         machineCentsPerHour: settings.machineCentsPerHour,
@@ -206,15 +213,16 @@ export function Print3dCostPage() {
           energyCentsPerKwh: settings.energyCentsPerKwh,
           machineCentsPerHour: settings.machineCentsPerHour,
           laborCentsPerHour: settings.laborCentsPerHour,
+          taxPercent: settings.taxPercent,
         },
         filaments: filamentUses.map((use) => ({
           ...settings.filaments.find((item) => item.id === use.filamentId),
           consumedGrams: use.consumedGrams,
         })),
-        supplies: supplyUses.map((use) => ({
+        supplies: [...supplyUses.map((use) => ({
           ...settings.supplies.find((item) => item.id === use.supplyId),
           quantity: use.quantity,
-        })),
+        })), ...packagingSupplies()],
     });
   };
 
@@ -427,6 +435,8 @@ export function Print3dCostPage() {
     {error && <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</div>}
     {notice && <div role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</div>}
 
+    <QuickCostSimulator settings={settings} />
+
     <section className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
       <h2 className="text-lg font-semibold">Custos cadastrados</h2>
       <div className="grid gap-4 md:grid-cols-2">
@@ -436,7 +446,12 @@ export function Print3dCostPage() {
         <CurrencyInput label="Energia por kWh" value={settings.energyCentsPerKwh} onChange={(value) => editSettings({ energyCentsPerKwh: value })} />
         <CurrencyInput label="Uso da máquina por hora" value={settings.machineCentsPerHour} onChange={(value) => editSettings({ machineCentsPerHour: value })} />
         <CurrencyInput label="Mão de obra por hora" value={settings.laborCentsPerHour} onChange={(value) => editSettings({ laborCentsPerHour: value })} />
+        <CurrencyInput label="Embalagem por peça" value={settings.packagingCentsPerPiece} onChange={(value) => editSettings({ packagingCentsPerPiece: value })} />
+        <label className="text-sm">Imposto estimado sobre a venda (%)<input className={numberClass} type="number" min="0" max="99.99" step="0.01" value={settings.taxPercent} onChange={(event) => editSettings({ taxPercent: Number(event.target.value) })} /></label>
       </div>
+      <p className="text-xs text-slate-600">Referências iniciais editáveis: máquina R$ 1,00/h e mão de obra R$ 20,00/h. São hipóteses de simulação, não índices oficiais. Valores já salvos, inclusive zero, são preservados. A máquina cobre desgaste/manutenção; energia é calculada separadamente. Mão de obra usa apenas os minutos de trabalho manual.</p>
+      <button type="button" className="text-sm text-violet-700 underline" onClick={() => editSettings({ machineCentsPerHour: 100, laborCentsPerHour: 2000 })}>Usar referências iniciais de máquina e mão de obra</button>
+      <p className="text-xs text-slate-600">Embalagem é multiplicada pelas peças do lote e incluída nos insumos da ficha. Não cadastre a mesma embalagem novamente em outros insumos. Caixa de envio coletiva pode ser lançada em outros insumos pela quantidade usada no lote. Informe sua alíquota efetiva; zero significa sem provisão de imposto.</p>
       <div className="space-y-3">
         <div className="flex items-center justify-between"><h3 className="font-semibold">Filamentos</h3><button className="rounded-lg border px-3 py-1 text-sm" onClick={() => editSettings({ filaments: [...settings.filaments, { id: newId(), name: '', color: '', spoolGrams: 1000, spoolCostCents: 0 }] })}>Adicionar filamento</button></div>
         {settings.filaments.map((item) => <div className="grid gap-2 rounded-lg border p-3 md:grid-cols-[2fr_1fr_1fr_1.5fr_auto]" key={item.id}>
@@ -448,9 +463,10 @@ export function Print3dCostPage() {
         </div>)}
       </div>
       <div className="space-y-3">
-        <div className="flex items-center justify-between"><h3 className="font-semibold">Outros insumos</h3><button className="rounded-lg border px-3 py-1 text-sm" onClick={() => editSettings({ supplies: [...settings.supplies, { id: newId(), name: '', unitCostCents: 0 }] })}>Adicionar insumo</button></div>
-        {settings.supplies.map((item) => <div className="grid gap-2 rounded-lg border p-3 md:grid-cols-[2fr_1fr_auto]" key={item.id}>
+        <div className="flex items-center justify-between"><h3 className="font-semibold">Outros insumos</h3><button className="rounded-lg border px-3 py-1 text-sm" onClick={() => editSettings({ supplies: [...settings.supplies, { id: newId(), name: '', unitLabel:'un', unitCostCents: 0 }] })}>Adicionar insumo</button></div>
+        {settings.supplies.map((item) => <div className="grid gap-2 rounded-lg border p-3 md:grid-cols-[2fr_5rem_1fr_auto]" key={item.id}>
           <input aria-label="Nome do insumo" placeholder="Ex.: argola para chaveiro" className={numberClass} value={item.name} onChange={(e) => editSettings({ supplies: settings.supplies.map((current) => current.id === item.id ? { ...current, name: e.target.value } : current) })} />
+          <input aria-label="Unidade do insumo" placeholder="un, g, ml" maxLength={40} className={numberClass} value={item.unitLabel ?? 'un'} onChange={(e) => editSettings({ supplies: settings.supplies.map((current) => current.id === item.id ? { ...current, unitLabel:e.target.value } : current) })} />
           <CurrencyInput label="Preço por unidade" value={item.unitCostCents} onChange={(value) => editSettings({ supplies: settings.supplies.map((current) => current.id === item.id ? { ...current, unitCostCents: value } : current) })} />
           <button className="text-sm text-red-700" onClick={() => editSettings({ supplies: settings.supplies.filter((current) => current.id !== item.id) })}>Remover</button>
         </div>)}
@@ -493,10 +509,13 @@ export function Print3dCostPage() {
           <p>Energia: <strong>{money(result.energyCents)}</strong></p>
           <p>Máquina: <strong>{money(result.machineCents)}</strong></p>
           <p>Mão de obra: <strong>{money(result.laborCents)}</strong></p>
-          <p>Outros insumos: <strong>{money(result.suppliesCents)}</strong></p>
+          <p>Outros insumos: <strong>{money(result.suppliesCents - settings.packagingCentsPerPiece * pieces)}</strong></p>
+          <p>Embalagens: <strong>{money(settings.packagingCentsPerPiece * pieces)}</strong></p>
         </div>
         <div className="mt-3 flex flex-wrap gap-6 border-t pt-3 text-lg font-bold"><p>Lote: {money(result.batchCents)}</p><p>Por peça: {money(result.unitCents)}</p></div>
+        <div className="mt-3 border-t pt-3 text-sm space-y-2"><p>Provisão de imposto ({result.taxPercent}%): <strong>{money(result.estimatedTaxCents)}</strong></p><p>Mínimo para cobrir custo e imposto: <strong>{money(result.minimumBatchSaleCents)} por lote · {money(result.minimumUnitSaleCents)} por peça</strong></p><p>Estimativa sem lucro, frete ou taxas de venda. Fórmula: custo ÷ (1 − imposto / 100). O arredondamento por peça pode aumentar o total.</p></div>
       </div>}
+      <p className="text-xs text-slate-600">Confira também perdas e reimpressões, suportes/purga não incluídos no JSON, acabamento, taxas de pagamento/marketplace, frete subsidiado e rateio de despesas fixas. Estes não são acrescentados automaticamente. Lucro deve ser definido na formação do preço de cada site.</p>
     </section>
     <section className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
       <h2 className="text-lg font-semibold">Ficha de produção — rascunho</h2>

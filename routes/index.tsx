@@ -92,6 +92,7 @@ const Print3dProductionPage = lazy(() => import('../pages/store/Print3dProductio
 const Print3dCheckoutPage = lazy(() => import('../pages/store/Print3dCheckoutPage'));
 const Print3dOrdersPage = lazy(() => import('../pages/store/Print3dOrdersPage'));
 const AdminPrint3dProductionPage = lazy(() => import('../pages/admin/products/Print3dProductionPage'));
+const Print3dRecordsPage = lazy(() => import('../pages/admin/print3d/Print3dRecordsPage'));
 const Print3dGoogleCallbackPage = lazy(() => import('../pages/store/Print3dGoogleCallbackPage'));
 const Print3dAccountActionPage = lazy(() => import('../pages/store/Print3dAccountActionPage'));
 const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
@@ -324,6 +325,30 @@ export const router = createBrowserRouter([
         <AdminLayout><ProductListPage /></AdminLayout>
       </ProtectedRoute>
     )
+  },
+  {
+    path: "/admin/loja-3d/clientes",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dRecordsPage key="3d-customers" kind="customers" /></AdminLayout></ProtectedRoute>
+  },
+  {
+    path: "/admin/loja-3d/pedidos",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dRecordsPage key="3d-orders" kind="orders" /></AdminLayout></ProtectedRoute>
+  },
+  {
+    path: "/admin/loja-3d/producao",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><AdminPrint3dProductionPage /></AdminLayout></ProtectedRoute>
+  },
+  {
+    path: "/admin/loja-3d/calculadora",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dCostPage /></AdminLayout></ProtectedRoute>
+  },
+  {
+    path: "/admin/loja-3d/catalogo",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><ProductStorefrontOffersPage key="3d-offers" storefront="loja_3d" /></AdminLayout></ProtectedRoute>
+  },
+  {
+    path: "/admin/loja-3d/banners",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><BannerManagementPage key="3d-banners" fixedStorefront="loja_3d" /></AdminLayout></ProtectedRoute>
   },
   {
     path: "/admin/products/print3d-production",
@@ -899,7 +924,7 @@ export const router = createBrowserRouter([
     path: "/admin/settings/banners",
     element: (
       <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><BannerManagementPage /></AdminLayout>
+        <AdminLayout><BannerManagementPage key="mdv-banners" fixedStorefront="mercado_do_vale" /></AdminLayout>
       </ProtectedRoute>
     )
   },

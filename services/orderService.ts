@@ -668,7 +668,8 @@ export async function getOrderById(id: string): Promise<OrderWithItems | null> {
 // ─── Listar pedidos (painel admin) ────────────────────────────────────────────
 
 export async function getOrders(filters?: OrderFilters): Promise<OrderWithItems[]> {
-    let orders = await loadOrderRows();
+    // Este serviço atende o Mercado do Vale; pedidos 3D têm consulta e ações próprias.
+    let orders = (await loadOrderRows()).filter(order => order.storefront == null || order.storefront === 'mercado_do_vale');
 
     if (filters?.customer_id) orders = orders.filter(order => String(order.customer_id || '') === String(filters.customer_id));
     if (filters?.status) orders = orders.filter(order => order.status === filters.status);

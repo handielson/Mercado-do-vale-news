@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS print3d_customer_tokens (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 ALTER TABLE orders
-  ADD COLUMN print3d_customer_id CHAR(36) NULL AFTER customer_id,
+  ADD COLUMN print3d_customer_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL AFTER customer_id,
   ADD KEY idx_orders_print3d_customer (print3d_customer_id),
   ADD CONSTRAINT fk_orders_print3d_customer FOREIGN KEY (print3d_customer_id)
     REFERENCES print3d_customers(id);

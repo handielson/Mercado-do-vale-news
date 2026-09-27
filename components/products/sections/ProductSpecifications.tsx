@@ -9,7 +9,7 @@ import { VersionSelect } from '../selectors/VersionSelect';
 import { CheckCircle2, Package, RefreshCw, Loader2 } from 'lucide-react';
 import { useEnrichedCustomFields } from '../../../hooks/useEnrichedCustomFields';
 import { FIELD_METADATA, isSpecialField, shouldRenderField } from './fieldMetadata';
-import { getCategoryDynamicSpecFields } from './categorySpecFieldCore.js';
+import { getCategoryDynamicSpecFields, getPrint3dDefaultSpecFields } from './categorySpecFieldCore.js';
 import { TableRelationField } from '../../fields/TableRelationField';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { shouldAddSerializedFieldToBatchOnEnter } from '../serializedBatch.js';
@@ -122,9 +122,10 @@ export function ProductSpecifications({
     const isSmartphoneCategory = SMARTPHONE_CATEGORY_PATTERNS.some(pattern =>
         categoryId.includes(pattern) || categorySlug.includes(pattern) || categoryName.includes(pattern)
     );
-    const shouldShowSmartphoneMemoryFields = isSmartphoneCategory || Boolean(
+    const isPrint3d = Boolean(watch('is_print3d'));
+    const shouldShowSmartphoneMemoryFields = !isPrint3d && (isSmartphoneCategory || Boolean(
         watch('specs.storage') || watch('specs.ram')
-    );
+    ));
     const isNonSerializedLegacyCategory = !hasExplicitCategoryFields && NON_SERIALIZED_CATEGORY_SLUG_PATTERNS.some(pattern =>
         categorySlug.includes(pattern) || categoryName.includes(pattern.replace(/-/g, ' '))
     );
@@ -149,9 +150,11 @@ export function ProductSpecifications({
     };
 
     const shouldShowBaseSpecField = (key: string): boolean => {
+        if (isPrint3d && PHONE_ONLY_BASE_SPEC_FIELD_KEYS.has(key)) return false;
         const legacyRequirement = categoryConfig?.[key];
 
         if (legacyRequirement === 'off' || legacyRequirement === 'hidden') return false;
+        if (isPrint3d && key === 'color' && !hasExplicitCategoryFields) return true;
 
         if (isNonSerializedLegacyCategory && PHONE_ONLY_BASE_SPEC_FIELD_KEYS.has(key)) {
             return false;
@@ -511,6 +514,8 @@ export function ProductSpecifications({
                 )}
 
                 {/* DYNAMIC FIELDS - Render all other configured fields */}
+                {isPrint3d && getPrint3dDefaultSpecFields(categoryConfig, customFields, templateValues)
+                    .map(({ key, requirement }) => renderGenericField(key, requirement as FieldRequirement))}
                 {getCategoryDynamicSpecFields(categoryConfig, templateValues)
                     .filter(({ key, requirement }) => !isSpecialField(key) && shouldRenderField(key, requirement as any))
                     .map(({ key, requirement }) => renderGenericField(key, requirement as any))

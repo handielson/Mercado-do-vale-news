@@ -37,6 +37,8 @@ export function calculatePrint3dCost(input) {
   const machineCentsPerHour = cents(input.machineCentsPerHour, 'machineCentsPerHour');
   const laborMinutes = nonNegative(input.laborMinutes, 'laborMinutes');
   const laborCentsPerHour = cents(input.laborCentsPerHour, 'laborCentsPerHour');
+  const taxPercent = nonNegative(input.taxPercent ?? 0, 'taxPercent');
+  if (taxPercent >= 100) throw new RangeError('Imposto deve ser menor que 100%.');
 
   if (!Array.isArray(input.filaments) || input.filaments.length === 0) {
     throw new TypeError('Informe pelo menos um filamento.');
@@ -66,6 +68,8 @@ export function calculatePrint3dCost(input) {
   const suppliesCents = supplyLines.reduce((sum, line) => sum + line.costCents, 0);
   const batchCents = filamentCents + energyCents + machineCents + laborCents + suppliesCents;
   if (!Number.isSafeInteger(batchCents)) throw new RangeError('Custo calculado excede o limite seguro.');
+  const minimumBatchSaleCents = Math.ceil(batchCents / (1 - taxPercent / 100));
+  if (!Number.isSafeInteger(minimumBatchSaleCents)) throw new RangeError('Valor calculado excede o limite seguro.');
 
   return {
     pieces,
@@ -78,6 +82,10 @@ export function calculatePrint3dCost(input) {
     laborCents,
     suppliesCents,
     batchCents,
+    taxPercent,
+    minimumBatchSaleCents,
+    estimatedTaxCents: minimumBatchSaleCents - batchCents,
+    minimumUnitSaleCents: Math.ceil(minimumBatchSaleCents / pieces),
     unitCents: Math.ceil(batchCents / pieces),
   };
 }

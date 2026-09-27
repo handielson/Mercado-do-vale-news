@@ -1,5 +1,23 @@
 'use strict';
 
+// Only public commercial attributes may travel with an order. Never copy
+// arbitrary specs (IMEI, internal notes or production file paths).
+function normalizeVariantSnapshot(value) {
+  if (typeof value === 'string') { try { value = JSON.parse(value); } catch { return {}; } }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const entries = Object.entries(value);
+  const snapshot = {};
+  for (const [key, aliases] of Object.entries({ material:['material'], color:['color','cor'], size:['size','tamanho'], finish:['finish','acabamento'] })) {
+    for (const alias of aliases) {
+      const entry = entries.find(([name, item]) => name.trim().toLocaleLowerCase('pt-BR') === alias
+        && (typeof item === 'string' || (typeof item === 'number' && Number.isFinite(item)))
+        && String(item).trim() && String(item).trim().length <= 120);
+      if (entry) { snapshot[key] = String(entry[1]).trim(); break; }
+    }
+  }
+  return snapshot;
+}
+
 function validateQuoteItems(input) {
   if (!Array.isArray(input) || input.length < 1 || input.length > 30) throw new Error('Informe de 1 a 30 itens.');
   const seen = new Set();
@@ -38,6 +56,7 @@ function quoteProduct(product, quantity) {
     product_id: product.id,
     sku: product.sku,
     name: product.title || product.name,
+    variant_snapshot: normalizeVariantSnapshot(product.specs),
     quantity,
     ready_quantity: ready,
     preorder_quantity: preorder,
@@ -75,4 +94,4 @@ function quotePaymentSchedule(items) {
   };
 }
 
-module.exports = { validateQuoteItems, quoteProduct, quotePaymentSchedule };
+module.exports = { validateQuoteItems, quoteProduct, quotePaymentSchedule, normalizeVariantSnapshot };

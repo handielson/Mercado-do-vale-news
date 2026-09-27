@@ -14,11 +14,11 @@ export default function Print3dGoogleCallbackPage() {
     }).catch(reason => { if (active) setMessage(reason instanceof Error ? reason.message : 'Não foi possível concluir o login.'); });
     return () => { active = false; };
   }, [code, navigate]);
-  return <main className="flex min-h-screen items-center justify-center bg-[#f6f7f3] px-5">
+  return <main className="flex min-h-screen items-center justify-center bg-[var(--print3d-surface)] px-5">
     <section className="w-full max-w-md rounded-3xl border border-[#e0e4dd] bg-white p-8">
-      <h1 className="text-2xl font-semibold text-[#254a39]">Sua conta 3D</h1>
+      <h1 className="text-2xl font-semibold text-[var(--print3d-accent)]">Sua conta 3D</h1>
       <p role="status" className="mt-4 text-[#617067]">{message}</p>
-      <Link to="/loja-3d/conta" className="mt-6 inline-block font-semibold text-[#254a39]">Voltar à minha conta</Link>
+      <Link to="/loja-3d/conta" className="mt-6 inline-block font-semibold text-[var(--print3d-accent)]">Voltar à minha conta</Link>
     </section>
   </main>;
 }

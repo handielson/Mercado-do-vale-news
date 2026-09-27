@@ -37,6 +37,9 @@ function validateStorefrontOffer(storefront, input) {
   if (offer.publication_status === 'published' && (!offer.price_retail || offer.price_retail <= 0)) {
     throw new Error('Informe preço de varejo maior que zero antes de publicar.');
   }
+  if (offer.publication_status === 'published' && !offer.category_label) {
+    throw new Error('Escolha a categoria deste site antes de publicar.');
+  }
   if (offer.price_promo !== null && offer.price_retail !== null && offer.price_promo >= offer.price_retail) {
     throw new Error('O preço promocional precisa ser menor que o preço de varejo.');
   }

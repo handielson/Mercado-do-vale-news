@@ -71,7 +71,7 @@ function respondError(reply, error) {
 
 async function loadPrint3dQuote(pool, requested) {
       const ids = requested.map((item) => item.product_id);
-      const [rows] = await pool.query(`SELECT p.id, p.company_id, p.sku, p.name, p.stock_quantity, p.weight_kg, p.dimensions,
+      const [rows] = await pool.query(`SELECT p.id, p.company_id, p.sku, p.name, p.specs, p.stock_quantity, p.weight_kg, p.dimensions,
           p.print3d_preorder_enabled, p.print3d_preorder_limit, p.production_days,
           o.title, o.price_retail, o.price_promo,
           (SELECT COUNT(*) FROM product_stock_locations psl WHERE psl.product_id = p.id) AS location_count,

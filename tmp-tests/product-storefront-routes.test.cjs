@@ -117,7 +117,7 @@ test('oferta MDV não pode ser publicada antes da migração de site, checkout e
     mdvReady: false,
   });
   const response = await app.inject({ method: 'PUT', url: '/admin/products/p1/storefront-offers/mercado_do_vale',
-    payload: { publication_status: 'published', price_retail: 5000 } });
+    payload: { publication_status: 'published', category_label: 'Acessórios', price_retail: 5000 } });
   assert.equal(response.statusCode, 409);
   assert.equal(touched, false);
   await app.close();
@@ -137,7 +137,7 @@ test('oferta MDV pode ser publicada após liberar a migração completa', async 
     mdvReady: true,
   });
   const response = await app.inject({ method: 'PUT', url: '/admin/products/p1/storefront-offers/mercado_do_vale',
-    payload: { publication_status: 'published', price_retail: 5000 } });
+    payload: { publication_status: 'published', category_label: 'Acessórios', price_retail: 5000 } });
   assert.equal(response.statusCode, 200);
   assert.equal(calls.length, 2);
   assert.match(calls[1].sql, /INSERT INTO product_storefront_offers/);
@@ -259,4 +259,41 @@ test('sem a migration, a consulta por site falha explicitamente sem cair no pre�
   assert.equal(response.statusCode, 503);
   assert.match(response.json().error, /não foram ativadas/);
   await app.close();
+});
+
+test('cotação real da loja 3D lê specs do catálogo e expõe apenas a variante comercial', async () => {
+  const app = Fastify();
+  let sql;
+  registerProductStorefrontOfferRoutes(app, {
+    pool: {query: async statement => {
+      sql=statement;
+      return [[{id:'p1',name:'Peça',sku:'SKU-PETG',specs:JSON.stringify({material:'PETG',cor:'Azul',tamanho:'G',acabamento:'Fosco',imei1:'private',internal_note:'private'}),
+        price_retail:2500,stock_quantity:2,location_count:0,print3d_preorder_enabled:1,production_days:4}]];
+    }},
+    requireSyncKeyOrAdmin: async () => undefined,
+  });
+  const response=await app.inject({method:'POST',url:'/storefronts/loja_3d/quote',payload:{items:[{product_id:'p1',quantity:1}]}});
+  assert.equal(response.statusCode,200,response.body);
+  assert.match(sql,/p\.specs/);
+  assert.deepEqual(response.json().items[0].variant_snapshot,{material:'PETG',color:'Azul',size:'G',finish:'Fosco'});
+  assert.doesNotMatch(response.body,/private|imei1|internal_note/);
+  await app.close();
+});
+
+test('API não publica em nenhum site sem categoria escolhida', async () => {
+  for (const storefront of ['mercado_do_vale', 'loja_3d']) {
+    let touched = false;
+    const app = Fastify();
+    registerProductStorefrontOfferRoutes(app, {
+      pool: { query: async () => { touched = true; return [[]]; } },
+      requireSyncKeyOrAdmin: async () => undefined,
+      mdvReady: true,
+    });
+    const response = await app.inject({ method: 'PUT', url: `/admin/products/p1/storefront-offers/${storefront}`,
+      payload: { publication_status: 'published', price_retail: 5000 } });
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /categoria deste site/);
+    assert.equal(touched, false);
+    await app.close();
+  }
 });

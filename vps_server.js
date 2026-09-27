@@ -14,7 +14,9 @@ const { registerPrint3dCustomerAccountRoutes } = require('./services/print3dCust
 const { registerPrint3dProductionRoutes } = require('./services/print3dProductionServer.cjs');
 const { registerPrint3dCheckoutRoutes } = require('./services/print3dCheckoutServer.cjs');
 const { registerPrint3dPaymentRoutes } = require('./services/print3dPaymentsServer.cjs');
-const { paymentsConfigured } = require('./services/print3dPayments.cjs');
+const { registerPrint3dCancellationRoutes } = require('./services/print3dCancellationServer.cjs');
+const { createPrint3dExpiryWorker } = require('./services/print3dExpiryWorker.cjs');
+const { paymentsConfigured, createMpAdapter, cancelPrint3dProviderCharges } = require('./services/print3dPayments.cjs');
 const { verifyShippingQuote } = require('./services/print3dShippingQuoteToken.cjs');
 const { createPrint3dWhatsAppSender } = require('./services/print3dWhatsAppSender.cjs');
 const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
@@ -2123,6 +2125,7 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
   if (['GET', 'POST'].includes(normalizedMethod) && pathname === '/print3d/checkout') return true;
   if (normalizedMethod === 'GET' && /^\/print3d\/orders(?:\/[0-9a-f-]{36}(?:\/payment)?)?$/i.test(pathname)) return true;
   if (normalizedMethod === 'POST' && /^\/print3d\/orders\/[0-9a-f-]{36}\/payment(?:\/refresh)?$/i.test(pathname)) return true;
+  if (normalizedMethod === 'POST' && /^\/print3d\/orders\/[0-9a-f-]{36}\/cancel$/i.test(pathname)) return true;
   if (normalizedMethod === 'POST' && pathname === '/print3d/payments/webhook') return true;
   if (normalizedMethod === 'POST' && VPS_PROXY_PUBLIC_PRINT3D_AUTH_POST_PATHS.has(pathname)) return true;
   if (normalizedMethod === 'GET' && (pathname === '/print3d/auth/me' || pathname === '/print3d/auth/phone/status')) return true;
@@ -10755,7 +10758,6 @@ async function recoverBlingWebhookStockTargetsVps({ blingId, sku, stockQty, vpsR
 
   const locationSync = [];
   for (const row of rows || []) {
-    await pool.query('UPDATE products SET stock_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [stockQty, row.id]);
     locationSync.push(
       stockNumber(row.stock_quantity) <= 0 && stockQty > 0
         ? await resetProductStockLocationsToIncoming(
@@ -20738,6 +20740,7 @@ require('./services/print3dAdminServer.cjs').registerPrint3dAdminRoutes(fastify,
   pool, getBearerAuthContext: getVpsBearerAuthContext,
   customersEnabled: process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig()),
   ordersEnabled: print3dCheckoutEnabled,
+  dispatchEnabled: print3dCheckoutEnabled && process.env.MDV_PRINT3D_DISPATCH_ENABLED === '1',
 });
 registerPrint3dCheckoutRoutes(fastify, {
   pool, getCustomer: print3dAccounts.getCustomer,
@@ -20745,12 +20748,23 @@ registerPrint3dCheckoutRoutes(fastify, {
   verifyShipping: input => verifyShippingQuote(input, process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET),
   companyId: process.env.MDV_PRINT3D_COMPANY_ID,
   enabled: print3dCheckoutEnabled,
+  dispatchEnabled: print3dCheckoutEnabled && process.env.MDV_PRINT3D_DISPATCH_ENABLED === '1',
 });
-registerPrint3dPaymentRoutes(fastify, { pool, getCustomer: print3dAccounts.getCustomer });
+const print3dMpAdapter = createMpAdapter(process.env);
+const cancelPrint3dProviderChargesForOrder = orderId => cancelPrint3dProviderCharges(pool, {
+  orderId, adapter:print3dMpAdapter, collectorId:process.env.MDV_PRINT3D_MP_COLLECTOR_ID,
+});
+registerPrint3dPaymentRoutes(fastify, { pool, getCustomer: print3dAccounts.getCustomer, adapter:print3dMpAdapter });
+registerPrint3dCancellationRoutes(fastify, {
+  pool, getCustomer: print3dAccounts.getCustomer, getBearerAuthContext: getVpsBearerAuthContext,
+  enabled: print3dCheckoutEnabled, cancelProviderCharges:cancelPrint3dProviderChargesForOrder,
+});
+createPrint3dExpiryWorker({ pool, checkoutEnabled:print3dCheckoutEnabled, cancelProviderCharges:cancelPrint3dProviderChargesForOrder }).start();
 registerPrint3dProductionRoutes(fastify, {
   pool, getBearerAuthContext: getVpsBearerAuthContext,
   getCustomer: print3dAccounts.getCustomer,
   enabled: process.env.MDV_PRINT3D_PRODUCTION_ENABLED === '1',
+  dispatchEnabled: print3dCheckoutEnabled && process.env.MDV_PRINT3D_DISPATCH_ENABLED === '1',
 });
 
 const PAYJOY_DEFAULT_ANALYSIS_URL = 'https://app.payjoy.com/br/d2c?utm_source=payjoysite&utm_medium=website&utm_campaign=payjoywebsitetraffic&utm_term=traffic&utm_content=payjoywebsitetraffic&click_source=payjoysite';
@@ -26487,35 +26501,12 @@ async function backfillProductStockLocations() {
   `);
 
   for (const product of productsToBackfill || []) {
-    const target = await ensureDefaultStockLocation(product.company_id);
-    await pool.query(
-      `INSERT INTO product_stock_locations
-        (id, company_id, product_id, deposit_id, location_id, quantity, reserved_quantity)
-       VALUES (?, ?, ?, ?, ?, ?, 0)
-       ON DUPLICATE KEY UPDATE quantity = VALUES(quantity), updated_at = CURRENT_TIMESTAMP`,
-      [crypto.randomUUID(), target.companyId, product.id, target.depositId, target.locationId, stockNumber(product.stock_quantity)]
-    );
-    await pool.query(
-      `INSERT INTO stock_location_movements
-        (id, company_id, product_id, to_deposit_id, to_location_id, quantity, movement_type, reason, reference_type,
-         previous_to_quantity, new_to_quantity, notes)
-       SELECT ?, ?, ?, ?, ?, ?, 'sync', 'inventory', 'initial_migration', 0, ?,
-              'Saldo inicial migrado de products.stock_quantity para Loja Principal / Estoque Geral.'
-       WHERE NOT EXISTS (
-         SELECT 1 FROM stock_location_movements
-         WHERE product_id = ? AND reference_type = 'initial_migration'
-       )`,
-      [
-        crypto.randomUUID(),
-        target.companyId,
-        product.id,
-        target.depositId,
-        target.locationId,
-        stockNumber(product.stock_quantity),
-        stockNumber(product.stock_quantity),
-        product.id,
-      ]
-    );
+    await require('./services/externalStockReconciliation.cjs').reconcileExternalStock(pool, {
+      productId: product.id, materializeUndistributed: true, initialMigration: true,
+      reason: 'inventory',
+      notes: 'Saldo inicial migrado de products.stock_quantity para Loja Principal / Estoque Geral.',
+      getIncoming: ensureDefaultStockLocation, getDefaultCompanyId: getDefaultStockCompanyId,
+    });
   }
 }
 
@@ -26530,229 +26521,26 @@ async function syncProductStockFromLocations(productId) {
 }
 
 async function materializeProductUndistributedStock(productId, reason = 'undistributed_stock', notes = null) {
-  const [[product]] = await pool.query(
-    'SELECT id, company_id, COALESCE(stock_quantity, 0) AS stock_quantity FROM products WHERE id = ? LIMIT 1',
-    [productId]
-  );
-  if (!product) return { ok: false, materialized: 0 };
-
-  const [[sumRow]] = await pool.query(
-    'SELECT COALESCE(SUM(quantity), 0) AS quantity FROM product_stock_locations WHERE product_id = ?',
-    [productId]
-  );
-  const target = Math.max(0, Math.trunc(stockNumber(product.stock_quantity)));
-  const currentTotal = Math.max(0, Math.trunc(stockNumber(sumRow?.quantity)));
-  const delta = target - currentTotal;
-  if (delta <= 0) return { ok: true, materialized: 0 };
-
-  const companyId = product.company_id || await getDefaultStockCompanyId();
-  const incoming = await ensureIncomingStockLocation(companyId);
-  const current = await getStockLocationRow(productId, incoming.depositId, incoming.locationId, true);
-  const previous = stockNumber(current?.quantity);
-  const reserved = stockNumber(current?.reserved_quantity);
-  const next = previous + delta;
-  await upsertStockLocationBalance({
-    companyId,
-    productId,
-    depositId: incoming.depositId,
-    locationId: incoming.locationId,
-    quantity: next,
-    reservedQuantity: reserved,
+  const result = await require('./services/externalStockReconciliation.cjs').reconcileExternalStock(pool, {
+    productId, materializeUndistributed: true, reason,
+    notes: notes || 'Saldo sem local definido materializado em Deposito / Entrada-Conferencia para permitir transferencia.',
+    getIncoming: ensureIncomingStockLocation, getDefaultCompanyId: getDefaultStockCompanyId,
   });
-  await pool.query(
-    `INSERT INTO stock_location_movements
-      (id, company_id, product_id, to_deposit_id, to_location_id, quantity, movement_type, reason,
-       reference_type, previous_to_quantity, new_to_quantity, notes)
-     VALUES (?, ?, ?, ?, ?, ?, 'sync', ?, 'undistributed_stock', ?, ?, ?)`,
-    [
-      crypto.randomUUID(),
-      companyId,
-      productId,
-      incoming.depositId,
-      incoming.locationId,
-      delta,
-      reason,
-      previous,
-      next,
-      notes || 'Saldo sem local definido materializado em Deposito / Entrada-Conferencia para permitir transferencia.',
-    ]
-  );
-
-  return { ok: true, materialized: delta };
+  return { ...result, materialized: result.materialized || 0 };
 }
 
 async function resetProductStockLocationsToIncoming(productId, targetQuantity, reason = 'external_stock_reentry', notes = null) {
-  const target = Math.max(0, Math.trunc(stockNumber(targetQuantity)));
-  const [[product]] = await pool.query('SELECT id, company_id FROM products WHERE id = ? LIMIT 1', [productId]);
-  if (!product) return { ok: false, appliedDelta: 0, resetToIncoming: false };
-
-  const companyId = product.company_id || await getDefaultStockCompanyId();
-  const incoming = await ensureIncomingStockLocation(companyId);
-  const [sources] = await pool.query(
-    `SELECT *
-       FROM product_stock_locations
-      WHERE product_id = ? AND quantity > 0
-      FOR UPDATE`,
-    [productId]
-  );
-
-  let cleared = 0;
-  for (const source of sources || []) {
-    const previous = stockNumber(source.quantity);
-    if (previous <= 0) continue;
-    const reserved = stockNumber(source.reserved_quantity);
-    const isIncoming = source.location_id === incoming.locationId && source.deposit_id === incoming.depositId;
-    const next = isIncoming ? target : 0;
-    await upsertStockLocationBalance({
-      companyId,
-      productId,
-      depositId: source.deposit_id,
-      locationId: source.location_id,
-      quantity: next,
-      reservedQuantity: reserved,
-    });
-    if (previous !== next) {
-      cleared += Math.max(0, previous - next);
-      await pool.query(
-        `INSERT INTO stock_location_movements
-          (id, company_id, product_id, from_deposit_id, from_location_id, to_deposit_id, to_location_id, quantity,
-           movement_type, reason, reference_type, previous_from_quantity, new_from_quantity, previous_to_quantity, new_to_quantity, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sync', ?, 'external_stock_reentry', ?, ?, ?, ?, ?)`,
-        [
-          crypto.randomUUID(),
-          companyId,
-          productId,
-          source.deposit_id,
-          source.location_id,
-          incoming.depositId,
-          incoming.locationId,
-          Math.abs(next - previous),
-          reason,
-          previous,
-          next,
-          isIncoming ? previous : null,
-          isIncoming ? next : null,
-          notes || 'Produto estava zerado; nova entrada externa recriada em Deposito / Entrada-Conferencia para conferencia fisica.',
-        ]
-      );
-    }
-  }
-
-  const incomingRow = await getStockLocationRow(productId, incoming.depositId, incoming.locationId, true);
-  const previousIncoming = stockNumber(incomingRow?.quantity);
-  if (!incomingRow || previousIncoming !== target) {
-    await upsertStockLocationBalance({
-      companyId,
-      productId,
-      depositId: incoming.depositId,
-      locationId: incoming.locationId,
-      quantity: target,
-      reservedQuantity: stockNumber(incomingRow?.reserved_quantity),
-    });
-    await pool.query(
-      `INSERT INTO stock_location_movements
-        (id, company_id, product_id, to_deposit_id, to_location_id, quantity, movement_type, reason,
-         reference_type, previous_to_quantity, new_to_quantity, notes)
-       VALUES (?, ?, ?, ?, ?, ?, 'sync', ?, 'external_stock_reentry', ?, ?, ?)`,
-      [
-        crypto.randomUUID(),
-        companyId,
-        productId,
-        incoming.depositId,
-        incoming.locationId,
-        Math.abs(target - previousIncoming),
-        reason,
-        previousIncoming,
-        target,
-        notes || 'Produto estava zerado; nova entrada externa recriada em Deposito / Entrada-Conferencia para conferencia fisica.',
-      ]
-    );
-  }
-
-  const syncedTotal = await syncProductStockFromLocations(productId);
-  return { ok: syncedTotal === target, appliedDelta: target, syncedTotal, resetToIncoming: true, cleared };
+  return require('./services/externalStockReconciliation.cjs').reconcileExternalStock(pool, {
+    productId, targetQuantity, reason, notes, resetToIncoming: true,
+    getIncoming: ensureIncomingStockLocation, getDefaultCompanyId: getDefaultStockCompanyId,
+  });
 }
 
 async function reconcileProductStockLocationsToTotal(productId, targetQuantity, reason = 'external_stock_sync', notes = null) {
-  const target = Math.max(0, Math.trunc(stockNumber(targetQuantity)));
-  const [[product]] = await pool.query('SELECT id, company_id FROM products WHERE id = ? LIMIT 1', [productId]);
-  if (!product) return { ok: false, appliedDelta: 0 };
-
-  const [[sumRow]] = await pool.query(
-    'SELECT COALESCE(SUM(quantity), 0) AS quantity FROM product_stock_locations WHERE product_id = ?',
-    [productId]
-  );
-  const currentTotal = Math.max(0, Math.trunc(stockNumber(sumRow?.quantity)));
-  let delta = target - currentTotal;
-  if (delta === 0) {
-    await syncProductStockFromLocations(productId);
-    return { ok: true, appliedDelta: 0 };
-  }
-
-  const companyId = product.company_id || await getDefaultStockCompanyId();
-
-  if (delta > 0) {
-    const incoming = await ensureIncomingStockLocation(companyId);
-    const current = await getStockLocationRow(productId, incoming.depositId, incoming.locationId, true);
-    const previous = stockNumber(current?.quantity);
-    const reserved = stockNumber(current?.reserved_quantity);
-    const next = previous + delta;
-    await upsertStockLocationBalance({
-      companyId,
-      productId,
-      depositId: incoming.depositId,
-      locationId: incoming.locationId,
-      quantity: next,
-      reservedQuantity: reserved,
-    });
-    await pool.query(
-      `INSERT INTO stock_location_movements
-        (id, company_id, product_id, to_deposit_id, to_location_id, quantity, movement_type, reason,
-         reference_type, previous_to_quantity, new_to_quantity, notes)
-       VALUES (?, ?, ?, ?, ?, ?, 'sync', ?, ?, ?, ?, ?)`,
-      [crypto.randomUUID(), companyId, productId, incoming.depositId, incoming.locationId, delta, reason, 'external_stock_total', previous, next, notes || 'Saldo recebido de integracao externa em Deposito / Entrada-Conferencia.']
-    );
-  } else {
-    let remaining = Math.abs(delta);
-    const [sources] = await pool.query(
-      `SELECT psl.*
-       FROM product_stock_locations psl
-       LEFT JOIN stock_deposits sd ON sd.id = psl.deposit_id
-       LEFT JOIN stock_locations sl ON sl.id = psl.location_id
-       WHERE psl.product_id = ? AND (psl.quantity - psl.reserved_quantity) > 0
-       ORDER BY sd.is_default DESC, sl.is_default DESC, psl.quantity DESC
-       FOR UPDATE`,
-      [productId]
-    );
-
-    for (const source of sources || []) {
-      if (remaining <= 0) break;
-      const previous = stockNumber(source.quantity);
-      const available = Math.max(0, previous - stockNumber(source.reserved_quantity));
-      const decrement = Math.min(remaining, available);
-      if (decrement <= 0) continue;
-      const next = previous - decrement;
-      await upsertStockLocationBalance({
-        companyId,
-        productId,
-        depositId: source.deposit_id,
-        locationId: source.location_id,
-        quantity: next,
-        reservedQuantity: stockNumber(source.reserved_quantity),
-      });
-      await pool.query(
-        `INSERT INTO stock_location_movements
-          (id, company_id, product_id, from_deposit_id, from_location_id, quantity, movement_type, reason,
-           reference_type, previous_from_quantity, new_from_quantity, notes)
-         VALUES (?, ?, ?, ?, ?, ?, 'sync', ?, ?, ?, ?, ?)`,
-        [crypto.randomUUID(), companyId, productId, source.deposit_id, source.location_id, decrement, reason, 'external_stock_total', previous, next, notes]
-      );
-      remaining -= decrement;
-    }
-  }
-
-  const syncedTotal = await syncProductStockFromLocations(productId);
-  return { ok: syncedTotal === target, appliedDelta: delta, syncedTotal };
+  return require('./services/externalStockReconciliation.cjs').reconcileExternalStock(pool, {
+    productId, targetQuantity, reason, notes,
+    getIncoming: ensureIncomingStockLocation, getDefaultCompanyId: getDefaultStockCompanyId,
+  });
 }
 
 async function getStockLocationRow(productId, depositId, locationId, lock = false) {
@@ -27170,68 +26958,16 @@ fastify.get('/stock-locations/movements', { preHandler: requireSyncKey }, async 
   }));
 });
 
-fastify.post('/stock-locations/entries', { preHandler: requireSyncKey }, async (req, reply) => {
-  const input = req.body || {};
-  const quantity = stockNumber(input.quantity);
-  if (!input.product_id || !input.deposit_id || !input.location_id) return reply.code(400).send({ error: 'Produto, deposito e local sao obrigatorios.' });
-  if (quantity <= 0) return reply.code(400).send({ error: 'Informe uma quantidade valida para a entrada.' });
-  if (!String(input.reason || '').trim()) return reply.code(400).send({ error: 'Informe o motivo da entrada.' });
-
-  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
-  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
-  const current = await getStockLocationRow(input.product_id, input.deposit_id, input.location_id, true);
-  const previous = stockNumber(current?.quantity);
-  const reserved = stockNumber(current?.reserved_quantity);
-  const next = previous + quantity;
-  const row = await upsertStockLocationBalance({
-    companyId: product.company_id || await getDefaultStockCompanyId(),
-    productId: input.product_id,
-    depositId: input.deposit_id,
-    locationId: input.location_id,
-    quantity: next,
-    reservedQuantity: reserved,
+fastify.post('/stock-locations/entries', { preHandler: requireSyncKey }, async (req) => {
+  return require('./services/manualStockMovement.cjs').applyManualStockMovement(pool, req.body || {}, 'entry', {
+    getDefaultCompanyId: getDefaultStockCompanyId,
   });
-  await pool.query(
-    `INSERT INTO stock_location_movements
-      (id, company_id, product_id, to_deposit_id, to_location_id, quantity, movement_type, reason, reference_type,
-       previous_to_quantity, new_to_quantity, notes)
-     VALUES (?, ?, ?, ?, ?, ?, 'in', ?, 'manual_entry', ?, ?, ?)`,
-    [crypto.randomUUID(), product.company_id, input.product_id, input.deposit_id, input.location_id, quantity, String(input.reason).trim(), previous, next, input.notes || null]
-  );
-  await syncProductStockFromLocations(input.product_id);
-  return row;
 });
 
-fastify.post('/stock-locations/adjustments', { preHandler: requireSyncKey }, async (req, reply) => {
-  const input = req.body || {};
-  const targetQuantity = stockNumber(input.quantity);
-  if (targetQuantity < 0) return reply.code(400).send({ error: 'Informe uma quantidade valida para o ajuste.' });
-  if (!String(input.reason || '').trim()) return reply.code(400).send({ error: 'Informe o motivo do ajuste.' });
-
-  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
-  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
-  const current = await getStockLocationRow(input.product_id, input.deposit_id, input.location_id, true);
-  const previous = stockNumber(current?.quantity);
-  const reserved = stockNumber(current?.reserved_quantity);
-  if (targetQuantity < reserved) return reply.code(400).send({ error: 'A quantidade ajustada nao pode ficar menor que o saldo reservado atual.' });
-  const row = await upsertStockLocationBalance({
-    companyId: product.company_id || await getDefaultStockCompanyId(),
-    productId: input.product_id,
-    depositId: input.deposit_id,
-    locationId: input.location_id,
-    quantity: targetQuantity,
-    reservedQuantity: reserved,
+fastify.post('/stock-locations/adjustments', { preHandler: requireSyncKey }, async (req) => {
+  return require('./services/manualStockMovement.cjs').applyManualStockMovement(pool, req.body || {}, 'adjustment', {
+    getDefaultCompanyId: getDefaultStockCompanyId,
   });
-  await pool.query(
-    `INSERT INTO stock_location_movements
-      (id, company_id, product_id, from_deposit_id, from_location_id, to_deposit_id, to_location_id, quantity,
-       movement_type, reason, reference_type, previous_from_quantity, new_from_quantity, previous_to_quantity, new_to_quantity, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'adjustment', ?, 'manual_adjustment', ?, ?, ?, ?, ?)`,
-    [crypto.randomUUID(), product.company_id, input.product_id, input.deposit_id, input.location_id, input.deposit_id, input.location_id,
-      Math.abs(targetQuantity - previous), String(input.reason).trim(), previous, targetQuantity, previous, targetQuantity, input.notes || null]
-  );
-  await syncProductStockFromLocations(input.product_id);
-  return row;
 });
 
 fastify.post('/stock-locations/transfers', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
@@ -27330,21 +27066,6 @@ fastify.post('/stock-locations/transfers', { preHandler: requireSyncKeyOrAdmin }
   }
 });
 
-async function getPriorityStockSources(productId) {
-  const [rows] = await pool.query(
-    `SELECT psl.*,
-            sd.name AS deposit_name, sd.code AS deposit_code, sd.type AS deposit_type, sd.is_default AS deposit_is_default,
-            sl.name AS location_name, sl.code AS location_code, sl.is_default AS location_is_default
-     FROM product_stock_locations psl
-     LEFT JOIN stock_deposits sd ON sd.id = psl.deposit_id
-     LEFT JOIN stock_locations sl ON sl.id = psl.location_id
-     WHERE psl.product_id = ? AND (psl.quantity - psl.reserved_quantity) > 0
-     ORDER BY sd.is_default DESC, sl.is_default DESC, psl.quantity DESC`,
-    [productId]
-  );
-  return rows || [];
-}
-
 async function insertStockMovement(row) {
   await pool.query(
     `INSERT INTO stock_location_movements
@@ -27375,65 +27096,9 @@ async function insertStockMovement(row) {
 }
 
 fastify.post('/stock-locations/priority-decrements', { preHandler: requireSyncKey }, async (req, reply) => {
-  const input = req.body || {};
-  const quantity = stockNumber(input.quantity);
-  if (!input.product_id || quantity <= 0) return reply.code(400).send({ error: 'Produto e quantidade sao obrigatorios.' });
-  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
-  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
-  const sources = await getPriorityStockSources(input.product_id);
-  const totalAvailable = sources.reduce((sum, row) => sum + Math.max(0, stockNumber(row.quantity) - stockNumber(row.reserved_quantity)), 0);
-  if (totalAvailable < quantity) return reply.code(400).send({ error: 'insufficient_stock_by_location' });
-
-  let remaining = quantity;
-  const result = [];
-  for (const source of sources) {
-    if (remaining <= 0) break;
-    const previous = stockNumber(source.quantity);
-    const available = Math.max(0, previous - stockNumber(source.reserved_quantity));
-    const decrement = Math.min(remaining, available);
-    if (decrement <= 0) continue;
-    const next = previous - decrement;
-    await upsertStockLocationBalance({
-      companyId: source.company_id || product.company_id,
-      productId: input.product_id,
-      depositId: source.deposit_id,
-      locationId: source.location_id,
-      quantity: next,
-      reservedQuantity: stockNumber(source.reserved_quantity),
-    });
-    await insertStockMovement({
-      company_id: source.company_id || product.company_id,
-      product_id: input.product_id,
-      from_deposit_id: source.deposit_id,
-      from_location_id: source.location_id,
-      quantity: decrement,
-      movement_type: 'sale',
-      reason: String(input.reason || '').trim() || 'Baixa por prioridade',
-      reference_type: input.reference_type || null,
-      reference_id: input.reference_id || null,
-      previous_from_quantity: previous,
-      new_from_quantity: next,
-      notes: input.notes || null,
-    });
-    result.push({
-      stock_location_id: source.id,
-      deposit_id: source.deposit_id,
-      location_id: source.location_id,
-      deposit_name: source.deposit_name || null,
-      deposit_code: source.deposit_code || null,
-      deposit_type: source.deposit_type || null,
-      deposit_is_default: Boolean(source.deposit_is_default),
-      location_name: source.location_name || null,
-      location_code: source.location_code || null,
-      location_is_default: Boolean(source.location_is_default),
-      quantity_decremented: decrement,
-      previous_quantity: previous,
-      new_quantity: next,
-    });
-    remaining -= decrement;
-  }
-  await syncProductStockFromLocations(input.product_id);
-  return result;
+  const outcome = await require('./services/priorityStockDecrement.cjs').decrementPriorityStock(pool, req.body || {});
+  if (outcome.error) return reply.code(outcome.status).send({ error: outcome.error });
+  return outcome.decrements;
 });
 
 fastify.post('/stock-locations/priority-reservations', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -27443,55 +27108,7 @@ fastify.post('/stock-locations/priority-reservations', { preHandler: requireSync
 });
 
 async function processOrderReservation(orderId, mode, reason, notes) {
-  const targetReferenceType = mode === 'consume' ? 'order' : 'order_release';
-  const targetMovementType = mode === 'consume' ? 'sale' : 'release_reservation';
-  const [existing] = await pool.query(
-    'SELECT id FROM stock_location_movements WHERE reference_type = ? AND reference_id = ? AND movement_type = ? LIMIT 1',
-    [targetReferenceType, orderId, targetMovementType]
-  );
-  if (existing?.length) return [];
-  const [reservations] = await pool.query(
-    `SELECT * FROM stock_location_movements
-     WHERE reference_type = 'order_reservation' AND reference_id = ? AND movement_type = 'reservation'
-     ORDER BY created_at ASC`,
-    [orderId]
-  );
-  const result = [];
-  for (const reservation of reservations || []) {
-    const current = await getStockLocationRow(reservation.product_id, reservation.from_deposit_id, reservation.from_location_id, false);
-    if (!current) throw new Error('order_reservation_stock_inconsistent');
-    const previousQuantity = stockNumber(current.quantity);
-    const previousReserved = stockNumber(current.reserved_quantity);
-    const quantity = stockNumber(reservation.quantity);
-    if (previousReserved < quantity || (mode === 'consume' && previousQuantity < quantity)) throw new Error('order_reservation_stock_inconsistent');
-    const nextQuantity = mode === 'consume' ? previousQuantity - quantity : previousQuantity;
-    const nextReserved = previousReserved - quantity;
-    await upsertStockLocationBalance({
-      companyId: current.company_id,
-      productId: reservation.product_id,
-      depositId: reservation.from_deposit_id,
-      locationId: reservation.from_location_id,
-      quantity: nextQuantity,
-      reservedQuantity: nextReserved,
-    });
-    await insertStockMovement({
-      company_id: current.company_id,
-      product_id: reservation.product_id,
-      from_deposit_id: reservation.from_deposit_id,
-      from_location_id: reservation.from_location_id,
-      quantity,
-      movement_type: targetMovementType,
-      reason,
-      reference_type: targetReferenceType,
-      reference_id: orderId,
-      previous_from_quantity: previousQuantity,
-      new_from_quantity: nextQuantity,
-      notes,
-    });
-    result.push({ reservation_movement_id: reservation.id, product_id: reservation.product_id, deposit_id: reservation.from_deposit_id, location_id: reservation.from_location_id, quantity_processed: quantity, previous_quantity: previousQuantity, new_quantity: nextQuantity, previous_reserved_quantity: previousReserved, new_reserved_quantity: nextReserved });
-    if (mode === 'consume') await syncProductStockFromLocations(reservation.product_id);
-  }
-  return result;
+  return require('./services/orderStockReservation.cjs').processOrderReservation(pool, { orderId, mode, reason, notes });
 }
 
 fastify.post('/stock-locations/order-reservations/consume', { preHandler: requireSyncKey }, async (req) => {
@@ -28410,7 +28027,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
 
       await withSmartphonePriceWrite(pool, p, async (priceDb, controlledProduct) => {
       Object.assign(p, controlledProduct);
-      await priceDb.query(
+      const [upsertResult] = await priceDb.query(
         `INSERT INTO products (
           id, name, slug, sku, ean, alternative_eans, description,
           price_retail, price_wholesale, price_cost, price_reseller,
@@ -28426,6 +28043,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           production_days, is_print3d, print3d_preorder_enabled, print3d_preorder_limit
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
+          id=IF(id=VALUES(id),id,NULL),
           name=IF(VALUES(name) IS NULL, name, VALUES(name)),
           slug=IF(VALUES(slug) IS NULL, slug, VALUES(slug)),
           sku=IF(VALUES(sku) IS NULL, sku, VALUES(sku)),
@@ -28439,7 +28057,6 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           price_promo=IF(VALUES(price_promo) IS NULL, price_promo, VALUES(price_promo)),
           promo_start=IF(VALUES(promo_start) IS NULL, promo_start, VALUES(promo_start)),
           promo_end=IF(VALUES(promo_end) IS NULL, promo_end, VALUES(promo_end)),
-          stock_quantity=IF(VALUES(stock_quantity) IS NULL, stock_quantity, VALUES(stock_quantity)),
           status=IF(VALUES(status) IS NULL, status, VALUES(status)),
           category_id=IF(VALUES(category_id) IS NULL, category_id, VALUES(category_id)),
           brand=IF(VALUES(brand) IS NULL, brand, VALUES(brand)),
@@ -28484,7 +28101,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.price_retail ?? null, p.price_wholesale ?? null,
           p.price_cost ?? null, p.price_reseller ?? null,
           p.price_promo ?? null, p.promo_start || null, p.promo_end || null,
-          p.stock_quantity ?? null, p.status ?? null,
+          0, p.status ?? null,
           p.category_id || null, p.brand || null, p.model_id || null,
           jsonStr(p.images), jsonStr(normalizeProductSpecsRam(p.specs)), jsonStr(p.custom_fields),
           jsonStr(p.dimensions), p.weight_kg || null,
@@ -28504,6 +28121,22 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           optionalBool(p.is_print3d), optionalBool(p.print3d_preorder_enabled), Object.hasOwn(p, 'print3d_preorder_limit') ? 1 : 0,
         ]
       );
+      if (upsertResult.warningStatus) {
+        const [warnings] = await priceDb.query('SHOW WARNINGS');
+        // VALUES() deprecation is informational; data conversion/identity warnings must roll back.
+        if (warnings.some(warning => Number(warning.Code) !== 1287)) {
+          throw new Error('Importação recusada: o banco sinalizou dados inválidos ou conflito de identidade.');
+        }
+      }
+      // Never let an unrelated unique-key collision redirect stock to another product.
+      if (rawProduct.stock_quantity != null) {
+        const stock = await require('./services/externalStockReconciliation.cjs').reconcileExternalStock(pool, {
+          connection: priceDb, productId: p.id, targetQuantity: rawProduct.stock_quantity,
+          reason: 'product_import', notes: 'Saldo informado na importação do produto.',
+          getIncoming: ensureIncomingStockLocation, getDefaultCompanyId: getDefaultStockCompanyId,
+        });
+        if (!stock.ok) throw new Error(stock.error || 'stock_reconciliation_failed');
+      }
       if ('marketing_background_url' in p || 'marketing_background_no_price_url' in p || 'marketing_video_url' in p) {
         await priceDb.query(
           `UPDATE products
@@ -28512,7 +28145,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           [p.marketing_background_url || null, p.marketing_background_no_price_url || null, p.marketing_video_url || null, p.id]
         );
       }
-      });
+      }, { transactional: true });
       results.upserted++;
       results.resolved.push({ requested_id: requestedId, id: p.id, bling_id: p.bling_id || null, matched_existing: matchedExisting });
     } catch (err) {
@@ -28578,13 +28211,14 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
       const sets = [];
       const params = [];
       for (const field of allowedFields) {
+        if (field === 'stock_quantity') continue; // O total e os locais são confirmados juntos na reconciliação.
         if (controlledProduct[field] !== undefined && (p[field] !== undefined || ['price_retail', 'price_reseller', 'price_wholesale'].includes(field))) {
           sets.push(`${field}=?`);
           params.push(field === 'track_inventory' ? (controlledProduct[field] ? 1 : 0) : controlledProduct[field]);
         }
       }
 
-      if (sets.length === 0 || (!p.id && !p.sku)) {
+      if ((sets.length === 0 && p.stock_quantity === undefined) || (!p.id && !p.sku)) {
         results.skipped++;
         return { affectedRows: 0 };
       }
@@ -28622,6 +28256,10 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
 
   results.stockTargets = await getShopeeStockTargetsForProductIds(changedProductIds);
   results.locationSync = locationSync;
+  for (const sync of locationSync) {
+    if (!sync.ok) results.errors.push({ id: sync.product_id, error: sync.error || 'stock_reconciliation_failed' });
+  }
+  results.ok = results.errors.length === 0 && results.skipped === 0;
   return results;
 });
 
@@ -28637,13 +28275,23 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
 
   await withSmartphonePriceWrite(pool, { ...p, id: req.params.id }, async (priceDb, controlledProduct) => {
   p = controlledProduct;
+  if (req.body.stock_quantity !== undefined) {
+    const stock = await require('./services/externalStockReconciliation.cjs').reconcileExternalStock(pool, {
+      connection: priceDb, productId: req.params.id, targetQuantity: req.body.stock_quantity,
+      reason: 'product_edit', notes: 'Saldo informado na edição do produto.',
+      getIncoming: ensureIncomingStockLocation, getDefaultCompanyId: getDefaultStockCompanyId,
+    });
+    if (!stock.ok) throw Object.assign(new Error(stock.error === 'external_stock_below_reserved'
+      ? 'O saldo informado é menor que a quantidade reservada. Confira os pedidos antes de ajustar.'
+      : 'Não foi possível reconciliar o estoque do produto.'), { statusCode: 409 });
+  }
   await priceDb.query(
     `UPDATE products SET
       name=?, slug=?, sku=?, ean=?, alternative_eans=?,
       description=?, technical_specifications=?,
       price_retail=?, price_wholesale=?, price_cost=?, price_reseller=?,
       price_promo=?, promo_start=?, promo_end=?,
-      stock_quantity=?, status=?, category_id=?, brand=?, model_id=?,
+      status=?, category_id=?, brand=?, model_id=?,
       images=?, specs=?, custom_fields=?, dimensions=?, weight_kg=?,
       ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?, is_parent=COALESCE(?, is_parent, 0),
       video_url=?, marketing_background_url=?, marketing_background_no_price_url=?, marketing_video_url=?, track_inventory=?, is_gift=?,
@@ -28661,7 +28309,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.price_retail ?? null, p.price_wholesale ?? null,
       p.price_cost ?? null, p.price_reseller ?? null,
       p.price_promo || null, p.promo_start || null, p.promo_end || null,
-      p.stock_quantity || 0, p.status || 'active',
+      p.status || 'active',
       p.category_id || null, p.brand || null, p.model_id || null,
       jsonStr(p.images), jsonStr(normalizeProductSpecsRam(p.specs)), jsonStr(p.custom_fields),
       jsonStr(p.dimensions), p.weight_kg || null,
@@ -28677,7 +28325,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       req.params.id,
     ]
   );
-  });
+  }, { transactional: true });
   return { ok: true };
 });
 
@@ -28812,14 +28460,8 @@ fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, rep
     };
   }
 
-  let result;
-  let changedRows = [];
+  const changedRows = matchedRows || [];
   const previousStockByProductId = new Map((matchedRows || []).map((row) => [row.id, stockNumber(row.stock_quantity)]));
-  [result] = await pool.query(
-    `UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE ${sku ? 'sku=?' : 'bling_id=?'}`,
-    [qty, whereValue]
-  );
-  [changedRows] = await pool.query(`SELECT id FROM products WHERE ${sku ? 'sku=?' : 'bling_id=?'}`, [whereValue]);
   const locationSync = [];
   for (const row of changedRows || []) {
     const previousStock = previousStockByProductId.get(row.id);
@@ -28830,7 +28472,7 @@ fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, rep
     );
   }
   const stockTargets = await getShopeeStockTargetsForProductIds(changedRows.map(row => row.id));
-  return { ok: true, affectedRows: result.affectedRows, locationSync, stockTargets };
+  return { ok: locationSync.every(row => row.ok), affectedRows: locationSync.filter(row => row.ok).length, locationSync, stockTargets };
 });
 
 // Update product name by SKU (used by Bling webhook — produto event)
@@ -29797,9 +29439,12 @@ const TABLE_DATA_BLOCKED_TABLES = new Set([
   'print3d_phone_verifications', 'print3d_phone_verification_limits',
   'print3d_login_limits', 'customer_login_limits',
   'print3d_customer_google', 'print3d_google_handoffs',
-  'print3d_production_jobs', 'print3d_production_events',
+  'print3d_production_jobs', 'print3d_production_events', 'print3d_production_outputs',
+  'print3d_filament_stock', 'print3d_filament_movements',
+  'print3d_supply_stock', 'print3d_supply_movements',
   'print3d_order_plans', 'print3d_order_item_plans', 'print3d_order_payment_receipts',
   'print3d_checkout_requests', 'print3d_order_shipping', 'print3d_order_stock_reservations', 'print3d_payment_charges',
+  'print3d_order_cancellation_events', 'print3d_order_dispatches',
   'pdv_cash_sessions', 'pdv_cash_closings', 'pdv_cash_movements',
   'pdv_cash_events', 'pdv_cash_rectifications', 'pdv_cash_documents',
 ]);
@@ -32533,6 +32178,11 @@ fastify.delete('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asy
   if (!isValidTable(name)) return reply.code(400).send({ error: 'Invalid table name' });
 
   const pkCol = req.query.pk || await getPrimaryKey(pool, name);
+  if (name === 'orders') {
+    if (pkCol !== 'id') return reply.code(403).send({ error: 'Exclusão de pedidos exige o ID.' });
+    const [existingOrders] = await pool.query('SELECT storefront FROM orders WHERE id=? LIMIT 1', [pkValue]);
+    if (existingOrders[0]?.storefront === 'loja_3d') return reply.code(403).send({ error: 'Pedido 3D exige fluxo próprio.' });
+  }
   const [result] = await pool.query(`DELETE FROM \`${name}\` WHERE \`${pkCol}\` = ?`, [pkValue]);
 
   if (result.affectedRows === 0) return reply.code(404).send({ error: 'Row not found' });

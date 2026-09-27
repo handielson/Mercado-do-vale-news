@@ -66,6 +66,7 @@ Em 25/09/2026, a verificação prévia mostrou HTTP 200 e HTTPS válido no site,
 - [x] Preparar persistência privada de fichas por produto e revisão: migration `028_print3d_recipe_revisions.sql`, API administrativa com revisões imutáveis/idempotentes e botão de salvamento condicionado à ativação do módulo. A migration não foi aplicada e o módulo continua desligado por padrão.
 - [x] Preparar listagem e download administrativo das fichas salvas, sem expor os custos na API pública de produtos.
 - [x] Preparar upload e download privados de arquivos da revisão no Synology, com pasta por SKU/revisão, limite de 50 MB por arquivo, hash SHA-256, metadados no MySQL somente após confirmação do NAS e verificação de integridade no download. O JSON enviado deve coincidir com material/tempo da ficha; G-code exige identificação manual de impressora e perfil.
+- [x] Mostrar na ordem administrativa o arquivo principal e a revisão fixados na compra, com perfil da impressora, material/tempo por lote e download privado. Consulta e criação recusam ficha/arquivo incompatíveis com produto e SKU. Falta homologar a abertura de um arquivo real no Synology antes de usar em produção.
 - [x] Preparar seleção administrativa da ficha principal por SKU: migration `030_print3d_active_recipe.sql`, referência à revisão e ao arquivo de fabricação escolhido, exigência de JSON conferido e atualização transacional sem apagar revisões anteriores. A seleção ainda não dispara ordens nem altera estoque.
 - [x] Mapear o estoque central existente: `products.stock_quantity` representa o total cadastrado, `product_stock_locations` registra físico e reservado por local, e `production_days` já existe no cadastro do produto/categoria. O painel 3D agora consulta os saldos e o prazo do SKU sem criar estoque paralelo.
 - [x] Preparar no cadastro central por SKU a marca de produto 3D, a opção de aceitar encomendas, o limite de unidades pendentes e o prazo individual em dias úteis. A migration `031_print3d_product_offer.sql` adiciona os campos comerciais; não foi aplicada. O checkout continua sem aceitar encomendas.
@@ -74,7 +75,7 @@ Em 25/09/2026, a verificação prévia mostrou HTTP 200 e HTTPS válido no site,
 - [x] Identificar caminhos que ainda podem concorrer com essa reserva: baixa por prioridade, consumo/liberação da reserva, entradas/ajustes manuais e sincronização externa do Bling atualizam `product_stock_locations` fora de uma transação única; transferência entre locais já usa transação. A nova rota de reserva não deve ser publicada isoladamente como garantia de estoque compartilhado.
 - [x] Validar localmente 21 testes focados (3D e reserva), 31 testes do núcleo de garantia assinada, teste monetário, sintaxe da API e build do frontend após as mudanças; checagem geral de TypeScript ainda encontra erros preexistentes em outras áreas. A etapa estática da suíte de garantia assinada falhou em comparação de texto do bot fora deste escopo. O teste estático legado de reserva Supabase não roda porque o arquivo histórico que ele lê não existe mais.
 - [ ] Validar a página com uma exportação real do programa de impressão e com cadastro real em ambiente de teste.
-- [ ] Evoluir do cadastro de preços para controle físico de saldos, receitas por SKU, revisões e ordens de produção.
+- [ ] Homologar o controle físico de todos os insumos. Saldos e baixa de filamentos, acessórios e embalagem estão preparados localmente; faltam aplicação da migration 050, conferência de saldos iniciais e teste em MySQL. Receitas por SKU, revisões e ordens de produção já estão preparadas; a saída aprovada fica alocada ao pedido e não entra no estoque vendável.
 
 Arquivos locais: `utils/print3dImport.mjs`, `utils/print3dCost.mjs`, `utils/print3dRecipeDraft.mjs`, `services/print3dCostSettings.ts`, `services/print3dRecipes.ts`, `services/print3dRecipesServer.cjs`, `services/print3dRecipeFiles.ts`, `services/print3dRecipeFilesServer.cjs`, `services/print3dActiveRecipeServer.cjs`, `pages/admin/products/Print3dCostPage.tsx`, migrations `028` a `030`, rota e menu do painel. A página ainda não gera pedido ou movimenta estoque. A seleção de ficha é referência administrativa para futuras produções; só deve ser considerada operacional após migrations, configuração privada e teste real no NAS.
 
@@ -235,9 +236,10 @@ Contrato solicitado ao programa de impressão, a validar com uma exportação re
 - [ ] Após pagamento confirmado da entrada, iniciar a demanda de produção da encomenda; registrar separadamente valor total, entrada recebida, saldo pendente e cobranças, sem marcar o pedido como integralmente pago.
 - [ ] Bloquear expedição enquanto houver saldo pendente da encomenda e liberar somente após a confirmação idempotente da segunda cobrança.
 - [ ] Não reutilizar as rotas atuais de Mercado Pago para uma encomenda 3D: PIX, cartão, preferência e webhook trabalham com `orders.total` como cobrança integral e marcam `payment_status='paid'` após uma aprovação. Criar parcelas/cobranças vinculadas ao pedido antes de cobrar a entrada.
-- [ ] Definir vencimento, cancelamento e eventual devolução da entrada, inclusive quando a produção já tiver começado, antes de ativar cobrança real.
-- [ ] Liberar reservas em vencimento/cancelamento conforme regra; tratar produção já iniciada sem devolver material consumido ficticiamente.
-- [ ] Impedir que a conclusão da fabricação disponibilize a outros compradores peças já reservadas.
+- [x] Preparar cancelamento antes da confirmação financeira, vencimento de PIX e liberação transacional das peças prontas por localização. Repetição não libera duas vezes; pagamento tardio vira evento de revisão/estorno e não reativa pedido ou produção. Produção iniciada e pedido pago seguem bloqueados para análise manual.
+- [x] Preparar trabalhador idempotente de varredura de vencimentos, desligado sem `MDV_PRINT3D_EXPIRY_ENABLED=1` e sem checkout completamente pronto. Cada execução trava o pedido antes de liberar a reserva.
+- [ ] Configurar e homologar a varredura, cancelamento no provedor e a revisão/estorno; não há automação ou cobrança real ativa nesta etapa.
+- [x] Preparar alocação das peças aprovadas ao pedido, sem entrada no estoque vendável. Migration 046 e testes locais; falta homologação MySQL e consumo da alocação na expedição.
 - [ ] Manter trilha de movimentações e reconciliação de divergências.
 
 **Conclusão:** compras simultâneas e repetição de eventos não duplicam vendas, reservas, consumo ou ordens.
@@ -370,12 +372,12 @@ Ao concluir cada fase, registrar data, arquivos alterados, testes e evidências.
 | 1. Regras e escopo | Pendente | — |
 | 2. Integração e dados | Pendente | — |
 | 3. Cadastro 3D | Em andamento | Campos por SKU, validação e migration 031 preparados localmente; faltam variantes 3D, teste no banco e publicação. |
-| 4. Arquivos e revisões | Em andamento | Rascunho, migrations 028–030, API, seleção e tela privadas preparadas; faltam aplicação, teste real no NAS e ligação às ordens. |
+| 4. Arquivos e revisões | Em andamento | Rascunho, migrations 028–030, API, seleção e tela privadas preparadas; a OP mostra a revisão e o arquivo fixados na compra. Faltam aplicação das migrations e teste real no NAS. |
 | 5. JSON mínimo | Em andamento | Parser estrito e testes locais; falta arquivo real e vínculo à ficha. |
-| 6. Insumos e calculadora | Em andamento | Tela, preços compartilhados e simulação local; falta estoque físico, ficha histórica e piloto. |
-| 7. Estoque e encomendas | Em andamento | Consulta de saldos/prazo e reserva atômica preparadas localmente; falta testar no MySQL, auditar outros canais e implementar demanda de produção sem estoque negativo. |
-| 8. Produção | Em andamento | Plano financeiro e OP parcial integrados localmente ao checkout/PIX; faltam consumo de insumos, estoque produzido, fila por capacidade e homologação MySQL. |
-| 9. Vitrine e integrações | Em andamento | Vitrine, catálogo por site, frete, checkout e duas cobranças PIX preparados e testados com simulações locais; faltam cancelamento/expiração, ativação e homologação real, expedição e documento fiscal. |
+| 6. Insumos e calculadora | Em andamento | Tela, preços compartilhados, simulação e saldos físicos de filamentos e demais insumos com baixa por OP preparados localmente; faltam homologação MySQL e piloto. |
+| 7. Estoque e encomendas | Em andamento | Reserva atômica e OP vinculada à demanda estão preparadas localmente; faltam teste no MySQL, conferência dos saldos iniciais e auditoria dos outros escritores de estoque. |
+| 8. Produção | Em andamento | Plano financeiro, OP parcial, peças alocadas ao pedido e baixa de filamentos/insumos integrados localmente; faltam fila por capacidade e homologação MySQL. |
+| 9. Vitrine e integrações | Em andamento | Vitrine, catálogo por site, frete, checkout, duas cobranças PIX, cancelamento/expiração e registro transacional de expedição preparados com testes simulados; faltam site/domínio independentes, homologação real e documento fiscal. |
 | 10. Validação | Pendente | — |
 | 11. Piloto e publicação | Pendente | — |
 
@@ -388,8 +390,382 @@ Ao concluir cada fase, registrar data, arquivos alterados, testes e evidências.
 - [x] Adaptador PIX exclusivo, confirmação canônica, webhook assinado e cobrança do saldo condicionada à produção concluída.
 - [x] Preparar migrations 042/043/044 e proteger tabelas no CRUD; não aplicar ou ativar nesta etapa. Condição financeira versionada preserva histórico.
 - [x] Testar com banco/provedor simulados e navegador local: retry do checkout, entrada, saldo com frete, credencial de outro canal e cobrança repetida.
-- [ ] Implementar cancelamento/expiração/abandono e liberação de reservas, considerando pagamento tardio, antes de ativar pedidos reais.
+- [x] Implementar localmente cancelamento/expiração/abandono e liberação rastreável de reservas, considerando pagamento tardio. O fluxo permanece desligado e ainda exige agendamento/homologação em MySQL e provedor antes de ativar pedidos reais.
 - [ ] Homologar migrations e concorrência com MySQL isolado, provedor e webhook reais de teste.
+- [x] Aplicar localmente as migrations 028–050 em MySQL 8.4 descartável sobre schema central mínimo; corrigir collations incompatíveis nas chaves de cliente das migrations 034/042 e verificar separação dos pedidos e saldos não negativos. Ainda faltam uma cópia estrutural fiel do banco central, demais caminhos de alteração de estoque e provedor de teste.
+- [x] Executar checkout 3D real em MySQL descartável com dois compradores pela última peça, rollback após falha na criação da produção e disputa entre checkout 3D e a rota central de reserva por prioridade. Os três cenários preservaram uma única reserva ou reverteram tudo; ainda faltam os demais escritores de estoque e um schema fiel ao banco de operação.
+- [x] Tornar a baixa central por prioridade transacional e compatível com a trava por produto do checkout 3D. MySQL local confirmou disputa pela última peça, sincronização de `products.stock_quantity` e rollback quando o movimento falha. Ainda faltam consumo/liberação de reservas, ajustes manuais e sincronização externa sob a mesma disciplina.
+- [x] Tornar consumo/liberação de reservas MDV transacionais, com trava do pedido e produtos, repetição sem segunda baixa e bloqueio de operação oposta. MySQL local confirmou preservação de reservas de outro pedido, rollback e rejeição de pedidos 3D. Restam ajustes/entradas manuais, sincronização externa e auditoria de histórico parcialmente processado.
+- [x] Tornar entradas e ajustes manuais transacionais, preservando as reservas sob trava por produto/local. MySQL local confirmou entrada concorrente com reserva, ajuste limitado pelo reservado, rollback de erro no movimento e duas entradas no mesmo local novo sem duplicar saldo. Sincronização externa e auditoria de histórico continuam pendentes.
 - [ ] Integrar quitação à trava de expedição e concluir os fluxos de estoque/fiscal pendentes.
 
 Detalhes e configuração futura: `docs/print3d-checkout.md`. Tudo permanece local e desabilitado por padrão.
+
+### Incremento local — 27/09/2026: expedição 3D
+
+- [x] Preparar registro único da expedição por pedido com rastreio e migration 049, sem aplicação no banco.
+- [x] Exigir quitação integral no registro financeiro e status não estornado; conferir todas as quantidades prontas reservadas e produzidas antes de enviar.
+- [x] Baixar estoque pronto e alocação de produção na mesma transação, com replay sem segunda baixa e separação dos pedidos MDV.
+- [x] Preparar ação administrativa e exibição do rastreio na área do cliente, condicionadas à flag `MDV_PRINT3D_DISPATCH_ENABLED` desligada por padrão.
+- [ ] Homologar em MySQL isolado, conferir documento fiscal e envio físico antes de ativar a ação em operação real.
+
+### Incremento local — 27/09/2026: saldo físico dos demais insumos
+
+- [x] Cadastrar unidade de medida dos insumos na calculadora e preservá-la na revisão imutável da ficha; receitas antigas sem unidade assumem `un`.
+- [x] Preparar migration 050, entradas idempotentes, saldo e movimentos separados do estoque vendável; embalagem por peça aparece como insumo físico quando configurada.
+- [x] Apontar quantidades reais por insumo da ficha e baixar saldos na mesma transação de filamentos e produção; zero explícito é permitido em lotes sem consumo.
+- [x] Preparar visualização e entrada administrativa, privadas e desabilitadas com o módulo de produção.
+- [ ] Testar unidade, saldo inicial, lotes parciais, falta de insumo e concorrência em MySQL isolado.
+
+### Incremento local — 27/09/2026: operação por loja no painel
+
+- [x] Seção Loja 3D com Clientes, Pedidos, Produção, Calculadora, Catálogo/preços e Banners.
+- [x] Clientes e pedidos 3D em consultas administrativas próprias, autenticadas, paginadas e sem fontes MDV como alternativa.
+- [x] Listagem de pedidos MDV exclui origens 3D/desconhecidas antes de carregar itens; pedidos antigos sem origem continuam MDV.
+- [x] Banners fixos por marca nas respectivas rotas e edição comercial exclusiva 3D; publicação central por SKU preservada.
+- [x] Alertas de vendas e monitoramento do bot MDV não aparecem na área 3D.
+- [x] Estados desativados explícitos sem consulta a tabelas ainda não habilitadas; testes com dados simulados.
+- [ ] Publicar este incremento, validar as telas autenticadas e ativar cadastros/pedidos somente após homologação das pendências anteriores.
+- [ ] Concluir expedição e documentos próprios da loja 3D; definir comunicações 3D no n8n separado antes da ativação.
+
+Compartilhados: cadastro técnico, SKU, imagens, características e estoque. Clientes, credenciais, pedidos, preços por site, banners e comunicação permanecem identificados por loja. A nova área é de consulta: ações reais de cadastro/pagamento/produção continuam nas travas de ativação existentes.
+
+### Incremento local — reconciliação externa e reservas compartilhadas
+
+- [x] Reconciliar total externo, locais e movimentos em uma transação com trava por produto; preservar unidades reservadas nos locais originais durante reentrada.
+- [x] Recusar saldo externo menor que o reservado (`external_stock_below_reserved`) sem apagar reservas; o total central permanece igual à soma física local.
+- [x] Remover gravação antecipada do total nos caminhos revisados de webhook e sincronização de preços/estoque. A resposta em lote informa falhas e o cliente não trata HTTP 200 parcial como sucesso.
+- [x] Validar em MySQL 8.4 descartável: conflito com reserva, reentrada, rollback por falha do movimento e concorrência; cinco testes focados e build local passaram.
+- [ ] Auditar os demais escritores de estoque (edição/importação genérica, estoque serializado e inicialização), histórico parcial e eventos externos fora de ordem antes da homologação integral.
+- [ ] Atualizar a regressão legada `bling-sync-prices-vps-regression.test.mjs`: depende de `api/bling.ts`, ausente no repositório atual. Ela não pôde executar.
+
+Sem publicação ou escrita em banco operacional nesta etapa.
+
+### Incremento local — edição individual de produto e reservas
+
+- [x] A rota `PUT /products/:id` deixa de gravar o total diretamente. Quando o saldo é informado, reconcilia locais/movimentos na mesma transação do cadastro; omitir saldo preserva o estoque.
+- [x] Saldo abaixo do reservado recusa a edição com HTTP 409; erro posterior ao ajuste reverte saldo e cadastro juntos.
+- [x] MySQL descartável validou rollback, recusa e confirmação conjunta. Dois testes do handler das APIs e 12 verificações dos grupos de preços passaram.
+- [ ] A importação `/products/batch` ainda possui escrita direta de saldo no upsert: adaptar junto à identidade efetivamente resolvida pelo conflito de chave, sem criar saldo em um ID diferente do produto atualizado.
+
+Alteração local; sem publicação, commit ou mudança no banco operacional.
+
+### Incremento local — importação em lote e estoque compartilhado
+
+- [x] Cada item de `/products/batch` confirma cadastro, locais, movimentos e total em uma transação. Produtos novos iniciam com zero e recebem saldo pelo reconciliador; estoque omitido preserva o saldo existente.
+- [x] Saldo abaixo das reservas reverte o item e entra em `errors`. Os outros itens do lote mantêm processamento independente, conforme contrato existente.
+- [x] Preservar resolução existente pelo Bling e recusar conflito de chave que aponte para outro ID. Avisos de conversão/identidade no MySQL revertem o item; aviso 1287 de sintaxe VALUES depreciada é informativo.
+- [x] Cliente da API reconhece falhas por item mesmo com HTTP 200.
+- [x] Handler e SQL reais testados em MySQL descartável com schema mínimo ampliado: novo saldo, omissão, rollback, conflito de SKU e disputa com reserva. Mais 16 testes focados e build passaram.
+- [ ] Homologar com schema central fiel, resolução de Bling/IMEI real e demais escritores genéricos/serializados/inicialização. A pendência anterior específica do upsert `/products/batch` foi atendida neste incremento; a auditoria integral continua.
+
+Somente local; alterações anteriores preservadas, sem commit ou publicação.
+
+### Incremento local — distribuição de saldo ainda sem local
+
+- [x] Reutilizar `externalStockReconciliation.cjs` para materializar somente o saldo ainda não distribuído. O total central é lido depois da trava do produto; saldo já distribuído não é somado outra vez.
+- [x] Confirmar local e movimento juntos, preservando reservas; falha no movimento reverte a distribuição.
+- [x] MySQL local confirmou duas distribuições simultâneas com um único saldo/movimento, repetição após reserva e rollback. Quatro verificações focadas e sintaxe das APIs passaram.
+- [ ] Revisar separadamente a carga inicial legada e `syncSerializedProductStockFromUnits`: esta rotina apaga/recria locais e usa quantidade de unidades disponíveis como total, enquanto os locais incluem disponíveis e reservadas. A regra não pode ser substituída automaticamente pela contagem física dos produtos comuns.
+
+Sem publicação ou escrita operacional.
+
+### Incremento local — carga inicial dos locais de estoque
+
+- [x] `backfillProductStockLocations` usa a transação canônica, relê o saldo sob trava por produto e conserva o destino Loja Principal / Estoque Geral.
+- [x] Não altera produtos que ganharam distribuição depois da seleção inicial; histórico `initial_migration` impede uma segunda inicialização se os locais desaparecerem.
+- [x] MySQL descartável confirmou inicialização simultânea única, preservação de reserva e recusa de recriação com histórico. Quatro regressões focadas e sintaxe passaram.
+- [ ] Compatibilidade IMEI/checkout 3D: checkout reserva quantidade por local, enquanto sincronização serializada deriva reservas das unidades e apaga/recria locais. É necessário tratar a identidade das reservas/unidades antes de considerar esse caminho homologado entre lojas. Nenhuma alteração desse fluxo serializado foi publicada ou aplicada.
+
+Alterações somente locais, sem commit ou publicação.
+- Validação adicional: contrato VPS de locais passou. O teste legado `multi-deposit-stock-migration-static.test.mjs` não executou porque aponta para a migration Supabase removida `20260509000001_multi_deposit_stock.sql`; não foi tratado como validação do MySQL atual.
+
+### Incremento local — concorrência de entradas e consumo de insumos
+
+- [x] Testar entradas simultâneas com a mesma chave em MySQL real descartável. Foi reproduzido `ER_DUP_ENTRY`: a leitura comum do histórico mantinha snapshot anterior à espera pela trava de saldo.
+- [x] Corrigir ambos os serviços para consultar o movimento anterior com `FOR UPDATE`, reconhecendo a tentativa concluída pela transação concorrente. Uma entrada efetiva e um replay, sem duplicar saldo.
+- [x] Executar os serviços reais de consumo de filamento e insumos numa transação com evento real: falta de acessório reverte filamento e evento; duas transações concorrentes deixam apenas um consumo confirmado.
+- [x] Quatro testes unitários e teste MySQL completo passaram; sintaxe dos módulos válida.
+- [ ] Repetir pela rota completa de apontamento/receita/pagamento com schema fiel e UI autenticada. O teste de consumo deste incremento monta explicitamente a transação e evento, não substitui a homologação ponta a ponta.
+
+Somente ambiente local, sem publicação ou mensagens externas.
+
+### Decisão de escopo — produtos 3D sem IMEI
+
+O usuário confirmou que produtos 3D não possuem IMEI. O checkout e a produção 3D seguem por quantidade/SKU. A integração de seleção de aparelhos individuais no checkout 3D deixa de ser requisito; as observações anteriores sobre estoque serializado ficam como diagnóstico do legado MDV, não como bloqueio para esse recurso da loja 3D.
+
+### Incremento local — rota de apontamento e consulta do cliente
+
+- [x] Testar rota Fastify real com MySQL descartável, plano versão 1, recibo e ficha de teste: apontamento 20/100, tentativa simultânea repetida e consulta do cliente.
+- [x] Reproduzir e corrigir erro de chave duplicada na repetição: a referência imutável do pedido é lida antes de abrir a transação, evitando snapshot antigo antes da espera pela trava do pedido. Ordem das travas pedido → produção preservada.
+- [x] Confirmar progresso 20/100, uma única ocorrência no histórico e 20 peças reservadas ao pedido na resposta do cliente, sem ator ou ficha privada.
+- [x] Falta de acessório pela rota completa reverte consumo de filamento, evento e progresso; 31 regressões de produção passaram.
+- [ ] Testar interface autenticada e schema fiel. Neste teste, principais de admin/cliente são simulados e recibo/ficha são fixtures locais; não há gateway nem NAS real.
+
+Sem deploy ou escrita externa.
+
+### Incremento local — navegador integrado ao MySQL descartável
+
+- [x] Exercitar componentes reais de admin/cliente sem `demo=1`, com Playwright encaminhando somente as rotas 3D ao Fastify local e seu MySQL descartável. Demais chamadas de API/rede externa são bloqueadas.
+- [x] Registrar mais 20 peças na tela administrativa e confirmar 20/100 → 40/100 na tela do cliente; nota interna não aparece para o cliente.
+- [x] Informar consumo de acessórios acima do saldo, conferir mensagem de erro e manutenção de 40/100 em ambas as telas.
+- [x] Simulação visual anterior também passou: 20 → 40 → 100, limite de quantidade e privacidade.
+- Execução opcional: com Vite local em `127.0.0.1:3000`, definir `PRINT3D_MYSQL_BROWSER=1` e executar `npm run test:print3d:mysql`.
+- Limites: páginas de preview montam os componentes sem layout/guard de login; credenciais e resolução de principal são fixtures separadas, preferências de custos são simuladas. Persistência, handlers e SQL de produção são reais no banco descartável. Isso não homologa login, NAS, gateway ou banco operacional.
+
+Sem publicação, alteração de dados reais ou envio externo.
+
+### Incremento local — expedição no MySQL descartável
+
+- [x] Exercitar a rota de expedição real com pedido/ficha/recibos de teste: recusar saldo financeiro pendente e produção incompleta; concluir produção e aceitar somente após quitação.
+- [x] Duas expedições simultâneas com o mesmo rastreio retornam envio/replay, com um registro e 100 peças produzidas marcadas como expedidas; rastreio diferente é recusado.
+- [x] Exercitar estoque pronto no serviço real: baixa de uma reserva preserva a reserva de outro pedido; repetição não baixa novamente e o total central acompanha os locais.
+- [x] Forçar falha no movimento após baixa e confirmar rollback do saldo. Quatro testes unitários e regressão MySQL passaram.
+- Estrutura mínima do teste ampliada com `orders.updated_at` e `stock_location_movements.created_by`, usados pela expedição. Ainda não equivale a schema operacional fiel.
+- [ ] Validar expedição pela interface, documento fiscal, integração de transporte e gateway de homologação. Recibos usados aqui são fixtures inseridas apenas no MySQL descartável.
+
+Nada publicado ou aplicado em operação real.
+
+### Incremento local — expedição na interface móvel
+
+- [x] Teste Playwright em viewport 390×844 com componente administrativo real, listagem Fastify real e MySQL descartável.
+- [x] Buscar o pedido, preencher rastreio, confirmar a ação, verificar rastreio atualizado e remoção do formulário de expedição.
+- [x] Consulta posterior ao banco confirmou preservação da reserva de outro pedido; tentativas seguintes foram replay sem segunda baixa.
+- [x] Executado junto à produção no navegador com `PRINT3D_MYSQL_BROWSER=1 npm run test:print3d:mysql`.
+- Limites permanecem: página de preview sem guard/layout completo, sessão administrativa fixture, banco mínimo e ausência de transportadora/fiscal/gateway reais. Todos os pedidos usados são descartáveis e a confirmação na tela não representa envio físico real.
+
+Nenhuma publicação nesta etapa.
+
+### Incremento local — cancelamento e primeira expiração no MySQL
+
+- [x] Cancelamento concorrente libera a reserva uma vez, conserva reserva de outro pedido e deixa um evento de auditoria; cliente de outro pedido e pedido com pagamento confirmado são recusados.
+- [x] Falha no movimento após reduzir a reserva reverte saldo e ledger.
+- [x] Reproduzir erro MySQL 3065 na seleção da expiração (`DISTINCT` + ordenação fora da projeção) e substituir por agrupamento de pedido com ordenação por menor atualização e ID.
+- [x] Expiração de PIX de teste passou no MySQL; dez testes focados de cancelamento/rotas/trabalhador passaram.
+- [ ] Auditar paginação/fairness do varredor: os primeiros candidatos ainda podem estar no futuro ou exigir análise de estorno e impedir avanço para outros vencidos. Não habilitar o trabalhador operacional antes dessa revisão e homologação do cancelamento no provedor.
+
+Somente MySQL descartável e fixtures; não houve cancelamento, estorno ou mensagem externa real.
+
+### Incremento local — avanço da expiração entre candidatos
+
+- [x] Paginar candidatos por ID estável, sem OFFSET; cancelamentos removem linhas da consulta e não fazem pular pedidos seguintes.
+- [x] Tratar `limit` como máximo de cancelamentos efetivos, continuando a leitura quando candidatos estão no futuro ou já exigem análise.
+- [x] Conflitos 404/409 não interrompem os demais candidatos; seus IDs retornam em `review_order_ids` e o trabalhador registra somente a contagem, sem dados pessoais. Erros inesperados continuam visíveis como falha da execução.
+- [x] MySQL local validou páginas de um item: cobrança futura preservada, pedido pago sinalizado e terceiro pedido vencido cancelado na mesma execução. Sete testes focados passaram.
+- [ ] Homologar volume, acompanhamento das revisões e cancelamento/retry no provedor antes de ativar. A varredura pode percorrer muitas páginas quando houver muitos candidatos ainda não vencidos.
+
+Trabalhador não ativado em produção; nenhuma cobrança externa cancelada.
+
+### Incremento local — nova tentativa de cancelamento no provedor
+
+- [x] Separar cobrança cancelada localmente (`cancelled`) da confirmação remota (`provider_cancelled`); a projeção pública continua mostrando `cancelled`, sem PIX ativo.
+- [x] Trabalhador configurado reencontra até 100 pedidos 3D cancelados com cobranças ainda pendentes de confirmação remota. A fila é derivada do banco, não da memória; cobranças confirmadas/recebimentos tardios não são reenviados.
+- [x] Falhas ou revisão atualizam a data da tentativa para ordenar próximas execuções. Repetição manual de cancelamento também pode retentar cobranças sem desfazer o cancelamento local.
+- [x] Teste MySQL com adaptador simulado: timeout → nova instância do trabalhador → confirmação remota → execução sem chamada repetida. Pedido permaneceu cancelado; 39 regressões focadas passaram.
+- [ ] Homologar comportamento do provedor real e cobranças criadas remotamente sem ID persistido durante cancelamento concorrente; acompanhar pendências na UI. O teste não fez requisições externas.
+
+Flags operacionais continuam desligadas; nada publicado.
+
+### Incremento local — resposta do PIX após cancelamento
+
+- [x] Persistir o identificador remoto verificado quando a resposta de criação chega depois do cancelamento local, preservando o estado terminal da cobrança e do pedido.
+- [x] Não expor código PIX, não criar recibo e não reabrir pedido; manter a cobrança local disponível para reconciliação/cancelamento remoto.
+- [x] MySQL real descartável com criação suspensa no adaptador → cancelamento local → resposta remota pendente → identificação persistida → encerramento remoto simulado. 33 testes focados também passaram.
+- [ ] Homologar timeout sem retorno nem webhook: recuperação da identidade remota precisa ser definida antes de ativar o fluxo real. O teste cobre resposta tardia recebida, não uma resposta permanentemente perdida.
+
+Sem qualquer requisição ao gateway real ou publicação.
+
+
+### Recuperação de PIX com resposta perdida — validação local
+
+- Cobranças de pedidos 3D cancelados sem identificador remoto entram na reconciliação persistente.
+- A busca usa `external_reference=print3d:<charge.id>` na API de pagamentos do Mercado Pago. Exige um único resultado, valida conta recebedora, moeda, método e valor, e consulta novamente o pagamento pelo ID antes de cancelar.
+- Busca vazia, ambígua ou incompatível mantém a pendência para nova conferência. Nunca cria outro PIX nem reabre pedido cancelado. Pedidos ativos e de outros canais são excluídos na consulta SQL.
+- Evidência: 38 testes focados passaram; MySQL 8.4 local descartável passou incluindo resposta perdida, busca inicialmente vazia, recuperação após recriar o trabalhador e ausência de recibos indevidos. Provedor simulado, sem chamadas financeiras reais.
+- Limitação: homologação real permanece pendente. A documentação do provedor limita a busca aos últimos 12 meses; ausência de resultado não prova que a cobrança nunca existiu. Pendências antigas exigem conferência administrativa.
+- Referência oficial: https://www.mercadopago.com.br/developers/en/reference/online-payments/subscriptions/search-payments/get
+
+
+### Avisos administrativos de reconciliação PIX — local
+
+- Pedidos 3D agora expõem contagem de cobranças cujo cancelamento remoto ainda está pendente e contagem/valor de pagamentos tardios, usando exclusivamente `print3d_payment_charges` do pedido.
+- O cartão de pedido mostra avisos distintos para conferência de cancelamento e análise de estorno. Valores tardios continuam separados dos recibos confirmados; o aviso não executa estorno.
+- Validação: 8 testes focados, build Vite e navegador móvel com APIs interceptadas passaram. MySQL local confirmou o aviso pendente e sua remoção após reconciliação. Nenhuma publicação ou chamada financeira real.
+- Pendente: fluxo administrativo de resolução/estorno com rastreabilidade e homologação real do provedor.
+
+
+### Reconciliação de estorno de pagamento tardio — local
+
+- O trabalhador agora revisita cobranças `late_payment` de pedidos cancelados por consulta ao provedor. Não solicita estorno automaticamente.
+- Uma resposta autenticada e correspondente à cobrança com status `refunded` e valor integral estornado encerra a pendência daquela cobrança. A ordem permanece cancelada e nenhum recibo de compra é criado.
+- Estornos parciais continuam em revisão. Notificações antigas de cancelamento não apagam um pagamento tardio; notificações antigas de aprovação não reabrem uma cobrança já estornada.
+- Painel mostra a quantidade de estornos integrais confirmados separadamente. O evento histórico de pagamento tardio permanece preservado.
+- Evidência: 45 testes focados, integração MySQL descartável (incluindo parcial, integral, repetição, histórico e listagem real), navegador móvel com APIs interceptadas e build passaram.
+- Pendentes: solicitação administrativa de estorno e homologação real. Nenhuma operação financeira externa ou publicação executada.
+
+
+### Notificações simultâneas de pagamento — correção validada
+
+- Teste novo com MySQL descartável bloqueia o pedido, recebe duas notificações do mesmo PIX e libera ambas. Antes da correção, havia um único recibo, porém a segunda resposta retornava cobertura financeira desatualizada.
+- A referência imutável cobrança → pedido é consultada antes de iniciar a transação. A liquidação continua travando pedido e cobrança; as leituras de recibos passam a enxergar o resultado da notificação anterior.
+- Após a correção, ambas retornam o valor integral confirmado e o banco contém exatamente um recibo. 35 testes focados e a suíte MySQL passaram. Nenhum banco operacional ou provedor real foi usado.
+
+
+### Aplicação pública 3D independente — primeira entrada local
+
+- `apps/print3d` contém HTML e entrada React próprios, reutilizando as telas canônicas de loja, conta, checkout, pedidos e produção. Não inicializa App/rotas/admin, analytics, favicon, cashback ou manutenção globais do Mercado do Vale.
+- `npm run dev:print3d`: servidor exclusivo em `http://127.0.0.1:3002`. Prévia visual: `/?demo=1`. As APIs desse servidor respondem 503 por padrão; não há proxy para produção.
+- `npm run build:print3d`: gera `dist-print3d`, separado de `dist`, sem copiar a pasta pública MDV nem ler seus arquivos `.env`. Clientes compartilhados de catálogo usam um adaptador sem sessão administrativa; as contas 3D conservam seu cliente próprio.
+- Validação: build independente passou; Playwright móvel percorreu loja/conta e rejeitou `/admin/login`, com APIs interceptadas. Uma sessão MDV fictícia gravada no navegador não foi enviada, não houve chamada externa nem consultas globais MDV.
+- Esta etapa não conclui a separação operacional: permanecem URLs com prefixo `/loja-3d`, gateway/proxy próprio com escopo de canal, callbacks/origens, domínio, SEO definitivo, implantação e homologação completa. O ERP e a prévia atual continuam disponíveis no build existente.
+
+
+### Gateway local exclusivo da vitrine 3D
+
+- `services/print3dPublicProxy.cjs` aplica lista explícita de rotas/métodos e parâmetros: catálogo publicado 3D, categorias compartilhadas, banners 3D, conta, frete, checkout, pedidos e produção do cliente. O servidor central continua validando sessão, preços e autorização.
+- Rotas administrativas, CRUD genérico, outro canal, webhook, parâmetros duplicados e caminhos normalizados/escapados são recusados. Cookies, chaves sync e cabeçalhos de encaminhamento do navegador não são retransmitidos. Bearer só segue para rotas `/print3d/`.
+- Configuração opcional de desenvolvimento: `PRINT3D_LOCAL_API_ORIGIN=http://127.0.0.1:<porta>` antes de `npm run dev:print3d`. Só aceita origem HTTP loopback explícita, sem credenciais/caminho. Sem variável, permanece 503. Nenhuma origem real foi configurada.
+- Testes com dois servidores HTTP locais validaram encaminhamento, isolamento, limites de corpo e bloqueio de redirecionamento externo. Teste móvel da vitrine e build independente passaram.
+- Pendente para implantação: proxy de produção com credencial própria e política de origem/IP confiável, callbacks Google e homologação ponta a ponta. O gateway local não se apresenta como proxy de produção concluído.
+
+
+### Vitrine → gateway → API local: teste integrado de navegador
+
+- Novo teste `node tmp-tests/print3d-standalone-gateway-browser.cjs` inicia API HTTP fixture e Vite em portas aleatórias, executa catálogo/conta/pedidos pelo proxy real e encerra somente seus processos. Chamadas locais não são interceptadas; rede externa é bloqueada.
+- Reproduziu erro na tela do cliente: pedido cancelado ainda consultava a rota de pagamento, que corretamente recusava a operação. A tela agora limpa dados transitórios e não consulta pagamentos de pedidos cancelados, estornados ou com falha. Pedidos ativos continuam consultando normalmente.
+- Verificados: catálogo não demo, sessão 3D fixture, navegação até pedidos, estados cancelado/estornado/falha/ativo, ausência de token MDV, bloqueio da rota administrativa e nenhum erro de execução.
+- 11 testes focados e build independente passaram. Este teste usa respostas/credenciais fictícias de API, não autenticação real, MySQL ou gateway financeiro; essas integrações continuam exigindo homologação própria.
+
+
+### Contas por e-mail com MySQL descartável
+
+- Cenário `tmp-tests/print3d-accounts-mysql-scenario.cjs`, chamado pela suíte MySQL, registra rotas reais de conta 3D e usa hash scrypt, tokens, sessão assinada e limitador transacional reais.
+- Confirmou cadastro, recusa de login antes de verificar e-mail, prova de uso único, login, recusa de assinatura no formato MDV (HMAC com segredo direto), cinco senhas erradas e bloqueio subsequente com `Retry-After: 900`.
+- Recuperação por e-mail durante o bloqueio funcionou; redefine senha, limpa bloqueio da conta, incrementa versão de autenticação e invalida a sessão antiga. Token de recuperação não pode ser reutilizado.
+- Suíte MySQL passou. CAPTCHA e envio de e-mail são adaptadores simulados; não houve mensagens reais. Ainda falta homologar WhatsApp/Google completos, navegador com login real e entregabilidade/configuração externa.
+
+
+### Contas por WhatsApp, CPF e recuperação com MySQL descartável
+
+- Ampliado `tmp-tests/print3d-accounts-mysql-scenario.cjs` com rotas reais e tabelas exclusivas 3D para gerar/conferir/consumir código de WhatsApp.
+- Validou código errado, vínculo da prova ao telefone, uso único, cadastro sem e-mail, data de WhatsApp confirmado e login por telefone ou CPF com a mesma senha.
+- Alternar telefone e CPF nas cinco falhas não contorna a trava: o sexto acesso é bloqueado pela conta. Recuperação por WhatsApp durante a trava redefine senha, invalida a sessão anterior e permite novo login por ambos os identificadores.
+- O teste avança somente o relógio de reenvio do código em 61 segundos para respeitar o intervalo entre mensagens; não avança o bloqueio de login de 15 minutos.
+- Suíte MySQL passou. CAPTCHA e envio WhatsApp/e-mail foram simulados e permaneceram locais. Não valida n8n, número real, entrega de mensagens nem a interface completa de cadastro.
+
+
+### Google 3D com MySQL descartável
+
+- Novo cenário `tmp-tests/print3d-google-mysql-scenario.cjs`, executado após os cenários de conta na suíte MySQL, usa rotas Google reais, migrations, transações, hash scrypt e sessão 3D assinada.
+- Validou prepare → start → callback → exchange, comprovante ligado ao navegador, troca simultânea do mesmo código (um sucesso e uma recusa), retorno pelo identificador estável Google, recusa de união automática por e-mail, vínculo explícito à conta autenticada, uso único e conta desativada.
+- Suíte MySQL e 9 testes de Google/sessão passaram. Identidade/token Google e CAPTCHA são simulados; não houve acesso à conta Google real. A autenticação da sessão usada no vínculo foi consultada no banco de teste.
+- Pendentes: credenciais OAuth próprias, callbacks/origens reais, cookies HTTPS no navegador e teste de autenticação ponta a ponta no domínio separado. O proxy público local não encaminha start/callback OAuth; estes permanecem no host de callback configurado.
+
+
+### Preservação da sessão durante falhas temporárias
+
+- Corrigido `print3dAccountClient.me()`: erro de rede, 429 e indisponibilidade da API não apagam mais a sessão 3D. Apenas resposta 401 encerra a sessão consultada; resposta atrasada não remove um token de login posterior.
+- A tela de conta trata a falha de consulta e exibe o erro, evitando rejeição não tratada. Quando o serviço volta, a sessão preservada permite consultar a conta novamente.
+- Dois testes de cliente cobrem matriz de erros e corrida entre sessões. O navegador via gateway HTTP local confirmou 503 com token preservado, recuperação após 200 e remoção após 401. Build independente passou.
+- Tudo local, API fixture; não altera duração de sessão, validação de senha, bloqueio de tentativas ou autenticação no servidor.
+
+
+### Cadastro pela vitrine independente até MySQL local
+
+- Teste opcional: definir `PRINT3D_MYSQL_ACCOUNT_BROWSER=1` e executar `npm run test:print3d:mysql`. O teste cria Vite/API em portas aleatórias, usa as rotas de contas reais e MySQL descartável e encerra os recursos próprios. Não usa sessão pré-fabricada para o cliente desse cenário.
+- Confirmou formulário de cadastro por e-mail, conta inicialmente não verificada, confirmação pelo link capturado, login com senha real e restauração da sessão após recarregar. Nenhuma chamada externa permitida.
+- Adicionada configuração explícita `PRINT3D_PUBLIC_TURNSTILE_SITE_KEY` no build separado, mapeada para a chave pública usada pelo cliente 3D. Segredo de validação continua somente no servidor; nenhum arquivo `.env` MDV é carregado.
+- Teste integrado e build passaram. Widget CAPTCHA, validação no provedor e envio de e-mail são simulados; CAPTCHA/entrega reais permanecem pendentes de homologação.
+
+
+### Cadastro WhatsApp pela interface até MySQL local
+
+- Ampliado o modo `PRINT3D_MYSQL_ACCOUNT_BROWSER=1`: o navegador sai da conta de e-mail, cadastra outra conta somente com WhatsApp/CPF, recebe código pelo adaptador local, testa código incorreto e confirma o correto.
+- Banco real descartável confirmou e-mail nulo, CPF correto e WhatsApp validado. A interface apresentou a confirmação após cadastro e após login separado por telefone e por CPF; sair removeu a sessão 3D.
+- Teste integrado passou por vitrine independente → proxy HTTP local → rotas reais → MySQL, sem interceptar as APIs. CAPTCHA e transporte de mensagens continuam simulados; nenhum WhatsApp real ou alteração de n8n ocorreu.
+
+
+### Autenticação real ligada ao checkout no MySQL local
+
+- Novo cenário `tmp-tests/print3d-account-checkout-mysql.cjs` é instalado no mesmo Fastify das contas reais. Usa sessões emitidas por login, validação de versão, checkout, reserva, plano e criação de OP canônicos.
+- Conta com e-mail confirmado e sem WhatsApp validado teve encomenda recusada (403), mesmo enviando campo de validação forjado no corpo. Estoque reservado permaneceu zero após a recusa. A mesma conta conseguiu comprar uma unidade pronta.
+- Conta com WhatsApp confirmado criou encomenda de duas peças; pedido ficou exclusivamente vinculado ao cliente 3D, OP aguardando entrada, ficha/arquivo corretos fixados. Entrada de 70% com frete proporcional resultou em 1750 centavos sobre total de 2500.
+- Sessão MDV inválida foi recusada e outra conta 3D recebeu 404 ao consultar o pedido alheio. Suíte MySQL passou.
+- Catálogo/frete e metadados NAS são fixtures locais; não houve cotação externa, cobrança, fabricação nem acesso a arquivo real.
+
+### Checkout pela vitrine independente até MySQL local
+
+- Corrigida a lista de rotas do proxy local: `POST /storefronts/loja_3d/quote` era bloqueado, impedindo conferir produtos e entrega. Rotas de outros canais e parâmetros extras continuam recusados.
+- O cenário opcional `PRINT3D_MYSQL_ACCOUNT_BROWSER=1` agora finaliza uma encomenda após cadastro e login reais pela interface. Todas as chamadas locais passam por HTTP até o Fastify e o MySQL descartável.
+- Exercita frete no saldo, frete inteiro na entrada, entrada abaixo de 50% bloqueada e entrada de 70% com frete proporcional. Confere pedido exclusivo do cliente 3D, OP com duas peças aguardando pagamento, carrinho limpo e consulta do pagamento após a criação.
+- Produtos do cenário usam SKU e quantidade, sem IMEI. A cotação do catálogo e da transportadora usa fixtures; autenticação, criação do pedido, plano financeiro e OP usam os serviços reais. Nenhuma cobrança externa é criada.
+
+### Acompanhamento de produção na vitrine independente
+
+- Ampliado o cenário MySQL/navegador para seguir o mesmo pedido criado na tela até a produção parcial e concluída. A conta autenticada consulta a rota real pelo proxy local; a API filtra exclusivamente suas OPs, mesmo havendo pedidos de outras contas no banco.
+- Antes da entrada, o apontamento administrativo é recusado. Após liquidação pelo serviço canônico com provedor simulado, a OP é liberada; entrada física de filamento e apontamentos usam serviços reais no MySQL descartável.
+- Verificações: uma de duas peças aparece como produção parcial, repetição do lançamento não duplica quantidade, peças ficam reservadas ao pedido e dados internos (observações, operador, ficha, arquivos, filamentos e perdas) não são expostos na resposta ao cliente.
+- O teste aguarda a atualização automática normal de 30 segundos para mostrar a segunda peça concluída; finalizar produção não quita o saldo. Nenhuma consulta externa, cobrança real ou alteração de produção foi feita.
+
+### Saldo e rastreamento pela vitrine independente
+
+- O mesmo cenário com conta real e pedido criado pela interface agora gera o PIX do saldo de 750 centavos pelos endpoints reais, usando exclusivamente um provedor simulado em memória.
+- Expedição recusada após finalizar a produção sem quitar o saldo. Clicar em “Já paguei” com provedor ainda pendente mantém o bloqueio. Após aprovação simulada e consulta pela interface, os dois recebimentos somam 2500 centavos e o pedido apresenta pagamento completo.
+- Expedição pela rota administrativa real registra as duas peças produzidas; repetir o envio com o mesmo rastreio não duplica a saída. A consulta autenticada da conta 3D mostra o código de rastreamento e saldo zero.
+- Suíte MySQL com `PRINT3D_MYSQL_ACCOUNT_BROWSER=1` passou, incluindo a jornada cadastro → checkout → produção parcial/concluída → saldo → rastreamento. Catálogo, transportadora, CAPTCHA, mensagens e provedor financeiro ainda são simulados; essa evidência não substitui homologação externa ou publicação.
+
+### Identificação de variantes 3D na vitrine
+
+- O seletor e a busca passaram a incluir material, cor, tamanho e acabamento dos atributos existentes do SKU. Aceitam nomes em português/inglês e diferenças de capitalização, ignoram valores vazios ou estruturados e mantêm SKU como alternativa quando não há características.
+- Textos da vitrine agora dizem “variações disponíveis” e “Escolha sua variação”, sem limitar as opções a material e cor. Não houve alteração no agrupamento por modelo nem no controle de estoque/preço por SKU.
+- Teste móvel pelo proxy HTTP local confirmou busca por acabamento, seleção da variante correspondente e troca entre peça pequena pronta (2500 centavos, dez unidades) e grande sob encomenda (3500 centavos, quatro dias úteis). Dados de catálogo são fixtures locais. Esta etapa melhora a apresentação de atributos já cadastrados; não cria nem homologa o cadastro administrativo de todas as combinações.
+
+### Características 3D no formulário administrativo
+
+- `ProductSpecifications` oferece material, tamanho e acabamento opcionais para SKU marcado como 3D, nos campos centrais `specs.material`, `specs.size` e `specs.finish`. Configuração da categoria, campos personalizados e valores do modelo têm prioridade; campos desativados não são reintroduzidos pelos padrões.
+- Cor reutiliza o seletor existente, com padrão visível para 3D sem lista explícita de campos. IMEI, serial, RAM, armazenamento, versão e saúde de bateria ficam ocultos quando `is_print3d` está marcado. Dados antigos não são apagados automaticamente.
+- Dois testes renderizam o componente real com dependências externas simuladas: verificam valores dos atributos, ausência de campos telefônicos em 3D, preservação desses campos em smartphone e respeito às configurações personalizadas. Cinco regressões existentes e build geral passaram.
+- Esta etapa não cria combinações em massa nem verifica gravação de um produto operacional; cadastro de variantes por SKU e homologação integral do formulário ainda exigem continuidade.
+
+### Isolamento das variantes 3D no serviço de produtos
+
+- Teste executando `productService.create/update/getById` com transporte VPS em memória reproduziu duas falhas: atributos RAM/armazenamento herdados do modelo podiam acionar sincronização de preço em outra peça 3D, e categoria serializada permitia reutilizar SKU de peça 3D.
+- Corrigido no serviço: fonte 3D não inicia sincronização de preços de aparelhos e produtos 3D são excluídos dos destinos dessa sincronização. Criação/edição 3D não usa a exceção de SKU duplicado para categorias serializadas.
+- Testes confirmam preservação de material/cor/tamanho/acabamento nos payloads e releitura, preço independente entre variantes, rejeição de SKU conflitante e funcionamento legado da sincronização entre aparelhos. Seis testes focados/regressivos e build geral passaram.
+- Limite da evidência: transporte de produtos simulado, sem MySQL ou operação real. A verificação de gravação integral pela API central e a auditoria de regras equivalentes do servidor continuam pendentes.
+
+### Isolamento 3D nos grupos de preço do servidor
+
+- Reproduzido e corrigido o mesmo risco no módulo `smartphonePriceGroups`: `is_print3d` exclui a peça da configuração de celular, da herança automática, da referência de preço e da listagem de grupos/incompletos. Consultas de produtos carregam explicitamente esse campo antes de filtrar.
+- Quinze testes focados passaram, cobrindo peças 3D com atributos de telefone herdados e peças sem RAM/armazenamento. As regras de preço dos aparelhos continuam testadas.
+- Novo cenário `print3d-price-isolation-mysql.cjs`, integrado à suíte MySQL descartável, executa as rotas reais de listagem e atualização de grupos: peça 3D não aparece como integrante, preço permanece após editar o grupo e transação de edição da peça mantém seu preço e características próprios. Suíte completa passou.
+- Nenhum banco operacional foi acessado. Esta evidência valida o módulo de grupos/preços com SQL real; não encerra a validação integral de todos os endpoints de cadastro ou a unicidade de SKU concorrente no servidor. Publicação requer schema 3D compatível, incluindo `products.is_print3d`.
+
+### Gravação 3D pelo handler de produtos com MySQL local
+
+- O teste MySQL agora usa o validador real `normalizePrint3dProductOffer` ao executar o handler extraído de `/products/batch`, além do SQL real e da reconciliação de estoque.
+- Confirmados: criação com material/cor/tamanho/acabamento e política de encomenda; edição parcial preservando a marca 3D/política; mudança de preço sem atingir outro SKU; prazo de encomenda inválido sem inserir produto.
+- Duas inclusões concorrentes com o mesmo SKU resultaram em uma gravação e uma recusa, preservando identidade/atributos/preço do vencedor e sem estoque para o perdedor. **Essa proteção foi exercitada com o índice único `test_batch_sku`, criado exclusivamente no banco de teste.** A busca nos arquivos locais de migrations/scripts/docs não confirmou índice equivalente operacional.
+- Pendente antes de garantir unicidade em produção: verificar o schema real e definir a restrição compatível com SKUs legados/serializados. Não aplicar índice global sem verificar duplicidades existentes. O teste usa autenticação e consultas de conflitos serializados simuladas; não houve gravação operacional.
+
+### Auditoria somente leitura de SKU preparada
+
+- `scripts/audit-print3d-sku.cjs` exporta `auditPrint3dSku(connection)`. O chamador deve fornecer uma conexão explicitamente selecionada; o módulo não carrega `.env`, não conecta automaticamente e executa somente SELECTs.
+- Retorna presença de índice único global completo sobre SKU, contagem de SKUs nulos/vazios em 3D e grupos de SKU duplicados envolvendo produto 3D (inclusive conflito com produto legado). Não retorna SKUs, dados pessoais ou credenciais. Ausência das colunas necessárias encerra a auditoria com motivo explícito.
+- Índices compostos, parciais e não únicos não são tratados como prova de unicidade global. A sinalização `ready` refere-se exclusivamente a essas condições de SKU; não certifica abertura da loja ou ausência de riscos em outros fluxos. Ausência de índice não autoriza criá-lo automaticamente.
+- Dois testes focados e a suíte MySQL descartável passaram. O cenário remove apenas o índice do banco de teste, cria conflitos fictícios e confirma os alertas. A auditoria ainda não foi executada no banco operacional e não está ligada automaticamente à publicação.
+
+### Identificação da variante no carrinho
+
+- Carrinho passa a mostrar material/cor/tamanho/acabamento junto ao SKU. Os controles acessíveis de aumentar/diminuir quantidade incluem características e SKU, diferenciando produtos de mesmo nome.
+- A função existente da vitrine foi extraída para `utils/print3dVariantLabel.js` e compartilhada pelo carrinho, evitando duas regras de descrição. Somente atributos comerciais previstos entram no texto; campos internos arbitrários e valores estruturados são ignorados.
+- Teste móvel percorreu busca por acabamento, troca de variante, inclusão no carrinho e aumento de quantidade com recotação pelo proxy local. Teste da descrição e build separado passaram.
+- Para pedidos novos, o servidor lê `products.specs` na cotação e copia somente material, cor, tamanho e acabamento para `print3d_order_item_plans.variant_snapshot` na mesma transação do checkout. O hash do plano torna o resumo imutável e o token de frete detecta alteração dessas características entre cotação e confirmação.
+- Pedido e ordem de produção leem exclusivamente o snapshot do item, inclusive nas telas do cliente; não buscam a variante atual do catálogo. A migration `051_print3d_order_variant_snapshot.sql` deixa pedidos anteriores com valor nulo, pois não há como inferir suas características históricas com segurança.
+- Testes locais passaram: rota real de cotação limita atributos públicos, teste de plano valida imutabilidade, build separado e jornada navegador → proxy → API → MySQL descartável verifica pedido/produção após alteração posterior do catálogo. A migration foi aplicada apenas ao banco descartável do teste; publicação e banco operacional ainda não foram alterados.
+
+### Categoria obrigatória por site antes da publicação
+
+- A tela de `Sites e preços` carrega as categorias já cadastradas e apresenta uma seleção independente no cartão do Mercado do Vale e no cartão da Loja 3D. O mesmo SKU pode escolher categorias diferentes nos dois sites.
+- Ao marcar uma oferta como publicada, o botão permanece bloqueado até selecionar a categoria. A API também rejeita publicação sem `category_label`, impedindo contorno da trava do painel; rascunhos e ofertas ocultas continuam podendo ser salvos sem categoria.
+- A tela mantém categorias já gravadas que não estejam mais na lista e oferece acesso ao cadastro de categorias. Testes focados da regra/rotas e os builds do sistema principal e da aplicação 3D passaram. Nenhum dado operacional ou publicação foi alterado.

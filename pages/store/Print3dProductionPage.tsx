@@ -29,7 +29,7 @@ export default function Print3dProductionPage() {
     return () => { active = false; window.clearInterval(timer); refresh.current = () => {}; };
   }, [demo]);
   const suffix = demo ? '?demo=1' : '';
-  return <main className="min-h-screen bg-[#f7f7f2] px-4 py-8 text-stone-800 sm:px-6"><div className="mx-auto max-w-3xl">
+  return <main className="min-h-screen bg-[var(--print3d-surface)] px-4 py-8 text-stone-800 sm:px-6"><div className="mx-auto max-w-3xl">
     <Link to={'/loja-3d/conta' + suffix} className="text-sm text-stone-600">← Minha conta</Link>
     <div className="my-7 flex flex-wrap items-center justify-between gap-4"><div><h1 className="text-3xl font-semibold tracking-tight">Minhas encomendas</h1><p className="mt-2 text-sm text-stone-600">Acompanhe as unidades produzidas e aprovadas.</p></div>
       <button disabled={busy} onClick={() => refresh.current()} className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm disabled:opacity-50">{busy ? 'Atualizando…' : 'Atualizar'}</button></div>

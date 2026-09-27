@@ -6,6 +6,7 @@ const servers = ['server.js', 'vps_server.js', 'vps_server.cjs'].map((file) => (
   file,
   source: readFileSync(file, 'utf8'),
 }));
+const priorityStockDecrement = readFileSync('services/priorityStockDecrement.cjs', 'utf8');
 const types = readFileSync('types/stock-location.ts', 'utf8');
 const saleDetails = readFileSync('components/admin/sales/SaleDetailsModal.tsx', 'utf8');
 
@@ -27,17 +28,23 @@ assert.match(
   'PDV sales must leave a warning when stock is decremented outside the main store'
 );
 
-for (const server of servers) {
-  assert.match(
-    server.source,
-    /sd\.name AS deposit_name[\s\S]*sl\.name AS location_name/,
-    `${server.file}: priority decrement sources must include human-readable deposit and location names`
-  );
+assert.match(
+  priorityStockDecrement,
+  /sd\.name AS deposit_name[\s\S]*sl\.name AS location_name/,
+  'priority decrement sources must include human-readable deposit and location names'
+);
 
+assert.match(
+  priorityStockDecrement,
+  /deposit_name:source\.deposit_name[\s\S]*location_name:source\.location_name/,
+  'priority decrement response must return the source location names used by the sale'
+);
+
+for (const server of servers.filter(({ file }) => file.startsWith('vps_server.'))) {
   assert.match(
     server.source,
-    /deposit_name: source\.deposit_name[\s\S]*location_name: source\.location_name/,
-    `${server.file}: priority decrement response must return the source location names used by the sale`
+    /require\('\.\/services\/priorityStockDecrement\.cjs'\)\.decrementPriorityStock/,
+    `${server.file}: priority decrement route must delegate to the transactional service`
   );
 }
 

@@ -52,10 +52,12 @@ export function buildPrint3dRecipeDraft(input) {
   const supplies = (input.supplies ?? []).map((entry) => ({
     id: safeSegment(entry?.id, 'ID do insumo'),
     name: String(entry?.name ?? '').trim(),
+    unitLabel: String(entry?.unitLabel ?? 'un').trim(),
     quantity: nonNegative(entry?.quantity, 'Quantidade do insumo', true),
     unitCostCents: safeCents(entry?.unitCostCents, 'Preço do insumo'),
   }));
-  if (supplies.some((entry) => !entry.name)) throw new TypeError('Informe o nome de cada insumo.');
+  if (supplies.some((entry) => !entry.name || !entry.unitLabel || entry.unitLabel.length > 40 || /[\x00-\x1f]/.test(entry.unitLabel))) throw new TypeError('Informe nome e unidade de cada insumo.');
+  if (new Set(supplies.map(entry => entry.id)).size !== supplies.length) throw new TypeError('A ficha contém o mesmo insumo mais de uma vez.');
   const cost = input.cost;
   if (!cost || typeof cost !== 'object') throw new TypeError('Calcule o custo antes de exportar a ficha.');
   const costFields = ['filamentCents', 'energyCents', 'machineCents', 'laborCents', 'suppliesCents', 'batchCents', 'unitCents'];
@@ -70,6 +72,7 @@ export function buildPrint3dRecipeDraft(input) {
     energyCentsPerKwh: safeCents(rates.energyCentsPerKwh, 'Tarifa de energia'),
     machineCentsPerHour: safeCents(rates.machineCentsPerHour, 'Uso da máquina'),
     laborCentsPerHour: safeCents(rates.laborCentsPerHour, 'Mão de obra por hora'),
+    ...(rates.taxPercent !== undefined ? { taxPercent: nonNegative(rates.taxPercent, 'Imposto') } : {}),
   };
   const recomputed = calculatePrint3dCost({
     pieces, printMinutes, laborMinutes, ...rateSnapshot,

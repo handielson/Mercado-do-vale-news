@@ -14,6 +14,27 @@ const input = {
   supplies: [{ quantity: 3, unitCostCents: 20 }],
 };
 
+test('simulação avulsa calcula somente gramas sem SKU, JSON, tempo ou custos adicionais', () => {
+  const cost = calculatePrint3dCost({ pieces: 2, printMinutes: 0, printerWatts: 0, energyCentsPerKwh: 0, machineCentsPerHour: 0, laborMinutes: 0, laborCentsPerHour: 0,
+    filaments: [{ consumedGrams: 50, spoolGrams: 1000, spoolCostCents: 10000 }] });
+  assert.equal(cost.filamentCents, 500);
+  assert.equal(cost.batchCents, 500);
+  assert.equal(cost.unitCents, 250);
+});
+
+test('embalagem por peça integra o lote e imposto é provisionado sobre a venda, sem alterar custo', () => {
+  const base = calculatePrint3dCost(input);
+  const cost = calculatePrint3dCost({ ...input, supplies: [...input.supplies, { quantity: 3, unitCostCents: 100 }], taxPercent: 10 });
+  assert.equal(cost.batchCents, base.batchCents + 300);
+  assert.equal(cost.minimumBatchSaleCents, 6362);
+  assert.equal(cost.estimatedTaxCents, 637);
+  assert.equal(cost.minimumUnitSaleCents, 2121);
+  assert.equal(base.minimumBatchSaleCents, base.batchCents);
+  for (const taxPercent of [-1, 100, 101, NaN, Infinity]) {
+    assert.throws(() => calculatePrint3dCost({ ...input, taxPercent }));
+  }
+});
+
 test('custo completo da impressão é calculado por lote e por peça', () => {
   const cost = calculatePrint3dCost(input);
   assert.deepEqual(

@@ -33,6 +33,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const { user, customer, signOut } = useVpsAuth();
   const { settings } = useTheme();
   const location = useLocation();
+  const isPrint3dArea = location.pathname.startsWith('/admin/loja-3d/') || /^\/admin\/products\/print3d-(cost|production)$/.test(location.pathname);
   const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
 
   const [search, setSearch] = useState('');
@@ -78,6 +79,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     let active = true;
+    if (isPrint3dArea) { setBotHealth(null); return; }
     const refresh = async () => {
       try {
         const status = await vpsClient.get<BotHealth>('/admin/bot-health');
@@ -89,7 +91,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     void refresh();
     const timer = window.setInterval(refresh, 30_000);
     return () => { active = false; window.clearInterval(timer); };
-  }, []);
+  }, [isPrint3dArea]);
 
   function handleMenuSearchChange(event: React.ChangeEvent<HTMLInputElement>) {
     const nextSearch = event.target.value;
@@ -98,7 +100,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const menuGroups = useMemo(() => [
     {
-      title: 'Atendimento',
+      title: 'Mercado do Vale · Atendimento',
       items: [
         { to: '/admin', icon: <LayoutDashboard size={18} />, label: 'Dashboard', keywords: 'inicio home painel' },
         { to: '/admin/pdv', icon: <ShoppingCart size={18} />, label: 'PDV', keywords: 'caixa venda rapida balcao' },
@@ -108,11 +110,21 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       ]
     },
     {
+      title: 'Loja 3D',
+      items: [
+        { to: '/admin/loja-3d/clientes', icon: <Users size={18} />, label: 'Clientes 3D', keywords: 'contas cadastro email whatsapp' },
+        { to: '/admin/loja-3d/pedidos', icon: <ShoppingBag size={18} />, label: 'Pedidos 3D', keywords: 'encomendas entrada saldo pagamento' },
+        { to: '/admin/loja-3d/producao', icon: <Printer size={18} />, label: 'Produção 3D', keywords: 'ordens fila progresso lotes aprovadas rejeitadas' },
+        { to: '/admin/loja-3d/calculadora', icon: <Printer size={18} />, label: 'Calculadora 3D', keywords: 'filamento impressao custo energia insumos' },
+        { to: '/admin/loja-3d/catalogo', icon: <Store size={18} />, label: 'Catálogo e preços 3D', keywords: 'produtos publicar visibilidade oferta' },
+        { to: '/admin/loja-3d/banners', icon: <Image size={18} />, label: 'Banners 3D', keywords: 'imagens carrossel' },
+      ]
+    },
+    {
       title: 'Produtos & Estoque',
       items: [
         { to: '/admin/products', icon: <Package size={18} />, label: 'Produtos', keywords: 'catalogo itens mercadoria' },
-        { to: '/admin/products/print3d-cost', icon: <Printer size={18} />, label: 'Calculadora 3D', keywords: 'filamento impressao custo energia insumos' },
-        { to: '/admin/products/print3d-production', icon: <Printer size={18} />, label: 'Produção 3D', keywords: 'ordens fila progresso lotes aprovadas rejeitadas encomenda' },
+        { to: '/admin/products/storefronts', icon: <Globe size={18} />, label: 'Publicação nos sites', keywords: 'precos canais lojas publicar' },
         { to: '/admin/inventory', icon: <ClipboardList size={18} />, label: 'Estoque', keywords: 'quantidade inventario' },
         { to: '/admin/inventory/locations', icon: <Boxes size={18} />, label: 'Locais de Estoque', keywords: 'depositos locais prateleira caixa balcao almoxarifado' },
         { to: '/admin/products/labels', icon: <Barcode size={18} />, label: 'Etiquetas', keywords: 'imprimir etiqueta codigo barras ean sku' },
@@ -232,8 +244,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     : '';
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50" data-admin-layout-build="2026-06-14-assets-refresh">
-      <SaleAlerts />
+    <div className={cn("min-h-screen flex flex-col md:flex-row bg-slate-50", isPrint3dArea && "print3d-admin")} data-storefront={isPrint3dArea ? 'loja_3d' : 'mercado_do_vale'} data-admin-layout-build="2026-06-14-assets-refresh">
+      {!isPrint3dArea && <SaleAlerts />}
       {certificatePopupOpen && certificateAlerts.length > 0 && <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/60 p-4" role="presentation"><div role="alertdialog" aria-modal="true" aria-labelledby="certificate-alert-title" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><h2 id="certificate-alert-title" className="text-xl font-bold text-amber-900">Certificado digital próximo do vencimento</h2><p className="mt-2 text-sm text-slate-700">Revise a renovação dos certificados destas empresas:</p><ul className="mt-3 space-y-2">{certificateAlerts.map(item => <li key={item.companyId} className="rounded-lg bg-amber-50 p-3 text-sm"><strong>{item.companyName}</strong> · {item.daysRemaining! < 0 ? 'vencido' : `faltam ${item.daysRemaining} dia(s)`} · validade {new Date(item.validUntil + 'T12:00:00').toLocaleDateString('pt-BR')}</li>)}</ul><div className="mt-5 flex flex-wrap gap-3"><Link to="/admin/settings/company#fiscal" onClick={() => setCertificatePopupOpen(false)} className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white">Ver certificados</Link><button type="button" className="rounded-lg border px-4 py-2 text-sm" onClick={() => { const today = new Date().toISOString().slice(0, 10); const fingerprint = certificateAlerts.map(item => `${item.companyId}:${item.validUntil}`).join('|'); sessionStorage.setItem('mdv-certificate-alert-dismissed', `${today}:${fingerprint}`); setCertificatePopupOpen(false); }}>Lembrar na próxima sessão</button></div></div></div>}
       {DEV_MODE && (
         <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black px-4 py-2 text-center text-sm font-bold z-[100] shadow-lg">
@@ -245,8 +257,10 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         DEV_MODE ? "md:top-10 md:h-[calc(100vh-2.5rem)]" : ""
       )}>
         <div className="px-2 pb-2">
-          <Link to="/" target="_blank" title="Ver Loja" className="block hover:opacity-80 transition-opacity">
-            {settings.logo_dark || settings.logo_main ? (
+          <Link to={isPrint3dArea ? '/loja-3d' : '/'} target="_blank" title={isPrint3dArea ? 'Ver Loja 3D' : 'Ver Loja'} className="block hover:opacity-80 transition-opacity">
+            {isPrint3dArea ? (
+              <div className="flex items-center gap-3 text-violet-100"><Printer size={28} className="text-violet-300" /><span className="text-xl font-bold tracking-tight">Loja 3D</span></div>
+            ) : settings.logo_dark || settings.logo_main ? (
               <img src={settings.logo_dark || settings.logo_main} alt={settings.company_name} className="h-10 object-contain" />
             ) : (
               <h1 className="text-xl font-bold tracking-tighter text-blue-400">
@@ -285,7 +299,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           ) : (
             filteredGroups.map((group, groupIndex) => (
               <div key={groupIndex} className="mb-4">
-                <div className="pt-2 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">
+                <div className={cn("pt-2 pb-2 px-3 text-[10px] font-bold uppercase tracking-widest", group.title === 'Loja 3D' ? 'text-violet-200 bg-violet-500/10 rounded-lg border-l-2 border-violet-400' : 'text-slate-400 bg-transparent')}>
                   {group.title}
                 </div>
                 {group.items.map((item, itemIndex) => {
@@ -313,7 +327,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold uppercase tracking-widest text-slate-500">Versao</span>
-              <span className="font-mono text-blue-300">{appVersion.version}</span>
+              <span className={cn("font-mono", isPrint3dArea ? "text-violet-300" : "text-blue-300")}>{appVersion.version}</span>
             </div>
             {appVersion.release_vps && (
               <p className="mt-1 truncate font-mono text-[9px] text-slate-600">
@@ -326,7 +340,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         {user && (
           <div className="pt-4 border-t border-slate-800">
             <div className="flex items-center gap-3 mb-4 px-2">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-xs font-bold shadow-lg">
+              <div className={cn("w-9 h-9 rounded-xl bg-gradient-to-br flex items-center justify-center text-xs font-bold shadow-lg", isPrint3dArea ? "from-violet-500 to-violet-700" : "from-blue-500 to-blue-700")}>
                 {customer?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
               </div>
               <div className="flex-1 overflow-hidden">
@@ -344,7 +358,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         )}
       </aside>
       <main className="flex-1 p-4 md:p-10 overflow-y-auto w-full md:w-auto overflow-x-hidden">
-        {botHealth?.status === 'offline' && (
+        {isPrint3dArea && <div className="mb-5 flex items-center gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 text-violet-900"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-700"><Printer size={20} /></span><div><p className="text-sm font-bold">Loja 3D</p><p className="text-xs text-violet-700">Área de gestão da loja 3D · estoque central compartilhado</p></div></div>}
+        {!isPrint3dArea && botHealth?.status === 'offline' && (
           <div role="alert" className="mb-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 shadow-sm">
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 flex-none text-red-600" />
@@ -368,11 +383,11 @@ const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; acti
     className={cn(
       "flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 group",
       active
-        ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-        : "hover:bg-slate-800 text-slate-400 hover:text-white"
+        ? to.startsWith('/admin/loja-3d/') ? "bg-violet-700 text-white shadow-lg shadow-violet-700/20" : "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+        : to.startsWith('/admin/loja-3d/') ? "hover:bg-violet-500/15 text-violet-200 hover:text-white" : "hover:bg-slate-800 text-slate-400 hover:text-white"
     )}
   >
-    <span className={cn("transition-transform group-hover:scale-110", active ? "text-white" : "text-slate-500 group-hover:text-blue-400")}>
+    <span className={cn("transition-transform group-hover:scale-110", active ? "text-white" : to.startsWith('/admin/loja-3d/') ? "text-violet-300 group-hover:text-violet-100" : "text-slate-500 group-hover:text-blue-400")}>
       {icon}
     </span>
     <span className="font-semibold text-sm tracking-tight">{label}</span>

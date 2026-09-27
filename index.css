@@ -2,6 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Identidade da loja 3D. Cores semânticas de erro, aviso e sucesso são preservadas. */
+:root {
+    --print3d-accent: #6d28d9;
+    --print3d-accent-hover: #5b21b6;
+    --print3d-surface: #f5f3ff;
+    --print3d-border: #ddd6fe;
+}
+
+.print3d-admin {
+    background-color: var(--print3d-surface);
+}
+.print3d-admin > aside {
+    background-color: #21143b;
+}
+.print3d-admin > main {
+    border-top: 4px solid var(--print3d-accent);
+}
+.print3d-admin main :is(button, a):is(.bg-blue-600, .bg-blue-700, .bg-slate-900) {
+    background-color: var(--print3d-accent);
+    color: white;
+}
+.print3d-admin main :is(button, a):is(.bg-blue-600, .bg-blue-700, .bg-slate-900):hover {
+    background-color: var(--print3d-accent-hover);
+}
+.print3d-admin main :is(a, button):is(.text-blue-600, .text-blue-700) {
+    color: var(--print3d-accent);
+}
+.print3d-admin main .bg-blue-50 {
+    background-color: var(--print3d-surface);
+}
+.print3d-admin main .border-blue-200 {
+    border-color: var(--print3d-border);
+}
+.print3d-admin aside input:focus {
+    --tw-ring-color: #a78bfa;
+    border-color: #a78bfa;
+}
+.print3d-admin main :is(input, select, textarea):focus-visible {
+    outline: 2px solid var(--print3d-accent);
+    outline-offset: 2px;
+}
+.print3d-admin main .bg-gray-50 {
+    background-color: var(--print3d-surface);
+}
+
 /* Print Styles for Customer Card */
 @media print {
 

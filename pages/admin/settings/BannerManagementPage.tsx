@@ -5,8 +5,9 @@ import { BannerForm } from '@/components/admin/BannerForm';
 import { bannerService, type BannerStats } from '@/services/bannerService';
 import type { CatalogBanner } from '@/types/catalog';
 
-const BannerManagementPage: React.FC = () => {
-    const [storefront, setStorefront] = useState<'mercado_do_vale' | 'loja_3d'>('mercado_do_vale');
+const BannerManagementPage: React.FC<{ fixedStorefront?: 'mercado_do_vale' | 'loja_3d' }> = ({ fixedStorefront }) => {
+    const [selectedStorefront, setStorefront] = useState<'mercado_do_vale' | 'loja_3d'>('mercado_do_vale');
+    const storefront = fixedStorefront ?? selectedStorefront;
     const loadVersion = useRef(0);
     const [banners, setBanners] = useState<CatalogBanner[]>([]);
     const [stats, setStats] = useState<BannerStats | null>(null);
@@ -142,11 +143,11 @@ const BannerManagementPage: React.FC = () => {
     return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-6xl mx-auto">
-                <label className="mb-6 block font-medium">Banners do site
+                {fixedStorefront ? <p className="mb-6 font-medium">Banners · {storefront === 'loja_3d' ? 'Loja 3D' : 'Mercado do Vale'}</p> : <label className="mb-6 block font-medium">Banners do site
                     <select aria-label="Banners do site" value={storefront} onChange={e => { setBanners([]); setStats(null); setStorefront(e.target.value as 'mercado_do_vale' | 'loja_3d'); }} className="ml-3 rounded-lg border p-2">
                         <option value="mercado_do_vale">Mercado do Vale</option><option value="loja_3d">Loja 3D</option>
                     </select>
-                </label>
+                </label>}
 
                 {/* Header */}
                 <div className="mb-8">

@@ -1,7 +1,7 @@
 -- Preparação local após 034-041. Não aplicar sem backup e autorização.
 -- Pedidos, itens e reservas usam as tabelas centrais existentes.
 CREATE TABLE IF NOT EXISTS print3d_checkout_requests (
-  customer_id CHAR(36) NOT NULL,
+  customer_id CHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   idempotency_key CHAR(36) NOT NULL,
   payload_hash CHAR(64) NOT NULL,
   order_id CHAR(36) NOT NULL,
