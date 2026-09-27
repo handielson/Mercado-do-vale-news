@@ -1,19 +1,16 @@
 {
-  "version": "v1.2.486-ml-vinculos",
+  "version": "v1.2.487-ml-link",
   "date": "2026-09-27",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260927-180730-ml-vinculos",
   "branch": "main",
-  "summary": "Busca de anuncios Mercado Livre e conferencia dos vinculos por SKU, preservando vinculos existentes.",
-  "tag": "v1.2.486-ml-vinculos",
+  "tag": "v1.2.487-ml-link",
+  "release_vps": "/var/www/mdv-site/releases/20260927-181611-ml-link",
+  "summary": "Link de conferencia do anuncio Mercado Livre em nova aba.",
   "changed_files": [
-    "services/mercadoLivreServer.cjs",
-    "services/mercadoLivreService.ts",
-    "pages/admin/settings/MercadoLivrePage.tsx",
     "pages/admin/settings/components/MercadoLivreLinkReview.tsx",
-    "tmp-tests/mercado-livre-product-links.test.cjs",
+    "tmp-tests/mercado-livre-integration-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-09-27-v1.2.486-ml-vinculos.md"
+    "docs/versoes/2026-09-27-v1.2.487-ml-link.md"
   ]
 }

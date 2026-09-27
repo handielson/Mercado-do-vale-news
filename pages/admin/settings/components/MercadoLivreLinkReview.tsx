@@ -75,6 +75,13 @@ export default function MercadoLivreLinkReview({ connected }: { connected: boole
       const key = keyOf(row), product = choices[key];
       return <article key={key} className="space-y-2 rounded-lg border p-4 text-sm">
         <h3 className="font-semibold">{row.title} · {row.itemId}</h3>
+        {/^(MLB)(\d+)$/.test(row.itemId) && <a
+          href={`https://produto.mercadolivre.com.br/${row.itemId.replace(/^MLB/, 'MLB-')}-_JM`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Conferir anúncio ${row.itemId} no Mercado Livre (abre em nova aba)`}
+          className="inline-flex items-center gap-1 font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900"
+        >Conferir no Mercado Livre ↗</a>}
         <p>{row.variation || 'Sem variação'}{row.variationId && ` · ID ${row.variationId}`} · Status no Mercado Livre: {row.status}</p>
         <p>SKU no anúncio: {row.sku || 'não informado'} · <strong>{labels[row.match]}</strong></p>
         {row.existing.length ? <p className="text-green-800">Vínculo preservado: {row.existing.map(link => link.sku || link.productId).join(', ')}</p> : <>

@@ -42,3 +42,8 @@ assert.ok(printer.includes("require('./mercado-livre-print-agent.cjs').startMerc
 assert.ok(printer.includes('getSettings: getCompanySettings'), 'deve reutilizar configuracao existente das impressoras');
 
 console.log('Mercado Livre integration static contract: OK');
+
+const linkReview = fs.readFileSync('pages/admin/settings/components/MercadoLivreLinkReview.tsx', 'utf8');
+assert.ok(linkReview.includes('https://produto.mercadolivre.com.br/${row.itemId.replace(/^MLB/, \'MLB-\')}-_JM'), 'conferencia deve abrir o anuncio especifico pelo ID');
+assert.ok(linkReview.includes('Conferir no Mercado Livre'), 'link de conferencia ausente');
+assert.ok(linkReview.includes('target="_blank"') && linkReview.includes('rel="noopener noreferrer"'), 'anuncio deve abrir em nova aba com isolamento');
