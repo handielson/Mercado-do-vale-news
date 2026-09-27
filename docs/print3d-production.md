@@ -29,16 +29,16 @@ O plano novo permite entrada de 50% a 100% de todos os produtos, inclusive os pr
 - `services/print3dOrderPlan.cjs`: plano e confirmações internas.
 - `services/print3dProduction.cjs`: criação/liberação/apontamento e projeções.
 - `services/print3dProductionServer.cjs`: rotas admin e consulta cliente.
-- Migrations preparadas: 040 (jobs/events), 041 (plans/item_plans/payment_receipts), 046 (saída de peças reservada por pedido), 047 (consumo real de material por lançamento), 048 (saldo físico e movimentos de filamentos), 049 (expedição única por pedido) e 050 (saldo físico e movimentos dos demais insumos). Dependem do schema central e migrations 028–035 relevantes. Nenhuma foi aplicada aqui.
+- Migrations 028–051 aplicadas no banco operacional em 27/09/2026, após backup integral e restauração fiel em MySQL 8.4 descartável. As estruturas de produção incluem 040 (jobs/events), 041 (plans/item_plans/payment_receipts), 046 (saída reservada por pedido), 047 (consumo real), 048 (filamentos), 049 (expedição) e 050 (demais insumos). Todas as habilitações 3D permanecem desligadas.
 - Tabelas novas bloqueadas no CRUD genérico das duas entradas VPS. Nenhuma rota pública cria, libera ou altera financeiramente OPs.
 - `MDV_PRINT3D_PRODUCTION_ENABLED` continua desligada. Não ativar antes de homologar checkout/gateway em MySQL de teste e resolver cancelamento/expiração de reservas.
-- `MDV_PRINT3D_DISPATCH_ENABLED` também fica desligada e depende do checkout habilitado. Aplicar a migration 049 e validar um pedido misto em MySQL isolado antes de ativar. A emissão fiscal e a entrega à transportadora continuam passos operacionais separados.
+- `MDV_PRINT3D_DISPATCH_ENABLED` também fica desligada e depende do checkout habilitado. A migration 049 está aplicada; ainda é necessário validar um pedido misto piloto antes de ativar. A emissão fiscal e a entrega à transportadora continuam passos operacionais separados.
 
 ## Pendências após este incremento
 
 Homologação do checkout transacional e gateway de duas cobranças, cancelamento/expiração/liberação de reservas, estorno/retificação de apontamento, seleção de impressora/capacidade e dados fiscais. A abertura privada do arquivo pela OP está preparada localmente, mas depende da configuração real do Synology e de um teste com arquivo físico. Os saldos de filamentos e insumos, a baixa pela produção e a expedição paga com consumo das reservas ainda exigem teste em MySQL real, saldo inicial conferido e operação piloto. Cada insumo usa a unidade informada na calculadora, preservada na revisão; mudar sua unidade com saldo positivo impede novas entradas até reconciliação. Detalhes do incremento em `docs/print3d-checkout.md`.
 
-Os testes atuais usam banco/provedor simulados e navegador local com rede externa bloqueada. Eles não comprovam migrations ou concorrência em MySQL real.
+Os fluxos funcionais usam provedor simulado e navegador local com rede externa bloqueada. A compatibilidade do schema foi comprovada restaurando o backup integral do banco operacional em MySQL 8.4 descartável e aplicando 028–051 nessa cópia; isso não homologa gateway, NAS, transportadora nem operação comercial real.
 
 Entradas de filamento e acessórios foram validadas com concorrência no MySQL descartável. A consulta do movimento por chave passou a usar leitura com trava (`FOR UPDATE`), evitando snapshot desatualizado após aguardar o saldo e retornando replay na segunda tentativa simultânea. Teste adicional executou os serviços de consumo na mesma transação de um evento real: falta de acessório reverteu filamento/evento e duas transações competindo por saldo insuficiente para ambas confirmaram apenas uma. A transação é montada pelo teste; ainda falta homologar a rota completa de apontamento com receita/pagamento e interface autenticada.
 
