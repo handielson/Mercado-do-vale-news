@@ -5,6 +5,98 @@ const ML_AUTH_ORIGIN = 'https://auth.mercadolivre.com.br';
 const DEFAULT_REDIRECT_URL = 'https://www.mercadodovale.com.br/api/mercado-livre/oauth/callback';
 let refreshPromise = null;
 
+function listingRows(item) {
+  const skuOf = source => String(source?.attributes?.find(a => a.id === 'SELLER_SKU')?.value_name || source?.seller_sku || source?.seller_custom_field || '').trim();
+  const variants = Array.isArray(item.variations) && item.variations.length ? item.variations : [null];
+  return variants.map(variant => ({
+    itemId: String(item.id), variationId: variant ? String(variant.id) : '', title: String(item.title || ''),
+    status: String(item.status || ''), sku: skuOf(variant || item),
+    variation: (variant?.attribute_combinations || []).map(a => `${a.name}: ${a.value_name}`).join(' · '),
+  }));
+}
+
+function suggestListingLinks(rows, products, links) {
+  return rows.map(row => {
+    const existing = links.filter(link => link.item_id === row.itemId && String(link.variation_id || '') === row.variationId);
+    const candidates = row.sku ? products.filter(product => String(product.sku || '').trim() === row.sku && !Number(product.is_parent)) : [];
+    return { ...row, existing: existing.map(link => ({ productId: link.product_id, sku: link.seller_sku })),
+      candidates: candidates.map(product => ({ id: product.id, sku: product.sku, name: product.name })),
+      match: existing.length ? 'linked' : !row.sku ? 'missing_sku' : candidates.length === 1 ? 'unique' : candidates.length > 1 ? 'ambiguous' : 'not_found' };
+  });
+}
+
+function createListingHandlers({ pool, settings: settingsFor, request }) {
+  const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
+  const account = async () => {
+    const settings = await settingsFor();
+    if (!/^\d+$/.test(String(settings.user_id || ''))) throw fail('Conecte a conta do Mercado Livre.', 409);
+    return String(settings.user_id);
+  };
+  const getItem = async (id, seller) => {
+    const item = await request(`/items/${encodeURIComponent(id)}?include_attributes=all`);
+    if (String(item.seller_id) !== seller || String(item.id) !== id) throw fail('Anúncio não pertence à conta conectada.', 409);
+    return item;
+  };
+  return {
+    async discover(req) {
+      const seller = await account();
+      const cursor = req.query?.cursor;
+      if (cursor !== undefined && (typeof cursor !== 'string' || cursor.length > 4096)) throw fail('Cursor inválido.');
+      const query = new URLSearchParams({ search_type: 'scan', limit: '20' });
+      if (cursor) query.set('scroll_id', cursor);
+      const search = await request(`/users/${seller}/items/search?${query}`);
+      const ids = search.results ?? [];
+      if (!Array.isArray(ids) || ids.length > 20 || ids.some(id => !/^MLB\d+$/.test(id))) throw fail('Resposta inesperada na busca de anúncios.', 502);
+      const rows = [];
+      const errors = [];
+      for (let offset = 0; offset < ids.length; offset += 5) {
+        const batch = ids.slice(offset, offset + 5);
+        const results = await Promise.allSettled(batch.map(id => getItem(id, seller)));
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled') rows.push(...listingRows(result.value));
+          else errors.push({ itemId: batch[index], error: 'Não foi possível consultar este anúncio. Reinicie a busca para tentar novamente.' });
+        });
+      }
+      const skus = [...new Set(rows.map(row => row.sku).filter(Boolean))];
+      const [products] = skus.length ? await pool.query(`SELECT id,sku,name,is_parent FROM products WHERE sku IN (${skus.map(() => '?').join(',')})`, skus) : [[]];
+      const [links] = ids.length ? await pool.query(`SELECT product_id,item_id,variation_id,seller_sku FROM mercado_livre_products WHERE item_id IN (${ids.map(() => '?').join(',')})`, ids) : [[]];
+      return { items: suggestListingLinks(rows, products, links), errors, sellerId: seller, total: Number(search.paging?.total || 0),
+        nextCursor: ids.length && search.scroll_id ? String(search.scroll_id) : null };
+    },
+    async candidates(req) {
+      const q = String(req.query?.q || '').trim();
+      if (q.length < 2 || q.length > 120) throw fail('Digite de 2 a 120 caracteres para buscar o produto.');
+      const [items] = await pool.query('SELECT id,sku,name FROM products WHERE COALESCE(is_parent,0)=0 AND (LOCATE(?,sku)>0 OR LOCATE(?,name)>0) ORDER BY sku,id LIMIT 25', [q, q]);
+      return { items };
+    },
+    async link(req) {
+      const body = req.body || {};
+      const productId = String(body.productId || '');
+      const itemId = String(body.itemId || '').trim().toUpperCase();
+      const variationId = String(body.variationId || '').trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId) || !/^MLB\d+$/.test(itemId) || !/^\d*$/.test(variationId)) throw fail('Produto, anúncio ou variação inválidos.');
+      const seller = await account();
+      const item = await getItem(itemId, seller);
+      if (!listingRows(item).some(row => row.variationId === variationId)) throw fail('Selecione uma variação válida deste anúncio.');
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        // Serialize manual linking and prevent replacing an existing assignment.
+        const [accounts] = await connection.query('SELECT user_id FROM mercado_livre_settings WHERE id=1 FOR UPDATE');
+        if (String(accounts[0]?.user_id) !== seller) throw fail('Conta alterada durante a conferência. Busque os anúncios novamente.', 409);
+        const [products] = await connection.query('SELECT id,sku,is_parent FROM products WHERE id=? FOR UPDATE', [productId]);
+        if (!products.length || Number(products[0].is_parent)) throw fail('Selecione um produto vendável cadastrado.');
+        const [links] = await connection.query('SELECT product_id FROM mercado_livre_products WHERE item_id=? AND variation_id=? FOR UPDATE', [itemId, variationId]);
+        if (links.some(link => link.product_id !== productId)) throw fail('Anúncio já vinculado a outro produto. O vínculo existente foi preservado.', 409);
+        if (!links.length) await connection.query('INSERT INTO mercado_livre_products (product_id,item_id,variation_id,seller_sku) VALUES (?,?,?,?)', [productId, itemId, variationId, products[0].sku]);
+        await connection.commit();
+        return { ok: true, alreadyLinked: links.length > 0 };
+      } catch (error) { await connection.rollback(); throw error; }
+      finally { connection.release(); }
+    },
+  };
+}
+
 function normalizeAvailableQuantity(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
@@ -569,16 +661,15 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   };
   registerAliases(fastify, 'post', '/mercado-livre/orders/:orderId/dce', protectedRoute, emitDce);
 
-  const linkProduct = async (request, reply) => {
-    const body = request.body || {};
-    const productId = String(body.productId || '').trim();
-    const itemId = String(body.itemId || '').trim().toUpperCase();
-    const variationId = String(body.variationId || '').trim();
-    if (!productId || !/^MLB\d+$/.test(itemId)) return reply.code(400).send({ error: 'productId e itemId MLB validos sao obrigatorios' });
-    await pool.query(`INSERT INTO mercado_livre_products (product_id,item_id,variation_id,seller_sku) VALUES (?,?,?,?)
-      ON DUPLICATE KEY UPDATE seller_sku=VALUES(seller_sku), updated_at=CURRENT_TIMESTAMP`, [productId, itemId, variationId, body.sellerSku || null]);
-    return { ok: true };
+  const listingHandlers = createListingHandlers({ pool, settings: () => loadSettings(pool), request: async path => (await mlRequest(pool, path)).json() });
+  const presentListingError = handler => async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try { return await handler(req); }
+    catch (error) { return reply.code(error.statusCode || 502).send({ error: error.statusCode ? error.message : 'Consulta ao Mercado Livre indisponível. Confira a conexão; se a busca expirou, reinicie a consulta.' }); }
   };
+  const linkProduct = presentListingError(listingHandlers.link);
+  registerAliases(fastify, 'get', '/mercado-livre/products/discover', protectedRoute, presentListingError(listingHandlers.discover));
+  registerAliases(fastify, 'get', '/mercado-livre/products/candidates', protectedRoute, presentListingError(listingHandlers.candidates));
   registerAliases(fastify, 'post', '/mercado-livre/products/link', protectedRoute, linkProduct);
   registerAliases(fastify, 'get', '/mercado-livre/products/links', protectedRoute, async () => {
     const [rows] = await pool.query('SELECT * FROM mercado_livre_products ORDER BY created_at DESC');
@@ -587,6 +678,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
 }
 
 module.exports = {
+  listingRows, suggestListingLinks, createListingHandlers,
   ensureMercadoLivreTables,
   registerMercadoLivreRoutes,
   syncMercadoLivreStockFromBlingTargets,

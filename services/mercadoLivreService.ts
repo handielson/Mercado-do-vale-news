@@ -1,5 +1,11 @@
 import { vpsClient } from './vpsClient';
 
+export type MercadoLivreCandidate = { id: string; sku: string; name: string };
+export type MercadoLivreListing = { itemId: string; variationId: string; title: string; status: string; sku: string; variation: string;
+  existing: Array<{ productId: string; sku: string | null }>; candidates: MercadoLivreCandidate[];
+  match: 'linked' | 'missing_sku' | 'unique' | 'ambiguous' | 'not_found' };
+export type MercadoLivreDiscovery = { items: MercadoLivreListing[]; errors: Array<{ itemId: string; error: string }>; nextCursor: string | null; total: number; sellerId: string };
+
 export interface MercadoLivreStatus {
   configured: boolean;
   connected: boolean;
@@ -26,6 +32,9 @@ export interface MercadoLivrePrintJob {
 }
 
 export const mercadoLivreService = {
+  discoverProducts: (cursor = '') => vpsClient.get<MercadoLivreDiscovery>(`/mercado-livre/products/discover${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+  findCandidates: (q: string) => vpsClient.get<{ items: MercadoLivreCandidate[] }>(`/mercado-livre/products/candidates?q=${encodeURIComponent(q)}`),
+  getProductLinks: () => vpsClient.get<{ items: Array<{ product_id: string; item_id: string; variation_id?: string; last_error?: string | null }> }>('/mercado-livre/products/links'),
   getStatus: () => vpsClient.get<MercadoLivreStatus>('/mercado-livre/settings'),
   updateSettings: (input: Partial<{
     clientId: string;

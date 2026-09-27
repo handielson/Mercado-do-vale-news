@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ExternalLink, Loader2, RefreshCw, Save, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { mercadoLivreService, type MercadoLivrePrintJob, type MercadoLivreStatus } from '../../../services/mercadoLivreService';
+import MercadoLivreLinkReview from './components/MercadoLivreLinkReview';
 
 const statusLabels: Record<string, string> = {
   awaiting_dce: 'Aguardando DC-e', ready: 'Pronta para imprimir', printing: 'Imprimindo',
@@ -9,6 +11,13 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function MercadoLivrePage() {
+  const [params] = useSearchParams();
+  const productId = params.get('productId') || '';
+  const productSku = params.get('sku') || '';
+  const [itemId, setItemId] = useState('');
+  const [variationId, setVariationId] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkNotice, setLinkNotice] = useState('');
   const [status, setStatus] = useState<MercadoLivreStatus | null>(null);
   const [jobs, setJobs] = useState<MercadoLivrePrintJob[]>([]);
   const [clientId, setClientId] = useState('');
@@ -73,6 +82,28 @@ export default function MercadoLivrePage() {
       </div>
     </header>
 
+    <MercadoLivreLinkReview connected={Boolean(status?.connected)} />
+    {productId && <section className="space-y-3 rounded-xl border border-yellow-300 bg-yellow-50 p-5">
+      <h2 className="text-lg font-semibold">Vincular anúncio existente · SKU {productSku || productId}</h2>
+      <p className="text-sm">Informe o anúncio desta conta que corresponde exatamente ao produto e à variação. Este vínculo será usado pela integração de estoque; não cria um novo anúncio nem confirma que ele está ativo.</p>
+      <form className="flex flex-wrap items-end gap-3" onSubmit={async event => {
+        event.preventDefault(); setLinkNotice('');
+        const normalized = itemId.trim().toUpperCase();
+        if (!/^MLB\d+$/.test(normalized) || !/^[0-9a-f-]{36}$/i.test(productId) || (variationId.trim() && !/^\d+$/.test(variationId.trim()))) { setLinkNotice('Confira o código MLB do anúncio e o ID numérico da variação.'); return; }
+        setLinkBusy(true);
+        try {
+          await mercadoLivreService.linkProduct({ productId, itemId: normalized, variationId: variationId.trim(), sellerSku: productSku });
+          setLinkNotice('Vínculo salvo. Volte ao card e atualize a situação dos canais.');
+        } catch { setLinkNotice('Não foi possível salvar o vínculo. Confira a conexão e tente novamente.'); }
+        finally { setLinkBusy(false); }
+      }}>
+        <label className="text-sm">Código do anúncio<input required placeholder="MLB123456789" className="block rounded-lg border px-3 py-2" value={itemId} onChange={event => setItemId(event.target.value)} /></label>
+        <label className="text-sm">ID da variação (se houver)<input className="block rounded-lg border px-3 py-2" value={variationId} onChange={event => setVariationId(event.target.value)} /></label>
+        <button disabled={linkBusy || !status?.connected} className="rounded-lg bg-yellow-400 px-4 py-2 font-semibold disabled:opacity-50">{linkBusy ? 'Salvando...' : 'Salvar vínculo Mercado Livre'}</button>
+      </form>
+      {!status?.connected && <p className="text-sm">Conecte a conta abaixo para vincular anúncios.</p>}
+      {linkNotice && <p role="status" className="text-sm">{linkNotice}</p>}
+    </section>}
     <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
       <section className="rounded-xl border bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold">Aplicativo e OAuth</h2>
