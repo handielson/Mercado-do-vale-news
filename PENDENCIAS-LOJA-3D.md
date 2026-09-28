@@ -7,14 +7,15 @@ Esta é a lista operacional vigente. O arquivo `CHECKLIST-LOJA-3D.md` permanece 
 ## Estado atual
 
 - [x] Estrutura de banco 3D, migrations 028–052 e empresa operacional preparadas.
-- [x] Vitrine 3D independente preparada localmente, com catálogo e ofertas por site.
-- [x] Contas, checkout, regra de entrada de 50% a 100%, produção parcial, saldo e expedição preparados localmente.
+- [x] Vitrine 3D e painel administrativo publicados no site principal para homologação, com catálogo e ofertas por site; a aplicação e o domínio independentes ainda não foram publicados.
+- [x] Contas, checkout, regra de entrada de 50% a 100%, produção parcial, saldo e expedição estão no código publicado, protegidos pelas flags operacionais desligadas.
 - [x] Produtos 3D separados de IMEI e de grupos de preço de smartphones.
 - [x] Arquivos privados no Synology organizados por SHA-256, com revisões, compartilhamento e verificação de integridade.
 - [x] Caminho privado do Synology configurado na VPS.
 - [x] Empresa, pagamento e estrutura fiscal central podem ser compartilhados operacionalmente, mantendo clientes, ofertas e comunicações separados por loja.
-- [x] Todas as funções 3D continuam desligadas em produção.
-- [x] Código dos últimos incrementos permanece local, sem publicação ou reinício da API.
+- [x] Versão `v1.2.490-ficha-3d-manual` publicada na VPS; site, Calculadora 3D, API e MySQL responderam corretamente após a implantação.
+- [x] API reiniciada com empresa e caminho privado do Synology configurados.
+- [x] Todas as flags operacionais 3D continuam desligadas em produção; a publicação não abriu vendas nem produção reais.
 
 ## 1. Produto piloto e dados reais
 
@@ -24,6 +25,7 @@ Estas tarefas liberam os primeiros testes reais e devem ser executadas antes das
 - [ ] Selecionar de 3 a 5 produtos representativos: pronta entrega, somente encomenda, pedido misto e produto com variantes.
 - [x] Inventariar candidatos existentes na pasta local de projetos próprios, sem copiar ou alterar os arquivos; resultado em `docs/print3d-pilot-candidates.md`.
 - [x] Escolher o primeiro produto piloto: Suporte LNB 3x3, lote com 11 unidades completas e duas partes por unidade; manifesto em `docs/print3d-pilots/suporte-lnb-3x3/manifest.json`.
+- [ ] Criar no cadastro central o produto piloto Suporte LNB 3x3, marcar como impressão 3D e confirmar o SKU vendável definitivo.
 - [ ] Confirmar as categorias desses produtos em cada site; o mesmo SKU pode usar categorias diferentes.
 - [ ] Cadastrar variantes reais de material, cor, tamanho, acabamento e acessórios, atribuindo um SKU único a cada combinação vendável.
 - [x] Permitir cadastrar a ficha inteira manualmente quando a impressão não passou pelo programa, registrando essa origem na revisão e dispensando o arquivo JSON.
@@ -103,9 +105,11 @@ Esta fase protege o Mercado do Vale e os demais canais antes de aceitar pedidos 
 
 ## 9. Piloto e publicação gradual
 
-- [ ] Restaurar o backup mais recente em ambiente isolado e repetir as migrations e os cenários críticos.
-- [ ] Publicar os incrementos locais pendentes usando o processo `publish-vps`.
-- [ ] Reiniciar a API em janela controlada para carregar empresa e pasta privada já configuradas.
+- [x] Criar backup integral, restaurá-lo em MySQL 8.4 descartável e homologar as migrations 028–051 antes de aplicá-las ao banco operacional.
+- [x] Aplicar e validar a migration 052 dos arquivos compartilhados por SHA-256 com as funções desligadas.
+- [x] Publicar os incrementos pela versão `v1.2.490-ficha-3d-manual`, usando o processo `publish-vps`.
+- [x] Reiniciar a API em janela controlada e confirmar HTTP 200 com `mysql.ok=true`.
+- [ ] Entrar no painel publicado com uma conta administrativa e homologar visualmente o preenchimento manual completo da ficha.
 - [ ] Habilitar primeiro cadastro e leitura, depois arquivos, frete, produção, pagamentos, expedição e trabalhadores, uma flag por vez.
 - [ ] Executar um pedido interno de ponta a ponta sem cliente real.
 - [ ] Executar um piloto controlado com poucos SKUs e acompanhar estoque, custo, pagamentos, produção e fiscal.
@@ -114,10 +118,11 @@ Esta fase protege o Mercado do Vale e os demais canais antes de aceitar pedidos 
 
 ## Ordem recomendada imediata
 
-1. Produto piloto e dados reais, informados manualmente ou importados por JSON.
-2. Arquivos reais e ficha ativa no Synology.
-3. Insumos, custos e saldos iniciais.
-4. Reconciliação do estoque legado.
-5. Teste local completo do pedido piloto.
-6. Serviços externos: domínio, autenticação, WhatsApp, frete, PIX e fiscal.
-7. Backup/restauração, publicação gradual e piloto controlado.
+1. Cadastrar o Suporte LNB 3x3 como produto 3D e confirmar SKU, categoria e variante vendável.
+2. Cadastrar filamento, energia, máquina, mão de obra, embalagem e demais insumos reais.
+3. Preencher manualmente material, tempo, impressora, perfil e demais dados do lote piloto de 11 pares.
+4. Habilitar somente fichas/arquivos em uma janela controlada, enviar os arquivos reais ao Synology, selecionar a revisão ativa e verificar sua integridade.
+5. Conferir estoque inicial e reconciliar as divergências legadas antes de liberar qualquer checkout.
+6. Executar localmente um pedido completo do produto piloto, incluindo reserva, pagamento simulado, produção parcial, saldo e expedição.
+7. Homologar serviços externos: domínio, autenticação, WhatsApp, frete, PIX e fiscal.
+8. Configurar backup/restauração dos arquivos, ativar uma flag por vez e executar o piloto controlado.
