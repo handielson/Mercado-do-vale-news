@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { shopeeProductService } from '../../../services/shopeeProducts';
+import { createShopeeConnection, listShopeeConnections, type ShopeeConnection } from '../../../services/shopeeConnections';
 import { Company } from '../../../types/company';
 import ShopeeOrdersTab from './components/ShopeeOrdersTab';
 import ShopeePrintersTab from './components/ShopeePrintersTab';
@@ -1244,6 +1245,9 @@ export default function ShopeePage() {
     const [saving, setSaving] = useState(false);
     const [shopeeConnected, setShopeeConnected] = useState(false);
     const [shopeeShopId, setShopeeShopId] = useState<string | null>(null);
+    const [shopeeConnections, setShopeeConnections] = useState<ShopeeConnection[]>([]);
+    const [newConnectionName, setNewConnectionName] = useState('');
+    const [creatingConnection, setCreatingConnection] = useState(false);
 
     // Products tab state
     const [products, setProducts] = useState<ShopeeProduct[]>([]);
@@ -1286,10 +1290,11 @@ export default function ShopeePage() {
     async function loadData() {
         try {
             setLoading(true);
-            const data = await getCompanyData();
+            const [data, connections] = await Promise.all([getCompanyData(), listShopeeConnections()]);
             setCompany(data);
             setShopeeConnected(!!data.shopee_access_token);
             setShopeeShopId(data.shopee_shop_id || null);
+            setShopeeConnections(connections);
         } catch { toast.error('Erro ao buscar configurações.'); }
         finally { setLoading(false); }
     }
@@ -1457,6 +1462,37 @@ export default function ShopeePage() {
                 toast.error(data.error || 'Erro ao gerar URL de autorização.', { id: 'shopee-auth' });
             }
         } catch { toast.error('Erro de conexão ao tentar autorizar.', { id: 'shopee-auth' }); }
+    };
+
+    const handleCreateConnection = async () => {
+        const name = newConnectionName.trim();
+        if (name.length < 3) {
+            toast.error('Informe um nome para identificar a nova loja.');
+            return;
+        }
+        try {
+            setCreatingConnection(true);
+            const connection = await createShopeeConnection(name);
+            setShopeeConnections((current) => [...current, connection]);
+            setNewConnectionName('');
+            toast.success('Nova loja criada. Autorize-a com o titular da conta.');
+        } catch (error: any) {
+            toast.error(error?.message || 'Não foi possível criar a nova loja.');
+        } finally {
+            setCreatingConnection(false);
+        }
+    };
+
+    const handleConnectionOAuth = async (connection: ShopeeConnection) => {
+        try {
+            toast.loading('Gerando link de autorização...', { id: `shopee-auth-${connection.id}` });
+            const res = await fetch(`/api/shopee?action=auth&connection_id=${encodeURIComponent(connection.id)}`);
+            const data = await res.json();
+            if (!res.ok || !data?.url) throw new Error(data?.error || 'Erro ao gerar URL de autorização.');
+            window.location.href = data.url;
+        } catch (error: any) {
+            toast.error(error?.message || 'Erro ao iniciar a autorização.', { id: `shopee-auth-${connection.id}` });
+        }
     };
 
     const importFromShopee = async () => {
@@ -2051,6 +2087,55 @@ export default function ShopeePage() {
                                     Acessar Console <ExternalLink className="w-4 h-4" />
                                 </a>
                             </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
+                            <Store className="w-5 h-5 text-slate-500" />
+                            <div>
+                                <h2 className="text-base font-bold text-slate-800">Lojas Shopee adicionais</h2>
+                                <p className="text-xs text-slate-500">Cada loja usa autorização própria e mantém anúncios separados.</p>
+                            </div>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <input
+                                    value={newConnectionName}
+                                    onChange={(event) => setNewConnectionName(event.target.value)}
+                                    className="flex-1 px-4 py-2 border rounded-xl focus:ring-2 focus:ring-orange-500 bg-white"
+                                    placeholder="Ex.: Loja Pernambuco"
+                                />
+                                <button
+                                    onClick={handleCreateConnection}
+                                    disabled={creatingConnection}
+                                    className="px-4 py-2 rounded-xl bg-slate-800 text-white text-sm font-semibold disabled:opacity-50"
+                                >
+                                    {creatingConnection ? 'Criando...' : 'Adicionar loja'}
+                                </button>
+                            </div>
+                            {shopeeConnections.length > 0 && (
+                                <div className="divide-y border rounded-xl overflow-hidden">
+                                    {shopeeConnections.map((connection) => (
+                                        <div key={connection.id} className="p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                                            <div>
+                                                <p className="font-semibold text-slate-800">{connection.display_name}</p>
+                                                <p className="text-xs text-slate-500">
+                                                    {connection.authorization_status === 'connected' && connection.shopee_shop_id
+                                                        ? `Conectada · Shop ID ${connection.shopee_shop_id}`
+                                                        : 'Aguardando autorização do titular'}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleConnectionOAuth(connection)}
+                                                className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-50"
+                                            >
+                                                {connection.authorization_status === 'connected' ? 'Reconectar' : 'Autorizar loja'}
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
 

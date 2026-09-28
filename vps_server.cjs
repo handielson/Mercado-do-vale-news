@@ -7296,9 +7296,24 @@ async function handleTikTokShopCategoryMappingPutVps(request, reply) {
 
 async function handleShopeeOAuthVps(request, reply) {
   const action = String(request.query?.action || '');
+  const connectionId = String(request.query?.connection_id || '').trim();
+
+  const loadConnection = async () => {
+    if (!connectionId) return null;
+    const [rows] = await pool.query(
+      `SELECT id, display_name, shopee_shop_id
+         FROM shopee_shop_connections
+        WHERE id = ? AND active = 1
+        LIMIT 1`,
+      [connectionId],
+    );
+    return rows?.[0] || null;
+  };
 
   if (action === 'auth') {
     try {
+      const connection = await loadConnection();
+      if (connectionId && !connection) return reply.code(404).send({ error: 'Conexão Shopee não encontrada.' });
       const rows = await vpsDbSelect('company_settings', 'select=shopee_partner_id,shopee_partner_key&limit=1');
       const settings = Array.isArray(rows) ? rows[0] : null;
       if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
@@ -7308,7 +7323,7 @@ async function handleShopeeOAuthVps(request, reply) {
       const apiPath = '/api/v2/shop/auth_partner';
       const timestamp = Math.floor(Date.now() / 1000);
       const sign = generateShopeePublicSignVps(partnerId, settings.shopee_partner_key, apiPath, timestamp);
-      const redirectUrl = buildShopeeCallbackUrlVps(request);
+      const redirectUrl = `${buildShopeeCallbackUrlVps(request)}${connection ? `&connection_id=${encodeURIComponent(connection.id)}` : ''}`;
       const authUrl = `${getShopeeBaseUrlVps(partnerId)}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}&redirect=${encodeURIComponent(redirectUrl)}`;
       return reply.code(200).send({ url: authUrl });
     } catch (err) {
@@ -7328,6 +7343,8 @@ async function handleShopeeOAuthVps(request, reply) {
       return reply.type('text/html; charset=utf-8').code(400).send('<h1>Falha na autorização</h1><p>Parâmetros ausentes (code, shop_id).</p>');
     }
     try {
+      const connection = await loadConnection();
+      if (connectionId && !connection) return reply.type('text/html; charset=utf-8').code(404).send('<h1>Conexão Shopee não encontrada</h1>');
       const rows = await vpsDbSelect('company_settings', 'select=id,shopee_partner_id,shopee_partner_key&limit=1');
       const settings = Array.isArray(rows) ? rows[0] : null;
       if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
@@ -7349,11 +7366,25 @@ async function handleShopeeOAuthVps(request, reply) {
       if (tokenData?.error) {
         return reply.type('text/html; charset=utf-8').code(400).send(`<h1>Erro na comunicação com a Shopee</h1><p>${tokenData.error}: ${tokenData.message || ''}</p>`);
       }
-      await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(String(settings.id))}`, {
-        shopee_shop_id: activeShopId.toString(),
-        shopee_access_token: tokenData.access_token,
-        shopee_refresh_token: tokenData.refresh_token,
-      });
+      if (connection) {
+        await pool.query(
+          `UPDATE shopee_shop_connections
+              SET shopee_shop_id = ?,
+                  shopee_access_token = ?,
+                  shopee_refresh_token = ?,
+                  authorization_status = 'connected',
+                  connected_at = CURRENT_TIMESTAMP,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?`,
+          [activeShopId.toString(), tokenData.access_token, tokenData.refresh_token, connection.id],
+        );
+      } else {
+        await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(String(settings.id))}`, {
+          shopee_shop_id: activeShopId.toString(),
+          shopee_access_token: tokenData.access_token,
+          shopee_refresh_token: tokenData.refresh_token,
+        });
+      }
       return reply.type('text/html; charset=utf-8').code(200).send(`
         <html><head><title>Shopee Autorizada</title></head>
         <body style="font-family: sans-serif; text-align: center; padding: 50px;">
@@ -8222,13 +8253,41 @@ async function readShopeeCatalogJsonResponseVps(response) {
   }
 }
 
-async function getShopeeCatalogCredentialsVps() {
+async function getShopeeCatalogCredentialsVps(connectionId = '') {
+  const normalizedConnectionId = String(connectionId || '').trim();
+  if (normalizedConnectionId) {
+    const [connectionRows] = await pool.query(
+      `SELECT id, shopee_shop_id, shopee_access_token, shopee_refresh_token
+         FROM shopee_shop_connections
+        WHERE id = ? AND active = 1
+        LIMIT 1`,
+      [normalizedConnectionId],
+    );
+    const connection = connectionRows?.[0] || null;
+    if (!connection?.shopee_access_token || !connection?.shopee_shop_id) {
+      throw new Error('Esta loja Shopee ainda não foi autorizada.');
+    }
+    const partnerRows = await vpsDbSelect('company_settings', 'select=shopee_partner_id,shopee_partner_key&limit=1');
+    const partner = Array.isArray(partnerRows) ? partnerRows[0] : null;
+    if (!partner?.shopee_partner_id || !partner?.shopee_partner_key) {
+      throw new Error('Credenciais do App Shopee não configuradas.');
+    }
+    return {
+      connectionId: connection.id,
+      partnerId: String(partner.shopee_partner_id),
+      partnerKey: String(partner.shopee_partner_key),
+      accessToken: String(connection.shopee_access_token),
+      shopId: String(connection.shopee_shop_id),
+      refreshToken: connection.shopee_refresh_token ? String(connection.shopee_refresh_token) : '',
+    };
+  }
   const rows = await vpsDbSelect('company_settings', 'select=shopee_partner_id,shopee_partner_key,shopee_access_token,shopee_shop_id,shopee_refresh_token&limit=1');
   const settings = Array.isArray(rows) ? rows[0] : null;
   if (!settings?.shopee_partner_id || !settings?.shopee_partner_key || !settings?.shopee_access_token || !settings?.shopee_shop_id) {
     throw new Error('Shopee não autenticada. Configure as credenciais no painel.');
   }
   return {
+    connectionId: '',
     partnerId: String(settings.shopee_partner_id),
     partnerKey: String(settings.shopee_partner_key),
     accessToken: String(settings.shopee_access_token),
@@ -8257,10 +8316,19 @@ async function refreshShopeeCatalogTokenVps(creds) {
   if (!response.ok || tokenData?.error) {
     throw new Error(tokenData?.message || tokenData?.error || 'Erro ao renovar token Shopee');
   }
-  await vpsDbPatch('company_settings', 'shopee_partner_id=not.is.null', {
-    shopee_access_token: tokenData.access_token,
-    shopee_refresh_token: tokenData.refresh_token,
-  });
+  if (creds.connectionId) {
+    await pool.query(
+      `UPDATE shopee_shop_connections
+          SET shopee_access_token = ?, shopee_refresh_token = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [tokenData.access_token, tokenData.refresh_token, creds.connectionId],
+    );
+  } else {
+    await vpsDbPatch('company_settings', 'shopee_partner_id=not.is.null', {
+      shopee_access_token: tokenData.access_token,
+      shopee_refresh_token: tokenData.refresh_token,
+    });
+  }
   return {
     ...creds,
     accessToken: String(tokenData.access_token),
@@ -8548,7 +8616,7 @@ async function handleShopeeCatalogVps(request, reply) {
     if (action === 'get_item_base_info' && !query.item_id_list) return reply.code(400).send({ error: 'item_id_list required' });
     if (action === 'get_model_list' && !query.item_id) return reply.code(400).send({ error: 'item_id required' });
 
-    const creds = await getShopeeCatalogCredentialsVps();
+    const creds = await getShopeeCatalogCredentialsVps(query.connection_id);
     let result;
 
     switch (action) {
@@ -9204,7 +9272,7 @@ async function handleShopeeActionsVps(request, reply) {
     if (action === 'update_stock' && payload.stock === undefined) return reply.code(400).send({ error: 'Faltam parametros' });
     if (action === 'update_price' && payload.price === undefined) return reply.code(400).send({ error: 'Faltam parametros' });
 
-    const creds = await getShopeeCatalogCredentialsVps();
+    const creds = await getShopeeCatalogCredentialsVps(request.query?.connection_id || payload.connection_id);
     let result;
 
     switch (action) {
@@ -13540,6 +13608,29 @@ fastify.all('/api/shopee', handleShopeeOAuthVps);
 fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);
 fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
 fastify.all('/api/shopee-actions', handleShopeeActionsVps);
+fastify.get('/api/shopee-connections', { preHandler: requireSyncKey }, async (_request, reply) => {
+  const [rows] = await pool.query(
+    `SELECT id, display_name, shopee_shop_id, authorization_status, active, connected_at, created_at, updated_at
+       FROM shopee_shop_connections
+      ORDER BY created_at ASC`,
+  );
+  return reply.send({ connections: rows });
+});
+fastify.post('/api/shopee-connections', { preHandler: requireSyncKey }, async (request, reply) => {
+  const displayName = String(request.body?.display_name || '').trim();
+  if (displayName.length < 3 || displayName.length > 120) {
+    return reply.code(400).send({ error: 'Informe um nome entre 3 e 120 caracteres para a nova loja.' });
+  }
+  const id = crypto.randomUUID();
+  await pool.query(
+    `INSERT INTO shopee_shop_connections (id, display_name)
+     VALUES (?, ?)`,
+    [id, displayName],
+  );
+  return reply.code(201).send({
+    connection: { id, display_name: displayName, shopee_shop_id: null, authorization_status: 'pending', active: true },
+  });
+});
 fastify.all('/api/tiktok-shop/webhook', handleTikTokShopWebhookVps);
 const fulfillTikTokOrderRoute = async (request, reply) => {
   try {
@@ -39762,6 +39853,23 @@ async function runMigrations() {
       INDEX idx_shopee_templates_company (company_id),
       INDEX idx_shopee_templates_active (active),
       INDEX idx_shopee_templates_priority (priority)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopee_shop_connections (
+      id CHAR(36) PRIMARY KEY,
+      display_name VARCHAR(120) NOT NULL,
+      shopee_shop_id VARCHAR(50) NULL,
+      authorization_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      shopee_access_token TEXT NULL,
+      shopee_refresh_token TEXT NULL,
+      connected_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY idx_shopee_shop_connections_shop (shopee_shop_id),
+      INDEX idx_shopee_shop_connections_active (active, authorization_status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 

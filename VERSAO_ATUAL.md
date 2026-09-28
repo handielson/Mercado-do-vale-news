@@ -1,12 +1,11 @@
-# v1.2.503-fluxo-produtos-3dmv
+# v1.2.504-shopee-multiloja
 
-Data: 2026-09-28. Status: pronta para publicação. Branch: main.
-Tag: v1.2.503-fluxo-produtos-3dmv
-Release principal: /var/www/mdv-site/releases/20260928-204917-v1-2-503-fluxo-produtos-3dmv
-Release 3DMV: /var/www/print3d-site/releases/20260928-204917-v1-2-503-fluxo-produtos-3dmv
+Data: 2026-09-28. Status: pronta para publicacao. Branch: main.
+Tag: v1.2.504-shopee-multiloja
+Release principal: /var/www/mdv-site/releases/20260928-231010-v1-2-504-shopee-multiloja
 
-O cadastro 3D passa a seguir um fluxo único por produto: **Cadastro → Produção 3D → Sites e preços**. Arquivos de impressão, custos, revisão e link de origem ficam vinculados ao SKU vendável; o modelo permanece opcional e reservado para dados reutilizáveis.
+O painel passa a permitir criar lojas Shopee adicionais, nomea-las e iniciar a autorizacao OAuth para cada titular. Os tokens e o identificador de cada loja ficam isolados da conexao principal e nao sao exibidos pela interface.
 
-A descrição exibida nos sites vem do cadastro central/pai, com HTML sanitizado e editor visual. No localhost, alterações de catálogo ficam em rascunho local e só chegam à API central após aprovação explícita.
+Esta etapa nao envia, altera ou exclui produtos. A vinculacao de um mesmo produto a mais de uma loja sera tratada em uma proxima entrega, com selecao explicita da loja de destino.
 
-Validações: testes de isolamento dos sites, descrição e oferta central, prévia local, ficha 3D, navegação do produto, verificações sintáticas da API e builds dos dois sites.
+Validacoes: verificacao estatica das duas variantes da API, sintaxe dos servidores e build do painel.
