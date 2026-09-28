@@ -357,6 +357,8 @@ const CORS_ORIGINS = [
   'https://staging.mercadodovale.com.br',
   'https://www.mercadodovale.com',
   'https://mercadodovale.com',
+  'https://www.3dmv.com.br',
+  'https://3dmv.com.br',
   'https://www.xiaomipetrolina.com.br',
   'https://xiaomipetrolina.com.br',
   'http://localhost:5173',
@@ -14068,6 +14070,26 @@ function readSeoIndexHtml() {
 </html>`;
 }
 
+function readPrint3dSeoIndexHtml() {
+  const candidates = [
+    process.env.VPS_PRINT3D_SITE_INDEX_HTML,
+    process.env.VPS_PRINT3D_SITE_ROOT ? path.join(process.env.VPS_PRINT3D_SITE_ROOT, 'current', 'index.html') : '',
+    '/var/www/print3d-site/current/index.html',
+    path.join(__dirname, 'dist-print3d', 'index.html'),
+    path.join(__dirname, 'apps', 'print3d', 'index.html'),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf8');
+    } catch {
+      // Try the next isolated 3DMV candidate.
+    }
+  }
+
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>3DMV</title></head><body><div id="root">Carregando 3DMV...</div></body></html>`;
+}
+
 function normalizeSeoKeywords(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (typeof value === 'string') {
@@ -14209,7 +14231,7 @@ fastify.get('/api/seo-produto-3d', async (request, reply) => {
   if (!routeTarget) return reply.redirect('/loja-3d');
 
   try {
-    const baseHtml = readSeoIndexHtml();
+    const baseHtml = readPrint3dSeoIndexHtml();
     const product = await loadPrint3dSeoProductByRouteTarget(routeTarget);
     if (!product) {
       return reply

@@ -27,10 +27,10 @@ export default defineConfig({
   define: {
     'import.meta.env.VITE_PRINT3D_TURNSTILE_SITE_KEY': JSON.stringify(process.env.PRINT3D_PUBLIC_TURNSTILE_SITE_KEY || ''),
     'import.meta.env.VITE_PRINT3D_PUBLIC_ORIGIN': JSON.stringify(process.env.PRINT3D_PUBLIC_ORIGIN || 'https://www.3dmv.com.br'),
-    'import.meta.env.VITE_FORCE_VPS_PROXY': JSON.stringify('1'),
-    'import.meta.env.VITE_FORCE_LOCAL_VPS_PROXY': JSON.stringify('1'),
+    'import.meta.env.VITE_FORCE_VPS_PROXY': JSON.stringify('0'),
+    'import.meta.env.VITE_FORCE_LOCAL_VPS_PROXY': JSON.stringify('0'),
     'import.meta.env.VITE_VPS_SYNC_KEY': JSON.stringify(''),
-    'import.meta.env.VITE_ALLOW_DIRECT_PUBLIC_VPS': JSON.stringify('0'),
+    'import.meta.env.VITE_ALLOW_DIRECT_PUBLIC_VPS': JSON.stringify('1'),
   },
   css: { postcss: path.resolve(__dirname) },
   server: { host:'127.0.0.1', port:3002, strictPort:true, fs:{allow:[path.resolve(__dirname)]} },

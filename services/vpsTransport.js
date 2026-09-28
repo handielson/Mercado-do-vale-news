@@ -109,6 +109,13 @@ function isPublicReadPath(pathname) {
     return true;
   }
 
+  if (pathname === '/storefronts/loja_3d/products'
+    || pathname === '/storefronts/loja_3d/settings'
+    || pathname === '/print3d/auth/google/config'
+    || pathname === '/print3d/auth/phone/status') {
+    return true;
+  }
+
   return isPublicProductReadPath(pathname);
 }
 
@@ -126,6 +133,14 @@ function isPublicWritePath(pathname, method) {
   }
 
   if (method === 'POST' && /^\/delivery\/jobs\/[^/]+\/(?:pix-intent|payment-status|start-route|proof|complete)$/u.test(pathname)) {
+    return true;
+  }
+
+  if (method === 'POST' && [
+    '/storefronts/loja_3d/quote',
+    '/storefronts/loja_3d/shipping/quote',
+    '/storefronts/loja_3d/deadline-requests',
+  ].includes(pathname)) {
     return true;
   }
 

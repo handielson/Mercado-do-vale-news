@@ -5,6 +5,11 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   const source = readFileSync(file, 'utf8');
 
   assert.match(source, /fastify\.get\('\/api\/seo-produto-3d'/, `${file} must expose the 3D product SEO route`);
+  assert.match(source, /'https:\/\/www\.3dmv\.com\.br'/, `${file} must allow the canonical 3DMV browser origin`);
+  assert.match(source, /'https:\/\/3dmv\.com\.br'/, `${file} must allow the redirecting 3DMV browser origin`);
+  assert.match(source, /function\s+readPrint3dSeoIndexHtml\(/, `${file} must have an isolated 3DMV HTML loader`);
+  assert.match(source, /\/var\/www\/print3d-site\/current\/index\.html/, `${file} must render 3D SEO with the 3DMV bundle`);
+  assert.match(source, /fastify\.get\('\/api\/seo-produto-3d'[\s\S]*const baseHtml = readPrint3dSeoIndexHtml\(\)/, `${file} must not render 3D SEO with the Mercado do Vale index`);
   assert.match(source, /async function\s+loadPrint3dSeoProductByRouteTarget\(/, `${file} must resolve published 3D products`);
   assert.match(source, /o\.storefront = 'loja_3d'[\s\S]*o\.publication_status = 'published'/, `${file} must restrict SEO to published Loja 3D offers`);
   assert.match(source, /function\s+getPrint3dSeoRouteTarget\(/, `${file} must generate stable product URLs`);
