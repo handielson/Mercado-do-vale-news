@@ -1,14 +1,13 @@
 {
-  "version": "v1.2.493-hotfix-proxy-prazo-3d",
+  "version": "v1.2.494-registro-rota-prazo-3d",
   "date": "2026-09-27",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.493-hotfix-proxy-prazo-3d",
-  "release_vps": "/var/www/mdv-site/releases/20260928-012920-v1-2-493-hotfix-proxy-prazo-3d",
-  "summary": "Hotfix que libera no proxy público a criação de solicitações de prazo por quantidade nos dois sites.",
+  "tag": "v1.2.494-registro-rota-prazo-3d",
+  "release_vps": "/var/www/mdv-site/releases/20260928-013502-v1-2-494-registro-rota-prazo-3d",
+  "summary": "Registra a rota de consulta de prazo e cria sua tabela no runtime efetivamente executado pela API VPS.",
   "changed_files": [
     "tmp-tests/print3d-public-proxy.test.cjs",
-    "vps_server.cjs",
     "vps_server.js"
   ]
 }

@@ -21,6 +21,7 @@ const { verifyShippingQuote } = require('./services/print3dShippingQuoteToken.cj
 const { createPrint3dWhatsAppSender } = require('./services/print3dWhatsAppSender.cjs');
 const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
 const { registerSmartphonePriceGroupRoutes, withSmartphonePriceWrite, patchProductWithGroupPrices, insertProductRecordsWithGroupPrices } = require('./services/smartphonePriceGroupsServer.cjs');
+const { ensureProductDeadlineRequestsTable, registerProductDeadlineRequestRoutes } = require('./services/productDeadlineRequestsServer.cjs');
 const {
   ensureMercadoLivreTables,
   registerMercadoLivreRoutes,
@@ -20711,6 +20712,29 @@ const print3dWhatsAppSender = createPrint3dWhatsAppSender({
   senderPhone: process.env.MDV_PRINT3D_WHATSAPP_NUMBER,
   mercadoDoValePhone: process.env.MDV_MARKET_WHATSAPP_NUMBER,
 });
+registerProductDeadlineRequestRoutes(fastify, {
+  pool,
+  getBearerAuthContext: getVpsBearerAuthContext,
+  notifyAdmins: async request => {
+    const [admins] = await pool.query('SELECT phone FROM n8n_bot_admin_numbers WHERE active=1 ORDER BY updated_at DESC');
+    if (!admins.length) return { status: 'unconfigured', error: 'Nenhum destinatário administrativo configurado.' };
+    if (request.storefront === 'loja_3d' && !print3dWhatsAppSender.configured) {
+      return { status: 'unconfigured', error: 'WhatsApp próprio da Loja 3D ainda não configurado.' };
+    }
+    let sent = 0;
+    let lastError = '';
+    for (const admin of admins) {
+      try {
+        const result = request.storefront === 'loja_3d'
+          ? await print3dWhatsAppSender(String(admin.phone || '').replace(/\D/g, ''), request.message, 'print3d_deadline_request')
+          : await sendDeliveryWhatsappText(admin.phone, request.message);
+        if (result?.ok) sent += 1;
+        else lastError = result?.reason || `HTTP ${result?.status || 'desconhecido'}`;
+      } catch (error) { lastError = error.message; }
+    }
+    return sent > 0 ? { status: 'sent', sent } : { status: 'failed', error: lastError || 'Falha ao notificar administradores.' };
+  },
+});
 const print3dAccounts = registerPrint3dCustomerAccountRoutes(fastify, {
   pool,
   enabled: process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig()),
@@ -39286,6 +39310,8 @@ async function getDefaultCompanyIdForCatalog() {
 }
 
 async function runMigrations() {
+  await ensureProductDeadlineRequestsTable(pool);
+  console.log('[migration] product deadline requests table: OK');
   await ensureMercadoLivreTables(pool);
   await ensureTikTokPrintTable(pool);
   await ensureTikTokFulfillmentTable(pool);

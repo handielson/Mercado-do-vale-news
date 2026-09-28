@@ -12,6 +12,13 @@ test('all VPS proxy runtimes allow the public deadline request endpoint',()=>{
   assert.match(source,/normalizedMethod === 'POST' && \/\^\\\/storefronts\\\/\(\?:mercado_do_vale\|loja_3d\)\\\/deadline-requests\$\/u\.test\(pathname\)/,`${file} must expose deadline requests through its public proxy allowlist: ${expected}`);
  }
 });
+test('both deployable API runtimes register the deadline routes and migration',()=>{
+ for(const file of ['vps_server.cjs','vps_server.js']){
+  const source=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
+  assert.match(source,/registerProductDeadlineRequestRoutes\(fastify,/u,`${file} must register the deadline request routes`);
+  assert.match(source,/await ensureProductDeadlineRequestsTable\(pool\);/u,`${file} must create the deadline request table during startup`);
+ }
+});
 test('channel boundary rejects other channels, administrative paths, duplicate queries and traversal',()=>{
  for(const [method,path] of [['GET','/categories'],['GET','/banners?storefront=loja_3d'],['GET','/storefronts/loja_3d/products?limit=2000'],
  ['POST','/print3d/auth/login'],['POST',`/print3d/orders/${id}/payment`],['POST','/storefronts/loja_3d/shipping/quote'],['POST','/storefronts/loja_3d/quote'],
