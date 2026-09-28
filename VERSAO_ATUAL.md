@@ -2,7 +2,8 @@
 
 Data: 2026-09-28. Status: pronta para publicação. Branch: main.
 Tag: v1.2.496-fix-destino-3dmv
-Release 3D: pendente
+Release principal: /var/www/mdv-site/releases/20260928-114800-v1-2-496-fix-destino
+Release 3D: /var/www/print3d-site/releases/20260928-114521-v1-2-496-3dmv
 
 Esta correção garante que a Loja 3D seja publicada em `/var/www/print3d-site`, mesmo quando o ambiente local contém `VPS_SITE_ROOT=/var/www/mdv-site` para o site principal.
 
