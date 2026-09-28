@@ -22,6 +22,7 @@ Estas tarefas liberam os primeiros testes reais e devem ser executadas antes das
 
 - [ ] Definir a identidade visual final e confirmar o nome comercial da loja 3D.
 - [ ] Selecionar de 3 a 5 produtos representativos: pronta entrega, somente encomenda, pedido misto e produto com variantes.
+- [x] Inventariar candidatos existentes na pasta local de projetos próprios, sem copiar ou alterar os arquivos; resultado em `docs/print3d-pilot-candidates.md`.
 - [ ] Confirmar as categorias desses produtos em cada site; o mesmo SKU pode usar categorias diferentes.
 - [ ] Cadastrar variantes reais de material, cor, tamanho, acabamento e acessórios, atribuindo um SKU único a cada combinação vendável.
 - [ ] Gerar um JSON real no programa de impressão e confirmar que `material_gramas` e `tempo_impressao_minutos` representam o lote completo.
