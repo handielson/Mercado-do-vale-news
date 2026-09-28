@@ -7,6 +7,7 @@ const vite = readFileSync('vite.print3d.config.ts', 'utf8');
 const nginx = readFileSync('infra/nginx/print3d-site-production.conf', 'utf8');
 const deploy = readFileSync('scripts/deploy-vps-site.cjs', 'utf8');
 const nginxInstall = readFileSync('scripts/install-print3d-site-nginx.cjs', 'utf8');
+const print3dDeploy = readFileSync('scripts/deploy-vps-print3d-site.cjs', 'utf8');
 
 assert.match(main, /\/loja-3d\/produto\/:slug/);
 assert.doesNotMatch(html, /noindex/i);
@@ -18,6 +19,7 @@ assert.match(nginx, /root \/var\/www\/print3d-site\/current/);
 assert.match(nginx, /api\/seo-produto-3d\?slug=\$1/);
 assert.match(deploy, /dist-print3d/);
 assert.match(deploy, /\/var\/www\/print3d-site/);
+assert.match(print3dDeploy, /VPS_SITE_ROOT[\s\S]*\/var\/www\/print3d-site/);
 assert.match(nginxInstall, /nginx -t/);
 assert.match(nginxInstall, /print3d-site-production\.conf/);
 

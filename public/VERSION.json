@@ -1,17 +1,13 @@
 {
-  "version": "v1.2.495-dominio-3dmv",
+  "version": "v1.2.496-fix-destino-3dmv",
   "date": "2026-09-28",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.495-dominio-3dmv",
+  "tag": "v1.2.496-fix-destino-3dmv",
   "release_vps": "pendente",
-  "summary": "Publica a Loja 3D em frontend isolado para www.3dmv.com.br e conclui o catálogo por famílias e a página pública de produto.",
+  "summary": "Garante que o deploy da Loja 3D use sempre /var/www/print3d-site, mesmo quando o ambiente do Mercado do Vale define VPS_SITE_ROOT.",
   "changed_files": [
-    "apps/print3d/index.html",
-    "apps/print3d/main.tsx",
-    "infra/nginx/print3d-site-production.conf",
     "scripts/deploy-vps-print3d-site.cjs",
-    "scripts/install-print3d-site-nginx.cjs",
-    "vite.print3d.config.ts"
+    "tmp-tests/print3d-domain-deploy-static.test.mjs"
   ]
 }
