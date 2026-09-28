@@ -14217,15 +14217,15 @@ fastify.get('/api/seo-produto-3d', async (request, reply) => {
         .header('Content-Type', 'text/html; charset=utf-8')
         .header('Cache-Control', 'no-store')
         .code(410)
-        .send('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="robots" content="noindex, follow"><title>Produto indisponivel | 3D do Vale</title></head><body><h1>Produto indisponivel</h1><p>Este produto nao esta publicado na Loja 3D.</p><a href="/loja-3d">Ver produtos 3D</a></body></html>');
+        .send('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="robots" content="noindex, follow"><title>Produto indisponivel | 3DMV</title></head><body><h1>Produto indisponivel</h1><p>Este produto nao esta publicado na Loja 3D.</p><a href="/loja-3d">Ver produtos 3D</a></body></html>');
     }
 
     const baseUrl = buildSeoBaseUrl(request);
     const publicImages = await loadSeoProductImages(product, baseUrl);
     const seoTitle = print3dSeoBaseProductName(product.meta_title || product.name);
-    const title = `${seoTitle} | 3D do Vale`;
+    const title = `${seoTitle} | 3DMV`;
     const cleanDescription = stripSeoHtml(product.meta_description || product.description || '');
-    const description = cleanDescription.slice(0, 155) || `Conheca ${product.name}, produzido pela 3D do Vale.`;
+    const description = cleanDescription.slice(0, 155) || `Conheca ${product.name}, produzido pela 3DMV.`;
     const canonicalTarget = product.seo_route_target || routeTarget;
     const url = `${baseUrl}/loja-3d/produto/${encodeURIComponent(canonicalTarget)}`;
     const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
@@ -14257,7 +14257,7 @@ fastify.get('/api/seo-produto-3d', async (request, reply) => {
       '@context': 'https://schema.org/',
       '@type': 'BreadcrumbList',
       itemListElement: [
-        { '@type': 'ListItem', position: 1, name: '3D do Vale', item: `${baseUrl}/loja-3d` },
+        { '@type': 'ListItem', position: 1, name: '3DMV', item: `${baseUrl}/loja-3d` },
         { '@type': 'ListItem', position: 2, name: product.category_label || 'Produtos 3D', item: `${baseUrl}/loja-3d` },
         { '@type': 'ListItem', position: 3, name: product.name || title, item: url },
       ],
@@ -14281,7 +14281,7 @@ fastify.get('/api/seo-produto-3d', async (request, reply) => {
     ${imageMetadata.type ? `<meta property="og:image:type" content="${escapeSeoHtml(imageMetadata.type)}" />` : ''}
     ${imageMetadata.width ? `<meta property="og:image:width" content="${imageMetadata.width}" />` : ''}
     ${imageMetadata.height ? `<meta property="og:image:height" content="${imageMetadata.height}" />` : ''}
-    <meta property="og:site_name" content="3D do Vale" />
+    <meta property="og:site_name" content="3DMV" />
     <meta property="og:locale" content="pt_BR" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="${url}" />
@@ -20966,6 +20966,10 @@ require('./services/print3dAdminServer.cjs').registerPrint3dAdminRoutes(fastify,
   customersEnabled: process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig()),
   ordersEnabled: print3dCheckoutEnabled,
   dispatchEnabled: print3dCheckoutEnabled && process.env.MDV_PRINT3D_DISPATCH_ENABLED === '1',
+});
+require('./services/print3dStorefrontSettingsServer.cjs').registerPrint3dStorefrontSettingsRoutes(fastify, {
+  pool,
+  getBearerAuthContext: getVpsBearerAuthContext,
 });
 registerPrint3dCheckoutRoutes(fastify, {
   pool, getCustomer: print3dAccounts.getCustomer,

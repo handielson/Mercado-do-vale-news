@@ -11,7 +11,7 @@ export type Print3dStoreProduct = CatalogProduct & {
 };
 
 const demoBase = {
-  brand: '3D do Vale', status: 'active' as CatalogProduct['status'], price_cost: 0,
+  brand: '3DMV', status: 'active' as CatalogProduct['status'], price_cost: 0,
   price_reseller: 0, price_wholesale: 0, track_inventory: true, images: [], eans: [],
   warranty_type: 'brand' as const, created: '', updated: '', is_print3d: true,
 };

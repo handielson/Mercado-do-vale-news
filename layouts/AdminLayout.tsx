@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench } from 'lucide-react';
 
 import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -111,7 +111,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       ]
     },
     {
-      title: 'Loja 3D',
+      title: '3DMV',
       items: [
         { to: '/admin/loja-3d/clientes', icon: <Users size={18} />, label: 'Clientes 3D', keywords: 'contas cadastro email whatsapp' },
         { to: '/admin/loja-3d/pedidos', icon: <ShoppingBag size={18} />, label: 'Pedidos 3D', keywords: 'encomendas entrada saldo pagamento' },
@@ -120,6 +120,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/loja-3d/calculadora', icon: <Printer size={18} />, label: 'Calculadora 3D', keywords: 'filamento impressao custo energia insumos' },
         { to: '/admin/loja-3d/catalogo', icon: <Store size={18} />, label: 'Catálogo e preços 3D', keywords: 'produtos publicar visibilidade oferta' },
         { to: '/admin/loja-3d/banners', icon: <Image size={18} />, label: 'Banners 3D', keywords: 'imagens carrossel' },
+        { to: '/admin/loja-3d/configuracoes', icon: <Wrench size={18} />, label: 'Configurações 3DMV', keywords: 'manutencao abrir fechar site mensagem' },
       ]
     },
     {
@@ -261,7 +262,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         <div className="px-2 pb-2">
           <Link to={isPrint3dArea ? '/loja-3d' : '/'} target="_blank" title={isPrint3dArea ? 'Ver Loja 3D' : 'Ver Loja'} className="block hover:opacity-80 transition-opacity">
             {isPrint3dArea ? (
-              <div className="flex items-center gap-3 text-violet-100"><Printer size={28} className="text-violet-300" /><span className="text-xl font-bold tracking-tight">Loja 3D</span></div>
+              <div className="flex items-center gap-3 text-violet-100"><Printer size={28} className="text-violet-300" /><span className="text-xl font-bold tracking-tight">3DMV</span></div>
             ) : settings.logo_dark || settings.logo_main ? (
               <img src={settings.logo_dark || settings.logo_main} alt={settings.company_name} className="h-10 object-contain" />
             ) : (
@@ -360,7 +361,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         )}
       </aside>
       <main className="flex-1 p-4 md:p-10 overflow-y-auto w-full md:w-auto overflow-x-hidden">
-        {isPrint3dArea && <div className="mb-5 flex items-center gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 text-violet-900"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-700"><Printer size={20} /></span><div><p className="text-sm font-bold">Loja 3D</p><p className="text-xs text-violet-700">Área de gestão da loja 3D · estoque central compartilhado</p></div></div>}
+        {isPrint3dArea && <div className="mb-5 flex items-center gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 text-violet-900"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-700"><Printer size={20} /></span><div><p className="text-sm font-bold">3DMV</p><p className="text-xs text-violet-700">Área de gestão da 3DMV · estoque central compartilhado</p></div></div>}
         {!isPrint3dArea && botHealth?.status === 'offline' && (
           <div role="alert" className="mb-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 shadow-sm">
             <div className="flex items-start gap-3">

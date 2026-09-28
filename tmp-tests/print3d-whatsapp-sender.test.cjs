@@ -23,10 +23,10 @@ test('envio usa apenas webhook 3D autenticado e exige confirmação da Evolution
     call = { url, options }; return { ok: true, json: async () => ({ ok: true, instance: 'loja3d',
       sender_phone: '5587999998888', message_id: 'wamid.123' }) };
   } });
-  assert.equal((await send('5511987654321', '3D do Vale: código 123456')).ok, true);
+  assert.equal((await send('5511987654321', '3DMV: código 123456')).ok, true);
   assert.equal(call.url, config.webhookUrl);
   assert.equal(call.options.headers['x-print3d-verification-key'], config.webhookToken);
-  assert.deepEqual(JSON.parse(call.options.body), { phone: '5511987654321', text: '3D do Vale: código 123456',
+  assert.deepEqual(JSON.parse(call.options.body), { phone: '5511987654321', text: '3DMV: código 123456',
     purpose: 'print3d_phone_verification' });
   assert.equal(call.options.headers.apikey, undefined);
 });
@@ -36,8 +36,8 @@ test('HTTP 200 antecipado, instância errada ou falha de rede não confirmam env
     { ok: true, instance: 'loja3d', sender_phone: config.mercadoDoValePhone, message_id: 'wamid.1' },
     { ok: true, instance: 'loja3d', sender_phone: config.senderPhone }]) {
     const send = createPrint3dWhatsAppSender({ ...config, fetchImpl: async () => ({ ok: true, json: async () => result }) });
-    assert.equal((await send('5511987654321', '3D do Vale: código 123456')).ok, false);
+    assert.equal((await send('5511987654321', '3DMV: código 123456')).ok, false);
   }
   const down = createPrint3dWhatsAppSender({ ...config, fetchImpl: async () => { throw new Error('offline'); } });
-  assert.equal((await down('5511987654321', '3D do Vale: código 123456')).ok, false);
+  assert.equal((await down('5511987654321', '3DMV: código 123456')).ok, false);
 });

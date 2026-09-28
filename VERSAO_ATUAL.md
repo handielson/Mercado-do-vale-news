@@ -1,14 +1,12 @@
-# v1.2.497-seo-dominio-3dmv
+# v1.2.498-manutencao-3dmv
 
 Data: 2026-09-28. Status: pronta para publicação. Branch: main.
-Tag: v1.2.497-seo-dominio-3dmv
-Release principal: /var/www/mdv-site/releases/20260928-115100-v1-2-497-seo-3dmv
-Release 3D: /var/www/print3d-site/releases/20260928-114521-v1-2-496-3dmv
+Tag: v1.2.498-manutencao-3dmv
+Release principal: /var/www/mdv-site/releases/20260928-120403-v1-2-498-manutencao-3dmv
+Release 3DMV: /var/www/print3d-site/releases/20260928-120403-v1-2-498-manutencao-3dmv
 
-Esta versão entrega sitemap e `robots.txt` próprios para `www.3dmv.com.br`. O sitemap do novo domínio inclui somente a Loja 3D e seus produtos publicados, sem URLs do Mercado do Vale.
+Esta versão adiciona uma configuração de manutenção exclusiva da 3DMV. O administrador pode editar a mensagem, colocar o site em manutenção e reabri-lo em **3DMV → Configurações 3DMV**. O controle usa tabela e rotas próprias e não altera o modo de manutenção do Mercado do Vale.
 
-A proteção automatizada também mantém o destino isolado do deploy 3D em `/var/www/print3d-site`.
+A loja independente, as rotas 3D ainda servidas pelo domínio principal, o SEO dos produtos e as mensagens de verificação por WhatsApp passam a usar a marca **3DMV**.
 
-O domínio usa Cloudflare com registros para a VPS e nameservers atribuídos à zona. O deploy separado grava releases em `/var/www/print3d-site`, mantendo rollback independente do site Mercado do Vale.
-
-Validações: builds principal e 3D, testes de famílias, herança de variações, ofertas por site, SEO do produto e contrato de implantação do domínio.
+Validações: testes do contrato de manutenção e WhatsApp, sintaxe dos servidores, builds principal e 3DMV.

@@ -7,6 +7,7 @@ import { AccountantProtectedRoute } from '../components/AccountantProtectedRoute
 import { CartProvider } from '../contexts/CartContext';
 import { QuoteCartProvider } from '../contexts/QuoteCartContext';
 import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
+import Print3dMaintenanceGuard from '../components/Print3dMaintenanceGuard.tsx';
 
 // Wrapper de React.lazy que recarrega a página quando o chunk falha por causa
 // de deploy novo ou cache antigo do navegador/CDN. Flag em
@@ -94,6 +95,7 @@ const Print3dCheckoutPage = lazy(() => import('../pages/store/Print3dCheckoutPag
 const Print3dOrdersPage = lazy(() => import('../pages/store/Print3dOrdersPage'));
 const AdminPrint3dProductionPage = lazy(() => import('../pages/admin/products/Print3dProductionPage'));
 const Print3dRecordsPage = lazy(() => import('../pages/admin/print3d/Print3dRecordsPage'));
+const Print3dSettingsPage = lazy(() => import('../pages/admin/print3d/Print3dSettingsPage'));
 const Print3dGoogleCallbackPage = lazy(() => import('../pages/store/Print3dGoogleCallbackPage'));
 const Print3dAccountActionPage = lazy(() => import('../pages/store/Print3dAccountActionPage'));
 const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
@@ -359,6 +361,10 @@ export const router = createBrowserRouter([
   {
     path: "/admin/loja-3d/banners",
     element: <ProtectedRoute requireAdmin={true}><AdminLayout><BannerManagementPage key="3d-banners" fixedStorefront="loja_3d" /></AdminLayout></ProtectedRoute>
+  },
+  {
+    path: "/admin/loja-3d/configuracoes",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dSettingsPage /></AdminLayout></ProtectedRoute>
   },
   {
     path: "/admin/products/print3d-production",
@@ -1072,17 +1078,17 @@ export const router = createBrowserRouter([
   {
     path: "/loja-3d",
     element: (
-      <MaintenanceGuard>
+      <Print3dMaintenanceGuard>
         <Print3dStorePage />
-      </MaintenanceGuard>
+      </Print3dMaintenanceGuard>
     )
   },
   {
     path: "/loja-3d/produto/:slug",
     element: (
-      <MaintenanceGuard>
+      <Print3dMaintenanceGuard>
         <Print3dProductPage />
-      </MaintenanceGuard>
+      </Print3dMaintenanceGuard>
     )
   },
   {
@@ -1091,30 +1097,30 @@ export const router = createBrowserRouter([
   },
   {
     path: "/loja-3d/conta/producao",
-    element: <MaintenanceGuard><Print3dProductionPage /></MaintenanceGuard>,
+    element: <Print3dMaintenanceGuard><Print3dProductionPage /></Print3dMaintenanceGuard>,
   },
   {
     path: "/loja-3d/checkout",
-    element: <MaintenanceGuard><Print3dCheckoutPage /></MaintenanceGuard>,
+    element: <Print3dMaintenanceGuard><Print3dCheckoutPage /></Print3dMaintenanceGuard>,
   },
   {
     path: "/loja-3d/pedidos",
-    element: <MaintenanceGuard><Print3dOrdersPage /></MaintenanceGuard>,
+    element: <Print3dMaintenanceGuard><Print3dOrdersPage /></Print3dMaintenanceGuard>,
   },
   {
     path: "/loja-3d/conta",
     element: (
-      <MaintenanceGuard>
+      <Print3dMaintenanceGuard>
         <Print3dAccountPage />
-      </MaintenanceGuard>
+      </Print3dMaintenanceGuard>
     )
   },
   ...["/conta/confirmar-email", "/conta/redefinir-senha", "/loja-3d/conta/confirmar-email", "/loja-3d/conta/redefinir-senha"].map(path => ({
     path,
     element: (
-      <MaintenanceGuard>
+      <Print3dMaintenanceGuard>
         <Print3dAccountActionPage />
-      </MaintenanceGuard>
+      </Print3dMaintenanceGuard>
     )
   })),
   {

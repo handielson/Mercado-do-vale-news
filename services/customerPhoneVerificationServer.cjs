@@ -130,11 +130,11 @@ function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Da
     let result;
     try {
       result = await send(phone, [
-        scope === 'loja_3d' ? '3D do Vale 🔐' : 'Mercado do Vale 🔐',
+        scope === 'loja_3d' ? '3DMV 🔐' : 'Mercado do Vale 🔐',
         scope === 'loja_3d' && request.body?.purpose === 'password_reset'
           ? 'Seu código para redefinir a senha é: ' + code
           : 'Seu código para confirmar este WhatsApp é: ' + code,
-        scope === 'loja_3d' ? 'Válido por 10 minutos. Digite o código somente no site 3D do Vale.'
+        scope === 'loja_3d' ? 'Válido por 10 minutos. Digite o código somente no site 3DMV.'
           : 'Válido por 10 minutos. Digite o código somente no site do Mercado do Vale.',
         'Não compartilhe este código. Se não foi você, ignore esta mensagem.',
       ].join('\n'));

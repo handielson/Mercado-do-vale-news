@@ -37,7 +37,7 @@ function Print3dProductSeo({ title, description, robots, canonical, image, price
   useEffect(() => {
     const seo = {
       description, robots, canonical,
-      openGraph: { 'og:type': 'product', 'og:site_name': '3D do Vale', 'og:title': title, 'og:description': description, 'og:url': canonical, ...(image ? { 'og:image': image } : {}), 'product:price:amount': price, 'product:price:currency': 'BRL' },
+      openGraph: { 'og:type': 'product', 'og:site_name': '3DMV', 'og:title': title, 'og:description': description, 'og:url': canonical, ...(image ? { 'og:image': image } : {}), 'product:price:amount': price, 'product:price:currency': 'BRL' },
       twitter: { 'twitter:card': 'summary_large_image', 'twitter:title': title, 'twitter:description': description, ...(image ? { 'twitter:image': image } : {}) },
     };
     const apply = () => syncDocumentSeo(seo);
@@ -49,7 +49,7 @@ function Print3dProductSeo({ title, description, robots, canonical, image, price
 
   return <Helmet>
     <title>{title}</title><meta name="description" content={description} /><meta name="robots" content={robots} /><link rel="canonical" href={canonical} />
-    <meta property="og:type" content="product" /><meta property="og:site_name" content="3D do Vale" /><meta property="og:title" content={title} /><meta property="og:description" content={description} /><meta property="og:url" content={canonical} />
+    <meta property="og:type" content="product" /><meta property="og:site_name" content="3DMV" /><meta property="og:title" content={title} /><meta property="og:description" content={description} /><meta property="og:url" content={canonical} />
     {image && <meta property="og:image" content={image} />}<meta property="product:price:amount" content={price} /><meta property="product:price:currency" content="BRL" />
     <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content={title} /><meta name="twitter:description" content={description} />{image && <meta name="twitter:image" content={image} />}
     <script type="application/ld+json">{JSON.stringify(schema)}</script>
@@ -162,7 +162,7 @@ export default function Print3dProductPage() {
   if (loading) return <div className="min-h-screen bg-[var(--print3d-surface)] px-5 py-20 text-center text-sm text-[#69716c]">Carregando produto...</div>;
 
   if (error || !product) return <main className="min-h-screen bg-[var(--print3d-surface)] px-5 py-20 text-[#1c2220]">
-    <Helmet><title>Produto não encontrado | 3D do Vale</title><meta name="robots" content="noindex, follow" /></Helmet>
+    <Helmet><title>Produto não encontrado | 3DMV</title><meta name="robots" content="noindex, follow" /></Helmet>
     <div className="mx-auto max-w-xl text-center"><Package className="mx-auto text-[#78817a]" size={42} /><h1 className="mt-5 text-3xl font-semibold">Produto não encontrado</h1><p className="mt-3 text-sm text-[#69716c]">Este produto não está publicado ou o endereço não existe.</p><Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'} className="mt-7 inline-flex items-center gap-2 rounded-md bg-[var(--print3d-accent)] px-5 py-3 text-sm font-semibold text-white"><ArrowLeft size={16} /> Voltar ao catálogo</Link></div>
   </main>;
 
@@ -172,13 +172,13 @@ export default function Print3dProductPage() {
   const siteOrigin = String(import.meta.env.VITE_PRINT3D_PUBLIC_ORIGIN || window.location.origin).replace(/\/$/, '');
   const canonical = `${siteOrigin}${print3dProductPath(product, false, variants)}`;
   const cleanMetaTitle = print3dBaseProductName({ name: product.meta_title || '' });
-  const title = String(cleanMetaTitle ? `${cleanMetaTitle} | 3D do Vale` : `${productName} | 3D do Vale`).slice(0, 65);
+  const title = String(cleanMetaTitle ? `${cleanMetaTitle} | 3DMV` : `${productName} | 3DMV`).slice(0, 65);
   const metaDescription = String(product.meta_description || description).slice(0, 160);
   const primaryImage = images[0] || '';
   const availabilityUrl = stock > 0 ? 'https://schema.org/InStock' : product.print3d_preorder_enabled ? 'https://schema.org/PreOrder' : 'https://schema.org/OutOfStock';
   const schema = {
     '@context': 'https://schema.org', '@type': 'Product', name: productName, description: metaDescription,
-    sku: product.sku, image: images, category, brand: { '@type': 'Brand', name: product.brand || '3D do Vale' },
+    sku: product.sku, image: images, category, brand: { '@type': 'Brand', name: product.brand || '3DMV' },
     offers: { '@type': 'Offer', url: canonical, priceCurrency: 'BRL', price: (Number(product.price_retail) / 100).toFixed(2), availability: availabilityUrl, itemCondition: 'https://schema.org/NewCondition' },
   };
   const robots = demo ? 'noindex, nofollow' : 'index, follow, max-image-preview:large';
@@ -187,7 +187,7 @@ export default function Print3dProductPage() {
   return <div className="min-h-screen bg-[var(--print3d-surface)] text-[#1c2220]">
     <Print3dProductSeo title={title} description={metaDescription} robots={robots} canonical={canonical} image={primaryImage} price={price} schema={schema} />
 
-    <header className="border-b border-[#deded8] bg-white"><div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-5 px-5 sm:px-9 lg:px-12"><Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'} className="text-[22px] font-bold tracking-[-.07em]">3D <span className="font-normal">do Vale</span><span className="text-[var(--print3d-accent)]">.</span></Link><nav className="hidden items-center gap-7 text-sm font-medium lg:flex"><Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'}>Produtos</Link><Link to={demo ? '/loja-3d/conta?demo=1' : '/loja-3d/conta'}>Minha conta</Link><Link to="/" className="text-[#747b75]">Mercado do Vale <ArrowUpRight size={14} className="inline" /></Link></nav><button type="button" aria-label="Abrir menu" onClick={() => setMenuOpen(!menuOpen)} className="p-2 lg:hidden"><Menu size={23} /></button></div>{menuOpen && <nav className="flex flex-col gap-4 border-t border-[#deded8] px-5 py-5 text-sm lg:hidden"><Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'}>Produtos</Link><Link to={demo ? '/loja-3d/conta?demo=1' : '/loja-3d/conta'}>Minha conta</Link><Link to="/">Mercado do Vale</Link></nav>}</header>
+    <header className="border-b border-[#deded8] bg-white"><div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-5 px-5 sm:px-9 lg:px-12"><Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'} className="text-[22px] font-bold tracking-[-.07em]">3DMV<span className="text-[var(--print3d-accent)]">.</span></Link><nav className="hidden items-center gap-7 text-sm font-medium lg:flex"><Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'}>Produtos</Link><Link to={demo ? '/loja-3d/conta?demo=1' : '/loja-3d/conta'}>Minha conta</Link><Link to="/" className="text-[#747b75]">Mercado do Vale <ArrowUpRight size={14} className="inline" /></Link></nav><button type="button" aria-label="Abrir menu" onClick={() => setMenuOpen(!menuOpen)} className="p-2 lg:hidden"><Menu size={23} /></button></div>{menuOpen && <nav className="flex flex-col gap-4 border-t border-[#deded8] px-5 py-5 text-sm lg:hidden"><Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'}>Produtos</Link><Link to={demo ? '/loja-3d/conta?demo=1' : '/loja-3d/conta'}>Minha conta</Link><Link to="/">Mercado do Vale</Link></nav>}</header>
 
     <main>
       <nav aria-label="Navegação estrutural" className="mx-auto flex max-w-[1344px] items-center gap-2 px-5 py-5 text-xs text-[#69716c] sm:px-9 lg:px-12"><Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'} className="hover:underline">Loja 3D</Link><ChevronRight size={13} /><Link to={`${demo ? '/loja-3d?demo=1&' : '/loja-3d?'}categoria=${encodeURIComponent(category)}`} className="hover:underline">{category}</Link><ChevronRight size={13} /><span className="truncate text-[#1c2220]">{productName}</span></nav>
@@ -211,7 +211,7 @@ export default function Print3dProductPage() {
     </main>
 
     <button type="button" onClick={() => setCartOpen(true)} className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-[var(--print3d-accent)] px-5 py-3 text-sm font-semibold text-white shadow-lg" aria-label="Abrir carrinho"><ShoppingBag size={19} /> Carrinho{cartLines.length ? ` (${cartLines.reduce((sum, line) => sum + line.quantity, 0)})` : ''}</button>
-    <footer className="px-5 py-8 sm:px-9 lg:px-12"><div className="mx-auto flex max-w-[1344px] flex-wrap items-center justify-between gap-4 text-sm"><strong className="text-lg tracking-[-.06em]">3D do Vale</strong><span className="text-[#78817a]">Uma criação do Mercado do Vale.</span><Link to="/" className="inline-flex items-center gap-1 hover:underline">Mercado do Vale <ArrowUpRight size={14} /></Link></div></footer>
+    <footer className="px-5 py-8 sm:px-9 lg:px-12"><div className="mx-auto flex max-w-[1344px] flex-wrap items-center justify-between gap-4 text-sm"><strong className="text-lg tracking-[-.06em]">3DMV</strong><span className="text-[#78817a]">Uma criação do Mercado do Vale.</span><Link to="/" className="inline-flex items-center gap-1 hover:underline">Mercado do Vale <ArrowUpRight size={14} /></Link></div></footer>
     {cartOpen && <Print3dCartDrawer lines={cartLines} preview={demo} onQuantity={updateCartQuantity} onClose={() => setCartOpen(false)} />}
   </div>;
 }

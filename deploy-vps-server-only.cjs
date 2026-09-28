@@ -54,6 +54,7 @@ const print3dRecipeRuntimePaths = [
   'services/print3dCheckout.cjs',
   'services/print3dCheckoutServer.cjs',
   'services/print3dAdminServer.cjs',
+  'services/print3dStorefrontSettingsServer.cjs',
   'services/print3dPayments.cjs',
   'services/print3dPaymentsServer.cjs',
   'services/print3dPaymentTerms.cjs',

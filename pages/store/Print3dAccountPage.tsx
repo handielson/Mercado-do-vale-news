@@ -157,7 +157,7 @@ export default function Print3dAccountPage() {
   return <div className="min-h-screen bg-[var(--print3d-surface)] text-[#1f2925]">
     <header className="border-b border-[#e0e4dd] bg-white">
       <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between px-5 sm:px-8">
-        <Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'} className="text-[22px] font-bold tracking-[-.07em]">3D <span className="font-normal">do Vale</span><span className="text-[var(--print3d-accent)]">.</span></Link>
+        <Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'} className="text-[22px] font-bold tracking-[-.07em]">3DMV<span className="text-[var(--print3d-accent)]">.</span></Link>
         <Link to={demo ? '/loja-3d?demo=1' : '/loja-3d'} className="inline-flex items-center gap-2 text-sm font-medium text-[#53665a] hover:text-[var(--print3d-accent)]"><ArrowLeft size={16} /> Voltar à loja</Link>
       </div>
     </header>
