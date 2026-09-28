@@ -21,6 +21,7 @@ export interface ProductFiltersState {
 
 interface ProductFiltersProps {
     onFilterChange: (filters: ProductFiltersState) => void;
+    showParentVisibility?: boolean;
 }
 
 const INITIAL_FILTERS: ProductFiltersState = {
@@ -41,7 +42,7 @@ const INITIAL_FILTERS: ProductFiltersState = {
  * ProductFilters Component
  * Provides search and status filtering for products
  */
-export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }) => {
+export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, showParentVisibility = true }) => {
     const [filters, setFilters] = useState<ProductFiltersState>(INITIAL_FILTERS);
     const [brandOptions, setBrandOptions] = useState<string[]>([]);
     const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
@@ -203,7 +204,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
                 </div>}
 
                 {/* Parent Visibility Select */}
-                <div className="w-full md:w-48">
+                {showParentVisibility && <div className="w-full md:w-48">
                     <select
                         value={filters.parentVisibility}
                         onChange={(e) => applyChange({ parentVisibility: e.target.value as ProductFiltersState['parentVisibility'] })}
@@ -213,7 +214,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
                         <option value="show_all">Mostrar Todos</option>
                         <option value="only_parents">Apenas Pais</option>
                     </select>
-                </div>
+                </div>}
 
                 {/* Sort Select */}
                 <div className="w-full md:w-56">

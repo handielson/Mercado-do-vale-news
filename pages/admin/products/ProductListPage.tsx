@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store, Camera } from 'lucide-react';
+import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store, Camera, LayoutGrid, ListTree } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { ProductList } from '../../../components/products/ProductList';
+import { ProductFamilyList, type ProductFamilyGroup } from '../../../components/products/ProductFamilyList';
 import { Product } from '../../../types/product';
 import { ExportCatalogModal } from '../../../components/admin/ExportCatalogModal';
 import { BulkActionBar } from '../../../components/products/BulkActionBar';
@@ -11,6 +12,9 @@ import { BulkCategoryModal } from '../../../components/products/BulkCategoryModa
 import { vpsApiService } from '../../../services/vpsApiService';
 import { toast } from 'sonner';
 import { buildProductVideoUrl } from '../../../utils/video-url';
+import { buildProductFamilyGroups, paginateProductFamilyGroups } from '../../../utils/productFamilies.mjs';
+import { getFamilyChildState } from '../../../services/productClonePrefill.js';
+import { mercadoLivreService } from '../../../services/mercadoLivreService';
 import {
     TIKTOK_PRODUCT_LINKS_UPDATED_EVENT,
     TIKTOK_PRODUCT_LINKS_UPDATED_STORAGE_KEY,
@@ -35,6 +39,15 @@ export const ProductListPage: React.FC = () => {
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [pageInput, setPageInput] = useState('1');
     const [tiktokProductLinks, setTikTokProductLinks] = useState<Record<string, TikTokShopProductLink>>({});
+    const [mercadoLivreLinkedIds, setMercadoLivreLinkedIds] = useState<Set<string>>(new Set());
+    const [updatingPrint3dFamilyIds, setUpdatingPrint3dFamilyIds] = useState<Set<string>>(new Set());
+    const [viewMode, setViewMode] = useState<'cards' | 'families'>(() => {
+        try {
+            return localStorage.getItem('admin_products_view_mode') === 'families' ? 'families' : 'cards';
+        } catch {
+            return 'cards';
+        }
+    });
 
     const {
         products,
@@ -48,19 +61,52 @@ export const ProductListPage: React.FC = () => {
         setCurrentPage,
         itemsPerPage,
         setItemsPerPage,
-        totalPages,
+        totalPages: cardTotalPages,
         allFilteredProducts,
+        familyFilteredProducts,
+        allProducts,
+        filters,
         cacheAge,
         channelLoading,
         channelError,
     } = useProducts();
+    const familyGroups = useMemo(
+        () => buildProductFamilyGroups(familyFilteredProducts, allProducts) as ProductFamilyGroup[],
+        [familyFilteredProducts, allProducts],
+    );
+    const familyPagination = useMemo(
+        () => paginateProductFamilyGroups(familyGroups, currentPage, itemsPerPage) as { currentPage: number; totalPages: number; groups: ProductFamilyGroup[] },
+        [familyGroups, currentPage, itemsPerPage],
+    );
+    const totalPages = viewMode === 'families' ? familyPagination.totalPages : cardTotalPages;
+    const visibleFamilyGroups = familyPagination.groups;
+    const visibleProducts = viewMode === 'families'
+        ? visibleFamilyGroups.flatMap(group => group.selectionProducts)
+        : products;
     const visibleProductIdsKey = Array.from(new Set(
-        products.flatMap((product) => [product.id, product.parent_id].filter(Boolean) as string[]),
+        visibleProducts.flatMap((product) => [product.id, product.parent_id].filter(Boolean) as string[]),
     )).sort().join(',');
 
     useEffect(() => {
         setPageInput(String(currentPage));
     }, [currentPage]);
+
+    useEffect(() => {
+        if (currentPage > totalPages) setCurrentPage(Math.max(1, totalPages));
+    }, [currentPage, totalPages, setCurrentPage]);
+
+    useEffect(() => {
+        let cancelled = false;
+        mercadoLivreService.getProductLinks()
+            .then(({ items }) => {
+                if (!cancelled) setMercadoLivreLinkedIds(new Set(items.map(item => item.product_id).filter(Boolean)));
+            })
+            .catch((cause) => {
+                console.warn('[ProductListPage] Falha ao carregar vínculos do Mercado Livre:', cause);
+                if (!cancelled) setMercadoLivreLinkedIds(new Set());
+            });
+        return () => { cancelled = true; };
+    }, [isRefreshing]);
 
     useEffect(() => {
         let cancelled = false;
@@ -191,6 +237,63 @@ export const ProductListPage: React.FC = () => {
             return next;
         });
     }, []);
+
+    const handleToggleFamily = useCallback((familyProducts: Product[], selected: boolean) => {
+        setSelectedIds(previous => {
+            const next = new Set(previous);
+            familyProducts.forEach(product => selected ? next.add(product.id) : next.delete(product.id));
+            return next;
+        });
+    }, []);
+
+    const handleViewModeChange = (nextMode: 'cards' | 'families') => {
+        setViewMode(nextMode);
+        setCurrentPage(1);
+        setPageInput('1');
+        try { localStorage.setItem('admin_products_view_mode', nextMode); } catch { /* preferência opcional */ }
+    };
+
+    const handleAddVariation = (parent: Product) => {
+        navigate('/admin/products/new', { state: getFamilyChildState(parent) });
+    };
+
+    const handleTogglePrint3dFamily = async (parent: Product, familyProducts: Product[], enabled: boolean) => {
+        const uniqueProducts = Array.from(new Map(familyProducts.map(product => [product.id, product])).values());
+        setUpdatingPrint3dFamilyIds(current => new Set(current).add(parent.id));
+        try {
+            const fullProducts = await Promise.all(uniqueProducts.map(product => vpsApiService.getProductById(product.id, true)));
+            if (fullProducts.some(product => !product)) throw new Error('Não foi possível carregar todos os produtos da família.');
+
+            const updates = await Promise.all(fullProducts.map(async (product, index) => ({
+                index,
+                ok: await vpsApiService.updateProduct(uniqueProducts[index].id, { ...product, is_print3d: enabled }),
+            })));
+            const failed = updates.filter(result => !result.ok);
+            if (failed.length > 0) {
+                const succeeded = updates.filter(result => result.ok);
+                await Promise.allSettled(succeeded.map(({ index }) => vpsApiService.updateProduct(
+                    uniqueProducts[index].id,
+                    { ...fullProducts[index], is_print3d: Boolean(fullProducts[index]?.is_print3d) },
+                )));
+                throw new Error('A atualização não foi concluída e as alterações aplicadas foram revertidas.');
+            }
+
+            toast.success(enabled
+                ? `Pai e ${Math.max(0, uniqueProducts.length - 1)} variação(ões) marcados como produtos 3D.`
+                : `Marca de produto 3D removida do pai e das ${Math.max(0, uniqueProducts.length - 1)} variação(ões).`);
+            await refresh();
+        } catch (cause) {
+            console.error('[ProductListPage] Falha ao atualizar família 3D:', cause);
+            toast.error(cause instanceof Error ? cause.message : 'Não foi possível atualizar a família 3D.');
+            await refresh();
+        } finally {
+            setUpdatingPrint3dFamilyIds(current => {
+                const next = new Set(current);
+                next.delete(parent.id);
+                return next;
+            });
+        }
+    };
 
     const handleExitSelection = () => {
         setSelectionMode(false);
@@ -415,21 +518,61 @@ export const ProductListPage: React.FC = () => {
             )}
 
             {/* Filters */}
-            <ProductFilters onFilterChange={handleFilterChange} />
+            <ProductFilters onFilterChange={handleFilterChange} showParentVisibility={viewMode === 'cards'} />
             {channelLoading && <p role="status" className="mt-3 text-sm text-slate-600">Consultando situação dos produtos no canal…</p>}
             {channelError && <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{channelError}</p>}
 
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p className="text-sm font-semibold text-slate-800">Visualização dos produtos</p>
+                    <p className="text-xs text-slate-500">Em Famílias, o pai e suas variações permanecem juntos na mesma página.</p>
+                </div>
+                <div className="inline-flex self-start rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label="Visualização dos produtos">
+                    <button type="button" onClick={() => handleViewModeChange('cards')}
+                        aria-pressed={viewMode === 'cards'}
+                        className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold ${viewMode === 'cards' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
+                        <LayoutGrid size={16} /> Cartões
+                    </button>
+                    <button type="button" onClick={() => handleViewModeChange('families')}
+                        aria-pressed={viewMode === 'families'}
+                        className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold ${viewMode === 'families' ? 'bg-violet-700 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
+                        <ListTree size={16} /> Famílias
+                    </button>
+                </div>
+            </div>
+
             {/* Products List */}
-            <ProductList
-                products={products}
-                isLoading={isLoading}
-                onEditProduct={handleEditProduct}
-                onDeleteProduct={handleDeleteProduct}
-                selectionMode={selectionMode}
-                selectedIds={selectedIds}
-                onToggleSelect={handleToggleSelect}
-                tiktokProductLinks={tiktokProductLinks}
-            />
+            {viewMode === 'cards' ? (
+                <ProductList
+                    products={products}
+                    isLoading={isLoading}
+                    onEditProduct={handleEditProduct}
+                    onDeleteProduct={handleDeleteProduct}
+                    selectionMode={selectionMode}
+                    selectedIds={selectedIds}
+                    onToggleSelect={handleToggleSelect}
+                    tiktokProductLinks={tiktokProductLinks}
+                />
+            ) : (
+                <ProductFamilyList
+                    groups={visibleFamilyGroups}
+                    isLoading={isLoading}
+                    searchActive={Boolean(filters.search.trim())}
+                    selectionMode={selectionMode}
+                    selectedIds={selectedIds}
+                    tiktokProductLinks={tiktokProductLinks}
+                    mercadoLivreLinkedIds={mercadoLivreLinkedIds}
+                    updatingPrint3dFamilyIds={updatingPrint3dFamilyIds}
+                    onEdit={handleEditProduct}
+                    onDelete={handleDeleteProduct}
+                    onAddVariation={handleAddVariation}
+                    onExportFamily={(parent) => navigate(`/admin/products/storefronts?sku=${encodeURIComponent(parent.sku || '')}`)}
+                    onTogglePrint3dFamily={(parent, products, enabled) => void handleTogglePrint3dFamily(parent, products, enabled)}
+                    onManagePublication={(product) => navigate(`/admin/loja-3d/catalogo?sku=${encodeURIComponent(product.sku || '')}`)}
+                    onToggleProduct={handleToggleSelect}
+                    onToggleFamily={handleToggleFamily}
+                />
+            )}
 
             {/* Bulk Action Bar */}
             <BulkActionBar
@@ -451,14 +594,16 @@ export const ProductListPage: React.FC = () => {
             {!isLoading && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200">
                     <div className="text-sm text-slate-500">
-                        {allFilteredProducts.length === 0 ? (
+                        {(viewMode === 'families' ? familyGroups.length : allFilteredProducts.length) === 0 ? (
                             'Nenhum produto encontrado'
+                        ) : viewMode === 'families' ? (
+                            `Exibindo ${visibleFamilyGroups.length} de ${familyGroups.length} ${familyGroups.length === 1 ? 'família/produto' : 'famílias/produtos'} · ${familyFilteredProducts.length} ${familyFilteredProducts.length === 1 ? 'SKU encontrado' : 'SKUs encontrados'}`
                         ) : (
                             `Exibindo ${products.length} de ${allFilteredProducts.length} ${allFilteredProducts.length === 1 ? 'produto' : 'produtos'}`
                         )}
                     </div>
 
-                    {allFilteredProducts.length > 0 && (
+                    {(viewMode === 'families' ? familyGroups.length : allFilteredProducts.length) > 0 && (
                         <div className="flex items-center gap-4">
                             <div className="flex items-center gap-2">
                                 <span className="text-sm text-slate-500">Itens por pág:</span>

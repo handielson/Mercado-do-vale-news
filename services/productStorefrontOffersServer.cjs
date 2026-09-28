@@ -8,7 +8,7 @@ const compactImageColumns = `CASE WHEN p.images IS NOT NULL AND JSON_LENGTH(p.im
   THEN JSON_ARRAY(JSON_UNQUOTE(JSON_EXTRACT(p.images, '$[0]'))) ELSE JSON_ARRAY() END AS images,
   CASE WHEN p.image_url LIKE 'http%' THEN p.image_url ELSE NULL END AS image_url`;
 
-function productColumns(compact, storefront) { return `p.id, p.sku, p.ean, p.alternative_eans, p.model_id, p.category_id, p.brand, p.name, p.description,
+function productColumns(compact, storefront) { return `p.id, p.sku, p.ean, p.alternative_eans, p.model_id, p.parent_id, p.category_id, p.brand, p.name, p.description,
   p.slug, p.status, p.is_parent, p.is_print3d, p.stock_quantity, p.track_inventory,
   ${storefront === 'loja_3d' ? `LEAST(GREATEST(COALESCE(p.stock_quantity, 0), 0),
     COALESCE((SELECT SUM(GREATEST(0, psl.quantity - psl.reserved_quantity))
@@ -17,6 +17,9 @@ function productColumns(compact, storefront) { return `p.id, p.sku, p.ean, p.alt
   p.warranty_type, p.warranty_template_id, p.created_at,
   (SELECT c.name FROM categories c WHERE c.id = p.category_id LIMIT 1) AS category_name,
   (SELECT c.slug FROM categories c WHERE c.id = p.category_id LIMIT 1) AS category_slug,
+  (SELECT pp.sku FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_sku,
+  (SELECT pp.name FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_name,
+  (SELECT pp.slug FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_slug,
   (SELECT m.blueprint_image_url FROM models m WHERE m.id = p.model_id LIMIT 1) AS blueprint_image_url,
   p.production_days, p.print3d_preorder_enabled,
   p.price_retail AS legacy_price_retail, p.price_promo AS legacy_price_promo`; }

@@ -14,6 +14,7 @@ import { UnitList } from '../../../components/units/UnitList';
 import { UnitForm } from '../../../components/units/UnitForm';
 import { NcmSearchWidget } from '../../../components/admin/NcmSearchWidget';
 import { InmetroWidget } from '../../../components/admin/InmetroWidget';
+import { getFamilyChildState } from '../../../services/productClonePrefill.js';
 
 type TabType = 'product' | 'inventory';
 
@@ -297,6 +298,16 @@ export const ProductDetailPage: React.FC = () => {
                     <p className="text-sm text-slate-500 mt-1">SKU: {product.sku}</p>
 
                     <div className="mt-4 flex flex-wrap items-center gap-2">
+                        {Number(product.is_parent) === 1 && (
+                            <button
+                                type="button"
+                                onClick={() => navigate('/admin/products/new', { state: getFamilyChildState(product) })}
+                                className="inline-flex items-center gap-2 rounded-lg bg-violet-700 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-800"
+                            >
+                                <Plus className="h-4 w-4" />
+                                Adicionar nova variação
+                            </button>
+                        )}
                         {modelPanelHref && (
                             <button
                                 type="button"

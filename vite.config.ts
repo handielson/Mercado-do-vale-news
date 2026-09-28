@@ -90,6 +90,11 @@ export default defineConfig(({ mode }) => {
               }
               
               proxyReq.setHeader('x-sync-key', key);
+
+              // O navegador local pode usar localhost ou 127.0.0.1. A chamada para
+              // a VPS parte deste proxy same-origin, portanto não deve encaminhar
+              // a origem do navegador como se fosse uma chamada CORS direta.
+              proxyReq.removeHeader('origin');
               
               // Ensure proper headers for POST/PUT/PATCH
               if (['POST', 'PUT', 'PATCH'].includes(req.method)) {

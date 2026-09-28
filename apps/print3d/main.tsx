@@ -5,6 +5,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import '../../index.css';
 
 const Store = lazy(() => import('../../pages/store/Print3dStorePage'));
+const Product = lazy(() => import('../../pages/store/Print3dProductPage'));
 const Account = lazy(() => import('../../pages/store/Print3dAccountPage'));
 const Action = lazy(() => import('../../pages/store/Print3dAccountActionPage'));
 const Google = lazy(() => import('../../pages/store/Print3dGoogleCallbackPage'));
@@ -16,6 +17,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><HelmetProvider><BrowserRouter><Suspense fallback={<p role="status">Carregando loja 3D…</p>}><Routes>
     <Route path="/" element={<Navigate to={'/loja-3d' + window.location.search} replace />} />
     <Route path="/loja-3d" element={<Store />} />
+    <Route path="/loja-3d/produto/:slug" element={<Product />} />
     <Route path="/loja-3d/conta" element={<Account />} />
     <Route path="/loja-3d/conta/google/callback" element={<Google />} />
     <Route path="/loja-3d/conta/producao" element={<Production />} />

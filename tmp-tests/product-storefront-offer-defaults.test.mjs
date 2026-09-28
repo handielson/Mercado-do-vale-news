@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fillStorefrontOfferFromProduct } from '../utils/storefrontOfferDefaults.mjs';
+import { fillStorefrontOfferFromProduct, htmlToPlainText } from '../utils/storefrontOfferDefaults.mjs';
 
 const central = {
   name: 'Suporte de antena', description: 'Descrição central', category_name: 'Suportes', slug: 'suporte-antena',
@@ -28,4 +28,21 @@ test('dados já personalizados no site não são substituídos pelo cadastro cen
   assert.equal(result.price_retail, 6500);
   assert.equal(result.slug, 'suporte-antena');
   assert.equal(result.price_reseller, 4500);
+});
+
+test('HTML becomes a clean search description', () => {
+  const description = '<h2>Suporte KU</h2><p>Peca <strong>resistente</strong> &amp; leve.</p><ul><li>Facil instalacao</li></ul>';
+  const result = fillStorefrontOfferFromProduct('loja_3d', null, {
+    ...central,
+    meta_description: null,
+    description,
+  });
+  assert.equal(result.description, description);
+  assert.equal(result.meta_description, 'Suporte KU Peca resistente & leve. Facil instalacao');
+});
+
+test('search description is limited to 160 characters without a trailing space', () => {
+  const result = htmlToPlainText(`<p>${'produto '.repeat(30)}</p>`, 160);
+  assert.ok(result.length <= 160);
+  assert.equal(result.endsWith(' '), false);
 });

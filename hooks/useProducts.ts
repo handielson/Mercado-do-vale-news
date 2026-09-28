@@ -49,6 +49,10 @@ function mapVpsProduct(row: any): Product {
         warranty_template_id: row.warranty_template_id || undefined,
         parent_id: row.parent_id || undefined,
         is_parent: Number(row.is_parent) === 1,
+        production_days: row.production_days ?? null,
+        is_print3d: Number(row.is_print3d) === 1,
+        print3d_preorder_enabled: Number(row.print3d_preorder_enabled) === 1,
+        print3d_preorder_limit: row.print3d_preorder_limit == null ? null : Number(row.print3d_preorder_limit),
         bling_id: row.bling_id || undefined,
         bling_parent_id: row.bling_parent_id || undefined,
         shopee_item_id: row.shopee_item_id || undefined,
@@ -156,6 +160,7 @@ export const useProducts = () => {
     const cached = loadFromCache();
     const [products, setProducts] = useState<Product[]>(cached || []);
     const [filteredProducts, setFilteredProducts] = useState<Product[]>(cached || []);
+    const [familyFilteredProducts, setFamilyFilteredProducts] = useState<Product[]>(cached || []);
     const [isLoading, setIsLoading] = useState(!cached); // só mostra loading se não tem cache
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -249,7 +254,12 @@ export const useProducts = () => {
      * Apply client-side filters
      */
     const applyFilters = useCallback(() => {
-        setFilteredProducts(filterAdminProducts(products, filters, channelState.channel === channel ? channelState.ids : null));
+        const channelIds = channelState.channel === channel ? channelState.ids : null;
+        setFilteredProducts(filterAdminProducts(products, filters, channelIds));
+        setFamilyFilteredProducts(filterAdminProducts(products, {
+            ...filters,
+            parentVisibility: 'show_all',
+        }, channelIds));
         setCurrentPage(1); // Reset to first page when filters change
     }, [products, filters, channelState, channel]);
 
@@ -265,14 +275,14 @@ export const useProducts = () => {
      */
     const refresh = useCallback(() => {
         setChannelRevision(value => value + 1);
-        fetchProducts('refresh');
+        return fetchProducts('refresh');
     }, [fetchProducts]);
 
     /**
      * Refetch products (useful after create/update/delete)
      */
     const refetch = useCallback(() => {
-        fetchProducts('spinner');
+        return fetchProducts('spinner');
     }, [fetchProducts]);
 
     /**
@@ -374,6 +384,7 @@ export const useProducts = () => {
     return {
         products: paginatedProducts,
         allFilteredProducts: filteredProducts,
+        familyFilteredProducts,
         allProducts: products,
         channelLoading: needsChannel && (channelState.channel !== channel || (!channelState.ids && !channelState.error)),
         channelError: needsChannel && channelState.channel === channel ? channelState.error : null,

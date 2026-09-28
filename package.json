@@ -36,7 +36,9 @@
     "preview": "vite preview",
     "test:smartphone-photo-intake-bling": "node --test tmp-tests/model-bling-mapping.test.mjs tmp-tests/photo-intake-bling-routes.test.mjs",
     "dev:print3d": "vite --config vite.print3d.config.ts",
-    "build:print3d": "node scripts/assert-no-supabase-runtime.cjs && vite build --config vite.print3d.config.ts"
+    "build:print3d": "node scripts/assert-no-supabase-runtime.cjs && vite build --config vite.print3d.config.ts",
+    "deploy:vps-print3d-site": "node scripts/deploy-vps-print3d-site.cjs",
+    "install:vps-print3d-nginx": "node scripts/install-print3d-site-nginx.cjs"
   },
   "dependencies": {
     "@alexssmusica/node-pdf-nfe": "1.2.24",

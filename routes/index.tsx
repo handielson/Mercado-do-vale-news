@@ -87,6 +87,7 @@ const TotemPixUpdatePage = lazy(() => import('../pages/store/TotemPixUpdatePage'
 const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
 const CatalogPage = lazy(() => import('../pages/catalog/index'));
 const Print3dStorePage = lazy(() => import('../pages/store/Print3dStorePage'));
+const Print3dProductPage = lazy(() => import('../pages/store/Print3dProductPage'));
 const Print3dAccountPage = lazy(() => import('../pages/store/Print3dAccountPage'));
 const Print3dProductionPage = lazy(() => import('../pages/store/Print3dProductionPage'));
 const Print3dCheckoutPage = lazy(() => import('../pages/store/Print3dCheckoutPage'));
@@ -1073,6 +1074,14 @@ export const router = createBrowserRouter([
     element: (
       <MaintenanceGuard>
         <Print3dStorePage />
+      </MaintenanceGuard>
+    )
+  },
+  {
+    path: "/loja-3d/produto/:slug",
+    element: (
+      <MaintenanceGuard>
+        <Print3dProductPage />
       </MaintenanceGuard>
     )
   },

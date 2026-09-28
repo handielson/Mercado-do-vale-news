@@ -283,6 +283,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             price_wholesale: 0,
             track_inventory: true,
             stock_quantity: 0,
+            is_parent: false,
+            product_format: initialData?.is_parent ? 'parent' : initialData?.parent_id ? 'variation' : 'simple',
             is_print3d: false,
             print3d_preorder_enabled: false,
             print3d_preorder_limit: null,
@@ -304,7 +306,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             console.log('📦 specs type:', typeof initialData.specs);
             console.log('📦 specs keys:', initialData.specs ? Object.keys(initialData.specs) : 'NO SPECS');
             console.log('🔄 Resetting form with initialData...');
-            reset(initialData);
+            reset({
+                product_format: initialData.is_parent ? 'parent' : initialData.parent_id ? 'variation' : 'simple',
+                ...initialData,
+            });
 
             // 🔥 CRITICAL: Update external IDs state when initialData arrives asynchronously
             setBlingId(initialData.bling_id || undefined);

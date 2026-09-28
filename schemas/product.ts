@@ -21,6 +21,8 @@ export const productSchema = z.object({
     brand: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
     model: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
     parent_id: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
+    is_parent: z.union([z.boolean(), z.number()]).optional().transform(v => v === true || v === 1),
+    product_format: z.enum(['simple', 'parent', 'variation']).optional().default('simple'),
 
     // Basic Information
     name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
@@ -176,7 +178,7 @@ export const productSchema = z.object({
         // If tracking inventory and NOT a combo, stock_quantity is required.
         // Combos calculate their stock dynamically on the backend based on child stocks.
         // Virtual products do not need stock tracking.
-        if (data.is_virtual) {
+        if (data.is_virtual || data.is_parent) {
             return true;
         }
         if (data.track_inventory === true && !data.is_combo && (data.stock_quantity === undefined || data.stock_quantity === null)) {
@@ -189,6 +191,13 @@ export const productSchema = z.object({
         path: ['stock_quantity']
     }
 ).superRefine((data, ctx) => {
+    if (data.product_format === 'variation' && !data.parent_id) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Escolha a família desta variação.',
+            path: ['parent_id'],
+        });
+    }
     if (data.print3d_preorder_enabled) {
         if (!data.is_print3d || !data.track_inventory || data.is_virtual) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Encomendas 3D exigem produto físico com controle de estoque.', path: ['print3d_preorder_enabled'] });

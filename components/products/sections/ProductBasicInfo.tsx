@@ -154,11 +154,42 @@ export function ProductBasicInfo({
     const [allProducts, setAllProducts] = useState<Product[]>([]);
     const [parentSearch, setParentSearch] = useState('');
     const [selectedParent, setSelectedParent] = useState<Product | null>(null);
+    const [productFormat, setProductFormat] = useState<'simple' | 'parent' | 'variation'>(
+        initialData?.is_parent ? 'parent' : initialData?.parent_id ? 'variation' : 'simple'
+    );
+
+    const changeProductFormat = (format: 'simple' | 'parent' | 'variation') => {
+        setProductFormat(format);
+        setValue('product_format', format, { shouldValidate: true, shouldDirty: true });
+        if (format === 'parent') {
+            setValue('is_parent', true, { shouldValidate: true, shouldDirty: true });
+            setValue('parent_id', undefined, { shouldValidate: true, shouldDirty: true });
+            setValue('track_inventory', false, { shouldValidate: true, shouldDirty: true });
+            setValue('stock_quantity', undefined, { shouldValidate: true, shouldDirty: true });
+            setValue('print3d_preorder_enabled', false, { shouldValidate: true, shouldDirty: true });
+            setSelectedParent(null);
+            setParentSearch('');
+            return;
+        }
+
+        setValue('is_parent', false, { shouldValidate: true, shouldDirty: true });
+        if (format === 'simple') {
+            setValue('parent_id', undefined, { shouldValidate: true, shouldDirty: true });
+            setSelectedParent(null);
+            setParentSearch('');
+        }
+    };
 
     // Carrega lista de produtos para busca de pai
     useEffect(() => {
         productService.list().then(setAllProducts).catch(() => { });
     }, []);
+
+    useEffect(() => {
+        const format = initialData?.is_parent ? 'parent' : initialData?.parent_id ? 'variation' : 'simple';
+        setProductFormat(format);
+        setValue('product_format', format);
+    }, [initialData?.id, initialData?.is_parent, initialData?.parent_id]);
 
     // Preenche selectedParent ao editar um produto que já tem parent_id
     useEffect(() => {
@@ -166,11 +197,15 @@ export function ProductBasicInfo({
         if (pid && allProducts.length > 0) {
             const parent = allProducts.find(p => p.id === pid);
             setSelectedParent(parent || null);
+            setProductFormat('variation');
+            setValue('product_format', 'variation');
         }
     }, [watch('parent_id'), allProducts]);
 
     useEffect(() => {
         if (blingParentProduct?.id) {
+            setProductFormat('variation');
+            setValue('product_format', 'variation');
             setAllProducts(current => current.some(product => product.id === blingParentProduct.id)
                 ? current
                 : [...current, blingParentProduct]);
@@ -186,6 +221,8 @@ export function ProductBasicInfo({
         );
         if (!parent) return;
 
+        setProductFormat('variation');
+        setValue('product_format', 'variation');
         setSelectedParent(parent);
         setParentSearch('');
         setValue('parent_id', parent.id, { shouldValidate: true, shouldDirty: true });
@@ -414,13 +451,43 @@ export function ProductBasicInfo({
                         )}
                     </div>
 
+                    <div className="space-y-2 md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700">
+                            Formato do produto
+                        </label>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                            {([
+                                ['simple', 'Produto simples', 'Vendido sozinho, sem variações.'],
+                                ['parent', 'Família de variações', 'Agrupa os SKUs filhos e não possui estoque próprio.'],
+                                ['variation', 'Variação vendável', 'SKU com estoque, preço e produção próprios.'],
+                            ] as const).map(([value, title, description]) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => changeProductFormat(value)}
+                                    className={`rounded-lg border px-3 py-3 text-left transition-colors ${productFormat === value
+                                        ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
+                                        : 'border-slate-200 bg-white hover:border-blue-300'
+                                        }`}
+                                >
+                                    <span className="block text-sm font-semibold text-slate-800">{title}</span>
+                                    <span className="mt-1 block text-xs leading-4 text-slate-500">{description}</span>
+                                </button>
+                            ))}
+                        </div>
+                        {productFormat === 'parent' && (
+                            <p className="rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
+                                Esta família organiza e publica as variações. Estoque, preço final, encomenda e arquivos 3D ficam em cada variação vendável.
+                            </p>
+                        )}
+                    </div>
+
                     {/* Produto Pai (Variação) */}
-                    <div className="space-y-1 md:col-span-2">
+                    {productFormat === 'variation' && <div className="space-y-1 md:col-span-2">
                         <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1.5">
                             <GitBranch size={14} className="text-slate-400" />
-                            Produto Pai
+                            Família deste produto
                             <span className="ml-1 text-xs text-slate-400 font-mono">products.parent_id</span>
-                            <span className="ml-2 text-xs text-slate-400">(opcional — vincule se este é uma variação de cor/versão)</span>
                         </label>
 
                         {selectedParent ? (
@@ -449,16 +516,20 @@ export function ProductBasicInfo({
                                     value={parentSearch}
                                     onChange={(e) => setParentSearch(e.target.value)}
                                     className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="Buscar por SKU ou nome do produto pai..."
+                                    placeholder="Buscar uma família por SKU ou nome..."
                                 />
                                 {parentSearch.length >= 2 && (() => {
                                     const filtered = allProducts.filter(p =>
-                                        !p.parent_id && // só pais
+                                        Number(p.is_parent) === 1 && // somente famílias já definidas
                                         p.id !== initialData?.id && // não ele mesmo
                                         (p.sku?.toLowerCase().includes(parentSearch.toLowerCase()) ||
                                             p.name.toLowerCase().includes(parentSearch.toLowerCase()))
                                     ).slice(0, 6);
-                                    if (filtered.length === 0) return null;
+                                    if (filtered.length === 0) return (
+                                        <div className="absolute z-10 mt-1 w-full rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800 shadow-lg">
+                                            Nenhuma família encontrada. Primeiro cadastre ou edite o produto agregador e escolha o formato “Família de variações”.
+                                        </div>
+                                    );
                                     return (
                                         <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-48 overflow-auto">
                                             {filtered.map(p => (
@@ -468,7 +539,8 @@ export function ProductBasicInfo({
                                                     onClick={() => {
                                                         setSelectedParent(p);
                                                         setParentSearch('');
-                                                        setValue('parent_id', p.id);
+                                                        setValue('parent_id', p.id, { shouldValidate: true, shouldDirty: true });
+                                                        setValue('is_parent', false, { shouldValidate: true, shouldDirty: true });
                                                         // Sugere SKU filho se o campo estiver vazio
                                                         const currentSku = watch('sku');
                                                         if (!currentSku?.trim() && p.sku) {
@@ -488,7 +560,10 @@ export function ProductBasicInfo({
                                 })()}
                             </div>
                         )}
-                    </div>
+                        <p className="text-xs text-slate-500">
+                            A família é definida uma única vez no cadastro central. Depois, a publicação nos sites leva o grupo já organizado.
+                        </p>
+                    </div>}
                 </div>
 
                 {/* Template Data Preview (read-only) — shown when a model is selected */}

@@ -562,6 +562,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
         company_id: companyId,
         model_id: effectiveModelId,
         parent_id: input.parent_id ?? null,
+        is_parent: input.is_parent !== undefined ? (input.is_parent ? 1 : 0) : (oldProduct.is_parent ? 1 : 0),
         brand,
         category_id,
         name: input.name,

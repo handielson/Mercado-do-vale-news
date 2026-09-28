@@ -31,7 +31,8 @@ try {
   // dotenv is optional for CI environments that inject variables directly.
 }
 
-const DIST_DIR = path.join(ROOT, 'dist');
+const DEPLOY_VARIANT = process.env.MDV_DEPLOY_SITE_VARIANT === 'print3d' ? 'print3d' : 'main';
+const DIST_DIR = path.join(ROOT, DEPLOY_VARIANT === 'print3d' ? 'dist-print3d' : 'dist');
 
 const config = {
   host: process.env.VPS_SITE_HOST,
@@ -39,7 +40,7 @@ const config = {
   username: process.env.VPS_SITE_USER,
   password: process.env.VPS_SITE_PASSWORD,
   privateKey: process.env.VPS_SITE_PRIVATE_KEY ? fs.readFileSync(process.env.VPS_SITE_PRIVATE_KEY) : undefined,
-  root: (process.env.VPS_SITE_ROOT || '/var/www/mdv-site').replace(/\/+$/, ''),
+  root: (process.env.VPS_SITE_ROOT || (DEPLOY_VARIANT === 'print3d' ? '/var/www/print3d-site' : '/var/www/mdv-site')).replace(/\/+$/, ''),
 };
 
 function requireConfig() {
@@ -101,21 +102,23 @@ function runLocalBuild() {
     return;
   }
 
-  console.log('Running npm run build...');
+  const buildScript = DEPLOY_VARIANT === 'print3d' ? 'build:print3d' : 'build';
+  console.log(`Running npm run ${buildScript}...`);
   const isWindows = process.platform === 'win32';
-  const command = isWindows ? 'npm.cmd run build' : 'npm';
-  const args = isWindows ? [] : ['run', 'build'];
-  const result = spawnSync(command, args, {
+  const command = 'npm';
+  const args = isWindows ? [] : ['run', buildScript];
+  const windowsCommand = isWindows ? `npm.cmd run ${buildScript}` : command;
+  const result = spawnSync(windowsCommand, args, {
     cwd: ROOT,
     stdio: 'inherit',
     shell: process.platform === 'win32',
   });
   if (result.error) {
-    throw new Error(`npm run build failed to start: ${result.error.message}`);
+    throw new Error(`npm run ${buildScript} failed to start: ${result.error.message}`);
   }
   if (result.status !== 0) {
     const suffix = result.signal ? `, signal ${result.signal}` : '';
-    throw new Error(`npm run build failed with exit code ${result.status}${suffix}`);
+    throw new Error(`npm run ${buildScript} failed with exit code ${result.status}${suffix}`);
   }
   if (!fs.existsSync(DIST_DIR)) {
     throw new Error(`Build output not found: ${DIST_DIR}`);

@@ -89,3 +89,27 @@ export function getProductCloneState(product = {}) {
     cloneProduct: buildProductClonePrefill(product),
   };
 }
+
+export function buildFamilyChildPrefill(parent = {}) {
+  if (!parent?.id) throw new Error('A família precisa estar salva antes de adicionar uma variação.');
+
+  const child = buildProductClonePrefill(parent);
+  child.parent_id = parent.id;
+  child.is_parent = false;
+  child.product_format = 'variation';
+  child.name = parent.name ? `${parent.name} - Nova variação` : '';
+  child.sku = '';
+  child.eans = [];
+  child.stock_quantity = 0;
+  child.bling_id = null;
+  child.bling_parent_id = null;
+  child.shopee_item_id = null;
+  child.print3d_preorder_enabled = false;
+  child.print3d_preorder_limit = null;
+
+  return child;
+}
+
+export function getFamilyChildState(parent = {}) {
+  return { cloneProduct: buildFamilyChildPrefill(parent) };
+}

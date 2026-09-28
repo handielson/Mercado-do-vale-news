@@ -1,13 +1,13 @@
-# v1.2.494-registro-rota-prazo-3d
+# v1.2.495-dominio-3dmv
 
-Data: 2026-09-27. Status: pronta para publicação. Branch: main.
-Tag: v1.2.494-registro-rota-prazo-3d
-Release: /var/www/mdv-site/releases/20260928-013502-v1-2-494-registro-rota-prazo-3d
+Data: 2026-09-28. Status: pronta para publicação. Branch: main.
+Tag: v1.2.495-dominio-3dmv
+Release 3D: pendente
 
-O runtime `vps_server.js`, executado pelo PM2 como `server.js`, agora registra a rota de solicitações de prazo e garante a criação da tabela correspondente durante a inicialização.
+Esta versão publica a Loja 3D em um frontend isolado para `www.3dmv.com.br`, sem expor o painel ou as páginas públicas do Mercado do Vale no novo domínio.
 
-A validação em produção mostrou que a permissão do proxy já funcionava, mas o pedido chegava a uma rota não registrada e recebia `404`. O runtime alternativo já continha a implementação; esta versão mantém os dois sincronizados nessa função.
+O catálogo administrativo passa a reunir pai e variações em famílias, permite marcar a família inteira como produto 3D, publicar todas as variações e completar os dados próprios do canal. A página pública de produto usa a família como endereço canônico, permite selecionar somente variações publicadas e entrega metadados de SEO.
 
-As regras permanecem: prazo e limite podem ficar em branco, solicitações não criam pedido ou cobrança, e o WhatsApp da Loja 3D continua isolado enquanto seu número próprio não for configurado.
+O domínio usa Cloudflare com registros para a VPS e nameservers atribuídos à zona. O deploy separado grava releases em `/var/www/print3d-site`, mantendo rollback independente do site Mercado do Vale.
 
-Validação: sintaxe dos runtimes, teste que exige registro e migração nos dois arquivos implantáveis, rotas de solicitação, pacote de implantação e verificação pública após o deploy.
+Validações: builds principal e 3D, testes de famílias, herança de variações, ofertas por site, SEO do produto e contrato de implantação do domínio.

@@ -13942,6 +13942,74 @@ async function loadSeoProductBySlug(slug) {
   return rows[0] || null;
 }
 
+function print3dSeoSlug(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 170);
+}
+
+function print3dSeoBaseProductName(value) {
+  const name = String(value || '').trim();
+  return name
+    .replace(/(?:\s*[-–—|]\s*|\s+)(?:cor|color)\s*:?\s*[^|,/]+$/iu, '')
+    .trim() || name;
+}
+
+function getPrint3dSeoRouteTarget(product) {
+  const base = print3dSeoSlug(product.parent_name || print3dSeoBaseProductName(product.offer_title || product.name)) || 'produto';
+  const unique = print3dSeoSlug(product.parent_sku || product.sku || product.id) || print3dSeoSlug(product.id);
+  return `${base}-${unique}`;
+}
+
+function getPrint3dLegacySeoRouteTarget(product) {
+  const base = print3dSeoSlug(product.offer_slug || product.product_slug || product.offer_title || product.name) || 'produto';
+  const unique = print3dSeoSlug(product.sku || product.id) || print3dSeoSlug(product.id);
+  return `${base}-${unique}`;
+}
+
+async function loadPrint3dSeoProductByRouteTarget(routeTarget) {
+  const [rows] = await pool.query(
+    `SELECT p.id, p.company_id, p.model_id, p.name, p.description, p.images, p.image_url, p.specs,
+        p.price_retail AS product_price_retail, p.stock_quantity,
+        LEAST(GREATEST(COALESCE(p.stock_quantity, 0), 0),
+          COALESCE((SELECT SUM(GREATEST(0, psl.quantity - psl.reserved_quantity))
+            FROM product_stock_locations psl WHERE psl.product_id = p.id), GREATEST(COALESCE(p.stock_quantity, 0), 0))) AS available_stock,
+        p.sku, p.slug AS product_slug, pp.sku AS parent_sku, pp.name AS parent_name, pp.slug AS parent_slug,
+        p.production_days, p.print3d_preorder_enabled,
+        o.title AS offer_title, o.description AS offer_description, o.category_label,
+        o.slug AS offer_slug, o.price_retail AS offer_price_retail,
+        o.meta_title, o.meta_description, o.updated_at
+       FROM products p
+       INNER JOIN product_storefront_offers o
+         ON o.product_id = p.id AND o.storefront = 'loja_3d'
+       LEFT JOIN products pp ON pp.id = p.parent_id
+       WHERE o.publication_status = 'published'
+         AND o.price_retail > 0
+         AND p.is_print3d = 1
+         AND p.status = 'active'
+         AND (p.is_parent = 0 OR p.is_parent IS NULL)
+         AND (p.exclude_from_seo = 0 OR p.exclude_from_seo IS NULL)
+       ORDER BY o.updated_at DESC
+       LIMIT 5000`
+  );
+  const normalizedTarget = String(routeTarget || '').toLowerCase();
+  const match = rows.find((row) => getPrint3dSeoRouteTarget(row).toLowerCase() === normalizedTarget
+    || getPrint3dLegacySeoRouteTarget(row).toLowerCase() === normalizedTarget);
+  if (!match) return null;
+  return {
+    ...match,
+    name: print3dSeoBaseProductName(match.offer_title || match.name),
+    description: match.offer_description ?? match.description,
+    slug: match.offer_slug || match.product_slug,
+    price_retail: match.offer_price_retail,
+    seo_route_target: getPrint3dSeoRouteTarget(match),
+  };
+}
+
 async function loadSeoProductImages(product, baseUrl) {
   const specs = parsePublicJson(product?.specs, {});
   const color = String(specs?.color || specs?.cor || '').trim();
@@ -14136,6 +14204,114 @@ fastify.get('/api/seo-produto', async (request, reply) => {
   }
 });
 
+fastify.get('/api/seo-produto-3d', async (request, reply) => {
+  const routeTarget = String(request.query?.slug || '').trim();
+  if (!routeTarget) return reply.redirect('/loja-3d');
+
+  try {
+    const baseHtml = readSeoIndexHtml();
+    const product = await loadPrint3dSeoProductByRouteTarget(routeTarget);
+    if (!product) {
+      return reply
+        .header('Content-Type', 'text/html; charset=utf-8')
+        .header('Cache-Control', 'no-store')
+        .code(410)
+        .send('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="robots" content="noindex, follow"><title>Produto indisponivel | 3D do Vale</title></head><body><h1>Produto indisponivel</h1><p>Este produto nao esta publicado na Loja 3D.</p><a href="/loja-3d">Ver produtos 3D</a></body></html>');
+    }
+
+    const baseUrl = buildSeoBaseUrl(request);
+    const publicImages = await loadSeoProductImages(product, baseUrl);
+    const seoTitle = print3dSeoBaseProductName(product.meta_title || product.name);
+    const title = `${seoTitle} | 3D do Vale`;
+    const cleanDescription = stripSeoHtml(product.meta_description || product.description || '');
+    const description = cleanDescription.slice(0, 155) || `Conheca ${product.name}, produzido pela 3D do Vale.`;
+    const canonicalTarget = product.seo_route_target || routeTarget;
+    const url = `${baseUrl}/loja-3d/produto/${encodeURIComponent(canonicalTarget)}`;
+    const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
+    const imageMetadata = await loadSeoImageMetadata(image);
+    const stockQuantity = Number(product.available_stock ?? product.stock_quantity) || 0;
+    const availability = stockQuantity > 0
+      ? 'https://schema.org/InStock'
+      : Number(product.print3d_preorder_enabled) === 1
+        ? 'https://schema.org/PreOrder'
+        : 'https://schema.org/OutOfStock';
+    const schemaProduct = {
+      '@context': 'https://schema.org/',
+      '@type': 'Product',
+      name: product.name || '',
+      image: publicImages.length ? publicImages.slice(0, 5) : [image],
+      description,
+      sku: product.sku || '',
+      category: product.category_label || 'Impressao 3D',
+      offers: {
+        '@type': 'Offer',
+        url,
+        priceCurrency: 'BRL',
+        price: formatSeoPrice(product.price_retail),
+        availability,
+        itemCondition: 'https://schema.org/NewCondition',
+      },
+    };
+    const schemaBreadcrumb = {
+      '@context': 'https://schema.org/',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: '3D do Vale', item: `${baseUrl}/loja-3d` },
+        { '@type': 'ListItem', position: 2, name: product.category_label || 'Produtos 3D', item: `${baseUrl}/loja-3d` },
+        { '@type': 'ListItem', position: 3, name: product.name || title, item: url },
+      ],
+    };
+
+    const safeTitle = escapeSeoHtml(title);
+    const safeDescription = escapeSeoHtml(description);
+    const safeImage = escapeSeoHtml(image);
+    const metaTags = `
+    <!-- SEO Injetado via VPS Fastify (seo-produto-3d) -->
+    <title>${safeTitle}</title>
+    <meta name="description" content="${safeDescription}" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="${url}" />
+    <meta property="og:type" content="product" />
+    <meta property="og:url" content="${url}" />
+    <meta property="og:title" content="${safeTitle}" />
+    <meta property="og:description" content="${safeDescription}" />
+    <meta property="og:image" content="${safeImage}" />
+    <meta property="og:image:secure_url" content="${safeImage}" />
+    ${imageMetadata.type ? `<meta property="og:image:type" content="${escapeSeoHtml(imageMetadata.type)}" />` : ''}
+    ${imageMetadata.width ? `<meta property="og:image:width" content="${imageMetadata.width}" />` : ''}
+    ${imageMetadata.height ? `<meta property="og:image:height" content="${imageMetadata.height}" />` : ''}
+    <meta property="og:site_name" content="3D do Vale" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="${url}" />
+    <meta name="twitter:title" content="${safeTitle}" />
+    <meta name="twitter:description" content="${safeDescription}" />
+    <meta name="twitter:image" content="${safeImage}" />
+    <script type="application/ld+json">${JSON.stringify(schemaProduct)}</script>
+    <script type="application/ld+json">${JSON.stringify(schemaBreadcrumb)}</script>
+    <!-- Fim SEO seo-produto-3d -->
+`;
+
+    const finalHtml = removeExistingSeoHeadTags(baseHtml)
+      .replace(/<meta[^>]*name=["']robots["'][^>]*>/gi, '')
+      .replace('<head>', `<head>\n${metaTags}`);
+    return reply
+      .header('Content-Type', 'text/html; charset=utf-8')
+      .header('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
+      .code(200)
+      .send(finalHtml);
+  } catch (err) {
+    return reply.code(500).send({
+      error: 'Failed to generate 3D product SEO HTML',
+      debug: buildCopyableDebug('seo-produto-3d', {
+        step: 'render 3D product seo',
+        slug: routeTarget,
+        rawMessage: err.message,
+      }),
+    });
+  }
+});
+
 fastify.get('/api/sitemap', async (request, reply) => {
   try {
     const [products] = await pool.query(
@@ -14153,9 +14329,35 @@ fastify.get('/api/sitemap', async (request, reply) => {
        LIMIT 5000`
     );
 
+    const [print3dProducts] = await pool.query(
+      `SELECT p.id, p.sku, p.name, p.slug AS product_slug,
+          pp.sku AS parent_sku, pp.name AS parent_name, pp.slug AS parent_slug,
+          o.title AS offer_title, o.slug AS offer_slug, MAX(o.updated_at) AS updated_at
+       FROM products p
+       INNER JOIN product_storefront_offers o
+         ON o.product_id = p.id AND o.storefront = 'loja_3d'
+       LEFT JOIN products pp ON pp.id = p.parent_id
+       WHERE o.publication_status = 'published'
+         AND o.price_retail > 0
+         AND p.is_print3d = 1
+         AND p.status = 'active'
+         AND (p.is_parent = 0 OR p.is_parent IS NULL)
+         AND (p.exclude_from_seo = 0 OR p.exclude_from_seo IS NULL)
+       GROUP BY p.id, p.sku, p.name, p.slug, pp.sku, pp.name, pp.slug, o.title, o.slug
+       ORDER BY updated_at DESC
+       LIMIT 5000`
+    );
+
     const baseUrl = buildSitemapBaseUrl(request);
     const productUrls = products.map((product) => `    <url>
         <loc>${escapeSitemapXml(`${baseUrl}/produto/${product.slug}`)}</loc>
+        <lastmod>${formatSitemapDate(product.updated_at)}</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>0.9</priority>
+    </url>`).join('\n');
+    const print3dFamilies = [...new Map(print3dProducts.map((product) => [getPrint3dSeoRouteTarget(product), product])).entries()];
+    const print3dProductUrls = print3dFamilies.map(([routeTarget, product]) => `    <url>
+        <loc>${escapeSitemapXml(`${baseUrl}/loja-3d/produto/${routeTarget}`)}</loc>
         <lastmod>${formatSitemapDate(product.updated_at)}</lastmod>
         <changefreq>daily</changefreq>
         <priority>0.9</priority>
@@ -14178,7 +14380,13 @@ fastify.get('/api/sitemap', async (request, reply) => {
         <changefreq>monthly</changefreq>
         <priority>0.5</priority>
     </url>
+    <url>
+        <loc>${escapeSitemapXml(`${baseUrl}/loja-3d`)}</loc>
+        <changefreq>daily</changefreq>
+        <priority>0.9</priority>
+    </url>
 ${productUrls}
+${print3dProductUrls}
 </urlset>`;
 
     return reply

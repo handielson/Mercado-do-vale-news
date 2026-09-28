@@ -199,6 +199,7 @@ export interface ProductInput {
     brand?: string;            // Optional: override from model
     parent_id?: string;        // Optional: UUID do produto pai
     is_parent?: boolean | number;  // Se true/1, eh produto pai (agregador de variantes, nao vendavel)
+    product_format?: 'simple' | 'parent' | 'variation'; // Campo de interface para orientar o cadastro
     name: string;
     sku: string;
     price_cost: number;
