@@ -10,12 +10,12 @@ export interface ShopeeConnection {
 }
 
 export async function listShopeeConnections(): Promise<ShopeeConnection[]> {
-    const data = await vpsClient.get<{ connections?: ShopeeConnection[] }>('/api/shopee-connections');
+    const data = await vpsClient.get<{ connections?: ShopeeConnection[] }>('/shopee-connections');
     return Array.isArray(data?.connections) ? data.connections : [];
 }
 
 export async function createShopeeConnection(displayName: string): Promise<ShopeeConnection> {
-    const data = await vpsClient.post<{ connection?: ShopeeConnection }>('/api/shopee-connections', {
+    const data = await vpsClient.post<{ connection?: ShopeeConnection }>('/shopee-connections', {
         display_name: displayName.trim(),
     });
     if (!data?.connection) throw new Error('A conexão Shopee não foi criada.');

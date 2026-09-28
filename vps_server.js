@@ -13566,11 +13566,11 @@ fastify.all('/api/shopee', handleShopeeOAuthVps);
 fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);
 fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
 fastify.all('/api/shopee-actions', handleShopeeActionsVps);
-fastify.get('/api/shopee-connections', { preHandler: requireSyncKey }, async (_request, reply) => {
+fastify.get('/shopee-connections', { preHandler: requireSyncKey }, async (_request, reply) => {
   const [rows] = await pool.query(`SELECT id, display_name, shopee_shop_id, authorization_status, active, connected_at, created_at, updated_at FROM shopee_shop_connections ORDER BY created_at ASC`);
   return reply.send({ connections: rows });
 });
-fastify.post('/api/shopee-connections', { preHandler: requireSyncKey }, async (request, reply) => {
+fastify.post('/shopee-connections', { preHandler: requireSyncKey }, async (request, reply) => {
   const displayName = String(request.body?.display_name || '').trim();
   if (displayName.length < 3 || displayName.length > 120) return reply.code(400).send({ error: 'Informe um nome entre 3 e 120 caracteres para a nova loja.' });
   const id = crypto.randomUUID();

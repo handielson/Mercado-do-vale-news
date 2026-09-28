@@ -1,14 +1,13 @@
 {
-  "version": "v1.2.504-shopee-multiloja",
+  "version": "v1.2.505-shopee-connections-proxy",
   "date": "2026-09-28",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.504-shopee-multiloja",
-  "release_vps": "/var/www/mdv-site/releases/20260928-231010-v1-2-504-shopee-multiloja",
+  "tag": "v1.2.505-shopee-connections-proxy",
+  "release_vps": "/var/www/mdv-site/releases/20260928-233743-v1-2-505-shopee-connections-proxy",
   "release_print3d_vps": null,
-  "summary": "Permite registrar e autorizar lojas Shopee adicionais com tokens isolados, sem alterar nem publicar produtos automaticamente.",
+  "summary": "Corrige o cadastro de lojas Shopee adicionais para usar uma rota compatível com o proxy administrativo.",
   "changed_files": [
-    "pages/admin/settings/ShopeePage.tsx",
     "services/shopeeConnections.ts",
     "vps_server.js",
     "vps_server.cjs",
