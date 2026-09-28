@@ -23,15 +23,16 @@ Essas são dimensões geométricas individuais dos STL. Elas não substituem as 
 
 ## Próxima entrada necessária
 
-Gerar no programa de impressão o JSON correspondente exatamente à mesa de 11 pares:
+Como esta impressão não passou pelo programa que gera o JSON, deve ser usada a opção **Preencher todos os dados manualmente** na Calculadora 3D. Para a mesa de 11 pares, informar os valores reais de:
 
-```json
-{
-  "material_gramas": 123.45,
-  "tempo_impressao_minutos": 678
-}
-```
+- material total consumido pelo lote;
+- tempo total de impressão do lote;
+- impressora e perfil usados;
+- se o material inclui suportes e purga;
+- material, cor e consumo de cada filamento;
+- preparação, montagem, acabamento, embalagem e outros insumos;
+- observações que ajudem a repetir a produção corretamente.
 
-Os números acima ilustram somente o formato. Não devem ser usados no cadastro. Depois do JSON real, ainda serão preenchidos manualmente material, cor, impressora, perfil, insumos e custos.
+A ficha ficará identificada como entrada manual e poderá ser ativada sem um arquivo JSON. Os valores devem ser medidos na produção; nenhum valor estimado foi incluído no cadastro.
 
 O manifesto técnico está em `manifest.json`. Nenhum produto foi criado no banco e nenhum arquivo foi enviado ao NAS, pois as rotas 3D continuam desligadas até a publicação e a homologação controlada.

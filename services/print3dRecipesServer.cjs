@@ -37,12 +37,14 @@ function registerPrint3dRecipeRoutes(app, { pool, getBearerAuthContext, enabled 
     const id = productId(req, reply);
     if (!id) return;
     const [rows] = await pool.query(
-      'SELECT id,product_id,sku_snapshot,revision,draft_sha256,created_by,created_at FROM print3d_recipe_revisions WHERE product_id=? ORDER BY created_at DESC, revision DESC LIMIT 100',
+      'SELECT id,product_id,sku_snapshot,revision,draft_json,draft_sha256,created_by,created_at FROM print3d_recipe_revisions WHERE product_id=? ORDER BY created_at DESC, revision DESC LIMIT 100',
       [id]
     );
-    return { recipes: rows.map(({ id: recipeId, product_id, sku_snapshot, revision, draft_sha256, created_by, created_at }) => ({
-      id: recipeId, product_id, sku_snapshot, revision, draft_sha256, created_by, created_at,
-    })) };
+    return { recipes: rows.map(({ id: recipeId, product_id, sku_snapshot, revision, draft_json, draft_sha256, created_by, created_at }) => {
+      const draft = typeof draft_json === 'string' ? JSON.parse(draft_json) : draft_json;
+      return { id: recipeId, product_id, sku_snapshot, revision, draft_sha256, created_by, created_at,
+        input_source:draft?.printSummary?.source === 'manual' ? 'manual' : 'json' };
+    }) };
   });
 
   app.get('/admin/print3d/products/:productId/recipes/:revision', { preHandler: admin }, async (req, reply) => {

@@ -10,6 +10,8 @@ const url = `/admin/print3d/products/${product.id}/recipes`;
 const draft = () => ({
   productId: product.id, productName: product.name, sku: product.sku, revision: 'r1',
   materialGrams: 20, printMinutes: 120, pieces: 2, laborMinutes: 10,
+  inputSource: 'manual', printerName: 'Bambu Lab A1', printerProfile: 'PLA 0,4 mm',
+  materialIncludesSupportsAndPurge: true, productionNotes: '',
   filaments: [{ id: 'pla-azul', name: 'PLA', color: 'Azul', consumedGrams: 20, spoolGrams: 1000, spoolCostCents: 9000 }],
   supplies: [{ id: 'argola', name: 'Argola', quantity: 2, unitCostCents: 30 }],
   rates: { printerWatts: 200, energyCentsPerKwh: 100, machineCentsPerHour: 50, laborCentsPerHour: 300 },
@@ -68,6 +70,7 @@ test('revisão fica imutável; repetição idêntica é idempotente e alteraçã
   assert.equal(rows.size, 1);
   const listing = (await app.inject({ method: 'GET', url, headers })).json();
   assert.equal(listing.recipes.length, 1);
+  assert.equal(listing.recipes[0].input_source, 'manual');
   assert.equal('draft_json' in listing.recipes[0], false);
   const detail = (await app.inject({ method: 'GET', url: `${url}/r1`, headers })).json();
   assert.equal(detail.draft.productId, product.id);

@@ -13,13 +13,13 @@ const ids = {
 const url = `/admin/print3d/products/${ids.product}/active-recipe`;
 const headers = { authorization: 'Bearer admin' };
 
-async function fixture({ enabled = true, sku = 'CHAVEIRO-01', fileKind = 'gcode', hasJson = true, fileRecipeId = ids.recipe } = {}) {
+async function fixture({ enabled = true, sku = 'CHAVEIRO-01', fileKind = 'gcode', hasJson = true, fileRecipeId = ids.recipe, inputSource = 'json' } = {}) {
   const app = Fastify();
   const state = { active: null, commits: 0, rollbacks: 0, released: 0, writes: 0 };
   const query = async (sql, params) => {
     if (sql.includes('FROM products WHERE id=? FOR UPDATE')) return [[{ id: ids.product, sku, is_parent: 0 }]];
     if (sql.includes('FROM print3d_recipe_revisions WHERE id=? AND product_id=?')) {
-      return [[{ id: ids.recipe, revision: 'r1', sku_snapshot: 'CHAVEIRO-01' }].filter(() => params[0] === ids.recipe && params[1] === ids.product)];
+      return [[{ id: ids.recipe, revision: 'r1', sku_snapshot: 'CHAVEIRO-01', draft_json:JSON.stringify({ printSummary:{ source:inputSource } }) }].filter(() => params[0] === ids.recipe && params[1] === ids.product)];
     }
     if (sql.includes('FROM print3d_recipe_files WHERE id=? AND recipe_id=?')) {
       return [[{ id: ids.file, kind: fileKind, original_name: 'chaveiro.gcode', printer_profile: 'PLA 0.4' }]
@@ -86,4 +86,12 @@ test('recusa JSON ausente, arquivo não imprimível, revisão alheia e SKU alter
     assert.equal(state.rollbacks, 1);
     assert.equal(state.released, 1);
   }
+});
+
+test('seleciona revisão manual sem exigir arquivo JSON separado', async t => {
+  const { app, state } = await fixture({ hasJson:false,inputSource:'manual',fileKind:'project' }); t.after(() => app.close());
+  const response = await app.inject({ method:'POST',url,headers,payload:{ recipeId:ids.recipe,primaryFileId:ids.file } });
+  assert.equal(response.statusCode,200,response.body);
+  assert.equal(response.json().changed,true);
+  assert.equal(state.writes,1);
 });

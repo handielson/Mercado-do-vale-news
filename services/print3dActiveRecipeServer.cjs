@@ -53,7 +53,7 @@ function registerPrint3dActiveRecipeRoutes(app, {
         return reply.code(404).send({ error: 'Variante vendável não encontrada.' });
       }
       const [recipes] = await connection.query(
-        'SELECT id,revision,sku_snapshot FROM print3d_recipe_revisions WHERE id=? AND product_id=? LIMIT 1', [recipeId, productId]
+        'SELECT id,revision,sku_snapshot,draft_json FROM print3d_recipe_revisions WHERE id=? AND product_id=? LIMIT 1', [recipeId, productId]
       );
       const recipe = recipes[0];
       if (!recipe) {
@@ -73,12 +73,16 @@ function registerPrint3dActiveRecipeRoutes(app, {
         await connection.rollback();
         return reply.code(409).send({ error: 'Escolha um modelo, projeto ou G-code desta revisão como arquivo principal.' });
       }
-      const [summaries] = await connection.query(
-        "SELECT id FROM print3d_recipe_files WHERE recipe_id=? AND kind='print-json' LIMIT 1", [recipeId]
-      );
-      if (!summaries[0]) {
-        await connection.rollback();
-        return reply.code(409).send({ error: 'Envie o JSON de material e tempo desta revisão antes de selecioná-la.' });
+      const recipeDraft = typeof recipe.draft_json === 'string' ? JSON.parse(recipe.draft_json) : recipe.draft_json;
+      const manualSummary = recipeDraft?.printSummary?.source === 'manual';
+      if (!manualSummary) {
+        const [summaries] = await connection.query(
+          "SELECT id FROM print3d_recipe_files WHERE recipe_id=? AND kind='print-json' LIMIT 1", [recipeId]
+        );
+        if (!summaries[0]) {
+          await connection.rollback();
+          return reply.code(409).send({ error: 'Envie o JSON de material e tempo desta revisão antes de selecioná-la.' });
+        }
       }
       const [currentRows] = await connection.query(
         'SELECT recipe_id,primary_file_id FROM print3d_active_recipes WHERE product_id=? LIMIT 1', [productId]

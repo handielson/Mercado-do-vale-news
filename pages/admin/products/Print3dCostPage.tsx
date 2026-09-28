@@ -18,6 +18,7 @@ import { print3dRecipeFilesService, type Print3dFileKind, type Print3dRecipeFile
 
 type FilamentUse = { filamentId: string; consumedGrams: number };
 type SupplyUse = { supplyId: string; quantity: number };
+type PrintInputMode = 'manual' | 'json';
 type CostResult = ReturnType<typeof calculatePrint3dCost>;
 type StockSnapshot = {
   productId: string;
@@ -45,10 +46,15 @@ export function Print3dCostPage() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [fileName, setFileName] = useState('');
+  const [inputMode, setInputMode] = useState<PrintInputMode>('manual');
   const [materialGrams, setMaterialGrams] = useState(0);
   const [printMinutes, setPrintMinutes] = useState(0);
   const [pieces, setPieces] = useState(1);
   const [laborMinutes, setLaborMinutes] = useState(0);
+  const [printerName, setPrinterName] = useState('');
+  const [productionProfile, setProductionProfile] = useState('');
+  const [materialIncludesWaste, setMaterialIncludesWaste] = useState<boolean | null>(null);
+  const [productionNotes, setProductionNotes] = useState('');
   const [filamentUses, setFilamentUses] = useState<FilamentUse[]>([]);
   const [supplyUses, setSupplyUses] = useState<SupplyUse[]>([]);
   const [result, setResult] = useState<CostResult | null>(null);
@@ -117,6 +123,24 @@ export function Print3dCostPage() {
     setResult(null);
   };
 
+  const useManualInput = () => {
+    setInputMode('manual');
+    setFileName('');
+    setNotice('Preenchimento manual selecionado. Informe os valores totais do lote e confira todos os campos.');
+    setError('');
+    setResult(null);
+  };
+
+  const editManualSummary = (field: 'material' | 'time', value: number) => {
+    setInputMode('manual');
+    setFileName('');
+    setResult(null);
+    if (field === 'material') {
+      setMaterialGrams(value);
+      setFilamentUses((current) => current.length === 1 ? [{ ...current[0], consumedGrams:value }] : current);
+    } else setPrintMinutes(value);
+  };
+
   const importJson = async (file?: File) => {
     if (!file) return;
     setError('');
@@ -124,6 +148,7 @@ export function Print3dCostPage() {
     try {
       if (file.size > 1024 * 1024) throw new Error('O JSON excede 1 MB.');
       const summary = parsePrint3dSummary(await file.text());
+      setInputMode('json');
       setMaterialGrams(summary.materialGrams);
       setPrintMinutes(summary.printMinutes);
       setFileName(file.name);
@@ -170,12 +195,14 @@ export function Print3dCostPage() {
     setNotice('');
     try {
       if (settingsDirty) throw new Error('Salve os custos cadastrados antes de calcular.');
-      if (!(materialGrams > 0) || !(printMinutes > 0)) throw new Error('Informe material e tempo da impressão ou importe o JSON.');
+      if (!(materialGrams > 0) || !(printMinutes > 0)) throw new Error('Informe material e tempo da impressão manualmente ou importe o JSON.');
+      if (!printerName.trim() || !productionProfile.trim()) throw new Error('Informe a impressora e o perfil de impressão usados.');
+      if (materialIncludesWaste === null) throw new Error('Informe se o material total inclui suportes e purga.');
       if (!(settings.printerWatts > 0) || !(settings.energyCentsPerKwh > 0)) throw new Error('Cadastre potência da impressora e tarifa de energia.');
       if (filamentUses.length === 0) throw new Error('Selecione ao menos um filamento.');
       const gramsSum = filamentUses.reduce((sum, item) => sum + item.consumedGrams, 0);
       if (Math.abs(gramsSum - materialGrams) > 0.001) {
-        throw new Error('A soma dos gramas por filamento deve ser igual ao total importado.');
+        throw new Error('A soma dos gramas por filamento deve ser igual ao material total informado.');
       }
       const filaments = filamentUses.map((item) => {
         const source = settings.filaments.find((filament) => filament.id === item.filamentId);
@@ -209,6 +236,8 @@ export function Print3dCostPage() {
     return buildPrint3dRecipeDraft({
         productId: product.id, productName: product.name,
         sku: product.sku, revision, materialGrams, printMinutes, pieces, laborMinutes, cost: result,
+        inputSource:inputMode, printerName, printerProfile:productionProfile,
+        materialIncludesSupportsAndPurge:materialIncludesWaste, productionNotes,
         rates: {
           printerWatts: settings.printerWatts,
           energyCentsPerKwh: settings.energyCentsPerKwh,
@@ -443,11 +472,12 @@ export function Print3dCostPage() {
   };
 
   if (loading) return <div className="p-6 text-slate-600">Carregando custos de impressão 3D...</div>;
+  const selectedRecipe = savedRecipes.find((item) => item.id === selectedRecipeId);
 
   return <div className="mx-auto max-w-5xl space-y-6 p-6">
     <header>
       <h1 className="text-2xl font-bold text-slate-900">Calculadora de impressão 3D</h1>
-      <p className="mt-1 text-sm text-slate-600">Cadastre custos e simule uma impressão. Os valores importados do JSON são do lote inteiro; a quantidade de peças é informada aqui.</p>
+      <p className="mt-1 text-sm text-slate-600">Cadastre custos e simule uma impressão. Material e tempo podem vir do JSON ou ser informados manualmente para o lote inteiro.</p>
     </header>
     {error && <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</div>}
     {notice && <div role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</div>}
@@ -493,15 +523,27 @@ export function Print3dCostPage() {
 
     <section className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
       <h2 className="text-lg font-semibold">Simular impressão</h2>
-      <label className="block text-sm">JSON da impressão
+      <div className="grid gap-2 rounded-lg bg-slate-100 p-1 sm:grid-cols-2" role="group" aria-label="Origem dos dados de impressão">
+        <button type="button" onClick={useManualInput} className={`rounded-md px-4 py-2 text-sm font-semibold ${inputMode === 'manual' ? 'bg-white text-violet-800 shadow-sm' : 'text-slate-600'}`}>Preencher todos os dados manualmente</button>
+        <button type="button" onClick={() => { setInputMode('json'); setResult(null); setNotice('Selecione o JSON gerado pelo programa. Impressora, perfil e demais dados continuam manuais.'); }} className={`rounded-md px-4 py-2 text-sm font-semibold ${inputMode === 'json' ? 'bg-white text-violet-800 shadow-sm' : 'text-slate-600'}`}>Importar material e tempo do JSON</button>
+      </div>
+      {inputMode === 'json' ? <label className="block text-sm">JSON da impressão
         <input className="mt-1 block w-full text-sm" type="file" accept=".json,application/json" onChange={(e) => void importJson(e.target.files?.[0])} />
-      </label>
+      </label> : <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950">Use esta opção quando a impressão não passou pelo programa. Os valores ficam registrados na ficha como entrada manual e não exigem arquivo JSON.</p>}
       {fileName && <p className="text-sm text-slate-600">Arquivo lido: {fileName}</p>}
       <div className="grid gap-4 md:grid-cols-2">
-        <label className="text-sm">Material total (g)<input className={numberClass} type="number" min="0" step="any" value={materialGrams} onChange={(e) => { setMaterialGrams(Number(e.target.value)); setResult(null); }} /></label>
-        <label className="text-sm">Tempo total (min)<input className={numberClass} type="number" min="0" step="any" value={printMinutes} onChange={(e) => { setPrintMinutes(Number(e.target.value)); setResult(null); }} /></label>
+        <label className="text-sm">Material total do lote (g)<input className={numberClass} type="number" min="0" step="any" value={materialGrams} onChange={(e) => editManualSummary('material', Number(e.target.value))} /></label>
+        <label className="text-sm">Tempo total do lote (min)<input className={numberClass} type="number" min="0" step="any" value={printMinutes} onChange={(e) => editManualSummary('time', Number(e.target.value))} /></label>
         <label className="text-sm">Peças produzidas no lote<input className={numberClass} type="number" min="1" step="1" value={pieces} onChange={(e) => { setPieces(Number(e.target.value)); setResult(null); }} /></label>
         <label className="text-sm">Mão de obra manual (min)<input className={numberClass} type="number" min="0" step="any" value={laborMinutes} onChange={(e) => { setLaborMinutes(Number(e.target.value)); setResult(null); }} /></label>
+        <label className="text-sm">Impressora usada<input className={numberClass} maxLength={120} value={printerName} onChange={(e) => { setPrinterName(e.target.value); setResult(null); }} placeholder="Ex.: Bambu Lab A1" /></label>
+        <label className="text-sm">Perfil de impressão<input className={numberClass} maxLength={160} value={productionProfile} onChange={(e) => { setProductionProfile(e.target.value); setResult(null); }} placeholder="Ex.: PLA · bico 0,4 mm · camada 0,20 mm" /></label>
+        <label className="text-sm">O material total inclui suportes e purga?
+          <select className={numberClass} value={materialIncludesWaste === null ? '' : materialIncludesWaste ? 'yes' : 'no'} onChange={(e) => { setMaterialIncludesWaste(e.target.value === '' ? null : e.target.value === 'yes'); setResult(null); }}>
+            <option value="">Selecione</option><option value="yes">Sim, já estão incluídos</option><option value="no">Não, serão informados separadamente</option>
+          </select>
+        </label>
+        <label className="text-sm md:col-span-2">Observações de produção<textarea className={`${numberClass} min-h-24`} maxLength={1000} value={productionNotes} onChange={(e) => { setProductionNotes(e.target.value); setResult(null); }} placeholder="Montagem, orientação, acabamento, cuidados e conferências." /></label>
       </div>
       <div className="space-y-2">
         <div className="flex items-center justify-between"><h3 className="font-semibold">Consumo por filamento</h3><button className="rounded-lg border px-3 py-1 text-sm" onClick={() => editFilamentUses([...filamentUses, { filamentId: settings.filaments[0]?.id ?? '', consumedGrams: 0 }])}>Adicionar cor/material</button></div>
@@ -567,7 +609,7 @@ export function Print3dCostPage() {
         <h3 className="font-semibold">Revisões salvas para este SKU</h3>
         <p className="text-sm text-slate-600">Ficha principal: {activeRecipe ? `${activeRecipe.revision} · ${activeRecipe.primary_file_name}${activeRecipe.printer_profile ? ` · ${activeRecipe.printer_profile}` : ''}` : 'nenhuma selecionada'}. A seleção ainda não cria ordens de produção automaticamente.</p>
         {savedRecipes.length === 0 ? <p className="text-sm text-slate-600">Nenhuma revisão cadastrada.</p> : savedRecipes.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
-          <span><strong>{item.revision}</strong> · {item.sku_snapshot} · {new Date(item.created_at).toLocaleString('pt-BR')}</span>
+          <span><strong>{item.revision}</strong> · {item.sku_snapshot} · {item.input_source === 'manual' ? 'dados manuais' : 'JSON importado'} · {new Date(item.created_at).toLocaleString('pt-BR')}</span>
           <div className="flex gap-3">
             <button className="text-blue-700 underline" onClick={() => void downloadSavedRecipe(item)}>Baixar ficha</button>
             {filesEnabled && <button className="text-blue-700 underline" onClick={() => void selectRecipe(item)}>Arquivos</button>}
@@ -593,7 +635,7 @@ export function Print3dCostPage() {
           <button className="text-blue-700 underline" onClick={() => void downloadRecipeFile(file)}>Baixar</button>
         </div>)}
         <div className="space-y-2 border-t pt-3">
-          <p className="text-sm text-slate-600">Para selecionar esta revisão, envie o JSON de material e tempo e escolha o arquivo principal correto.</p>
+          <p className="text-sm text-slate-600">{selectedRecipe?.input_source === 'manual' ? 'Esta revisão usa material e tempo informados manualmente. Escolha o arquivo principal correto.' : 'Para selecionar esta revisão, envie o JSON de material e tempo e escolha o arquivo principal correto.'}</p>
           <div className="flex flex-wrap items-end gap-2">
             <label className="min-w-64 flex-1 text-sm">Arquivo principal
               <select className={numberClass} value={primaryFileId} onChange={(event) => setPrimaryFileId(event.target.value)}>
@@ -602,7 +644,7 @@ export function Print3dCostPage() {
                   <option key={file.id} value={file.id}>{file.kind} · {file.original_name}{file.printer_profile ? ` · ${file.printer_profile}` : ''}</option>)}
               </select>
             </label>
-            <button disabled={!primaryFileId || !recipeFiles.some((file) => file.kind === 'print-json') || selectingActive}
+            <button disabled={!primaryFileId || (selectedRecipe?.input_source !== 'manual' && !recipeFiles.some((file) => file.kind === 'print-json')) || selectingActive}
               className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
               onClick={() => void selectActiveRecipe()}>{selectingActive ? 'Selecionando...' : 'Selecionar ficha principal'}</button>
           </div>

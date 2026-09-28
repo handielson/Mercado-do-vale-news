@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "pilot_id": "suporte-lnb-3x3",
-  "status": "aguardando_resumo_de_impressao",
+  "status": "aguardando_dados_manuais",
   "product_draft": {
     "name": "Suporte LNB 3x3",
     "sku": "3D-SUP-LNB-3X3-V2",
@@ -68,12 +68,16 @@
       }
     }
   ],
-  "expected_print_json": {
+  "expected_manual_entry": {
     "material_gramas": "numero_positivo_do_lote",
-    "tempo_impressao_minutos": "numero_positivo_do_lote"
+    "tempo_impressao_minutos": "numero_positivo_do_lote",
+    "impressora": "texto_obrigatorio",
+    "perfil_impressao": "texto_obrigatorio",
+    "material_inclui_suportes_e_purga": "booleano_obrigatorio",
+    "observacoes_producao": "texto_opcional"
   },
   "missing_required_data": [
-    "JSON real do programa para a mesa de 11 pares",
+    "material total e tempo total informados manualmente para a mesa de 11 pares",
     "material e cor de cada filamento",
     "impressora e perfil usados",
     "categoria da oferta",

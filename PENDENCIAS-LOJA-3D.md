@@ -26,8 +26,8 @@ Estas tarefas liberam os primeiros testes reais e devem ser executadas antes das
 - [x] Escolher o primeiro produto piloto: Suporte LNB 3x3, lote com 11 unidades completas e duas partes por unidade; manifesto em `docs/print3d-pilots/suporte-lnb-3x3/manifest.json`.
 - [ ] Confirmar as categorias desses produtos em cada site; o mesmo SKU pode usar categorias diferentes.
 - [ ] Cadastrar variantes reais de material, cor, tamanho, acabamento e acessórios, atribuindo um SKU único a cada combinação vendável.
-- [ ] Gerar um JSON real no programa de impressão e confirmar que `material_gramas` e `tempo_impressao_minutos` representam o lote completo.
-- [ ] Importar o JSON real, preencher quantidade de peças, filamentos por cor, impressora, perfil, preparação, montagem, acabamento e perdas.
+- [x] Permitir cadastrar a ficha inteira manualmente quando a impressão não passou pelo programa, registrando essa origem na revisão e dispensando o arquivo JSON.
+- [ ] Informar manualmente, para o piloto, material total e tempo total do lote de 11 pares; preencher também quantidade de peças, filamentos por cor, impressora, perfil, preparação, montagem, acabamento e perdas.
 - [ ] Enviar STL/3MF/G-code e instruções reais ao Synology, selecionar a revisão ativa e executar a verificação de integridade.
 - [ ] Conferir fotos, vídeo, descrição, peso e dimensões reais de cada variante.
 
@@ -114,7 +114,7 @@ Esta fase protege o Mercado do Vale e os demais canais antes de aceitar pedidos 
 
 ## Ordem recomendada imediata
 
-1. Produto piloto e JSON real.
+1. Produto piloto e dados reais, informados manualmente ou importados por JSON.
 2. Arquivos reais e ficha ativa no Synology.
 3. Insumos, custos e saldos iniciais.
 4. Reconciliação do estoque legado.

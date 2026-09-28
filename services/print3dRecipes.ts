@@ -3,7 +3,7 @@ import { buildPrint3dRecipeDraft } from '../utils/print3dRecipeDraft.mjs';
 
 export type Print3dRecipeDraft = ReturnType<typeof buildPrint3dRecipeDraft>;
 export type Print3dRecipeSaveResult = { id: string; revision: string; saved: boolean; sha256: string };
-export type Print3dRecipeSummary = { id: string; revision: string; sku_snapshot: string; draft_sha256: string; created_at: string };
+export type Print3dRecipeSummary = { id: string; revision: string; sku_snapshot: string; draft_sha256: string; created_at: string; input_source: 'json' | 'manual' };
 export type Print3dActiveRecipe = {
   product_id: string;
   recipe_id: string;

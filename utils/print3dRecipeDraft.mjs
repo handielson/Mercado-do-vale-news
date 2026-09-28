@@ -24,6 +24,14 @@ const safeCents = (value, field) => {
   return value;
 };
 
+const safeText = (value, field, { required = false, max = 500 } = {}) => {
+  const text = String(value ?? '').trim();
+  if ((required && !text) || text.length > max || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text)) {
+    throw new TypeError(`${field} ${required ? 'é obrigatório e ' : ''}deve ter até ${max} caracteres válidos.`);
+  }
+  return text;
+};
+
 export function buildPrint3dRecipeDraft(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new TypeError('Informe a ficha de produção.');
   const sku = safeSegment(input.sku, 'SKU');
@@ -34,6 +42,14 @@ export function buildPrint3dRecipeDraft(input) {
   if (!productName) throw new TypeError('Informe o nome do produto cadastrado.');
   const materialGrams = nonNegative(input.materialGrams, 'Material total', true);
   const printMinutes = nonNegative(input.printMinutes, 'Tempo total', true);
+  const inputSource = input.inputSource === undefined ? 'json' : String(input.inputSource);
+  if (!['json', 'manual'].includes(inputSource)) throw new TypeError('Origem dos dados de impressão inválida.');
+  const printerName = safeText(input.printerName, 'Impressora', { required: true, max: 120 });
+  const printerProfile = safeText(input.printerProfile, 'Perfil de impressão', { required: true, max: 160 });
+  if (typeof input.materialIncludesSupportsAndPurge !== 'boolean') {
+    throw new TypeError('Informe se o material total inclui suportes e purga.');
+  }
+  const productionNotes = safeText(input.productionNotes, 'Observações de produção', { max: 1000 });
   const pieces = input.pieces;
   if (!Number.isSafeInteger(pieces) || pieces <= 0) throw new TypeError('Peças do lote deve ser um inteiro positivo.');
   const laborMinutes = nonNegative(input.laborMinutes, 'Mão de obra');
@@ -90,7 +106,13 @@ export function buildPrint3dRecipeDraft(input) {
     sku,
     revision,
     suggestedPrivateFolder: `producao-3d/produtos/${sku}/revisoes/${revision}`,
-    printSummary: { material_gramas: materialGrams, tempo_impressao_minutos: printMinutes },
+    printSummary: { material_gramas: materialGrams, tempo_impressao_minutos: printMinutes, source: inputSource },
+    productionDetails: {
+      printer: printerName,
+      profile: printerProfile,
+      material_includes_supports_and_purge: input.materialIncludesSupportsAndPurge,
+      notes: productionNotes,
+    },
     piecesPerBatch: pieces,
     laborMinutes,
     filaments,
@@ -111,6 +133,11 @@ export function validatePrint3dRecipeDraft(draft) {
     revision: draft.revision,
     materialGrams: draft.printSummary?.material_gramas,
     printMinutes: draft.printSummary?.tempo_impressao_minutos,
+    inputSource: draft.printSummary?.source,
+    printerName: draft.productionDetails?.printer,
+    printerProfile: draft.productionDetails?.profile,
+    materialIncludesSupportsAndPurge: draft.productionDetails?.material_includes_supports_and_purge,
+    productionNotes: draft.productionDetails?.notes,
     pieces: draft.piecesPerBatch,
     laborMinutes: draft.laborMinutes,
     filaments: draft.filaments,
