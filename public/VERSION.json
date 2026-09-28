@@ -1,14 +1,16 @@
 {
-  "version": "v1.2.496-fix-destino-3dmv",
+  "version": "v1.2.497-seo-dominio-3dmv",
   "date": "2026-09-28",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.496-fix-destino-3dmv",
-  "release_vps": "/var/www/mdv-site/releases/20260928-114800-v1-2-496-fix-destino",
+  "tag": "v1.2.497-seo-dominio-3dmv",
+  "release_vps": "/var/www/mdv-site/releases/20260928-115100-v1-2-497-seo-3dmv",
   "release_print3d_vps": "/var/www/print3d-site/releases/20260928-114521-v1-2-496-3dmv",
-  "summary": "Garante que o deploy da Loja 3D use sempre /var/www/print3d-site, mesmo quando o ambiente do Mercado do Vale define VPS_SITE_ROOT.",
+  "summary": "Separa o sitemap do domínio 3D e publica robots.txt próprio para indexação sem misturar URLs do Mercado do Vale.",
   "changed_files": [
-    "scripts/deploy-vps-print3d-site.cjs",
-    "tmp-tests/print3d-domain-deploy-static.test.mjs"
+    "infra/nginx/print3d-site-production.conf",
+    "tmp-tests/print3d-domain-deploy-static.test.mjs",
+    "vps_server.cjs",
+    "vps_server.js"
   ]
 }

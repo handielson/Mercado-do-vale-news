@@ -14364,6 +14364,24 @@ fastify.get('/api/sitemap', async (request, reply) => {
         <priority>0.9</priority>
     </url>`).join('\n');
 
+    const print3dDomain = /(^|\.)3dmv\.com\.br$/i.test(new URL(baseUrl).hostname);
+    if (print3dDomain) {
+      const print3dXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>${escapeSitemapXml(`${baseUrl}/loja-3d`)}</loc>
+        <changefreq>daily</changefreq>
+        <priority>1.0</priority>
+    </url>
+${print3dProductUrls}
+</urlset>`;
+      return reply
+        .header('Content-Type', 'application/xml; charset=utf-8')
+        .header('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
+        .code(200)
+        .send(print3dXml.trim());
+    }
+
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>

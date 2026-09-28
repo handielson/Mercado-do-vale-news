@@ -17,10 +17,18 @@ assert.match(nginx, /server_name 3dmv\.com\.br/);
 assert.match(nginx, /server_name www\.3dmv\.com\.br/);
 assert.match(nginx, /root \/var\/www\/print3d-site\/current/);
 assert.match(nginx, /api\/seo-produto-3d\?slug=\$1/);
+assert.match(nginx, /location = \/robots\.txt/);
+assert.match(nginx, /Sitemap: https:\/\/www\.3dmv\.com\.br\/sitemap\.xml/);
 assert.match(deploy, /dist-print3d/);
 assert.match(deploy, /\/var\/www\/print3d-site/);
 assert.match(print3dDeploy, /VPS_SITE_ROOT[\s\S]*\/var\/www\/print3d-site/);
 assert.match(nginxInstall, /nginx -t/);
 assert.match(nginxInstall, /print3d-site-production\.conf/);
+
+for (const runtime of ['vps_server.js', 'vps_server.cjs']) {
+  const source = readFileSync(runtime, 'utf8');
+  assert.match(source, /print3dDomain = \/\(\^\|\\\.\)3dmv\\\.com\\\.br\$\/i/);
+  assert.match(source, /if \(print3dDomain\)[\s\S]*print3dProductUrls[\s\S]*send\(print3dXml\.trim\(\)\)/);
+}
 
 console.log('3D domain deploy static checks ok');
