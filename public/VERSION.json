@@ -1,22 +1,16 @@
 {
-  "version": "v1.2.499-frete-seo-3dmv",
+  "version": "v1.2.500-quantidade-encomenda-vazia",
   "date": "2026-09-28",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.499-frete-seo-3dmv",
-  "release_vps": "/var/www/mdv-site/releases/20260928-124500-v1-2-499-frete-seo-3dmv",
-  "release_print3d_vps": "/var/www/print3d-site/releases/20260928-124500-v1-2-499-frete-seo-3dmv",
-  "summary": "Ativa a cotação de frete 3DMV, libera a origem oficial no CORS e impede que páginas SEO 3D carreguem o site Mercado do Vale.",
+  "tag": "v1.2.500-quantidade-encomenda-vazia",
+  "release_vps": "/var/www/mdv-site/releases/20260928-131800-v1-2-500-quantidade-encomenda-vazia",
+  "release_print3d_vps": "/var/www/print3d-site/releases/20260928-131800-v1-2-500-quantidade-encomenda-vazia",
+  "summary": "Deixa a quantidade desejada vazia ao abrir uma consulta de prazo pelo produto, sem copiar o estoque disponível.",
   "changed_files": [
+    "components/catalog/ProductDeadlineRequest.tsx",
     "pages/store/Print3dProductPage.tsx",
-    "pages/store/Print3dStorePage.tsx",
-    "services/vpsTransport.js",
-    "tmp-tests/print3d-public-transport.test.mjs",
-    "tmp-tests/vps-seo-produto-3d-static.test.mjs",
-    "tmp-tests/vps-api-nginx-cors-static.test.mjs",
-    "infra/nginx/mdv-api-ssl.conf",
-    "vite.print3d.config.ts",
-    "vps_server.cjs",
-    "vps_server.js"
+    "pages/store/PublicProductPage.tsx",
+    "tmp-tests/product-deadline-request-blank-quantity-static.test.mjs"
   ]
 }

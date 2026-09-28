@@ -1862,7 +1862,6 @@ export const PublicProductPage: React.FC = () => {
                                         defaultName={customer?.name || ''}
                                         defaultPhone={(customer as any)?.phone || ''}
                                         defaultEmail={(customer as any)?.email || ''}
-                                        initialQuantity={Math.max(1, Number(product.stock_quantity || 0) + 1)}
                                     />}
                                     <button
                                         onClick={handleAddToCart}
