@@ -13,6 +13,8 @@
     "services/vpsTransport.js",
     "tmp-tests/print3d-public-transport.test.mjs",
     "tmp-tests/vps-seo-produto-3d-static.test.mjs",
+    "tmp-tests/vps-api-nginx-cors-static.test.mjs",
+    "infra/nginx/mdv-api-ssl.conf",
     "vite.print3d.config.ts",
     "vps_server.cjs",
     "vps_server.js"

@@ -12,7 +12,8 @@ assert.equal(
 );
 assert.match(nginx, /if \(\$request_method = OPTIONS\)[\s\S]*?return 204;/, 'preflight must terminate with 204');
 assert.match(nginx, /Access-Control-Allow-Headers' 'Accept, Content-Type, Authorization, X-Sync-Key'/, 'authenticated JSON calls must be allowed');
-assert.match(nginx, /\(mercadodovale\\\.com\\\.br\|xiaomipetrolina\\\.com\\\.br\)/, 'CORS must remain restricted to the approved domains');
+assert.match(nginx, /\(mercadodovale\\\.com\\\.br\|xiaomipetrolina\\\.com\\\.br\|3dmv\\\.com\\\.br\)/, 'CORS must remain restricted to the approved domains, including 3DMV');
+assert.equal((nginx.match(/3dmv\\\.com\\\.br/g) || []).length, 2, 'HTTP and HTTPS must both allow the 3DMV origin');
 
 assert.match(installer, /infra', 'nginx', 'mdv-api-ssl\.conf/, 'installer must use the versioned API config');
 assert.match(installer, /CONFIRM_MDV_API_NGINX_INSTALL/, 'installer must require explicit confirmation');
