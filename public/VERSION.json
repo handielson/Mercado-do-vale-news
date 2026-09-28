@@ -1,29 +1,15 @@
 {
-  "version": "v1.2.490-ficha-3d-manual",
+  "version": "v1.2.491-oferta-autopreenchida",
   "date": "2026-09-27",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.490-ficha-3d-manual",
-  "release_vps": "/var/www/mdv-site/releases/20260927-212312-v12490-ficha-3d-manual",
-  "summary": "Ficha de producao 3D com entrada manual completa, arquivos privados deduplicados no Synology e preparacao operacional do piloto Suporte LNB 3x3.",
+  "tag": "v1.2.491-oferta-autopreenchida",
+  "release_vps": "/var/www/mdv-site/releases/20260927-214245-v12491-oferta-autopreenchida",
+  "summary": "Ofertas por site preenchidas a partir do cadastro central, com campos editaveis, orientacoes claras e bloqueios de publicacao 3D incompleta.",
   "changed_files": [
     "PENDENCIAS-LOJA-3D.md",
-    "docs/operacional/2026-09-27-print3d-database-readiness.md",
-    "docs/print3d-pilot-candidates.md",
-    "docs/print3d-pilots/suporte-lnb-3x3/",
-    "docs/print3d-synology.md",
-    "migrations/052_print3d_file_assets.sql",
-    "pages/admin/products/Print3dCostPage.tsx",
-    "scripts/apply-print3d-production-migrations.cjs",
-    "scripts/audit-print3d-production.cjs",
-    "scripts/configure-print3d-company.cjs",
-    "scripts/configure-print3d-storage.cjs",
-    "scripts/prepare-print3d-database.cjs",
-    "services/print3dActiveRecipeServer.cjs",
-    "services/print3dRecipeFiles.ts",
-    "services/print3dRecipeFilesServer.cjs",
-    "services/print3dRecipes.ts",
-    "services/print3dRecipesServer.cjs",
-    "utils/print3dRecipeDraft.mjs"
+    "pages/admin/products/ProductStorefrontOffersPage.tsx",
+    "utils/storefrontOfferDefaults.mjs",
+    "tmp-tests/product-storefront-offer-defaults.test.mjs"
   ]
 }
