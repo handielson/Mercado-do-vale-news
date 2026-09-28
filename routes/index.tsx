@@ -133,6 +133,7 @@ const ModelProductAggregatorPage = lazy(() => import('../pages/admin/products/Mo
 const ProductCombosPage = lazy(() => import('../pages/admin/products/ProductCombosPage').then(module => ({ default: module.ProductCombosPage })));
 const ProductImageBankPage = lazy(() => import('../pages/admin/products/ProductImageBankPage').then(module => ({ default: module.ProductImageBankPage })));
 const Print3dCostPage = lazy(() => import('../pages/admin/products/Print3dCostPage').then(module => ({ default: module.Print3dCostPage })));
+const ProductDeadlineRequestsPage = lazy(() => import('../pages/admin/products/ProductDeadlineRequestsPage'));
 const ProductStorefrontOffersPage = lazy(() => import('../pages/admin/products/ProductStorefrontOffersPage'));
 const InventoryPage = lazy(() => import('../pages/admin/inventory/InventoryPage').then(module => ({ default: module.InventoryPage })));
 const StockLocationsPage = lazy(() => import('../pages/admin/inventory/StockLocationsPage').then(module => ({ default: module.StockLocationsPage })));
@@ -325,6 +326,14 @@ export const router = createBrowserRouter([
         <AdminLayout><ProductListPage /></AdminLayout>
       </ProtectedRoute>
     )
+  },
+  {
+    path: "/admin/solicitacoes-prazo",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><ProductDeadlineRequestsPage storefront="mercado_do_vale" /></AdminLayout></ProtectedRoute>
+  },
+  {
+    path: "/admin/loja-3d/solicitacoes",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><ProductDeadlineRequestsPage storefront="loja_3d" /></AdminLayout></ProtectedRoute>
   },
   {
     path: "/admin/loja-3d/clientes",

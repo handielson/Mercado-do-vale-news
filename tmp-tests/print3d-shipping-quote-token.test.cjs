@@ -4,7 +4,7 @@ const { signShippingQuote,verifyShippingQuote,quoteItemsFingerprint }=require('.
 const {quoteProduct,quotePaymentSchedule}=require('../services/print3dStorefrontQuote.cjs');
 const secret='local-only-shipping-signing-secret-32-chars';
 const items=[{product_id:'p1',quantity:2}];
-const quoted=[quoteProduct({id:'p1',price_retail:2500,available_stock:1,print3d_preorder_enabled:1,production_days:3},2)];
+const quoted=[quoteProduct({id:'p1',price_retail:2500,available_stock:2,print3d_preorder_enabled:1,production_days:3},2)];
 const payload={items,quote:{items:quoted,paymentSchedule:quotePaymentSchedule(quoted)},cep:'01001000',options:[{id:'frenet:1',price_cents:1990}],origin_cep:'56300001',parcel:{weight_g:400,height_cm:10,width_cm:10,length_cm:20},production_days:3,handling_business_days:1};
 const input=token=>({token,items,cep:'01001-000',shippingOptionId:'frenet:1'});
 test('cotação assinada preserva valor/origem/embalagem e não aceita preço externo',()=>{
@@ -28,7 +28,7 @@ test('token rejeita adulteração, loja/chave errada, destino/quantidade/modalid
 });
 test('fingerprint detecta alteração de preço, prazo ou divisão pronta/encomenda',()=>{
  const original=quoteItemsFingerprint(quoted);
- for(const [field,value] of [['unit_price',2501],['ready_quantity',2],['preorder_quantity',0],['production_days',5]])
+ for(const [field,value] of [['unit_price',2501],['ready_quantity',1],['preorder_quantity',1],['production_days',5]])
   assert.notEqual(quoteItemsFingerprint([{...quoted[0],[field]:value}]),original);
 });
 test('assinatura não funciona sem segredo configurado',()=>{

@@ -43,10 +43,9 @@ function quoteProduct(product, quantity) {
   const preorder = quantity - ready;
   const preorderEnabled = Number(product.print3d_preorder_enabled) === 1 || product.print3d_preorder_enabled === true;
   const productionDays = Number(product.production_days);
-  const preorderLimit = product.print3d_preorder_limit == null ? null : Number(product.print3d_preorder_limit);
-  const canPreorder = preorderEnabled && Number.isSafeInteger(productionDays) && productionDays > 0
-    && (preorderLimit === null || preorder <= preorderLimit);
-  const status = preorder > 0 && !canPreorder ? 'unavailable' : 'available';
+  // Quantidades acima do estoque exigem análise humana de capacidade e prazo.
+  // A cotação pública não transforma essa demanda em pedido ou reserva.
+  const status = preorder > 0 ? (preorderEnabled ? 'requires_consultation' : 'unavailable') : 'available';
   const readySubtotal = price * ready;
   const preorderSubtotal = price * preorder;
   // Mínimo de 50% dos produtos, mesmo quando já disponíveis em estoque.
@@ -60,7 +59,7 @@ function quoteProduct(product, quantity) {
     quantity,
     ready_quantity: ready,
     preorder_quantity: preorder,
-    production_days: preorder > 0 && canPreorder ? productionDays : null,
+    production_days: preorder > 0 && Number.isSafeInteger(productionDays) && productionDays > 0 ? productionDays : null,
     unit_price: price,
     subtotal: price * quantity,
     ready_subtotal: readySubtotal,

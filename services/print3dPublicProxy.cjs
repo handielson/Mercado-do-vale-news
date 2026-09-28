@@ -22,7 +22,7 @@ function targetPath(raw,method) {
       '/print3d/checkout','/print3d/orders','/print3d/production'].includes(p)&&!orderPath.test(p)) return null;
   } else if(method==='POST') {
     if(p.startsWith('/print3d/auth/')) {if(!AUTH_POST.has(p.slice('/print3d/auth/'.length)))return null;}
-    else if(!['/print3d/checkout','/storefronts/loja_3d/quote','/storefronts/loja_3d/shipping/quote'].includes(p)&&!orderAction.test(p)) return null;
+    else if(!['/print3d/checkout','/storefronts/loja_3d/quote','/storefronts/loja_3d/shipping/quote','/storefronts/loja_3d/deadline-requests'].includes(p)&&!orderAction.test(p)) return null;
   } else return null;
   for(const key of q.keys()) if(!keys.includes(key)||q.getAll(key).length!==1)return null;
   return target.pathname+target.search;

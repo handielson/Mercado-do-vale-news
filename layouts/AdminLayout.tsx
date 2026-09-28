@@ -106,6 +106,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/pdv', icon: <ShoppingCart size={18} />, label: 'PDV', keywords: 'caixa venda rapida balcao' },
         { to: '/admin/sales', icon: <ShoppingBag size={18} />, label: 'Vendas', keywords: 'pedidos transacoes' },
         { to: '/admin/pedidos-online', icon: <Globe size={18} />, label: 'Pedidos Online', keywords: 'site web' },
+        { to: '/admin/solicitacoes-prazo', icon: <MessageCircle size={18} />, label: 'Solicitações de prazo', keywords: 'encomenda quantidade prazo consulta whatsapp' },
         { to: '/admin/customers', icon: <Users size={18} />, label: 'Clientes', keywords: 'usuarios compradores' },
       ]
     },
@@ -114,6 +115,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       items: [
         { to: '/admin/loja-3d/clientes', icon: <Users size={18} />, label: 'Clientes 3D', keywords: 'contas cadastro email whatsapp' },
         { to: '/admin/loja-3d/pedidos', icon: <ShoppingBag size={18} />, label: 'Pedidos 3D', keywords: 'encomendas entrada saldo pagamento' },
+        { to: '/admin/loja-3d/solicitacoes', icon: <MessageCircle size={18} />, label: 'Solicitações 3D', keywords: 'encomenda quantidade prazo consulta whatsapp' },
         { to: '/admin/loja-3d/producao', icon: <Printer size={18} />, label: 'Produção 3D', keywords: 'ordens fila progresso lotes aprovadas rejeitadas' },
         { to: '/admin/loja-3d/calculadora', icon: <Printer size={18} />, label: 'Calculadora 3D', keywords: 'filamento impressao custo energia insumos' },
         { to: '/admin/loja-3d/catalogo', icon: <Store size={18} />, label: 'Catálogo e preços 3D', keywords: 'produtos publicar visibilidade oferta' },

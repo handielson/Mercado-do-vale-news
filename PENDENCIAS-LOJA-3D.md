@@ -126,3 +126,10 @@ Esta fase protege o Mercado do Vale e os demais canais antes de aceitar pedidos 
 6. Executar localmente um pedido completo do produto piloto, incluindo reserva, pagamento simulado, produção parcial, saldo e expedição.
 7. Homologar serviços externos: domínio, autenticação, WhatsApp, frete, PIX e fiscal.
 8. Configurar backup/restauração dos arquivos, ativar uma flag por vez e executar o piloto controlado.
+
+## Incremento: prazo sob consulta por quantidade
+
+- [x] Implementar prazo editável por produto, usando `Prazo sob consulta` quando o campo ficar vazio.
+- [x] Criar solicitação de prazo com quantidade, protocolo, registro no painel, status, prazo negociado e observação administrativa. A solicitação não cria pedido, reserva ou cobrança.
+- [x] Manter o aviso do Mercado do Vale no canal administrativo existente e impedir que a Loja 3D use esse remetente como alternativa.
+- [ ] Habilitar no n8n exclusivo da Loja 3D o evento `print3d_deadline_request` depois de cadastrar o novo número e a nova instância Evolution. Até lá, as solicitações ficam no painel com o aviso de WhatsApp aguardando configuração.

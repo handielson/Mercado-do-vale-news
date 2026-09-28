@@ -60,6 +60,8 @@ const { buildPrint3dOrderPlan, savePrint3dOrderPlanOnConnection,
 function fixture() {
   const quote = quoteProduct({ id: 'product-1', price_retail: 101, available_stock: 1,
     print3d_preorder_enabled: 1, production_days: 5 }, 4);
+  // Representa uma solicitação já aprovada pelo administrador e convertida em pedido.
+  quote.status = 'available';
   const order = { id: 'order-1', storefront: 'loja_3d', print3d_customer_id: 'customer-3d', customer_id: null,
     status: 'pending', payment_status: 'pending', subtotal: 404, shipping_cost: 80, total: 484, discount: 0 };
   const item = { id: 'item-1', order_id: order.id, product_id: quote.product_id, quantity: 4, unit_price: 101, subtotal: 404 };

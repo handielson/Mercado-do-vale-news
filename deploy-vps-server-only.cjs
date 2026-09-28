@@ -44,6 +44,8 @@ const tiktokShopAutomationPaths = [
 ];
 const print3dRecipeRuntimePaths = [
   'services/print3dProductOffer.cjs',
+  'services/productDeadlineRequest.cjs',
+  'services/productDeadlineRequestsServer.cjs',
   'services/productStorefrontOffer.cjs',
   'services/productStorefrontOffersServer.cjs',
   'services/print3dStorefrontQuote.cjs',

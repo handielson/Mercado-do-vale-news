@@ -47,7 +47,7 @@ function fixture({stock=2,phone=true,company=COMPANY,failProduction=false,authVe
   const signedQuote=quote(stock);
   const deps={customerId:CUSTOMER,authVersion:1,companyId:COMPANY,body:body(),
     loadQuote:async connection=>quote(connection.draft.stock),
-    verifyShipping:()=>({subtotal_cents:signedQuote.paymentSchedule.subtotal,items_fingerprint:quoteItemsFingerprint(signedQuote.items),
+    verifyShipping:()=>({subtotal_cents:signedQuote.paymentSchedule?.subtotal ?? 2002,items_fingerprint:quoteItemsFingerprint(signedQuote.items),
       option:{id:'frenet:1',price_cents:500},production_days:5,handling_business_days:1}),
     reserveStock:async(connection,input)=>{events.push('reserve');if(connection.draft.stock<input.quantity)return {status:400};connection.draft.stock-=input.quantity;connection.draft.reservations++;return {status:200,reservations:[{stock_location_id:KEY,deposit_id:null,location_id:null,quantity_reserved:input.quantity}]};},
     savePlan:async connection=>{connection.draft.plans++;},
@@ -106,9 +106,9 @@ test('mudança de estoque entre cotação e checkout impede assumir encomenda si
   await assert.rejects(createPrint3dCheckout(f.pool,{...f.deps,body:{...body(),idempotency_key:'55555555-5555-4555-8555-555555555555'}}),error=>error.statusCode===409);
   assert.equal(f.state.orders.length,1);
 });
-test('encomenda exige WhatsApp verificado, estoque pronto aceita e-mail',async()=>{
+test('quantidade sob encomenda exige consulta e não entra no checkout',async()=>{
   const f=fixture({stock:1,phone:false});
-  await assert.rejects(createPrint3dCheckout(f.pool,f.deps),error=>error.statusCode===403);
+  await assert.rejects(createPrint3dCheckout(f.pool,f.deps),error=>error.statusCode===409);
   assert.equal(f.state.orders.length,0);
   const ready=fixture({phone:false});assert.equal((await createPrint3dCheckout(ready.pool,ready.deps)).replayed,false);
 });

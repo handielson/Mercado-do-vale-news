@@ -15,9 +15,18 @@ const valid = () => ({
   stock_quantity: 0,
 });
 
-test('aceita SKU 3D sem peças prontas com prazo e limite próprios', () => {
+test('aceita SKU 3D sem peças prontas com prazo e limite opcionais', () => {
   assert.deepEqual(normalizePrint3dProductOffer(valid()), {
     isPrint3d: 1, preorderEnabled: 1, limit: 8, days: 4,
+  });
+});
+
+test('prazo e limite vazios deixam a encomenda sob consulta', () => {
+  assert.deepEqual(normalizePrint3dProductOffer({ ...valid(), production_days:null, print3d_preorder_limit:null }), {
+    isPrint3d:1, preorderEnabled:1, limit:null, days:null,
+  });
+  assert.deepEqual(normalizePrint3dProductOffer({ ...valid(), production_days:'  ', print3d_preorder_limit:'' }), {
+    isPrint3d:1, preorderEnabled:1, limit:null, days:null,
   });
 });
 
@@ -32,8 +41,6 @@ for (const [name, change] of [
   ['sem controle de estoque', { track_inventory: false }],
   ['produto virtual', { is_virtual: true }],
   ['produto pai', { is_parent: true }],
-  ['sem prazo individual', { production_days: null }],
-  ['sem limite de unidades', { print3d_preorder_limit: null }],
   ['limite fracionário', { print3d_preorder_limit: 1.5 }],
 ]) {
   test(`rejeita encomenda: ${name}`, () => {

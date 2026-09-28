@@ -2197,6 +2197,10 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
     return true;
   }
 
+  if (normalizedMethod === 'POST' && /^\/storefronts\/(?:mercado_do_vale|loja_3d)\/deadline-requests$/u.test(pathname)) {
+    return true;
+  }
+
   if (normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD') return false;
 
   if (

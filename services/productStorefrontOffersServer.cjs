@@ -112,7 +112,9 @@ function registerProductStorefrontOfferRoutes(fastify, {
         subtotal: paymentSchedule?.subtotal ?? null,
         payment_schedule: paymentSchedule,
         can_checkout: false,
-        notice: 'Cotação informativa de produtos, sem frete. Escolha entrada entre 50% e 100% de todos os produtos e quando pagar o frete no checkout. Saldo quitado antes do envio. Estoque e prazo serão reconfirmados; nenhum item foi reservado.' };
+        notice: paymentSchedule
+          ? 'Cotação informativa das peças prontas, sem frete. Escolha entrada entre 50% e 100% no checkout. Nenhum item foi reservado.'
+          : 'A quantidade solicitada supera o estoque pronto. Envie uma solicitação para a equipe analisar a produção e negociar o prazo; nenhum pedido, cobrança ou reserva foi criado.' };
     } catch (error) { return respondError(reply, error); }
   });
 

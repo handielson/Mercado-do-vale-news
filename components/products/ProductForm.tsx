@@ -1405,14 +1405,17 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             mergedData.meta_description = currentMetaDescription || null;
             mergedData.keywords = currentKeywords || null;
 
-            // Prazo de produção individual (override da categoria)
+            // Campos vazios representam prazo sob consulta e ausência de limite.
             const currentProductionDays = watch('production_days');
             mergedData.production_days = currentProductionDays != null && currentProductionDays !== '' as any
                 ? parseInt(String(currentProductionDays))
                 : null;
             mergedData.is_print3d = Boolean(watch('is_print3d'));
             mergedData.print3d_preorder_enabled = Boolean(watch('print3d_preorder_enabled'));
-            mergedData.print3d_preorder_limit = watch('print3d_preorder_limit') ?? null;
+            const currentPreorderLimit = watch('print3d_preorder_limit');
+            mergedData.print3d_preorder_limit = currentPreorderLimit != null && currentPreorderLimit !== '' as any
+                ? Number(currentPreorderLimit)
+                : null;
 
             if (data.model) {
                 try {
@@ -2298,13 +2301,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
 
 
-            {/* — PRAZO DE PRODUÇÃO (Override individual) — */}
+            {/* Prazo estimado; vazio significa consulta conforme a quantidade. */}
             <div className="bg-amber-50 border border-amber-200 p-5 rounded-xl shadow-sm">
                 <h3 className="font-semibold text-amber-800 mb-1 flex items-center gap-2">
-                    ⚙️ Prazo de Produção Individual
+                    ⚙️ Prazo para encomenda
                 </h3>
                 <p className="text-xs text-amber-700 mb-3">
-                    Deixe em branco para herdar o prazo da categoria. Preencha apenas se este produto tem um prazo diferente.
+                    Deixe em branco para mostrar “Prazo sob consulta”. Se houver uma estimativa padrão para este SKU, informe-a abaixo; o prazo final será negociado conforme a quantidade solicitada.
                 </p>
                 <div className="flex items-center gap-3">
                     <input
@@ -2312,7 +2315,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         min="0"
                         value={watch('production_days') ?? ''}
                         onChange={(e) => setValue('production_days' as any, e.target.value === '' ? null : parseInt(e.target.value) || 0)}
-                        placeholder="Ex: 3 (dias úteis)"
+                        placeholder="Vazio = Prazo sob consulta"
                         className="w-40 px-3 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white text-sm"
                     />
                     <span className="text-sm text-amber-700">dias úteis antes do envio</span>
@@ -2322,7 +2325,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                             onClick={() => setValue('production_days' as any, null)}
                             className="text-xs text-amber-600 underline hover:text-amber-800"
                         >
-                            Limpar (usar categoria)
+                            Usar “Prazo sob consulta”
                         </button>
                     )}
                 </div>
@@ -2352,17 +2355,18 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         <span>Aceitar encomendas deste SKU</span>
                     </label>
                     {watch('print3d_preorder_enabled') && <div className="grid gap-3 md:grid-cols-2">
-                        <label className="text-sm text-slate-700">Limite de unidades pendentes sob encomenda
+                        <label className="text-sm text-slate-700">Limite opcional para solicitações
                             <input type="number" min="1" max="10000" step="1" className="mt-1 w-full rounded-lg border border-slate-300 p-2"
                                 value={watch('print3d_preorder_limit') ?? ''}
-                                onChange={(event) => setValue('print3d_preorder_limit', event.target.value ? Number(event.target.value) : null, { shouldValidate: true })} />
+                                placeholder="Vazio = sem limite"
+                                onChange={(event) => setValue('print3d_preorder_limit', event.target.value.trim() === '' ? null : Number(event.target.value), { shouldValidate: true })} />
                             {errors.print3d_preorder_limit && <span className="text-xs text-red-700">{errors.print3d_preorder_limit.message}</span>}
                         </label>
-                        <p className="self-center text-xs text-slate-600">Informe também, no campo acima, o prazo individual de produção em dias úteis. O limite controla encomendas pendentes, sem alterar as peças prontas.</p>
+                        <p className="self-center text-xs text-slate-600">O cliente informa a quantidade desejada. O sistema registra a solicitação e o administrador negocia o prazo antes de criar o pedido. Deixe este campo vazio para não aplicar limite cadastrado.</p>
                     </div>}
                     {errors.print3d_preorder_enabled && <p className="text-xs text-red-700">{errors.print3d_preorder_enabled.message}</p>}
                     {errors.production_days && <p className="text-xs text-red-700">{errors.production_days.message}</p>}
-                    <p className="text-xs text-amber-800">O cadastro desta opção não libera a venda sob encomenda até a integração segura do checkout e da ficha de produção.</p>
+                    <p className="text-xs text-amber-800">Peças prontas continuam disponíveis para compra. Quantidades sob encomenda seguem primeiro para consulta, sem cobrança ou reserva automática.</p>
                 </div>}
             </div>
 

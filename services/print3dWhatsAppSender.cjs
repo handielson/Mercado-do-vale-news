@@ -12,16 +12,17 @@ function createPrint3dWhatsAppSender({ webhookUrl, webhookToken, evolutionInstan
     && /^[a-zA-Z0-9_.-]{3,80}$/.test(instance) && instance.toLowerCase() !== 'botmercadodovale'
     && /^55\d{10,11}$/.test(ownNumber) && /^55\d{10,11}$/.test(mdvNumber) && ownNumber !== mdvNumber;
 
-  const sendPrint3dVerification = async function (phone, text) {
+  const sendPrint3dVerification = async function (phone, text, purpose = 'print3d_phone_verification') {
     if (!configured) return { ok: false, reason: 'print3d_whatsapp_not_configured' };
-    if (!/^55\d{10,11}$/.test(phone) || typeof text !== 'string' || text.length < 10 || text.length > 800) {
+    if (!['print3d_phone_verification', 'print3d_deadline_request'].includes(purpose)
+      || !/^55\d{10,11}$/.test(phone) || typeof text !== 'string' || text.length < 10 || text.length > 1200) {
       return { ok: false, reason: 'invalid_payload' };
     }
     try {
       const response = await fetchImpl(url.href, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-print3d-verification-key': webhookToken },
-        body: JSON.stringify({ phone, text, purpose: 'print3d_phone_verification' }),
+        body: JSON.stringify({ phone, text, purpose }),
         signal: AbortSignal.timeout(20000),
       });
       if (!response.ok) return { ok: false, reason: 'n8n_send_failed' };

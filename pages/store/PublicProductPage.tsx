@@ -37,6 +37,7 @@ import { getPublicProductName } from './publicProductName.js';
 import { getPublicProductDisambiguatedRouteTarget, getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
 import { buildCategoryBreadcrumb } from './categoryBreadcrumb.js';
 import { customFieldsService } from '@/services/custom-fields';
+import ProductDeadlineRequest, { productDeadlineLabel } from '@/components/catalog/ProductDeadlineRequest';
 /**
  * PublicProductPage
  * A dedicated SEO-friendly landing page for a single product.
@@ -1838,7 +1839,7 @@ export const PublicProductPage: React.FC = () => {
 
                                 <div className="mt-6">
                                     {/* Aviso de prazo de produção (Sob Encomenda) */}
-                                    {((product as any).effective_production_days ?? (product as any).production_days ?? 0) > 0 && (
+                                    {Boolean((product as any).print3d_preorder_enabled) && (
                                         <div className="mb-3 flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
                                             <span className="text-xl mt-0.5">⚙️</span>
                                             <div>
@@ -1846,15 +1847,23 @@ export const PublicProductPage: React.FC = () => {
                                                     Produzido sob encomenda
                                                 </p>
                                                 <p className="text-xs text-amber-700 mt-0.5">
-                                                    Este produto é fabricado após o pedido. Prazo de produção:{' '}
+                                                    Consulte a produção conforme a quantidade desejada. Prazo:{' '}
                                                     <span className="font-bold">
-                                                        {(product as any).effective_production_days ?? (product as any).production_days} dias úteis
+                                                        {productDeadlineLabel((product as any).effective_production_days ?? (product as any).production_days)}
                                                     </span>
-                                                    {' '}+ prazo de entrega.
+                                                    .
                                                 </p>
                                             </div>
                                         </div>
                                     )}
+                                    {Boolean((product as any).is_print3d && (product as any).print3d_preorder_enabled) && <ProductDeadlineRequest
+                                        storefront="mercado_do_vale"
+                                        product={product}
+                                        defaultName={customer?.name || ''}
+                                        defaultPhone={(customer as any)?.phone || ''}
+                                        defaultEmail={(customer as any)?.email || ''}
+                                        initialQuantity={Math.max(1, Number(product.stock_quantity || 0) + 1)}
+                                    />}
                                     <button
                                         onClick={handleAddToCart}
                                         disabled={hasMissingComboChoice || (!product.track_inventory ? false : (product.stock_quantity || 0) <= 0)}
@@ -1925,11 +1934,11 @@ export const PublicProductPage: React.FC = () => {
                                         <span className="text-slate-400 text-xs ml-1.5">· Calcule o frete pelo CEP acima</span>
                                     </div>
                                 </div>
-                                {((product as any).effective_production_days ?? (product as any).production_days ?? 0) > 0 && (
+                                {Boolean((product as any).print3d_preorder_enabled) && (
                                     <div className="flex items-center gap-3 px-3 py-2 bg-amber-50 rounded-xl border border-amber-200">
                                         <Settings className="w-5 h-5 text-amber-600 shrink-0" />
                                         <div className="min-w-0">
-                                            <span className="font-semibold text-amber-800 text-sm">Fabricação: {(product as any).effective_production_days ?? (product as any).production_days} dias úteis</span>
+                                        <span className="font-semibold text-amber-800 text-sm">Fabricação: {productDeadlineLabel((product as any).effective_production_days ?? (product as any).production_days)}</span>
                                             <span className="text-amber-600 text-xs ml-1.5">· Sob encomenda</span>
                                         </div>
                                     </div>

@@ -9,6 +9,9 @@ import { ProductStatus } from '../utils/field-standards';
  */
 
 const IMEI_REGEX = /^[0-9]{15}$/;
+const emptyOptionalNumber = (value: unknown) => (
+    typeof value === 'string' && value.trim() === '' ? null : value
+);
 export const productSchema = z.object({
     // Model Reference (optional - populated by EAN scanner)
     model_id: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
@@ -138,10 +141,16 @@ export const productSchema = z.object({
     track_inventory: z.boolean().default(true),
     stock_quantity: z.coerce.number().int().min(0).nullable().optional()
         .transform(val => val === null ? undefined : val),
-    production_days: z.coerce.number().int().min(0).max(365).nullable().optional(),
+    production_days: z.preprocess(
+        emptyOptionalNumber,
+        z.coerce.number().int().min(0).max(365).nullable().optional()
+    ),
     is_print3d: z.boolean().optional().default(false),
     print3d_preorder_enabled: z.boolean().optional().default(false),
-    print3d_preorder_limit: z.coerce.number().int().min(1).max(10000).nullable().optional(),
+    print3d_preorder_limit: z.preprocess(
+        emptyOptionalNumber,
+        z.coerce.number().int().min(1).max(10000).nullable().optional()
+    ),
 
     // Promotional Pricing
     price_promo: z.coerce.number().min(0).nullable().optional()
@@ -183,12 +192,6 @@ export const productSchema = z.object({
     if (data.print3d_preorder_enabled) {
         if (!data.is_print3d || !data.track_inventory || data.is_virtual) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Encomendas 3D exigem produto físico com controle de estoque.', path: ['print3d_preorder_enabled'] });
-        }
-        if (!data.production_days || data.production_days < 1) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Informe os dias úteis de produção deste SKU.', path: ['production_days'] });
-        }
-        if (!data.print3d_preorder_limit) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Informe o limite de unidades pendentes.', path: ['print3d_preorder_limit'] });
         }
     }
     const imei1 = data.specs?.imei1;

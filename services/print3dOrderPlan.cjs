@@ -40,6 +40,9 @@ function buildPrint3dOrderPlan(order, persistedItems, quoteItems, paymentTerms) 
     const unitPrice = integer(quote.unit_price, 1);
     const canonical = quoteProduct({ id: quote.product_id, price_retail: unitPrice, available_stock: ready,
       print3d_preorder_enabled: 1, production_days: quote.production_days }, quantity);
+    // This path also validates an admin-approved consultation converted to an order.
+    // Public checkout rejects requires_consultation before reaching the plan builder.
+    canonical.status = quote.status;
     for (const field of ['quantity', 'ready_quantity', 'preorder_quantity', 'unit_price', 'subtotal', 'ready_subtotal',
       'preorder_subtotal', 'deposit_amount', 'balance_before_shipping']) {
       if (integer(quote[field]) !== canonical[field]) fail(`Cotação inconsistente: ${field}.`);

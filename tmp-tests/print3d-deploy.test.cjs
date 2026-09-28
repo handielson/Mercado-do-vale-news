@@ -2,8 +2,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs');
 const { deployPrint3d, schemaPlan, nodeCommand, waitForHealth } = require('../scripts/deploy-print3d.cjs');
 const migrations = { '031':'ALTER products', '032':'CREATE product_id CHAR(36) NOT NULL', '039':'ALTER banners' };
+test('pacote da API inclui os módulos de solicitação de prazo', () => {
+ const source = fs.readFileSync(path.resolve(__dirname, '..', 'deploy-vps-server-only.cjs'), 'utf8');
+ assert.match(source, /services\/productDeadlineRequest\.cjs/);
+ assert.match(source, /services\/productDeadlineRequestsServer\.cjs/);
+});
 function state() { return { columns:[{TABLE_NAME:'products',COLUMN_NAME:'id',COLUMN_TYPE:'char(36)',COLLATION_NAME:'utf8mb4_unicode_ci'}],indexes:[],tables:[{TABLE_NAME:'products',ENGINE:'InnoDB'},{TABLE_NAME:'banners',ENGINE:'InnoDB'}],counts:{products:'10',banners:'2'},google:false }; }
 test('plans only additive 031/032/039 and matches product collation',()=>{
  const plan=schemaPlan(state(),migrations); assert.equal(plan.length,3); assert.match(plan[1],/CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci/);

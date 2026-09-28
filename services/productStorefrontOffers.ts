@@ -7,7 +7,7 @@ export type Print3dQuote = {
   storefront: 'loja_3d';
   items: Array<{ product_id: string; sku?: string; name?: string; quantity: number; ready_quantity?: number;
     preorder_quantity?: number; production_days?: number | null; unit_price?: number; subtotal?: number;
-    status: 'available' | 'unavailable' }>;
+    status: 'available' | 'requires_consultation' | 'unavailable' }>;
   subtotal: number | null;
   payment_schedule: {
     subtotal: number;

@@ -16,6 +16,8 @@ function localDatabase(readyQuantity = 0) {
   const orderId = randomUUID(), itemId = randomUUID(), productId = randomUUID(), customerId = randomUUID();
   const quote = quoteProduct({ id: productId, price_retail: 100, available_stock: readyQuantity,
     print3d_preorder_enabled: 1, production_days: 5 }, 100);
+  // A cascata começa depois que a consulta de prazo foi aprovada e virou pedido.
+  quote.status = 'available';
   const data = {
     orders: [{ id: orderId, storefront: 'loja_3d', print3d_customer_id: customerId, customer_id: null,
       status: 'pending', payment_status: 'pending', subtotal: 10000, shipping_cost: 500, total: 10500, discount: 0 }],

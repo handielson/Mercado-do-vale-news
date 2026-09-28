@@ -20,27 +20,20 @@ test('quantidades inválidas e duplicadas não entram na cotação', () => {
   assert.throws(() => validateQuoteItems([{ product_id: 'p1', quantity: 1 }, { product_id: 'p1', quantity: 2 }]), /repetido/);
 });
 
-test('encomenda exige permissão, prazo e respeito ao limite por pedido', () => {
+test('quantidade acima do estoque exige consulta, com ou sem prazo estimado', () => {
   const product = { id: 'p1', price_retail: 2000, available_stock: 1, print3d_preorder_enabled: 1,
     print3d_preorder_limit: 2, production_days: 4 };
-  assert.equal(quoteProduct(product, 3).status, 'available');
-  assert.equal(quoteProduct(product, 4).status, 'unavailable');
-  assert.equal(quoteProduct({ ...product, production_days: null }, 2).status, 'unavailable');
+  assert.equal(quoteProduct(product, 3).status, 'requires_consultation');
+  assert.equal(quoteProduct(product, 4).status, 'requires_consultation');
+  assert.equal(quoteProduct({ ...product, production_days: null }, 2).status, 'requires_consultation');
   assert.equal(quoteProduct({ ...product, print3d_preorder_enabled: 0 }, 2).status, 'unavailable');
 });
 
-test('entrada mínima é 50% de todos os produtos, mesmo no pedido misto', () => {
+test('quantidade em consulta não gera condição de pagamento', () => {
   const mixed = quoteProduct({ id: 'p1', price_retail: 5900, available_stock: 2,
     print3d_preorder_enabled: 1, production_days: 4 }, 4);
-  assert.deepEqual(quotePaymentSchedule([mixed]), {
-    subtotal: 23600,
-    ready_amount: 11800,
-    preorder_amount: 11800,
-    deposit_amount: 11800,
-    due_on_confirmation: 11800,
-    due_before_shipping: 11800,
-    shipping_cost_included: false,
-  });
+  assert.equal(mixed.status, 'requires_consultation');
+  assert.equal(quotePaymentSchedule([mixed]), null);
 });
 
 test('centavo excedente fica na entrada e valores indisponíveis não geram cobrança', () => {
@@ -48,7 +41,7 @@ test('centavo excedente fica na entrada e valores indisponíveis não geram cobr
     print3d_preorder_enabled: 1, production_days: 3 }, 1);
   assert.equal(preorder.deposit_amount, 951);
   assert.equal(preorder.balance_before_shipping, 950);
-  assert.equal(quotePaymentSchedule([preorder]).due_on_confirmation, 951);
+  assert.equal(quotePaymentSchedule([preorder]), null);
   assert.equal(quotePaymentSchedule([{ ...preorder, status: 'unavailable' }]), null);
 });
 

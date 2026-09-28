@@ -17,7 +17,7 @@ const password = process.env.VPS_SITE_PASSWORD || process.env.VPS_ROOT_PASSWORD 
 const privateKeyPath = process.env.VPS_SITE_PRIVATE_KEY || process.env.VPS_PRIVATE_KEY;
 const privateKey = privateKeyPath ? fs.readFileSync(privateKeyPath) : undefined;
 const appDir = '/var/www/mdv-api';
-const migrationNumbers = ['028','029','030','033','034','035','036','037','038','040','041','042','043','044','045','046','047','048','049','050','051','052'];
+const migrationNumbers = ['028','029','030','033','034','035','036','037','038','040','041','042','043','044','045','046','047','048','049','050','051','052','053'];
 const container = `mdv-print3d-homolog-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`;
 const mysqlPassword = crypto.randomBytes(24).toString('hex');
 const ssh = new Client();
@@ -170,7 +170,7 @@ async function main() {
     for (const migration of migrationFiles()) runSql(fs.readFileSync(migration.file,'utf8'), { silent:true });
     const after = runSql("SELECT CONCAT((SELECT COUNT(*) FROM products),'|',(SELECT COUNT(*) FROM orders),'|',(SELECT COUNT(*) FROM banners));");
     if (before !== after) throw new Error(`Core row counts changed during homologation: ${before} -> ${after}`);
-    const expectedTables = ['print3d_recipe_revisions','print3d_recipe_files','print3d_active_recipes','print3d_customers','print3d_customer_auth','print3d_customer_tokens','print3d_phone_verifications','print3d_phone_verification_limits','print3d_login_limits','customer_login_limits','print3d_customer_google','print3d_google_handoffs','print3d_production_jobs','print3d_production_events','print3d_order_plans','print3d_order_item_plans','print3d_order_payment_receipts','print3d_checkout_requests','print3d_order_shipping','print3d_order_stock_reservations','print3d_payment_charges','print3d_order_cancellation_events','print3d_production_outputs','print3d_filament_stock','print3d_filament_movements','print3d_order_dispatches','print3d_supply_stock','print3d_supply_movements'];
+    const expectedTables = ['print3d_recipe_revisions','print3d_recipe_files','print3d_active_recipes','print3d_customers','print3d_customer_auth','print3d_customer_tokens','print3d_phone_verifications','print3d_phone_verification_limits','print3d_login_limits','customer_login_limits','print3d_customer_google','print3d_google_handoffs','print3d_production_jobs','print3d_production_events','print3d_order_plans','print3d_order_item_plans','print3d_order_payment_receipts','print3d_checkout_requests','print3d_order_shipping','print3d_order_stock_reservations','print3d_payment_charges','print3d_order_cancellation_events','print3d_production_outputs','print3d_filament_stock','print3d_filament_movements','print3d_order_dispatches','print3d_supply_stock','print3d_supply_movements','product_deadline_requests'];
     const present = Number(runSql(`SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN (${expectedTables.map(quote).join(',')});`));
     if (present !== expectedTables.length) throw new Error(`Homologation missing tables: ${present}/${expectedTables.length}`);
     const requiredColumns = Number(runSql("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND (TABLE_NAME,COLUMN_NAME) IN (('orders','storefront'),('orders','print3d_customer_id'),('print3d_customers','phone_verified_at'),('print3d_order_plans','payment_terms_version'),('print3d_production_events','material_consumed_grams'),('print3d_order_item_plans','variant_snapshot'));"));

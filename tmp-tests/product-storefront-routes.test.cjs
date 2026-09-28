@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const Fastify = require('fastify');
 const { registerProductStorefrontOfferRoutes } = require('../services/productStorefrontOffersServer.cjs');
 
-test('cotação 3D usa preço do servidor e divide pronta entrega de encomenda', async () => {
+test('cotação 3D usa preço do servidor e exige consulta para quantidade acima do estoque', async () => {
   const app = Fastify();
   const calls = [];
   registerProductStorefrontOfferRoutes(app, {
@@ -18,11 +18,11 @@ test('cotação 3D usa preço do servidor e divide pronta entrega de encomenda',
   const response = await app.inject({ method: 'POST', url: '/storefronts/loja_3d/quote',
     payload: { items: [{ product_id: 'p1', quantity: 4, unit_price: 1 }] } });
   assert.equal(response.statusCode, 200);
-  assert.equal(response.json().subtotal, 23600);
-  assert.equal(response.json().payment_schedule.due_on_confirmation, 11800);
-  assert.equal(response.json().payment_schedule.due_before_shipping, 11800);
+  assert.equal(response.json().subtotal, null);
+  assert.equal(response.json().payment_schedule, null);
   assert.deepEqual([response.json().items[0].ready_quantity, response.json().items[0].preorder_quantity], [2, 2]);
   assert.equal(response.json().items[0].production_days, 3);
+  assert.equal(response.json().items[0].status, 'requires_consultation');
   assert.equal(response.json().can_checkout, false);
   assert.match(calls[0].sql, /o\.storefront = 'loja_3d'/);
   assert.match(calls[0].sql, /psl\.quantity - psl\.reserved_quantity/);

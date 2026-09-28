@@ -5,13 +5,15 @@ const {targetPath,createPrint3dPublicProxy}=require('../services/print3dPublicPr
 const id='11111111-1111-4111-8111-111111111111';
 test('channel boundary rejects other channels, administrative paths, duplicate queries and traversal',()=>{
  for(const [method,path] of [['GET','/categories'],['GET','/banners?storefront=loja_3d'],['GET','/storefronts/loja_3d/products?limit=2000'],
- ['POST','/print3d/auth/login'],['POST',`/print3d/orders/${id}/payment`],['POST','/storefronts/loja_3d/shipping/quote'],['POST','/storefronts/loja_3d/quote']])assert.equal(targetPath(path,method),path);
+ ['POST','/print3d/auth/login'],['POST',`/print3d/orders/${id}/payment`],['POST','/storefronts/loja_3d/shipping/quote'],['POST','/storefronts/loja_3d/quote'],
+ ['POST','/storefronts/loja_3d/deadline-requests']])assert.equal(targetPath(path,method),path);
  for(const path of ['/admin/print3d/orders','/products','/customers','/storefronts/mercado_do_vale/products','/banners',
  '/banners?storefront=mercado_do_vale','/banners?storefront=loja_3d&storefront=mercado_do_vale','//evil.test/categories',
  '/print3d/../categories','/print3d/%2e%2e/categories','/categories#anything','/categories?storefront=mercado_do_vale',
  '/storefronts/loja_3d/products?limit=2001','/categories?path=/products'])assert.equal(targetPath(path,'GET'),null,path);
  assert.equal(targetPath('/print3d/payments/webhook','POST'),null);
  assert.equal(targetPath('/storefronts/mercado_do_vale/quote','POST'),null);
+ assert.equal(targetPath('/storefronts/mercado_do_vale/deadline-requests','POST'),null);
  assert.equal(targetPath('/storefronts/loja_3d/quote?storefront=mercado_do_vale','POST'),null);
  assert.equal(targetPath('/categories','DELETE'),null);
  for(const apiOrigin of ['https://example.test','http://localhost:4000','http://127.0.0.1:4000/admin','http://user@127.0.0.1:4000'])assert.throws(()=>createPrint3dPublicProxy({apiOrigin}));
