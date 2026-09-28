@@ -42,8 +42,10 @@ export default function Print3dSettingsPage() {
     setBusy(true);
     try {
       const preview = await print3dStorefrontSettingsService.createPreview();
-      if (previewTab) previewTab.location.replace(preview.preview_url);
-      else window.location.assign(preview.preview_url);
+      const previewUrl = new URL('/loja-3d', window.location.origin);
+      previewUrl.searchParams.set('maintenance_preview', preview.token);
+      if (previewTab) previewTab.location.replace(previewUrl.toString());
+      else window.location.assign(previewUrl.toString());
     } catch (error: any) {
       previewTab?.close();
       toast.error(error?.message || 'Não foi possível abrir a prévia administrativa.');

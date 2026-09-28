@@ -92,5 +92,6 @@ test('maintenance guard only bypasses after server verification and keeps a visi
   assert.match(guard, /searchParams\.delete\('maintenance_preview'\)/);
   assert.match(guard, /o público continua vendo a página de manutenção/);
   assert.match(adminPage, /createPreview\(\)/);
+  assert.match(adminPage, /new URL\('\/loja-3d', window\.location\.origin\)/);
   assert.match(adminPage, /Abrir prévia administrativa/);
 });

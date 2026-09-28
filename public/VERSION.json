@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.501-preview-manutencao-3dmv",
+  "version": "v1.2.502-preview-manutencao-3dmv",
   "date": "2026-09-28",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.501-preview-manutencao-3dmv",
-  "release_vps": "/var/www/mdv-site/releases/20260928-162631-v1-2-501-preview-manutencao-3dmv",
-  "release_print3d_vps": "/var/www/print3d-site/releases/20260928-162631-v1-2-501-preview-manutencao-3dmv",
-  "summary": "Mantém a 3DMV em manutenção pública e libera uma prévia administrativa temporária e segura para testes.",
+  "tag": "v1.2.502-preview-manutencao-3dmv",
+  "release_vps": "/var/www/mdv-site/releases/20260928-163600-v1-2-502-preview-manutencao-3dmv",
+  "release_print3d_vps": "/var/www/print3d-site/releases/20260928-163600-v1-2-502-preview-manutencao-3dmv",
+  "summary": "Mantém a 3DMV em manutenção pública e libera uma prévia administrativa temporária pelo domínio ativo do painel.",
   "changed_files": [
     "components/Print3dMaintenanceGuard.tsx",
     "pages/admin/print3d/Print3dSettingsPage.tsx",
