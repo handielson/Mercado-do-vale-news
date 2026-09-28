@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "pilot_id": "suporte-lnb-3x3",
+  "status": "aguardando_resumo_de_impressao",
+  "product_draft": {
+    "name": "Suporte LNB 3x3",
+    "sku": "3D-SUP-LNB-3X3-V2",
+    "is_print3d": true,
+    "category": null,
+    "storefront_price_cents": null,
+    "ready_stock_quantity": null,
+    "preorder_enabled": null,
+    "production_days": null,
+    "preorder_limit": null
+  },
+  "recipe_revision": {
+    "code": "flange-3x3-v2-2026-08-19",
+    "pieces_per_batch": 11,
+    "unit_composition": [
+      {
+        "name": "Parte 1",
+        "quantity_per_unit": 1,
+        "model_file": "Suporte Flange 3x3 v2 (1).stl"
+      },
+      {
+        "name": "Parte 2",
+        "quantity_per_unit": 1,
+        "model_file": "Suporte Flange 3x3 v2 (2).stl"
+      }
+    ],
+    "print_summary": null,
+    "filaments": [],
+    "supplies": [],
+    "printer_profile": null
+  },
+  "source_root": "Fusion 360/Projetos/Próprio/Suporte LNB 3x3",
+  "files": [
+    {
+      "kind": "model",
+      "name": "Suporte Flange 3x3 v2 (1).stl",
+      "byte_size": 77284,
+      "sha256": "2f7643c42afc05104d1eab61138ebb5d9ed90c784cb306e96669d86048473ea8",
+      "dimensions_mm": {
+        "x": 66,
+        "y": 40,
+        "z": 50.06
+      }
+    },
+    {
+      "kind": "model",
+      "name": "Suporte Flange 3x3 v2 (2).stl",
+      "byte_size": 81384,
+      "sha256": "68f7c321fc2f09a6869da3dadb8cb36fa51a182d0504f1446647326b8d095a71",
+      "dimensions_mm": {
+        "x": 66,
+        "y": 20,
+        "z": 30.63
+      }
+    },
+    {
+      "kind": "project",
+      "name": "Suporte Flange 3x3 v2 (mesa com 11 pares).3mf",
+      "byte_size": 134572,
+      "sha256": "2f1de3c5798109bf159af13b03843733a3077d95bcca9d8ecc788bfdd5becf12",
+      "objects": {
+        "Suporte Flange 3x3 v2 (1).stl": 11,
+        "Suporte Flange 3x3 v2 (2).stl": 11
+      }
+    }
+  ],
+  "expected_print_json": {
+    "material_gramas": "numero_positivo_do_lote",
+    "tempo_impressao_minutos": "numero_positivo_do_lote"
+  },
+  "missing_required_data": [
+    "JSON real do programa para a mesa de 11 pares",
+    "material e cor de cada filamento",
+    "impressora e perfil usados",
+    "categoria da oferta",
+    "preço da loja 3D",
+    "quantidade pronta em estoque",
+    "aceitação, prazo e limite de encomendas",
+    "peso e dimensões do produto montado para frete",
+    "embalagem e demais insumos",
+    "fotos comerciais"
+  ]
+}
