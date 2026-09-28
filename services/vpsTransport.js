@@ -140,6 +140,7 @@ function isPublicWritePath(pathname, method) {
     '/storefronts/loja_3d/quote',
     '/storefronts/loja_3d/shipping/quote',
     '/storefronts/loja_3d/deadline-requests',
+    '/storefronts/loja_3d/maintenance-preview/verify',
   ].includes(pathname)) {
     return true;
   }

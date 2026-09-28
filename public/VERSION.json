@@ -1,16 +1,21 @@
 {
-  "version": "v1.2.500-quantidade-encomenda-vazia",
+  "version": "v1.2.501-preview-manutencao-3dmv",
   "date": "2026-09-28",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.500-quantidade-encomenda-vazia",
-  "release_vps": "/var/www/mdv-site/releases/20260928-131800-v1-2-500-quantidade-encomenda-vazia",
-  "release_print3d_vps": "/var/www/print3d-site/releases/20260928-131800-v1-2-500-quantidade-encomenda-vazia",
-  "summary": "Deixa a quantidade desejada vazia ao abrir uma consulta de prazo pelo produto, sem copiar o estoque disponível.",
+  "tag": "v1.2.501-preview-manutencao-3dmv",
+  "release_vps": "/var/www/mdv-site/releases/20260928-162631-v1-2-501-preview-manutencao-3dmv",
+  "release_print3d_vps": "/var/www/print3d-site/releases/20260928-162631-v1-2-501-preview-manutencao-3dmv",
+  "summary": "Mantém a 3DMV em manutenção pública e libera uma prévia administrativa temporária e segura para testes.",
   "changed_files": [
-    "components/catalog/ProductDeadlineRequest.tsx",
-    "pages/store/Print3dProductPage.tsx",
-    "pages/store/PublicProductPage.tsx",
-    "tmp-tests/product-deadline-request-blank-quantity-static.test.mjs"
+    "components/Print3dMaintenanceGuard.tsx",
+    "pages/admin/print3d/Print3dSettingsPage.tsx",
+    "services/print3dStorefrontSettings.ts",
+    "services/print3dStorefrontSettingsServer.cjs",
+    "services/vpsTransport.js",
+    "vps_server.cjs",
+    "vps_server.js",
+    "tmp-tests/print3d-maintenance-settings.test.cjs",
+    "tmp-tests/print3d-public-transport.test.mjs"
   ]
 }

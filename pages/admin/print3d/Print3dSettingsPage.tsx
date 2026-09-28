@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, Power, RefreshCw, Wrench } from 'lucide-react';
+import { Eye, ExternalLink, Power, RefreshCw, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 import { print3dStorefrontSettingsService, type Print3dStorefrontSettings } from '../../../services/print3dStorefrontSettings';
 
@@ -36,6 +36,20 @@ export default function Print3dSettingsPage() {
     } finally { setBusy(false); }
   }
 
+  async function openAdministrativePreview() {
+    const previewTab = window.open('about:blank', '_blank');
+    if (previewTab) previewTab.opener = null;
+    setBusy(true);
+    try {
+      const preview = await print3dStorefrontSettingsService.createPreview();
+      if (previewTab) previewTab.location.replace(preview.preview_url);
+      else window.location.assign(preview.preview_url);
+    } catch (error: any) {
+      previewTab?.close();
+      toast.error(error?.message || 'Não foi possível abrir a prévia administrativa.');
+    } finally { setBusy(false); }
+  }
+
   const active = Boolean(settings?.maintenance_mode);
   return <div className="mx-auto max-w-4xl space-y-6">
     <header className="flex flex-wrap items-start justify-between gap-4">
@@ -47,6 +61,10 @@ export default function Print3dSettingsPage() {
         <div className="flex items-center gap-3"><span className={`flex h-12 w-12 items-center justify-center rounded-xl ${active ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{active ? <Wrench /> : <Power />}</span><div><h2 className="font-bold text-slate-900">{active ? 'Site em manutenção' : 'Site aberto ao público'}</h2><p className="text-sm text-slate-600">{active ? 'Os clientes veem somente a página de manutenção.' : 'Catálogo, produtos e área do cliente estão disponíveis.'}</p></div></div>
         <button type="button" disabled={busy || !settings} onClick={() => save(!active)} className={`rounded-xl px-5 py-3 text-sm font-bold text-white disabled:opacity-50 ${active ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'}`}>{busy ? 'Salvando…' : active ? 'Reabrir site' : 'Colocar em manutenção'}</button>
       </div>
+      {active && <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-amber-200 pt-5">
+        <p className="max-w-xl text-sm text-amber-900">Teste o catálogo e os produtos reais em uma aba privada. O acesso vale por 2 horas nesta sessão e não retira a manutenção para os clientes.</p>
+        <button type="button" disabled={busy} onClick={openAdministrativePreview} className="inline-flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Eye size={16} /> Abrir prévia administrativa</button>
+      </div>}
     </section>
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <label htmlFor="maintenance-message" className="font-bold text-slate-900">Mensagem para os clientes</label>

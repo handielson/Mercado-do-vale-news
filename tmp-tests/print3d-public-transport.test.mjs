@@ -8,6 +8,7 @@ for (const [method, path] of [
   ['POST', '/storefronts/loja_3d/quote'],
   ['POST', '/storefronts/loja_3d/shipping/quote'],
   ['POST', '/storefronts/loja_3d/deadline-requests'],
+  ['POST', '/storefronts/loja_3d/maintenance-preview/verify'],
 ]) {
   assert.equal(transport.isPublicVpsPath(path, method), true, `${method} ${path} must use the public API directly`);
   assert.match(transport.buildVpsUrl(path, {

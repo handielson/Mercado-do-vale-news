@@ -20992,6 +20992,8 @@ require('./services/print3dAdminServer.cjs').registerPrint3dAdminRoutes(fastify,
 require('./services/print3dStorefrontSettingsServer.cjs').registerPrint3dStorefrontSettingsRoutes(fastify, {
   pool,
   getBearerAuthContext: getVpsBearerAuthContext,
+  authSecret: VPS_AUTH_SECRET,
+  publicOrigin: process.env.PRINT3D_PUBLIC_ORIGIN || 'https://www.3dmv.com.br',
 });
 registerPrint3dCheckoutRoutes(fastify, {
   pool, getCustomer: print3dAccounts.getCustomer,
