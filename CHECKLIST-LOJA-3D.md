@@ -3,6 +3,8 @@
 Data: 25/09/2026.
 Status: implementação local iniciada; domínio 3D pendente de janela de baixo movimento.
 
+> A lista operacional consolidada e ordenada está em `PENDENCIAS-LOJA-3D.md`. Este documento preserva o histórico técnico detalhado e pode conter itens antigos que já foram atendidos por incrementos registrados mais abaixo.
+
 ## Objetivo e decisões confirmadas
 
 Criar uma loja de impressão 3D e derivados com identidade visual própria, aproveitando recursos comerciais já construídos, incluindo fotos e vídeos. O sistema de gestão atual será a central operacional, como um ERP que publica produtos para dois sites independentes. Cada site terá seu próprio domínio, aplicação pública, cadastro/login, carrinho, checkout, preços, políticas, frete, pagamentos e comunicação. Produtos/SKU, fotos/vídeos, características e estoque serão compartilhados pela API central; pedidos dos dois sites voltarão à central com a origem identificada. Os canais disputarão o mesmo estoque dos mesmos produtos.
