@@ -1,8 +1,17 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const http=require('node:http');
+const fs=require('node:fs');
+const path=require('node:path');
 const {targetPath,createPrint3dPublicProxy}=require('../services/print3dPublicProxy.cjs');
 const id='11111111-1111-4111-8111-111111111111';
+test('all VPS proxy runtimes allow the public deadline request endpoint',()=>{
+ const expected="/^\\/storefronts\\/(?:mercado_do_vale|loja_3d)\\/deadline-requests$/u.test(pathname)";
+ for(const file of ['server.js','vps_server.cjs','vps_server.js']){
+  const source=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
+  assert.match(source,/normalizedMethod === 'POST' && \/\^\\\/storefronts\\\/\(\?:mercado_do_vale\|loja_3d\)\\\/deadline-requests\$\/u\.test\(pathname\)/,`${file} must expose deadline requests through its public proxy allowlist: ${expected}`);
+ }
+});
 test('channel boundary rejects other channels, administrative paths, duplicate queries and traversal',()=>{
  for(const [method,path] of [['GET','/categories'],['GET','/banners?storefront=loja_3d'],['GET','/storefronts/loja_3d/products?limit=2000'],
  ['POST','/print3d/auth/login'],['POST',`/print3d/orders/${id}/payment`],['POST','/storefronts/loja_3d/shipping/quote'],['POST','/storefronts/loja_3d/quote'],

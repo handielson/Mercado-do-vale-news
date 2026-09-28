@@ -1,13 +1,13 @@
-# v1.2.492-prazo-consulta-3d
+# v1.2.493-hotfix-proxy-prazo-3d
 
 Data: 2026-09-27. Status: pronta para publicação. Branch: main.
-Tag: v1.2.492-prazo-consulta-3d
-Release: /var/www/mdv-site/releases/20260928-012214-prazo-consulta-3d
+Tag: v1.2.493-hotfix-proxy-prazo-3d
+Release: /var/www/mdv-site/releases/20260928-012920-v1-2-493-hotfix-proxy-prazo-3d
 
-Produtos 3D agora podem exibir `Prazo sob consulta` e receber uma solicitação com a quantidade desejada. O registro fica separado por site no painel administrativo, com protocolo, status, prazo negociado, observações e contato do cliente.
+Hotfix de publicação: os runtimes do proxy VPS agora reconhecem como pública a criação de solicitações de prazo por quantidade para o Mercado do Vale e para a Loja 3D.
 
-No Mercado do Vale, o aviso usa o canal administrativo existente. Na Loja 3D, o envio permanece isolado e aguardando o novo número, a nova instância Evolution e o n8n próprio; nunca há fallback para o número do Mercado do Vale.
+Sem essa permissão, o formulário público recebia `Admin required` antes de alcançar a rota da API. A liberação é restrita ao método `POST` e aos dois caminhos de vitrine previstos.
 
-Os campos `production_days` e `print3d_preorder_limit` aceitam vazio, espaços ou `null`. Prazo vazio significa consulta e limite vazio significa ausência de limite cadastrado. Quantidades sob consulta não geram pedido, reserva, frete ou cobrança automática.
+As regras implantadas na versão anterior permanecem: prazo e limite podem ficar em branco, solicitações não criam pedido ou cobrança, e o WhatsApp da Loja 3D continua isolado enquanto seu número próprio não for configurado.
 
-Validação: testes focados de cadastro, cotação, checkout, produção, proxy, WhatsApp e rotas administrativas; builds do sistema principal e da aplicação 3D; trava contra dependência operacional do Supabase.
+Validação: sintaxe dos dois runtimes VPS, testes do proxy público, rotas de solicitação e pacote de implantação, além da verificação pública após o deploy.
