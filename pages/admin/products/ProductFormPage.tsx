@@ -2,11 +2,61 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ExternalLink } from 'lucide-react';
 import { ProductForm } from '../../../components/products/ProductForm';
+import { ProductWorkspaceNav } from '../../../components/products/ProductWorkspaceNav';
 import { Product, ProductInput } from '../../../types/product';
 import { productService } from '../../../services/products';
 import { buildProductClonePrefill } from '../../../services/productClonePrefill.js';
+import { isLocalCatalogPreviewRuntime, localCatalogPreviewService, type LocalCatalogDraft } from '../../../services/localCatalogPreview';
+
+function LocalPreviewApproval({ productId, revision, onApproved }: { productId: string; revision: number; onApproved: () => void }) {
+    const [draft, setDraft] = useState<LocalCatalogDraft | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [approving, setApproving] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        setLoading(true);
+        localCatalogPreviewService.list(productId)
+            .then((response) => { if (active) setDraft(response.drafts[0] || null); })
+            .catch(() => { if (active) setDraft(null); })
+            .finally(() => { if (active) setLoading(false); });
+        return () => { active = false; };
+    }, [productId, revision]);
+
+    if (loading || !draft) return null;
+
+    const approve = async () => {
+        if (!window.confirm('Publicar este rascunho na API central? Esta ação atualiza a produção.')) return;
+        try {
+            setApproving(true);
+            const result = await localCatalogPreviewService.approve(productId);
+            toast.success(`${result.approved} alteração(ões) aprovada(s) e enviada(s) à produção.`);
+            onApproved();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Não foi possível aprovar o rascunho.');
+        } finally {
+            setApproving(false);
+        }
+    };
+
+    return (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <p className="flex items-center gap-2 font-bold"><CheckCircle2 size={18} /> Rascunho local pendente</p>
+                    <p className="mt-1 text-sm">A prévia 3DMV usa estas alterações somente no localhost. Produção permanece intacta até a aprovação.</p>
+                    <p className="mt-2 text-xs">Campos alterados: {draft.fields.join(', ') || 'oferta da vitrine'}.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <a href="/loja-3d" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-amber-400 bg-white px-3 py-2 text-sm font-semibold hover:bg-amber-100"><ExternalLink size={15} /> Ver prévia</a>
+                    <button type="button" onClick={() => void approve()} disabled={approving} className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60">{approving ? 'Aprovando...' : 'Aprovar para produção'}</button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 /**
  * ProductFormPage
@@ -19,6 +69,7 @@ export const ProductFormPage: React.FC = () => {
     const [product, setProduct] = useState<Product | undefined>();
     const [isLoading, setIsLoading] = useState(false);
     const [isFetching, setIsFetching] = useState(false);
+    const [draftRevision, setDraftRevision] = useState(0);
 
     const isEditMode = id && id !== 'new';
 
@@ -76,9 +127,13 @@ export const ProductFormPage: React.FC = () => {
             if (isEditMode && id) {
                 // Update existing product
                 const savedProduct = await productService.update(id, data);
+                if (isLocalCatalogPreviewRuntime()) {
+                    setProduct(savedProduct as Product);
+                    setDraftRevision((current) => current + 1);
+                    toast.success('Rascunho salvo na prévia local. Aprove-o quando estiver conferido.');
+                    return savedProduct;
+                }
                 toast.success('Produto atualizado com sucesso!');
-                // Navegar após edição (produto único)
-                navigate('/admin/products');
                 return savedProduct;
             } else {
                 // Create new product (pode ser chamado várias vezes no batch)
@@ -94,7 +149,15 @@ export const ProductFormPage: React.FC = () => {
         }
     };
 
-    const handleBatchComplete = () => {
+    const handleBatchComplete = (savedProduct?: Product) => {
+        if (isLocalCatalogPreviewRuntime()) {
+            if (savedProduct?.id && !isEditMode) navigate(`/admin/products/${savedProduct.id}`);
+            return;
+        }
+        if (savedProduct?.is_print3d && savedProduct.id) {
+            navigate(`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(savedProduct.id)}#ficha-producao-3d`);
+            return;
+        }
         navigate('/admin/products');
     };
 
@@ -136,7 +199,17 @@ export const ProductFormPage: React.FC = () => {
                 </div>
             </div>
 
+            {isEditMode && product?.id && product.sku && (
+                <ProductWorkspaceNav productId={product.id} sku={product.sku} active="product" />
+            )}
+
             {/* Form */}
+            {isEditMode && id && isLocalCatalogPreviewRuntime() && (
+                <LocalPreviewApproval productId={id} revision={draftRevision} onApproved={() => {
+                    setDraftRevision((current) => current + 1);
+                    void fetchProduct();
+                }} />
+            )}
             <ProductForm
                 initialData={product}
                 onSubmit={handleSubmit}

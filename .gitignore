@@ -97,3 +97,6 @@ scripts/central-print-runtime/
 scripts/central-print-journal/
 
 /dist-print3d/
+
+# Prévia administrativa local: rascunhos nunca fazem parte do repositório nem da produção.
+/.local/

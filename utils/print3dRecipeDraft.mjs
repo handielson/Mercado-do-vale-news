@@ -32,6 +32,21 @@ const safeText = (value, field, { required = false, max = 500 } = {}) => {
   return text;
 };
 
+const safeOptionalHttpUrl = (value, field) => {
+  const text = safeText(value, field, { max: 1000 });
+  if (!text) return '';
+  let parsed;
+  try {
+    parsed = new URL(text);
+  } catch {
+    throw new TypeError(`${field} deve ser um endereço completo válido.`);
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
+    throw new TypeError(`${field} deve usar HTTP ou HTTPS e não pode conter credenciais.`);
+  }
+  return parsed.toString();
+};
+
 export function buildPrint3dRecipeDraft(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new TypeError('Informe a ficha de produção.');
   const sku = safeSegment(input.sku, 'SKU');
@@ -50,6 +65,7 @@ export function buildPrint3dRecipeDraft(input) {
     throw new TypeError('Informe se o material total inclui suportes e purga.');
   }
   const productionNotes = safeText(input.productionNotes, 'Observações de produção', { max: 1000 });
+  const sourceUrl = safeOptionalHttpUrl(input.sourceUrl, 'Link de origem');
   const pieces = input.pieces;
   if (!Number.isSafeInteger(pieces) || pieces <= 0) throw new TypeError('Peças do lote deve ser um inteiro positivo.');
   const laborMinutes = nonNegative(input.laborMinutes, 'Mão de obra');
@@ -105,6 +121,7 @@ export function buildPrint3dRecipeDraft(input) {
     productName,
     sku,
     revision,
+    ...(sourceUrl ? { sourceUrl } : {}),
     suggestedPrivateFolder: `producao-3d/produtos/${sku}/revisoes/${revision}`,
     printSummary: { material_gramas: materialGrams, tempo_impressao_minutos: printMinutes, source: inputSource },
     productionDetails: {
@@ -131,6 +148,7 @@ export function validatePrint3dRecipeDraft(draft) {
     productName: draft.productName,
     sku: draft.sku,
     revision: draft.revision,
+    sourceUrl: draft.sourceUrl,
     materialGrams: draft.printSummary?.material_gramas,
     printMinutes: draft.printSummary?.tempo_impressao_minutos,
     inputSource: draft.printSummary?.source,

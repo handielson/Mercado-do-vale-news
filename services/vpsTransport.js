@@ -2,6 +2,8 @@ const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
 
 export const DEFAULT_VPS_BASE_URL = 'https://api.xiaomipetrolina.com.br';
 export const DEV_VPS_PROXY_BASE = '/vps-proxy';
+// Rota separada: o preview local nunca depende da decisÃ£o do proxy remoto.
+export const DEV_CATALOG_PREVIEW_PROXY_BASE = '/local-catalog-preview';
 export const PROD_VPS_PROXY_BASE = '/api/vps-proxy';
 
 const PUBLIC_READ_EXACT_PATHS = new Set([
@@ -54,6 +56,25 @@ function getVpsPathname(path) {
   } catch {
     return normalizedPath.split('?')[0] || '/';
   }
+}
+
+function isLocalCatalogPreviewPath(path, method = 'GET') {
+  const pathname = getVpsPathname(path);
+  const normalizedMethod = normalizeVpsMethod(method);
+  const productId = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+  if (pathname === '/products/batch' && normalizedMethod === 'POST') return true;
+  if (new RegExp(`^/products/${productId}$`, 'i').test(pathname) && ['GET', 'PUT'].includes(normalizedMethod)) return true;
+  if (new RegExp(`^/admin/products/${productId}/storefront-offers$`, 'i').test(pathname) && normalizedMethod === 'GET') return true;
+  if (new RegExp(`^/admin/products/${productId}/storefront-offers/(mercado_do_vale|loja_3d)$`, 'i').test(pathname) && normalizedMethod === 'PUT') return true;
+  if (pathname === '/storefronts/loja_3d/products' && normalizedMethod === 'GET') return true;
+  if (new RegExp(`^/storefronts/loja_3d/products/${productId}$`, 'i').test(pathname) && normalizedMethod === 'GET') return true;
+  if (pathname === '/admin/local-preview/drafts' && normalizedMethod === 'GET') return true;
+  return new RegExp(`^/admin/local-preview/drafts/${productId}/approve$`, 'i').test(pathname) && normalizedMethod === 'POST';
+}
+
+function shouldUseLocalCatalogPreview(env = {}, runtimeHostname, path, method) {
+  const isDevBuild = env.MODE !== 'production' && Boolean(env.DEV);
+  return (isDevBuild || isLocalHostname(runtimeHostname)) && isLocalCatalogPreviewPath(path, method);
 }
 
 function isPublicProductReadPath(pathname) {
@@ -189,12 +210,14 @@ export function resolveVpsBase(env = {}, runtimeHostname, path, method = 'GET') 
 
 export function buildVpsUrl(path, options = {}) {
   const normalizedPath = normalizeVpsPath(path);
-  const base = options.base || resolveVpsBase(
+  const base = options.base || (shouldUseLocalCatalogPreview(
+    options.env || {}, options.runtimeHostname, normalizedPath, options.method,
+  ) ? DEV_CATALOG_PREVIEW_PROXY_BASE : resolveVpsBase(
     options.env || {},
     options.runtimeHostname,
     normalizedPath,
     options.method,
-  );
+  ));
 
   if (isProxyBase(base)) {
     return `${base}?path=${encodeURIComponent(normalizedPath)}`;

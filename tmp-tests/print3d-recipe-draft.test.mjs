@@ -52,3 +52,14 @@ test('ficha preserva unidade do insumo e recusa ID duplicado', () => {
   assert.deepEqual(validatePrint3dRecipeDraft(draft),draft);
   assert.throws(()=>buildPrint3dRecipeDraft({...input,supplies:[...input.supplies,input.supplies[0]]}),/mesmo insumo/);
 });
+
+test('link de origem é opcional, preservado e restrito a HTTP(S)', () => {
+  const withoutLink = buildPrint3dRecipeDraft(valid());
+  assert.equal(withoutLink.sourceUrl, undefined);
+
+  const withLink = buildPrint3dRecipeDraft({ ...valid(), sourceUrl: 'https://makerworld.com/en/models/123' });
+  assert.equal(withLink.sourceUrl, 'https://makerworld.com/en/models/123');
+  assert.deepEqual(validatePrint3dRecipeDraft(withLink), withLink);
+  assert.throws(() => buildPrint3dRecipeDraft({ ...valid(), sourceUrl: 'javascript:alert(1)' }), /HTTP ou HTTPS/);
+  assert.throws(() => buildPrint3dRecipeDraft({ ...valid(), sourceUrl: 'https://usuario:senha@example.com/modelo' }), /credenciais/);
+});

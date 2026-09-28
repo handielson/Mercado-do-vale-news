@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowUpRight, Check, ChevronLeft, ChevronRight, Clock3, Menu, Package, Play, Share2, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, Clock3, Menu, Package, Play, Share2, ShoppingBag } from 'lucide-react';
 import { productStorefrontOffersService } from '@/services/productStorefrontOffers';
 import { normalizeCatalogProduct } from '@/services/productNormalizer';
 import { formatPrice } from '@/services/installmentCalculator';
@@ -16,13 +16,14 @@ import {
   print3dBaseProductName,
   print3dDemoProducts,
   print3dGroupKey,
+  isPrint3dStorefrontProduct,
   print3dLegacyProductRouteTarget,
-  print3dPlainText,
   print3dProductPath,
   print3dProductRouteTarget,
   type Print3dStoreProduct,
 } from '@/utils/print3dStorefront';
 import { syncDocumentSeo } from '@/utils/documentSeo';
+import { sanitizeCatalogHtml } from '@/utils/sanitizeCatalogHtml';
 
 const SPEC_LABELS: Record<string, string> = {
   material: 'Material', color: 'Cor', cor: 'Cor', size: 'Tamanho', tamanho: 'Tamanho',
@@ -85,7 +86,16 @@ export default function Print3dProductPage() {
       return () => { active = false; };
     }
     productStorefrontOffersService.publicProducts('loja_3d')
-      .then(rows => { if (active) setProducts((rows || []).map(row => normalizeCatalogProduct(row))); })
+      .then(rows => {
+        const isolated = (rows || []).filter(isPrint3dStorefrontProduct);
+        if (!active) return;
+        if (isolated.length !== (rows || []).length) {
+          setProducts([]);
+          setError(true);
+          return;
+        }
+        setProducts(isolated.map(row => normalizeCatalogProduct(row)));
+      })
       .catch(() => { if (active) setError(true); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -105,7 +115,9 @@ export default function Print3dProductPage() {
   const images = useMemo(() => product
     ? [...new Set([...(product.images || []), product.image_url].filter((value): value is string => Boolean(value)))]
     : [], [product]);
-  const description = print3dPlainText(product?.description) || 'Peça produzida por impressão 3D com atenção aos detalhes.';
+  const descriptionHtml = sanitizeCatalogHtml(product?.description) || '<p>Peça produzida por impressão 3D com atenção aos detalhes.</p>';
+  const description = new DOMParser().parseFromString(descriptionHtml, 'text/html').body.textContent?.trim()
+    || 'Peça produzida por impressão 3D com atenção aos detalhes.';
   const specifications = useMemo(() => Object.entries(product?.specs || {})
     .filter(([key, value]) => !key.startsWith('_') && !HIDDEN_SPECS.has(key) && (typeof value === 'string' || typeof value === 'number') && String(value).trim())
     .slice(0, 12), [product]);
@@ -203,11 +215,10 @@ export default function Print3dProductPage() {
           {stock <= 0 && <p className="mt-8 rounded-lg border border-[#deded8] bg-[#f1f0eb] p-4 text-sm">Esta variação não possui peça pronta em estoque.</p>}
           {product.print3d_preorder_enabled && !demo && <ProductDeadlineRequest storefront="loja_3d" product={product} />}
           {demo && <p className="mt-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">Prévia visual: produto, preço e disponibilidade ilustrativos.</p>}
-          <div className="mt-8 grid gap-3 border-y border-[#deded8] py-5 text-sm"><p className="flex items-center gap-3"><Check size={17} className="text-[var(--print3d-accent)]" /> Estoque integrado e conferido no pedido</p><p className="flex items-center gap-3"><Check size={17} className="text-[var(--print3d-accent)]" /> Entrada mínima de 50% para encomendas</p></div>
         </div>
       </section>
 
-      <section className="border-y border-[#deded8] bg-white"><div className="mx-auto grid max-w-[1100px] gap-12 px-5 py-14 sm:px-9 lg:grid-cols-[1.25fr_.75fr] lg:py-20"><div><span className="text-xs font-semibold uppercase tracking-[.14em] text-[#69716c]">Sobre o produto</span><h2 className="mt-3 text-2xl font-semibold tracking-tight">Detalhes e aplicações</h2><p className="mt-5 whitespace-pre-line text-base leading-8 text-[#525a54]">{description}</p></div>{specifications.length > 0 && <div><h2 className="text-sm font-semibold">Ficha do produto</h2><dl className="mt-4 divide-y divide-[#deded8] border-y border-[#deded8]">{specifications.map(([key, value]) => <div key={key} className="flex justify-between gap-5 py-3 text-sm"><dt className="text-[#69716c]">{SPEC_LABELS[key] || key.replace(/[._-]+/g, ' ')}</dt><dd className="text-right font-medium">{specValue(key, value)}</dd></div>)}</dl></div>}</div></section>
+      <section className="border-y border-[#deded8] bg-white"><div className="mx-auto grid max-w-[1100px] gap-12 px-5 py-14 sm:px-9 lg:grid-cols-[1.25fr_.75fr] lg:py-20"><div><span className="text-xs font-semibold uppercase tracking-[.14em] text-[#69716c]">Sobre o produto</span><h2 className="mt-3 text-2xl font-semibold tracking-tight">Detalhes e aplicações</h2><div className="print3d-rich-description mt-5 overflow-x-auto text-base leading-8 text-[#525a54] [&_a]:text-violet-700 [&_a]:underline [&_h2]:mb-4 [&_h2]:mt-9 [&_h2]:text-2xl [&_h2]:font-semibold [&_h3]:mb-3 [&_h3]:mt-7 [&_h3]:text-xl [&_h3]:font-semibold [&_li]:my-2 [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-4 [&_table]:my-5 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-[#deded8] [&_td]:p-3 [&_th]:border [&_th]:border-[#deded8] [&_th]:bg-[#f4f3ef] [&_th]:p-3 [&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-6" dangerouslySetInnerHTML={{ __html: descriptionHtml }} /></div>{specifications.length > 0 && <div><h2 className="text-sm font-semibold">Ficha do produto</h2><dl className="mt-4 divide-y divide-[#deded8] border-y border-[#deded8]">{specifications.map(([key, value]) => <div key={key} className="flex justify-between gap-5 py-3 text-sm"><dt className="text-[#69716c]">{SPEC_LABELS[key] || key.replace(/[._-]+/g, ' ')}</dt><dd className="text-right font-medium">{specValue(key, value)}</dd></div>)}</dl></div>}</div></section>
     </main>
 
     <button type="button" onClick={() => setCartOpen(true)} className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-[var(--print3d-accent)] px-5 py-3 text-sm font-semibold text-white shadow-lg" aria-label="Abrir carrinho"><ShoppingBag size={19} /> Carrinho{cartLines.length ? ` (${cartLines.reduce((sum, line) => sum + line.quantity, 0)})` : ''}</button>

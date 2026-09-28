@@ -44,7 +44,7 @@ export function fillStorefrontOfferFromProduct(storefront, saved, product, categ
     storefront,
     publication_status: saved?.publication_status || 'draft',
     title: savedOr(saved, 'title', text(product?.name)),
-    description: savedOr(saved, 'description', text(product?.description)),
+    description: null,
     category_label: savedOr(saved, 'category_label', text(categoryName || product?.category_name)),
     slug: savedOr(saved, 'slug', text(product?.slug)),
     price_retail: savedOr(saved, 'price_retail', cents(product?.price_retail)),

@@ -2,6 +2,7 @@ import type { CatalogProduct } from '@/types/catalog';
 import { print3dVariantLabel } from './print3dVariantLabel.js';
 
 export type Print3dStoreProduct = CatalogProduct & {
+  storefront?: 'loja_3d';
   available_stock?: number;
   storefront_category?: string | null;
   parent_sku?: string | null;
@@ -9,6 +10,8 @@ export type Print3dStoreProduct = CatalogProduct & {
   parent_slug?: string | null;
   previewKind?: 'vase' | 'organizer' | 'keychain' | 'lamp';
 };
+
+export const isPrint3dStorefrontProduct = (product: { storefront?: unknown }) => product.storefront === 'loja_3d';
 
 const demoBase = {
   brand: '3DMV', status: 'active' as CatalogProduct['status'], price_cost: 0,
@@ -96,10 +99,24 @@ export function print3dProductPath(
 
 export function print3dPlainText(value: unknown): string {
   if (!value) return '';
+  const html = String(value)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(?:p|div|h[1-6]|table|thead|tbody|tr)[^>]*>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\n• ')
+    .replace(/<\/li>/gi, '')
+    .replace(/<\/?(?:ul|ol|td|th)[^>]*>/gi, ' ');
   if (typeof document !== 'undefined') {
     const element = document.createElement('div');
-    element.innerHTML = String(value);
-    return (element.textContent || '').replace(/\s+/g, ' ').trim();
+    element.innerHTML = html;
+    return (element.textContent || '')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n[ \t]+/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
-  return String(value).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return html.replace(/<[^>]*>/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }

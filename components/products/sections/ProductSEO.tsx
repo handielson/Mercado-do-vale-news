@@ -3,6 +3,7 @@ import { UseFormWatch, UseFormSetValue } from 'react-hook-form';
 import { toast } from 'sonner';
 import { ProductInput } from '../../../types/product';
 import { ExternalLink, RefreshCw } from 'lucide-react';
+import { RichTextEditor } from '@/components/ui/RichTextEditor';
 
 interface ProductSEOProps {
     watch: UseFormWatch<ProductInput>;
@@ -345,16 +346,17 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             {/* Campo: Descrição do Produto */}
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descrição do Produto <span className="text-purple-600 font-bold">(SEO)</span> *
+                    Descrição do produto *
                     <span className="ml-2 text-xs text-slate-400 font-mono">description</span>
                 </label>
-                <textarea
+                <RichTextEditor
                     value={description}
-                    onChange={(e) => setValue('description', e.target.value)}
-                    rows={8}
-                    className="w-full px-3 py-2 border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-                    placeholder="Descrição detalhada do produto para SEO (mínimo 300 palavras recomendado)"
+                    onChange={(value) => setValue('description', value)}
+                    placeholder="Descreva o produto, compatibilidade, características e conteúdo da embalagem"
                 />
+                <p className="mt-2 text-xs text-gray-500">
+                    Use o modo Visual para organizar títulos e listas. O modo HTML permite editar o código quando necessário.
+                </p>
                 <div className="flex justify-between items-center mt-1">
                     <span className="text-xs text-gray-500">
                         Mínimo recomendado: 300 palavras

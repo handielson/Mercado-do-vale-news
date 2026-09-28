@@ -43,7 +43,8 @@ function registerPrint3dRecipeRoutes(app, { pool, getBearerAuthContext, enabled 
     return { recipes: rows.map(({ id: recipeId, product_id, sku_snapshot, revision, draft_json, draft_sha256, created_by, created_at }) => {
       const draft = typeof draft_json === 'string' ? JSON.parse(draft_json) : draft_json;
       return { id: recipeId, product_id, sku_snapshot, revision, draft_sha256, created_by, created_at,
-        input_source:draft?.printSummary?.source === 'manual' ? 'manual' : 'json' };
+        input_source:draft?.printSummary?.source === 'manual' ? 'manual' : 'json',
+        source_url: typeof draft?.sourceUrl === 'string' ? draft.sourceUrl : null };
     }) };
   });
 

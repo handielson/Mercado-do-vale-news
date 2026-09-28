@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
+import { ProductWorkspaceNav } from '../../../components/products/ProductWorkspaceNav';
 import { QuickCostSimulator } from '../../../components/print3d/QuickCostSimulator';
 import {
   emptyPrint3dCostSettings,
@@ -15,6 +16,7 @@ import { categoryService } from '../../../services/categories';
 import { stockLocationService } from '../../../services/stockLocationService';
 import { print3dRecipesService, type Print3dActiveRecipe, type Print3dRecipeDraft, type Print3dRecipeSummary } from '../../../services/print3dRecipes';
 import { print3dRecipeFilesService, type Print3dFileKind, type Print3dRecipeFile } from '../../../services/print3dRecipeFiles';
+import type { Product } from '../../../types/product';
 
 type FilamentUse = { filamentId: string; consumedGrams: number };
 type SupplyUse = { supplyId: string; quantity: number };
@@ -39,6 +41,8 @@ const money = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'curren
 const newId = () => crypto.randomUUID();
 
 export function Print3dCostPage() {
+  const [searchParams] = useSearchParams();
+  const selectedProductId = searchParams.get('product_id')?.trim() || '';
   const [settings, setSettings] = useState<Print3dCostSettings>(emptyPrint3dCostSettings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -55,6 +59,7 @@ export function Print3dCostPage() {
   const [productionProfile, setProductionProfile] = useState('');
   const [materialIncludesWaste, setMaterialIncludesWaste] = useState<boolean | null>(null);
   const [productionNotes, setProductionNotes] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
   const [filamentUses, setFilamentUses] = useState<FilamentUse[]>([]);
   const [supplyUses, setSupplyUses] = useState<SupplyUse[]>([]);
   const [result, setResult] = useState<CostResult | null>(null);
@@ -80,6 +85,7 @@ export function Print3dCostPage() {
   const [verifyingFiles, setVerifyingFiles] = useState(false);
   const [stockSnapshot, setStockSnapshot] = useState<StockSnapshot | null>(null);
   const [loadingStock, setLoadingStock] = useState(false);
+  const [workspaceProduct, setWorkspaceProduct] = useState<Product | null>(null);
   const packagingSupplies = () => settings.packagingCentsPerPiece > 0
     ? [{ id: 'packaging-per-piece', name: 'Embalagem por peça', unitLabel:'un', quantity: pieces, unitCostCents: settings.packagingCentsPerPiece }]
     : [];
@@ -237,7 +243,7 @@ export function Print3dCostPage() {
         productId: product.id, productName: product.name,
         sku: product.sku, revision, materialGrams, printMinutes, pieces, laborMinutes, cost: result,
         inputSource:inputMode, printerName, printerProfile:productionProfile,
-        materialIncludesSupportsAndPurge:materialIncludesWaste, productionNotes,
+        materialIncludesSupportsAndPurge:materialIncludesWaste, productionNotes, sourceUrl,
         rates: {
           printerWatts: settings.printerWatts,
           energyCentsPerKwh: settings.energyCentsPerKwh,
@@ -315,13 +321,14 @@ export function Print3dCostPage() {
     }
   };
 
-  const loadRecipes = async () => {
+  const loadRecipes = async (targetSku = sku) => {
     setError('');
     setLoadingRecipes(true);
     try {
-      const product = await productService.getBySku(sku);
+      const product = await productService.getBySku(targetSku);
       if (!product) throw new Error('SKU não encontrado no cadastro de produtos.');
       if (product.is_parent) throw new Error('Escolha o SKU de uma variante vendável.');
+      setWorkspaceProduct(product);
       const [listing, active] = await Promise.all([
         print3dRecipesService.list(product.id), print3dRecipesService.active(product.id),
       ]);
@@ -344,12 +351,13 @@ export function Print3dCostPage() {
     }
   };
 
-  const loadStockSnapshot = async () => {
+  const loadStockSnapshot = async (targetSku = sku) => {
     setError('');
     setLoadingStock(true);
     try {
-      const product = await productService.getBySku(sku);
+      const product = await productService.getBySku(targetSku);
       if (!product || product.is_parent) throw new Error('Escolha o SKU de uma variante vendável.');
+      setWorkspaceProduct(product);
       const [distribution, category] = await Promise.all([
         stockLocationService.getProductStockDistribution(product.id),
         product.category_id ? categoryService.getById(product.category_id) : Promise.resolve(null),
@@ -439,6 +447,24 @@ export function Print3dCostPage() {
     }
   };
 
+  useEffect(() => {
+    if (!selectedProductId || loading) return;
+    let active = true;
+    productService.getById(selectedProductId)
+      .then(async (product) => {
+        if (!active) return;
+        if (product.is_parent) throw new Error('A produção 3D deve ser vinculada a um SKU vendável, não ao produto pai.');
+        setWorkspaceProduct(product);
+        setSku(product.sku);
+        await Promise.all([loadRecipes(product.sku), loadStockSnapshot(product.sku)]);
+        if (active && window.location.hash === '#ficha-producao-3d') {
+          window.requestAnimationFrame(() => document.getElementById('ficha-producao-3d')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        }
+      })
+      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível abrir o produto 3D.'); });
+    return () => { active = false; };
+  }, [selectedProductId, loading]);
+
   const verifyRecipeFiles = async () => {
     if (!selectedRecipeId) return;
     setError('');
@@ -476,9 +502,10 @@ export function Print3dCostPage() {
 
   return <div className="mx-auto max-w-5xl space-y-6 p-6">
     <header>
-      <h1 className="text-2xl font-bold text-slate-900">Calculadora de impressão 3D</h1>
-      <p className="mt-1 text-sm text-slate-600">Cadastre custos e simule uma impressão. Material e tempo podem vir do JSON ou ser informados manualmente para o lote inteiro.</p>
+      <h1 className="text-2xl font-bold text-slate-900">Produção, custos e arquivos 3D</h1>
+      <p className="mt-1 text-sm text-slate-600">Calcule o custo, salve revisões de produção e mantenha os arquivos de impressão ligados ao SKU correto.</p>
     </header>
+    {workspaceProduct && <ProductWorkspaceNav productId={workspaceProduct.id} sku={workspaceProduct.sku} active="production" />}
     {error && <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</div>}
     {notice && <div role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</div>}
 
@@ -521,7 +548,7 @@ export function Print3dCostPage() {
       <button disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={() => void saveSettings()}>{saving ? 'Salvando...' : 'Salvar custos'}</button>
     </section>
 
-    <section className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
+    <section id="ficha-producao-3d" className="scroll-mt-6 space-y-4 rounded-xl border bg-white p-5 shadow-sm">
       <h2 className="text-lg font-semibold">Simular impressão</h2>
       <div className="grid gap-2 rounded-lg bg-slate-100 p-1 sm:grid-cols-2" role="group" aria-label="Origem dos dados de impressão">
         <button type="button" onClick={useManualInput} className={`rounded-md px-4 py-2 text-sm font-semibold ${inputMode === 'manual' ? 'bg-white text-violet-800 shadow-sm' : 'text-slate-600'}`}>Preencher todos os dados manualmente</button>
@@ -582,6 +609,7 @@ export function Print3dCostPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <label className="text-sm">SKU do produto vendável<input className={numberClass} value={sku} onChange={(event) => { setSku(event.target.value); setSavedRecipes([]); setListedProductId(''); setSelectedRecipeId(''); setRecipeFiles([]); setActiveRecipe(null); setPrimaryFileId(''); setStockSnapshot(null); }} placeholder="Ex.: CHAVEIRO-01" /></label>
         <label className="text-sm">Revisão<input className={numberClass} value={revision} onChange={(event) => setRevision(event.target.value)} placeholder="Ex.: r1" /></label>
+        <label className="text-sm md:col-span-2">Link de origem do projeto <span className="font-normal text-slate-500">(opcional)</span><input className={numberClass} type="url" maxLength={1000} value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://makerworld.com/... ou https://www.printables.com/..." /><span className="mt-1 block text-xs text-slate-500">Referência privada da revisão para localizar a página original. Não é exibida automaticamente no site.</span></label>
       </div>
       <div className="flex flex-wrap gap-3">
         <button disabled={!sku.trim() || loadingStock} className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50" onClick={() => void loadStockSnapshot()}>{loadingStock ? 'Consultando saldo...' : 'Consultar estoque e prazo'}</button>
@@ -609,7 +637,7 @@ export function Print3dCostPage() {
         <h3 className="font-semibold">Revisões salvas para este SKU</h3>
         <p className="text-sm text-slate-600">Ficha principal: {activeRecipe ? `${activeRecipe.revision} · ${activeRecipe.primary_file_name}${activeRecipe.printer_profile ? ` · ${activeRecipe.printer_profile}` : ''}` : 'nenhuma selecionada'}. A seleção ainda não cria ordens de produção automaticamente.</p>
         {savedRecipes.length === 0 ? <p className="text-sm text-slate-600">Nenhuma revisão cadastrada.</p> : savedRecipes.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
-          <span><strong>{item.revision}</strong> · {item.sku_snapshot} · {item.input_source === 'manual' ? 'dados manuais' : 'JSON importado'} · {new Date(item.created_at).toLocaleString('pt-BR')}</span>
+          <span><strong>{item.revision}</strong> · {item.sku_snapshot} · {item.input_source === 'manual' ? 'dados manuais' : 'JSON importado'} · {new Date(item.created_at).toLocaleString('pt-BR')}{item.source_url ? <> · <a className="text-blue-700 underline" href={item.source_url} target="_blank" rel="noreferrer">abrir origem</a></> : ''}</span>
           <div className="flex gap-3">
             <button className="text-blue-700 underline" onClick={() => void downloadSavedRecipe(item)}>Baixar ficha</button>
             {filesEnabled && <button className="text-blue-700 underline" onClick={() => void selectRecipe(item)}>Arquivos</button>}

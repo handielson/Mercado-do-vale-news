@@ -13,7 +13,7 @@ import { formatPrice } from '@/services/installmentCalculator';
 import type { CatalogProduct } from '@/types/catalog';
 import Print3dCartDrawer, { type Print3dCartLine } from './Print3dCartDrawer';
 import { print3dVariantLabel as variantLabel } from '@/utils/print3dVariantLabel.js';
-import { print3dAvailability as availability, print3dAvailableStock as availableStock, print3dBaseProductName, print3dDemoProducts as demoProducts, print3dGroupKey as groupKey, print3dMatchesQuery as matchesQuery, print3dProductPath, type Print3dStoreProduct as StoreProduct } from '@/utils/print3dStorefront';
+import { print3dAvailability as availability, print3dAvailableStock as availableStock, print3dBaseProductName, print3dDemoProducts as demoProducts, print3dGroupKey as groupKey, isPrint3dStorefrontProduct, print3dMatchesQuery as matchesQuery, print3dProductPath, type Print3dStoreProduct as StoreProduct } from '@/utils/print3dStorefront';
 import { syncDocumentSeo } from '@/utils/documentSeo';
 
 function ProductImage({ product, hero = false }: { product: StoreProduct; hero?: boolean }) {
@@ -49,7 +49,16 @@ export default function Print3dStorePage() {
     if (params.get('demo') === '1') { setLoading(false); return; }
     let active = true;
     vpsApiService.getCategories().then(rows => { if (active) setCategoryNames(Object.fromEntries((rows || []).map((row: { id: string; name: string }) => [String(row.id), row.name]))); }).catch(() => undefined);
-    productStorefrontOffersService.publicProducts('loja_3d').then(rows => { if (active) setProducts((rows || []).map(row => normalizeCatalogProduct(row))); }).catch(() => { if (active) setError(true); }).finally(() => { if (active) setLoading(false); });
+    productStorefrontOffersService.publicProducts('loja_3d').then(rows => {
+      const isolated = (rows || []).filter(isPrint3dStorefrontProduct);
+      if (!active) return;
+      if (isolated.length !== (rows || []).length) {
+        setProducts([]);
+        setError(true);
+        return;
+      }
+      setProducts(isolated.map(row => normalizeCatalogProduct(row)));
+    }).catch(() => { if (active) setError(true); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
   const preview = params.get('demo') === '1' || (!loading && !error && products.length === 0);

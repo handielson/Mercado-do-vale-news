@@ -70,6 +70,7 @@ test('API pública entrega somente a projeção comercial do site, sem custo', a
   assert.equal(product.price_retail, 6500);
   assert.equal(product.stock_quantity, 2);
   assert.equal(product.available_stock, 1);
+  assert.equal(product.storefront, 'loja_3d');
   assert.deepEqual(product.images, ['foto.webp']);
   assert.equal(Object.hasOwn(product, 'price_cost'), false);
   assert.match(calls[0].sql, /o\.publication_status = 'published'/);

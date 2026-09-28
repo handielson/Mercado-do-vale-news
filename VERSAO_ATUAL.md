@@ -1,12 +1,12 @@
-# v1.2.502-preview-manutencao-3dmv
+# v1.2.503-fluxo-produtos-3dmv
 
 Data: 2026-09-28. Status: pronta para publicação. Branch: main.
-Tag: v1.2.502-preview-manutencao-3dmv
-Release principal: /var/www/mdv-site/releases/20260928-163600-v1-2-502-preview-manutencao-3dmv
-Release 3DMV: /var/www/print3d-site/releases/20260928-163600-v1-2-502-preview-manutencao-3dmv
+Tag: v1.2.503-fluxo-produtos-3dmv
+Release principal: /var/www/mdv-site/releases/20260928-204917-v1-2-503-fluxo-produtos-3dmv
+Release 3DMV: /var/www/print3d-site/releases/20260928-204917-v1-2-503-fluxo-produtos-3dmv
 
-A 3DMV permanece em manutenção para o público. O administrador pode abrir uma prévia autenticada pela tela **Configurações do site**, válida por duas horas e limitada à sessão da aba.
+O cadastro 3D passa a seguir um fluxo único por produto: **Cadastro → Produção 3D → Sites e preços**. Arquivos de impressão, custos, revisão e link de origem ficam vinculados ao SKU vendável; o modelo permanece opcional e reservado para dados reutilizáveis.
 
-O acesso usa token assinado e verificado pela API. A prévia abre pelo mesmo domínio ativo do painel administrativo, permitindo os testes enquanto o DNS próprio da 3DMV ainda é concluído. Depois da validação, o token é removido do endereço e uma faixa amarela identifica a prévia.
+A descrição exibida nos sites vem do cadastro central/pai, com HTML sanitizado e editor visual. No localhost, alterações de catálogo ficam em rascunho local e só chegam à API central após aprovação explícita.
 
-Validações: testes de assinatura, expiração, adulteração, rotas e interface; verificação sintática dos servidores; builds principal e 3DMV.
+Validações: testes de isolamento dos sites, descrição e oferta central, prévia local, ficha 3D, navegação do produto, verificações sintáticas da API e builds dos dois sites.

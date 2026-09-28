@@ -37,12 +37,28 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'https://www.mercadodovale.com.br';
   const shopeeApiProxyTarget = env.VITE_SHOPEE_API_PROXY_TARGET || apiProxyTarget;
-
+  const localPreviewPort = Number(env.VITE_LOCAL_PREVIEW_API_PORT || 3101);
+  const localPreviewOrigin = `http://127.0.0.1:${localPreviewPort}`;
   return {
     server: {
       port: 3000,
       host: '0.0.0.0',
       proxy: {
+        '/local-catalog-preview': {
+          target: localPreviewOrigin,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (pathStr) => {
+            const url = new URL(`http://localhost${pathStr}`);
+            return decodeURIComponent(url.searchParams.get('path') || '/');
+          },
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              const key = syncKey || env.VITE_VPS_SYNC_KEY || '';
+              if (key) proxyReq.setHeader('x-sync-key', key);
+            });
+          },
+        },
         '/api/shopee-catalog': {
           target: shopeeApiProxyTarget,
           changeOrigin: true,
@@ -55,16 +71,6 @@ export default defineConfig(({ mode }) => {
         },
         '/vps-proxy': {
           target: 'https://api.xiaomipetrolina.com.br',
-          router: (req) => {
-            try {
-              const url = new URL(`http://localhost${req.url}`);
-              const targetPath = url.searchParams.get('path') || '';
-              if (/^\/status-/i.test(targetPath) || /imagens\.xiaomipetrolina\.com\.br/i.test(targetPath)) {
-                return 'https://imagens.xiaomipetrolina.com.br';
-              }
-            } catch {}
-            return 'https://api.xiaomipetrolina.com.br';
-          },
           changeOrigin: true,
           secure: false,
           rewrite: (pathStr) => {

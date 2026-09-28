@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateStorefrontOffer, projectStorefrontProduct } = require('../services/productStorefrontOffer.cjs');
+const { validateStorefrontOffer, projectStorefrontProduct, resolveStorefrontDescription } = require('../services/productStorefrontOffer.cjs');
 
 test('preços e publicação são independentes por site, com mesmo estoque e mídia', () => {
   const shared = { id: 'p1', sku: 'SKU-1', name: 'Produto', status: 'active', stock_quantity: 3,
@@ -34,4 +34,22 @@ test('publicação exige preço em centavos positivo e não altera a ficha compa
   assert.equal(offer.category_label, 'Decoração');
   assert.equal(validateStorefrontOffer('loja_3d', { publication_status: 'draft' }).category_label, null);
   assert.equal(Object.hasOwn(offer, 'stock_quantity'), false);
+});
+
+test('published variations inherit the central parent description on every storefront', () => {
+  const variation = {
+    id: 'child-1', sku: 'SKU-1-BLUE', name: 'Blue product', status: 'active', is_parent: 0,
+    description: '<p>Old variation description</p>',
+    parent_description: '<h2>Central product description</h2><ul><li>Package contents</li></ul>',
+  };
+  for (const storefront of ['mercado_do_vale', 'loja_3d']) {
+    const result = projectStorefrontProduct(variation, {
+      storefront, publication_status: 'published', category_label: 'Category', price_retail: 5000,
+    });
+    assert.equal(result.description, variation.parent_description);
+  }
+  assert.equal(projectStorefrontProduct({ ...variation, parent_description: null }, {
+    storefront: 'loja_3d', publication_status: 'published', category_label: 'Category', price_retail: 5000,
+  }).description, variation.description);
+  assert.equal(resolveStorefrontDescription({ ...variation, parent_description: '   ' }), variation.description);
 });

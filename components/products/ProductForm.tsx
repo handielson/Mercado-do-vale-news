@@ -55,7 +55,7 @@ interface ProductFormProps {
     initialData?: Product;
     onSubmit: (data: ProductInput) => Promise<Product | void>;
     onCancel: () => void;
-    onBatchComplete?: () => void;
+    onBatchComplete?: (savedProduct?: Product) => void;
     isLoading?: boolean;
 }
 
@@ -1727,7 +1727,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 if (!initialData) {
                     toast.success('Produto cadastrado com sucesso!');
                 }
-                onBatchComplete?.();
+                onBatchComplete?.(savedProduct || undefined);
             }
 
             // 2. Calcular preço médio se for novo produto com variação
@@ -2354,6 +2354,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 </label>
                 {watch('is_print3d') && <div className="space-y-3 rounded-lg border border-violet-200 bg-white p-4">
                     <p className="text-xs text-slate-600">A quantidade pronta fica no estoque central acima. Encomenda é uma demanda de fabricação, não saldo negativo.</p>
+                    {initialData?.id && initialData?.sku ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-violet-200 bg-violet-50 p-3">
+                        <div>
+                            <p className="text-sm font-semibold text-violet-950">Arquivos e ficha de produção</p>
+                            <p className="mt-1 text-xs text-violet-800">Envie STL, 3MF, G-code, JSON e instruções; registre também o link opcional do MakerWorld ou outro site.</p>
+                        </div>
+                        <Link to={`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(initialData.id)}#ficha-producao-3d`} className="rounded-md bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-800">Abrir produção 3D</Link>
+                    </div> : <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-800">Salve este produto para liberar arquivos, custos e revisões de produção.</p>}
                     <label className="flex items-start gap-3 text-sm text-slate-700">
                         <input type="checkbox" className="mt-0.5 h-4 w-4" checked={Boolean(watch('print3d_preorder_enabled'))}
                             onChange={(event) => setValue('print3d_preorder_enabled', event.target.checked, { shouldValidate: true })} />

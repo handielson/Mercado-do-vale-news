@@ -20,6 +20,7 @@ function productColumns(compact, storefront) { return `p.id, p.sku, p.ean, p.alt
   (SELECT pp.sku FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_sku,
   (SELECT pp.name FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_name,
   (SELECT pp.slug FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_slug,
+  (SELECT pp.description FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_description,
   (SELECT m.blueprint_image_url FROM models m WHERE m.id = p.model_id LIMIT 1) AS blueprint_image_url,
   p.production_days, p.print3d_preorder_enabled,
   p.price_retail AS legacy_price_retail, p.price_promo AS legacy_price_promo`; }

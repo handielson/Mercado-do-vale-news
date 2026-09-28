@@ -15,6 +15,13 @@ function optionalText(value, field, maxLength) {
   return value.trim() || null;
 }
 
+function resolveStorefrontDescription(product) {
+  const parentDescription = typeof product?.parent_description === 'string'
+    ? product.parent_description.trim()
+    : '';
+  return parentDescription || product?.description || null;
+}
+
 function validateStorefrontOffer(storefront, input) {
   if (!STOREFRONTS.includes(storefront)) throw new Error('Site desconhecido.');
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Oferta inválida.');
@@ -23,7 +30,7 @@ function validateStorefrontOffer(storefront, input) {
   const offer = {
     publication_status: input.publication_status,
     title: optionalText(input.title, 'Título', 255),
-    description: optionalText(input.description, 'Descrição', 65535),
+    description: null,
     category_label: optionalText(input.category_label, 'Categoria do site', 120),
     slug: optionalText(input.slug, 'Slug', 255),
     price_retail: cents(input.price_retail, 'Preço de varejo'),
@@ -66,7 +73,7 @@ function projectStorefrontProduct(product, offer) {
     storefront_category: offer.category_label || null,
     brand: product.brand,
     name: offer.title || product.name,
-    description: offer.description ?? product.description,
+    description: resolveStorefrontDescription(product),
     slug: offer.slug || product.slug,
     price_retail: Number(offer.price_retail),
     price_reseller: offer.price_reseller == null ? null : Number(offer.price_reseller),
@@ -96,4 +103,4 @@ function projectStorefrontProduct(product, offer) {
   };
 }
 
-module.exports = { STOREFRONTS, STATUSES, validateStorefrontOffer, projectStorefrontProduct };
+module.exports = { STOREFRONTS, STATUSES, validateStorefrontOffer, projectStorefrontProduct, resolveStorefrontDescription };

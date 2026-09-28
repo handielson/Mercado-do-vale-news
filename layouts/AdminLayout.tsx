@@ -117,7 +117,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/loja-3d/pedidos', icon: <ShoppingBag size={18} />, label: 'Pedidos 3D', keywords: 'encomendas entrada saldo pagamento' },
         { to: '/admin/loja-3d/solicitacoes', icon: <MessageCircle size={18} />, label: 'Solicitações 3D', keywords: 'encomenda quantidade prazo consulta whatsapp' },
         { to: '/admin/loja-3d/producao', icon: <Printer size={18} />, label: 'Produção 3D', keywords: 'ordens fila progresso lotes aprovadas rejeitadas' },
-        { to: '/admin/loja-3d/calculadora', icon: <Printer size={18} />, label: 'Calculadora 3D', keywords: 'filamento impressao custo energia insumos' },
+        { to: '/admin/loja-3d/calculadora', icon: <Printer size={18} />, label: 'Produtos e arquivos 3D', keywords: 'filamento impressao custo energia insumos arquivos ficha makerworld stl 3mf gcode' },
         { to: '/admin/loja-3d/catalogo', icon: <Store size={18} />, label: 'Catálogo e preços 3D', keywords: 'produtos publicar visibilidade oferta' },
         { to: '/admin/loja-3d/banners', icon: <Image size={18} />, label: 'Banners 3D', keywords: 'imagens carrossel' },
         { to: '/admin/loja-3d/configuracoes', icon: <Wrench size={18} />, label: 'Configurações 3DMV', keywords: 'manutencao abrir fechar site mensagem' },
@@ -260,17 +260,29 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         DEV_MODE ? "md:top-10 md:h-[calc(100vh-2.5rem)]" : ""
       )}>
         <div className="px-2 pb-2">
-          <Link to={isPrint3dArea ? '/loja-3d' : '/'} target="_blank" title={isPrint3dArea ? 'Ver Loja 3D' : 'Ver Loja'} className="block hover:opacity-80 transition-opacity">
-            {isPrint3dArea ? (
-              <div className="flex items-center gap-3 text-violet-100"><Printer size={28} className="text-violet-300" /><span className="text-xl font-bold tracking-tight">3DMV</span></div>
-            ) : settings.logo_dark || settings.logo_main ? (
-              <img src={settings.logo_dark || settings.logo_main} alt={settings.company_name} className="h-10 object-contain" />
-            ) : (
-              <h1 className="text-xl font-bold tracking-tighter text-blue-400">
-                {settings.company_name}
-              </h1>
-            )}
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link to="/" target="_blank" title="Abrir site Mercado do Vale" className="block min-w-0 hover:opacity-80 transition-opacity">
+              {settings.logo_dark || settings.logo_main ? (
+                <img src={settings.logo_dark || settings.logo_main} alt={settings.company_name} className="h-10 max-w-[78px] object-contain object-left" />
+              ) : (
+                <h1 className="text-xl font-bold tracking-tighter text-blue-400">
+                  {settings.company_name}
+                </h1>
+              )}
+            </Link>
+            <Link
+              to="/loja-3d"
+              target="_blank"
+              title="Abrir site 3DMV"
+              aria-label="Abrir site 3DMV"
+              data-storefront-brand="loja_3d"
+              className="flex h-11 min-w-[92px] items-center justify-center gap-1.5 rounded-md border border-violet-300/70 bg-violet-500/10 px-2 text-violet-100 transition-colors hover:border-violet-200 hover:bg-violet-500/20"
+            >
+              <Printer size={17} className="text-violet-300" />
+              <span className="text-sm font-extrabold tracking-tight">3DMV</span>
+            </Link>
+          </div>
+          <p className="mt-1 text-[9px] font-medium text-violet-300/80">Área reservada para a logomarca 3DMV</p>
           <div className="flex items-center gap-1.5 mt-2 mb-4">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
