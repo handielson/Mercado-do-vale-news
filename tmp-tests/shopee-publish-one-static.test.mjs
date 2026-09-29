@@ -62,5 +62,44 @@ test('video is discovered from Synology, uploaded and confirmed after publicatio
   assert.match(source, /action=upload_video/);
   assert.match(source, /video_upload_id/);
   assert.match(source, /waitForSavedVideo/);
+  assert.match(source, /wait_for_result: false/);
+  assert.match(source, /action=get_video_upload_result/);
   assert.match(source, /a Shopee nao confirmou o video/i);
+});
+
+test('video dispatcher timeout waits, checks duplicate and retries only once', () => {
+  assert.match(source, /VIDEO_DISPATCHER_SETTLE_MS = 15000/);
+  assert.match(source, /VIDEO_DISPATCHER_RETRY_MS = 30000/);
+  assert.match(source, /get video dispatcher info fail/);
+  assert.match(source, /refreshRemoteDuplicateIndex\(ctx\)/);
+  assert.match(source, /item .* ja existe na G; reutilizando sem reenviar/);
+  assert.match(source, /addItemWithVideoRetry/);
+});
+
+test('video upload can fall back to locally downloaded data', () => {
+  assert.match(source, /downloadVideoAsDataUrl/);
+  assert.match(source, /video_data_url/);
+  assert.match(source, /40 \* 1024 \* 1024/);
+});
+
+test('clone revalidates required attributes and keeps video fallbacks', () => {
+  assert.match(source, /validatedSourceAttributes/);
+  assert.match(source, /safeRequiredAttributeDefaults/);
+  assert.match(source, /invalidRegulatoryAttributeValues/);
+  assert.match(source, /valor fora da lista oficial/);
+  assert.match(source, /uploadFirstAvailableVideo/);
+  assert.doesNotMatch(source, /Array\.from\(new Set\(\[\.\.\.explicit, \.\.\.generated, \.\.\.source\]\)\)\s*\.slice\(0, 1\)/);
+});
+
+test('source-backed variations avoid duplicate anchor links', () => {
+  assert.match(source, /sourceFamilyLinks/);
+  assert.match(source, /rootIsVariationModel/);
+  assert.match(source, /O modelo .* do anuncio M nao possui produto local ativo vinculado/);
+});
+
+test('created variations wait for every model id and can be reconciled without republishing', () => {
+  assert.match(source, /waitForExpectedModels/);
+  assert.match(source, /reconcileExistingVariationPublication/);
+  assert.match(source, /\[RECUPERADO\]/);
+  assert.match(source, /products\?sku=/);
 });

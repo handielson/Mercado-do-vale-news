@@ -8790,6 +8790,13 @@ async function handleShopeeCatalogVps(request, reply) {
           report_data: { upload_cost: Math.max(1, Date.now() - startedAt) },
         });
         if (complete.data?.error) return reply.code(200).send(complete.data);
+        if (request.body?.wait_for_result === false) {
+          return reply.code(200).send({
+            error: '',
+            message: '',
+            response: { video_upload_id: uploadId, status: 'processing' },
+          });
+        }
 
         // Budget estendido: 30 x 3s = ~90s. Videos maiores/mais lentos podiam
         // estourar o limite anterior (12 x 2s = 24s) e o ID voltava "quase pronto",
@@ -8822,6 +8829,9 @@ async function handleShopeeCatalogVps(request, reply) {
           response: { video_upload_id: uploadId },
         });
       }
+      case 'get_video_upload_result':
+        result = await shopeeCatalogGetVps('/api/v2/media_space/get_video_upload_result', creds, encodeShopeeCatalogParamsVps({ video_upload_id: query.video_upload_id }));
+        break;
       case 'get_full_catalog': {
         const pageSize = clampShopeeCatalogIntVps(query.page_size, 100, 1, 100);
         const maxPages = clampShopeeCatalogIntVps(query.max_pages, 200, 1, 200);

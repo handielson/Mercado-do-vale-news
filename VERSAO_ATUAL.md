@@ -1,13 +1,11 @@
-# v1.2.511-vendas-refresh-seguro
+# v1.2.512-shopee-conta-g-cascata
 
 Data: 2026-09-29. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.511-vendas-refresh-seguro
-Release principal: /var/www/mdv-site/releases/20260929-161107-v1-2-511-vendas-refresh-seguro
+Tag: v1.2.512-shopee-conta-g-cascata
+Release principal: /var/www/mdv-site/releases/20260929-214846-v1-2-512-shopee-conta-g-cascata
 
-A tabela de `/admin/sales` deixa de aguardar o historico completo dos marketplaces para aparecer. As vendas do PDV sao exibidas assim que ficam prontas, enquanto Shopee MV, Shopee G, Mercado Livre e TikTok Shop continuam carregando em segundo plano com estado visivel.
+Esta versao conclui o fluxo controlado de copia dos anuncios da conta Shopee M para a conta G. O envio individual e a cascata preservam variacoes, atributos, imagens e video; excluem anuncios ja vinculados; reconciliam anuncios que ja existem na Shopee; registram sucesso, bloqueio, erro, restante e previsao de termino em checkpoint persistente.
 
-A atualizacao automatica espera qualquer carregamento ativo terminar e consulta apenas os dois dias mais recentes dos marketplaces, incorporando vendas novas ao historico ja carregado. Isso elimina a concorrencia que podia manter a tela em `Carregando vendas...`.
+O upload de video passa a retornar o identificador logo apos concluir o envio dos bytes. O cliente consulta o processamento da Shopee separadamente, evitando o limite do proxy. Bloqueios regulatorios continuam seguros: dados ANATEL, ANVISA ou INMETRO nao sao inventados.
 
-Esta entrega publica somente o site. A API nao sera reiniciada, e os arquivos e processos locais da automacao de anuncios Shopee G permanecem fora do commit e em execucao.
-
-Validacoes: teste focado do carregamento progressivo e incremental, build de producao, ausencia de runtime Supabase e validacao publica do site, rota administrativa e versao.
+Validacoes: testes estaticos focados do envio individual, cascata, tunel e API de midia; sintaxe dos scripts e servidores; build de producao; saude publica da API e teste real controlado do SKU XD540.

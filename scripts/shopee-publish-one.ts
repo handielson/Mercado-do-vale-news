@@ -47,8 +47,10 @@ const BRAZIL_ORIGIN_ATTRIBUTE = {
   attribute_value_list: [{ value_id: 6737, original_value_name: 'Brasil', value_unit: '' }],
   is_mandatory: false,
 };
+const VIDEO_DISPATCHER_SETTLE_MS = 15000;
+const VIDEO_DISPATCHER_RETRY_MS = 30000;
 
-type CliOptions = {
+export type CliOptions = {
   productId: string;
   sku: string;
   connectionId: string;
@@ -57,7 +59,7 @@ type CliOptions = {
   help: boolean;
 };
 
-type ApiContext = {
+export type ApiContext = {
   apiBase: string;
   syncKey: string;
   connectionId: string;
@@ -130,7 +132,93 @@ function parseArray(value: unknown): any[] {
   }
 }
 
-async function apiRequest<T>(ctx: ApiContext, route: string, init: RequestInit = {}): Promise<T> {
+function validatedSourceAttributes(attributes: any[], attributeList: any[]): any[] {
+  const currentById = new Map(attributes.map((attribute) => [Number(attribute.attribute_id), attribute]));
+  return (Array.isArray(attributeList) ? attributeList : []).flatMap((source: any) => {
+    const current = currentById.get(Number(source?.attribute_id));
+    if (!current) return [];
+    const sourceValues = Array.isArray(source?.attribute_value_list) ? source.attribute_value_list : [];
+    if (current.support_search_value) {
+      return sourceValues.length ? [{ ...source, attribute_id: current.attribute_id }] : [];
+    }
+    const options = Array.isArray(current.attribute_value_list) ? current.attribute_value_list : [];
+    if (options.length > 0) {
+      const accepted = sourceValues.flatMap((value: any) => {
+        const match = options.find((option: any) => Number(value?.value_id) > 0
+          ? Number(option.value_id) === Number(value.value_id)
+          : [option.label, option.raw_name, option.original_value_name]
+            .some((candidate) => normalizeText(candidate) === normalizeText(value?.original_value_name)));
+        return match ? [{ value_id: match.value_id || 0, original_value_name: match.original_value_name || match.raw_name || match.label }] : [];
+      });
+      return accepted.length ? [{ attribute_id: current.attribute_id, attribute_value_list: accepted }] : [];
+    }
+    return sourceValues.length ? [{ ...source, attribute_id: current.attribute_id }] : [];
+  });
+}
+
+function safeRequiredAttributeDefaults(attributes: any[], product: any): Record<string, string> {
+  const context = normalizeText(`${product?.name || ''} ${product?.description || ''} ${JSON.stringify(parseObject(product?.specs))}`);
+  const defaults: Record<string, string> = {};
+  for (const attribute of attributes) {
+    if (!attribute?.mandatory) continue;
+    const options = Array.isArray(attribute.attribute_value_list) ? attribute.attribute_value_list : [];
+    if (options.length === 1) {
+      defaults[String(attribute.attribute_id)] = String(options[0].raw_name || options[0].original_value_name || options[0].label || '').trim();
+      continue;
+    }
+    const label = normalizeText(attribute.label);
+    if (label.includes('cabos eletricos')) {
+      const hasCable = /\b(extensao|cabo|fio)\b/.test(normalizeText(`${product?.name || ''} ${parseObject(product?.specs)?.keywords || ''}`))
+        && !/\bsem fio\b/.test(context);
+      const desired = hasCable ? ['yes', 'sim'] : ['no', 'nao'];
+      const option = options.find((candidate: any) => desired.includes(normalizeText(candidate.label || candidate.raw_name || candidate.original_value_name)));
+      if (option) defaults[String(attribute.attribute_id)] = String(option.raw_name || option.original_value_name || option.label);
+    }
+    if (label.includes('tipo de conexao')) {
+      const desired = /infravermelho|infra[- ]?red|\bir\b/.test(context)
+        ? ['infra-red controller', 'infrared controller']
+        : /\b(cabo|wired|usb|p2|p3|rca|hdmi|vga)\b/.test(context) && !/\bsem fio\b/.test(context)
+          ? ['wired']
+          : /\b(sem fio|wireless|bluetooth|wi-fi|wifi)\b/.test(context)
+            ? ['wireless']
+            : ['others', 'other'];
+      const option = options.find((candidate: any) => desired.includes(normalizeText(candidate.label || candidate.raw_name || candidate.original_value_name)));
+      if (option) defaults[String(attribute.attribute_id)] = String(option.raw_name || option.original_value_name || option.label);
+    }
+    if (label.includes('tipo de bateria') && /bateria botao|pilha botao|lr\s?41|ag\s?3/.test(context)) {
+      const coinOption = options.find((option: any) => /button|coin|botao/.test(normalizeText(option.label || option.raw_name || option.original_value_name)));
+      if (coinOption) defaults[String(attribute.attribute_id)] = String(coinOption.raw_name || coinOption.original_value_name || coinOption.label);
+    }
+    if (label.includes('voltagem da bateria')) {
+      const voltage = context.match(/\b(\d+(?:[.,]\d+)?)\s*v\b/)?.[1]?.replace(',', '.');
+      if (voltage) defaults[String(attribute.attribute_id)] = voltage;
+    }
+    if (label.includes('numero da peca') || label.includes('part number') || label.includes('numero do modelo')) {
+      const identifier = String(product?.model || product?.model_name || product?.sku || '').trim();
+      if (identifier) defaults[String(attribute.attribute_id)] = identifier;
+    }
+  }
+  return defaults;
+}
+
+function invalidRegulatoryAttributeValues(attributes: any[], attributeList: any[]): string[] {
+  const payloadById = new Map((Array.isArray(attributeList) ? attributeList : []).map((attribute: any) => [Number(attribute.attribute_id), attribute]));
+  const invalid: string[] = [];
+  for (const attribute of attributes) {
+    const label = normalizeText(attribute.label);
+    if (!label.includes('homologacao') && Number(attribute.attribute_id) !== 101197) continue;
+    const values = (payloadById.get(Number(attribute.attribute_id))?.attribute_value_list || [])
+      .map((value: any) => String(value?.original_value_name || '').trim())
+      .filter(Boolean);
+    const digits = values.join(' ').replace(/\D/g, '');
+    if (attribute.mandatory && (values.length === 0 || /^(n\/?a|nao se aplica|not applicable)$/i.test(normalizeText(values.join(' '))) || digits.length < 10)) {
+      invalid.push(attribute.label);
+    }
+  }
+  return invalid;
+}
+
+export async function apiRequest<T>(ctx: ApiContext, route: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${ctx.apiBase}${route}`, {
     ...init,
     headers: {
@@ -155,7 +243,7 @@ function withConnection(route: string, connectionId: string): string {
   return `${route}${separator}connection_id=${encodeURIComponent(connectionId)}`;
 }
 
-async function loadAllTableRows(ctx: ApiContext, table: string): Promise<any[]> {
+export async function loadAllTableRows(ctx: ApiContext, table: string): Promise<any[]> {
   const rows: any[] = [];
   for (let offset = 0; ; offset += 200) {
     const data = await apiRequest<{ rows?: any[] }>(ctx, `/table-data/${table}?limit=200&offset=${offset}`);
@@ -165,7 +253,7 @@ async function loadAllTableRows(ctx: ApiContext, table: string): Promise<any[]> 
   }
 }
 
-async function resolveConnection(ctx: ApiContext, requestedId: string): Promise<any> {
+export async function resolveConnection(ctx: ApiContext, requestedId: string): Promise<any> {
   const data = await apiRequest<{ connections?: any[] }>(ctx, '/shopee-connections');
   const connections = Array.isArray(data.connections) ? data.connections : [];
   const eligible = connections.filter((entry) =>
@@ -260,6 +348,10 @@ async function buildAttributePayload(ctx: ApiContext, attributes: any[], default
         valuePayloads.push({ value_id: option.value_id || 0, original_value_name: option.original_value_name || option.raw_name || option.label });
         continue;
       }
+      if (attr.attribute_value_list.length > 0) {
+        if (attr.mandatory) missing.push(`${attr.label} (valor fora da lista oficial: ${value})`);
+        continue;
+      }
       if (attr.attribute_id === 100413 && ['novo', 'new'].includes(normalizeText(value))) {
         valuePayloads.push({ value_id: 0, original_value_name: 'New' });
         continue;
@@ -331,16 +423,105 @@ async function resolveLocationIds(ctx: ApiContext): Promise<string[]> {
   return [...ids];
 }
 
-async function findRemoteDuplicate(ctx: ApiContext, sku: string, name: string): Promise<any | null> {
+type RemoteDuplicateIndex = {
+  bySku: Map<string, any>;
+  byTitle: Map<string, any>;
+};
+
+const remoteDuplicateIndexes = new Map<string, Promise<RemoteDuplicateIndex>>();
+
+function addRemoteDuplicate(index: RemoteDuplicateIndex, item: any): void {
+  const normalizedSku = normalizeText(item?.item_sku);
+  const normalizedTitle = normalizeText(item?.item_name);
+  if (normalizedSku) index.bySku.set(normalizedSku, item);
+  if (normalizedTitle) index.byTitle.set(normalizedTitle, item);
+}
+
+async function loadRemoteDuplicateIndex(ctx: ApiContext): Promise<RemoteDuplicateIndex> {
+  const index: RemoteDuplicateIndex = { bySku: new Map(), byTitle: new Map() };
   for (const status of ['NORMAL', 'UNLIST']) {
-    const data = await apiRequest<any>(ctx, withConnection(`/api/shopee-catalog?action=get_full_catalog&item_status=${status}&page_size=100`, ctx.connectionId));
-    const list = Array.isArray(data?.response?.item_list) ? data.response.item_list : [];
-    const match = list.find((item: any) =>
-      (sku && normalizeText(item.item_sku) === normalizeText(sku)) || normalizeText(item.item_name) === normalizeText(name)
-    );
-    if (match) return match;
+    const itemIds: number[] = [];
+    let offset = 0;
+    for (let page = 0; page < 200; page += 1) {
+      const data = await apiRequest<any>(ctx, withConnection(
+        `/api/shopee-catalog?action=get_item_list&item_status=${status}&page_size=100&offset=${offset}`,
+        ctx.connectionId,
+      ));
+      const items = Array.isArray(data?.response?.item) ? data.response.item : [];
+      items.forEach((item: any) => {
+        const itemId = Number(item?.item_id);
+        if (itemId > 0) itemIds.push(itemId);
+      });
+      if (data?.response?.has_next_page !== true || items.length === 0) break;
+      offset = Number(data?.response?.next_offset ?? (offset + 100));
+    }
+    const uniqueIds = [...new Set(itemIds)];
+    for (let position = 0; position < uniqueIds.length; position += 20) {
+      const batch = uniqueIds.slice(position, position + 20);
+      const details = await apiRequest<any>(ctx, withConnection(
+        `/api/shopee-catalog?action=get_item_base_info&item_id_list=${batch.join(',')}`,
+        ctx.connectionId,
+      ));
+      (Array.isArray(details?.response?.item_list) ? details.response.item_list : [])
+        .forEach((item: any) => addRemoteDuplicate(index, item));
+    }
   }
-  return null;
+  return index;
+}
+
+async function getRemoteDuplicateIndex(ctx: ApiContext): Promise<RemoteDuplicateIndex> {
+  const key = ctx.connectionId || PRIMARY_CONNECTION_ID;
+  if (!remoteDuplicateIndexes.has(key)) {
+    remoteDuplicateIndexes.set(key, loadRemoteDuplicateIndex(ctx));
+  }
+  return remoteDuplicateIndexes.get(key)!;
+}
+
+async function refreshRemoteDuplicateIndex(ctx: ApiContext): Promise<RemoteDuplicateIndex> {
+  const key = ctx.connectionId || PRIMARY_CONNECTION_ID;
+  const refreshed = loadRemoteDuplicateIndex(ctx);
+  remoteDuplicateIndexes.set(key, refreshed);
+  return refreshed;
+}
+
+async function findRemoteDuplicate(ctx: ApiContext, sku: string, name: string): Promise<any | null> {
+  const index = await getRemoteDuplicateIndex(ctx);
+  return (sku ? index.bySku.get(normalizeText(sku)) : null)
+    || index.byTitle.get(normalizeText(name))
+    || null;
+}
+
+async function rememberRemotePublication(ctx: ApiContext, item: any): Promise<void> {
+  addRemoteDuplicate(await getRemoteDuplicateIndex(ctx), item);
+}
+
+function isVideoDispatcherTimeout(error: unknown): boolean {
+  const message = normalizeText((error as Error)?.message || error);
+  return message.includes('get video dispatcher info fail')
+    && (message.includes('242400101') || message.includes('check_product_rules'));
+}
+
+async function addItemWithVideoRetry(ctx: ApiContext, prepared: any, payload: any, hasVideo: boolean): Promise<any> {
+  try {
+    return await apiRequest<any>(ctx, withConnection('/api/shopee-catalog?action=add_item', ctx.connectionId), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    if (!hasVideo || !isVideoDispatcherTimeout(error)) throw error;
+    console.warn(`[VIDEO] ${prepared.sku}: dispatcher da Shopee expirou; aguardando antes da unica repeticao segura.`);
+    await new Promise((resolve) => setTimeout(resolve, VIDEO_DISPATCHER_RETRY_MS));
+    await refreshRemoteDuplicateIndex(ctx);
+    const existing = await findRemoteDuplicate(ctx, prepared.sku, prepared.title);
+    if (Number(existing?.item_id) > 0) {
+      console.warn(`[VIDEO] ${prepared.sku}: item ${existing.item_id} ja existe na G; reutilizando sem reenviar.`);
+      return { response: { item_id: Number(existing.item_id) } };
+    }
+    return apiRequest<any>(ctx, withConnection('/api/shopee-catalog?action=add_item', ctx.connectionId), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
 }
 
 function savedVideoList(item: any): any[] {
@@ -393,7 +574,6 @@ async function resolveVideoCandidates(ctx: ApiContext, familyProducts: any[], so
   }
   const source = savedVideoList(sourceItem).map((video) => String(video?.video_url || '').trim()).filter(Boolean);
   return Array.from(new Set([...explicit, ...generated, ...source]))
-    .slice(0, 1)
     .map((video_url) => ({ video_url, file_name: video_url.split('/').pop() || 'video.mp4' }));
 }
 
@@ -404,7 +584,7 @@ async function loadVariationChildren(ctx: ApiContext, parent: any): Promise<any[
     .filter((row) => String(row.status || '') === 'active');
 }
 
-async function prepare(ctx: ApiContext, options: CliOptions): Promise<any> {
+export async function prepare(ctx: ApiContext, options: CliOptions): Promise<any> {
   const connection = await resolveConnection(ctx, options.connectionId);
   ctx.connectionId = String(connection.id);
   const product = await loadProduct(ctx, options);
@@ -417,15 +597,10 @@ async function prepare(ctx: ApiContext, options: CliOptions): Promise<any> {
   if (product.parent_id) blockers.push('Informe o SKU pai da familia, nao o SKU de uma variacao filha.');
   if (String(product.status || '') !== 'active') blockers.push(`Produto nao esta ativo (status: ${product.status || 'vazio'}).`);
 
-  const isVariation = Number(product.is_parent) === 1;
-  const children = isVariation ? await loadVariationChildren(ctx, product) : [];
-  const familyProducts = isVariation ? [product, ...children] : [product];
-  if (isVariation && children.length < 2) blockers.push(`Familia de variacoes precisa ter ao menos 2 filhos ativos; encontrados: ${children.length}.`);
-
+  let isVariation = Number(product.is_parent) === 1;
+  let children = isVariation ? await loadVariationChildren(ctx, product) : [];
+  let familyProducts = isVariation ? [product, ...children] : [product];
   const links = await loadAllTableRows(ctx, 'shopee_products');
-  const familyIds = new Set(familyProducts.map((entry) => String(entry.id)));
-  const existingLinks = links.filter((row) => familyIds.has(String(row.product_id)) && String(row.connection_id || PRIMARY_CONNECTION_ID) === ctx.connectionId && Number(row.shopee_item_id) > 0);
-  existingLinks.forEach((link) => blockers.push(`Produto ${familyProducts.find((entry) => String(entry.id) === String(link.product_id))?.sku || link.product_id} ja vinculado nesta conta ao item ${link.shopee_item_id}.`));
   const primaryLink = links.find((row) =>
     String(row.product_id) === productId &&
     String(row.connection_id || PRIMARY_CONNECTION_ID) === PRIMARY_CONNECTION_ID &&
@@ -443,21 +618,51 @@ async function prepare(ctx: ApiContext, options: CliOptions): Promise<any> {
     sourceItem = sourceData?.response?.item_list?.[0] || null;
     if (!sourceItem) blockers.push(`O vinculo M aponta para o item ${primaryLink.shopee_item_id}, mas a Shopee nao retornou os dados.`);
     if (isVariation && sourceItem && sourceItem?.has_model !== true) blockers.push('O produto local e uma familia, mas o anuncio M nao possui variacoes.');
-    if (!isVariation && sourceItem?.has_model === true) blockers.push('O anuncio M possui variacoes; informe o SKU pai da familia.');
-    if (isVariation && sourceItem?.has_model === true) {
+    if (sourceItem?.has_model === true) {
       sourceModelData = await apiRequest<any>(ctx, withConnection(
         `/api/shopee-catalog?action=get_model_list&item_id=${Number(primaryLink.shopee_item_id)}`,
         PRIMARY_CONNECTION_ID,
       ));
       sourceModels = sourceModelData?.response?.model || sourceModelData?.response?.model_list || [];
       sourceTierVariation = sourceModelData?.response?.tier_variation || [];
+      if (!isVariation) {
+        const sourceFamilyLinks = links.filter((row) =>
+          String(row.connection_id || PRIMARY_CONNECTION_ID) === PRIMARY_CONNECTION_ID
+          && Number(row.shopee_item_id) === Number(primaryLink.shopee_item_id)
+          && Number(row.shopee_model_id) > 0
+        );
+        const loaded = await Promise.all(sourceFamilyLinks.map((row) => apiRequest<any>(ctx, `/products/${encodeURIComponent(String(row.product_id))}`)));
+        const sourceSkus = new Set(sourceModels.map((model: any) => normalizeText(model?.model_sku)).filter(Boolean));
+        const loadedBySku = new Map(loaded.filter((entry) => sourceSkus.has(normalizeText(entry?.sku))).map((entry) => [normalizeText(entry.sku), entry]));
+        for (const sourceModel of sourceModels) {
+          const modelSku = String(sourceModel?.model_sku || '').trim();
+          if (!modelSku || loadedBySku.has(normalizeText(modelSku))) continue;
+          const candidates = await apiRequest<any[]>(ctx, `/products?sku=${encodeURIComponent(modelSku)}&status=all&include_parents=true&limit=10`);
+          const exact = (Array.isArray(candidates) ? candidates : []).filter((entry) => normalizeText(entry?.sku) === normalizeText(modelSku));
+          if (exact.length === 1) loadedBySku.set(normalizeText(modelSku), exact[0]);
+        }
+        children = [...loadedBySku.values()].map((entry: any) => String(entry?.status || '') === 'active'
+          ? entry
+          : { ...entry, stock_quantity: 0, stock: 0 });
+        familyProducts = children;
+        isVariation = children.length >= 2;
+        if (!isVariation) blockers.push('O anuncio M possui variacoes, mas nao foi possivel reconstruir a familia pelos vinculos de modelo.');
+      }
       const sourceSkus = new Set(sourceModels.map((model: any) => normalizeText(model?.model_sku)).filter(Boolean));
       children.forEach((child) => {
         if (!sourceSkus.has(normalizeText(child.sku))) blockers.push(`A variacao ${child.sku} nao foi localizada no anuncio M.`);
       });
+      const localSkus = new Set(children.map((child) => normalizeText(child.sku)).filter(Boolean));
+      sourceModels.forEach((model: any) => {
+        if (!localSkus.has(normalizeText(model?.model_sku))) blockers.push(`O modelo ${model?.model_sku || model?.model_id} do anuncio M nao possui produto local ativo vinculado.`);
+      });
       if (!sourceTierVariation.length) blockers.push('O anuncio M nao retornou a estrutura das variacoes.');
     }
   }
+  if (isVariation && children.length < 2) blockers.push(`Familia de variacoes precisa ter ao menos 2 itens ativos; encontrados: ${children.length}.`);
+  const familyIds = new Set(familyProducts.map((entry) => String(entry.id)));
+  const existingLinks = links.filter((row) => familyIds.has(String(row.product_id)) && String(row.connection_id || PRIMARY_CONNECTION_ID) === ctx.connectionId && Number(row.shopee_item_id) > 0);
+  existingLinks.forEach((link) => blockers.push(`Produto ${familyProducts.find((entry) => String(entry.id) === String(link.product_id))?.sku || link.product_id} ja vinculado nesta conta ao item ${link.shopee_item_id}.`));
 
   const templateRows = await loadAllTableRows(ctx, 'shopee_templates');
   const templates = templateRows.map(mapShopeeTemplateFromRow);
@@ -493,9 +698,14 @@ async function prepare(ctx: ApiContext, options: CliOptions): Promise<any> {
   let variationValidation: any = null;
   if (isVariation) {
     variationGroup = { id: productId, parent: product, children };
-    variationDimensions = detectShopeeVariationDimensions(variationGroup);
-    variationValidation = validateShopeeVariationGroup(variationGroup, variationDimensions);
-    variationValidation.blockers.forEach((issue: any) => blockers.push(issue.message));
+    if (sourceModels.length && sourceTierVariation.length) {
+      variationDimensions = sourceTierVariation;
+      variationValidation = { ok: true, blockers: [], warnings: [] };
+    } else {
+      variationDimensions = detectShopeeVariationDimensions(variationGroup);
+      variationValidation = validateShopeeVariationGroup(variationGroup, variationDimensions);
+      variationValidation.blockers.forEach((issue: any) => blockers.push(issue.message));
+    }
   }
 
   let attributes: any[] = [];
@@ -508,24 +718,38 @@ async function prepare(ctx: ApiContext, options: CliOptions): Promise<any> {
     attributes = normalizeAttributes(attributeData);
     const validAttributeIds = new Set(attributes.map((attribute) => Number(attribute.attribute_id)));
     supportsBrazilOrigin = validAttributeIds.has(BRAZIL_ORIGIN_ATTRIBUTE.attribute_id);
-    if (sourceItem && validAttributeIds.size > 0) {
-      attributeList = attributeList.filter((attribute) => validAttributeIds.has(Number(attribute?.attribute_id)));
-    }
-    if (!sourceItem) {
-      const fieldTemplate = resolveShopeeFieldTemplate(product);
-      const modelValues = parseObject(product.model_template_values || product.template_values);
-      const modelDefaults = parseObject(modelValues.shopee_attribute_defaults || modelValues.shopeeAttributeDefaults);
-      const defaults = alignShopeeAttributeDefaultsToOptions(attributes, mergeShopeeAttributeDefaults({
+    const fieldTemplate = resolveShopeeFieldTemplate(product);
+    const modelValues = parseObject(product.model_template_values || product.template_values);
+    const modelDefaults = parseObject(modelValues.shopee_attribute_defaults || modelValues.shopeeAttributeDefaults);
+    const defaults = alignShopeeAttributeDefaultsToOptions(attributes, {
+      ...mergeShopeeAttributeDefaults({
         universalDefaults: resolveUniversalShopeeAttributeDefaults(templates),
         fieldTemplateDefaults: buildShopeeTemplateAttributeValues(attributes, product, fieldTemplate),
         selectedTemplateDefaults: applied?.attributeValues || {},
         modelDefaults,
         product,
-      }));
-      const built = await buildAttributePayload(ctx, attributes, defaults, fieldTemplate?.strict_attribute_ids);
-      attributeList = built.payload;
-      built.missing.forEach((label) => blockers.push(`Atributo obrigatorio ausente: ${label}.`));
-    }
+      }),
+      ...safeRequiredAttributeDefaults(attributes, product),
+    });
+    const built = await buildAttributePayload(ctx, attributes, defaults, sourceItem ? undefined : fieldTemplate?.strict_attribute_ids);
+    const preservedSource = validatedSourceAttributes(attributes, attributeList);
+    const mergedById = new Map(built.payload.map((attribute: any) => [Number(attribute.attribute_id), attribute]));
+    preservedSource.forEach((attribute: any) => mergedById.set(Number(attribute.attribute_id), attribute));
+    attributeList = [...mergedById.values()];
+    const invalidOptionalRegulatoryIds = new Set(attributes
+      .filter((attribute) => !attribute.mandatory && (normalizeText(attribute.label).includes('homologacao') || Number(attribute.attribute_id) === 101197))
+      .filter((attribute) => {
+        const payloadAttribute: any = attributeList.find((entry: any) => Number(entry.attribute_id) === Number(attribute.attribute_id));
+        const value = (payloadAttribute?.attribute_value_list || []).map((entry: any) => String(entry?.original_value_name || '')).join(' ');
+        return !value.replace(/\D/g, '') || /^(n\/?a|nao se aplica|not applicable)$/i.test(normalizeText(value));
+      })
+      .map((attribute) => Number(attribute.attribute_id)));
+    attributeList = attributeList.filter((attribute: any) => !invalidOptionalRegulatoryIds.has(Number(attribute.attribute_id)));
+    const presentAttributeIds = new Set(attributeList.map((attribute: any) => Number(attribute.attribute_id)));
+    attributes.filter((attribute) => attribute.mandatory && !presentAttributeIds.has(Number(attribute.attribute_id)))
+      .forEach((attribute) => blockers.push(`Atributo obrigatorio ausente ou invalido: ${attribute.label}.`));
+    invalidRegulatoryAttributeValues(attributes, attributeList)
+      .forEach((label) => blockers.push(`Atributo regulatorio precisa de numero valido: ${label}.`));
     logistics = await resolveLogistics(ctx);
     if (!logistics.length) blockers.push('Nenhum canal logistico habilitado na conta G.');
     if (!sourceItem) brand = await resolveBrand(ctx, categoryId, product);
@@ -572,7 +796,7 @@ async function prepare(ctx: ApiContext, options: CliOptions): Promise<any> {
   };
 }
 
-function printPreview(prepared: any, execute: boolean): void {
+export function printPreview(prepared: any, execute: boolean): void {
   console.log(JSON.stringify({
     mode: execute ? 'EXECUCAO AUTORIZADA' : 'PRE-VISUALIZACAO (nenhuma gravacao)',
     store: { code: 'G', connection_id: prepared.connection.id, name: prepared.connection.display_name, shop_id: prepared.connection.shopee_shop_id },
@@ -619,27 +843,76 @@ function isVideoStillProcessing(error: unknown): boolean {
 }
 
 async function uploadVideo(ctx: ApiContext, video: any): Promise<string> {
+  const data = await apiRequest<any>(ctx, withConnection('/api/shopee-catalog?action=upload_video', ctx.connectionId), {
+    method: 'POST',
+    body: JSON.stringify({
+      ...(video.video_data_url ? { video_data_url: video.video_data_url } : { video_url: video.video_url }),
+      file_name: video.file_name || 'video.mp4',
+      wait_for_result: false,
+    }),
+  });
+  const id = data?.response?.video_upload_id || data?.response?.video_id;
+  if (!id) throw new Error(data?.message || data?.error || 'Upload de video nao retornou video_upload_id.');
   let lastError: unknown = null;
-  const delays = [0, 6000, 10000, 15000];
-  for (const delay of delays) {
-    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+  for (const delay of [3000, 5000, 8000, 12000, 18000, 25000]) {
+    await new Promise((resolve) => setTimeout(resolve, delay));
     try {
-      const data = await apiRequest<any>(ctx, withConnection('/api/shopee-catalog?action=upload_video', ctx.connectionId), {
-        method: 'POST',
-        body: JSON.stringify({ video_url: video.video_url, file_name: video.file_name || 'video.mp4' }),
-      });
-      const id = data?.response?.video_upload_id || data?.response?.video_id;
-      if (!id) throw new Error(data?.message || data?.error || 'Upload de video nao retornou video_upload_id.');
-      return String(id);
+      const poll = await apiRequest<any>(ctx, withConnection(`/api/shopee-catalog?action=get_video_upload_result&video_upload_id=${encodeURIComponent(String(id))}`, ctx.connectionId));
+      const status = normalizeText(poll?.response?.status || poll?.response?.video_upload_result?.status || poll?.status);
+      if (['success', 'succeeded', 'complete', 'completed'].includes(status) || poll?.response?.video_info) return String(id);
+      if (['failed', 'failure', 'error'].includes(status)) throw new Error(poll?.message || `Processamento do video falhou com status ${status}.`);
     } catch (error) {
       lastError = error;
-      if (!isVideoStillProcessing(error)) throw error;
+      if (!isVideoStillProcessing(error) && !normalizeText((error as Error)?.message).includes('invalid or expired vid')) throw error;
     }
   }
-  throw lastError || new Error('O video nao terminou de processar na Shopee.');
+  throw lastError || new Error('O video nao terminou de processar na Shopee dentro do prazo seguro.');
+}
+
+async function downloadVideoAsDataUrl(video: any): Promise<any> {
+  const response = await fetch(String(video?.video_url || ''), { redirect: 'follow', signal: AbortSignal.timeout(60000) });
+  if (!response.ok) throw new Error(`Download local do video retornou HTTP ${response.status}.`);
+  const mimeType = String(response.headers.get('content-type') || 'video/mp4').split(';')[0].trim();
+  if (!mimeType.startsWith('video/')) throw new Error(`Download local retornou tipo inesperado: ${mimeType}.`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length === 0 || buffer.length > 40 * 1024 * 1024) throw new Error(`Video fora do limite seguro para fallback local: ${buffer.length} bytes.`);
+  return { ...video, video_data_url: `data:${mimeType};base64,${buffer.toString('base64')}` };
+}
+
+function isRetryableVideoSourceError(error: unknown): boolean {
+  const message = normalizeText((error as Error)?.message || error);
+  return /api (404|408|429|500|502|503|504)/.test(message)
+    || message.includes('remote media')
+    || message.includes('timeout')
+    || message.includes('temporarily unavailable');
+}
+
+async function uploadFirstAvailableVideo(ctx: ApiContext, videos: any[], sku: string): Promise<string> {
+  const errors: string[] = [];
+  for (let index = 0; index < videos.length; index += 1) {
+    const video = videos[index];
+    let localFallback: any = null;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        if (attempt > 1) {
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          localFallback ||= await downloadVideoAsDataUrl(video);
+        }
+        return await uploadVideo(ctx, localFallback || video);
+      } catch (error) {
+        const message = String((error as Error)?.message || error);
+        errors.push(`fonte ${index + 1}, tentativa ${attempt}: ${message}`);
+        if (!isRetryableVideoSourceError(error)) throw error;
+      }
+    }
+    console.warn(`[VIDEO] ${sku}: fonte ${index + 1} indisponivel; tentando a proxima.`);
+  }
+  throw new Error(`Nenhuma fonte de video ficou disponivel para ${sku}: ${errors.join(' | ')}`);
 }
 
 async function persistLink(ctx: ApiContext, prepared: any, product: any, itemId: number, model?: any): Promise<void> {
+  const productIsVariationModel = prepared.isVariation
+    && prepared.children.some((child: any) => String(child.id) === String(product.id));
   await apiRequest(ctx, '/table-data/shopee_products', {
     method: 'POST',
     body: JSON.stringify({
@@ -653,7 +926,7 @@ async function persistLink(ctx: ApiContext, prepared: any, product: any, itemId:
       shopee_tier_index: Array.isArray(model?.tier_index) ? model.tier_index : null,
       shopee_category_id: prepared.categoryId,
       shopee_category_name: prepared.categoryName || null,
-      shopee_price: Math.round((product === prepared.product ? prepared.price : localPriceInReais(product)) * 100),
+      shopee_price: Math.round((product === prepared.product && !productIsVariationModel ? prepared.price : localPriceInReais(product)) * 100),
       status: 'active',
       last_synced_at: new Date().toISOString(),
     }),
@@ -684,6 +957,38 @@ async function waitForModelList(ctx: ApiContext, itemId: number): Promise<any[]>
     if (Array.isArray(models) && models.length > 0) return models;
   }
   return [];
+}
+
+async function waitForExpectedModels(ctx: ApiContext, itemId: number, expectedSkus: string[]): Promise<any[]> {
+  const expected = new Set(expectedSkus.map(normalizeText).filter(Boolean));
+  let latest: any[] = [];
+  for (const delay of [0, 4000, 8000, 12000, 18000, 25000]) {
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+    const data = await apiRequest<any>(ctx, withConnection(`/api/shopee-catalog?action=get_model_list&item_id=${itemId}`, ctx.connectionId));
+    latest = data?.response?.model || data?.response?.model_list || [];
+    const available = new Set(latest.map((model: any) => normalizeText(model?.model_sku)).filter(Boolean));
+    if ([...expected].every((sku) => available.has(sku) && Number(latest.find((model: any) => normalizeText(model?.model_sku) === sku)?.model_id) > 0)) return latest;
+  }
+  return latest;
+}
+
+export async function reconcileExistingVariationPublication(ctx: ApiContext, prepared: any, itemId: number): Promise<void> {
+  if (!prepared.isVariation) throw new Error('A reconciliacao automatica exige uma familia de variacoes.');
+  const expectedSkus = prepared.children.map((child: any) => String(child.sku || '').trim()).filter(Boolean);
+  const models = await waitForExpectedModels(ctx, itemId, expectedSkus);
+  const bySku = new Map(models.map((model: any) => [normalizeText(model?.model_sku), model]));
+  const missing = expectedSkus.filter((sku: string) => !Number(bySku.get(normalizeText(sku))?.model_id));
+  if (missing.length) throw new Error(`Item ${itemId} existe, mas ainda faltam IDs das variacoes ${missing.join(', ')}. NAO reenvie.`);
+  const links = await loadAllTableRows(ctx, 'shopee_products');
+  const linkedIds = new Set(links
+    .filter((link) => String(link?.connection_id || PRIMARY_CONNECTION_ID) === ctx.connectionId && Number(link?.shopee_item_id) === itemId)
+    .map((link) => String(link.product_id)));
+  const rootIsModel = prepared.children.some((child: any) => String(child.id) === String(prepared.product.id));
+  if (!rootIsModel && !linkedIds.has(String(prepared.product.id))) await persistLink(ctx, prepared, prepared.product, itemId);
+  for (const child of prepared.children) {
+    if (linkedIds.has(String(child.id))) continue;
+    await persistLink(ctx, prepared, child, itemId, bySku.get(normalizeText(child.sku)));
+  }
 }
 
 async function buildVariationParts(ctx: ApiContext, prepared: any): Promise<{ tier_variation: any[]; model_list: any[] }> {
@@ -719,13 +1024,24 @@ async function buildVariationParts(ctx: ApiContext, prepared: any): Promise<{ ti
   return { tier_variation, model_list };
 }
 
-async function publish(ctx: ApiContext, prepared: any): Promise<number> {
+export async function publish(ctx: ApiContext, prepared: any): Promise<number> {
   const duplicate = await findRemoteDuplicate(ctx, prepared.sku, prepared.title);
-  if (duplicate?.item_id) throw new Error(`Seguranca contra duplicidade: a conta G ja possui o item ${duplicate.item_id} com o mesmo SKU ou titulo.`);
+  if (duplicate?.item_id) {
+    if (prepared.isVariation) {
+      await reconcileExistingVariationPublication(ctx, prepared, Number(duplicate.item_id));
+      console.warn(`[RECUPERADO] ${prepared.sku}: item ${duplicate.item_id} ja existia e os vinculos das variacoes foram reconciliados.`);
+      return Number(duplicate.item_id);
+    }
+    throw new Error(`Seguranca contra duplicidade: a conta G ja possui o item ${duplicate.item_id} com o mesmo SKU ou titulo.`);
+  }
   const imageIds = await uploadImages(ctx, prepared.images, prepared.sku);
-  const videoUploadIds = prepared.videos.length ? [await uploadVideo(ctx, prepared.videos[0])] : [];
+  const videoUploadIds = prepared.videos.length ? [await uploadFirstAvailableVideo(ctx, prepared.videos, prepared.sku)] : [];
   if (!videoUploadIds.length && savedVideoList(prepared.sourceItem).length) {
     throw new Error('O anuncio M possui video, mas nenhum video ficou pronto para envio a G.');
+  }
+  if (videoUploadIds.length) {
+    console.log(`[VIDEO] ${prepared.sku}: aguardando ${VIDEO_DISPATCHER_SETTLE_MS / 1000}s para propagacao interna da Shopee.`);
+    await new Promise((resolve) => setTimeout(resolve, VIDEO_DISPATCHER_SETTLE_MS));
   }
   const basePayload = {
     ...prepared.payload,
@@ -740,10 +1056,12 @@ async function publish(ctx: ApiContext, prepared: any): Promise<number> {
   if (prepared.isVariation) {
     variationParts = await buildVariationParts(ctx, prepared);
     try {
-      created = await apiRequest<any>(ctx, withConnection('/api/shopee-catalog?action=add_item', ctx.connectionId), {
-        method: 'POST',
-        body: JSON.stringify({ ...basePayload, item_sku: undefined, ...variationParts }),
-      });
+      created = await addItemWithVideoRetry(
+        ctx,
+        prepared,
+        { ...basePayload, item_sku: undefined, ...variationParts },
+        videoUploadIds.length > 0,
+      );
       createdWithDirectVariation = true;
     } catch (error) {
       lastError = error;
@@ -753,9 +1071,12 @@ async function publish(ctx: ApiContext, prepared: any): Promise<number> {
   if (!created) {
     for (const variant of buildShopeeAddItemStockVariants({ stock: prepared.stock, locationIds })) {
       try {
-        created = await apiRequest<any>(ctx, withConnection('/api/shopee-catalog?action=add_item', ctx.connectionId), {
-          method: 'POST', body: JSON.stringify(applyShopeeStockFields(basePayload, variant.stockFields)),
-        });
+        created = await addItemWithVideoRetry(
+          ctx,
+          prepared,
+          applyShopeeStockFields(basePayload, variant.stockFields),
+          videoUploadIds.length > 0,
+        );
         break;
       } catch (error) {
         lastError = error;
@@ -766,20 +1087,26 @@ async function publish(ctx: ApiContext, prepared: any): Promise<number> {
   if (!created) throw lastError || new Error('A Shopee nao aceitou nenhuma variante de estoque.');
   const itemId = Number(created?.response?.item_id);
   if (!(itemId > 0)) throw new Error('A Shopee respondeu ao add_item sem um item_id valido. Nao execute novamente sem conferir a conta.');
+  await rememberRemotePublication(ctx, { item_id: itemId, item_sku: prepared.sku, item_name: prepared.title });
 
-  try {
-    await persistLink(ctx, prepared, prepared.product, itemId);
-  } catch (error) {
-    throw new Error(`Item ${itemId} foi publicado, mas o vinculo local falhou: ${(error as Error).message}. NAO execute novamente.`);
+  const rootIsVariationModel = prepared.isVariation
+    && prepared.children.some((child: any) => String(child.id) === String(prepared.product.id));
+  if (!rootIsVariationModel) {
+    try {
+      await persistLink(ctx, prepared, prepared.product, itemId);
+    } catch (error) {
+      throw new Error(`Item ${itemId} foi publicado, mas o vinculo local falhou: ${(error as Error).message}. NAO execute novamente.`);
+    }
   }
 
   if (prepared.isVariation && variationParts) {
-    let publishedModels = createdWithDirectVariation ? await waitForModelList(ctx, itemId) : [];
+    const expectedModelSkus = variationParts.model_list.map((model: any) => String(model.model_sku || '')).filter(Boolean);
+    let publishedModels = createdWithDirectVariation ? await waitForExpectedModels(ctx, itemId, expectedModelSkus) : [];
     if (!createdWithDirectVariation) {
       await apiRequest(ctx, withConnection('/api/shopee-catalog?action=init_tier_variation', ctx.connectionId), {
         method: 'POST', body: JSON.stringify({ item_id: itemId, tier_variation: variationParts.tier_variation, model: variationParts.model_list }),
       });
-      publishedModels = await waitForModelList(ctx, itemId);
+      publishedModels = await waitForExpectedModels(ctx, itemId, expectedModelSkus);
     }
     const modelBySku = new Map(publishedModels.map((model: any) => [normalizeText(model.model_sku), model]));
     const modelForUpdate = variationParts.model_list.map((model: any) => ({ ...model, model_id: Number(modelBySku.get(normalizeText(model.model_sku))?.model_id) || undefined }));
@@ -790,7 +1117,7 @@ async function publish(ctx: ApiContext, prepared: any): Promise<number> {
     await apiRequest(ctx, withConnection('/api/shopee-catalog?action=update_model', ctx.connectionId), {
       method: 'POST', body: JSON.stringify({ item_id: itemId, tier_variation: variationParts.tier_variation, model: modelForUpdate }),
     });
-    publishedModels = await waitForModelList(ctx, itemId);
+    publishedModels = await waitForExpectedModels(ctx, itemId, expectedModelSkus);
     const missingSkus = getMissingShopeeVariationSkus(prepared.children, publishedModels);
     if (missingSkus.length) throw new Error(`Item ${itemId} foi criado, mas faltaram variacoes: ${missingSkus.join(', ')}. NAO execute novamente.`);
     const matches = matchShopeeModelsBySku(prepared.children, publishedModels);
@@ -826,13 +1153,7 @@ async function publish(ctx: ApiContext, prepared: any): Promise<number> {
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const options = parseCliArgs(argv);
   if (options.help) { console.log(usage()); return; }
-  const syncKey = String(process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || process.env.SYNC_SECRET || '').trim();
-  if (!syncKey) throw new Error('Configure VITE_VPS_SYNC_KEY, VPS_SYNC_KEY ou SYNC_SECRET.');
-  const ctx: ApiContext = {
-    apiBase: String(process.env.VITE_VPS_BASE_URL || process.env.VITE_VPS_URL || DEFAULT_API_BASE).replace(/\/+$/, ''),
-    syncKey,
-    connectionId: '',
-  };
+  const ctx = createApiContext();
   const prepared = await prepare(ctx, options);
   printPreview(prepared, options.execute);
   if (prepared.blockers.length) throw new Error(`Publicacao bloqueada por ${prepared.blockers.length} validacao(oes).`);
@@ -845,6 +1166,16 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
   const itemId = await publish(ctx, prepared);
   console.log(`\nSUCESSO: SKU ${prepared.sku} publicado somente na conta G. Item Shopee: ${itemId}.`);
+}
+
+export function createApiContext(): ApiContext {
+  const syncKey = String(process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || process.env.SYNC_SECRET || '').trim();
+  if (!syncKey) throw new Error('Configure VITE_VPS_SYNC_KEY, VPS_SYNC_KEY ou SYNC_SECRET.');
+  return {
+    apiBase: String(process.env.VITE_VPS_BASE_URL || process.env.VITE_VPS_URL || DEFAULT_API_BASE).replace(/\/+$/, ''),
+    syncKey,
+    connectionId: '',
+  };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

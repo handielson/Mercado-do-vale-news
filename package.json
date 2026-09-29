@@ -32,6 +32,8 @@
     "test:mercado-livre": "node --test tmp-tests/mercado-livre-core.test.cjs tmp-tests/mercado-livre-print-agent.test.cjs && node tmp-tests/mercado-livre-integration-static.test.mjs",
     "test:marketing-calendar": "node tmp-tests/marketing-calendar-data-loading-static.test.mjs && node tmp-tests/instagram-schedule-service-vps-static.test.mjs",
     "shopee:publish-one": "node scripts/shopee-publish-one.ts",
+    "shopee:publish-all": "node scripts/shopee-publish-all.ts",
+    "shopee:vps-tunnel": "node scripts/shopee-vps-tunnel.cjs",
     "publish:vps-plan": "node scripts/publish-vps-plan.cjs",
     "deploy:vps-site": "node scripts/deploy-vps-site.cjs",
     "preview": "vite preview",

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 const requiredActions = [
   'upload_image',
   'upload_video',
+  'get_video_upload_result',
   'get_full_catalog',
 ];
 
@@ -39,6 +40,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /invalid video input/, `${file} must validate video upload input`);
   assert.match(source, /video_upload_id_not_found/, `${file} must handle missing Shopee video upload id`);
   assert.match(source, /video_upload_timeout/, `${file} must return timeout while Shopee processes video`);
+  assert.match(source, /wait_for_result === false/, `${file} must support non-blocking Shopee video upload`);
   assert.match(source, /safety < 200/, `${file} must cap full catalog pagination`);
   assert.match(source, /maxPages/, `${file} must support bounded full catalog validation by max_pages`);
   assert.match(source, /maxItems/, `${file} must support bounded full catalog validation by max_items`);

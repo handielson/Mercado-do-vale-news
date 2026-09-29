@@ -1,14 +1,22 @@
 {
-  "version": "v1.2.511-vendas-refresh-seguro",
+  "version": "v1.2.512-shopee-conta-g-cascata",
   "date": "2026-09-29",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.511-vendas-refresh-seguro",
-  "release_vps": "/var/www/mdv-site/releases/20260929-161107-v1-2-511-vendas-refresh-seguro",
+  "tag": "v1.2.512-shopee-conta-g-cascata",
+  "release_vps": "/var/www/mdv-site/releases/20260929-214846-v1-2-512-shopee-conta-g-cascata",
   "release_print3d_vps": null,
-  "summary": "Exibe o PDV sem esperar o histórico dos marketplaces e atualiza novas vendas sem consultas concorrentes.",
+  "summary": "Publica o catalogo Shopee na conta G em cascata, sem duplicar vinculos, com variacoes, videos assincronos, bloqueios regulatórios e contador persistente.",
   "changed_files": [
-    "pages/admin/sales/SalesPage.tsx",
-    "tmp-tests/sales-page-marketplaces-static.test.mjs"
+    "package.json",
+    "scripts/shopee-publish-all.ts",
+    "scripts/shopee-publish-one.ts",
+    "scripts/shopee-vps-tunnel.cjs",
+    "tmp-tests/shopee-publish-all-static.test.mjs",
+    "tmp-tests/shopee-publish-one-static.test.mjs",
+    "tmp-tests/shopee-vps-tunnel-static.test.mjs",
+    "tmp-tests/vps-shopee-catalog-media-full-fastify-static.test.mjs",
+    "vps_server.cjs",
+    "vps_server.js"
   ]
 }
