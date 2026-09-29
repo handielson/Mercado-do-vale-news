@@ -13717,12 +13717,13 @@ fastify.get('/admin/mobile-sales', { preHandler: requireAdminBearerToken }, asyn
 fastify.get('/admin/mobile-sales/:channel/:saleId', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   const channel = String(request.params?.channel || '').trim().toLowerCase();
   const saleId = String(request.params?.saleId || '').trim();
+  const connectionId = String(request.query?.connection_id || 'primary').trim() || 'primary';
   if (!saleId) return reply.code(400).send({ error: 'Venda nao informada.' });
   try {
     let sale = null;
     if (channel === 'pdv') sale = (await loadMobilePdvSalesVps(1, saleId))[0] || null;
     else if (channel === 'online') sale = (await loadMobileOnlineSalesVps(1, saleId))[0] || null;
-    else if (channel === 'shopee') sale = (await loadMobileShopeeSalesVps(1, saleId))[0] || null;
+    else if (channel === 'shopee') sale = (await loadMobileShopeeSalesVps(1, saleId, connectionId))[0] || null;
     else if (channel === 'tiktok') sale = (await loadMobileTikTokSalesVps(1, saleId))[0] || null;
     else return reply.code(400).send({ error: 'Canal de venda invalido.' });
 

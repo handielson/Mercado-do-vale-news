@@ -1,14 +1,19 @@
 {
-  "version": "v1.2.514-shopee-atributos-reais",
+  "version": "v1.2.515-marketplace-sale-details",
   "date": "2026-09-29",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.514-shopee-atributos-reais",
-  "release_vps": "/var/www/mdv-site/releases/20260929-192000-v1-2-514-shopee-atributos-reais",
+  "tag": "v1.2.515-marketplace-sale-details",
+  "release_vps": "/var/www/mdv-site/releases/20260929-200250-v1-2-515-marketplace-sale-details",
   "release_print3d_vps": null,
-  "summary": "Copia atributos reais da conta Shopee MV, aplica garantia confirmada de tres meses e busca a proxima fonte de video quando um endereco antigo retorna 404.",
+  "summary": "Exibe fotos e locais de estoque nos detalhes das vendas, traduz e atualiza o status da Shopee e permite imprimir comprovantes térmicos.",
   "changed_files": [
-    "scripts/shopee-publish-one.ts",
-    "tmp-tests/shopee-publish-one-static.test.mjs"
+    "components/admin/sales/MarketplaceSaleDetailsModal.tsx",
+    "components/admin/sales/SaleDetailsModal.tsx",
+    "components/admin/sales/SaleItemInventoryInfo.tsx",
+    "services/adminMarketplaceSalesService.ts",
+    "utils/printMarketplaceSaleReceipt.ts",
+    "vps_server.cjs",
+    "vps_server.js"
   ]
 }

@@ -25,6 +25,7 @@ export interface MarketplaceSale {
     total_cents: number;
     currency: string;
     occurred_at: string;
+    connection_id?: string;
     details?: {
         items?: MarketplaceSaleItem[];
         payment?: string;
@@ -33,6 +34,26 @@ export interface MarketplaceSale {
         pack_id?: string;
         [key: string]: unknown;
     };
+}
+
+const MARKETPLACE_STATUS_LABELS: Record<string, string> = {
+    UNPAID: 'Aguardando pagamento',
+    TO_CONFIRM_RECEIVE: 'Aguardando recebimento',
+    READY_TO_SHIP: 'Aguardando envio',
+    PROCESSED: 'Pedido processado',
+    RETRY_SHIP: 'Reenvio necessário',
+    SHIPPED: 'Enviado',
+    COMPLETED: 'Concluído',
+    CANCELLED: 'Cancelado',
+    IN_CANCEL: 'Cancelamento solicitado',
+    PAYMENT_FAILED: 'Pagamento recusado',
+    CONFIRMED: 'Pagamento confirmado',
+};
+
+export function formatMarketplaceStatus(status: unknown): string {
+    const raw = String(status || '').trim();
+    if (!raw) return 'Situação não informada';
+    return MARKETPLACE_STATUS_LABELS[raw.toUpperCase()] || raw;
 }
 
 interface SalesResponse {
@@ -64,6 +85,7 @@ function mapSales(
     response: SalesResponse,
     channel: MarketplaceSalesChannel,
     channelLabel: string,
+    connectionId?: string,
 ): MarketplaceSale[] {
     return (Array.isArray(response?.sales) ? response.sales : []).map((sale) => ({
         ...sale,
@@ -75,6 +97,7 @@ function mapSales(
         total_cents: Number(sale.total_cents) || 0,
         currency: String(sale.currency || 'BRL'),
         occurred_at: String(sale.occurred_at || ''),
+        connection_id: connectionId,
     })).filter((sale) => sale.external_id && sale.occurred_at);
 }
 
@@ -89,15 +112,17 @@ export async function getMarketplaceSales(filters: { start_date?: string; end_da
         && connection.authorization_status === 'connected'
         && connection.shopee_shop_id
     ));
-    const requests: Array<{ label: string; channel: MarketplaceSalesChannel; promise: Promise<SalesResponse> }> = [
+    const requests: Array<{ label: string; channel: MarketplaceSalesChannel; connectionId?: string; promise: Promise<SalesResponse> }> = [
         {
             label: 'Shopee MV',
             channel: 'shopee_mv',
+            connectionId: PRIMARY_SHOPEE_CONNECTION_ID,
             promise: vpsClient.get<SalesResponse>(`/admin/mobile-sales?${queryString(filters, { channel: 'shopee', connection_id: PRIMARY_SHOPEE_CONNECTION_ID })}`),
         },
         ...secondaryConnections.map((connection, index) => ({
             label: index === 0 ? 'Shopee G' : `Shopee ${connection.display_name}`,
             channel: 'shopee_g' as const,
+            connectionId: connection.id,
             promise: vpsClient.get<SalesResponse>(`/admin/mobile-sales?${queryString(filters, { channel: 'shopee', connection_id: connection.id })}`),
         })),
         {
@@ -121,9 +146,20 @@ export async function getMarketplaceSales(filters: { start_date?: string; end_da
             warnings.push(`${request.label} indisponível`);
             return;
         }
-        sales.push(...mapSales(result.value, request.channel, request.label));
+        sales.push(...mapSales(result.value, request.channel, request.label, request.connectionId));
         if (result.value.warning) warnings.push(`${request.label}: ${result.value.warning}`);
     });
     sales.sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)));
     return { sales, warnings };
+}
+
+export async function getMarketplaceSaleDetail(sale: MarketplaceSale): Promise<MarketplaceSale> {
+    if (!['shopee_mv', 'shopee_g', 'tiktok'].includes(sale.channel)) return sale;
+    const apiChannel = sale.channel.startsWith('shopee') ? 'shopee' : 'tiktok';
+    const query = sale.connection_id ? `?connection_id=${encodeURIComponent(sale.connection_id)}` : '';
+    const response = await vpsClient.get<{ sale?: Omit<MarketplaceSale, 'channel' | 'channel_label' | 'normalized_status'> }>(
+        `/admin/mobile-sales/${apiChannel}/${encodeURIComponent(sale.external_id)}${query}`,
+    );
+    const refreshed = mapSales({ sales: response?.sale ? [response.sale] : [] }, sale.channel, sale.channel_label, sale.connection_id)[0];
+    return refreshed || sale;
 }

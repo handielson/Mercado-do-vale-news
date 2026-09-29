@@ -34,6 +34,7 @@ import {
 import { SignedWarrantyDocumentSection } from './SignedWarrantyDocumentSection';
 import { formatBrazilDateTime } from '../../../utils/brazilDateTime';
 import { getSaleItemRecordedIdentifier, getWarrantySaleItems } from '../../../utils/warrantySaleItems';
+import { SaleItemInventoryInfo } from './SaleItemInventoryInfo';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -856,8 +857,8 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 const itemView = buildSaleItemPresentation(item, productSpecs, realProfit);
                                 const productAdminHref = item.product_id ? `/admin/products/${encodeURIComponent(item.product_id)}` : '';
                                 return (
-                                    <div key={index} className="flex justify-between items-start py-3 border-b border-slate-100 last:border-0 last:pb-0">
-                                        <div className="flex-1">
+                                    <div key={index} className="flex justify-between items-start gap-4 py-3 border-b border-slate-100 last:border-0 last:pb-0">
+                                        <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2">
                                                 {productAdminHref ? (
                                                     <a
@@ -898,6 +899,14 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                                 <span>Custo un.: <strong className="text-slate-700">{formatCurrency(itemView.unitCost)}</strong></span>
                                                 <span>Custo item: <strong className="text-slate-700">{formatCurrency(itemView.itemCost)}</strong></span>
                                                 <span>Lucro item: <strong className={itemView.itemProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}>{formatCurrency(itemView.itemProfit)}</strong></span>
+                                            </div>
+                                            <div className="mt-3">
+                                                <SaleItemInventoryInfo
+                                                    productId={item.product_id}
+                                                    sku={item.product_sku}
+                                                    name={item.product_name}
+                                                    imageUrl={item.product_image_url}
+                                                />
                                             </div>
                                         </div>
                                         <div className="text-right">
