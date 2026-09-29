@@ -737,8 +737,26 @@ export async function prepare(ctx: ApiContext, options: CliOptions): Promise<any
     });
     const built = await buildAttributePayload(ctx, attributes, defaults, sourceItem ? undefined : fieldTemplate?.strict_attribute_ids);
     const preservedSource = validatedSourceAttributes(attributes, attributeList);
-    const mergedById = new Map(built.payload.map((attribute: any) => [Number(attribute.attribute_id), attribute]));
+    const mandatoryAttributeIds = new Set(attributes.filter((attribute) => attribute.mandatory).map((attribute) => Number(attribute.attribute_id)));
+    const builtAttributes = sourceItem
+      ? built.payload.filter((attribute: any) => mandatoryAttributeIds.has(Number(attribute.attribute_id)))
+      : built.payload;
+    const mergedById = new Map(builtAttributes.map((attribute: any) => [Number(attribute.attribute_id), attribute]));
     preservedSource.forEach((attribute: any) => mergedById.set(Number(attribute.attribute_id), attribute));
+    const warrantyDuration = attributes.find((attribute) => Number(attribute.attribute_id) === 100121);
+    const threeMonths = warrantyDuration?.attribute_value_list?.find((option: any) => normalizeText(option.raw_name || option.original_value_name || option.label) === '3 months');
+    if (threeMonths) {
+      mergedById.set(100121, {
+        attribute_id: 100121,
+        attribute_value_list: [{ value_id: Number(threeMonths.value_id) || 799, original_value_name: '3 Months' }],
+      });
+    }
+    if (attributes.some((attribute) => Number(attribute.attribute_id) === 100370)) {
+      mergedById.set(100370, {
+        attribute_id: 100370,
+        attribute_value_list: [{ value_id: 0, original_value_name: 'Supplier Warranty' }],
+      });
+    }
     attributeList = [...mergedById.values()];
     const invalidOptionalRegulatoryIds = new Set(attributes
       .filter((attribute) => !attribute.mandatory && (normalizeText(attribute.label).includes('homologacao') || Number(attribute.attribute_id) === 101197))
@@ -822,6 +840,7 @@ export function printPreview(prepared: any, execute: boolean): void {
       attributes: prepared.payload.attribute_list.length,
       logistics: prepared.payload.logistic_info.length,
     },
+    ...(process.env.SHOPEE_DEBUG_PAYLOAD === '1' ? { debug_attribute_list: prepared.payload.attribute_list } : {}),
     blockers: prepared.blockers,
   }, null, 2));
 }
@@ -924,6 +943,7 @@ function isRetryableVideoSourceError(error: unknown): boolean {
   const message = normalizeText((error as Error)?.message || error);
   return /api (404|408|429|500|502|503|504)/.test(message)
     || message.includes('remote media')
+    || message.includes('download local do video retornou http')
     || message.includes('processamento do video falhou')
     || message.includes('timeout')
     || message.includes('temporarily unavailable');

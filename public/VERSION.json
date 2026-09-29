@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.513-shopee-video-compat",
+  "version": "v1.2.514-shopee-atributos-reais",
   "date": "2026-09-29",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.513-shopee-video-compat",
-  "release_vps": "/var/www/mdv-site/releases/20260929-190339-v1-2-513-shopee-video-compat",
+  "tag": "v1.2.514-shopee-atributos-reais",
+  "release_vps": "/var/www/mdv-site/releases/20260929-192000-v1-2-514-shopee-atributos-reais",
   "release_print3d_vps": null,
-  "summary": "Normaliza videos curtos rejeitados pela Shopee em uma copia temporaria compativel, preservando o arquivo original do Synology.",
+  "summary": "Copia atributos reais da conta Shopee MV, aplica garantia confirmada de tres meses e busca a proxima fonte de video quando um endereco antigo retorna 404.",
   "changed_files": [
     "scripts/shopee-publish-one.ts",
     "tmp-tests/shopee-publish-one-static.test.mjs"

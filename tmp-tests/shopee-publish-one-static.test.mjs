@@ -82,10 +82,14 @@ test('video upload can fall back to locally downloaded data', () => {
   assert.match(source, /40 \* 1024 \* 1024/);
   assert.match(source, /tpad=stop_mode=clone:stop_duration=2/);
   assert.match(source, /processamento do video falhou/);
+  assert.match(source, /download local do video retornou http/);
 });
 
 test('clone revalidates required attributes and keeps video fallbacks', () => {
   assert.match(source, /validatedSourceAttributes/);
+  assert.match(source, /built\.payload\.filter\(\(attribute: any\) => mandatoryAttributeIds\.has/);
+  assert.match(source, /original_value_name: '3 Months'/);
+  assert.match(source, /original_value_name: 'Supplier Warranty'/);
   assert.match(source, /safeRequiredAttributeDefaults/);
   assert.match(source, /invalidRegulatoryAttributeValues/);
   assert.match(source, /valor fora da lista oficial/);
