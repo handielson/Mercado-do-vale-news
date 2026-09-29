@@ -28,4 +28,4 @@ mercadoLivreService.discoverProducts = async cursor => ({sellerId:'7',total:3,ne
 ]});
 mercadoLivreService.findCandidates = async () => ({items:[candidate]});
 mercadoLivreService.linkProduct = async input => { if(input.itemId==='MLB2') throw Error('Conflito simulado: vínculo existente preservado.'); return {ok:true}; };
-createRoot(document.getElementById('root')!).render(<BrowserRouter><main className="m-6 max-w-4xl rounded-xl border p-4"><h1>Teste local · sem dados reais</h1>{params.has('review') ? <MercadoLivreLinkReview connected /> : <ProductPublicationChannels product={product} shopeeLinked tiktokStatus="PENDING" onShopee={() => {}} onTikTok={() => {}} />}</main></BrowserRouter>);
+createRoot(document.getElementById('root')!).render(<BrowserRouter><main className="m-6 max-w-4xl rounded-xl border p-4"><h1>Teste local · sem dados reais</h1>{params.has('review') ? <MercadoLivreLinkReview connected /> : <ProductPublicationChannels product={product} shopeeLinked shopeeStoreCodes={['M', 'G']} tiktokStatus="PENDING" onShopee={() => {}} onTikTok={() => {}} />}</main></BrowserRouter>);

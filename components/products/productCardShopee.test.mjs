@@ -9,11 +9,19 @@ import {
 const syncedState = getShopeeButtonVisualState({ shopee_item_id: 987654321 });
 assert.equal(syncedState.isSynced, true);
 assert.equal(syncedState.itemId, 987654321);
+assert.deepEqual(syncedState.storeCodes, ['M']);
 assert.match(syncedState.title, /Shopee/i);
+
+const multiStoreState = getShopeeButtonVisualState({ shopee_store_codes: ['G', 'M', 'G'] });
+assert.equal(multiStoreState.isSynced, true);
+assert.equal(multiStoreState.itemId, null);
+assert.deepEqual(multiStoreState.storeCodes, ['G', 'M']);
+assert.match(multiStoreState.title, /G e M/);
 
 const pendingState = getShopeeButtonVisualState({ shopee_item_id: null });
 assert.equal(pendingState.isSynced, false);
 assert.equal(pendingState.itemId, null);
+assert.deepEqual(pendingState.storeCodes, []);
 
 assert.equal(
   buildShopeeProductUrl('12345', 987654321),
@@ -95,6 +103,8 @@ assert.deepEqual(mapped, {
   shipping_height: 4,
   dimensions: { width_cm: 9, height_cm: 4, depth_cm: 18 },
   model_id: null,
+  shopee_category_id: null,
+  shopee_category_name: null,
 });
 
 console.log('productCardShopee.test.mjs: ok');

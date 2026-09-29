@@ -35,6 +35,26 @@ interface ProductCardProps {
     tiktokProductLink?: TikTokShopProductLink | null;
 }
 
+function ShopeeStoreBadges({ codes }: { codes: string[] }) {
+    if (codes.length === 0) return null;
+    return (
+        <span className="absolute -right-1.5 -top-2 flex gap-0.5" aria-label={`Lojas Shopee: ${codes.join(', ')}`}>
+            {codes.map((code) => (
+                <span
+                    key={code}
+                    className={cn(
+                        'flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black ring-2 ring-white',
+                        code === 'G' ? 'bg-fuchsia-600 text-white' : 'bg-orange-500 text-white',
+                    )}
+                    title={code === 'G' ? 'Shopee Glaucia' : 'Shopee Mercado do Vale'}
+                >
+                    {code}
+                </span>
+            ))}
+        </span>
+    );
+}
+
 type VideoUploadPhase = 'idle' | 'uploading' | 'processing' | 'verifying' | 'success' | 'error';
 
 type VideoUploadState = {
@@ -361,6 +381,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         const parsed = Number(product.shopee_item_id);
         return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     });
+    const [shopeeStoreCodes, setShopeeStoreCodes] = useState<Array<'M' | 'G'>>(
+        () => Array.isArray(product.shopee_store_codes) ? product.shopee_store_codes : [],
+    );
     const [isShopeeModalOpen, setIsShopeeModalOpen] = useState(false);
     const [isTikTokModalOpen, setIsTikTokModalOpen] = useState(false);
     const [currentTikTokProductLink, setCurrentTikTokProductLink] = useState<TikTokShopProductLink | null>(
@@ -370,7 +393,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [shopeeCompany, setShopeeCompany] = useState<Company | null>(null);
     const [shopeeModalProductSource, setShopeeModalProductSource] = useState<Product & Record<string, any>>(product as Product & Record<string, any>);
 
-    const shopeeVisualState = getShopeeButtonVisualState({ shopee_item_id: shopeeItemId });
+    const shopeeVisualState = getShopeeButtonVisualState({
+        shopee_item_id: shopeeItemId,
+        shopee_store_codes: shopeeStoreCodes,
+    });
     const currentTikTokStatus = String(currentTikTokProductLink?.status || '').toUpperCase();
     const hasTikTokLink = Boolean(currentTikTokProductLink?.tiktok_product_id);
     const isTikTokInheritedLink = Boolean(
@@ -383,6 +409,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     useEffect(() => {
         setCurrentTikTokProductLink(tiktokProductLink);
     }, [tiktokProductLink]);
+    useEffect(() => {
+        setShopeeStoreCodes(Array.isArray(product.shopee_store_codes) ? product.shopee_store_codes : []);
+    }, [product.shopee_store_codes]);
     const shopeeModalProduct = mapProductToShopeeLocalProduct(shopeeModalProductSource as Product & Record<string, any>) as LocalProduct;
     const emptyShopeeHistory: ShopeeProduct[] = [];
     const currentStockQuantity = Math.max(0, Number(currentStock || 0));
@@ -746,7 +775,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
 
     const refreshShopeeLinkState = async (): Promise<number | null> => {
         try {
-            const itemId = await shopeeProductService.getItemIdByProductId(product.id);
+            const [itemId, storeCodeMap] = await Promise.all([
+                shopeeProductService.getItemIdByProductId(product.id),
+                shopeeProductService.getStoreCodesByProductIdMap(),
+            ]);
+            setShopeeStoreCodes(storeCodeMap.get(String(product.id)) || []);
             if (itemId) {
                 setShopeeItemId(itemId);
                 return itemId;
@@ -775,6 +808,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         });
 
         setShopeeItemId(null);
+        setShopeeStoreCodes((current) => current.filter((code) => code !== 'M'));
     };
 
     const openShopeeSyncModal = async () => {
@@ -1321,9 +1355,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             )}
                             title={isPreparingShopeeModal ? 'Preparando sincronizacao da Shopee...' : shopeeVisualState.title}
                         >
-                            {shopeeVisualState.isSynced && (
-                                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
-                            )}
+                            <ShopeeStoreBadges codes={shopeeVisualState.storeCodes} />
                             {isPreparingShopeeModal ? (
                                 <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
                             ) : (
@@ -1546,7 +1578,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             <p className="font-mono text-[10px] text-slate-400 mt-0.5">SKU: {product.sku}</p>
                         )}
                         {/* Badge Pai / Variação */}
-                        <ProductPublicationChannels product={product} shopeeLinked={shopeeVisualState.isSynced} tiktokStatus={hasTikTokLink ? currentTikTokStatus : ''} onShopee={handleOpenShopeeModal} onTikTok={() => setIsTikTokModalOpen(true)} />
+                        <ProductPublicationChannels product={product} shopeeLinked={shopeeVisualState.isSynced} shopeeStoreCodes={shopeeVisualState.storeCodes} tiktokStatus={hasTikTokLink ? currentTikTokStatus : ''} onShopee={handleOpenShopeeModal} onTikTok={() => setIsTikTokModalOpen(true)} />
                         {product.parent_id ? (
                             <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200">
                                 ↳ Variação
@@ -1601,9 +1633,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             )}
                             title={isPreparingShopeeModal ? 'Preparando sincronizacao da Shopee...' : shopeeVisualState.title}
                         >
-                            {shopeeVisualState.isSynced && (
-                                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
-                            )}
+                            <ShopeeStoreBadges codes={shopeeVisualState.storeCodes} />
                             {isPreparingShopeeModal ? (
                                 <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
                             ) : (

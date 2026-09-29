@@ -29,12 +29,18 @@ export function buildShopeeProductUrl(shopId, itemId) {
 
 export function getShopeeButtonVisualState(product) {
   const itemId = normalizePositiveNumber(product?.shopee_item_id);
+  const storeCodes = [...new Set(normalizeStringArray(product?.shopee_store_codes)
+    .map((code) => code.toUpperCase())
+    .filter((code) => code === 'M' || code === 'G'))];
+  if (itemId !== null && !storeCodes.includes('M')) storeCodes.unshift('M');
+  const isSynced = itemId !== null || storeCodes.length > 0;
 
   return {
-    isSynced: itemId !== null,
+    isSynced,
     itemId,
-    title: itemId !== null
-      ? `Produto sincronizado na Shopee (#${itemId})`
+    storeCodes,
+    title: isSynced
+      ? `Produto sincronizado na Shopee (${storeCodes.join(' e ')})${itemId !== null ? ` (#${itemId})` : ''}`
       : 'Sincronizar com Shopee',
   };
 }

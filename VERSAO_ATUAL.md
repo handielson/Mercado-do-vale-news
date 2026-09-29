@@ -1,11 +1,13 @@
-# v1.2.505-shopee-connections-proxy
+# v1.2.506-shopee-contas-mg
 
-Data: 2026-09-28. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.505-shopee-connections-proxy
-Release principal: /var/www/mdv-site/releases/20260928-233743-v1-2-505-shopee-connections-proxy
+Data: 2026-09-29. Status: pronta para publicacao. Branch: main.
+Tag: v1.2.506-shopee-contas-mg
+Release principal: /var/www/mdv-site/releases/20260929-003309-v1-2-506-shopee-contas-mg
 
-Corrige o cadastro de lojas Shopee adicionais: o frontend e a API agora usam a rota `/shopee-connections`, compativel com o proxy administrativo que reserva o prefixo `/api`.
+Os produtos vinculados a loja oficial Mercado do Vale passam a exibir o selo `M`; os vinculados a conta adicional da Glaucia exibem `G`. Um mesmo produto pode manter vinculos independentes nas duas lojas e exibir os dois selos.
 
-Esta correcao somente permite criar a conexao pendente e iniciar o OAuth. Nenhum produto e enviado, alterado ou excluido.
+Os vinculos existentes sao preservados como loja principal. A sincronizacao de estoque resolve as credenciais da conta correspondente antes de atualizar cada anuncio.
 
-Validacoes: teste regressivo da rota multiloja, sintaxe das duas variantes da API, teste de estoque sugerido pelo preflight e build do painel.
+Tambem foi incluido o indicador visivel `Conectada` nas lojas Shopee adicionais autorizadas.
+
+Validacoes: testes regressivos de multiloja, selos, vinculos e estoque; sintaxe das duas variantes da API; trava contra Supabase e build do painel.

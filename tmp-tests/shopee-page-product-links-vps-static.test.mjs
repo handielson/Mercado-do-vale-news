@@ -31,8 +31,11 @@ for (const method of [
 
 assert.match(
   service,
-  /\/table-data\/shopee_products\/\$\{encodeURIComponent\(productId\)\}\?pk=product_id/,
-  'Shopee product link service should update product links by product_id on the VPS',
+  /\/table-data\/shopee_products\/\$\{encodeURIComponent\(String\(existing\.id\)\)\}\?pk=id/,
+  'Shopee product link service should update the exact store-scoped row by id on the VPS',
 );
+
+assert.match(service, /connection_id:\s*normalizedConnectionId/, 'Shopee product links must persist their store connection');
+assert.match(service, /getStoreCodesByProductIdMap/, 'Shopee product links must expose M and G store codes');
 
 console.log('Shopee page product link VPS static checks passed');

@@ -11,8 +11,8 @@ function loadLinks() {
   return pendingLinks;
 }
 
-export function ProductPublicationChannels({ product, shopeeLinked, tiktokStatus, onShopee, onTikTok }: {
-  product: Product; shopeeLinked: boolean; tiktokStatus: string; onShopee: (event: MouseEvent) => void; onTikTok: () => void;
+export function ProductPublicationChannels({ product, shopeeLinked, shopeeStoreCodes, tiktokStatus, onShopee, onTikTok }: {
+  product: Product; shopeeLinked: boolean; shopeeStoreCodes: string[]; tiktokStatus: string; onShopee: (event: MouseEvent) => void; onTikTok: () => void;
 }) {
   const [offers, setOffers] = useState<StorefrontOffer[] | null>(null);
   const [ml, setMl] = useState<Array<{ item_id: string; variation_id?: string; last_error?: string | null }> | null>(null);
@@ -46,7 +46,8 @@ export function ProductPublicationChannels({ product, shopeeLinked, tiktokStatus
       <span className="rounded bg-blue-100 px-2 py-1 text-blue-800">Mercado do Vale: {product.hide_from_catalog ? 'Oculto no cadastro' : 'Catálogo atual'}</span>
       <span className="rounded bg-violet-100 px-2 py-1 text-violet-800">Loja 3D: {status3d}</span>
       <span className="rounded bg-yellow-100 px-2 py-1 text-yellow-900">Mercado Livre: {mlStatus}</span>
-      {shopeeLinked && <span className="rounded bg-orange-100 px-2 py-1 text-orange-900">Shopee: vinculado</span>}
+      {shopeeStoreCodes.includes('M') && <span className="rounded bg-orange-100 px-2 py-1 font-semibold text-orange-900">Shopee M</span>}
+      {shopeeStoreCodes.includes('G') && <span className="rounded bg-fuchsia-100 px-2 py-1 font-semibold text-fuchsia-900">Shopee G</span>}
       {tiktokStatus && <span className="rounded bg-slate-100 px-2 py-1">TikTok: {['ACTIVE', 'ACTIVATE'].includes(tiktokStatus) ? 'Publicado' : tiktokStatus === 'PENDING' ? 'Em análise' : tiktokStatus}</span>}
     </div>
     <details className="text-xs"><summary className="cursor-pointer font-semibold text-slate-700">Publicações e canais de venda</summary>
@@ -54,7 +55,7 @@ export function ProductPublicationChannels({ product, shopeeLinked, tiktokStatus
         <li><strong>Mercado do Vale</strong><p>{product.hide_from_catalog ? 'Oculto no cadastro' : 'Visibilidade controlada pelo catálogo atual'}</p><Link className="text-blue-700 underline" to={`/admin/products/${product.id}`}>Gerenciar cadastro e visibilidade</Link></li>
         <li><strong>Loja 3D — {status3d}</strong><p>Preço e visibilidade próprios, configurados por SKU.</p></li>
         <li><strong>Mercado Livre — {mlStatus}</strong>{ml?.map(item => <p key={`${item.item_id}-${item.variation_id}`}>{item.item_id}{item.variation_id ? ` · variação ${item.variation_id}` : ''}{item.last_error ? ' · sincronização requer atenção' : ''}</p>)}<p>Vínculo salvo não confirma anúncio ativo. A criação automática de anúncios ainda não está disponível.</p><Link className="text-blue-700 underline" to={`/admin/settings/mercado-livre?productId=${encodeURIComponent(product.id)}&sku=${encodeURIComponent(product.sku || '')}`}>Gerenciar Mercado Livre</Link></li>
-        <li><button type="button" className="text-orange-700 underline" onClick={onShopee}>Gerenciar Shopee{shopeeLinked ? ' · vinculado' : ''}</button></li>
+        <li><button type="button" className="text-orange-700 underline" onClick={onShopee}>Gerenciar Shopee{shopeeLinked ? ` · ${shopeeStoreCodes.join(' + ') || 'vinculado'}` : ''}</button></li>
         <li><button type="button" className="text-slate-800 underline" onClick={onTikTok}>Gerenciar TikTok Shop</button></li>
       </ul>
       {failed && <p role="status" className="mt-2 text-amber-800">Não foi possível consultar todos os canais. Isso não significa que o produto não está publicado.</p>}

@@ -99,7 +99,8 @@ function ChannelBadges({ products, tiktokProductLinks, mercadoLivreLinkedIds }: 
   const has = {
     mdv: products.some(product => !product.hide_from_catalog && product.status === 'active'),
     print3d: products.some(product => Boolean(product.is_print3d)),
-    shopee: products.some(product => Number(product.shopee_item_id) > 0),
+    shopeeM: products.some(product => Number(product.shopee_item_id) > 0 || product.shopee_store_codes?.includes('M')),
+    shopeeG: products.some(product => product.shopee_store_codes?.includes('G')),
     tiktok: products.some(product => Boolean(tiktokProductLinks[product.id]?.tiktok_product_id)),
     ml: products.some(product => mercadoLivreLinkedIds.has(product.id)),
   };
@@ -110,7 +111,8 @@ function ChannelBadges({ products, tiktokProductLinks, mercadoLivreLinkedIds }: 
   return <div className="flex flex-wrap gap-1">
     {badge('MDV', has.mdv, 'bg-blue-100 text-blue-800')}
     {badge('3D', has.print3d, 'bg-violet-100 text-violet-800')}
-    {badge('Shopee', has.shopee, 'bg-orange-100 text-orange-800')}
+    {badge('M', has.shopeeM, 'bg-orange-100 text-orange-800')}
+    {badge('G', has.shopeeG, 'bg-fuchsia-100 text-fuchsia-800')}
     {badge('TikTok', has.tiktok, 'bg-slate-800 text-white')}
     {badge('ML', has.ml, 'bg-yellow-100 text-yellow-900')}
   </div>;

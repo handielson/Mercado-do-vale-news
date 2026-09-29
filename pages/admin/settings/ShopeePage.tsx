@@ -2126,12 +2126,19 @@ export default function ShopeePage() {
                                                         : 'Aguardando autorização do titular'}
                                                 </p>
                                             </div>
-                                            <button
-                                                onClick={() => handleConnectionOAuth(connection)}
-                                                className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-50"
-                                            >
-                                                {connection.authorization_status === 'connected' ? 'Reconectar' : 'Autorizar loja'}
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                {connection.authorization_status === 'connected' && (
+                                                    <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200 uppercase">
+                                                        Conectada
+                                                    </span>
+                                                )}
+                                                <button
+                                                    onClick={() => handleConnectionOAuth(connection)}
+                                                    className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-50"
+                                                >
+                                                    {connection.authorization_status === 'connected' ? 'Reconectar' : 'Autorizar loja'}
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

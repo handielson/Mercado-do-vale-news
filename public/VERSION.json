@@ -1,16 +1,22 @@
 {
-  "version": "v1.2.505-shopee-connections-proxy",
-  "date": "2026-09-28",
+  "version": "v1.2.506-shopee-contas-mg",
+  "date": "2026-09-29",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.505-shopee-connections-proxy",
-  "release_vps": "/var/www/mdv-site/releases/20260928-233743-v1-2-505-shopee-connections-proxy",
+  "tag": "v1.2.506-shopee-contas-mg",
+  "release_vps": "/var/www/mdv-site/releases/20260929-003309-v1-2-506-shopee-contas-mg",
   "release_print3d_vps": null,
-  "summary": "Corrige o cadastro de lojas Shopee adicionais para usar uma rota compatível com o proxy administrativo.",
+  "summary": "Identifica produtos Shopee por loja com os selos M e G e isola vinculos e estoque por conta.",
   "changed_files": [
-    "services/shopeeConnections.ts",
+    "components/products/ProductCard.tsx",
+    "components/products/ProductFamilyList.tsx",
+    "components/products/ProductPublicationChannels.tsx",
+    "components/products/productCardShopee.js",
+    "pages/admin/settings/ShopeePage.tsx",
+    "services/products.ts",
+    "services/shopeeProducts.ts",
+    "types/product.ts",
     "vps_server.js",
-    "vps_server.cjs",
-    "tmp-tests/shopee-multiple-connections-static.test.mjs"
+    "vps_server.cjs"
   ]
 }

@@ -164,6 +164,7 @@ export interface Product {
 
     // Shopee Integration
     shopee_item_id?: number;   // ID do item na Shopee (item_id)
+    shopee_store_codes?: Array<'M' | 'G'>; // M = Mercado do Vale; G = Glaucia
 
     // Media Add-ons
     video_url?: string;        // URL do vídeo do produto (YouTube, Synology, etc.)
@@ -243,6 +244,7 @@ export interface ProductInput {
     bling_parent_id?: number;
     // Shopee Integration
     shopee_item_id?: number;
+    shopee_store_codes?: Array<'M' | 'G'>;
     // Media Add-ons
     video_url?: string;
     marketing_background_url?: string;

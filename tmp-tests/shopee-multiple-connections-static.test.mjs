@@ -24,5 +24,10 @@ assert.doesNotMatch(
 );
 assert.match(page, /Lojas Shopee adicionais/, 'admin page must expose additional stores');
 assert.match(page, /connection_id=\$\{encodeURIComponent\(connection\.id\)\}/, 'OAuth must target the selected additional store');
+assert.match(
+    page,
+    /connection\.authorization_status === 'connected'[\s\S]*?>\s*Conectada\s*<\/span>/,
+    'connected additional stores must show a visible connected badge',
+);
 
 console.log('shopee multiple connections static checks ok');
