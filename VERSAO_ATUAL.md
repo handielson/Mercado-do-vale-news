@@ -1,11 +1,11 @@
-# v1.2.512-shopee-conta-g-cascata
+# v1.2.513-shopee-video-compat
 
 Data: 2026-09-29. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.512-shopee-conta-g-cascata
-Release principal: /var/www/mdv-site/releases/20260929-214846-v1-2-512-shopee-conta-g-cascata
+Tag: v1.2.513-shopee-video-compat
+Release principal: /var/www/mdv-site/releases/20260929-190339-v1-2-513-shopee-video-compat
 
-Esta versao conclui o fluxo controlado de copia dos anuncios da conta Shopee M para a conta G. O envio individual e a cascata preservam variacoes, atributos, imagens e video; excluem anuncios ja vinculados; reconciliam anuncios que ja existem na Shopee; registram sucesso, bloqueio, erro, restante e previsao de termino em checkpoint persistente.
+Quando a Shopee rejeita o processamento do video original, o publicador gera uma copia MP4 H.264 temporaria, estende o quadro final por dois segundos e tenta novamente. O arquivo original no Synology nao e alterado e os temporarios sao removidos automaticamente.
 
-O upload de video passa a retornar o identificador logo apos concluir o envio dos bytes. O cliente consulta o processamento da Shopee separadamente, evitando o limite do proxy. Bloqueios regulatorios continuam seguros: dados ANATEL, ANVISA ou INMETRO nao sao inventados.
+O comportamento foi validado com o SKU XD540: o original de 8,93 segundos foi rejeitado, a copia compativel de 10,93 segundos foi aceita e o item 58269311232 foi publicado na conta G com video, estoque e vinculo confirmados.
 
-Validacoes: testes estaticos focados do envio individual, cascata, tunel e API de midia; sintaxe dos scripts e servidores; build de producao; saude publica da API e teste real controlado do SKU XD540.
+Validacoes: 12 testes focados do publicador Shopee, conversao real com FFmpeg e publicacao controlada do XD540.

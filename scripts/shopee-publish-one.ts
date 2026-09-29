@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { config as loadEnv } from 'dotenv';
+import ffmpegPath from 'ffmpeg-static';
 import {
   alignShopeeAttributeDefaultsToOptions,
   analyzeShopeeTitleSafety,
@@ -860,7 +864,10 @@ async function uploadVideo(ctx: ApiContext, video: any): Promise<string> {
       const poll = await apiRequest<any>(ctx, withConnection(`/api/shopee-catalog?action=get_video_upload_result&video_upload_id=${encodeURIComponent(String(id))}`, ctx.connectionId));
       const status = normalizeText(poll?.response?.status || poll?.response?.video_upload_result?.status || poll?.status);
       if (['success', 'succeeded', 'complete', 'completed'].includes(status) || poll?.response?.video_info) return String(id);
-      if (['failed', 'failure', 'error'].includes(status)) throw new Error(poll?.message || `Processamento do video falhou com status ${status}.`);
+      if (['failed', 'failure', 'error'].includes(status)) {
+        const detail = JSON.stringify(poll?.response?.video_upload_result || poll?.response || poll).slice(0, 1000);
+        throw new Error(poll?.message || `Processamento do video falhou com status ${status}: ${detail}`);
+      }
     } catch (error) {
       lastError = error;
       if (!isVideoStillProcessing(error) && !normalizeText((error as Error)?.message).includes('invalid or expired vid')) throw error;
@@ -876,13 +883,48 @@ async function downloadVideoAsDataUrl(video: any): Promise<any> {
   if (!mimeType.startsWith('video/')) throw new Error(`Download local retornou tipo inesperado: ${mimeType}.`);
   const buffer = Buffer.from(await response.arrayBuffer());
   if (buffer.length === 0 || buffer.length > 40 * 1024 * 1024) throw new Error(`Video fora do limite seguro para fallback local: ${buffer.length} bytes.`);
-  return { ...video, video_data_url: `data:${mimeType};base64,${buffer.toString('base64')}` };
+  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-shopee-video-'));
+  const inputPath = path.join(tempDirectory, 'source.mp4');
+  const outputPath = path.join(tempDirectory, 'shopee-compatible.mp4');
+  try {
+    fs.writeFileSync(inputPath, buffer);
+    const conversionArgs = [
+      '-y', '-i', inputPath,
+      '-vf', 'tpad=stop_mode=clone:stop_duration=2',
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', '30',
+      '-movflags', '+faststart', '-an', outputPath,
+    ];
+    const executables = [...new Set([
+      String(process.env.FFMPEG_PATH || '').trim(),
+      process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg',
+      String(ffmpegPath || '').trim(),
+    ].filter(Boolean))];
+    const failures: string[] = [];
+    let converted = false;
+    for (const executable of executables) {
+      const conversion = spawnSync(executable, conversionArgs, { encoding: 'utf8', timeout: 120000, windowsHide: true });
+      if (conversion.status === 0 && fs.existsSync(outputPath)) {
+        converted = true;
+        break;
+      }
+      failures.push(`${executable}: ${conversion.error?.message || `status=${conversion.status} signal=${conversion.signal || '-'}`} ${String(conversion.stderr || '').slice(-300)}`);
+    }
+    if (!converted) throw new Error(`Conversao do video para o padrao Shopee falhou: ${failures.join(' | ').slice(-1200)}`);
+    const compatible = fs.readFileSync(outputPath);
+    if (compatible.length === 0 || compatible.length > 40 * 1024 * 1024) {
+      throw new Error(`Video convertido fora do limite seguro: ${compatible.length} bytes.`);
+    }
+    return { ...video, video_data_url: `data:video/mp4;base64,${compatible.toString('base64')}` };
+  } finally {
+    fs.rmSync(tempDirectory, { recursive: true, force: true });
+  }
 }
 
 function isRetryableVideoSourceError(error: unknown): boolean {
   const message = normalizeText((error as Error)?.message || error);
   return /api (404|408|429|500|502|503|504)/.test(message)
     || message.includes('remote media')
+    || message.includes('processamento do video falhou')
     || message.includes('timeout')
     || message.includes('temporarily unavailable');
 }

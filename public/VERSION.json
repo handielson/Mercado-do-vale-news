@@ -1,22 +1,14 @@
 {
-  "version": "v1.2.512-shopee-conta-g-cascata",
+  "version": "v1.2.513-shopee-video-compat",
   "date": "2026-09-29",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.512-shopee-conta-g-cascata",
-  "release_vps": "/var/www/mdv-site/releases/20260929-214846-v1-2-512-shopee-conta-g-cascata",
+  "tag": "v1.2.513-shopee-video-compat",
+  "release_vps": "/var/www/mdv-site/releases/20260929-190339-v1-2-513-shopee-video-compat",
   "release_print3d_vps": null,
-  "summary": "Publica o catalogo Shopee na conta G em cascata, sem duplicar vinculos, com variacoes, videos assincronos, bloqueios regulatórios e contador persistente.",
+  "summary": "Normaliza videos curtos rejeitados pela Shopee em uma copia temporaria compativel, preservando o arquivo original do Synology.",
   "changed_files": [
-    "package.json",
-    "scripts/shopee-publish-all.ts",
     "scripts/shopee-publish-one.ts",
-    "scripts/shopee-vps-tunnel.cjs",
-    "tmp-tests/shopee-publish-all-static.test.mjs",
-    "tmp-tests/shopee-publish-one-static.test.mjs",
-    "tmp-tests/shopee-vps-tunnel-static.test.mjs",
-    "tmp-tests/vps-shopee-catalog-media-full-fastify-static.test.mjs",
-    "vps_server.cjs",
-    "vps_server.js"
+    "tmp-tests/shopee-publish-one-static.test.mjs"
   ]
 }

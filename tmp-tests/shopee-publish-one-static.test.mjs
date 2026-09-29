@@ -80,6 +80,8 @@ test('video upload can fall back to locally downloaded data', () => {
   assert.match(source, /downloadVideoAsDataUrl/);
   assert.match(source, /video_data_url/);
   assert.match(source, /40 \* 1024 \* 1024/);
+  assert.match(source, /tpad=stop_mode=clone:stop_duration=2/);
+  assert.match(source, /processamento do video falhou/);
 });
 
 test('clone revalidates required attributes and keeps video fallbacks', () => {
