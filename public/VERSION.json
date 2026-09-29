@@ -15,6 +15,7 @@
     "services/mercadoLivreServer.cjs",
     "tmp-tests/deploy-sales-marketplaces-static.test.mjs",
     "tmp-tests/sales-page-marketplaces-static.test.mjs",
+    "vps_server.js",
     "vps_server.cjs"
   ]
 }

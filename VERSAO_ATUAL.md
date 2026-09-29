@@ -8,6 +8,6 @@ A tela `/admin/sales` passa a reunir as vendas do PDV, Shopee MV, Shopee G, Merc
 
 Os indicadores de faturamento, custo e lucro real continuam restritos ao PDV, pois os carregadores de marketplace nao fornecem custo real comparavel. Shopee consulta separadamente a conta principal e as conexoes adicionais; TikTok e Mercado Livre usam paginacao oficial.
 
-A API sera publicada pelo modo seletivo `--sales-marketplaces-only`, que troca somente `vps_server.cjs` e `services/mercadoLivreServer.cjs`, preservando a automacao local de publicacao Shopee G em execucao.
+A API sera publicada pelo modo seletivo `--sales-marketplaces-only`, que troca somente o runtime ativo `server.js` e `services/mercadoLivreServer.cjs`, preservando a automacao local de publicacao Shopee G em execucao.
 
 Validacoes: testes focados da listagem e do deploy seletivo; testes de vendas, Mercado Livre e TikTok; verificacao de sintaxe; build de producao; validacao publica do site, versao e API.

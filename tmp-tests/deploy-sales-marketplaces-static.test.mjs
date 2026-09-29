@@ -8,7 +8,8 @@ assert.ok(start >= 0 && end > start, 'selective sales marketplace deploy mode mu
 const block = source.slice(start, end);
 
 assert.match(block, /pm_exec_path/, 'selective deploy must validate the active PM2 runtime');
-assert.match(block, /vps_server\.cjs/, 'selective deploy must publish the active sales API server');
+assert.match(block, /server\.js/, 'selective deploy must support the active production server runtime');
+assert.match(block, /localRuntime/, 'selective deploy must select the source matching the active PM2 runtime');
 assert.match(block, /mercadoLivreServicePath/, 'selective deploy must publish the Mercado Livre sales route');
 assert.match(block, /\.next\.cjs/, 'selective deploy must validate staged remote files before replacing runtime files');
 assert.match(block, /Sales marketplaces backup/, 'selective deploy must preserve a rollback backup');
