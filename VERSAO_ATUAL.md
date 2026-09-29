@@ -1,9 +1,9 @@
-# v1.2.516-n8n-edited-messages
+# v1.2.517-marketplace-sales-cache-stock
 
 Data: 2026-09-29. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.516-n8n-edited-messages
-Release principal: `/var/www/mdv-site/releases/20260929-201220-v1-2-516-n8n-edited-messages`.
+Tag: v1.2.517-marketplace-sales-cache-stock
+Release principal: `/var/www/mdv-site/releases/20260929-202147-v1-2-517-marketplace-sales-cache-stock`.
 
-O bot do WhatsApp passa a interpretar o texto substituto quando o cliente edita uma mensagem. Atualizacoes sem texto continuam fora do fluxo para nao criar respostas indevidas.
+As vendas de marketplace ficam salvas no navegador por cinco minutos. A tela mostra a ultima lista imediatamente e busca uma versao nova em segundo plano; o botao Atualizar ignora o cache.
 
-A politica de garantia permanece deterministica: marca ou memoria sem modelo exato nao autoriza a IA a inventar prazo ou cobertura.
+Nos detalhes da Shopee, o sistema procura o produto interno pelo SKU e, se necessario, pelo nome e pela variacao. Assim a foto e os locais com saldo voltam a aparecer mesmo quando o retorno do marketplace nao traz o identificador interno.

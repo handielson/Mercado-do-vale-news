@@ -66,6 +66,39 @@ export interface MarketplaceSalesResult {
     warnings: string[];
 }
 
+const MARKETPLACE_SALES_CACHE_PREFIX = 'mdv:marketplace-sales:v1:';
+const MARKETPLACE_SALES_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface MarketplaceSalesCacheEntry {
+    savedAt: number;
+    result: MarketplaceSalesResult;
+}
+
+function marketplaceSalesCacheKey(filters: { start_date?: string; end_date?: string }): string {
+    return `${MARKETPLACE_SALES_CACHE_PREFIX}${filters.start_date || ''}:${filters.end_date || ''}`;
+}
+
+export function getCachedMarketplaceSales(filters: { start_date?: string; end_date?: string } = {}): MarketplaceSalesResult | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = window.sessionStorage.getItem(marketplaceSalesCacheKey(filters));
+        const cached = raw ? JSON.parse(raw) as MarketplaceSalesCacheEntry : null;
+        if (!cached || Date.now() - Number(cached.savedAt) > MARKETPLACE_SALES_CACHE_TTL_MS || !Array.isArray(cached.result?.sales)) return null;
+        return cached.result;
+    } catch {
+        return null;
+    }
+}
+
+function cacheMarketplaceSales(filters: { start_date?: string; end_date?: string }, result: MarketplaceSalesResult): void {
+    if (typeof window === 'undefined') return;
+    try {
+        window.sessionStorage.setItem(marketplaceSalesCacheKey(filters), JSON.stringify({ savedAt: Date.now(), result } satisfies MarketplaceSalesCacheEntry));
+    } catch {
+        // A listagem continua funcionando quando o navegador bloqueia o armazenamento local.
+    }
+}
+
 function normalizeStatus(value: unknown): MarketplaceSaleStatus {
     const status = String(value || '').trim().toUpperCase();
     if (/CANCEL|CANCELED/.test(status)) return 'cancelled';
@@ -101,7 +134,9 @@ function mapSales(
     })).filter((sale) => sale.external_id && sale.occurred_at);
 }
 
-export async function getMarketplaceSales(filters: { start_date?: string; end_date?: string } = {}): Promise<MarketplaceSalesResult> {
+export async function getMarketplaceSales(filters: { start_date?: string; end_date?: string } = {}, options: { force?: boolean } = {}): Promise<MarketplaceSalesResult> {
+    const cached = !options.force ? getCachedMarketplaceSales(filters) : null;
+    if (cached) return cached;
     let connectionLoadFailed = false;
     const connections = await listShopeeConnections().catch(() => {
         connectionLoadFailed = true;
@@ -150,7 +185,9 @@ export async function getMarketplaceSales(filters: { start_date?: string; end_da
         if (result.value.warning) warnings.push(`${request.label}: ${result.value.warning}`);
     });
     sales.sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)));
-    return { sales, warnings };
+    const result = { sales, warnings };
+    cacheMarketplaceSales(filters, result);
+    return result;
 }
 
 export async function getMarketplaceSaleDetail(sale: MarketplaceSale): Promise<MarketplaceSale> {

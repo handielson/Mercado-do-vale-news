@@ -5,26 +5,20 @@ import { SaleWithItems, SaleFilters } from '../../../types/sale';
 import { getSales, cancelSale, refundSale } from '../../../services/saleService';
 import SaleDetailsModal from '../../../components/admin/sales/SaleDetailsModal';
 import MarketplaceSaleDetailsModal from '../../../components/admin/sales/MarketplaceSaleDetailsModal';
-import { getMarketplaceSales, MarketplaceSale, MarketplaceSaleStatus } from '../../../services/adminMarketplaceSalesService';
+import { getCachedMarketplaceSales, getMarketplaceSales, MarketplaceSale, MarketplaceSaleStatus } from '../../../services/adminMarketplaceSalesService';
 import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../../../utils/salePresentation';
 import toast from 'react-hot-toast';
 
-const AUTO_REFRESH_MS = 60_000;
-const AUTO_REFRESH_LOOKBACK_MS = 2 * 24 * 60 * 60 * 1000;
-
-function mergeMarketplaceSales(current: MarketplaceSale[], incoming: MarketplaceSale[]): MarketplaceSale[] {
-    const merged = new Map(current.map((sale) => [`${sale.channel}:${sale.external_id}`, sale]));
-    incoming.forEach((sale) => merged.set(`${sale.channel}:${sale.external_id}`, sale));
-    return Array.from(merged.values()).sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)));
-}
+const AUTO_REFRESH_MS = 5 * 60_000;
 
 export default function SalesPage() {
     const [searchParams] = useSearchParams();
     const [sales, setSales] = useState<SaleWithItems[]>([]);
-    const [marketplaceSales, setMarketplaceSales] = useState<MarketplaceSale[]>([]);
-    const [marketplaceWarnings, setMarketplaceWarnings] = useState<string[]>([]);
+    const initialMarketplaceCache = getCachedMarketplaceSales();
+    const [marketplaceSales, setMarketplaceSales] = useState<MarketplaceSale[]>(initialMarketplaceCache?.sales || []);
+    const [marketplaceWarnings, setMarketplaceWarnings] = useState<string[]>(initialMarketplaceCache?.warnings || []);
     const [isLoading, setIsLoading] = useState(true);
-    const [isMarketplaceLoading, setIsMarketplaceLoading] = useState(true);
+    const [isMarketplaceLoading, setIsMarketplaceLoading] = useState(!initialMarketplaceCache);
     const [filters, setFilters] = useState<SaleFilters>({});
 
     // Filtros UI
@@ -68,8 +62,8 @@ export default function SalesPage() {
 
     const loadData = useCallback(async ({
         silent = false,
-        recentMarketplaceOnly = false,
-    }: { silent?: boolean; recentMarketplaceOnly?: boolean } = {}) => {
+        forceMarketplace = false,
+    }: { silent?: boolean; forceMarketplace?: boolean } = {}) => {
         const requestId = ++loadRequestSequence.current;
         activeLoads.current += 1;
         setIsMarketplaceLoading(true);
@@ -94,15 +88,8 @@ export default function SalesPage() {
                 start_date: activeFilters.start_date,
                 end_date: activeFilters.end_date,
             };
-            const mergeRecentMarketplaceSales = recentMarketplaceOnly
-                && !marketplaceFilters.start_date
-                && !marketplaceFilters.end_date;
-            if (mergeRecentMarketplaceSales) {
-                marketplaceFilters.start_date = new Date(Date.now() - AUTO_REFRESH_LOOKBACK_MS).toISOString();
-            }
-
             // Start both sources together, but release the table as soon as the faster PDV query finishes.
-            const marketplaceRequest = getMarketplaceSales(marketplaceFilters).then(
+            const marketplaceRequest = getMarketplaceSales(marketplaceFilters, { force: forceMarketplace }).then(
                 (data) => ({ ok: true as const, data }),
                 (error: unknown) => ({ ok: false as const, error }),
             );
@@ -116,11 +103,7 @@ export default function SalesPage() {
             if (!marketplaceResult.ok) throw marketplaceResult.error;
             const marketplaceData = marketplaceResult.data;
             if (requestId === loadRequestSequence.current) {
-                setMarketplaceSales((current) => (
-                    mergeRecentMarketplaceSales
-                        ? mergeMarketplaceSales(current, marketplaceData.sales)
-                        : marketplaceData.sales
-                ));
+                setMarketplaceSales(marketplaceData.sales);
                 setMarketplaceWarnings(marketplaceData.warnings);
             }
         } catch (error) {
@@ -149,7 +132,7 @@ export default function SalesPage() {
                 || backgroundRefreshInFlight.current
             ) return;
             backgroundRefreshInFlight.current = true;
-            void loadData({ silent: true, recentMarketplaceOnly: true }).finally(() => {
+            void loadData({ silent: true }).finally(() => {
                 backgroundRefreshInFlight.current = false;
             });
         };
@@ -366,7 +349,7 @@ export default function SalesPage() {
                 </div>
                 <div className="flex flex-col items-start gap-1 sm:items-end">
                     <button
-                        onClick={() => void loadData()}
+                        onClick={() => void loadData({ forceMarketplace: true })}
                         disabled={isMarketplaceLoading}
                         className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
                     >
@@ -374,7 +357,7 @@ export default function SalesPage() {
                         Atualizar
                     </button>
                     <span className="text-xs text-slate-400">
-                        {isMarketplaceLoading ? 'Atualizando marketplaces...' : 'Atualização automática a cada 1 minuto'}
+                        {isMarketplaceLoading ? 'Atualizando marketplaces...' : 'Atualização automática a cada 5 minutos'}
                     </span>
                 </div>
             </div>

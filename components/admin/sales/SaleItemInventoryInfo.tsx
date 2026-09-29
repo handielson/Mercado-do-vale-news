@@ -9,7 +9,39 @@ interface Props {
   productId?: string | null;
   sku?: string | null;
   name: string;
+  variation?: string | null;
   imageUrl?: string | null;
+}
+
+function normalizeLookupText(value: unknown): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function pickMarketplaceProduct(products: Product[], sku?: string | null, name?: string | null, variation?: string | null): Product | null {
+  const expectedSku = normalizeLookupText(sku).replace(/\s+/g, '');
+  const expectedName = normalizeLookupText(name);
+  const expectedVariation = normalizeLookupText(variation);
+  let best: { product: Product; score: number } | null = null;
+  for (const product of products) {
+    if (!product?.id || Number((product as any).is_parent) === 1) continue;
+    const productSku = normalizeLookupText(product.sku).replace(/\s+/g, '');
+    const productText = normalizeLookupText(`${product.name || ''} ${(product as any).model || ''} ${JSON.stringify(product.specs || {})}`);
+    let score = 0;
+    if (expectedSku && productSku === expectedSku) score += 1000;
+    else if (expectedSku && productSku && (productSku.includes(expectedSku) || expectedSku.includes(productSku))) score += 400;
+    if (expectedName && productText.includes(expectedName)) score += 180;
+    const nameTokens = expectedName.split(' ').filter((token) => token.length >= 3);
+    score += nameTokens.filter((token) => productText.includes(token)).length * 12;
+    const variationTokens = expectedVariation.split(' ').filter((token) => token.length >= 2);
+    score += variationTokens.filter((token) => productText.includes(token)).length * 18;
+    if (!best || score > best.score) best = { product, score };
+  }
+  return best && best.score >= 36 ? best.product : null;
 }
 
 function firstProductImage(product: Product | null, fallback?: string | null): string {
@@ -24,7 +56,7 @@ function locationLabel(row: ProductStockLocation): string {
   return `${deposit} · ${location}`;
 }
 
-export function SaleItemInventoryInfo({ productId, sku, name, imageUrl }: Props) {
+export function SaleItemInventoryInfo({ productId, sku, name, variation, imageUrl }: Props) {
   const [product, setProduct] = useState<Product | null>(null);
   const [locations, setLocations] = useState<ProductStockLocation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,9 +70,13 @@ export function SaleItemInventoryInfo({ productId, sku, name, imageUrl }: Props)
         if (productId) {
           resolved = await vpsApiService.getProductById(productId, true) as Product | null;
         } else if (sku?.trim()) {
-          const normalizedSku = sku.trim().toLocaleLowerCase('pt-BR');
+          const normalizedSku = normalizeLookupText(sku).replace(/\s+/g, '');
           const matches = await vpsApiService.getProducts({ sku: sku.trim(), status: 'all', limit: 10, noCache: true });
-          resolved = ((matches || []) as Product[]).find((item) => item.sku?.trim().toLocaleLowerCase('pt-BR') === normalizedSku) || null;
+          resolved = ((matches || []) as Product[]).find((item) => normalizeLookupText(item.sku).replace(/\s+/g, '') === normalizedSku) || null;
+        }
+        if (!resolved && name.trim()) {
+          const matches = await vpsApiService.getProducts({ search: name.trim(), status: 'all', limit: 100, compact: true });
+          resolved = pickMarketplaceProduct((matches || []) as Product[], sku, name, variation);
         }
         if (!active) return;
         setProduct(resolved);
@@ -61,7 +97,7 @@ export function SaleItemInventoryInfo({ productId, sku, name, imageUrl }: Props)
     };
     void load();
     return () => { active = false; };
-  }, [productId, sku]);
+  }, [productId, sku, name, variation]);
 
   const image = firstProductImage(product, imageUrl);
   return (

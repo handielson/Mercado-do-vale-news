@@ -65,7 +65,7 @@ function MarketplaceSaleDetailsContent({ sale: initialSale, onClose }: { sale: M
                                         <p className="text-sm font-medium text-slate-800">{item.name}</p>
                                         <p className="text-xs text-slate-500">{item.sku || 'Sem SKU'}{item.variation ? ` · ${item.variation}` : ''} · {item.quantity} un.</p>
                                         <div className="mt-2">
-                                            <SaleItemInventoryInfo name={item.name} sku={item.sku} imageUrl={item.image_url} />
+                                            <SaleItemInventoryInfo name={item.name} sku={item.sku} variation={item.variation} imageUrl={item.image_url} />
                                         </div>
                                     </div>
                                     <p className="whitespace-nowrap text-sm font-semibold text-slate-800">{money(item.total_cents)}</p>
