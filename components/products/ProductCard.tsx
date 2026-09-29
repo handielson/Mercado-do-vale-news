@@ -15,6 +15,12 @@ import { getAuthSessionToken } from '../../services/authSession';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
 import { shopeeProductService } from '../../services/shopeeProducts';
+import {
+    listShopeeConnections,
+    PRIMARY_SHOPEE_CONNECTION_ID,
+    withShopeeConnection,
+    type ShopeeConnection,
+} from '../../services/shopeeConnections';
 import { stockLocationService } from '../../services/stockLocationService';
 import { unitService } from '../../services/units';
 import { deleteImageFromBank, uploadImagesToBank } from '../../services/productImageBank';
@@ -385,6 +391,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         () => Array.isArray(product.shopee_store_codes) ? product.shopee_store_codes : [],
     );
     const [isShopeeModalOpen, setIsShopeeModalOpen] = useState(false);
+    const [isShopeeStorePickerOpen, setIsShopeeStorePickerOpen] = useState(false);
+    const [shopeeConnections, setShopeeConnections] = useState<ShopeeConnection[]>([]);
+    const [selectedShopeeConnectionId, setSelectedShopeeConnectionId] = useState(PRIMARY_SHOPEE_CONNECTION_ID);
+    const [selectedShopeeStoreLabel, setSelectedShopeeStoreLabel] = useState('Mercado do Vale (M)');
+    const [selectedShopeeShopId, setSelectedShopeeShopId] = useState<string | null>(null);
     const [isTikTokModalOpen, setIsTikTokModalOpen] = useState(false);
     const [currentTikTokProductLink, setCurrentTikTokProductLink] = useState<TikTokShopProductLink | null>(
         () => tiktokProductLink,
@@ -773,17 +784,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         return company;
     };
 
-    const refreshShopeeLinkState = async (): Promise<number | null> => {
+    const refreshShopeeLinkState = async (connectionId = PRIMARY_SHOPEE_CONNECTION_ID): Promise<number | null> => {
         try {
             const [itemId, storeCodeMap] = await Promise.all([
-                shopeeProductService.getItemIdByProductId(product.id),
+                shopeeProductService.getItemIdByProductId(product.id, connectionId),
                 shopeeProductService.getStoreCodesByProductIdMap(),
             ]);
             setShopeeStoreCodes(storeCodeMap.get(String(product.id)) || []);
-            if (itemId) {
+            if (connectionId === PRIMARY_SHOPEE_CONNECTION_ID) {
                 setShopeeItemId(itemId);
-                return itemId;
             }
+            return itemId;
         } catch (error) {
             console.error('[ProductCard] Erro ao atualizar estado Shopee:', error);
         }
@@ -791,29 +802,35 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         return null;
     };
 
-    const fetchShopeeItemBaseInfo = async (itemId: number) => {
-        const response = await fetch(`/api/shopee-catalog?action=get_item_base_info&item_id_list=${encodeURIComponent(String(itemId))}`);
+    const fetchShopeeItemBaseInfo = async (itemId: number, connectionId: string) => {
+        const response = await fetch(withShopeeConnection(`/api/shopee-catalog?action=get_item_base_info&item_id_list=${encodeURIComponent(String(itemId))}`, connectionId));
         if (!response.ok) throw new Error('Falha ao validar anuncio na Shopee');
         const payload = await response.json().catch(() => null);
         return payload?.response?.item_list?.[0] || null;
     };
 
-    const clearStaleShopeeLink = async (itemId: number) => {
-        await shopeeProductService.deleteByProductId(product.id);
+    const clearStaleShopeeLink = async (connectionId: string) => {
+        await shopeeProductService.deleteByProductId(product.id, connectionId);
 
-        const latestProduct = await vpsApiService.getProductById(product.id, true);
-        await vpsApiService.updateProduct(product.id, {
-            ...(latestProduct || product),
-            shopee_item_id: null,
-        });
+        if (connectionId === PRIMARY_SHOPEE_CONNECTION_ID) {
+            const latestProduct = await vpsApiService.getProductById(product.id, true);
+            await vpsApiService.updateProduct(product.id, {
+                ...(latestProduct || product),
+                shopee_item_id: null,
+            });
+            setShopeeItemId(null);
+        }
 
-        setShopeeItemId(null);
-        setShopeeStoreCodes((current) => current.filter((code) => code !== 'M'));
+        const removedCode = connectionId === PRIMARY_SHOPEE_CONNECTION_ID ? 'M' : 'G';
+        setShopeeStoreCodes((current) => current.filter((code) => code !== removedCode));
     };
 
-    const openShopeeSyncModal = async () => {
+    const openShopeeSyncModal = async (connectionId: string, storeLabel: string, shopId: string | null) => {
         await ensureShopeeCompany();
         const hydratedProduct = await vpsApiService.getProductById(product.id, true);
+        setSelectedShopeeConnectionId(connectionId);
+        setSelectedShopeeStoreLabel(storeLabel);
+        setSelectedShopeeShopId(shopId);
         setShopeeModalProductSource({
             ...(product as Product & Record<string, any>),
             ...(hydratedProduct || {}),
@@ -822,32 +839,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         setIsShopeeModalOpen(true);
     };
 
-    const handleOpenShopeeModal = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (isPreparingShopeeModal) return;
-
+    const prepareShopeeStore = async (connectionId: string, storeLabel: string, shopId: string | null) => {
+        setIsShopeeStorePickerOpen(false);
         setIsPreparingShopeeModal(true);
         try {
-            const existingItemId = shopeeVisualState.isSynced
-                ? shopeeVisualState.itemId
-                : await refreshShopeeLinkState();
+            const existingItemId = await refreshShopeeLinkState(connectionId);
 
             if (existingItemId) {
-                const shopeeItem = await fetchShopeeItemBaseInfo(existingItemId);
+                const shopeeItem = await fetchShopeeItemBaseInfo(existingItemId, connectionId);
                 const validation = validateShopeeItemForProduct(product, shopeeItem);
                 if (!validation.isMatch) {
-                    await clearStaleShopeeLink(existingItemId);
-                    toast.warning('Vinculo antigo da Shopee removido', {
-                        description: validation.reason || 'O anuncio salvo nao corresponde a este produto.',
+                    await clearStaleShopeeLink(connectionId);
+                    toast.warning(`Vínculo antigo de ${storeLabel} removido`, {
+                        description: validation.reason || 'O anúncio salvo não corresponde a este produto.',
                     });
-                    await openShopeeSyncModal();
+                    await openShopeeSyncModal(connectionId, storeLabel, shopId);
                     return;
                 }
 
-                const company = await ensureShopeeCompany();
-                const shopeeUrl = buildShopeeProductUrl(company?.shopee_shop_id, existingItemId);
+                const shopeeUrl = buildShopeeProductUrl(shopId, existingItemId);
                 if (!shopeeUrl) {
-                    toast.warning('Shop ID da Shopee nao configurado. Nao foi possivel abrir o anuncio.');
+                    toast.warning(`Shop ID de ${storeLabel} não configurado. Não foi possível abrir o anúncio.`);
                     return;
                 }
 
@@ -855,10 +867,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 return;
             }
 
-            await openShopeeSyncModal();
+            await openShopeeSyncModal(connectionId, storeLabel, shopId);
         } catch (error) {
             console.error('[ProductCard] Erro ao preparar modal Shopee:', error);
-            toast.error('Nao foi possivel abrir a sincronizacao da Shopee.');
+            toast.error(`Não foi possível abrir a sincronização de ${storeLabel}.`);
+        } finally {
+            setIsPreparingShopeeModal(false);
+        }
+    };
+
+    const handleOpenShopeeModal = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isPreparingShopeeModal) return;
+
+        setIsPreparingShopeeModal(true);
+        try {
+            const [company, connections] = await Promise.all([
+                ensureShopeeCompany(),
+                listShopeeConnections().catch((error) => {
+                    console.warn('[ProductCard] Lojas Shopee adicionais indisponíveis:', error);
+                    return [];
+                }),
+            ]);
+            setSelectedShopeeShopId(company?.shopee_shop_id || null);
+            setShopeeConnections(connections.filter((connection) => connection.active));
+            setIsShopeeStorePickerOpen(true);
+        } catch (error) {
+            console.error('[ProductCard] Erro ao carregar lojas Shopee:', error);
+            toast.error('Não foi possível carregar as lojas Shopee.');
         } finally {
             setIsPreparingShopeeModal(false);
         }
@@ -1989,15 +2025,88 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 </div>
             )}
 
+            {isShopeeStorePickerOpen && (
+                <div
+                    className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/50 p-4"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        setIsShopeeStorePickerOpen(false);
+                    }}
+                >
+                    <div
+                        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900">Escolha a loja Shopee</h3>
+                                <p className="mt-1 text-sm text-slate-500">O anúncio e o vínculo serão abertos somente na conta escolhida.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsShopeeStorePickerOpen(false)}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                                aria-label="Fechar seleção de loja Shopee"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="space-y-2">
+                            <button
+                                type="button"
+                                disabled={!shopeeCompany?.shopee_shop_id || isPreparingShopeeModal}
+                                onClick={() => prepareShopeeStore(
+                                    PRIMARY_SHOPEE_CONNECTION_ID,
+                                    'Mercado do Vale (M)',
+                                    shopeeCompany?.shopee_shop_id || null,
+                                )}
+                                className="flex w-full items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-left hover:border-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500 font-black text-white">M</span>
+                                <span className="min-w-0">
+                                    <span className="block font-semibold text-slate-900">Mercado do Vale</span>
+                                    <span className="block text-xs text-slate-500">{shopeeCompany?.shopee_shop_id ? `Shop ID ${shopeeCompany.shopee_shop_id}` : 'Conta não conectada'}</span>
+                                </span>
+                            </button>
+                            {shopeeConnections.map((connection) => {
+                                const connected = connection.authorization_status === 'connected' && Boolean(connection.shopee_shop_id);
+                                return (
+                                    <button
+                                        key={connection.id}
+                                        type="button"
+                                        disabled={!connected || isPreparingShopeeModal}
+                                        onClick={() => prepareShopeeStore(
+                                            connection.id,
+                                            `${connection.display_name || 'Glaucia'} (G)`,
+                                            connection.shopee_shop_id,
+                                        )}
+                                        className="flex w-full items-center gap-3 rounded-xl border border-fuchsia-200 bg-fuchsia-50 px-4 py-3 text-left hover:border-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-fuchsia-600 font-black text-white">G</span>
+                                        <span className="min-w-0">
+                                            <span className="block font-semibold text-slate-900">{connection.display_name || 'Glaucia'}</span>
+                                            <span className="block text-xs text-slate-500">{connected ? `Shop ID ${connection.shopee_shop_id}` : 'Aguardando autorização'}</span>
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {isShopeeModalOpen && (
                 <ShopeeSyncModal
                     product={shopeeModalProduct}
                     company={shopeeCompany}
                     historicalProducts={emptyShopeeHistory}
+                    connectionId={selectedShopeeConnectionId}
+                    storeLabel={selectedShopeeStoreLabel}
+                    shopeeShopId={selectedShopeeShopId}
                     onClose={() => setIsShopeeModalOpen(false)}
                     onSuccess={() => {
                         setIsShopeeModalOpen(false);
-                        refreshShopeeLinkState();
+                        refreshShopeeLinkState(selectedShopeeConnectionId);
                     }}
                 />
             )}

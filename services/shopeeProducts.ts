@@ -1,4 +1,5 @@
 import { vpsClient } from './vpsClient';
+import { normalizeShopeeConnectionId, PRIMARY_SHOPEE_CONNECTION_ID } from './shopeeConnections';
 
 interface TableDataResponse<T> {
     rows?: T[];
@@ -25,11 +26,8 @@ export interface ShopeeProductLink {
 
 type ShopeeProductLinkInput = Omit<ShopeeProductLink, 'id'> & { id?: string };
 
-export const PRIMARY_SHOPEE_CONNECTION_ID = 'primary';
-
 function normalizeConnectionId(value: unknown): string {
-    const normalized = String(value || '').trim();
-    return normalized || PRIMARY_SHOPEE_CONNECTION_ID;
+    return normalizeShopeeConnectionId(String(value || ''));
 }
 
 export function getShopeeStoreCode(connectionId: unknown): 'M' | 'G' {

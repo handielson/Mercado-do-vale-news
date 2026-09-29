@@ -23,7 +23,7 @@ assert.doesNotMatch(
 
 assert.match(
   source,
-  /const shopeeItemByProductId = await shopeeProductService\.getItemIdByProductIdMap\(\)/,
+  /const \[shopeeItemByProductId, shopeeStoreCodesByProductId\] = await Promise\.all\(\[[\s\S]*shopeeProductService\.getItemIdByProductIdMap\(\)/,
   'product list should get Shopee item ids indexed by product id from the VPS service'
 );
 

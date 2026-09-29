@@ -9,6 +9,8 @@ const {
     createShopeeSeparationSummaryPdf,
 } = require('./shopee-separation-summary.cjs');
 const { expandShopeeLabelForThermalPaper } = require('./shopee-label-core.cjs');
+const { createMercadoLivreSummaryPdf } = require('./mercado-livre-print-core.cjs');
+const { prepareMercadoLivreSummaryPrinter } = require('./mercado-livre-print-agent.cjs');
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -67,7 +69,7 @@ async function getFetch() {
     return mod.default;
 }
 
-async function callVpsShopeeAction(action, payload = {}) {
+async function callVpsShopeeAction(action, payload = {}, connectionId = 'primary') {
     const requestFetch = await getFetch();
     const response = await requestFetch(`${VPS_API_URL}/api/shopee-actions`, {
         method: 'POST',
@@ -75,7 +77,7 @@ async function callVpsShopeeAction(action, payload = {}) {
             'Content-Type': 'application/json',
             'x-sync-key': VPS_SYNC_KEY,
         },
-        body: JSON.stringify({ action, payload }),
+        body: JSON.stringify({ action, payload: { ...payload, connection_id: connectionId } }),
         signal: AbortSignal.timeout(60000),
     });
     const contentType = response.headers.get('content-type') || '';
@@ -96,6 +98,24 @@ async function callVpsShopeeAction(action, payload = {}) {
         data = { error: text || `HTTP ${response.status}` };
     }
     return { ok: response.ok, status: response.status, contentType, buffer: null, data };
+}
+
+async function getShopeePrintConnections() {
+    const requestFetch = await getFetch();
+    const response = await requestFetch(`${VPS_API_URL}/shopee-connections`, {
+        headers: { 'x-sync-key': VPS_SYNC_KEY },
+        signal: AbortSignal.timeout(60000),
+    });
+    if (!response.ok) throw new Error(`Falha ao listar contas Shopee: HTTP ${response.status}`);
+    const data = await response.json();
+    const additional = (Array.isArray(data?.connections) ? data.connections : [])
+        .filter(connection => connection?.active && connection?.authorization_status === 'connected')
+        .map(connection => ({
+            id: String(connection.id),
+            displayName: String(connection.display_name || 'Shopee G'),
+            sellerType: String(connection.seller_type || 'individual'),
+        }));
+    return [{ id: 'primary', displayName: 'Mercado do Vale', sellerType: 'business' }, ...additional];
 }
 
 function tiktokPrintStatePaths(orderId) {
@@ -147,11 +167,13 @@ async function runTikTokPrintFlow(orderId) {
     throw new Error('Tempo excedido aguardando a fila TikTok concluir a impressão.');
 }
 
-function orderPrintStatePaths(orderSn) {
+function orderPrintStatePaths(orderSn, connectionId = 'primary') {
+    const safeConnectionId = String(connectionId || 'primary').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const prefix = safeConnectionId === 'primary' ? orderSn : `${safeConnectionId}.${orderSn}`;
     return {
-        legacy: path.join(printedMarkersDir, `${orderSn}.txt`),
-        label: path.join(printedMarkersDir, `${orderSn}.label.txt`),
-        summary: path.join(printedMarkersDir, `${orderSn}.summary.txt`),
+        legacy: path.join(printedMarkersDir, `${prefix}.txt`),
+        label: path.join(printedMarkersDir, `${prefix}.label.txt`),
+        summary: path.join(printedMarkersDir, `${prefix}.summary.txt`),
     };
 }
 
@@ -195,6 +217,7 @@ function requiresHumanIntervention(stage, resultOrError) {
 function interventionInstructions(stage) {
     return {
         invoice: 'Abra a NF-e no Bling, corrija NCM, CEST ou tributacao, autorize a nota e confirme o envio para a Shopee.',
+        personal_document: 'Abra o pedido da conta G na Shopee e confira qual documento de pessoa física foi solicitado. Não emita NF-e pelo Bling para esta conta.',
         ship_order: 'Abra o pedido na Shopee e no Bling, resolva o bloqueio informado e prepare o envio manualmente se necessario.',
         shipping_document: 'Confira se o pedido esta preparado para envio e gere a etiqueta manualmente na Shopee antes de despachar.',
         label_print: 'Verifique a impressora de etiquetas, papel, conexao e fila do Windows. Depois imprima a etiqueta manualmente.',
@@ -324,7 +347,73 @@ async function getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn) {
     };
 }
 
-async function printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, stage, resultOrError }) {
+async function getShopeeOrderSummaryDataFromVps(connection, orderSn) {
+    const detailResult = await callVpsShopeeAction('get_order_detail', { order_sn_list: orderSn }, connection.id);
+    if (!isVpsActionSuccess(detailResult)) {
+        throw new Error(detailResult.data?.message || detailResult.data?.error || `Falha ao consultar o pedido ${orderSn}.`);
+    }
+    const order = detailResult.data?.response?.order_list?.[0];
+    if (!order) throw new Error(`Pedido ${orderSn} não retornou detalhes para o comprovante.`);
+
+    const packageInfo = Array.isArray(order.package_list) ? order.package_list[0] || {} : {};
+    let trackingNumber = String(
+        packageInfo.tracking_number
+        || packageInfo.logistics_tracking_number
+        || order.tracking_number
+        || '',
+    ).trim();
+    try {
+        const trackingResult = await callVpsShopeeAction('get_tracking_info', { order_sn: orderSn }, connection.id);
+        if (isVpsActionSuccess(trackingResult)) {
+            trackingNumber = String(
+                trackingResult.data?.response?.tracking_number_explicit
+                || trackingResult.data?.response?.tracking_number
+                || trackingResult.data?.response?.first_mile_tracking_number
+                || trackingNumber,
+            ).trim();
+        }
+    } catch (trackingError) {
+        console.warn(`[SUMMARY ${connection.displayName}] Rastreio ainda indisponível para ${orderSn}: ${trackingError.message}`);
+    }
+
+    const items = (Array.isArray(order.item_list) ? order.item_list : []).map(item => ({
+        name: item?.item_name || item?.product_name || 'Item Shopee',
+        modelName: item?.model_name || '',
+        sku: item?.model_sku || item?.item_sku || item?.seller_sku || '',
+        quantity: item?.model_quantity_purchased || item?.quantity || 1,
+    }));
+    const itemSkus = Array.from(new Set(items.map(item => String(item.sku || '').trim()).filter(Boolean)));
+    const stockLocationsBySku = new Map();
+    if (itemSkus.length) {
+        const locationResult = await callVpsShopeeAction('get_stock_locations', { skus: itemSkus }, connection.id);
+        if (isVpsActionSuccess(locationResult)) {
+            for (const entry of locationResult.data?.items || []) {
+                stockLocationsBySku.set(
+                    String(entry?.sku || '').trim().toUpperCase(),
+                    Array.isArray(entry?.locations) ? entry.locations.filter(Boolean) : [],
+                );
+            }
+        }
+    }
+
+    return {
+        marketplaceName: connection.id === 'primary' ? 'SHOPEE M' : 'SHOPEE G',
+        orderSn,
+        trackingNumber,
+        buyerName: order?.recipient_address?.name || order?.buyer_username || 'Cliente Shopee',
+        shippingCarrier: order?.shipping_carrier || order?.checkout_shipping_carrier || 'Shopee',
+        createdAt: order?.create_time,
+        note: order?.note || '',
+        paymentMethod: order?.payment_method || '',
+        totalAmount: Number(order?.total_amount || 0),
+        items: items.map(item => {
+            const locations = stockLocationsBySku.get(String(item.sku || '').trim().toUpperCase()) || [];
+            return { ...item, stockLocation: locations.length ? locations.join(' | ') : 'Não cadastrada' };
+        }),
+    };
+}
+
+async function printHumanInterventionReceipt({ settings, shopeeApiUrl, connection, orderSn, stage, resultOrError }) {
     const summaryPrinter = String(settings?.shopee_printer_a4 || '').trim();
     if (!summaryPrinter) {
         console.error(`[INTERVENTION] Impressora de comprovante não configurada para ${orderSn}.`);
@@ -336,7 +425,9 @@ async function printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, 
         .update(`${stage}|${issue.errorCode}`)
         .digest('hex')
         .slice(0, 12);
-    const markerPath = path.join(printedMarkersDir, `${orderSn}.intervention-${issueHash}.txt`);
+    const safeConnectionId = String(connection?.id || 'primary').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const interventionPrefix = safeConnectionId === 'primary' ? orderSn : `${safeConnectionId}.${orderSn}`;
+    const markerPath = path.join(printedMarkersDir, `${interventionPrefix}.intervention-${issueHash}.txt`);
     if (fs.existsSync(markerPath)) {
         console.log(`[INTERVENTION] Aviso ${issue.errorCode} já impresso para ${orderSn}.`);
         return { printed: false, reason: 'already_printed' };
@@ -350,7 +441,9 @@ async function printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, 
         items: [],
     };
     try {
-        orderData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn);
+        orderData = connection
+            ? await getShopeeOrderSummaryDataFromVps(connection, orderSn)
+            : await getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn);
     } catch (summaryError) {
         console.warn(`[INTERVENTION] Dados parciais para ${orderSn}: ${summaryError.message}`);
     }
@@ -358,13 +451,14 @@ async function printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, 
     try {
         const receiptPath = path.join(
             shippingLabelsDir,
-            `${orderSn}_intervencao-${stage}-${issueHash}-10x15.pdf`,
+            `${safeConnectionId === 'primary' ? '' : 'G_'}${orderSn}_intervencao-${stage}-${issueHash}-10x15.pdf`,
         );
         const receipt = await createShopeeInterventionReceiptPdf({
             order: orderData,
             stage,
             stageLabel: {
                 invoice: 'Nota fiscal',
+                personal_document: 'Documento da conta PF',
                 ship_order: 'Preparar envio',
                 shipping_document: 'Gerar etiqueta',
                 label_print: 'Imprimir etiqueta',
@@ -679,6 +773,7 @@ function startLocalServer() {
             const urlParams = new URLSearchParams(req.url.split('?')[1]);
             const orderSn = urlParams.get('order_sn');
             const docType = urlParams.get('type') || 'both'; // 'awb', 'summary', or 'both'
+            const requestedConnectionId = urlParams.get('connection_id') || 'primary';
             
             if (!orderSn) {
                 res.writeHead(400);
@@ -693,41 +788,23 @@ function startLocalServer() {
             // Process print in background
             setTimeout(async () => {
                 try {
-                    console.log(`[MANUAL PRINT] Disparado para ${orderSn} (tipo: ${docType})`);
+                    const connections = await getShopeePrintConnections();
+                    const connection = connections.find(item => item.id === requestedConnectionId);
+                    if (!connection) throw new Error('Conta Shopee não conectada ou inválida.');
+                    const isIndividual = connection.sellerType === 'individual';
+                    console.log(`[MANUAL PRINT ${connection.displayName}] Disparado para ${orderSn} (tipo: ${docType})`);
                     const ptp = require('pdf-to-printer');
                     const settings = await getCompanySettings();
-                    const shopeeApiUrl = String(settings.shopee_partner_id).startsWith('10') ? 'https://partner.test-stable.shopeemobile.com' : 'https://partner.shopeemobile.com';
-                    
-                    const pathDoc = '/api/v2/logistics/download_shipping_document';
-                    const tsDoc = Math.floor(Date.now() / 1000);
-                    const signDoc = generateSign(settings.shopee_partner_id, settings.shopee_partner_key, pathDoc, tsDoc, settings.shopee_access_token, settings.shopee_shop_id);
-                    const urlDoc = `${shopeeApiUrl}${pathDoc}?partner_id=${settings.shopee_partner_id}&timestamp=${tsDoc}&access_token=${settings.shopee_access_token}&shop_id=${settings.shopee_shop_id}&sign=${signDoc}`;
 
-                    // CREATE THE DOCUMENT FIRST (MANDATORY FOR SHOPEE API V2 THERMAL PDFs)
-                    const pathCreate = '/api/v2/logistics/create_shipping_document';
-                    const signCreate = generateSign(settings.shopee_partner_id, settings.shopee_partner_key, pathCreate, tsDoc, settings.shopee_access_token, settings.shopee_shop_id);
-                    const urlCreate = `${shopeeApiUrl}${pathCreate}?partner_id=${settings.shopee_partner_id}&timestamp=${tsDoc}&access_token=${settings.shopee_access_token}&shop_id=${settings.shopee_shop_id}&sign=${signCreate}`;
-                    
                     if ((docType === 'both' || docType === 'awb') && settings.shopee_printer_thermal) {
                         try {
-                            // Request generation of Thermal AWB
-                            await fetch(urlCreate, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ order_list: [{ order_sn: orderSn }], shipping_document_type: "NORMAL_AIR_WAYBILL" })
-                            });
-                            // Wait 2 seconds for Shopee to build the PDF internally
-                            await new Promise(r => setTimeout(r, 2000));
-                            
-                            const rDoc = await fetch(urlDoc, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ order_list: [{ order_sn: orderSn }], shipping_document_type: "NORMAL_AIR_WAYBILL" })
-                            });
-                            if (rDoc.headers.get('content-type')?.includes('pdf')) {
-                                const pdfBuffer = await rDoc.arrayBuffer();
-                                const tempPdfPath = path.join(shippingLabelsDir, `MANUAL_${orderSn}_etiqueta-10x15.pdf`);
-                                fs.writeFileSync(tempPdfPath, await expandShopeeLabelForThermalPaper(Buffer.from(pdfBuffer)));
+                            const document = await callVpsShopeeAction('get_shipping_document', {
+                                order_sn: orderSn,
+                                shipping_document_type: 'NORMAL_AIR_WAYBILL',
+                            }, connection.id);
+                            if (document.ok && document.buffer?.length && document.contentType.includes('pdf')) {
+                                const tempPdfPath = path.join(shippingLabelsDir, `MANUAL_${connection.id === 'primary' ? '' : 'G_'}${orderSn}_etiqueta-10x15.pdf`);
+                                fs.writeFileSync(tempPdfPath, await expandShopeeLabelForThermalPaper(document.buffer));
                                 await ptp.print(tempPdfPath, {
                                     printer: settings.shopee_printer_thermal,
                                     paperSize: '4x6',
@@ -735,25 +812,26 @@ function startLocalServer() {
                                 });
                                 console.log(`[MANUAL PRINT] Etiqueta Térmica enviada!`);
                             } else {
-                                const j = await rDoc.json();
-                                console.log(`[MANUAL PRINT AWB REJECTED]:`, j);
+                                console.log(`[MANUAL PRINT AWB REJECTED]:`, document.data);
                             }
                         } catch(e) { console.error("Erro manual AWB:", e); }
                     }
-                    // We will send the summary to the thermal printer if A4 is not configured or if they want it on thermal.
-                    // Wait, standard Shopee setup: A4 printer handles summary. Let's use A4 if it exists, otherwise fallback to thermal.
                     const targetSummaryPrinter = settings.shopee_printer_a4 || settings.shopee_printer_thermal;
-                    
+
                     if ((docType === 'both' || docType === 'summary') && targetSummaryPrinter) {
                         try {
-                            const summaryData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn);
-                            const tempPkgPath = path.join(shippingLabelsDir, `MANUAL_${orderSn}_resumo-separacao-80mm.pdf`);
-                            fs.writeFileSync(tempPkgPath, await createShopeeSeparationSummaryPdf(summaryData));
-                            await ptp.print(tempPkgPath, {
-                                printer: targetSummaryPrinter,
-                                scale: 'shrink'
-                            });
-                            console.log(`[MANUAL PRINT] Resumo com rastreio enviado!`);
+                            const summaryData = await getShopeeOrderSummaryDataFromVps(connection, orderSn);
+                            const tempPkgPath = path.join(shippingLabelsDir, isIndividual
+                                ? `MANUAL_G_${orderSn}_comprovante-90x100.pdf`
+                                : `MANUAL_${orderSn}_resumo-separacao-80mm.pdf`);
+                            const summaryBuffer = isIndividual
+                                ? await createMercadoLivreSummaryPdf(summaryData)
+                                : await createShopeeSeparationSummaryPdf(summaryData);
+                            fs.writeFileSync(tempPkgPath, summaryBuffer);
+                            await ptp.print(tempPkgPath, isIndividual
+                                ? await prepareMercadoLivreSummaryPrinter(targetSummaryPrinter)
+                                : { printer: targetSummaryPrinter, scale: 'shrink' });
+                            console.log(`[MANUAL PRINT] ${isIndividual ? 'Comprovante PF' : 'Resumo'} com rastreio enviado!`);
                         } catch(e) { console.error("Erro manual Resumo:", e); }
                     }
                 } catch(err) {
@@ -787,6 +865,44 @@ function startLocalServer() {
 }
 
 function delay(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+async function prepareShopeeOrderShipment({
+    connection,
+    orderSn,
+    callAction = callVpsShopeeAction,
+    wait = delay,
+    maxAttempts = 6,
+}) {
+    const isIndividual = connection.sellerType === 'individual';
+    if (!isIndividual) {
+        const invoice = await callAction('upload_invoice', { order_sn: orderSn }, connection.id);
+        if (!isVpsActionSuccess(invoice)) {
+            return { success: false, stage: 'invoice', result: invoice };
+        }
+    }
+
+    let shipment = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        shipment = await callAction('ship_order', { order_sn: orderSn }, connection.id);
+        if (isVpsActionSuccess(shipment)) break;
+        const shipmentError = `${shipment?.data?.error || ''} ${shipment?.data?.message || ''}`;
+        if (!/invoice|nota fiscal|lack_of_invoice_data|pending/i.test(shipmentError)) break;
+        if (attempt < maxAttempts) await wait(2500);
+    }
+
+    if (!isVpsActionSuccess(shipment)) {
+        const shipmentMessage = `${shipment?.data?.error || ''} ${shipment?.data?.message || ''}`;
+        return {
+            success: false,
+            stage: isIndividual && /invoice|nota fiscal|lack_of_invoice_data/i.test(shipmentMessage)
+                ? 'personal_document'
+                : 'ship_order',
+            result: shipment,
+        };
+    }
+
+    return { success: true, stage: 'ship_order', result: shipment };
+}
 
 async function legacyRunLoop() {
     console.log(`[${new Date().toISOString()}] Iniciando ciclo do Shopee Auto Print...`);
@@ -925,161 +1041,146 @@ async function legacyRunLoop() {
 }
 
 let loopRunning = false;
+async function processShopeePrintConnection(settings, connection, ptp) {
+    const listResult = await callVpsShopeeAction('get_order_list', {
+        page_size: 30,
+        order_status: 'READY_TO_SHIP',
+        time_range_field: 'create_time',
+    }, connection.id);
+    if (!isVpsActionSuccess(listResult)) {
+        throw new Error(listResult.data?.message || listResult.data?.error || `Falha ao consultar ${connection.displayName}.`);
+    }
+    const orders = listResult.data?.response?.order_list || [];
+    if (!orders.length) {
+        console.log(`[${connection.displayName}] Nenhum pedido READY_TO_SHIP.`);
+        return;
+    }
+
+    const isIndividual = connection.sellerType === 'individual';
+    const filePrefix = connection.id === 'primary' ? '' : 'G_';
+    for (const order of orders) {
+        const orderSn = String(order.order_sn || '').trim();
+        if (!orderSn) continue;
+        const markers = orderPrintStatePaths(orderSn, connection.id);
+        if (fs.existsSync(markers.legacy)) continue;
+
+        console.log(`[${connection.displayName}] Processando impressão de ${orderSn} (${isIndividual ? 'PF/comprovante' : 'PJ/NF-e'})...`);
+        let currentStage = isIndividual ? 'ship_order' : 'invoice';
+        try {
+            if (!fs.existsSync(markers.label)) {
+                if (isIndividual) {
+                    console.log(`[${connection.displayName}] ${orderSn}: conta PF, etapa de NF-e/Bling não executada.`);
+                }
+
+                currentStage = 'ship_order';
+                const preparation = await prepareShopeeOrderShipment({ connection, orderSn });
+                if (!preparation.success) {
+                    const preparationResult = preparation.result;
+                    const pendingLabel = preparation.stage === 'invoice' ? 'Nota ainda não pronta' : 'Preparar envio pendente';
+                    console.log(`[${orderSn}] ${pendingLabel}: ${preparationResult?.data?.message || preparationResult?.data?.error || `HTTP ${preparationResult?.status}`}`);
+                    if (requiresHumanIntervention(preparation.stage, preparationResult)) {
+                        await printHumanInterventionReceipt({
+                            settings,
+                            connection,
+                            orderSn,
+                            stage: preparation.stage,
+                            resultOrError: preparationResult,
+                        });
+                    }
+                    continue;
+                }
+
+                currentStage = 'shipping_document';
+                await delay(2000);
+                const document = await callVpsShopeeAction('get_shipping_document', {
+                    order_sn: orderSn,
+                    shipping_document_type: 'NORMAL_AIR_WAYBILL',
+                }, connection.id);
+                if (!document.ok || !document.buffer?.length || !document.contentType.includes('pdf')) {
+                    console.log(`[${orderSn}] Etiqueta ainda não pronta: ${document.data?.message || document.data?.error || `HTTP ${document.status}`}`);
+                    if (requiresHumanIntervention('shipping_document', document)) {
+                        await printHumanInterventionReceipt({ settings, connection, orderSn, stage: 'shipping_document', resultOrError: document });
+                    }
+                    continue;
+                }
+
+                currentStage = 'label_print';
+                const labelPath = path.join(shippingLabelsDir, `${filePrefix}${orderSn}_etiqueta-10x15.pdf`);
+                fs.writeFileSync(labelPath, await expandShopeeLabelForThermalPaper(document.buffer));
+                await ptp.print(labelPath, {
+                    printer: settings.shopee_printer_thermal,
+                    paperSize: '4x6',
+                    scale: 'fit',
+                });
+                markPrintStep(markers.label);
+                console.log(`[${connection.displayName}] Etiqueta ${orderSn} impressa e marcada.`);
+            }
+
+            if (settings.shopee_printer_a4 && !fs.existsSync(markers.summary)) {
+                currentStage = 'summary';
+                const summaryData = await getShopeeOrderSummaryDataFromVps(connection, orderSn);
+                const summaryPath = path.join(
+                    shippingLabelsDir,
+                    isIndividual
+                        ? `${filePrefix}${orderSn}_comprovante-90x100.pdf`
+                        : `${filePrefix}${orderSn}_resumo-separacao-80mm.pdf`,
+                );
+                const summaryBuffer = isIndividual
+                    ? await createMercadoLivreSummaryPdf(summaryData)
+                    : await createShopeeSeparationSummaryPdf(summaryData);
+                if (!summaryBuffer?.length) throw new Error('Comprovante de separação vazio.');
+                fs.writeFileSync(summaryPath, summaryBuffer);
+                const printOptions = isIndividual
+                    ? await prepareMercadoLivreSummaryPrinter(settings.shopee_printer_a4)
+                    : { printer: settings.shopee_printer_a4, scale: 'shrink' };
+                await ptp.print(summaryPath, printOptions);
+                markPrintStep(markers.summary);
+                console.log(`[${connection.displayName}] ${isIndividual ? 'Comprovante' : 'Resumo'} ${orderSn} impresso e marcado.`);
+            }
+
+            if (fs.existsSync(markers.label) && (!settings.shopee_printer_a4 || fs.existsSync(markers.summary))) {
+                markPrintStep(markers.legacy);
+                console.log(`[${connection.displayName}] Fluxo ${orderSn} concluído sem repetição.`);
+            }
+        } catch (orderError) {
+            console.error(`[${connection.displayName}] Falha no pedido ${orderSn}:`, orderError.message || orderError);
+            if (requiresHumanIntervention(currentStage, orderError)) {
+                await printHumanInterventionReceipt({
+                    settings,
+                    connection,
+                    orderSn,
+                    stage: currentStage,
+                    resultOrError: orderError,
+                });
+            }
+        }
+        await delay(3000);
+    }
+}
+
 async function runLoop() {
     if (loopRunning) {
         console.log('Ciclo anterior ainda está em execução; nova rodada ignorada.');
         return;
     }
     loopRunning = true;
-    console.log(`[${new Date().toISOString()}] Iniciando ciclo seguro do Shopee Auto Print...`);
-
+    console.log(`[${new Date().toISOString()}] Iniciando ciclo seguro do Shopee Auto Print M/G...`);
     try {
         const settings = await getCompanySettings();
-        const {
-            shopee_partner_id,
-            shopee_partner_key,
-            shopee_shop_id,
-            shopee_access_token,
-            shopee_printer_thermal,
-        } = settings;
-        if (!shopee_access_token) {
-            console.log('Shopee não conectada. Aguardando...');
-            return;
-        }
-        if (!shopee_printer_thermal) {
+        if (!settings.shopee_access_token) console.log('Shopee M não conectada; demais conexões continuarão sendo verificadas.');
+        if (!settings.shopee_printer_thermal) {
             console.log('Impressora térmica não configurada. Aguardando configuração no painel...');
             return;
         }
-
-        const requestFetch = await getFetch();
-        const shopeeApiUrl = String(shopee_partner_id).startsWith('10')
-            ? 'https://partner.test-stable.shopeemobile.com'
-            : 'https://partner.shopeemobile.com';
-        const pathList = '/api/v2/order/get_order_list';
-        const timestamp = Math.floor(Date.now() / 1000);
-        const sign = generateSign(
-            shopee_partner_id,
-            shopee_partner_key,
-            pathList,
-            timestamp,
-            shopee_access_token,
-            shopee_shop_id,
-        );
-        const timeFrom = timestamp - (14 * 24 * 60 * 60);
-        const listUrl = `${shopeeApiUrl}${pathList}?partner_id=${shopee_partner_id}&timestamp=${timestamp}&access_token=${shopee_access_token}&shop_id=${shopee_shop_id}&sign=${sign}&time_range_field=create_time&time_from=${timeFrom}&time_to=${timestamp}&page_size=30&order_status=READY_TO_SHIP`;
-        const listResponse = await requestFetch(listUrl);
-        const listData = await listResponse.json();
-        if (listData.error) {
-            console.error('Shopee API Error:', listData.message);
-            return;
-        }
-
-        const orders = listData.response?.order_list || [];
-        if (orders.length === 0) {
-            console.log('Nenhum pedido READY_TO_SHIP no momento.');
-            return;
-        }
-
+        const connections = await getShopeePrintConnections();
         const ptp = require('pdf-to-printer');
-        for (const order of orders) {
-            const orderSn = String(order.order_sn || '').trim();
-            if (!orderSn) continue;
-            const markers = orderPrintStatePaths(orderSn);
-            if (fs.existsSync(markers.legacy)) continue;
-
-            console.log(`Processando fluxo fiscal e impressão de ${orderSn}...`);
-            let currentStage = 'invoice';
+        for (const connection of connections) {
+            if (connection.id === 'primary' && !settings.shopee_access_token) continue;
             try {
-                if (!fs.existsSync(markers.label)) {
-                    const invoice = await callVpsShopeeAction('upload_invoice', { order_sn: orderSn });
-                    if (!isVpsActionSuccess(invoice)) {
-                        console.log(`[${orderSn}] Nota ainda não pronta: ${invoice.data?.message || invoice.data?.error || `HTTP ${invoice.status}`}`);
-                        if (requiresHumanIntervention('invoice', invoice)) {
-                            await printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, stage: 'invoice', resultOrError: invoice });
-                        }
-                        continue;
-                    }
-
-                    currentStage = 'ship_order';
-                    let shipment = null;
-                    for (let attempt = 1; attempt <= 6; attempt += 1) {
-                        shipment = await callVpsShopeeAction('ship_order', { order_sn: orderSn });
-                        if (isVpsActionSuccess(shipment)) break;
-                        const shipmentError = `${shipment.data?.error || ''} ${shipment.data?.message || ''}`;
-                        if (!/invoice|nota fiscal|lack_of_invoice_data|pending/i.test(shipmentError)) break;
-                        await delay(2500);
-                    }
-                    if (!isVpsActionSuccess(shipment)) {
-                        console.log(`[${orderSn}] Preparar envio pendente: ${shipment?.data?.message || shipment?.data?.error || `HTTP ${shipment?.status}`}`);
-                        if (requiresHumanIntervention('ship_order', shipment)) {
-                            await printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, stage: 'ship_order', resultOrError: shipment });
-                        }
-                        continue;
-                    }
-
-                    currentStage = 'shipping_document';
-                    await delay(2000);
-                    const document = await callVpsShopeeAction('get_shipping_document', {
-                        order_sn: orderSn,
-                        shipping_document_type: 'NORMAL_AIR_WAYBILL',
-                    });
-                    if (!document.ok || !document.buffer?.length || !document.contentType.includes('pdf')) {
-                        console.log(`[${orderSn}] Etiqueta ainda não pronta: ${document.data?.message || document.data?.error || `HTTP ${document.status}`}`);
-                        if (requiresHumanIntervention('shipping_document', document)) {
-                            await printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, stage: 'shipping_document', resultOrError: document });
-                        }
-                        continue;
-                    }
-
-                    currentStage = 'label_print';
-                    const labelPath = path.join(shippingLabelsDir, `${orderSn}_etiqueta-10x15.pdf`);
-                    fs.writeFileSync(labelPath, await expandShopeeLabelForThermalPaper(document.buffer));
-                    console.log(`Enviando etiqueta para: ${shopee_printer_thermal}`);
-                    await ptp.print(labelPath, {
-                        printer: shopee_printer_thermal,
-                        paperSize: '4x6',
-                        scale: 'fit',
-                    });
-                    markPrintStep(markers.label);
-                    console.log(`Etiqueta ${orderSn} impressa e marcada.`);
-                }
-
-                if (settings.shopee_printer_a4 && !fs.existsSync(markers.summary)) {
-                    currentStage = 'summary';
-                    const summaryData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn);
-                    const summaryPath = path.join(shippingLabelsDir, `${orderSn}_resumo-separacao-80mm.pdf`);
-                    const summaryBuffer = await createShopeeSeparationSummaryPdf(summaryData);
-                    if (!summaryBuffer?.length) throw new Error('Resumo de separação vazio.');
-                    fs.writeFileSync(summaryPath, summaryBuffer);
-                    console.log(`Enviando resumo para: ${settings.shopee_printer_a4}`);
-                    await ptp.print(summaryPath, {
-                        printer: settings.shopee_printer_a4,
-                        scale: 'shrink',
-                    });
-                    markPrintStep(markers.summary);
-                    console.log(`Resumo ${orderSn} impresso e marcado.`);
-                }
-
-                if (
-                    fs.existsSync(markers.label)
-                    && (!settings.shopee_printer_a4 || fs.existsSync(markers.summary))
-                ) {
-                    markPrintStep(markers.legacy);
-                    console.log(`Fluxo ${orderSn} concluído sem repetição.`);
-                }
-            } catch (orderError) {
-                console.error(`Falha no pedido ${orderSn}:`, orderError.message || orderError);
-                if (requiresHumanIntervention(currentStage, orderError)) {
-                    await printHumanInterventionReceipt({
-                        settings,
-                        shopeeApiUrl,
-                        orderSn,
-                        stage: currentStage,
-                        resultOrError: orderError,
-                    });
-                }
+                await processShopeePrintConnection(settings, connection, ptp);
+            } catch (connectionError) {
+                console.error(`[${connection.displayName}] Falha no ciclo:`, connectionError.message || connectionError);
             }
-            await delay(3000);
         }
     } catch (error) {
         console.error('Erro Fatal no Ciclo:', error);
@@ -1088,43 +1189,52 @@ async function runLoop() {
     }
 }
 
-if (process.env.MDV_PRINT_DEVICE_TOKEN && process.env.MDV_PRINT_API_URL) {
+function startShopeeAutoPrintService() {
+    if (process.env.MDV_PRINT_DEVICE_TOKEN && process.env.MDV_PRINT_API_URL) {
+        try {
+            require('./central-print-agent.cjs').startCentralPrintAgent();
+        } catch (error) {
+            console.error('[Impressão central] Inicialização falhou:', error.message);
+        }
+    }
+    startLocalServer();
+    void runLoop();
+    setInterval(() => void runLoop(), POLLING_INTERVAL);
+
     try {
-        require('./central-print-agent.cjs').startCentralPrintAgent();
+        require('./mercado-livre-print-agent.cjs').startMercadoLivrePrintAgent({
+            apiUrl: VPS_API_URL, syncKey: VPS_SYNC_KEY, getSettings: getCompanySettings,
+            getStockLocations: async (skus) => {
+                if (!skus.length) return {};
+                const result = await callVpsShopeeAction('get_stock_locations', { skus });
+                return Object.fromEntries((result.data?.items || []).map(item => [
+                    String(item.sku || '').toUpperCase(), (item.locations || []).filter(Boolean).join(' | '),
+                ]));
+            },
+        });
     } catch (error) {
-        console.error('[Impressão central] Inicialização falhou:', error.message);
+        console.error('Mercado Livre Auto Print: inicializacao falhou:', error.message);
+    }
+
+    try {
+        require('./tiktok-shop-print-agent.cjs').startTikTokPrintAgent({
+            apiUrl: VPS_API_URL, syncKey: VPS_SYNC_KEY, getSettings: getCompanySettings,
+            getStockLocations: async (skus) => {
+                if (!skus.length) return {};
+                const result = await callVpsShopeeAction('get_stock_locations', { skus });
+                return Object.fromEntries((result.data?.items || []).map(item => [
+                    String(item.sku || '').toUpperCase(), (item.locations || []).filter(Boolean).join(' | '),
+                ]));
+            },
+        });
+    } catch (error) {
+        console.error('TikTok Shop Auto Print: inicializacao falhou:', error.message);
     }
 }
-startLocalServer();
-void runLoop();
-setInterval(() => void runLoop(), POLLING_INTERVAL);
 
-try {
-    require('./mercado-livre-print-agent.cjs').startMercadoLivrePrintAgent({
-        apiUrl: VPS_API_URL, syncKey: VPS_SYNC_KEY, getSettings: getCompanySettings,
-        getStockLocations: async (skus) => {
-            if (!skus.length) return {};
-            const result = await callVpsShopeeAction('get_stock_locations', { skus });
-            return Object.fromEntries((result.data?.items || []).map(item => [
-                String(item.sku || '').toUpperCase(), (item.locations || []).filter(Boolean).join(' | '),
-            ]));
-        },
-    });
-} catch (error) {
-    console.error('Mercado Livre Auto Print: inicializacao falhou:', error.message);
-}
+if (require.main === module) startShopeeAutoPrintService();
 
-try {
-    require('./tiktok-shop-print-agent.cjs').startTikTokPrintAgent({
-        apiUrl: VPS_API_URL, syncKey: VPS_SYNC_KEY, getSettings: getCompanySettings,
-        getStockLocations: async (skus) => {
-            if (!skus.length) return {};
-            const result = await callVpsShopeeAction('get_stock_locations', { skus });
-            return Object.fromEntries((result.data?.items || []).map(item => [
-                String(item.sku || '').toUpperCase(), (item.locations || []).filter(Boolean).join(' | '),
-            ]));
-        },
-    });
-} catch (error) {
-    console.error('TikTok Shop Auto Print: inicializacao falhou:', error.message);
-}
+module.exports = {
+    prepareShopeeOrderShipment,
+    startShopeeAutoPrintService,
+};

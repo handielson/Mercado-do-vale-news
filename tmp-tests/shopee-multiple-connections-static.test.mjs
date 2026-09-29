@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 
 const page = readFileSync('pages/admin/settings/ShopeePage.tsx', 'utf8');
 const connectionsService = readFileSync('services/shopeeConnections.ts', 'utf8');
+const productsService = readFileSync('services/shopeeProducts.ts', 'utf8');
+const ordersTab = readFileSync('pages/admin/settings/components/ShopeeOrdersTab.tsx', 'utf8');
+const financeTab = readFileSync('pages/admin/settings/components/ShopeeFinanceTab.tsx', 'utf8');
 
 for (const serverFile of ['vps_server.js', 'vps_server.cjs']) {
     const server = readFileSync(serverFile, 'utf8');
@@ -29,5 +32,16 @@ assert.match(
     /connection\.authorization_status === 'connected'[\s\S]*?>\s*Conectada\s*<\/span>/,
     'connected additional stores must show a visible connected badge',
 );
+assert.match(page, /selectedConnectionId/, 'admin page must keep an explicit selected Shopee store');
+assert.match(page, /Loja Shopee em uso/, 'admin page must expose the operational store selector');
+assert.match(page, /normalizeShopeeConnectionId\(row\.connection_id\) === selectedConnectionId/, 'product links must be filtered by selected store');
+assert.match(page, /selectedConnectionId === PRIMARY_SHOPEE_CONNECTION_ID[\s\S]*?normalizePositiveId\(p\.shopee_item_id\)/, 'legacy primary item ids must never appear as Glaucia links');
+assert.match(page, /connection_id:\s*selectedConnectionId/, 'manual and imported links must persist the selected store');
+assert.match(page, /connectionId=\{selectedConnectionId\}/, 'publish, orders and finance flows must receive the selected store');
+assert.match(productsService, /idx|connection_id|normalizeConnectionId/, 'product link service must scope operations by connection id');
+assert.match(ordersTab, /shopee_orders_\$\{connectionId\}_\$\{statusFilter\}/, 'order cache must be isolated by store');
+assert.match(ordersTab, /connection_id:\s*connectionId/, 'order mutations must target the selected store');
+assert.match(financeTab, /financeCacheKey\(connectionId\)/, 'finance cache must be isolated by store');
+assert.match(financeTab, /withShopeeConnection[\s\S]*connectionId/, 'finance reads must target the selected store');
 
 console.log('shopee multiple connections static checks ok');

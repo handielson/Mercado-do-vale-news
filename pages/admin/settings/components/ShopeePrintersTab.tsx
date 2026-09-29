@@ -207,7 +207,7 @@ export default function ShopeePrintersTab() {
                             <p className="font-semibold mb-1">Como funciona a impressão automática?</p>
                             <p className="text-blue-700/80">
                                 No computador onde as impressoras estão conectadas, use o botão para buscar e selecionar cada térmica uma única vez.
-                                O serviço local de impressão mantém essa configuração e envia automaticamente a etiqueta de envio para uma térmica 10x15 e o resumo de separação para a impressora de comprovante em papel 80 mm.
+                                O serviço local usa as mesmas impressoras nas duas lojas: etiqueta 10x15 para M e G; na conta M imprime o resumo atual e, na conta G pessoa física, imprime o comprovante 90 x 100 no mesmo padrão do Mercado Livre, sem emitir NF-e no Bling.
                             </p>
                         </div>
                     </div>

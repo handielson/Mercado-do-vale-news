@@ -65,6 +65,7 @@ function transformFromDB(row: any): Product {
         bling_id: row.bling_id || undefined,
         bling_parent_id: row.bling_parent_id || undefined,
         shopee_item_id: row.shopee_item_id || undefined,
+        shopee_store_codes: Array.isArray(row.shopee_store_codes) ? row.shopee_store_codes : [],
         video_url: row.video_url || undefined,
         marketing_background_url: row.marketing_background_url || undefined,
         marketing_background_no_price_url: row.marketing_background_no_price_url || undefined,
@@ -655,12 +656,17 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
     }
 
     // Shopee Sync Automático
-    if (payload.shopee_item_id && oldProduct) {
+    const shopeePriceChanged = oldProduct.price_retail !== savedProduct.price_retail;
+    const shopeeStockChanged = Boolean(input.track_inventory && oldProduct.stock_quantity !== input.stock_quantity);
+    const hasShopeeLinks = (shopeePriceChanged || shopeeStockChanged)
+        ? (await shopeeProductService.getByProductIds([id])).some((link) => Number(link.shopee_item_id) > 0)
+        : false;
+    if (hasShopeeLinks) {
         import('./shopeeService').then(({ shopeeService }) => {
-            if (oldProduct.price_retail !== savedProduct.price_retail) {
+            if (shopeePriceChanged) {
                 shopeeService.updatePrice(id, savedProduct.price_retail).catch(e => console.error("Shopee Price Sync Error:", e));
             }
-            if (input.track_inventory && oldProduct.stock_quantity !== input.stock_quantity) {
+            if (shopeeStockChanged) {
                 shopeeService.updateStock(id, input.stock_quantity || 0).catch(e => console.error("Shopee Stock Sync Error:", e));
             }
         });

@@ -82,7 +82,7 @@ assert.match(script, /createShopeeSeparationSummaryPdf/,
   'os fluxos manual e automático precisam usar o resumo próprio 10x15');
 assert.match(script, /createShopeeInterventionReceiptPdf/,
   'erros que exigem ação humana precisam gerar comprovante próprio 10x15');
-assert.match(script, /requiresHumanIntervention\('invoice'[\s\S]*?printHumanInterventionReceipt/,
+assert.match(script, /requiresHumanIntervention\(preparation\.stage, preparationResult\)[\s\S]*?printHumanInterventionReceipt/,
   'erros fiscais não transitórios precisam imprimir o aviso operacional');
 assert.match(script, /\.intervention-\$\{issueHash\}\.txt/,
   'cada erro precisa de marcador deduplicado para não imprimir em loop');
@@ -101,8 +101,10 @@ assert.match(summary, /INTERVENCAO NECESSARIA[\s\S]*?NAO DESPACHAR ATE CORRIGIR/
 assert.match(packageJson, /"bwip-js":\s*"\^\d+/,
   'a dependência que gera o código de barras precisa estar versionada');
 
-assert.match(script, /async function runLoop\(\)[\s\S]*?'upload_invoice'[\s\S]*?'ship_order'[\s\S]*?'get_shipping_document'/,
-  'o fluxo real precisa enviar a nota antes de preparar o envio e baixar a etiqueta');
+assert.match(script, /async function prepareShopeeOrderShipment[\s\S]*?if \(!isIndividual\)[\s\S]*?'upload_invoice'[\s\S]*?'ship_order'/,
+  'o fluxo PJ precisa enviar a nota antes de preparar o envio e baixar a etiqueta');
+assert.match(script, /async function processShopeePrintConnection[\s\S]*?prepareShopeeOrderShipment[\s\S]*?'get_shipping_document'/,
+  'o fluxo automático precisa preparar o envio antes de baixar a etiqueta');
 assert.match(script, /loopRunning[\s\S]*?nova rodada ignorada/,
   'ciclos sobrepostos precisam ser bloqueados para nÃ£o duplicar impressÃµes');
 assert.match(script, /\.label\.txt[\s\S]*?\.summary\.txt/,
@@ -125,7 +127,10 @@ assert.match(vpsServer, /product_stock_locations[\s\S]*?stock_deposits[\s\S]*?st
   'a localização deve vir da distribuição real de estoque');
 assert.match(mobilePush, /sendOperationalAlert/,
   'o GestÃ£o MDV precisa receber alertas operacionais deduplicados');
-assert.equal(vpsServer, vpsServerMirror,
-  'vps_server.js e vps_server.cjs devem permanecer idÃªnticos');
+for (const server of [vpsServer, vpsServerMirror]) {
+  assert.match(server, /case 'upload_invoice'/, 'os dois entrypoints VPS precisam preservar o upload fiscal Shopee');
+  assert.match(server, /seller_type VARCHAR\(20\) NOT NULL DEFAULT 'individual'/,
+    'os dois entrypoints VPS precisam preservar a classificação PF das lojas adicionais');
+}
 
 console.log('Shopee dual thermal print flow regression checks passed.');

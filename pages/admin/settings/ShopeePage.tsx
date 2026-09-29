@@ -9,7 +9,14 @@ import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { shopeeProductService } from '../../../services/shopeeProducts';
-import { createShopeeConnection, listShopeeConnections, type ShopeeConnection } from '../../../services/shopeeConnections';
+import {
+    createShopeeConnection,
+    listShopeeConnections,
+    normalizeShopeeConnectionId,
+    PRIMARY_SHOPEE_CONNECTION_ID,
+    withShopeeConnection,
+    type ShopeeConnection,
+} from '../../../services/shopeeConnections';
 import { Company } from '../../../types/company';
 import ShopeeOrdersTab from './components/ShopeeOrdersTab';
 import ShopeePrintersTab from './components/ShopeePrintersTab';
@@ -126,10 +133,7 @@ export interface ShopeeProduct {
         height_cm?: number;
         depth_cm?: number;
     } | string | null;
-    shopee_item_id?: number | null;
     model_id?: string | null;
-    shopee_category_id?: number | null;
-    shopee_category_name?: string | null;
 }
 
 export interface LocalProduct {
@@ -866,10 +870,11 @@ type SearchableAttributeComboboxProps = {
     attributeId: number;
     value: string;
     placeholder: string;
+    connectionId?: string;
     onChange: (next: string) => void;
 };
 
-function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange }: SearchableAttributeComboboxProps) {
+function SearchableAttributeCombobox({ attributeId, value, placeholder, connectionId = PRIMARY_SHOPEE_CONNECTION_ID, onChange }: SearchableAttributeComboboxProps) {
     const [query, setQuery] = useState<string>(getShopeeAttributeDisplayValue(value));
     const [options, setOptions] = useState<{ value_id: number; value_name: string }[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
@@ -912,7 +917,7 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
                 params.set('value_name', trimmed);
                 params.set('keyword', trimmed);
             }
-            const res = await fetch(`/api/shopee-catalog?action=search_attribute_values&${params}`);
+            const res = await fetch(withShopeeConnection(`/api/shopee-catalog?action=search_attribute_values&${params}`, connectionId));
             const data = await res.json();
             if (data?.error) {
                 console.error('[ShopeePage] search_attribute_values error', data);
@@ -936,7 +941,7 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
         } finally {
             setLoading(false);
         }
-    }, [attributeId]);
+    }, [attributeId, connectionId]);
 
     const scheduleFetch = useCallback((term: string) => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -1046,9 +1051,9 @@ async function fetchJsonStrict(url: string, init?: RequestInit): Promise<any> {
     return data;
 }
 
-async function buildShopeePriceList(itemId: number, originalPrice: number): Promise<Array<{ model_id: number; original_price: number }>> {
+async function buildShopeePriceList(itemId: number, originalPrice: number, connectionId = PRIMARY_SHOPEE_CONNECTION_ID): Promise<Array<{ model_id: number; original_price: number }>> {
     try {
-        const modelData = await fetchJsonStrict(`/api/shopee-catalog?action=get_model_list&item_id=${itemId}`);
+        const modelData = await fetchJsonStrict(withShopeeConnection(`/api/shopee-catalog?action=get_model_list&item_id=${itemId}`, connectionId));
         const modelIds = (modelData?.response?.model || [])
             .map((m: any) => Number(m?.model_id))
             .filter((id: number) => Number.isFinite(id) && id > 0);
@@ -1239,6 +1244,7 @@ export default function ShopeePage() {
     const [searchParams] = useSearchParams();
     const requestedTab = searchParams.get('tab');
     const requestedOrderStatus = searchParams.get('status') || 'ALL';
+    const requestedProductId = searchParams.get('product_id');
     const [tab, setTab] = useState<Tab>('config');
     const [company, setCompany] = useState<Company | null>(null);
     const [loading, setLoading] = useState(true);
@@ -1246,6 +1252,7 @@ export default function ShopeePage() {
     const [shopeeConnected, setShopeeConnected] = useState(false);
     const [shopeeShopId, setShopeeShopId] = useState<string | null>(null);
     const [shopeeConnections, setShopeeConnections] = useState<ShopeeConnection[]>([]);
+    const [selectedConnectionId, setSelectedConnectionId] = useState(PRIMARY_SHOPEE_CONNECTION_ID);
     const [newConnectionName, setNewConnectionName] = useState('');
     const [creatingConnection, setCreatingConnection] = useState(false);
 
@@ -1279,6 +1286,24 @@ export default function ShopeePage() {
     const [savingRenameProductId, setSavingRenameProductId] = useState<string | null>(null);
     const [unlinkingProductId, setUnlinkingProductId] = useState<string | null>(null);
 
+    const selectedAdditionalConnection = shopeeConnections.find(
+        connection => connection.id === selectedConnectionId,
+    ) || null;
+    const selectedStoreCode: 'M' | 'G' = selectedConnectionId === PRIMARY_SHOPEE_CONNECTION_ID ? 'M' : 'G';
+    const selectedStoreLabel = selectedStoreCode === 'M'
+        ? 'Mercado do Vale (M)'
+        : `${selectedAdditionalConnection?.display_name || 'Glaucia'} (G)`;
+    const selectedShopId = selectedStoreCode === 'M'
+        ? shopeeShopId
+        : selectedAdditionalConnection?.shopee_shop_id || null;
+    const selectedStoreConnected = selectedStoreCode === 'M'
+        ? shopeeConnected
+        : selectedAdditionalConnection?.authorization_status === 'connected';
+    const selectedShopeeUrl = useCallback(
+        (url: string) => withShopeeConnection(url, selectedConnectionId),
+        [selectedConnectionId],
+    );
+
     useEffect(() => {
         if (requestedTab === 'config' || requestedTab === 'products' || requestedTab === 'bulk' || requestedTab === 'orders' || requestedTab === 'finance' || requestedTab === 'printers') {
             setTab(requestedTab);
@@ -1286,6 +1311,16 @@ export default function ShopeePage() {
     }, [requestedTab]);
 
     useEffect(() => { loadData(); }, []);
+
+    useEffect(() => {
+        setSyncModal(null);
+        setBulkActiveProduct(null);
+        setBulkQueueIds([]);
+        setBulkSelectedIds([]);
+        setBulkCompletedIds([]);
+        setBulkRunItems([]);
+        setExpandedProductId(null);
+    }, [selectedConnectionId]);
 
     async function loadData() {
         try {
@@ -1316,13 +1351,18 @@ export default function ShopeePage() {
             }
 
             // Fetch Shopee sync records from VPS (integration metadata)
-            const shopeeRecords = await shopeeProductService.list();
+            const shopeeRecords = (await shopeeProductService.list()).filter(
+                record => normalizeShopeeConnectionId(record.connection_id) === selectedConnectionId,
+            );
 
             const syncMap = new Map((shopeeRecords || []).map((r: any) => [r.product_id, r]));
 
             const merged: ShopeeProduct[] = (localProds || []).map((p: any) => {
                 const sr = syncMap.get(String(p.id)) as any;
-                const existingShopeeItemId = normalizePositiveId(sr?.shopee_item_id) || normalizePositiveId(p.shopee_item_id);
+                const existingShopeeItemId = normalizePositiveId(sr?.shopee_item_id)
+                    || (selectedConnectionId === PRIMARY_SHOPEE_CONNECTION_ID
+                        ? normalizePositiveId(p.shopee_item_id)
+                        : null);
                 
                 return {
                     id: sr?.id || p.id,
@@ -1373,11 +1413,17 @@ export default function ShopeePage() {
             setProducts(merged);
         } catch (e) { toast.error('Erro ao carregar produtos.'); }
         finally { setLoadingProducts(false); }
-    }, []);
+    }, [selectedConnectionId]);
 
     useEffect(() => {
         if (tab === 'products' || tab === 'bulk') loadProducts();
     }, [tab, loadProducts]);
+
+    useEffect(() => {
+        if (!requestedProductId || products.length === 0) return;
+        const requestedProduct = products.find(product => product.product_id === requestedProductId);
+        if (requestedProduct) setSearchQ(requestedProduct.sku || requestedProduct.name || '');
+    }, [products, requestedProductId]);
 
     useEffect(() => {
         if (tab !== 'bulk') return;
@@ -1405,7 +1451,7 @@ export default function ShopeePage() {
 
         Promise.all(categoryIds.map(async (categoryId) => {
             try {
-                const res = await fetch(`/api/shopee-catalog?action=attributes&category_id=${categoryId}`);
+                const res = await fetch(selectedShopeeUrl(`/api/shopee-catalog?action=attributes&category_id=${categoryId}`));
                 const data = await res.json();
                 return [String(categoryId), normalizeShopeeAttributes(data).filter(attr => attr.mandatory)] as const;
             } catch {
@@ -1416,7 +1462,7 @@ export default function ShopeePage() {
             setBulkRequiredAttributesByCategoryId(Object.fromEntries(entries));
         });
 
-        fetch('/api/shopee-catalog?action=logistics_channel_list')
+        fetch(selectedShopeeUrl('/api/shopee-catalog?action=logistics_channel_list'))
             .then(res => res.json())
             .then(data => {
                 if (cancelled) return;
@@ -1434,7 +1480,7 @@ export default function ShopeePage() {
         return () => {
             cancelled = true;
         };
-    }, [tab, bulkShopeeTemplates]);
+    }, [tab, bulkShopeeTemplates, selectedShopeeUrl]);
 
     const handleSave = async () => {
         if (!company) return;
@@ -1497,10 +1543,10 @@ export default function ShopeePage() {
 
     const importFromShopee = async () => {
         setImporting(true);
-        toast.loading('Buscando produtos na Shopee...', { id: 'shopee-import' });
+        toast.loading(`Buscando produtos em ${selectedStoreLabel}...`, { id: 'shopee-import' });
         try {
             // 1. Busca catalogo completo no backend (evita dezenas de chamadas no browser)
-            const fullData = await fetchJsonStrict('/api/shopee-catalog?action=get_full_catalog&item_status=NORMAL&page_size=100');
+            const fullData = await fetchJsonStrict(selectedShopeeUrl('/api/shopee-catalog?action=get_full_catalog&item_status=NORMAL&page_size=100'));
             if (fullData?.error && fullData.error !== '') {
                 throw new Error(fullData.message || fullData.error || 'Falha ao buscar catalogo Shopee.');
             }
@@ -1574,7 +1620,9 @@ export default function ShopeePage() {
 
 
             // 4. Deduplicate by product_id (SKU match wins over name match) and upsert
-            const existing = await shopeeProductService.list();
+            const existing = (await shopeeProductService.list()).filter(
+                row => normalizeShopeeConnectionId(row.connection_id) === selectedConnectionId,
+            );
             const existingIds = new Set((existing || []).map((r: any) => String(r.product_id)));
 
             // Keep one Shopee item per VPS product (SKU match wins over name match)
@@ -1591,6 +1639,7 @@ export default function ShopeePage() {
                 .filter(m => !existingIds.has(String(m.localProduct.id)))
                 .map(m => ({
                     product_id: String(m.localProduct.id),
+                    connection_id: selectedConnectionId,
                     shopee_item_id: m.shopeeItem.item_id,
                     shopee_category_id: m.shopeeItem.category_id || null,
                     shopee_price: m.shopeeItem.price_info?.[0]?.original_price
@@ -1634,6 +1683,7 @@ export default function ShopeePage() {
         try {
             await shopeeProductService.upsert({
                 product_id: p.product_id,
+                connection_id: selectedConnectionId,
                 shopee_item_id: Number(itemId),
                 status: 'active',
                 last_synced_at: new Date().toISOString(),
@@ -1653,13 +1703,13 @@ export default function ShopeePage() {
         }
 
         const confirmed = window.confirm(
-            `Apagar o anúncio Shopee #${p.shopee_item_id} e excluir o vínculo local? Essa ação remove o anúncio da Shopee.`
+            `Apagar o anúncio #${p.shopee_item_id} de ${selectedStoreLabel} e excluir somente esse vínculo local? Essa ação remove o anúncio da loja selecionada.`
         );
         if (!confirmed) return;
 
         setUnlinkingProductId(p.product_id);
         try {
-            const shopeeRes = await fetch('/api/shopee-catalog?action=delete_item', {
+            const shopeeRes = await fetch(selectedShopeeUrl('/api/shopee-catalog?action=delete_item'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ item_id: p.shopee_item_id }),
@@ -1669,7 +1719,7 @@ export default function ShopeePage() {
                 throw new Error(shopeeData.message || shopeeData.error || 'Falha ao apagar produto na Shopee.');
             }
 
-            await shopeeProductService.deleteByShopeeItemId(p.shopee_item_id);
+            await shopeeProductService.deleteByShopeeItemId(p.shopee_item_id, selectedConnectionId);
 
             toast.success('Produto apagado da Shopee e vínculo local excluído. Você já pode reenviar.');
             loadProducts();
@@ -1684,7 +1734,7 @@ export default function ShopeePage() {
         if (!p.shopee_item_id) return;
         const newStatus = p.status === 'active' ? 'INACTIVE' : 'NORMAL';
         try {
-            const res = await fetch('/api/shopee-catalog?action=update_item_status', {
+            const res = await fetch(selectedShopeeUrl('/api/shopee-catalog?action=update_item_status'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ item_id: p.shopee_item_id, item_status: newStatus }),
@@ -1693,7 +1743,7 @@ export default function ShopeePage() {
             if (data.error) { toast.error(`Erro: ${data.message}`); return; }
             await shopeeProductService.updateByProductId(p.product_id, {
                 status: newStatus === 'NORMAL' ? 'active' : 'inactive'
-            });
+            }, selectedConnectionId);
             toast.success(`Produto ${newStatus === 'NORMAL' ? 'ativado' : 'desativado'} na Shopee!`);
             loadProducts();
         } catch { toast.error('Erro ao alterar status.'); }
@@ -1703,8 +1753,8 @@ export default function ShopeePage() {
         const newPrice = editingPrice[p.product_id];
         if (!newPrice || !p.shopee_item_id) return;
         try {
-            const priceList = await buildShopeePriceList(p.shopee_item_id, newPrice / 100);
-            const res = await fetch('/api/shopee-catalog?action=update_price', {
+            const priceList = await buildShopeePriceList(p.shopee_item_id, newPrice / 100, selectedConnectionId);
+            const res = await fetch(selectedShopeeUrl('/api/shopee-catalog?action=update_price'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1714,7 +1764,7 @@ export default function ShopeePage() {
             });
             const data = await res.json();
             if (data.error) { toast.error(`Erro: ${data.message}`); return; }
-            await shopeeProductService.updateByProductId(p.product_id, { shopee_price: newPrice });
+            await shopeeProductService.updateByProductId(p.product_id, { shopee_price: newPrice }, selectedConnectionId);
             toast.success('Preço atualizado na Shopee!');
             setEditingPrice(prev => { const n = { ...prev }; delete n[p.product_id]; return n; });
             loadProducts();
@@ -1735,7 +1785,7 @@ export default function ShopeePage() {
 
         setSavingRenameProductId(p.product_id);
         try {
-            const shopeeRes = await fetch('/api/shopee-catalog?action=update_item', {
+            const shopeeRes = await fetch(selectedShopeeUrl('/api/shopee-catalog?action=update_item'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1760,7 +1810,7 @@ export default function ShopeePage() {
                 }
             }
 
-            await shopeeProductService.updateByProductId(p.product_id, { last_synced_at: new Date().toISOString() });
+            await shopeeProductService.updateByProductId(p.product_id, { last_synced_at: new Date().toISOString() }, selectedConnectionId);
 
             setProducts(prev => prev.map(prod =>
                 prod.product_id === p.product_id
@@ -1931,7 +1981,7 @@ export default function ShopeePage() {
         </div>
     );
 
-    const isConnected = shopeeConnected;
+    const isConnected = selectedStoreConnected;
 
     const filtered = products.filter(p => {
         const matchFilter =
@@ -2048,6 +2098,50 @@ export default function ShopeePage() {
                 ))}
             </div>
 
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <p className="text-sm font-bold text-slate-800">Loja Shopee em uso</p>
+                        <p className="text-xs text-slate-500">Produtos, anúncios, pedidos e financeiro ficam separados por conta.</p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${selectedStoreConnected ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {selectedStoreConnected ? 'CONECTADA' : 'DESCONECTADA'}
+                    </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setSelectedConnectionId(PRIMARY_SHOPEE_CONNECTION_ID)}
+                        className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${selectedConnectionId === PRIMARY_SHOPEE_CONNECTION_ID ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-100' : 'border-slate-200 hover:bg-slate-50'}`}
+                    >
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 font-black text-white">M</span>
+                        <span>
+                            <span className="block text-sm font-semibold text-slate-800">Mercado do Vale</span>
+                            <span className="block text-xs text-slate-500">{shopeeShopId ? `Shop ID ${shopeeShopId}` : 'Sem autorização'}</span>
+                        </span>
+                    </button>
+                    {shopeeConnections.map(connection => (
+                        <button
+                            key={connection.id}
+                            type="button"
+                            onClick={() => setSelectedConnectionId(connection.id)}
+                            className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${selectedConnectionId === connection.id ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-100' : 'border-slate-200 hover:bg-slate-50'}`}
+                        >
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 font-black text-white">G</span>
+                            <span>
+                                <span className="block text-sm font-semibold text-slate-800">{connection.display_name || 'Glaucia'}</span>
+                                <span className="block text-xs text-slate-500">
+                                    {connection.authorization_status === 'connected' && connection.shopee_shop_id
+                                        ? `Shop ID ${connection.shopee_shop_id}`
+                                        : 'Aguardando autorização'}
+                                </span>
+                            </span>
+                        </button>
+                    ))}
+                </div>
+                <p className="mt-3 text-xs font-medium text-slate-600">Selecionada: {selectedStoreLabel}</p>
+            </div>
+
             {/* ── Tab: Configurações ── */}
             {tab === 'config' && (
                 <div className="space-y-6">
@@ -2122,7 +2216,7 @@ export default function ShopeePage() {
                                                 <p className="font-semibold text-slate-800">{connection.display_name}</p>
                                                 <p className="text-xs text-slate-500">
                                                     {connection.authorization_status === 'connected' && connection.shopee_shop_id
-                                                        ? `Conectada · Shop ID ${connection.shopee_shop_id}`
+                                        ? `Conectada · Pessoa física · Comprovante · Shop ID ${connection.shopee_shop_id}`
                                                         : 'Aguardando autorização do titular'}
                                                 </p>
                                             </div>
@@ -2156,13 +2250,13 @@ export default function ShopeePage() {
                                     <p className="text-xs text-slate-500">Vincule sua conta de Vendedor ao App.</p>
                                 </div>
                             </div>
-                            {isConnected
+                            {shopeeConnected
                                 ? <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200 uppercase">Conectado</span>
                                 : <span className="px-3 py-1 bg-slate-200 text-slate-500 text-xs font-bold rounded-full border border-slate-300 uppercase">Desconectado</span>
                             }
                         </div>
                         <div className="p-6">
-                            {isConnected ? (
+                            {shopeeConnected ? (
                                 <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
                                     <div>
                                         <p className="text-sm font-bold text-green-800">Autenticação Ativa</p>
@@ -2210,7 +2304,7 @@ export default function ShopeePage() {
                             <button onClick={importFromShopee} disabled={importing || loadingProducts}
                                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50 shadow-sm">
                                 {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 text-slate-500" />}
-                                Importar da Shopee
+                                Importar de {selectedStoreLabel}
                             </button>
                         </div>
                     )}
@@ -2509,9 +2603,10 @@ export default function ShopeePage() {
 
                                             {/* ── Expanded panel ─────────────────────── */}
                                             {expandedProductId === p.product_id && (
-                                                <ExpandedItemPanel
-                                                    p={p}
-                                                    shopeeShopId={shopeeShopId}
+                        <ExpandedItemPanel
+                            p={p}
+                            shopeeShopId={selectedShopId}
+                            connectionId={selectedConnectionId}
                                                     onClose={() => setExpandedProductId(null)}
                                                     onPriceChange={val => setEditingPrice(prev => ({ ...prev, [p.product_id]: val }))}
                                                     editingPriceVal={editingPrice[p.product_id]}
@@ -2532,6 +2627,9 @@ export default function ShopeePage() {
                         <ShopeeSyncModal
                             product={syncModal}
                             company={company}
+                            connectionId={selectedConnectionId}
+                            storeLabel={selectedStoreLabel}
+                            shopeeShopId={selectedShopId}
                             historicalProducts={products}
                             variationGroups={variationGroups}
                             onClose={() => setSyncModal(null)}
@@ -2824,6 +2922,9 @@ export default function ShopeePage() {
                             key={bulkActiveProduct.id}
                             product={bulkActiveProduct}
                             company={company}
+                            connectionId={selectedConnectionId}
+                            storeLabel={selectedStoreLabel}
+                            shopeeShopId={selectedShopId}
                             historicalProducts={products}
                             variationGroups={variationGroups}
                             autoPublish={Boolean(bulkAutoPreset)}
@@ -2838,12 +2939,12 @@ export default function ShopeePage() {
             )}
 
             {tab === 'orders' && (
-                <ShopeeOrdersTab isConnected={isConnected} initialStatusFilter={requestedOrderStatus} />
+                <ShopeeOrdersTab key={selectedConnectionId} isConnected={isConnected} connectionId={selectedConnectionId} initialStatusFilter={requestedOrderStatus} />
             )}
 
             {/* ── Tab: Financeiro ── */}
             {tab === 'finance' && (
-                <ShopeeFinanceTab />
+                <ShopeeFinanceTab key={selectedConnectionId} connectionId={selectedConnectionId} />
             )}
 
             {/* ── Tab: Impressoras ── */}
@@ -2856,8 +2957,12 @@ export default function ShopeePage() {
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────
 export function ShopeeSyncModal({
-    product, company, historicalProducts, variationGroups, autoPublish = false, bulkAutoPreset = null, onBulkAutoPresetReady, onClose, onSuccess, onError
-}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; autoPublish?: boolean; bulkAutoPreset?: ShopeeBulkAutoPreset | null; onBulkAutoPresetReady?: (preset: ShopeeBulkAutoPreset) => void; onClose: () => void; onSuccess: (publishedProductIds?: string[]) => void; onError?: (message: string) => void }) {
+    product, company, historicalProducts, variationGroups, connectionId = PRIMARY_SHOPEE_CONNECTION_ID, storeLabel = 'Mercado do Vale (M)', shopeeShopId = null, autoPublish = false, bulkAutoPreset = null, onBulkAutoPresetReady, onClose, onSuccess, onError
+}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; connectionId?: string; storeLabel?: string; shopeeShopId?: string | null; autoPublish?: boolean; bulkAutoPreset?: ShopeeBulkAutoPreset | null; onBulkAutoPresetReady?: (preset: ShopeeBulkAutoPreset) => void; onClose: () => void; onSuccess: (publishedProductIds?: string[]) => void; onError?: (message: string) => void }) {
+    const shopeeConnectionUrl = useCallback(
+        (url: string) => withShopeeConnection(url, connectionId),
+        [connectionId],
+    );
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [catSearch, setCatSearch] = useState('');
     const [allCatTree, setAllCatTree] = useState<any[]>([]);
@@ -3068,7 +3173,7 @@ export function ShopeeSyncModal({
             { minimumCount: 3, maxCount: 9 }
         );
         setMediaImages((current) => {
-            const next = galleryUrls.map((imageUrl) => ({ image_url: imageUrl }));
+            const next: EditableImage[] = galleryUrls.map((imageUrl) => ({ image_url: imageUrl }));
             const seen = new Set(galleryUrls);
             for (const image of current) {
                 if (next.length >= 9) break;
@@ -3224,12 +3329,12 @@ export function ShopeeSyncModal({
     // Carrega toda a árvore de categorias ao abrir o modal
     useEffect(() => {
         setLoadingCats(true);
-        fetch(`/api/shopee-catalog?action=categories`)
+        fetch(shopeeConnectionUrl('/api/shopee-catalog?action=categories'))
             .then(r => r.json())
             .then(data => setAllCatTree(buildCategoryTree(data.response?.category_list || [])))
             .catch(() => toast.error('Erro ao carregar categorias.'))
             .finally(() => setLoadingCats(false));
-    }, []);
+    }, [shopeeConnectionUrl]);
 
     const reloadShopeeTemplates = useCallback(async (options: { applySuggestion?: boolean } = {}) => {
         try {
@@ -3447,8 +3552,8 @@ export function ShopeeSyncModal({
     const sellerProductUrl = syncResult?.itemId
         ? `https://seller.shopee.com.br/portal/product/${syncResult.itemId}`
         : '';
-    const publicProductUrl = syncResult?.itemId && company?.shopee_shop_id
-        ? `https://shopee.com.br/product/${encodeURIComponent(String(company.shopee_shop_id))}/${syncResult.itemId}`
+    const publicProductUrl = syncResult?.itemId && shopeeShopId
+        ? `https://shopee.com.br/product/${encodeURIComponent(String(shopeeShopId))}/${syncResult.itemId}`
         : '';
 
     const updateSyncStep = (key: SyncStepKey, status: SyncStepStatus, detail?: string) => {
@@ -3467,6 +3572,7 @@ export function ShopeeSyncModal({
 
         await shopeeProductService.upsert({
             product_id: product.id,
+            connection_id: connectionId,
             shopee_item_id: itemId,
             shopee_category_id: selectedCat?.category_id ?? product.shopee_category_id ?? null,
             shopee_category_name: selectedCat?.display_category_name || product.shopee_category_name || null,
@@ -3555,8 +3661,8 @@ export function ShopeeSyncModal({
                 brand_name: inferredBrandName,
             });
             const promises: Promise<any>[] = [
-                fetch(`/api/shopee-catalog?action=attributes&category_id=${cat.category_id}`).then(res => res.json()),
-                fetch(`/api/shopee-catalog?${brandParams.toString()}`).then(res => res.json()),
+                fetch(shopeeConnectionUrl(`/api/shopee-catalog?action=attributes&category_id=${cat.category_id}`)).then(res => res.json()),
+                fetch(shopeeConnectionUrl(`/api/shopee-catalog?${brandParams.toString()}`)).then(res => res.json()),
             ];
             if (product.model_id) {
                 promises.push(modelService.getById(product.model_id).catch(() => null));
@@ -3690,6 +3796,7 @@ export function ShopeeSyncModal({
                     attributeId={attr.attribute_id}
                     value={flatValue}
                     placeholder={attr.label}
+                    connectionId={connectionId}
                     onChange={(next) => updateAttributeValue(attr.attribute_id, next)}
                 />
             );
@@ -3788,7 +3895,7 @@ export function ShopeeSyncModal({
     const postShopeeDebug = async (action: string, body: Record<string, any>, debugLabel: string = action) => {
         pushSyncDebug(`${debugLabel}:request`, body);
 
-        const res = await fetch(`/api/shopee-catalog?action=${action}`, {
+        const res = await fetch(shopeeConnectionUrl(`/api/shopee-catalog?action=${action}`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -3880,7 +3987,7 @@ export function ShopeeSyncModal({
 
         pushSyncDebug(`${debugLabel}:request`, { action, ...(queryParams || {}) });
 
-        const res = await fetch(`/api/shopee-catalog?${searchParams.toString()}`);
+        const res = await fetch(shopeeConnectionUrl(`/api/shopee-catalog?${searchParams.toString()}`));
         const text = await res.text();
         let data: any = null;
         try {
@@ -4833,6 +4940,7 @@ export function ShopeeSyncModal({
                     const match = modelMatches.get(child.id);
                     await shopeeProductService.upsert({
                         product_id: child.id,
+                        connection_id: connectionId,
                         shopee_item_id: shopeeItemId,
                         shopee_model_id: match?.shopee_model_id ?? null,
                         shopee_model_sku: match?.shopee_model_sku ?? child.sku ?? null,
@@ -5852,7 +5960,7 @@ export function ShopeeSyncModal({
                             </details>
                             {!syncResult && <button onClick={handleSync} disabled={syncing || mediaBusy}
                                 className="w-full py-3 bg-[#ee4d2d] text-white rounded-xl font-bold hover:bg-[#d73f21] transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
-                                {(syncing || mediaBusy) ? <><Loader2 className="w-4 h-4 animate-spin" />Publicando...</> : <><Upload className="w-4 h-4" />Publicar na Shopee</>}
+                                {(syncing || mediaBusy) ? <><Loader2 className="w-4 h-4 animate-spin" />Publicando...</> : <><Upload className="w-4 h-4" />Publicar em {storeLabel}</>}
                             </button>}
                             <button onClick={() => setStep(2)} className="w-full py-2 text-slate-500 text-sm hover:text-slate-800">← Voltar e ajustar</button>
                         </div>
@@ -5866,15 +5974,49 @@ export function ShopeeSyncModal({
 
 // ─── Expanded Item Panel ───────────────────────────────────────────────────────
 function ExpandedItemPanel({
-    p, shopeeShopId, onClose, onPriceChange, editingPriceVal, onSaved,
+    p, shopeeShopId, connectionId, onClose, onPriceChange, editingPriceVal, onSaved,
 }: {
     p: ShopeeProduct;
     shopeeShopId: string | null;
+    connectionId: string;
     onClose: () => void;
     onPriceChange: (val: number) => void;
     editingPriceVal?: number;
     onSaved: () => void;
 }) {
+    const shopeeConnectionUrl = useCallback(
+        (url: string) => withShopeeConnection(url, connectionId),
+        [connectionId],
+    );
+    const postShopeeDebugWithRetry = async (
+        action: string,
+        body: Record<string, any>,
+        _debugLabel: string = action,
+        options: { retries?: number; delaysMs?: number[]; shouldRetry?: (error: any) => boolean } = {},
+    ) => {
+        const retries = Math.max(0, options.retries ?? 0);
+        const delaysMs = options.delaysMs || [];
+        const shouldRetry = options.shouldRetry || (() => false);
+
+        for (let attempt = 0; ; attempt += 1) {
+            try {
+                const response = await fetch(shopeeConnectionUrl(`/api/shopee-catalog?action=${encodeURIComponent(action)}`), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await response.json().catch(() => null);
+                if (!response.ok || data?.error) {
+                    throw new Error(data?.message || data?.error || `HTTP ${response.status}`);
+                }
+                return data;
+            } catch (error) {
+                if (attempt >= retries || !shouldRetry(error)) throw error;
+                const delayMs = delaysMs[Math.min(attempt, Math.max(0, delaysMs.length - 1))] || 0;
+                if (delayMs > 0) await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+            }
+        }
+    };
     const isNoGtinValue = (value: string) => {
         const normalized = String(value || '')
             .normalize('NFD')
@@ -5922,7 +6064,7 @@ function ExpandedItemPanel({
     useEffect(() => {
         if (!p.shopee_item_id) return;
         setLoadingItem(true);
-        fetch(`/api/shopee-catalog?action=get_item_base_info&item_id_list=${p.shopee_item_id}`)
+        fetch(shopeeConnectionUrl(`/api/shopee-catalog?action=get_item_base_info&item_id_list=${p.shopee_item_id}`))
             .then(r => r.json())
             .then(d => {
                 // DEBUG: log full raw response
@@ -6026,14 +6168,14 @@ function ExpandedItemPanel({
             })
             .catch((e) => { console.error('[Shopee Panel] fetch error:', e); toast.error('Erro ao buscar dados da Shopee'); })
             .finally(() => setLoadingItem(false));
-    }, [p.shopee_item_id]);
+    }, [p.shopee_item_id, shopeeConnectionUrl]);
 
 
     // Load category attributes — uses effectiveCategoryId (from Shopee live data) as fallback
     useEffect(() => {
         if (!effectiveCategoryId) return;
         setLoadingAttrs(true);
-        fetch(`/api/shopee-catalog?action=attributes&category_id=${effectiveCategoryId}`)
+        fetch(shopeeConnectionUrl(`/api/shopee-catalog?action=attributes&category_id=${effectiveCategoryId}`))
             .then(r => r.json())
             .then((d) => {
                 const attrList = d.response?.list?.[0]?.attribute_tree || [];
@@ -6041,7 +6183,7 @@ function ExpandedItemPanel({
             })
             .catch(() => {})
             .finally(() => setLoadingAttrs(false));
-    }, [effectiveCategoryId]);
+    }, [effectiveCategoryId, shopeeConnectionUrl]);
 
     const handleSave = async () => {
         if (!p.shopee_item_id) { toast.error('Produto sem Item ID na Shopee.'); return; }
@@ -6105,7 +6247,7 @@ function ExpandedItemPanel({
                     continue;
                 }
 
-                const uploadRes = await fetch('/api/shopee-catalog?action=upload_image', {
+                const uploadRes = await fetch(shopeeConnectionUrl('/api/shopee-catalog?action=upload_image'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image_data_url: image.data_url, file_name: image.file_name || 'image.jpg' }),
@@ -6130,20 +6272,15 @@ function ExpandedItemPanel({
                     continue;
                 }
 
-                const uploadData = await postShopeeDebugWithRetry(
-                    'upload_video',
-                    {
-                        ...(video.data_url ? { video_data_url: video.data_url } : {}),
-                        ...(video.video_url ? { video_url: video.video_url } : {}),
-                        file_name: video.file_name || 'video.mp4',
-                    },
-                    'upload_video',
-                    {
-                        retries: 3,
-                        delaysMs: [6000, 10000, 15000],
-                        shouldRetry: (error: any) => isShopeeVideoStillProcessingMessage(error?.message),
-                    },
-                );
+                const uploadData = await postShopeeDebugWithRetry('upload_video', {
+                    ...(video.data_url ? { video_data_url: video.data_url } : {}),
+                    ...(video.video_url ? { video_url: video.video_url } : {}),
+                    file_name: video.file_name || 'video.mp4',
+                }, 'edit_item:upload_video', {
+                    retries: 3,
+                    delaysMs: [6000, 10000, 15000],
+                    shouldRetry: (error: any) => isShopeeVideoStillProcessingMessage(error?.message || error),
+                });
                 const uploadedId = uploadData?.response?.video_upload_id || uploadData?.response?.video_id;
                 if (!uploadedId) {
                     throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de vídeo');
@@ -6153,15 +6290,15 @@ function ExpandedItemPanel({
             payload.video_upload_id = videoUploadIdList;
 
             const promises: Promise<any>[] = [
-                fetch('/api/shopee-catalog?action=update_item', {
+                fetch(shopeeConnectionUrl('/api/shopee-catalog?action=update_item'), {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 }).then(r => r.json()),
             ];
             const priceVal = parseFloat(form.price);
             if (!isNaN(priceVal) && priceVal > 0) {
-                const priceList = await buildShopeePriceList(p.shopee_item_id, priceVal);
-                promises.push(fetch('/api/shopee-catalog?action=update_price', {
+                const priceList = await buildShopeePriceList(p.shopee_item_id, priceVal, connectionId);
+                promises.push(fetch(shopeeConnectionUrl('/api/shopee-catalog?action=update_price'), {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ item_id: p.shopee_item_id, price_list: priceList }),
                 }).then(r => r.json()));

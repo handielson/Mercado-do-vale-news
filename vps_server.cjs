@@ -7683,8 +7683,9 @@ function normalizeMobileShopeeOrderVps(order) {
   };
 }
 
-async function loadMobileShopeeSalesVps(limit = 50, orderSn = '') {
-  const creds = await getShopeeCatalogCredentialsVps();
+async function loadMobileShopeeSalesVps(limit = 50, orderSn = '', connectionId = 'primary') {
+  const normalizedConnectionId = String(connectionId || 'primary').trim() || 'primary';
+  const creds = await getShopeeCatalogCredentialsVps(normalizedConnectionId === 'primary' ? undefined : normalizedConnectionId);
   let orderNumbers = [];
   if (orderSn) {
     orderNumbers = [String(orderSn)];
@@ -8098,8 +8099,27 @@ async function recordMobileOnlineSaleVps(orderId) {
   return sale ? mobileSalesPushService.recordSaleEvent(sale) : null;
 }
 
-async function recordMobileShopeeSaleVps(orderSn) {
-  const sale = (await loadMobileShopeeSalesVps(1, orderSn))[0];
+async function resolveShopeeConnectionIdByShopIdVps(shopId) {
+  const normalizedShopId = String(shopId || '').trim();
+  if (!normalizedShopId) return 'primary';
+
+  const settingsRows = await vpsDbSelect('company_settings', 'select=shopee_shop_id&limit=1');
+  const primaryShopId = String(settingsRows?.[0]?.shopee_shop_id || '').trim();
+  if (primaryShopId && primaryShopId === normalizedShopId) return 'primary';
+
+  const [connectionRows] = await pool.query(
+    `SELECT id
+       FROM shopee_shop_connections
+      WHERE shopee_shop_id = ?
+        AND active = 1
+      LIMIT 1`,
+    [normalizedShopId],
+  );
+  return String(connectionRows?.[0]?.id || '').trim() || null;
+}
+
+async function recordMobileShopeeSaleVps(orderSn, connectionId = 'primary') {
+  const sale = (await loadMobileShopeeSalesVps(1, orderSn, connectionId))[0];
   if (!sale || /CANCEL|UNPAID|REFUND|RETURN/i.test(sale.status)) return null;
   return mobileSalesPushService.recordSaleEvent(sale);
 }
@@ -8118,9 +8138,15 @@ async function handleShopeeWebhookVps(request, reply) {
     const body = request.body && typeof request.body === 'object' ? request.body : {};
     const data = body.data && typeof body.data === 'object' ? body.data : body;
     const orderSn = String(data.ordersn || data.order_sn || data.orderSn || '').trim();
+    const shopId = String(body.shop_id || body.shopid || data.shop_id || data.shopid || '').trim();
     if (orderSn) {
+      const connectionId = await resolveShopeeConnectionIdByShopIdVps(shopId);
       void wakeFiscalCancellationVps('shopee', orderSn).catch(error => console.error('[fiscal-cancellation] Shopee wake failed:', error.message));
-      await recordMobileShopeeSaleVps(orderSn);
+      if (connectionId) {
+        await recordMobileShopeeSaleVps(orderSn, connectionId);
+      } else {
+        console.warn('[shopee-webhook] ignored order from unknown shop');
+      }
     }
     return reply.code(200).send({ message: 'success' });
   } catch (err) {
@@ -9159,6 +9185,14 @@ function getShopeeActionsProductItemIdVps(product) {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
 }
 
+async function getShopeeActionsLinkedItemIdVps(productId, product, connectionId = 'primary') {
+  const normalizedConnectionId = String(connectionId || 'primary').trim() || 'primary';
+  const rows = await vpsDbSelect('shopee_products', `select=shopee_item_id&product_id=eq.${encodeURIComponent(String(productId))}&connection_id=eq.${encodeURIComponent(normalizedConnectionId)}&shopee_item_id=not.is.null&limit=1`);
+  const tableItemId = Number(Array.isArray(rows) ? rows[0]?.shopee_item_id : 0);
+  if (Number.isFinite(tableItemId) && tableItemId > 0) return tableItemId;
+  return normalizedConnectionId === 'primary' ? getShopeeActionsProductItemIdVps(product) : 0;
+}
+
 function stripShopeeActionsHtmlVps(value) {
   return String(value || '').replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim();
 }
@@ -9226,15 +9260,9 @@ async function uploadShopeeActionsProductImagesVps(product, creds) {
 
 async function assertShopeeActionsProductNotLinkedVps(productId, product, connectionId = 'primary') {
   const normalizedConnectionId = String(connectionId || 'primary').trim() || 'primary';
-  const linkedItemId = normalizedConnectionId === 'primary' ? getShopeeActionsProductItemIdVps(product) : 0;
+  const linkedItemId = await getShopeeActionsLinkedItemIdVps(productId, product, normalizedConnectionId);
   if (linkedItemId) {
     return { linked: true, itemId: linkedItemId };
-  }
-
-  const rows = await vpsDbSelect('shopee_products', `select=shopee_item_id&product_id=eq.${encodeURIComponent(String(productId))}&connection_id=eq.${encodeURIComponent(normalizedConnectionId)}&shopee_item_id=not.is.null&limit=1`);
-  const fallbackItemId = Number(Array.isArray(rows) ? rows[0]?.shopee_item_id : 0);
-  if (Number.isFinite(fallbackItemId) && fallbackItemId > 0) {
-    return { linked: true, itemId: fallbackItemId };
   }
 
   return { linked: false, itemId: 0 };
@@ -9644,7 +9672,7 @@ async function handleShopeeActionsVps(request, reply) {
       case 'update_stock': {
         if (requireShopeeActionsPostVps(request, reply)) return;
         const product = await loadShopeeActionsProductFromVps(payload.product_id);
-        const itemId = getShopeeActionsProductItemIdVps(product);
+        const itemId = await getShopeeActionsLinkedItemIdVps(payload.product_id, product, connectionId);
         if (!itemId) return reply.code(400).send({ error: 'Produto não vinculado a Shopee' });
         result = await shopeeCatalogPostVps('/api/v2/product/update_stock', creds, {
           item_id: itemId,
@@ -9656,7 +9684,7 @@ async function handleShopeeActionsVps(request, reply) {
       case 'update_price': {
         if (requireShopeeActionsPostVps(request, reply)) return;
         const product = await loadShopeeActionsProductFromVps(payload.product_id);
-        const itemId = getShopeeActionsProductItemIdVps(product);
+        const itemId = await getShopeeActionsLinkedItemIdVps(payload.product_id, product, connectionId);
         if (!itemId) return reply.code(400).send({ error: 'Produto não vinculado a Shopee' });
         result = await shopeeCatalogPostVps('/api/v2/product/update_price', creds, {
           item_id: itemId,
@@ -10653,6 +10681,7 @@ async function syncShopeeStockFromBlingTargetsVps(stockTargets = []) {
       if (!result.ok || result.data?.error || result.data?.response?.failure_list?.length) {
         results.ok = false;
         results.errors.push({
+          connection_id: connectionId,
           item_id: itemId,
           status: result.status,
           error: result.data?.error || 'shopee_update_stock_failed',
@@ -13609,7 +13638,7 @@ fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
 fastify.all('/api/shopee-actions', handleShopeeActionsVps);
 fastify.get('/shopee-connections', { preHandler: requireSyncKey }, async (_request, reply) => {
   const [rows] = await pool.query(
-    `SELECT id, display_name, shopee_shop_id, authorization_status, active, connected_at, created_at, updated_at
+    `SELECT id, display_name, seller_type, shopee_shop_id, authorization_status, active, connected_at, created_at, updated_at
        FROM shopee_shop_connections
       ORDER BY created_at ASC`,
   );
@@ -13627,7 +13656,7 @@ fastify.post('/shopee-connections', { preHandler: requireSyncKey }, async (reque
     [id, displayName],
   );
   return reply.code(201).send({
-    connection: { id, display_name: displayName, shopee_shop_id: null, authorization_status: 'pending', active: true },
+    connection: { id, display_name: displayName, seller_type: 'individual', shopee_shop_id: null, authorization_status: 'pending', active: true },
   });
 });
 fastify.all('/api/tiktok-shop/webhook', handleTikTokShopWebhookVps);
@@ -39859,6 +39888,7 @@ async function runMigrations() {
     CREATE TABLE IF NOT EXISTS shopee_shop_connections (
       id CHAR(36) PRIMARY KEY,
       display_name VARCHAR(120) NOT NULL,
+      seller_type VARCHAR(20) NOT NULL DEFAULT 'individual',
       shopee_shop_id VARCHAR(50) NULL,
       authorization_status VARCHAR(32) NOT NULL DEFAULT 'pending',
       active TINYINT(1) NOT NULL DEFAULT 1,
@@ -39871,6 +39901,18 @@ async function runMigrations() {
       INDEX idx_shopee_shop_connections_active (active, authorization_status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  const [shopeeConnectionSellerTypeColumns] = await pool.query(
+    `SELECT 1
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'shopee_shop_connections'
+        AND COLUMN_NAME = 'seller_type'
+      LIMIT 1`
+  );
+  if (!shopeeConnectionSellerTypeColumns.length) {
+    await pool.query(`ALTER TABLE shopee_shop_connections ADD COLUMN seller_type VARCHAR(20) NOT NULL DEFAULT 'individual' AFTER display_name`);
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS shopee_products (

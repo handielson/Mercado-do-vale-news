@@ -4,6 +4,7 @@ import {
     Loader2, AlertCircle, Check, Calendar, Download, Truck, Database
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { withShopeeConnection } from '../../../../services/shopeeConnections';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -126,16 +127,20 @@ function saveTaxConfig(cfg: TaxConfig) {
 
 // ─── Cache helpers ────────────────────────────────────────────────────────────
 
-function loadCache(): CacheStore {
+function financeCacheKey(connectionId: string): string {
+    return `${CACHE_KEY}_${connectionId || 'primary'}`;
+}
+
+function loadCache(connectionId: string): CacheStore {
     try {
-        const raw = localStorage.getItem(CACHE_KEY);
+        const raw = localStorage.getItem(financeCacheKey(connectionId));
         if (!raw) return { items: {}, fetchedRanges: {} };
         return JSON.parse(raw);
     } catch { return { items: {}, fetchedRanges: {} }; }
 }
 
-function saveCache(store: CacheStore) {
-    try { localStorage.setItem(CACHE_KEY, JSON.stringify(store)); } catch { /* quota */ }
+function saveCache(store: CacheStore, connectionId: string) {
+    try { localStorage.setItem(financeCacheKey(connectionId), JSON.stringify(store)); } catch { /* quota */ }
 }
 
 function rangeKey(from: number, to: number) {
@@ -144,19 +149,19 @@ function rangeKey(from: number, to: number) {
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
-async function safeRefreshToken() {
-    const r = await fetch('/api/shopee-actions?action=refresh_token');
+async function safeRefreshToken(connectionId: string) {
+    const r = await fetch(withShopeeConnection('/api/shopee-actions?action=refresh_token', connectionId));
     return r.ok;
 }
 
 // Statuses válidos na API Shopee para o financeiro
 const FINANCE_STATUSES = ['COMPLETED', 'CANCELLED', 'IN_CANCEL', 'IN_RETURN', 'REFUNDED'];
 
-async function fetchOrdersChunk(from: number, to: number): Promise<{ order_sn: string; create_time: number; order_status: string }[]> {
+async function fetchOrdersChunk(from: number, to: number, connectionId: string): Promise<{ order_sn: string; create_time: number; order_status: string }[]> {
     const allOrders: { order_sn: string; create_time: number; order_status: string }[] = [];
     await Promise.all(FINANCE_STATUSES.map(async (status) => {
         try {
-            const res = await fetch(`/api/shopee-actions?action=get_order_list&time_from=${from}&time_to=${to}&page_size=50&order_status=${status}`);
+            const res = await fetch(withShopeeConnection(`/api/shopee-actions?action=get_order_list&time_from=${from}&time_to=${to}&page_size=50&order_status=${status}`, connectionId));
             const data = await res.json();
             if (data.error) return; // skip this status silently
             const list = data.response?.order_list || [];
@@ -166,9 +171,9 @@ async function fetchOrdersChunk(from: number, to: number): Promise<{ order_sn: s
     return allOrders;
 }
 
-async function fetchEscrowDetail(order: { order_sn: string; create_time: number; order_status: string }): Promise<EscrowItem> {
+async function fetchEscrowDetail(order: { order_sn: string; create_time: number; order_status: string }, connectionId: string): Promise<EscrowItem> {
     try {
-        const r = await fetch(`/api/shopee-actions?action=get_escrow_detail&order_sn=${order.order_sn}`);
+        const r = await fetch(withShopeeConnection(`/api/shopee-actions?action=get_escrow_detail&order_sn=${order.order_sn}`, connectionId));
         const d = await r.json();
         const income = d.response?.order_income;
         if (!income) {
@@ -213,7 +218,7 @@ function exportCSV(items: EscrowItem[], dateRange: number) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ShopeeFinanceTab() {
+export default function ShopeeFinanceTab({ connectionId }: { connectionId: string }) {
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState<EscrowItem[]>([]);
     const [apiError, setApiError] = useState<string | null>(null);
@@ -254,7 +259,7 @@ export default function ShopeeFinanceTab() {
         setApiError(null);
         abortRef.current = false;
 
-        const cache = loadCache();
+        const cache = loadCache(connectionId);
         const now = Date.now();
         const freshCutoff = Math.floor((now - FRESH_THRESHOLD_MS) / 1000); // 30 days ago in unix
 
@@ -293,19 +298,19 @@ export default function ShopeeFinanceTab() {
         setFromCache(false);
 
         try {
-            let allOrders: { order_sn: string }[] = [];
+            let allOrders: { order_sn: string; create_time: number; order_status: string }[] = [];
             for (let i = 0; i < chunksToFetch.length; i++) {
                 if (abortRef.current) return;
                 setProgress(`Atualizando período ${i + 1}/${chunksToFetch.length}...`);
                 try {
-                    const chunk = await fetchOrdersChunk(chunksToFetch[i].from, chunksToFetch[i].to);
+                    const chunk = await fetchOrdersChunk(chunksToFetch[i].from, chunksToFetch[i].to, connectionId);
                     allOrders = [...allOrders, ...chunk];
                     // Mark range as fetched
                     cache.fetchedRanges[rangeKey(chunksToFetch[i].from, chunksToFetch[i].to)] = now;
                 } catch (e: any) {
                     if (e.message === 'invalid_access_token' || e.message === 'error_auth') {
                         if (!retry) {
-                            const ok = await safeRefreshToken();
+                            const ok = await safeRefreshToken(connectionId);
                             if (ok) return fetchFinance(true);
                         }
                         setApiError('Sessão expirada. Vá em Configurações e vincule a loja novamente.');
@@ -334,7 +339,7 @@ export default function ShopeeFinanceTab() {
                 if (abortRef.current) return;
                 const batch = toFetchEscrow.slice(i, i + BATCH);
                 setProgress(`Calculando valores... (${Math.min(i + BATCH, toFetchEscrow.length)}/${toFetchEscrow.length})`);
-                const resolved = await Promise.all(batch.map(o => fetchEscrowDetail(o)));
+                const resolved = await Promise.all(batch.map(o => fetchEscrowDetail(o, connectionId)));
                 resolved.forEach(r => { cache.items[r.order_sn] = r; });
                 // Show incrementally - all cache items (old + new)
                 const all = Object.values(cache.items);
@@ -342,7 +347,7 @@ export default function ShopeeFinanceTab() {
                 setFromCache(false);
             }
 
-            saveCache(cache);
+            saveCache(cache, connectionId);
 
         } catch (e: any) {
             setApiError(e.message || 'Erro de conexão ao buscar financeiro.');
@@ -355,16 +360,23 @@ export default function ShopeeFinanceTab() {
     };
 
     useEffect(() => {
+        setItems([]);
+        setApiError(null);
+        setFromCache(false);
+        setProgress('');
+    }, [connectionId]);
+
+    useEffect(() => {
         fetchFinance();
         return () => { abortRef.current = true; };
-    }, [dateRange]);
+    }, [connectionId, dateRange]);
 
     // Trigger custom range fetch when both dates are filled
     useEffect(() => {
         if (dateRange === 0 && customFrom && customTo && customFrom <= customTo) {
             fetchFinance();
         }
-    }, [customFrom, customTo]);
+    }, [connectionId, customFrom, customTo]);
 
     const totalBruto = items.reduce((acc, i) => acc + i.buyer_total_amount, 0);
     const totalFrete = items.reduce((acc, i) => acc + i.shipping_fee, 0);
@@ -420,9 +432,9 @@ export default function ShopeeFinanceTab() {
                         </button>
                     )}
                     <button onClick={() => {
-                        const cache = loadCache();
+                        const cache = loadCache(connectionId);
                         cache.fetchedRanges = {}; // force full refresh on next load
-                        saveCache(cache);
+                        saveCache(cache, connectionId);
                         fetchFinance();
                     }} disabled={loading} title="Forçar atualização completa"
                         className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors flex items-center gap-2">

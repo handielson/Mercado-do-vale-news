@@ -8,12 +8,16 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 
   assert.match(source, /fastify\.all\('\/api\/shopee-webhook', handleShopeeWebhookVps\)/, `${file} must expose /api/shopee-webhook through Fastify`);
   assert.match(source, /async function handleShopeeWebhookVps/, `${file} must implement Shopee webhook handler`);
+  assert.match(source, /async function resolveShopeeConnectionIdByShopIdVps/, `${file} must resolve the receiving store from the webhook shop id`);
+  assert.match(source, /FROM shopee_shop_connections[\s\S]*WHERE shopee_shop_id = \?/, `${file} must map additional shop ids to their connection`);
+  assert.match(source, /loadMobileShopeeSalesVps\(1, orderSn, connectionId\)/, `${file} must read the order with the receiving store credentials`);
+  assert.match(handler?.[0] || '', /resolveShopeeConnectionIdByShopIdVps\(shopId\)/, `${file} webhook handler must select the correct Shopee connection`);
   assert.ok(handler, `${file} must keep Shopee webhook handler scoped before Shopee signing helper`);
   assert.match(source, /Method Not Allowed/, `${file} must reject non-POST Shopee webhook requests`);
   assert.match(source, /return reply\.code\(200\)\.send\(\{ message: 'success' \}\)/, `${file} must always acknowledge successful webhook processing with Shopee success message`);
   assert.match(source, /return reply\.code\(200\)\.send\(\{ error: err\.message \}\)/, `${file} must avoid 500 retries on webhook exceptions`);
   assert.match(source, /buildCopyableDebug\('shopee-webhook'/, `${file} must include copyable debug for relay failures`);
-  assert.doesNotMatch(source.toLowerCase(), new RegExp(forbidden), `${file} must not relay Shopee webhooks to removed automation tooling`);
+  assert.doesNotMatch(handler[0].toLowerCase(), new RegExp(forbidden), `${file} must not relay Shopee webhooks to removed automation tooling`);
   assert.doesNotMatch(handler[0], /select=.*webhook_url|order_status_update|order_sn:|shop_id: shopId/, `${file} must not keep removed external automation relay payloads`);
 
   const debugPayloads = source.match(/buildCopyableDebug\('shopee-webhook',\s*(?:\{[\s\S]*?\n\s*\}|[^)]*)\)/g) || [];

@@ -17,7 +17,10 @@ for (const file of ['../vps_server.cjs', '../vps_server.js', '../server.js']) {
 for (const file of ['../vps_server.cjs', '../vps_server.js']) {
   const source = readFileSync(new URL(file, import.meta.url), 'utf8');
   assert.match(source, /groupKey = `\$\{connectionId\}:\$\{itemId\}`/, `${file} must group stock updates by store and item`);
+  assert.match(source, /SELECT product_id, connection_id, shopee_item_id, shopee_model_id/, `${file} must load the store identity for every stock link`);
   assert.match(source, /getShopeeCatalogCredentialsVps\(connectionId === 'primary' \? undefined : connectionId\)/, `${file} must use the credentials of each linked store`);
+  assert.match(source, /AND connection_id = \?/, `${file} must mark stock synchronization only for the matching store`);
+  assert.match(source, /errors\.push\(\{ connection_id: connectionId, item_id: itemId, error:/, `${file} must identify the failed store in stock errors`);
 }
 
 console.log('bling shopee stock sync tests passed');

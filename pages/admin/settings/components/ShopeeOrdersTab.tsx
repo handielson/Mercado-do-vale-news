@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, Package, Search, ExternalLink, Mail, Clock, CheckCircle2, XCircle, Truck, Calculator, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
+import { withShopeeConnection } from '../../../../services/shopeeConnections';
 
 interface ShopeeOrdersTabProps {
     isConnected: boolean;
+    connectionId: string;
     initialStatusFilter?: string;
 }
 
-export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'ALL' }: ShopeeOrdersTabProps) {
+export default function ShopeeOrdersTab({ isConnected, connectionId, initialStatusFilter = 'ALL' }: ShopeeOrdersTabProps) {
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchQ, setSearchQ] = useState('');
@@ -24,7 +26,13 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
             const interval = setInterval(() => fetchOrders(true), 5 * 60 * 1000);
             return () => clearInterval(interval);
         }
-    }, [isConnected, statusFilter]);
+    }, [connectionId, isConnected, statusFilter]);
+
+    useEffect(() => {
+        setOrders([]);
+        setTrackingData({});
+        setEscrowData({});
+    }, [connectionId]);
 
     useEffect(() => {
         setStatusFilter(initialStatusFilter || 'ALL');
@@ -47,7 +55,7 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
     };
 
     const fetchOrders = async (forceRefresh = false) => {
-        const cacheKey = `shopee_orders_${statusFilter}`;
+        const cacheKey = `shopee_orders_${connectionId}_${statusFilter}`;
 
         if (!forceRefresh) {
             const cached = readOrdersCache(cacheKey);
@@ -75,12 +83,12 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
                 url += `&order_status=${statusFilter}`;
             }
 
-            const listRes = await fetch(url);
+            const listRes = await fetch(withShopeeConnection(url, connectionId));
             const listData = await listRes.json();
 
             if (listData.error === 'invalid_access_token' || listData.error === 'error_auth') {
                 toast.loading('Sessão expirada. Renovando token automaticamente...', { id: 'shopee-auth' });
-                const rRefresh = await fetch('/api/shopee-actions?action=refresh_token');
+                const rRefresh = await fetch(withShopeeConnection('/api/shopee-actions?action=refresh_token', connectionId));
                 if (rRefresh.ok) {
                     toast.success('Sessão renovada! Carregando pedidos...', { id: 'shopee-auth' });
                     return fetchOrders(forceRefresh);
@@ -114,7 +122,7 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
                 });
                 if (statusFilter !== 'ALL') pageParams.set('order_status', statusFilter);
 
-                const pageRes = await fetch(`/api/shopee-actions?${pageParams.toString()}`);
+                const pageRes = await fetch(withShopeeConnection(`/api/shopee-actions?${pageParams.toString()}`, connectionId));
                 const pageData = await pageRes.json();
                 if (pageData.error) {
                     toast.error(`Erro ao buscar proxima pagina de pedidos: ${pageData.message || pageData.error}`);
@@ -141,7 +149,7 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
             const newOrders: any[] = [];
             for (let index = 0; index < orderSns.length; index += 50) {
                 const batch = orderSns.slice(index, index + 50);
-                const detailsRes = await fetch(`/api/shopee-actions?action=get_order_detail&order_sn_list=${batch.join(',')}`);
+                const detailsRes = await fetch(withShopeeConnection(`/api/shopee-actions?action=get_order_detail&order_sn_list=${batch.join(',')}`, connectionId));
                 const detailsData = await detailsRes.json();
                 if (detailsData.error) {
                     toast.error(`Erro ao buscar detalhes: ${detailsData.message || detailsData.error}`);
@@ -172,6 +180,7 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'ship_order',
+                    connection_id: connectionId,
                     order_sn: orderSn,
                     ...(packageNumber ? { package_number: packageNumber } : {}),
                 }),
@@ -205,12 +214,12 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
 
         setLoadingTracking(prev => ({ ...prev, [orderSn]: true }));
         try {
-            const res = await fetch(`/api/shopee-actions?action=get_tracking_info&order_sn=${orderSn}`);
+            const res = await fetch(withShopeeConnection(`/api/shopee-actions?action=get_tracking_info&order_sn=${orderSn}`, connectionId));
             const data = await res.json();
 
             if (data.error === 'invalid_access_token' || data.error === 'error_auth') {
                 toast.loading('Sessão expirada. Renovando token automaticamente...', { id: 'shopee-auth' });
-                const rRefresh = await fetch('/api/shopee-actions?action=refresh_token');
+                const rRefresh = await fetch(withShopeeConnection('/api/shopee-actions?action=refresh_token', connectionId));
                 if (rRefresh.ok) {
                     toast.success('Sessão renovada! Buscando rastreio...', { id: 'shopee-auth' });
                     setLoadingTracking(prev => ({ ...prev, [orderSn]: false }));
@@ -233,9 +242,10 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
     const handlePrintLocal = async (orderSn: string) => {
         toast.loading(`Disparando impressão local (Resumo/Etiqueta) para #${orderSn}...`, { id: `print-${orderSn}` });
         try {
-            const res = await fetch(`http://localhost:8081/print-order?order_sn=${orderSn}&type=both`);
+            const params = new URLSearchParams({ order_sn: orderSn, type: 'both', connection_id: connectionId });
+            const res = await fetch(`http://127.0.0.1:8081/print-order?${params.toString()}`);
             if (!res.ok) throw new Error();
-            toast.success(`Impressão de Resumo e Etiqueta enviada para as impressoras locais!`, { id: `print-${orderSn}` });
+            toast.success(`Impressão da etiqueta e do comprovante da loja selecionada enviada!`, { id: `print-${orderSn}` });
         } catch {
             toast.error(`Sem conexão com as impressoras. O painel no PC está aberto?`, { id: `print-${orderSn}` });
         }
@@ -249,12 +259,12 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
 
         setLoadingEscrow(prev => ({ ...prev, [orderSn]: true }));
         try {
-            const res = await fetch(`/api/shopee-actions?action=get_escrow_detail&order_sn=${orderSn}`);
+            const res = await fetch(withShopeeConnection(`/api/shopee-actions?action=get_escrow_detail&order_sn=${orderSn}`, connectionId));
             const data = await res.json();
 
             if (data.error === 'invalid_access_token' || data.error === 'error_auth') {
                 toast.loading('Sessão expirada. Renovando token automaticamente...', { id: 'shopee-auth' });
-                const rRefresh = await fetch('/api/shopee-actions?action=refresh_token');
+                const rRefresh = await fetch(withShopeeConnection('/api/shopee-actions?action=refresh_token', connectionId));
                 if (rRefresh.ok) {
                     toast.success('Sessão renovada! Buscando finanças...', { id: 'shopee-auth' });
                     setLoadingEscrow(prev => ({ ...prev, [orderSn]: false }));
@@ -306,6 +316,7 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'get_shipping_document',
+                    connection_id: connectionId,
                     order_sn: orderSn,
                     full_page_a4: true,
                 }),

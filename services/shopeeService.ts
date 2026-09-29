@@ -1,7 +1,38 @@
-import { getCompanyData } from './companyService';
+import { normalizeShopeeConnectionId, PRIMARY_SHOPEE_CONNECTION_ID } from './shopeeConnections';
+import { shopeeProductService } from './shopeeProducts';
 
-// API V2 Endpoint Base
-const SHOPEE_API_URL = 'https://partner.shopeemobile.com';
+async function getLinkedShopeeConnectionIds(productId: string): Promise<string[]> {
+    const links = await shopeeProductService.getByProductIds([productId]);
+    const connectionIds = links
+        .filter((link) => Number(link.shopee_item_id) > 0)
+        .map((link) => normalizeShopeeConnectionId(link.connection_id));
+    return [...new Set(connectionIds.length > 0 ? connectionIds : [PRIMARY_SHOPEE_CONNECTION_ID])];
+}
+
+async function postShopeeActionForLinkedStores(
+    productId: string,
+    action: string,
+    payload: Record<string, unknown>,
+): Promise<{ connection_id: string; response: any }[]> {
+    const connectionIds = await getLinkedShopeeConnectionIds(productId);
+    return Promise.all(connectionIds.map(async (connectionId) => {
+        const res = await fetch('/api/shopee-actions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action,
+                product_id: productId,
+                connection_id: connectionId,
+                ...payload,
+            }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || data?.error) {
+            throw new Error(`${connectionId}: ${data?.message || data?.error || `HTTP ${res.status}`}`);
+        }
+        return { connection_id: connectionId, response: data };
+    }));
+}
 
 /**
  * Utilitário local para assinar URLs e chamadas no lado Cliente/Node
@@ -51,12 +82,7 @@ export const shopeeService = {
 
     updateStock: async (productId: string, newStock: number) => {
         try {
-            const res = await fetch('/api/shopee-actions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'update_stock', product_id: productId, stock: newStock })
-            });
-            return await res.json();
+            return await postShopeeActionForLinkedStores(productId, 'update_stock', { stock: newStock });
         } catch (error) {
             console.error("Erro ao atualizar estoque na Shopee", error);
             throw error;
@@ -65,12 +91,7 @@ export const shopeeService = {
 
     updatePrice: async (productId: string, retailPriceCentavos: number) => {
         try {
-            const res = await fetch('/api/shopee-actions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'update_price', product_id: productId, price: retailPriceCentavos })
-            });
-            return await res.json();
+            return await postShopeeActionForLinkedStores(productId, 'update_price', { price: retailPriceCentavos });
         } catch (error) {
             console.error("Erro ao atualizar preço na Shopee", error);
             throw error;
