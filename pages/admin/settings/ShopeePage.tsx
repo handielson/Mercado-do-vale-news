@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { shopeeProductService } from '../../../services/shopeeProducts';
+import { scanShopeeCatalogLinks } from '../../../services/shopeeCatalogLinkScanner';
 import {
     createShopeeConnection,
     listShopeeConnections,
@@ -874,6 +875,15 @@ type SearchableAttributeComboboxProps = {
     onChange: (next: string) => void;
 };
 
+type ShopeeLinkScanSummary = {
+    scannedAt: string;
+    remoteItemCount: number;
+    linkedProductCount: number;
+    newLinkCount: number;
+    existingLinkCount: number;
+    unmatchedRemoteCount: number;
+};
+
 function SearchableAttributeCombobox({ attributeId, value, placeholder, connectionId = PRIMARY_SHOPEE_CONNECTION_ID, onChange }: SearchableAttributeComboboxProps) {
     const [query, setQuery] = useState<string>(getShopeeAttributeDisplayValue(value));
     const [options, setOptions] = useState<{ value_id: number; value_name: string }[]>([]);
@@ -1049,6 +1059,56 @@ async function fetchJsonStrict(url: string, init?: RequestInit): Promise<any> {
     }
 
     return data;
+}
+
+async function loadShopeeCatalogForLinkScan(
+    connectionId: string,
+    onProgress?: (loaded: number) => void,
+): Promise<{ items: any[]; total: number }> {
+    const itemIds: number[] = [];
+    let offset = 0;
+    for (let page = 0; page < 200; page += 1) {
+        const listData = await fetchJsonStrict(withShopeeConnection(
+            `/api/shopee-catalog?action=get_item_list&item_status=NORMAL&page_size=100&offset=${offset}`,
+            connectionId,
+        ));
+        const pageItems = Array.isArray(listData?.response?.item) ? listData.response.item : [];
+        pageItems.forEach((item: any) => {
+            const itemId = Number(item?.item_id);
+            if (Number.isFinite(itemId) && itemId > 0) itemIds.push(itemId);
+        });
+        onProgress?.(itemIds.length);
+        if (listData?.response?.has_next_page !== true || pageItems.length === 0) break;
+        offset = Number(listData?.response?.next_offset ?? (offset + 100));
+    }
+
+    const uniqueIds = [...new Set(itemIds)];
+    const items: any[] = [];
+    for (let index = 0; index < uniqueIds.length; index += 20) {
+        const batch = uniqueIds.slice(index, index + 20);
+        const detailData = await fetchJsonStrict(withShopeeConnection(
+            `/api/shopee-catalog?action=get_item_base_info&item_id_list=${batch.join(',')}`,
+            connectionId,
+        ));
+        items.push(...(detailData?.response?.item_list || []));
+        onProgress?.(Math.min(uniqueIds.length, index + batch.length));
+    }
+
+    const variationItems = items.filter(item => item?.has_model === true && Number(item?.item_id) > 0);
+    for (let index = 0; index < variationItems.length; index += 5) {
+        const batch = variationItems.slice(index, index + 5);
+        const modelResponses = await Promise.all(batch.map(item =>
+            fetchJsonStrict(withShopeeConnection(
+                `/api/shopee-catalog?action=get_model_list&item_id=${Number(item.item_id)}`,
+                connectionId,
+            )),
+        ));
+        batch.forEach((item, batchIndex) => {
+            item.models = modelResponses[batchIndex]?.response?.model || modelResponses[batchIndex]?.response?.model_list || [];
+        });
+    }
+
+    return { items, total: uniqueIds.length };
 }
 
 async function buildShopeePriceList(itemId: number, originalPrice: number, connectionId = PRIMARY_SHOPEE_CONNECTION_ID): Promise<Array<{ model_id: number; original_price: number }>> {
@@ -1235,6 +1295,63 @@ function toLocalProductFromVpsProduct(p: any, shopeeItemId?: number | null): Loc
     };
 }
 
+function toShopeeProductFromVpsProduct(
+    p: any,
+    shopeeRecord: any,
+    connectionId: string,
+    variationStockQuantity = 0,
+): ShopeeProduct {
+    const existingShopeeItemId = normalizePositiveId(shopeeRecord?.shopee_item_id)
+        || (connectionId === PRIMARY_SHOPEE_CONNECTION_ID
+            ? normalizePositiveId(p.shopee_item_id)
+            : null);
+
+    return {
+        id: shopeeRecord?.id || p.id,
+        product_id: String(p.id),
+        shopee_item_id: existingShopeeItemId,
+        shopee_category_id: shopeeRecord?.shopee_category_id || null,
+        shopee_category_name: shopeeRecord?.shopee_category_name || null,
+        shopee_price: shopeeRecord?.shopee_price || null,
+        status: shopeeRecord?.status || (existingShopeeItemId ? 'active' : 'not_synced'),
+        last_synced_at: shopeeRecord?.last_synced_at || null,
+        name: p.name,
+        sku: p.sku,
+        images: p.images,
+        price_retail: p.price_retail,
+        price_cost: p.price_cost || 0,
+        category_slug: p.category_slug,
+        description: p.description,
+        brand: p.brand,
+        bling_id: p.bling_id ?? null,
+        bling_parent_id: p.bling_parent_id ?? null,
+        video_url: p.video_url ?? null,
+        stock_quantity: Number(p.stock_quantity ?? 0) || 0,
+        variation_stock_quantity: variationStockQuantity,
+        track_inventory: p.track_inventory !== false,
+        parent_id: p.parent_id ?? null,
+        is_parent: p.is_parent ?? null,
+        is_combo: p.is_combo ?? null,
+        combo_children: Array.isArray(p.combo_children) ? p.combo_children : [],
+        offer_type: p.offer_type || null,
+        offer_parent_product_id: p.offer_parent_product_id || null,
+        offer_visibility: p.offer_visibility || 'visible',
+        shopee_strategy: p.shopee_strategy || null,
+        shopee_offer_status: p.shopee_offer_status || null,
+        shopee_offer_error: p.shopee_offer_error || null,
+        specs: p.specs || {},
+        eans: Array.isArray(p.eans) ? p.eans : (p.ean ? [p.ean] : []),
+        weight_kg: p.weight_kg,
+        shipping_weight: p.shipping_weight,
+        shipping_length: p.shipping_length,
+        shipping_width: p.shipping_width,
+        shipping_height: p.shipping_height,
+        dimensions: normalizeProductDimensions(p.dimensions),
+        ncm: p.ncm,
+        model_id: p.model_id,
+    };
+}
+
 function productLooksLikeVariationOption(product: LocalProduct): boolean {
     const specs = product.specs || {};
     return Boolean(specs.color || specs.cor || /\bCor\s*:/i.test(product.name));
@@ -1262,6 +1379,7 @@ export default function ShopeePage() {
     const [importing, setImporting] = useState(false);
     const [filter, setFilter] = useState<Filter>('all');
     const [searchQ, setSearchQ] = useState('');
+    const [remoteSearchProducts, setRemoteSearchProducts] = useState<ShopeeProduct[]>([]);
     const [priceMin, setPriceMin] = useState('');
     const [priceMax, setPriceMax] = useState('');
     const [syncModal, setSyncModal] = useState<LocalProduct | null>(null);
@@ -1285,6 +1403,8 @@ export default function ShopeePage() {
     const [renameInput, setRenameInput] = useState('');
     const [savingRenameProductId, setSavingRenameProductId] = useState<string | null>(null);
     const [unlinkingProductId, setUnlinkingProductId] = useState<string | null>(null);
+    const [linkScanSummary, setLinkScanSummary] = useState<ShopeeLinkScanSummary | null>(null);
+    const [scanningLinks, setScanningLinks] = useState(false);
 
     const selectedAdditionalConnection = shopeeConnections.find(
         connection => connection.id === selectedConnectionId,
@@ -1320,6 +1440,8 @@ export default function ShopeePage() {
         setBulkCompletedIds([]);
         setBulkRunItems([]);
         setExpandedProductId(null);
+        setRemoteSearchProducts([]);
+        setLinkScanSummary(null);
     }, [selectedConnectionId]);
 
     async function loadData() {
@@ -1357,58 +1479,14 @@ export default function ShopeePage() {
 
             const syncMap = new Map((shopeeRecords || []).map((r: any) => [r.product_id, r]));
 
-            const merged: ShopeeProduct[] = (localProds || []).map((p: any) => {
-                const sr = syncMap.get(String(p.id)) as any;
-                const existingShopeeItemId = normalizePositiveId(sr?.shopee_item_id)
-                    || (selectedConnectionId === PRIMARY_SHOPEE_CONNECTION_ID
-                        ? normalizePositiveId(p.shopee_item_id)
-                        : null);
-                
-                return {
-                    id: sr?.id || p.id,
-                    product_id: String(p.id),
-                    shopee_item_id: existingShopeeItemId,
-                    shopee_category_id: sr?.shopee_category_id || null,
-                    shopee_category_name: sr?.shopee_category_name || null,
-                    shopee_price: sr?.shopee_price || null,
-                    status: sr?.status || (existingShopeeItemId ? 'active' : 'not_synced'),
-                    last_synced_at: sr?.last_synced_at || null,
-                    name: p.name,
-                    sku: p.sku,
-                    images: p.images,
-                    price_retail: p.price_retail,
-                    price_cost: p.price_cost || 0,
-                    category_slug: p.category_slug,
-                    description: p.description,
-                    brand: p.brand,
-                    bling_id: p.bling_id ?? null,
-                    bling_parent_id: p.bling_parent_id ?? null,
-                    video_url: p.video_url ?? null,
-                    stock_quantity: Number(p.stock_quantity ?? 0) || 0,
-                    variation_stock_quantity: variationStockByParentId.get(String(p.id)) || 0,
-                    track_inventory: p.track_inventory !== false,
-                    parent_id: p.parent_id ?? null,
-                    is_parent: p.is_parent ?? null,
-                    is_combo: p.is_combo ?? null,
-                    combo_children: Array.isArray(p.combo_children) ? p.combo_children : [],
-                    offer_type: p.offer_type || null,
-                    offer_parent_product_id: p.offer_parent_product_id || null,
-                    offer_visibility: p.offer_visibility || 'visible',
-                    shopee_strategy: p.shopee_strategy || null,
-                    shopee_offer_status: p.shopee_offer_status || null,
-                    shopee_offer_error: p.shopee_offer_error || null,
-                    specs: p.specs || {},
-                    eans: Array.isArray(p.eans) ? p.eans : (p.ean ? [p.ean] : []),
-                    weight_kg: p.weight_kg,
-                    shipping_weight: p.shipping_weight,
-                    shipping_length: p.shipping_length,
-                    shipping_width: p.shipping_width,
-                    shipping_height: p.shipping_height,
-                    dimensions: normalizeProductDimensions(p.dimensions),
-                    ncm: p.ncm,
-                    model_id: p.model_id,
-                };
-            });
+            const merged: ShopeeProduct[] = (localProds || []).map((p: any) =>
+                toShopeeProductFromVpsProduct(
+                    p,
+                    syncMap.get(String(p.id)),
+                    selectedConnectionId,
+                    variationStockByParentId.get(String(p.id)) || 0,
+                )
+            );
 
             setProducts(merged);
         } catch (e) { toast.error('Erro ao carregar produtos.'); }
@@ -1424,6 +1502,63 @@ export default function ShopeePage() {
         const requestedProduct = products.find(product => product.product_id === requestedProductId);
         if (requestedProduct) setSearchQ(requestedProduct.sku || requestedProduct.name || '');
     }, [products, requestedProductId]);
+
+    useEffect(() => {
+        if (tab !== 'products') return;
+        const query = searchQ.trim();
+        if (query.length < 2) {
+            setRemoteSearchProducts([]);
+            return;
+        }
+
+        const normalizedQuery = query.toLowerCase();
+        const alreadyLoaded = products.some((product) =>
+            product.name?.toLowerCase().includes(normalizedQuery) ||
+            product.sku?.toLowerCase().includes(normalizedQuery)
+        );
+        if (alreadyLoaded) {
+            setRemoteSearchProducts([]);
+            return;
+        }
+
+        let cancelled = false;
+        const timer = window.setTimeout(async () => {
+            try {
+                const localMatches = await vpsApiService.getProducts({
+                    search: query,
+                    status: 'all',
+                    limit: 20,
+                    noCache: true,
+                    preferProxy: true,
+                    proxyOnly: true,
+                }) || [];
+                const visibleMatches = localMatches.filter((product: any) => !isArchivedProductRecord(product));
+                const links = await shopeeProductService.getByProductIds(visibleMatches.map((product: any) => product.id));
+                const linksByProductId = new Map(
+                    links
+                        .filter(link => normalizeShopeeConnectionId(link.connection_id) === selectedConnectionId)
+                        .map(link => [String(link.product_id), link])
+                );
+                if (!cancelled) {
+                    setRemoteSearchProducts(visibleMatches.map((product: any) =>
+                        toShopeeProductFromVpsProduct(
+                            product,
+                            linksByProductId.get(String(product.id)),
+                            selectedConnectionId,
+                        )
+                    ));
+                }
+            } catch (error) {
+                console.warn('[Shopee Products] Falha na busca direta do catalogo:', error);
+                if (!cancelled) setRemoteSearchProducts([]);
+            }
+        }, 250);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [products, searchQ, selectedConnectionId, tab]);
 
     useEffect(() => {
         if (tab !== 'bulk') return;
@@ -1674,6 +1809,51 @@ export default function ShopeePage() {
     };
 
 
+    const scanLinkedCatalog = async () => {
+        setScanningLinks(true);
+        toast.loading(`Varrendo anuncios e vinculos em ${selectedStoreLabel}...`, { id: 'shopee-link-scan' });
+        try {
+            const remoteCatalog = await loadShopeeCatalogForLinkScan(selectedConnectionId, (loaded) => {
+                toast.loading(`Varrendo ${selectedStoreLabel}: ${loaded} anuncio(s) localizados...`, { id: 'shopee-link-scan' });
+            });
+            const remoteItems = remoteCatalog.items;
+            const [localProducts, existingLinks] = await Promise.all([
+                fetchAllVpsProducts({ status: 'all', noCache: true, preferProxy: true, proxyOnly: true }),
+                shopeeProductService.list(),
+            ]);
+            const scannedAt = new Date().toISOString();
+            const scan = scanShopeeCatalogLinks({
+                localProducts: localProducts.filter((product: any) => !isArchivedProductRecord(product)),
+                remoteItems,
+                existingLinks,
+                connectionId: selectedConnectionId,
+                scannedAt,
+            });
+            const newDiscoveries = scan.discoveries.filter(link => !link.already_linked);
+            await shopeeProductService.upsertMany(newDiscoveries.map(({ local_sku, match_kind, already_linked, ...link }) => link));
+            const newLinkCount = newDiscoveries.length;
+            const existingLinkCount = scan.discoveries.length - newLinkCount;
+            setLinkScanSummary({
+                scannedAt,
+                remoteItemCount: remoteCatalog.total,
+                linkedProductCount: scan.discoveries.length,
+                newLinkCount,
+                existingLinkCount,
+                unmatchedRemoteCount: scan.unmatchedRemoteItems.length,
+            });
+            await loadProducts();
+            toast.success(
+                `${scan.discoveries.length} produto(s) vinculados por SKU: ${newLinkCount} novo(s), ${existingLinkCount} ja existentes.`,
+                { id: 'shopee-link-scan', duration: 8000 },
+            );
+        } catch (error: any) {
+            setLinkScanSummary(null);
+            toast.error(`Erro na varredura: ${error?.message || 'falha desconhecida'}`, { id: 'shopee-link-scan' });
+        } finally {
+            setScanningLinks(false);
+        }
+    };
+
     const handleManualLink = async (p: ShopeeProduct) => {
         const itemId = linkInput.trim();
         if (!itemId || isNaN(Number(itemId))) {
@@ -1838,7 +2018,7 @@ export default function ShopeePage() {
 
     const selectBulkReadyProducts = (items: ShopeeProduct[]) => {
         const readyIds = items
-            .filter(p => hasShopeeBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)) && bulkReadinessById.get(p.product_id)?.status === 'ready')
+            .filter(p => hasShopeeBulkPublishStock(p) && p.status === 'not_synced' && !p.shopee_item_id && bulkReadinessById.get(p.product_id)?.status === 'ready')
             .map(p => p.product_id);
         setBulkSelectedIds(readyIds);
         if (readyIds.length === 0) {
@@ -1848,7 +2028,7 @@ export default function ShopeePage() {
 
     const getBulkSelectableProductIds = (items: ShopeeProduct[]) =>
         items
-            .filter(p => hasShopeeBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)))
+            .filter(p => hasShopeeBulkPublishStock(p) && p.status === 'not_synced' && !p.shopee_item_id)
             .map(p => p.product_id);
 
     const toggleBulkVisibleSelection = () => {
@@ -1872,13 +2052,17 @@ export default function ShopeePage() {
     };
 
     const startBulkAssistedSync = () => {
+        if (!linkScanSummary) {
+            toast.error('Faca a varredura dos anuncios vinculados antes de iniciar novos envios.');
+            return;
+        }
         const queue = bulkSelectedIds
             .map(id => products.find(p => p.product_id === id))
             .filter((p): p is ShopeeProduct => Boolean(p))
-            .filter(p => hasShopeeBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)));
+            .filter(p => hasShopeeBulkPublishStock(p) && p.status === 'not_synced' && !p.shopee_item_id);
 
         if (queue.length === 0) {
-            toast.error('Selecione pelo menos um produto para enviar ou atualizar.');
+            toast.error('Selecione pelo menos um produto ainda nao vinculado para enviar.');
             return;
         }
 
@@ -1983,7 +2167,10 @@ export default function ShopeePage() {
 
     const isConnected = selectedStoreConnected;
 
-    const filtered = products.filter(p => {
+    const productSearchSource = remoteSearchProducts.length > 0
+        ? [...products, ...remoteSearchProducts.filter(remote => !products.some(product => product.product_id === remote.product_id))]
+        : products;
+    const filtered = productSearchSource.filter(p => {
         const matchFilter =
             filter === 'all' ? true :
             filter === 'synced' ? p.status === 'active' :
@@ -2003,11 +2190,12 @@ export default function ShopeePage() {
         notSynced: products.filter(p => p.status === 'not_synced').length,
     };
 
-    const bulkCandidates = products.filter(p => (p.status === 'not_synced' || isBulkUpdateCandidate(p)) && hasShopeeBulkPublishStock(p));
+    const linkedProducts = products.filter(p => Number(p.shopee_item_id) > 0);
+    const bulkCandidates = products.filter(p => p.status === 'not_synced' && !p.shopee_item_id && hasShopeeBulkPublishStock(p));
     const bulkReadiness = bulkCandidates.map((product) =>
         evaluateShopeeAutoPublishReadiness({
             ...product,
-            status: isBulkUpdateCandidate(product) ? 'not_synced' : product.status,
+            status: product.status,
             stock_quantity: getShopeeBulkEffectiveStock(product),
         }, bulkShopeeTemplates, {
             requiredAttributesByCategoryId: bulkRequiredAttributesByCategoryId,
@@ -2301,11 +2489,20 @@ export default function ShopeePage() {
                     {/* Import from Shopee button */}
                     {isConnected && (
                         <div className="flex justify-end">
-                            <button onClick={importFromShopee} disabled={importing || loadingProducts}
+                            <button onClick={scanLinkedCatalog} disabled={scanningLinks || loadingProducts}
                                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50 shadow-sm">
-                                {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 text-slate-500" />}
-                                Importar de {selectedStoreLabel}
+                                {scanningLinks ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 text-slate-500" />}
+                                Varrer anuncios de {selectedStoreLabel}
                             </button>
+                        </div>
+                    )}
+
+                    {linkScanSummary && (
+                        <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+                            <p className="font-semibold">Varredura concluida: os vinculados abaixo estao bloqueados para novo envio.</p>
+                            <p className="mt-1 text-xs">
+                                {linkScanSummary.remoteItemCount} anuncio(s) na loja · {linkScanSummary.linkedProductCount} produto(s) identificado(s) por SKU · {linkScanSummary.newLinkCount} novo(s) vinculo(s) · {linkScanSummary.unmatchedRemoteCount} sem SKU correspondente
+                            </p>
                         </div>
                     )}
 
@@ -2649,8 +2846,54 @@ export default function ShopeePage() {
                         </div>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
+                        <div className="flex flex-col gap-3 border-b border-blue-100 bg-blue-50 p-4 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <h2 className="font-bold text-blue-950">Anúncios já vinculados — não serão reenviados</h2>
+                                <p className="text-xs text-blue-800">A varredura compara o SKU do anúncio e os SKUs das variações na loja selecionada.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={scanLinkedCatalog}
+                                disabled={!isConnected || scanningLinks || loadingProducts}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+                            >
+                                {scanningLinks ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                {scanningLinks ? 'Varrendo...' : 'Varrer antes de enviar'}
+                            </button>
+                        </div>
+                        {!linkScanSummary ? (
+                            <div className="p-4 text-sm text-amber-800">A fila de novos envios fica bloqueada até concluir esta varredura.</div>
+                        ) : (
+                            <div className="border-b border-slate-100 bg-green-50 p-4 text-xs text-green-900">
+                                Varredura concluída: {linkScanSummary.remoteItemCount} anúncio(s), {linkScanSummary.linkedProductCount} produto(s) identificados por SKU, {linkScanSummary.newLinkCount} novo(s) vínculo(s) e {linkScanSummary.unmatchedRemoteCount} sem correspondência local.
+                            </div>
+                        )}
+                        <div className="max-h-72 overflow-auto divide-y divide-slate-100">
+                            {linkedProducts.length === 0 ? (
+                                <p className="p-4 text-sm text-slate-500">Nenhum vínculo registrado nesta conta.</p>
+                            ) : linkedProducts.map(product => (
+                                <div key={product.product_id} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-semibold text-slate-800">{product.name}</p>
+                                        <p className="font-mono text-xs text-slate-500">{product.sku || 'sem SKU'}</p>
+                                    </div>
+                                    <a
+                                        href={selectedShopId ? `https://shopee.com.br/product/${encodeURIComponent(String(selectedShopId))}/${product.shopee_item_id}` : `https://seller.shopee.com.br/portal/product/${product.shopee_item_id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"
+                                    >
+                                        Item #{product.shopee_item_id} <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                         {[
+                            { label: 'Já vinculados', value: linkedProducts.length },
                             { label: 'Não sincronizados', value: bulkCandidates.length },
                             { label: 'Prontos para automatico', value: bulkReadinessSummary.ready },
                             { label: 'Precisam revisao', value: bulkReadinessSummary.review },
@@ -2773,7 +3016,7 @@ export default function ShopeePage() {
                             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                                 <button
                                     onClick={() => selectBulkReadyProducts(bulkFiltered)}
-                                    disabled={!isConnected || loadingProducts || bulkFiltered.length === 0}
+                                    disabled={!isConnected || !linkScanSummary || loadingProducts || bulkFiltered.length === 0}
                                     className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
                                 >
                                     Selecionar automaticos
@@ -2787,7 +3030,7 @@ export default function ShopeePage() {
                                 </button>
                                 <button
                                     onClick={startBulkAssistedSync}
-                                    disabled={!isConnected || loadingProducts || bulkSelectedCount === 0}
+                                    disabled={!isConnected || !linkScanSummary || loadingProducts || bulkSelectedCount === 0}
                                     className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-[#ee4d2d] text-white hover:bg-[#d73f21] transition-colors disabled:opacity-50 flex items-center gap-2"
                                 >
                                     <Upload className="w-4 h-4" />
@@ -2797,7 +3040,7 @@ export default function ShopeePage() {
                         </div>
 
                         <div className="p-4 bg-orange-50 border-b border-orange-100 text-sm text-orange-900">
-                            O envio em massa abre a revisão da Shopee em sequência. Você confirma cada produto, e ao concluir o sistema chama o próximo do lote.
+                            Somente produtos sem vínculo entram nesta fila. Depois da varredura, o envio abre a revisão da Shopee em sequência.
                         </div>
 
                         {loadingProducts ? (

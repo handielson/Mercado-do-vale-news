@@ -72,13 +72,17 @@ async function enrichProductsWithShopeeLinks(products: Product[]): Promise<Produ
     if (products.length === 0) return products;
 
     try {
-        const shopeeItemByProductId = await shopeeProductService.getItemIdByProductIdMap();
+        const [shopeeItemByProductId, shopeeStoreCodesByProductId] = await Promise.all([
+            shopeeProductService.getItemIdByProductIdMap(),
+            shopeeProductService.getStoreCodesByProductIdMap(),
+        ]);
 
-        if (shopeeItemByProductId.size === 0) return products;
+        if (shopeeItemByProductId.size === 0 && shopeeStoreCodesByProductId.size === 0) return products;
 
         return products.map((product) => ({
             ...product,
             shopee_item_id: shopeeItemByProductId.get(String(product.id)) ?? product.shopee_item_id,
+            shopee_store_codes: shopeeStoreCodesByProductId.get(String(product.id)) || [],
         }));
     } catch (error) {
         console.warn('[useProducts] Falha ao carregar vinculos da Shopee:', error);

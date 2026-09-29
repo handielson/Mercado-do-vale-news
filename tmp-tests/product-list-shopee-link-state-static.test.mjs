@@ -33,6 +33,18 @@ assert.match(
   'Shopee link metadata should override/complete VPS product rows'
 );
 
+const hookSource = readFileSync('hooks/useProducts.ts', 'utf8');
+assert.match(
+  hookSource,
+  /shopeeProductService\.getStoreCodesByProductIdMap\(\)/,
+  'admin product cards should load all Shopee store codes'
+);
+assert.match(
+  hookSource,
+  /shopee_store_codes: shopeeStoreCodesByProductId\.get\(String\(product\.id\)\) \|\| \[\]/,
+  'admin product cards should receive M/G badge metadata'
+);
+
 assert.match(
   source,
   /const enrichedRows = await enrichProductsWithShopeeLinks\(rows\);[\s\S]*return enrichedRows\.map\(transformFromDB\)/,

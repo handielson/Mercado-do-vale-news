@@ -2,7 +2,7 @@
 
 Documentacao operacional da integracao Shopee Open Platform v2 no Mercado do Vale.
 
-Ultima revisao: 2026-05-16
+Ultima revisao: 2026-09-29
 
 ## Objetivo
 
@@ -34,6 +34,24 @@ Este arquivo cobre o fluxo atual de:
 | Ofertas/kits no site e Shopee | `docs/operacional/2026-05-15-ofertas-kits-site-shopee.md` |
 | Motor de ofertas | `services/productOfferEngine.ts` |
 | Mapeamento oferta -> Shopee | `services/shopeeOfferMapping.ts` |
+| Varredura de vinculos por SKU | `services/shopeeCatalogLinkScanner.ts` |
+
+## Varredura de anuncios ja vinculados
+
+Antes de formar a fila de novos envios, a aba de publicacao em massa exige uma varredura da conta Shopee selecionada.
+
+Regras de seguranca:
+
+- a varredura consulta todos os anuncios normais da loja em paginas e busca os modelos dos anuncios com variacao;
+- o SKU principal do anuncio e cada `model_sku` sao comparados com o SKU local;
+- os vinculos sao gravados em `shopee_products` com o `connection_id` da conta selecionada;
+- um vinculo da conta `M` nao marca o mesmo produto como vinculado na conta `G`, e vice-versa;
+- somente correspondencias exatas e unicas sao vinculadas automaticamente;
+- SKU ausente, divergente ou ambiguo permanece sem vinculo para revisao manual;
+- produtos ja vinculados aparecem no painel e nunca entram na fila de novo envio;
+- a fila aceita apenas produtos com estado `not_synced`, estoque publicavel e sem `shopee_item_id` naquela conta.
+
+A consulta e paginada no navegador (`get_item_list`, `get_item_base_info` e `get_model_list`) para evitar estouro de tempo no proxy em catalogos grandes.
 
 ## Fluxo de publicacao de produto
 

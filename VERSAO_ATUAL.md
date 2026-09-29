@@ -1,13 +1,13 @@
-# v1.2.507-shopee-duas-contas-pf
+# v1.2.508-shopee-vinculos-contas
 
 Data: 2026-09-29. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.507-shopee-duas-contas-pf
-Release principal: /var/www/mdv-site/releases/20260929-013625-v1-2-507-shopee-duas-contas-pf
+Tag: v1.2.508-shopee-vinculos-contas
+Release principal: /var/www/mdv-site/releases/20260929-025000-v1-2-508-shopee-vinculos-contas
 
-As contas Shopee `M` (Mercado do Vale) e `G` (Glaucia) passam a operar de forma independente no painel, publicacao, pedidos, financeiro, vinculos de produtos, preco e estoque.
+O painel Shopee agora varre o catalogo da conta selecionada antes de formar a fila de publicacao. A leitura paginada identifica o SKU principal e os SKUs de cada variacao, registra os vinculos encontrados na conta correta e mostra todos os produtos que nao serao reenviados.
 
-A conta `M` preserva o fluxo empresarial existente com NF-e do Bling. A conta `G`, cadastrada como pessoa fisica, nao chama NF-e/Bling e gera etiqueta mais comprovante de separacao 90 x 100 mm no mesmo padrao aprovado do Mercado Livre. Se a Shopee exigir documento fiscal nessa conta, o fluxo para para intervencao em vez de emitir a nota da empresa.
+A correspondencia automatica e deliberadamente conservadora: somente SKU exato e unico. Anuncios sem SKU local correspondente ou com SKU ambiguo ficam intocados para revisao manual. Um vinculo da conta `M` nao bloqueia o envio para a conta `G`, e vice-versa.
 
-O webhook identifica a conexao pelo `shop_id`, e atualizacoes de preco e estoque usam o vinculo e as credenciais da loja correspondente. Contas desconhecidas nao caem silenciosamente na loja principal.
+A fila de envio em massa permanece bloqueada ate a varredura terminar e aceita somente produtos `not_synced`, com estoque publicavel e sem `shopee_item_id` naquela conta. Tambem foi incluido o comando seguro `npm run shopee:publish-one -- --sku <SKU> --connection <M|G>` para testes unitarios de publicacao, inclusive produtos com variacao, imagens e video.
 
-Validacoes: testes comportamentais e estaticos de conta M/G, estoque, webhook, vinculos e impressao; sintaxe da API e do agente local; trava contra Supabase; build do painel; PDF ficticio 90 x 100 mm inspecionado visualmente. Nenhum pedido real ou impressao fisica foi usado na validacao.
+Validacoes: reconciliacao real das contas M e G por SKU exato; testes do scanner e da protecao da fila; testes de publicacao simples/variacao, busca e exibicao dos selos; verificacao de sintaxe; build de producao e validacao publica da versao.

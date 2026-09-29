@@ -1,25 +1,21 @@
 {
-  "version": "v1.2.507-shopee-duas-contas-pf",
+  "version": "v1.2.508-shopee-vinculos-contas",
   "date": "2026-09-29",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.507-shopee-duas-contas-pf",
-  "release_vps": "/var/www/mdv-site/releases/20260929-013625-v1-2-507-shopee-duas-contas-pf",
+  "tag": "v1.2.508-shopee-vinculos-contas",
+  "release_vps": "/var/www/mdv-site/releases/20260929-025000-v1-2-508-shopee-vinculos-contas",
   "release_print3d_vps": null,
-  "summary": "Conclui o fluxo independente das contas Shopee M e G, com publicacao e estoque por loja e comprovante PF sem NF-e na conta G.",
+  "summary": "Varre os anuncios das contas Shopee por SKU, exibe os vinculos e impede o reenvio de produtos ja publicados na loja selecionada.",
   "changed_files": [
-    "components/products/ProductCard.tsx",
-    "components/products/sections/ShopeeLinkSection.tsx",
+    "hooks/useProducts.ts",
+    "package.json",
     "pages/admin/settings/ShopeePage.tsx",
-    "pages/admin/settings/components/ShopeeFinanceTab.tsx",
-    "pages/admin/settings/components/ShopeeOrdersTab.tsx",
-    "pages/admin/settings/components/ShopeePrintersTab.tsx",
-    "scripts/shopee-auto-print.cjs",
-    "services/products.ts",
-    "services/shopeeConnections.ts",
+    "scripts/shopee-publish-one.ts",
+    "services/shopeeCatalogLinkScanner.ts",
     "services/shopeeProducts.ts",
-    "services/shopeeService.ts",
-    "vps_server.js",
-    "vps_server.cjs"
+    "services/shopeeTemplateRowMapper.ts",
+    "services/shopeeTemplateService.ts",
+    "Shopee.md"
   ]
 }

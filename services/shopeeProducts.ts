@@ -135,12 +135,37 @@ async function upsert(link: ShopeeProductLinkInput): Promise<void> {
 }
 
 async function upsertMany(links: ShopeeProductLinkInput[]): Promise<number> {
-    let count = 0;
+    const unique = new Map<string, ShopeeProductLinkInput>();
     for (const link of links) {
-        await upsert(link);
-        count += 1;
+        const productId = String(link.product_id);
+        const connectionId = normalizeConnectionId(link.connection_id);
+        unique.set(`${productId}|${connectionId}`, { ...link, product_id: productId, connection_id: connectionId });
     }
-    return count;
+    const existingByKey = new Map(
+        (await list()).map(row => [
+            `${String(row.product_id)}|${normalizeConnectionId(row.connection_id)}`,
+            row,
+        ]),
+    );
+    const pending = [...unique.entries()];
+    const concurrency = 8;
+    for (let index = 0; index < pending.length; index += concurrency) {
+        await Promise.all(pending.slice(index, index + concurrency).map(async ([key, link]) => {
+            const existing = existingByKey.get(key);
+            if (existing?.id) {
+                await vpsClient.patch(
+                    `/table-data/shopee_products/${encodeURIComponent(String(existing.id))}?pk=id`,
+                    link,
+                );
+                return;
+            }
+            await vpsClient.post('/table-data/shopee_products', {
+                id: link.id || crypto.randomUUID(),
+                ...link,
+            });
+        }));
+    }
+    return pending.length;
 }
 
 async function updateByProductId(productId: string, updates: Partial<ShopeeProductLink>, connectionId = PRIMARY_SHOPEE_CONNECTION_ID): Promise<void> {
