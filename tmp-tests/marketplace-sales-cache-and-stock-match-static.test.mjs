@@ -7,7 +7,10 @@ const page = readFileSync('pages/admin/sales/SalesPage.tsx', 'utf8');
 const modal = readFileSync('components/admin/sales/MarketplaceSaleDetailsModal.tsx', 'utf8');
 
 assert.match(inventory, /pickMarketplaceProduct/, 'marketplace items need a fallback matcher when the local SKU is absent');
-assert.match(inventory, /getProducts\(\{ search: name\.trim\(\), status: 'all', limit: 100, compact: true \}\)/, 'inventory lookup must search by marketplace product name');
+assert.match(inventory, /marketplaceProductSearchTerms/, 'marketplace items without SKU must derive stable search terms from the title');
+assert.ok(inventory.includes('trimmed.match(/[a-z0-9]+(?:[-_.\\/][a-z0-9]+)+/gi)'), 'inventory lookup must extract model codes embedded in marketplace titles');
+assert.match(inventory, /compactExpectedName\.includes\(productSku\)/, 'a local SKU embedded in the marketplace title must be a strong match');
+assert.match(inventory, /getProducts\(\{ search, status: 'all', limit: 100, compact: true, noCache: true \}\)/, 'inventory lookup must retry catalog searches with the derived terms');
 assert.match(modal, /variation=\{item\.variation\}/, 'marketplace item variation must reach stock matching');
 assert.match(service, /MARKETPLACE_SALES_CACHE_TTL_MS = 5 \* 60 \* 1000/, 'marketplace list cache must have a bounded five-minute refresh');
 assert.match(service, /window\.sessionStorage\.getItem/, 'marketplace sales should restore browser cache');

@@ -22,9 +22,20 @@ function normalizeLookupText(value: unknown): string {
     .trim();
 }
 
+function marketplaceProductSearchTerms(name: string): string[] {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return [];
+  const modelCodes = trimmed.match(/[a-z0-9]+(?:[-_.\/][a-z0-9]+)+/gi) || [];
+  return [...new Set([
+    ...modelCodes.filter((value) => value.length >= 5),
+    trimmed,
+  ])];
+}
+
 function pickMarketplaceProduct(products: Product[], sku?: string | null, name?: string | null, variation?: string | null): Product | null {
   const expectedSku = normalizeLookupText(sku).replace(/\s+/g, '');
   const expectedName = normalizeLookupText(name);
+  const compactExpectedName = expectedName.replace(/\s+/g, '');
   const expectedVariation = normalizeLookupText(variation);
   let best: { product: Product; score: number } | null = null;
   for (const product of products) {
@@ -34,6 +45,7 @@ function pickMarketplaceProduct(products: Product[], sku?: string | null, name?:
     let score = 0;
     if (expectedSku && productSku === expectedSku) score += 1000;
     else if (expectedSku && productSku && (productSku.includes(expectedSku) || expectedSku.includes(productSku))) score += 400;
+    else if (!expectedSku && productSku && compactExpectedName.includes(productSku)) score += 800;
     if (expectedName && productText.includes(expectedName)) score += 180;
     const nameTokens = expectedName.split(' ').filter((token) => token.length >= 3);
     score += nameTokens.filter((token) => productText.includes(token)).length * 12;
@@ -75,8 +87,11 @@ export function SaleItemInventoryInfo({ productId, sku, name, variation, imageUr
           resolved = ((matches || []) as Product[]).find((item) => normalizeLookupText(item.sku).replace(/\s+/g, '') === normalizedSku) || null;
         }
         if (!resolved && name.trim()) {
-          const matches = await vpsApiService.getProducts({ search: name.trim(), status: 'all', limit: 100, compact: true });
-          resolved = pickMarketplaceProduct((matches || []) as Product[], sku, name, variation);
+          for (const search of marketplaceProductSearchTerms(name)) {
+            const matches = await vpsApiService.getProducts({ search, status: 'all', limit: 100, compact: true, noCache: true });
+            resolved = pickMarketplaceProduct((matches || []) as Product[], sku, name, variation);
+            if (resolved) break;
+          }
         }
         if (!active) return;
         setProduct(resolved);

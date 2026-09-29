@@ -1,9 +1,9 @@
-# v1.2.517-marketplace-sales-cache-stock
+# v1.2.518-shopee-title-sku-stock
 
 Data: 2026-09-29. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.517-marketplace-sales-cache-stock
-Release principal: `/var/www/mdv-site/releases/20260929-202147-v1-2-517-marketplace-sales-cache-stock`.
+Tag: v1.2.518-shopee-title-sku-stock
+Release principal: `/var/www/mdv-site/releases/20260929-233554-v1-2-518-shopee-title-sku-stock`.
 
-As vendas de marketplace ficam salvas no navegador por cinco minutos. A tela mostra a ultima lista imediatamente e busca uma versao nova em segundo plano; o botao Atualizar ignora o cache.
+Nos detalhes de vendas da Shopee, itens recebidos sem SKU agora usam codigos de modelo encontrados no titulo para localizar o cadastro interno.
 
-Nos detalhes da Shopee, o sistema procura o produto interno pelo SKU e, se necessario, pelo nome e pela variacao. Assim a foto e os locais com saldo voltam a aparecer mesmo quando o retorno do marketplace nao traz o identificador interno.
+O pedido `260930C1R08CFA` passa a associar a fonte ao SKU `ADS-24FUA-12Y`, exibindo a foto cadastrada e os locais com saldo.
