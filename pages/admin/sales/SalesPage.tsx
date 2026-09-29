@@ -10,6 +10,13 @@ import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../.
 import toast from 'react-hot-toast';
 
 const AUTO_REFRESH_MS = 60_000;
+const AUTO_REFRESH_LOOKBACK_MS = 2 * 24 * 60 * 60 * 1000;
+
+function mergeMarketplaceSales(current: MarketplaceSale[], incoming: MarketplaceSale[]): MarketplaceSale[] {
+    const merged = new Map(current.map((sale) => [`${sale.channel}:${sale.external_id}`, sale]));
+    incoming.forEach((sale) => merged.set(`${sale.channel}:${sale.external_id}`, sale));
+    return Array.from(merged.values()).sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)));
+}
 
 export default function SalesPage() {
     const [searchParams] = useSearchParams();
@@ -17,6 +24,7 @@ export default function SalesPage() {
     const [marketplaceSales, setMarketplaceSales] = useState<MarketplaceSale[]>([]);
     const [marketplaceWarnings, setMarketplaceWarnings] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isMarketplaceLoading, setIsMarketplaceLoading] = useState(true);
     const [filters, setFilters] = useState<SaleFilters>({});
 
     // Filtros UI
@@ -33,6 +41,7 @@ export default function SalesPage() {
     const [dateTo, setDateTo] = useState('');
     const [activePeriod, setActivePeriod] = useState<'day' | 'week' | 'month' | 'year' | 'custom' | null>(null);
     const loadRequestSequence = useRef(0);
+    const activeLoads = useRef(0);
     const backgroundRefreshInFlight = useRef(false);
 
     const toISO = (d: Date) => d.toISOString().split('T')[0];
@@ -57,9 +66,18 @@ export default function SalesPage() {
         setDateTo('');
     };
 
-    const loadData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    const loadData = useCallback(async ({
+        silent = false,
+        recentMarketplaceOnly = false,
+    }: { silent?: boolean; recentMarketplaceOnly?: boolean } = {}) => {
         const requestId = ++loadRequestSequence.current;
-        if (!silent) setIsLoading(true);
+        activeLoads.current += 1;
+        setIsMarketplaceLoading(true);
+        if (!silent) {
+            setIsLoading(true);
+            setMarketplaceSales([]);
+            setMarketplaceWarnings([]);
+        }
         try {
             const activeFilters: SaleFilters = { ...filters };
             if (statusFilter !== 'all' && statusFilter !== 'pending') {
@@ -72,16 +90,37 @@ export default function SalesPage() {
                 activeFilters.end_date = `${dateTo}T23:59:59`;
             }
 
-            const [salesData, marketplaceData] = await Promise.all([
-                getSales(activeFilters),
-                getMarketplaceSales({
-                    start_date: activeFilters.start_date,
-                    end_date: activeFilters.end_date,
-                }),
-            ]);
+            const marketplaceFilters = {
+                start_date: activeFilters.start_date,
+                end_date: activeFilters.end_date,
+            };
+            const mergeRecentMarketplaceSales = recentMarketplaceOnly
+                && !marketplaceFilters.start_date
+                && !marketplaceFilters.end_date;
+            if (mergeRecentMarketplaceSales) {
+                marketplaceFilters.start_date = new Date(Date.now() - AUTO_REFRESH_LOOKBACK_MS).toISOString();
+            }
+
+            // Start both sources together, but release the table as soon as the faster PDV query finishes.
+            const marketplaceRequest = getMarketplaceSales(marketplaceFilters).then(
+                (data) => ({ ok: true as const, data }),
+                (error: unknown) => ({ ok: false as const, error }),
+            );
+            const salesData = await getSales(activeFilters);
             if (requestId === loadRequestSequence.current) {
                 setSales(salesData);
-                setMarketplaceSales(marketplaceData.sales);
+                if (!silent) setIsLoading(false);
+            }
+
+            const marketplaceResult = await marketplaceRequest;
+            if (!marketplaceResult.ok) throw marketplaceResult.error;
+            const marketplaceData = marketplaceResult.data;
+            if (requestId === loadRequestSequence.current) {
+                setMarketplaceSales((current) => (
+                    mergeRecentMarketplaceSales
+                        ? mergeMarketplaceSales(current, marketplaceData.sales)
+                        : marketplaceData.sales
+                ));
                 setMarketplaceWarnings(marketplaceData.warnings);
             }
         } catch (error) {
@@ -90,7 +129,11 @@ export default function SalesPage() {
                 toast.error('Erro ao carregar dados de vendas');
             }
         } finally {
-            if (requestId === loadRequestSequence.current) setIsLoading(false);
+            activeLoads.current = Math.max(0, activeLoads.current - 1);
+            if (requestId === loadRequestSequence.current) {
+                setIsLoading(false);
+                setIsMarketplaceLoading(false);
+            }
         }
     }, [filters, statusFilter, dateFrom, dateTo]);
 
@@ -100,9 +143,13 @@ export default function SalesPage() {
 
     useEffect(() => {
         const refreshWhenVisible = () => {
-            if (document.visibilityState !== 'visible' || backgroundRefreshInFlight.current) return;
+            if (
+                document.visibilityState !== 'visible'
+                || activeLoads.current > 0
+                || backgroundRefreshInFlight.current
+            ) return;
             backgroundRefreshInFlight.current = true;
-            void loadData({ silent: true }).finally(() => {
+            void loadData({ silent: true, recentMarketplaceOnly: true }).finally(() => {
                 backgroundRefreshInFlight.current = false;
             });
         };
@@ -320,12 +367,15 @@ export default function SalesPage() {
                 <div className="flex flex-col items-start gap-1 sm:items-end">
                     <button
                         onClick={() => void loadData()}
+                        disabled={isMarketplaceLoading}
                         className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
                     >
-                        <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+                        <RefreshCw size={18} className={isMarketplaceLoading ? 'animate-spin' : ''} />
                         Atualizar
                     </button>
-                    <span className="text-xs text-slate-400">Atualização automática a cada 1 minuto</span>
+                    <span className="text-xs text-slate-400">
+                        {isMarketplaceLoading ? 'Atualizando marketplaces...' : 'Atualização automática a cada 1 minuto'}
+                    </span>
                 </div>
             </div>
 

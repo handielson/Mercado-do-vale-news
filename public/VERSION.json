@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.510-vendas-auto-refresh",
+  "version": "v1.2.511-vendas-refresh-seguro",
   "date": "2026-09-29",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.510-vendas-auto-refresh",
-  "release_vps": "/var/www/mdv-site/releases/20260929-132207-v1-2-510-vendas-auto-refresh",
+  "tag": "v1.2.511-vendas-refresh-seguro",
+  "release_vps": "/var/www/mdv-site/releases/20260929-161107-v1-2-511-vendas-refresh-seguro",
   "release_print3d_vps": null,
-  "summary": "Ajusta a tabela de vendas sem rolagem horizontal e atualiza todos os canais automaticamente a cada minuto.",
+  "summary": "Exibe o PDV sem esperar o histórico dos marketplaces e atualiza novas vendas sem consultas concorrentes.",
   "changed_files": [
     "pages/admin/sales/SalesPage.tsx",
     "tmp-tests/sales-page-marketplaces-static.test.mjs"

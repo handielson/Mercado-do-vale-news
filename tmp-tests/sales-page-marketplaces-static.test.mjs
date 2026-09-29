@@ -23,6 +23,14 @@ assert.match(page, /setInterval\(refreshWhenVisible, AUTO_REFRESH_MS\)/, 'automa
 assert.match(page, /visibilityState !== 'visible'/, 'background tabs must not keep polling marketplace APIs');
 assert.match(page, /addEventListener\('focus', refreshWhenVisible\)/, 'sales must refresh as soon as the operator returns to the tab');
 assert.match(page, /backgroundRefreshInFlight\.current/, 'focus and visibility events must not duplicate marketplace requests');
+assert.match(page, /activeLoads\.current > 0/, 'automatic refresh must wait for the initial or filtered load to finish');
+assert.match(page, /recentMarketplaceOnly: true/, 'automatic refresh must request only the recent marketplace window');
+assert.match(page, /AUTO_REFRESH_LOOKBACK_MS/, 'the incremental marketplace refresh must have an explicit lookback window');
+assert.match(page, /mergeMarketplaceSales/, 'recent marketplace results must merge into the already loaded history');
+assert.match(page, /const marketplaceRequest = getMarketplaceSales[\s\S]*const salesData = await getSales[\s\S]*setSales\(salesData\)[\s\S]*await marketplaceRequest/, 'PDV rows must be released before the slower marketplace history finishes');
+assert.doesNotMatch(page, /const \[salesData, marketplaceData\] = await Promise\.all/, 'the table must not wait for every marketplace before showing PDV sales');
+assert.match(page, /Atualizando marketplaces\.\.\./, 'the page must explain that marketplace history is still loading after PDV rows appear');
+assert.match(page, /disabled=\{isMarketplaceLoading\}/, 'manual refresh must not start a competing marketplace load');
 assert.match(page, /MarketplaceSaleDetailsModal/, 'marketplace details must be read-only and separate from PDV actions');
 assert.match(modal, /Consulta somente leitura do marketplace/, 'marketplace modal must declare its read-only behavior');
 assert.match(service, /Promise\.allSettled/, 'one unavailable marketplace must not hide the other channels');
