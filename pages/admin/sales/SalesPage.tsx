@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical, Calendar, DollarSign, RefreshCw, XCircle, RotateCcw, TrendingUp, Truck } from 'lucide-react';
 import { SaleWithItems, SaleFilters } from '../../../types/sale';
@@ -8,6 +8,8 @@ import MarketplaceSaleDetailsModal from '../../../components/admin/sales/Marketp
 import { getMarketplaceSales, MarketplaceSale, MarketplaceSaleStatus } from '../../../services/adminMarketplaceSalesService';
 import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../../../utils/salePresentation';
 import toast from 'react-hot-toast';
+
+const AUTO_REFRESH_MS = 60_000;
 
 export default function SalesPage() {
     const [searchParams] = useSearchParams();
@@ -30,6 +32,8 @@ export default function SalesPage() {
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [activePeriod, setActivePeriod] = useState<'day' | 'week' | 'month' | 'year' | 'custom' | null>(null);
+    const loadRequestSequence = useRef(0);
+    const backgroundRefreshInFlight = useRef(false);
 
     const toISO = (d: Date) => d.toISOString().split('T')[0];
     const startOf = (unit: 'day' | 'week' | 'month' | 'year') => {
@@ -53,8 +57,9 @@ export default function SalesPage() {
         setDateTo('');
     };
 
-    const loadData = async () => {
-        setIsLoading(true);
+    const loadData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+        const requestId = ++loadRequestSequence.current;
+        if (!silent) setIsLoading(true);
         try {
             const activeFilters: SaleFilters = { ...filters };
             if (statusFilter !== 'all' && statusFilter !== 'pending') {
@@ -74,20 +79,42 @@ export default function SalesPage() {
                     end_date: activeFilters.end_date,
                 }),
             ]);
-            setSales(salesData);
-            setMarketplaceSales(marketplaceData.sales);
-            setMarketplaceWarnings(marketplaceData.warnings);
+            if (requestId === loadRequestSequence.current) {
+                setSales(salesData);
+                setMarketplaceSales(marketplaceData.sales);
+                setMarketplaceWarnings(marketplaceData.warnings);
+            }
         } catch (error) {
             console.error('Error loading sales data:', error);
-            toast.error('Erro ao carregar dados de vendas');
+            if (!silent && requestId === loadRequestSequence.current) {
+                toast.error('Erro ao carregar dados de vendas');
+            }
         } finally {
-            setIsLoading(false);
+            if (requestId === loadRequestSequence.current) setIsLoading(false);
         }
-    };
+    }, [filters, statusFilter, dateFrom, dateTo]);
 
     useEffect(() => {
-        loadData();
-    }, [filters, statusFilter, dateFrom, dateTo]);
+        void loadData();
+    }, [loadData]);
+
+    useEffect(() => {
+        const refreshWhenVisible = () => {
+            if (document.visibilityState !== 'visible' || backgroundRefreshInFlight.current) return;
+            backgroundRefreshInFlight.current = true;
+            void loadData({ silent: true }).finally(() => {
+                backgroundRefreshInFlight.current = false;
+            });
+        };
+        const intervalId = window.setInterval(refreshWhenVisible, AUTO_REFRESH_MS);
+        window.addEventListener('focus', refreshWhenVisible);
+        document.addEventListener('visibilitychange', refreshWhenVisible);
+        return () => {
+            window.clearInterval(intervalId);
+            window.removeEventListener('focus', refreshWhenVisible);
+            document.removeEventListener('visibilitychange', refreshWhenVisible);
+        };
+    }, [loadData]);
 
     useEffect(() => {
         const saleId = searchParams.get('sale');
@@ -290,13 +317,16 @@ export default function SalesPage() {
                     </h2>
                     <p className="text-slate-500 mt-1">Vendas do PDV, Shopee MV, Shopee G, Mercado Livre e TikTok Shop</p>
                 </div>
-                <button
-                    onClick={loadData}
-                    className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-                >
-                    <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
-                    Atualizar
-                </button>
+                <div className="flex flex-col items-start gap-1 sm:items-end">
+                    <button
+                        onClick={() => void loadData()}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                        <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+                        Atualizar
+                    </button>
+                    <span className="text-xs text-slate-400">Atualização automática a cada 1 minuto</span>
+                </div>
             </div>
 
             {/* Metrics Dashboard */}
@@ -475,18 +505,28 @@ export default function SalesPage() {
                     )}
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                <div className="w-full overflow-hidden">
+                    <table className="w-full table-fixed text-left border-collapse">
+                        <colgroup>
+                            <col className="w-[11%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[11%]" />
+                            <col className="w-[20%]" />
+                            <col className="w-[11%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[10%]" />
+                        </colgroup>
                         <thead>
                             <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
-                                <th className="p-4 font-medium">Data / Hora</th>
-                                <th className="p-4 font-medium">Pedido</th>
-                                <th className="p-4 font-medium">Canal</th>
-                                <th className="p-4 font-medium">Cliente</th>
-                                <th className="p-4 font-medium">Status</th>
-                                <th className="p-4 font-medium">Entrega</th>
-                                <th className="p-4 font-medium text-right">Total</th>
-                                <th className="p-4 font-medium text-center">Ações</th>
+                                <th className="px-2 py-4 font-medium lg:px-3">Data / Hora</th>
+                                <th className="px-2 py-4 font-medium lg:px-3">Pedido</th>
+                                <th className="px-2 py-4 font-medium lg:px-3">Canal</th>
+                                <th className="px-2 py-4 font-medium lg:px-3">Cliente</th>
+                                <th className="px-2 py-4 font-medium lg:px-3">Status</th>
+                                <th className="px-2 py-4 font-medium lg:px-3">Entrega</th>
+                                <th className="px-2 py-4 font-medium text-right lg:px-3">Total</th>
+                                <th className="px-2 py-4 font-medium text-center lg:px-3">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -512,7 +552,7 @@ export default function SalesPage() {
                             ) : (
                                 filteredRows.map((row) => (
                                     <tr key={row.key} className="hover:bg-slate-50 transition-colors group">
-                                        <td className="p-4">
+                                        <td className="px-2 py-4 lg:px-3">
                                             <div className="text-sm font-medium text-slate-800">
                                                 {formatDate(row.occurredAt).split(' ')[0]}
                                             </div>
@@ -521,8 +561,8 @@ export default function SalesPage() {
                                                 {formatDate(row.occurredAt).split(' ')[1]}
                                             </div>
                                         </td>
-                                        <td className="p-4">
-                                            <div className="text-sm font-mono text-slate-600">
+                                        <td className="min-w-0 px-2 py-4 lg:px-3">
+                                            <div className="truncate text-sm font-mono text-slate-600" title={row.displayId}>
                                                 {row.displayId}
                                             </div>
                                             {row.localSale?.seller?.name && (
@@ -531,22 +571,22 @@ export default function SalesPage() {
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="p-4">
-                                            <span className="inline-flex whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                                        <td className="min-w-0 px-2 py-4 lg:px-3">
+                                            <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700" title={row.channelLabel}>
                                                 {row.channelLabel}
                                             </span>
                                         </td>
-                                        <td className="p-4">
-                                            <div className="text-sm font-medium text-slate-800 line-clamp-1">
+                                        <td className="min-w-0 px-2 py-4 lg:px-3">
+                                            <div className="truncate text-sm font-medium text-slate-800" title={row.customerName}>
                                                 {row.customerName}
                                             </div>
                                             <div className="text-xs text-slate-500">
                                                 {row.itemCount} {row.itemCount === 1 ? 'item' : 'itens'}
                                             </div>
                                         </td>
-                                        <td className="p-4">
+                                        <td className="min-w-0 px-2 py-4 lg:px-3">
                                             <div className="flex flex-col items-start gap-1">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${row.localSale ? getSaleOperationalStatusStyle(row.localSale) : getMarketplaceStatusStyle(row.normalizedStatus)}`}>
+                                                <span className={`inline-flex max-w-full items-center truncate px-2 py-0.5 rounded-full text-xs font-medium border ${row.localSale ? getSaleOperationalStatusStyle(row.localSale) : getMarketplaceStatusStyle(row.normalizedStatus)}`}>
                                                     {row.localSale ? getSaleOperationalStatusLabel(row.localSale) : getMarketplaceStatusLabel(row.normalizedStatus)}
                                                 </span>
                                                 {row.localSale?.finalization_status === 'needs_review' && (
@@ -556,18 +596,18 @@ export default function SalesPage() {
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="p-4">
-                                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${row.localSale ? getDeliveryStatusStyle(row.localSale) : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                                <Truck size={12} />
-                                                {row.localSale ? getDeliveryStatusLabel(row.localSale) : 'Marketplace'}
+                                        <td className="min-w-0 px-2 py-4 lg:px-3">
+                                            <span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${row.localSale ? getDeliveryStatusStyle(row.localSale) : 'bg-slate-100 text-slate-600 border-slate-200'}`} title={row.localSale ? getDeliveryStatusLabel(row.localSale) : 'Marketplace'}>
+                                                <Truck size={12} className="shrink-0" />
+                                                <span className="truncate">{row.localSale ? getDeliveryStatusLabel(row.localSale) : 'Marketplace'}</span>
                                             </span>
                                         </td>
-                                        <td className="p-4 text-right">
-                                            <div className="text-sm font-bold text-slate-800">
+                                        <td className="px-2 py-4 text-right lg:px-3">
+                                            <div className="whitespace-nowrap text-sm font-bold text-slate-800">
                                                 {formatCurrency(row.totalCents)}
                                             </div>
                                         </td>
-                                        <td className="p-4 text-center">
+                                        <td className="px-1 py-4 text-center lg:px-2">
                                             <button
                                                 onClick={() => {
                                                     if (row.localSale) {
@@ -577,7 +617,7 @@ export default function SalesPage() {
                                                         setSelectedMarketplaceSale(row.marketplaceSale);
                                                     }
                                                 }}
-                                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium text-xs"
+                                                className="max-w-full whitespace-normal rounded-lg p-1.5 text-xs font-medium leading-tight text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
                                             >
                                                 Ver Detalhes
                                             </button>
@@ -598,7 +638,7 @@ export default function SalesPage() {
                     setTimeout(() => setSelectedSale(null), 300); // delay pro transition não bugar a interface
                 }}
                 sale={selectedSale}
-                onStatusChange={loadData}
+                onStatusChange={() => void loadData()}
             />
             <MarketplaceSaleDetailsModal
                 sale={selectedMarketplaceSale}

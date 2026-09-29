@@ -15,6 +15,14 @@ for (const label of ['PDV', 'Shopee MV', 'Shopee G', 'Mercado Livre', 'TikTok Sh
 }
 assert.match(page, /filteredRows\.map/, 'sales table must render the unified channel rows');
 assert.match(page, />Canal</, 'sales table must expose the channel column');
+assert.match(page, /table-fixed/, 'sales table must distribute columns inside the available width');
+assert.match(page, /<colgroup>/, 'sales table must define a stable width for all columns');
+assert.doesNotMatch(page, /<div className="overflow-x-auto">\s*<table/, 'sales table must not require horizontal scrolling');
+assert.match(page, /AUTO_REFRESH_MS = 60_000/, 'sales from every channel must refresh automatically every minute');
+assert.match(page, /setInterval\(refreshWhenVisible, AUTO_REFRESH_MS\)/, 'automatic refresh must reuse the unified sales loader');
+assert.match(page, /visibilityState !== 'visible'/, 'background tabs must not keep polling marketplace APIs');
+assert.match(page, /addEventListener\('focus', refreshWhenVisible\)/, 'sales must refresh as soon as the operator returns to the tab');
+assert.match(page, /backgroundRefreshInFlight\.current/, 'focus and visibility events must not duplicate marketplace requests');
 assert.match(page, /MarketplaceSaleDetailsModal/, 'marketplace details must be read-only and separate from PDV actions');
 assert.match(modal, /Consulta somente leitura do marketplace/, 'marketplace modal must declare its read-only behavior');
 assert.match(service, /Promise\.allSettled/, 'one unavailable marketplace must not hide the other channels');
