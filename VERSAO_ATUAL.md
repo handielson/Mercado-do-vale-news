@@ -1,13 +1,13 @@
-# v1.2.508-shopee-vinculos-contas
+# v1.2.509-vendas-marketplaces
 
 Data: 2026-09-29. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.508-shopee-vinculos-contas
-Release principal: /var/www/mdv-site/releases/20260929-025000-v1-2-508-shopee-vinculos-contas
+Tag: v1.2.509-vendas-marketplaces
+Release principal: /var/www/mdv-site/releases/20260929-125525-v1-2-509-vendas-marketplaces
 
-O painel Shopee agora varre o catalogo da conta selecionada antes de formar a fila de publicacao. A leitura paginada identifica o SKU principal e os SKUs de cada variacao, registra os vinculos encontrados na conta correta e mostra todos os produtos que nao serao reenviados.
+A tela `/admin/sales` passa a reunir as vendas do PDV, Shopee MV, Shopee G, Mercado Livre e TikTok Shop, ordenadas por data e identificadas por canal. Os marketplaces possuem detalhes somente leitura e falhas isoladas: a indisponibilidade de um canal nao impede a exibicao dos demais.
 
-A correspondencia automatica e deliberadamente conservadora: somente SKU exato e unico. Anuncios sem SKU local correspondente ou com SKU ambiguo ficam intocados para revisao manual. Um vinculo da conta `M` nao bloqueia o envio para a conta `G`, e vice-versa.
+Os indicadores de faturamento, custo e lucro real continuam restritos ao PDV, pois os carregadores de marketplace nao fornecem custo real comparavel. Shopee consulta separadamente a conta principal e as conexoes adicionais; TikTok e Mercado Livre usam paginacao oficial.
 
-A fila de envio em massa permanece bloqueada ate a varredura terminar e aceita somente produtos `not_synced`, com estoque publicavel e sem `shopee_item_id` naquela conta. Tambem foi incluido o comando seguro `npm run shopee:publish-one -- --sku <SKU> --connection <M|G>` para testes unitarios de publicacao, inclusive produtos com variacao, imagens e video.
+A API sera publicada pelo modo seletivo `--sales-marketplaces-only`, que troca somente `vps_server.cjs` e `services/mercadoLivreServer.cjs`, preservando a automacao local de publicacao Shopee G em execucao.
 
-Validacoes: reconciliacao real das contas M e G por SKU exato; testes do scanner e da protecao da fila; testes de publicacao simples/variacao, busca e exibicao dos selos; verificacao de sintaxe; build de producao e validacao publica da versao.
+Validacoes: testes focados da listagem e do deploy seletivo; testes de vendas, Mercado Livre e TikTok; verificacao de sintaxe; build de producao; validacao publica do site, versao e API.

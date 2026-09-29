@@ -7683,7 +7683,8 @@ function normalizeMobileShopeeOrderVps(order) {
   };
 }
 
-async function loadMobileShopeeSalesVps(limit = 50, orderSn = '', connectionId = 'primary') {
+async function loadMobileShopeeSalesVps(limit = 50, orderSn = '', connectionId = 'primary', startDate = '', endDate = '') {
+  const safeLimit = Math.max(1, Math.min(500, Number(limit) || 50));
   const normalizedConnectionId = String(connectionId || 'primary').trim() || 'primary';
   const creds = await getShopeeCatalogCredentialsVps(normalizedConnectionId === 'primary' ? undefined : normalizedConnectionId);
   let orderNumbers = [];
@@ -7691,34 +7692,35 @@ async function loadMobileShopeeSalesVps(limit = 50, orderSn = '', connectionId =
     orderNumbers = [String(orderSn)];
   } else {
     const now = Math.floor(Date.now() / 1000);
-    let cursor = '';
-    let page = 0;
-    do {
-      const listed = await shopeeCatalogGetVps(
-        '/api/v2/order/get_order_list',
-        creds,
-        encodeShopeeCatalogParamsVps({
-          time_range_field: 'create_time',
-          time_from: now - (14 * 24 * 60 * 60),
-          time_to: now,
-          page_size: Math.max(1, Math.min(100, Number(limit) || 50)),
-          cursor,
-        }),
-      );
-      if (listed?.data?.error) {
-        throw new Error(listed.data.message || listed.data.error);
-      }
-      const response = listed?.data?.response || {};
-      orderNumbers.push(
-        ...(response.order_list || [])
-          .map((order) => String(order?.order_sn || ''))
-          .filter(Boolean),
-      );
-      cursor = response.more && response.next_cursor
-        ? String(response.next_cursor)
-        : '';
-      page += 1;
-    } while (cursor && page < 20 && orderNumbers.length < Math.max(1, Math.min(100, Number(limit) || 50)));
+    const parsedStart = Math.floor(new Date(startDate || 0).getTime() / 1000);
+    const parsedEnd = Math.floor(new Date(endDate || 0).getTime() / 1000);
+    const earliest = Number.isFinite(parsedStart) && parsedStart > 0 ? parsedStart : now - (366 * 24 * 60 * 60);
+    let windowEnd = Number.isFinite(parsedEnd) && parsedEnd > 0 ? Math.min(parsedEnd, now) : now;
+    const windowSeconds = (14 * 24 * 60 * 60) - 1;
+    while (windowEnd >= earliest && orderNumbers.length < safeLimit) {
+      const windowStart = Math.max(earliest, windowEnd - windowSeconds);
+      let cursor = '';
+      let page = 0;
+      do {
+        const listed = await shopeeCatalogGetVps(
+          '/api/v2/order/get_order_list',
+          creds,
+          encodeShopeeCatalogParamsVps({
+            time_range_field: 'create_time',
+            time_from: windowStart,
+            time_to: windowEnd,
+            page_size: Math.max(1, Math.min(100, safeLimit - orderNumbers.length)),
+            cursor,
+          }),
+        );
+        if (listed?.data?.error) throw new Error(listed.data.message || listed.data.error);
+        const response = listed?.data?.response || {};
+        orderNumbers.push(...(response.order_list || []).map((order) => String(order?.order_sn || '')).filter(Boolean));
+        cursor = response.more && response.next_cursor ? String(response.next_cursor) : '';
+        page += 1;
+      } while (cursor && page < 20 && orderNumbers.length < safeLimit);
+      windowEnd = windowStart - 1;
+    }
   }
   if (!orderNumbers.length) return [];
   orderNumbers = [...new Set(orderNumbers)];
@@ -7750,7 +7752,7 @@ async function loadMobileShopeeSalesVps(limit = 50, orderSn = '', connectionId =
   return sales
     .filter((sale) => sale.external_id)
     .sort((a, b) => new Date(b.occurred_at) - new Date(a.occurred_at))
-    .slice(0, Math.max(1, Math.min(100, Number(limit) || 50)));
+    .slice(0, safeLimit);
 }
 
 function normalizeMobileTikTokOrderVps(order) {
@@ -7790,7 +7792,8 @@ function normalizeMobileTikTokOrderVps(order) {
   };
 }
 
-async function loadMobileTikTokSalesVps(limit = 50, orderId = '') {
+async function loadMobileTikTokSalesVps(limit = 50, orderId = '', startDate = '', endDate = '') {
+  const safeLimit = Math.max(1, Math.min(500, Number(limit) || 50));
   const settings = await loadTikTokShopOAuthSettingsVps();
   let orders = [];
   if (orderId) {
@@ -7800,24 +7803,33 @@ async function loadMobileTikTokSalesVps(limit = 50, orderId = '') {
     });
     orders = result?.payload?.data?.orders || [];
   } else {
-    const result = await callTikTokShopOpenApiVps(settings, {
-      method: 'POST',
-      pathname: '/order/202309/orders/search',
-      query: {
-        page_size: Math.max(1, Math.min(100, Number(limit) || 50)),
-        sort_field: 'create_time',
-        sort_order: 'DESC',
-      },
-      body: {
-        create_time_ge: Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60),
-      },
-    });
-    orders = result?.payload?.data?.orders || [];
+    const parsedStart = Math.floor(new Date(startDate || 0).getTime() / 1000);
+    const parsedEnd = Math.floor(new Date(endDate || 0).getTime() / 1000);
+    let pageToken = '';
+    do {
+      const body = {};
+      if (Number.isFinite(parsedStart) && parsedStart > 0) body.create_time_ge = parsedStart;
+      if (Number.isFinite(parsedEnd) && parsedEnd > 0) body.create_time_lt = parsedEnd;
+      const result = await callTikTokShopOpenApiVps(settings, {
+        method: 'POST',
+        pathname: '/order/202309/orders/search',
+        query: {
+          page_size: Math.max(1, Math.min(100, safeLimit - orders.length)),
+          sort_field: 'create_time',
+          sort_order: 'DESC',
+          ...(pageToken ? { page_token: pageToken } : {}),
+        },
+        body,
+      });
+      const data = result?.payload?.data || {};
+      orders.push(...(Array.isArray(data.orders) ? data.orders : []));
+      pageToken = String(data.next_page_token || '');
+    } while (pageToken && orders.length < safeLimit);
   }
   return orders
     .map(normalizeMobileTikTokOrderVps)
     .filter((sale) => sale.external_id)
-    .slice(0, Math.max(1, Math.min(100, Number(limit) || 50)));
+    .slice(0, safeLimit);
 }
 
 function shopeeSupportIsoVps(value) {
@@ -13705,7 +13717,10 @@ fastify.get('/admin/sale-alerts', { preHandler: requireAdminBearerToken }, async
 });
 fastify.get('/admin/mobile-sales', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   const channel = String(request.query?.channel || '').trim().toLowerCase();
-  const limit = Math.max(1, Math.min(100, Number(request.query?.limit) || 50));
+  const limit = Math.max(1, Math.min(500, Number(request.query?.limit) || 50));
+  const connectionId = String(request.query?.connection_id || 'primary').trim() || 'primary';
+  const startDate = String(request.query?.start_date || '').trim();
+  const endDate = String(request.query?.end_date || '').trim();
   try {
     let sales = [];
     let warning = null;
@@ -13713,14 +13728,14 @@ fastify.get('/admin/mobile-sales', { preHandler: requireAdminBearerToken }, asyn
     else if (channel === 'online') sales = await loadMobileOnlineSalesVps(limit);
     else if (channel === 'shopee') {
       try {
-        sales = await loadMobileShopeeSalesVps(limit);
+        sales = await loadMobileShopeeSalesVps(limit, '', connectionId, startDate, endDate);
       } catch (error) {
         warning = error.message || 'Shopee indisponivel.';
-        sales = await mobileSalesPushService.listRecordedSales(channel, limit);
+        sales = connectionId === 'primary' ? await mobileSalesPushService.listRecordedSales(channel, limit) : [];
       }
     } else if (channel === 'tiktok') {
       try {
-        sales = await loadMobileTikTokSalesVps(limit);
+        sales = await loadMobileTikTokSalesVps(limit, '', startDate, endDate);
       } catch (error) {
         warning = error.message || 'TikTok Shop indisponivel.';
         sales = await mobileSalesPushService.listRecordedSales(channel, limit);
@@ -13731,6 +13746,7 @@ fastify.get('/admin/mobile-sales', { preHandler: requireAdminBearerToken }, asyn
     reply.header('Cache-Control', 'no-store');
     return {
       channel,
+      ...(channel === 'shopee' ? { connection_id: connectionId } : {}),
       count: sales.length,
       sales,
       ...(warning ? { warning } : {}),

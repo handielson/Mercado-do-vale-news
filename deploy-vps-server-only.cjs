@@ -592,6 +592,24 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--sales-marketplaces-only')) {
+    if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+    const runtimePath = String(apiProc.pm2_env?.pm_exec_path || '');
+    if (!runtimePath.endsWith('/vps_server.cjs')) throw new Error(`Unexpected API runtime for selective sales deploy: ${runtimePath}`);
+    const backupDir = `${appDir}/backups/sales-marketplaces-${Date.now()}`;
+    const serverTarget = `${appDir}/vps_server.cjs`;
+    const mercadoLivreTarget = `${appDir}/${mercadoLivreServicePath}`;
+    await exec(`mkdir -p ${backupDir} ${appDir}/services`);
+    await exec(`cp -p ${serverTarget} ${backupDir}/vps_server.cjs && cp -p ${mercadoLivreTarget} ${backupDir}/mercadoLivreServer.cjs`);
+    await upload(localServerCjs, `${serverTarget}.next.cjs`);
+    await upload(path.join(__dirname, mercadoLivreServicePath), `${mercadoLivreTarget}.next.cjs`);
+    await exec(`node --check ${serverTarget}.next.cjs && node --check ${mercadoLivreTarget}.next.cjs`);
+    await exec(`mv ${serverTarget}.next.cjs ${serverTarget} && mv ${mercadoLivreTarget}.next.cjs ${mercadoLivreTarget}`);
+    console.log((await exec('pm2 restart mdv-api --update-env')).trim());
+    console.log(`Sales marketplaces backup: ${backupDir}`);
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--marketing-scenes-migration-only')) {
     await applyMarketingScenesMigration({ appDir, apiProc, exec, upload, root: __dirname });
     conn.end();

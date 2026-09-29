@@ -1,21 +1,20 @@
 {
-  "version": "v1.2.508-shopee-vinculos-contas",
+  "version": "v1.2.509-vendas-marketplaces",
   "date": "2026-09-29",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.508-shopee-vinculos-contas",
-  "release_vps": "/var/www/mdv-site/releases/20260929-025000-v1-2-508-shopee-vinculos-contas",
+  "tag": "v1.2.509-vendas-marketplaces",
+  "release_vps": "/var/www/mdv-site/releases/20260929-125525-v1-2-509-vendas-marketplaces",
   "release_print3d_vps": null,
-  "summary": "Varre os anuncios das contas Shopee por SKU, exibe os vinculos e impede o reenvio de produtos ja publicados na loja selecionada.",
+  "summary": "Consolida na tela de vendas o PDV, Shopee MV, Shopee G, Mercado Livre e TikTok Shop.",
   "changed_files": [
-    "hooks/useProducts.ts",
-    "package.json",
-    "pages/admin/settings/ShopeePage.tsx",
-    "scripts/shopee-publish-one.ts",
-    "services/shopeeCatalogLinkScanner.ts",
-    "services/shopeeProducts.ts",
-    "services/shopeeTemplateRowMapper.ts",
-    "services/shopeeTemplateService.ts",
-    "Shopee.md"
+    "components/admin/sales/MarketplaceSaleDetailsModal.tsx",
+    "deploy-vps-server-only.cjs",
+    "pages/admin/sales/SalesPage.tsx",
+    "services/adminMarketplaceSalesService.ts",
+    "services/mercadoLivreServer.cjs",
+    "tmp-tests/deploy-sales-marketplaces-static.test.mjs",
+    "tmp-tests/sales-page-marketplaces-static.test.mjs",
+    "vps_server.cjs"
   ]
 }

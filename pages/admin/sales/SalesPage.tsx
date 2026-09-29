@@ -4,21 +4,26 @@ import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical
 import { SaleWithItems, SaleFilters } from '../../../types/sale';
 import { getSales, cancelSale, refundSale } from '../../../services/saleService';
 import SaleDetailsModal from '../../../components/admin/sales/SaleDetailsModal';
+import MarketplaceSaleDetailsModal from '../../../components/admin/sales/MarketplaceSaleDetailsModal';
+import { getMarketplaceSales, MarketplaceSale, MarketplaceSaleStatus } from '../../../services/adminMarketplaceSalesService';
 import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../../../utils/salePresentation';
 import toast from 'react-hot-toast';
 
 export default function SalesPage() {
     const [searchParams] = useSearchParams();
     const [sales, setSales] = useState<SaleWithItems[]>([]);
+    const [marketplaceSales, setMarketplaceSales] = useState<MarketplaceSale[]>([]);
+    const [marketplaceWarnings, setMarketplaceWarnings] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [filters, setFilters] = useState<SaleFilters>({});
 
     // Filtros UI
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'cancelled' | 'refunded'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'cancelled' | 'refunded'>('all');
 
     // Modal Controle
     const [selectedSale, setSelectedSale] = useState<SaleWithItems | null>(null);
+    const [selectedMarketplaceSale, setSelectedMarketplaceSale] = useState<MarketplaceSale | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Filtros de data
@@ -52,7 +57,7 @@ export default function SalesPage() {
         setIsLoading(true);
         try {
             const activeFilters: SaleFilters = { ...filters };
-            if (statusFilter !== 'all') {
+            if (statusFilter !== 'all' && statusFilter !== 'pending') {
                 activeFilters.status = statusFilter;
             }
             if (dateFrom) {
@@ -62,8 +67,16 @@ export default function SalesPage() {
                 activeFilters.end_date = `${dateTo}T23:59:59`;
             }
 
-            const salesData = await getSales(activeFilters);
+            const [salesData, marketplaceData] = await Promise.all([
+                getSales(activeFilters),
+                getMarketplaceSales({
+                    start_date: activeFilters.start_date,
+                    end_date: activeFilters.end_date,
+                }),
+            ]);
             setSales(salesData);
+            setMarketplaceSales(marketplaceData.sales);
+            setMarketplaceWarnings(marketplaceData.warnings);
         } catch (error) {
             console.error('Error loading sales data:', error);
             toast.error('Erro ao carregar dados de vendas');
@@ -167,25 +180,68 @@ export default function SalesPage() {
         return 'bg-slate-100 text-slate-800 border-slate-200';
     };
 
-    // Filtro local por busca textual e data
-    const filteredSales = useMemo(() => {
-        return sales.filter(sale => {
+    const filteredRows = useMemo(() => {
+        const localRows = sales.map((sale) => ({
+            key: `pdv:${sale.id}`,
+            channel: 'pdv',
+            channelLabel: 'PDV',
+            id: sale.id,
+            displayId: sale.id.split('-')[0],
+            customerName: sale.customer?.name || 'Cliente Avulso',
+            itemCount: sale.items.length,
+            occurredAt: sale.created_at,
+            totalCents: sale.total,
+            normalizedStatus: sale.status as MarketplaceSaleStatus,
+            localSale: sale,
+            marketplaceSale: null,
+        }));
+        const externalRows = marketplaceSales.map((sale) => ({
+            key: `${sale.channel}:${sale.external_id}`,
+            channel: sale.channel,
+            channelLabel: sale.channel_label,
+            id: sale.external_id,
+            displayId: sale.display_id || sale.external_id,
+            customerName: sale.customer_name,
+            itemCount: Array.isArray(sale.details?.items) ? sale.details.items.length : 0,
+            occurredAt: sale.occurred_at,
+            totalCents: sale.total_cents,
+            normalizedStatus: sale.normalized_status,
+            localSale: null,
+            marketplaceSale: sale,
+        }));
+        return [...localRows, ...externalRows].filter(row => {
             if (searchTerm) {
                 const s = searchTerm.toLowerCase();
-                if (!sale.customer?.name.toLowerCase().includes(s) && !sale.id.toLowerCase().includes(s)) return false;
+                if (!`${row.customerName} ${row.id} ${row.channelLabel}`.toLowerCase().includes(s)) return false;
             }
+            if (statusFilter !== 'all' && row.normalizedStatus !== statusFilter) return false;
             if (dateFrom) {
-                if (new Date(sale.created_at) < new Date(dateFrom + 'T00:00:00')) return false;
+                if (new Date(row.occurredAt) < new Date(dateFrom + 'T00:00:00')) return false;
             }
             if (dateTo) {
-                if (new Date(sale.created_at) > new Date(dateTo + 'T23:59:59')) return false;
+                if (new Date(row.occurredAt) > new Date(dateTo + 'T23:59:59')) return false;
             }
             return true;
-        });
-    }, [sales, searchTerm, dateFrom, dateTo]);
+        }).sort((a, b) => String(b.occurredAt).localeCompare(String(a.occurredAt)));
+    }, [sales, marketplaceSales, searchTerm, statusFilter, dateFrom, dateTo]);
+
+    const getMarketplaceStatusLabel = (status: MarketplaceSaleStatus) => ({
+        completed: 'Confirmada',
+        pending: 'Pendente',
+        cancelled: 'Cancelada',
+        refunded: 'Estornada',
+    }[status]);
+
+    const getMarketplaceStatusStyle = (status: MarketplaceSaleStatus) => ({
+        completed: 'bg-green-100 text-green-800 border-green-200',
+        pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+        cancelled: 'bg-red-100 text-red-800 border-red-200',
+        refunded: 'bg-orange-100 text-orange-800 border-orange-200',
+    }[status]);
 
     const summaryStats = useMemo(() => {
         const scopedSales = sales.filter(sale => {
+            if (statusFilter === 'pending') return false;
             if (statusFilter !== 'all' && sale.status !== statusFilter) return false;
             if (sale.status !== 'completed') return false;
             if (dateFrom && new Date(sale.created_at) < new Date(dateFrom + 'T00:00:00')) return false;
@@ -232,7 +288,7 @@ export default function SalesPage() {
                         <ShoppingBag className="text-blue-600" size={32} />
                         Gestão de Vendas
                     </h2>
-                    <p className="text-slate-500 mt-1">Acompanhe e gerencie todas as vendas do PDV</p>
+                    <p className="text-slate-500 mt-1">Vendas do PDV, Shopee MV, Shopee G, Mercado Livre e TikTok Shop</p>
                 </div>
                 <button
                     onClick={loadData}
@@ -244,6 +300,7 @@ export default function SalesPage() {
             </div>
 
             {/* Metrics Dashboard */}
+            <p className="mb-2 text-xs text-slate-500">Indicadores financeiros calculados pelas vendas do PDV, onde custo e lucro real estão disponíveis.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <div className="flex items-center justify-between mb-4">
@@ -369,6 +426,7 @@ export default function SalesPage() {
                             >
                                 <option value="all">Todos os Status</option>
                                 <option value="completed">Apenas Concluídas</option>
+                                <option value="pending">Pendentes</option>
                                 <option value="cancelled">Canceladas</option>
                                 <option value="refunded">Estornadas</option>
                             </select>
@@ -404,12 +462,17 @@ export default function SalesPage() {
                                 Limpar filtro
                             </button>
                         )}
-                        {filteredSales.length !== sales.length && (
+                        {filteredRows.length !== sales.length + marketplaceSales.length && (
                             <span className="text-xs text-slate-500 ml-auto">
-                                Exibindo <strong>{filteredSales.length}</strong> de <strong>{sales.length}</strong> vendas
+                                Exibindo <strong>{filteredRows.length}</strong> de <strong>{sales.length + marketplaceSales.length}</strong> vendas
                             </span>
                         )}
                     </div>
+                    {marketplaceWarnings.length > 0 && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                            Alguns canais não puderam ser atualizados: {marketplaceWarnings.join(' · ')}. As demais vendas continuam disponíveis.
+                        </div>
+                    )}
                 </div>
 
                 <div className="overflow-x-auto">
@@ -418,6 +481,7 @@ export default function SalesPage() {
                             <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
                                 <th className="p-4 font-medium">Data / Hora</th>
                                 <th className="p-4 font-medium">Pedido</th>
+                                <th className="p-4 font-medium">Canal</th>
                                 <th className="p-4 font-medium">Cliente</th>
                                 <th className="p-4 font-medium">Status</th>
                                 <th className="p-4 font-medium">Entrega</th>
@@ -428,16 +492,16 @@ export default function SalesPage() {
                         <tbody className="divide-y divide-slate-100">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={7} className="p-8 text-center text-slate-500">
+                                    <td colSpan={8} className="p-8 text-center text-slate-500">
                                         <div className="flex flex-col items-center justify-center">
                                             <RefreshCw className="animate-spin mb-2 text-blue-500" size={24} />
                                             <span>Carregando vendas...</span>
                                         </div>
                                     </td>
                                 </tr>
-                            ) : filteredSales.length === 0 ? (
+                            ) : filteredRows.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="p-8 text-center text-slate-500">
+                                    <td colSpan={8} className="p-8 text-center text-slate-500">
                                         <div className="bg-slate-50 rounded-lg p-8 inline-block mt-4">
                                             <ShoppingBag size={48} className="mx-auto text-slate-300 mb-4" />
                                             <p className="font-medium text-slate-700">Nenhuma venda encontrada</p>
@@ -446,41 +510,46 @@ export default function SalesPage() {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredSales.map((sale) => (
-                                    <tr key={sale.id} className="hover:bg-slate-50 transition-colors group">
+                                filteredRows.map((row) => (
+                                    <tr key={row.key} className="hover:bg-slate-50 transition-colors group">
                                         <td className="p-4">
                                             <div className="text-sm font-medium text-slate-800">
-                                                {formatDate(sale.created_at).split(' ')[0]}
+                                                {formatDate(row.occurredAt).split(' ')[0]}
                                             </div>
                                             <div className="text-xs text-slate-500 flex items-center gap-1">
                                                 <Calendar size={12} />
-                                                {formatDate(sale.created_at).split(' ')[1]}
+                                                {formatDate(row.occurredAt).split(' ')[1]}
                                             </div>
                                         </td>
                                         <td className="p-4">
                                             <div className="text-sm font-mono text-slate-600">
-                                                {sale.id.split('-')[0]}
+                                                {row.displayId}
                                             </div>
-                                            {sale.seller?.name && (
+                                            {row.localSale?.seller?.name && (
                                                 <div className="text-xs text-slate-400 mt-0.5">
-                                                    Vend: {sale.seller.name.split(' ')[0]}
+                                                    Vend: {row.localSale.seller.name.split(' ')[0]}
                                                 </div>
                                             )}
                                         </td>
                                         <td className="p-4">
+                                            <span className="inline-flex whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                                                {row.channelLabel}
+                                            </span>
+                                        </td>
+                                        <td className="p-4">
                                             <div className="text-sm font-medium text-slate-800 line-clamp-1">
-                                                {sale.customer?.name || 'Cliente Avulso'}
+                                                {row.customerName}
                                             </div>
                                             <div className="text-xs text-slate-500">
-                                                {sale.items.length} {sale.items.length === 1 ? 'item' : 'itens'}
+                                                {row.itemCount} {row.itemCount === 1 ? 'item' : 'itens'}
                                             </div>
                                         </td>
                                         <td className="p-4">
                                             <div className="flex flex-col items-start gap-1">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getSaleOperationalStatusStyle(sale)}`}>
-                                                    {getSaleOperationalStatusLabel(sale)}
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${row.localSale ? getSaleOperationalStatusStyle(row.localSale) : getMarketplaceStatusStyle(row.normalizedStatus)}`}>
+                                                    {row.localSale ? getSaleOperationalStatusLabel(row.localSale) : getMarketplaceStatusLabel(row.normalizedStatus)}
                                                 </span>
-                                                {sale.finalization_status === 'needs_review' && (
+                                                {row.localSale?.finalization_status === 'needs_review' && (
                                                     <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                                                         Corrigir log
                                                     </span>
@@ -488,21 +557,25 @@ export default function SalesPage() {
                                             </div>
                                         </td>
                                         <td className="p-4">
-                                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${getDeliveryStatusStyle(sale)}`}>
+                                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${row.localSale ? getDeliveryStatusStyle(row.localSale) : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                                                 <Truck size={12} />
-                                                {getDeliveryStatusLabel(sale)}
+                                                {row.localSale ? getDeliveryStatusLabel(row.localSale) : 'Marketplace'}
                                             </span>
                                         </td>
                                         <td className="p-4 text-right">
                                             <div className="text-sm font-bold text-slate-800">
-                                                {formatCurrency(sale.total)}
+                                                {formatCurrency(row.totalCents)}
                                             </div>
                                         </td>
                                         <td className="p-4 text-center">
                                             <button
                                                 onClick={() => {
-                                                    setSelectedSale(sale);
-                                                    setIsModalOpen(true);
+                                                    if (row.localSale) {
+                                                        setSelectedSale(row.localSale);
+                                                        setIsModalOpen(true);
+                                                    } else {
+                                                        setSelectedMarketplaceSale(row.marketplaceSale);
+                                                    }
                                                 }}
                                                 className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium text-xs"
                                             >
@@ -526,6 +599,10 @@ export default function SalesPage() {
                 }}
                 sale={selectedSale}
                 onStatusChange={loadData}
+            />
+            <MarketplaceSaleDetailsModal
+                sale={selectedMarketplaceSale}
+                onClose={() => setSelectedMarketplaceSale(null)}
             />
         </div>
     );

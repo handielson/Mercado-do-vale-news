@@ -132,6 +132,39 @@ function presentPrintJob(job) {
     : job;
 }
 
+function mercadoLivreOrderToAdminSale(order = {}) {
+  const items = (Array.isArray(order.order_items) ? order.order_items : []).map((entry) => {
+    const quantity = Math.max(1, Number(entry?.quantity) || 1);
+    const unitPrice = Number(entry?.unit_price) || 0;
+    return {
+      name: String(entry?.item?.title || 'Item Mercado Livre'),
+      sku: String(entry?.item?.seller_sku || entry?.item?.seller_custom_field || ''),
+      variation: String(entry?.item?.variation_id || ''),
+      quantity,
+      unit_price_cents: Math.round(unitPrice * 100),
+      total_cents: Math.round(unitPrice * quantity * 100),
+      image_url: '',
+    };
+  });
+  const buyer = order.buyer || {};
+  return {
+    channel: 'mercado_livre',
+    external_id: String(order.id || ''),
+    display_id: String(order.id || ''),
+    status: String(order.status || 'confirmed'),
+    customer_name: String(buyer.nickname || buyer.first_name || 'Cliente Mercado Livre'),
+    total_cents: Math.round((Number(order.total_amount) || 0) * 100),
+    currency: String(order.currency_id || 'BRL'),
+    occurred_at: String(order.date_closed || order.date_created || new Date().toISOString()),
+    details: {
+      items,
+      payment: 'Mercado Livre',
+      shipment_id: order.shipping?.id ? String(order.shipping.id) : '',
+      pack_id: order.pack_id ? String(order.pack_id) : '',
+    },
+  };
+}
+
 function buildEventKey(payload = {}) {
   return crypto.createHash('sha256').update(JSON.stringify({
     id: payload._id || payload.id || '',
@@ -547,6 +580,44 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
     return { items: rows.map(presentPrintJob) };
   };
   registerAliases(fastify, 'get', '/mercado-livre/print-jobs', protectedRoute, listJobs);
+
+  const listOrders = async (request, reply) => {
+    const settings = await loadSettings(pool);
+    const sellerId = String(settings.user_id || '').trim();
+    if (!/^\d+$/.test(sellerId)) return reply.code(409).send({ error: 'Conecte a conta do Mercado Livre.' });
+
+    const limit = Math.max(1, Math.min(500, Number(request.query?.limit) || 500));
+    const startDate = String(request.query?.start_date || '').trim();
+    const endDate = String(request.query?.end_date || '').trim();
+    const sales = [];
+    let offset = 0;
+    let total = Number.POSITIVE_INFINITY;
+
+    while (sales.length < limit && offset < total) {
+      const query = new URLSearchParams({
+        seller: sellerId,
+        sort: 'date_desc',
+        limit: String(Math.min(50, limit - sales.length)),
+        offset: String(offset),
+      });
+      if (startDate && !Number.isNaN(new Date(startDate).getTime())) {
+        query.set('order.date_created.from', new Date(startDate).toISOString());
+      }
+      if (endDate && !Number.isNaN(new Date(endDate).getTime())) {
+        query.set('order.date_created.to', new Date(endDate).toISOString());
+      }
+      const response = await mlRequest(pool, `/orders/search?${query.toString()}`);
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.results) ? payload.results : [];
+      sales.push(...rows.map(mercadoLivreOrderToAdminSale).filter((sale) => sale.external_id));
+      total = Number(payload?.paging?.total) || sales.length;
+      offset += rows.length;
+      if (!rows.length) break;
+    }
+    reply.header('Cache-Control', 'no-store');
+    return { channel: 'mercado_livre', count: sales.length, sales: sales.slice(0, limit) };
+  };
+  registerAliases(fastify, 'get', '/mercado-livre/orders', protectedRoute, listOrders);
 
   const nextJob = async (_request, reply) => {
     // Reconcile pending DC-e without depending on a second webhook arriving.
