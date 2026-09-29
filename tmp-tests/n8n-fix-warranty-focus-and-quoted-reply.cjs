@@ -2,10 +2,16 @@ const assert = require('node:assert/strict');
 const { Client } = require('ssh2');
 const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
 const { readWorkflow } = require('./n8n-warranty-policy.cjs');
+const {
+  MARKER: MESSAGE_EDIT_MARKER,
+  patchWorkflow: patchMessageEditRecovery,
+  runFixtures: runMessageEditFixtures,
+} = require('./n8n-message-edit-recovery.cjs');
 
 const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const FOCUS_MARKER = 'warranty-recommended-model-focus-v2';
 const QUOTE_MARKER = 'quoted-customer-question-v2';
+const FOLLOWUP_MARKER = 'warranty-followup-context-v3';
 const q = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
 function replaceOnce(source, before, after, label) {
@@ -140,14 +146,54 @@ function patchSplitter(code) {
   return next;
 }
 
+function patchWarrantyFollowup(code) {
+  if (code.includes(FOLLOWUP_MARKER)) return code;
+  const questionAnchor = String.raw`const warrantyQuestionV1 = (/\bgaranti(?:a|as)\b/.test(normalized)
+  || (recentWarrantyPromptV1 && /\b(?:quantos? meses?|quanto tempo|qual prazo)\b/.test(normalized)))
+  && !/\b(?:estendida|defeito|quebrou|troca|trocar|conserto|reparo|assistencia|acionar|parou|problema)\b/.test(normalized);`;
+  const questionReplacement = String.raw`// warranty-followup-context-v3: keep the next reply inside the deterministic warranty flow.
+const recentWarrantyRowsV3 = Array.isArray(source.recentMessages) ? source.recentMessages.slice(-12) : [];
+const lastOutboundWarrantyV3 = [...recentWarrantyRowsV3].reverse().find((row) => row?.direction === 'outbound');
+const lastOutboundWarrantyTextV3 = normalize(lastOutboundWarrantyV3?.text || lastOutboundWarrantyV3?.message_text || '');
+const lastOutboundWarrantyAtV3 = Date.parse(String(lastOutboundWarrantyV3?.created_at || ''));
+const pendingWarrantyFollowupV3 = /prazo correto da garantia.*marca e o modelo/.test(lastOutboundWarrantyTextV3)
+  && Number.isFinite(lastOutboundWarrantyAtV3)
+  && Date.now() - lastOutboundWarrantyAtV3 < 10 * 60 * 1000;
+const warrantyFollowupV3 = pendingWarrantyFollowupV3
+  && !/\b(?:obrigad|valeu|depois|foto|imagem|preco|valor|cartao|pix|parcela|entrega|frete|localizacao|onde fica)\b/.test(normalized);
+const warrantyQuestionV1 = (/\bgaranti(?:a|as)\b/.test(normalized)
+  || warrantyFollowupV3
+  || (recentWarrantyPromptV1 && /\b(?:quantos? meses?|quanto tempo|qual prazo)\b/.test(normalized)))
+  && !/\b(?:estendida|defeito|quebrou|troca|trocar|conserto|reparo|assistencia|acionar|parou|problema)\b/.test(normalized);`;
+  let next = replaceOnce(code, questionAnchor, questionReplacement, 'warranty follow-up detection');
+  const safeReplyPattern = /  (?:const|let) safeReplyV1 = 'Para te passar o prazo correto da garantia, me diga a marca e o modelo do produto, por favor\. [^']+';/g;
+  const safeMatches = [...next.matchAll(safeReplyPattern)];
+  assert.equal(safeMatches.length, 1, 'warranty follow-up reply anchor must occur exactly once');
+  next = next.replace(safeReplyPattern,
+    "  let safeReplyV1 = warrantyFollowupV3\n"
+      + "    ? 'Entendi que você informou a marca e a memória, mas ainda preciso do modelo exato do aparelho para confirmar a garantia. Qual é o modelo?'\n"
+      + "    : 'Para te passar o prazo correto da garantia, me diga a marca e o modelo do produto, por favor. 😊';");
+  new Function('$json', '$', '$getWorkflowStaticData', 'fetch', next);
+  return next;
+}
+
+function patchAgentWarrantyPrompt(node) {
+  assert.ok(node?.parameters?.options, `${node?.name || 'AI agent'} options missing`);
+  const current = String(node.parameters.options.systemMessage || '');
+  if (current.includes(FOLLOWUP_MARKER)) return;
+  node.parameters.options.systemMessage = `${current}\n\nPOLITICA DE GARANTIA (// ${FOLLOWUP_MARKER}:agent):\n- Nunca informe prazo, cobertura ou responsavel pela garantia usando memoria da conversa, conhecimento geral ou apenas a marca do produto.\n- So informe esses dados quando o contexto atual trouxer uma garantia confirmada pelo cadastro. Na ausencia dessa confirmacao, peca o modelo exato e deixe a regra deterministica consultar o cadastro.\n- Nunca diga que celulares Xiaomi possuem 1 ano de garantia sem uma confirmacao estruturada do produto.`;
+}
+
 function patchWorkflow(workflow) {
   const cloned = structuredClone(workflow);
   const warrantyNode = cloned.nodes.find((node) => node.name === 'Vendas - Verificar Pos Lista');
   const splitterNode = cloned.nodes.find((node) => node.name === 'Dividir mensagens');
   assert.ok(warrantyNode?.parameters?.jsCode && splitterNode?.parameters?.jsCode, 'required bot nodes missing');
-  warrantyNode.parameters.jsCode = patchWarranty(warrantyNode.parameters.jsCode);
+  warrantyNode.parameters.jsCode = patchWarrantyFollowup(patchWarranty(warrantyNode.parameters.jsCode));
   splitterNode.parameters.jsCode = patchSplitter(splitterNode.parameters.jsCode);
-  return cloned;
+  patchAgentWarrantyPrompt(cloned.nodes.find((node) => node.name === 'Agente Geral - Atendimento'));
+  patchAgentWarrantyPrompt(cloned.nodes.find((node) => node.name === 'Especialista - Vendas'));
+  return patchMessageEditRecovery(cloned);
 }
 
 function remote(conn, command) {
@@ -191,7 +237,7 @@ async function applyWorkflow(conn, workflow) {
   const backup = await psql(conn, container, historySql);
   assert.ok(backup.trim(), 'active workflow history missing');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupPath = `/root/n8n-backups/${WORKFLOW_ID}-before-${FOCUS_MARKER}-${stamp}.json`;
+  const backupPath = `/root/n8n-backups/${WORKFLOW_ID}-before-${FOLLOWUP_MARKER}-${stamp}.json`;
   await remote(conn, 'mkdir -p /root/n8n-backups');
   await writeRemote(conn, backupPath, backup);
   const nodesPath = `/tmp/${WORKFLOW_ID}-${FOCUS_MARKER}-${stamp}.json`;
@@ -207,15 +253,18 @@ async function applyWorkflow(conn, workflow) {
     if (mainScaled) { await remote(conn, 'docker service scale n8n_n8n=1 >/dev/null'); await waitService(conn, 'n8n_n8n', 1); }
     if (runnerScaled) { await remote(conn, 'docker service scale n8n_n8n-runner=1 >/dev/null'); await waitService(conn, 'n8n_n8n-runner', 1); }
   }
-  const verifySql = `COPY (SELECT json_build_object('active',e.active,'versionAligned',e."versionId"=e."activeVersionId",'entityHistoryEqual',e.nodes::jsonb=h.nodes::jsonb,'focusMarker',e.nodes::text LIKE '%${FOCUS_MARKER}%','quoteMarker',e.nodes::text LIKE '%${QUOTE_MARKER}%')::text FROM workflow_entity e JOIN workflow_history h ON h."workflowId"=e.id AND h."versionId"=e."activeVersionId" WHERE e.id=${q(WORKFLOW_ID)}) TO STDOUT;`;
+  const verifySql = `COPY (SELECT json_build_object('active',e.active,'versionAligned',e."versionId"=e."activeVersionId",'entityHistoryEqual',e.nodes::jsonb=h.nodes::jsonb,'focusMarker',e.nodes::text LIKE '%${FOCUS_MARKER}%','quoteMarker',e.nodes::text LIKE '%${QUOTE_MARKER}%','followupMarker',e.nodes::text LIKE '%${FOLLOWUP_MARKER}%','messageEditMarker',e.nodes::text LIKE '%${MESSAGE_EDIT_MARKER}%')::text FROM workflow_entity e JOIN workflow_history h ON h."workflowId"=e.id AND h."versionId"=e."activeVersionId" WHERE e.id=${q(WORKFLOW_ID)}) TO STDOUT;`;
   const verified = JSON.parse((await psql(conn, container, verifySql)).trim());
-  assert.deepEqual(verified, { active: true, versionAligned: true, entityHistoryEqual: true, focusMarker: true, quoteMarker: true });
+  assert.deepEqual(verified, { active: true, versionAligned: true, entityHistoryEqual: true, focusMarker: true, quoteMarker: true, followupMarker: true, messageEditMarker: true });
   return { backupPath, verified };
 }
 
 async function validate(workflow) {
   const warrantyCode = workflow.nodes.find((node) => node.name === 'Vendas - Verificar Pos Lista').parameters.jsCode;
   const splitCode = workflow.nodes.find((node) => node.name === 'Dividir mensagens').parameters.jsCode;
+  const dadosCode = workflow.nodes.find((node) => node.name === 'Dados').parameters.jsCode;
+  const generalPrompt = workflow.nodes.find((node) => node.name === 'Agente Geral - Atendimento').parameters.options.systemMessage;
+  const salesPrompt = workflow.nodes.find((node) => node.name === 'Especialista - Vendas').parameters.options.systemMessage;
   const textSend = workflow.nodes.find((node) => node.name === 'Enviar WhatsApp');
   const quoted = textSend.parameters.bodyParameters.parameters.find((field) => field.name === 'quoted');
   assert.match(quoted?.value || '', /replyToWaMessageId/);
@@ -279,6 +328,32 @@ async function validate(workflow) {
   const noContext = await executeWarranty({ ...source, recentMessages: [] }, { salesPostList: {} });
   assert.match(noContext.output, /me diga a marca e o modelo/);
 
+  const warrantyPrompt = {
+    direction: 'outbound',
+    text: 'Para te passar o prazo correto da garantia, me diga a marca e o modelo do produto, por favor. 😊',
+    created_at: new Date().toISOString(),
+  };
+  const incident = await executeWarranty({
+    ...source,
+    conversation: 'É da Xiaomi, Xiaomi 256G.',
+    recentMessages: [warrantyPrompt],
+  }, { salesPostList: { [jid]: structuredClone({ ...state, focusedModelName: '' }) } });
+  assert.equal(incident.salesPostListHandled, true);
+  assert.match(incident.output, /ainda preciso do modelo exato/);
+  assert.doesNotMatch(incident.output, /1 ano|fabricante/i);
+
+  const exactFollowup = await executeWarranty({
+    ...source,
+    conversation: 'É o Redmi Note 14S de 256 GB.',
+    recentMessages: [warrantyPrompt],
+  }, { salesPostList: { [jid]: structuredClone({ ...state, focusedModelName: '' }) } });
+  assert.match(exactFollowup.output, /Redmi Note 14S tem 90 dias de garantia/);
+  assert.match(generalPrompt, new RegExp(FOLLOWUP_MARKER));
+  assert.match(salesPrompt, new RegExp(FOLLOWUP_MARKER));
+  assert.match(generalPrompt, /Nunca diga que celulares Xiaomi possuem 1 ano/);
+  assert.match(dadosCode, new RegExp(MESSAGE_EDIT_MARKER));
+  assert.deepEqual(runMessageEditFixtures(workflow), { normal: true, editedText: true, nestedEditedText: true, ignoredStatusOnly: true });
+
   const split = new Function('$json', '$', splitCode)(
     answer,
     (name) => ({ first: () => ({ json: name === 'switc Mensagens' ? source : {} }) }),
@@ -305,7 +380,7 @@ async function validate(workflow) {
   assert.equal(multiple.length, 2);
   assert.equal(multiple[0].json.replyToWaMessageId, source.messageId);
   assert.equal(multiple[1].json.replyToWaMessageId, '');
-  return { warranty: answer.output, focus: state.focusedModelName, quoted: split[0].json.replyToWaMessageId, explicitModel: true, variantSafety: true, unquotedSafe: true, multiMessageSafe: true };
+  return { warranty: answer.output, focus: state.focusedModelName, quoted: split[0].json.replyToWaMessageId, explicitModel: true, variantSafety: true, warrantyFollowup: incident.output, exactFollowup: exactFollowup.output, agentGuard: true, unquotedSafe: true, multiMessageSafe: true };
 }
 
 async function main() {
@@ -318,13 +393,23 @@ async function main() {
     const result = await validate(patched);
     assert.deepEqual(patchWorkflow(patched).nodes, patched.nodes, 'patch must be idempotent');
     if (process.argv.includes('--apply')) {
-      const alreadyActive = current.nodes.some((node) => String(node.parameters?.jsCode || '').includes(FOCUS_MARKER));
+      const alreadyActive = current.nodes.some((node) => String(node.parameters?.jsCode || '').includes(FOLLOWUP_MARKER))
+        && current.nodes.some((node) => String(node.parameters?.jsCode || '').includes(MESSAGE_EDIT_MARKER))
+        && current.nodes.filter((node) => ['Agente Geral - Atendimento', 'Especialista - Vendas'].includes(node.name))
+          .every((node) => String(node.parameters?.options?.systemMessage || '').includes(FOLLOWUP_MARKER));
       const workflowResult = alreadyActive ? { alreadyActive: true } : await applyWorkflow(conn, patched);
-      console.log(JSON.stringify({ applied: true, workflow: current.name, markers: [FOCUS_MARKER, QUOTE_MARKER], result, workflowResult }, null, 2));
+      console.log(JSON.stringify({ applied: true, workflow: current.name, markers: [FOCUS_MARKER, QUOTE_MARKER, FOLLOWUP_MARKER, MESSAGE_EDIT_MARKER], result, workflowResult }, null, 2));
     } else if (process.argv.includes('--validate-live')) {
-      console.log(JSON.stringify({ live: { active: current.active, versionAligned: current.versionId === current.activeVersionId, focusMarker: current.nodes.some((node) => String(node.parameters?.jsCode || '').includes(FOCUS_MARKER)), quoteMarker: current.nodes.some((node) => String(node.parameters?.jsCode || '').includes(QUOTE_MARKER)) } }, null, 2));
+      console.log(JSON.stringify({ live: {
+        active: current.active,
+        versionAligned: current.versionId === current.activeVersionId,
+        focusMarker: current.nodes.some((node) => String(node.parameters?.jsCode || '').includes(FOCUS_MARKER)),
+        quoteMarker: current.nodes.some((node) => String(node.parameters?.jsCode || '').includes(QUOTE_MARKER)),
+        followupMarker: current.nodes.some((node) => String(node.parameters?.jsCode || '').includes(FOLLOWUP_MARKER)),
+        messageEditMarker: current.nodes.some((node) => String(node.parameters?.jsCode || '').includes(MESSAGE_EDIT_MARKER)),
+      } }, null, 2));
     } else {
-      console.log(JSON.stringify({ mode: 'local dry run; production unchanged', workflow: current.name, markers: [FOCUS_MARKER, QUOTE_MARKER], result }, null, 2));
+      console.log(JSON.stringify({ mode: 'local dry run; production unchanged', workflow: current.name, markers: [FOCUS_MARKER, QUOTE_MARKER, FOLLOWUP_MARKER, MESSAGE_EDIT_MARKER], result }, null, 2));
     }
   } finally {
     conn.end();
@@ -332,4 +417,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.stack || error.message); process.exit(1); });
-module.exports = { patchWarranty, patchSplitter, patchWorkflow, validate };
+module.exports = { patchWarranty, patchWarrantyFollowup, patchAgentWarrantyPrompt, patchSplitter, patchWorkflow, validate };

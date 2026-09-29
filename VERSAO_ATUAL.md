@@ -1,9 +1,9 @@
-# v1.2.515-marketplace-sale-details
+# v1.2.516-n8n-edited-messages
 
 Data: 2026-09-29. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.515-marketplace-sale-details
-Release principal: `/var/www/mdv-site/releases/20260929-200250-v1-2-515-marketplace-sale-details`.
+Tag: v1.2.516-n8n-edited-messages
+Release principal: `/var/www/mdv-site/releases/20260929-201220-v1-2-516-n8n-edited-messages`.
 
-Os detalhes das vendas do PDV e de marketplaces agora mostram a foto do item e os depósitos e locais em que há saldo disponível. Para pedidos Shopee, o modal consulta novamente a conta de origem ao abrir ou atualizar e apresenta o status em português, como “Pedido processado”.
+O bot do WhatsApp passa a interpretar o texto substituto quando o cliente edita uma mensagem. Atualizacoes sem texto continuam fora do fluxo para nao criar respostas indevidas.
 
-O modal de marketplace também inclui comprovante no formato da impressora térmica configurada pela loja.
+A politica de garantia permanece deterministica: marca ou memoria sem modelo exato nao autoriza a IA a inventar prazo ou cobertura.

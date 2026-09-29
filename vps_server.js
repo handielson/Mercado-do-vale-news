@@ -3165,7 +3165,7 @@ function normalizeN8nBotContactName(input = {}) {
 
 const N8N_BOT_EVOLUTION_INSTANCE_NAME = process.env.N8N_BOT_EVOLUTION_INSTANCE_NAME || 'botmercadodovale';
 const EXPECTED_N8N_BOT_WEBHOOK_URL = 'https://n8n.mercadodovale.com.br/webhook/whatsapp';
-const EXPECTED_N8N_BOT_WEBHOOK_EVENTS = ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'];
+const EXPECTED_N8N_BOT_WEBHOOK_EVENTS = ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'];
 
 async function getN8nBotEvolutionSettings() {
   let row = null;
