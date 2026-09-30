@@ -34,6 +34,7 @@ assert.match(
 );
 
 const hookSource = readFileSync('hooks/useProducts.ts', 'utf8');
+const filtersSource = readFileSync('components/products/ProductFilters.tsx', 'utf8');
 assert.match(
   hookSource,
   /shopeeProductService\.getStoreCodesByProductIdMap\(\)/,
@@ -44,6 +45,16 @@ assert.match(
   /shopee_store_codes: shopeeStoreCodesByProductId\.get\(String\(product\.id\)\) \|\| \[\]/,
   'admin product cards should receive M/G badge metadata'
 );
+assert.match(
+  hookSource,
+  /channel === 'shopee'[\s\S]*shopeeProductService\.getStoreCodesByProductIdMap\(\)/,
+  'Shopee channel filter should include linked products from both stores'
+);
+assert.match(filtersSource, /shopeeStore: 'all' \| 'M' \| 'G'/, 'filters should expose the two Shopee stores');
+assert.match(filtersSource, /aria-label="Loja Shopee"/, 'product filters should expose the Shopee store selector');
+assert.match(filtersSource, /<option value="M">Mercado do Vale<\/option>/, 'Shopee M must be identified as Mercado do Vale');
+assert.match(filtersSource, /<option value="G">Glaucia<\/option>/, 'Shopee G must be identified as Glaucia');
+assert.match(filtersSource, /grid grid-cols-1 gap-2\.5[\s\S]*xl:grid-cols-6/, 'product filters should use compact responsive cards');
 
 assert.match(
   source,

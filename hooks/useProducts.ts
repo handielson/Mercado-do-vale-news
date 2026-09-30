@@ -171,6 +171,7 @@ export const useProducts = () => {
     const [cacheAge, setCacheAge] = useState<string | null>(getCacheAge);
     const [filters, setFilters] = useState<ProductFiltersState>({
         salesChannel: 'all', channelStatus: 'all',
+        shopeeStore: 'all',
         search: '',
         status: 'all',
         sortBy: 'newest',
@@ -193,7 +194,12 @@ export const useProducts = () => {
         const load = async (): Promise<Set<string>> => {
             if (channel === 'mercado_livre') return new Set((await mercadoLivreService.getProductLinks()).items.map(link => link.product_id));
             if (channel === 'tiktok') return new Set((await tiktokShopService.getProductLinks(products.flatMap(product => [product.id, product.parent_id].filter(Boolean) as string[]))).links.filter(link => link.tiktok_product_id).map(link => link.product_id));
-            if (channel === 'shopee') return new Set([...(await shopeeProductService.getItemIdByProductIdMap()).entries()].filter(([, id]) => Number(id) > 0).map(([id]) => id).concat(products.filter(product => Number(product.shopee_item_id) > 0).map(product => product.id)));
+            if (channel === 'shopee') return new Set([
+                ...(await shopeeProductService.getStoreCodesByProductIdMap()).keys(),
+                ...products
+                    .filter(product => Number(product.shopee_item_id) > 0 || (product.shopee_store_codes?.length || 0) > 0)
+                    .map(product => product.id),
+            ]);
             if (channel === 'bling') return new Set(products.filter(product => product.bling_id && String(product.bling_id) !== '0').map(product => product.id));
             return productStorefrontOffersService.publicProductIds(channel as 'loja_3d' | 'mercado_do_vale');
         };

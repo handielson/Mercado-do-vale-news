@@ -201,6 +201,14 @@ export const ProductListPage: React.FC = () => {
         });
     };
 
+    const goToPage = (nextPage: number) => {
+        const safePage = Math.min(Math.max(1, nextPage), Math.max(1, totalPages));
+        if (safePage === currentPage) return;
+
+        setCurrentPage(safePage);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     const goToTypedPage = () => {
         const requestedPage = Number.parseInt(pageInput, 10);
         if (!Number.isFinite(requestedPage)) {
@@ -209,7 +217,7 @@ export const ProductListPage: React.FC = () => {
         }
 
         const safePage = Math.min(Math.max(1, requestedPage), Math.max(1, totalPages));
-        setCurrentPage(safePage);
+        goToPage(safePage);
         setPageInput(String(safePage));
     };
 
@@ -624,7 +632,7 @@ export const ProductListPage: React.FC = () => {
 
                             <div className="flex items-center gap-2">
                                 <button
-                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    onClick={() => goToPage(currentPage - 1)}
                                     disabled={currentPage === 1}
                                     className="p-1 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
@@ -634,7 +642,7 @@ export const ProductListPage: React.FC = () => {
                                     Página {currentPage} de {totalPages || 1}
                                 </span>
                                 <button
-                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    onClick={() => goToPage(currentPage + 1)}
                                     disabled={currentPage >= totalPages}
                                     className="p-1 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >

@@ -12,6 +12,7 @@ const baseFilters = {
   brand: 'all',
   categoryId: 'all',
   shopeeStatus: 'all' as const,
+  shopeeStore: 'all' as const,
   videoStatus: 'all' as const,
 };
 

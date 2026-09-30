@@ -178,6 +178,14 @@ export function filterAdminProducts(products: Product[], filters: ProductFilters
         });
     }
 
+    if (filters.shopeeStore && filters.shopeeStore !== 'all') {
+        filtered = filtered.filter(product => {
+            const storeCodes = Array.isArray(product.shopee_store_codes) ? product.shopee_store_codes : [];
+            if (storeCodes.includes(filters.shopeeStore as 'M' | 'G')) return true;
+            return filters.shopeeStore === 'M' && Number(product.shopee_item_id) > 0;
+        });
+    }
+
     if (filters.search.trim() !== '') {
         const searchLower = filters.search.toLowerCase();
         filtered = filtered.filter(product => {
