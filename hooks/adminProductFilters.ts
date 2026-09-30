@@ -169,21 +169,29 @@ function collectSerializedSearchValues(product: Product): string[] {
 
 export function filterAdminProducts(products: Product[], filters: ProductFiltersState, channelIds: ReadonlySet<string> | null = null): Product[] {
     let filtered = products.filter(product => !isArchivedProductRecord(product));
+
+    const hasShopeeStoreLink = (product: Product, store: 'M' | 'G'): boolean => {
+        const storeCodes = Array.isArray(product.shopee_store_codes) ? product.shopee_store_codes : [];
+        if (storeCodes.includes(store)) return true;
+        return store === 'M' && Number(product.shopee_item_id) > 0;
+    };
+
     if (filters.salesChannel && filters.salesChannel !== 'all' && filters.channelStatus && filters.channelStatus !== 'all') {
         // Unknown or failed channel data must never classify products as unlinked.
         if (channelIds === null) return [];
         filtered = filtered.filter(product => {
-            const linked = channelIds.has(product.id) || (filters.salesChannel === 'tiktok' && Boolean(product.parent_id && channelIds.has(product.parent_id)));
+            const linked = filters.salesChannel === 'shopee' && filters.shopeeStore !== 'all'
+                ? hasShopeeStoreLink(product, filters.shopeeStore)
+                : channelIds.has(product.id) || (filters.salesChannel === 'tiktok' && Boolean(product.parent_id && channelIds.has(product.parent_id)));
             return filters.channelStatus === 'linked' ? linked : !linked;
         });
     }
 
-    if (filters.shopeeStore && filters.shopeeStore !== 'all') {
-        filtered = filtered.filter(product => {
-            const storeCodes = Array.isArray(product.shopee_store_codes) ? product.shopee_store_codes : [];
-            if (storeCodes.includes(filters.shopeeStore as 'M' | 'G')) return true;
-            return filters.shopeeStore === 'M' && Number(product.shopee_item_id) > 0;
-        });
+    // When Shopee is the selected channel, the store is the comparison target:
+    // linked/unlinked decides whether the product was sent to that exact store.
+    // Keep the legacy standalone store filter for callers that do not select a channel.
+    if (filters.shopeeStore && filters.shopeeStore !== 'all' && filters.salesChannel !== 'shopee') {
+        filtered = filtered.filter(product => hasShopeeStoreLink(product, filters.shopeeStore as 'M' | 'G'));
     }
 
     if (filters.search.trim() !== '') {

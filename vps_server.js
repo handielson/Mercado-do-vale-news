@@ -10787,6 +10787,27 @@ async function syncMarketplaceStockFromBlingTargetsVps(stockTargets = []) {
   return { ok: Boolean(shopee.ok && tiktok.ok && mercadoLivre.ok), shopee, tiktok, mercadoLivre };
 }
 
+async function syncMarketplaceStockAfterLocalMutationVps(productIds = [], source = 'local_stock_mutation') {
+  const ids = [...new Set((productIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!ids.length) return { ok: true, skipped: 'no_product_ids' };
+
+  try {
+    const targets = await getShopeeStockTargetsForProductIds(ids);
+    const result = await syncMarketplaceStockFromBlingTargetsVps(targets);
+    if (!result.ok) {
+      console.error('[marketplace-stock] Falha apos mutacao local', { source, productIds: ids, result });
+    }
+    return result;
+  } catch (error) {
+    console.error('[marketplace-stock] Erro apos mutacao local', {
+      source,
+      productIds: ids,
+      error: String(error?.message || error),
+    });
+    return { ok: false, error: String(error?.message || error) };
+  }
+}
+
 async function recoverBlingWebhookStockTargetsVps({ blingId, sku, stockQty, vpsResult }) {
   if (vpsResult?.ok && Array.isArray(vpsResult.stockTargets) && vpsResult.stockTargets.length) {
     return { ...vpsResult, recovered: false };
@@ -27334,15 +27355,21 @@ fastify.get('/stock-locations/movements', { preHandler: requireSyncKey }, async 
 });
 
 fastify.post('/stock-locations/entries', { preHandler: requireSyncKey }, async (req) => {
-  return require('./services/manualStockMovement.cjs').applyManualStockMovement(pool, req.body || {}, 'entry', {
+  const input = req.body || {};
+  const result = await require('./services/manualStockMovement.cjs').applyManualStockMovement(pool, input, 'entry', {
     getDefaultCompanyId: getDefaultStockCompanyId,
   });
+  await syncMarketplaceStockAfterLocalMutationVps([input.product_id], 'manual_stock_entry');
+  return result;
 });
 
 fastify.post('/stock-locations/adjustments', { preHandler: requireSyncKey }, async (req) => {
-  return require('./services/manualStockMovement.cjs').applyManualStockMovement(pool, req.body || {}, 'adjustment', {
+  const input = req.body || {};
+  const result = await require('./services/manualStockMovement.cjs').applyManualStockMovement(pool, input, 'adjustment', {
     getDefaultCompanyId: getDefaultStockCompanyId,
   });
+  await syncMarketplaceStockAfterLocalMutationVps([input.product_id], 'manual_stock_adjustment');
+  return result;
 });
 
 fastify.post('/stock-locations/transfers', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
@@ -27471,8 +27498,10 @@ async function insertStockMovement(row) {
 }
 
 fastify.post('/stock-locations/priority-decrements', { preHandler: requireSyncKey }, async (req, reply) => {
-  const outcome = await require('./services/priorityStockDecrement.cjs').decrementPriorityStock(pool, req.body || {});
+  const input = req.body || {};
+  const outcome = await require('./services/priorityStockDecrement.cjs').decrementPriorityStock(pool, input);
   if (outcome.error) return reply.code(outcome.status).send({ error: outcome.error });
+  await syncMarketplaceStockAfterLocalMutationVps([input.product_id], 'priority_stock_decrement');
   return outcome.decrements;
 });
 
@@ -27483,7 +27512,11 @@ fastify.post('/stock-locations/priority-reservations', { preHandler: requireSync
 });
 
 async function processOrderReservation(orderId, mode, reason, notes) {
-  return require('./services/orderStockReservation.cjs').processOrderReservation(pool, { orderId, mode, reason, notes });
+  const result = await require('./services/orderStockReservation.cjs').processOrderReservation(pool, { orderId, mode, reason, notes });
+  if (mode === 'consume') {
+    await syncMarketplaceStockAfterLocalMutationVps(result.map((row) => row.product_id), 'order_reservation_consume');
+  }
+  return result;
 }
 
 fastify.post('/stock-locations/order-reservations/consume', { preHandler: requireSyncKey }, async (req) => {
@@ -28084,12 +28117,16 @@ async function restoreStockFromMovements(referenceType, restoreReferenceType, re
 
 fastify.post('/stock-locations/sale-restores', { preHandler: requireSyncKey }, async (req) => {
   const input = req.body || {};
-  return restoreStockFromMovements('sale', 'sale_restore', input.sale_id, String(input.reason || '').trim() || 'Restauracao de venda', input.notes || null);
+  const result = await restoreStockFromMovements('sale', 'sale_restore', input.sale_id, String(input.reason || '').trim() || 'Restauracao de venda', input.notes || null);
+  await syncMarketplaceStockAfterLocalMutationVps(result.map((row) => row.product_id), 'sale_stock_restore');
+  return result;
 });
 
 fastify.post('/stock-locations/order-restores', { preHandler: requireSyncKey }, async (req) => {
   const input = req.body || {};
-  return restoreStockFromMovements('order', 'order_restore', input.order_id, String(input.reason || '').trim() || 'Restauracao de pedido', input.notes || null);
+  const result = await restoreStockFromMovements('order', 'order_restore', input.order_id, String(input.reason || '').trim() || 'Restauracao de pedido', input.notes || null);
+  await syncMarketplaceStockAfterLocalMutationVps(result.map((row) => row.product_id), 'order_stock_restore');
+  return result;
 });
 
 async function buildStockPathDeactivationCheck(type, id) {

@@ -54,6 +54,9 @@ assert.match(filtersSource, /shopeeStore: 'all' \| 'M' \| 'G'/, 'filters should 
 assert.match(filtersSource, /aria-label="Loja Shopee"/, 'product filters should expose the Shopee store selector');
 assert.match(filtersSource, /<option value="M">Mercado do Vale<\/option>/, 'Shopee M must be identified as Mercado do Vale');
 assert.match(filtersSource, /<option value="G">Glaucia<\/option>/, 'Shopee G must be identified as Glaucia');
+assert.doesNotMatch(filtersSource, /shopeeStore !== 'all' \? \{ salesChannel: 'shopee' as const, channelStatus: 'linked'/, 'selecting a Shopee store must not force only linked products');
+assert.match(filtersSource, /Situação na loja/, 'a selected Shopee store should expose a clearly named store status filter');
+assert.match(filtersSource, /Ainda não enviado/, 'store status should offer the not-yet-sent option');
 assert.match(filtersSource, /grid grid-cols-1 gap-2\.5[\s\S]*xl:grid-cols-6/, 'product filters should use compact responsive cards');
 
 assert.match(

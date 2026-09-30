@@ -11,6 +11,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { extractVariants } from '@/services/productVariants';
 import { QuoteModal } from '@/components/catalog/QuoteModal';
 import type { MixedPaymentState } from '@/components/catalog/MixedPaymentSimulator';
+import { MixedPaymentSimulator } from '@/components/catalog/MixedPaymentSimulator';
 import { DeliveryOptions, type DeliveryOption } from '@/components/catalog/DeliveryOptions';
 import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { useCoupon } from '@/hooks/useCoupon';
@@ -68,6 +69,7 @@ function CartPageContent() {
     const [budgetMode, setBudgetMode] = useState<BudgetTextMode>('separate');
     const [budgetIncludeInstallments, setBudgetIncludeInstallments] = useState(true);
     const [budgetIncludeCalculator, setBudgetIncludeCalculator] = useState(true);
+    const [budgetScope, setBudgetScope] = useState<string>('all');
     const [cartMixedPaymentState, setCartMixedPaymentState] = useState<MixedPaymentState | null>(null);
     const [showNewOrderModal, setShowNewOrderModal] = useState(false);
     const [companyPhone, setCompanyPhone] = useState('');
@@ -115,13 +117,14 @@ function CartPageContent() {
         setGeneratingBudget(true);
         try {
             const text = await generateBudgetText(
-                items.map(i => ({ product: i.product, unit_price: i.unit_price, quantity: i.quantity })),
+                selectedBudgetItems.map(i => ({ product: i.product, unit_price: i.unit_price, quantity: i.quantity })),
                 {
-                    mode: items.length > 1 ? budgetMode : 'separate',
-                    totalBudgetCents: grandTotal,
+                    mode: selectedBudgetItems.length > 1 ? budgetMode : 'separate',
+                    totalBudgetCents: selectedBudgetTotalCents,
                     mixedPaymentState: cartMixedPaymentState,
                     includeInstallments: budgetIncludeInstallments,
                     includeCalculatorLink: budgetIncludeCalculator,
+                    expandSiblingVariants: false,
                 }
             );
             await navigator.clipboard.writeText(text);
@@ -304,6 +307,23 @@ function CartPageContent() {
     const shippingCost = delivery.type === 'delivery' ? Math.round((delivery.shippingOption?.price ?? 0) * 100) : 0;
     const grandTotal = subtotal + warrantyPrice + shippingCost - couponDiscount - cartCoinDiscount;
     const hasModifiers = warrantyPrice > 0 || couponDiscount > 0 || cartCoinDiscount > 0 || shippingCost > 0;
+    const selectedBudgetItems = useMemo(
+        () => budgetScope === 'all' ? items : items.filter(item => item.id === budgetScope),
+        [budgetScope, items]
+    );
+    const selectedBudgetTotalCents = useMemo(
+        () => budgetScope === 'all'
+            ? grandTotal
+            : selectedBudgetItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0),
+        [budgetScope, grandTotal, selectedBudgetItems]
+    );
+
+    useEffect(() => {
+        if (budgetScope !== 'all' && !items.some(item => item.id === budgetScope)) {
+            setBudgetScope('all');
+            setCartMixedPaymentState(null);
+        }
+    }, [budgetScope, items]);
 
     const openMercadoPagoCheckout = () => {
         if (!customer) {
@@ -785,6 +805,98 @@ function CartPageContent() {
     );
 
     // ─── Painel de resumo + pagamento (compartilhado) ─────────────────────────
+    const adminBudgetPanel = customer?.customer_type === 'ADMIN' && (
+        <div className="space-y-3 rounded-2xl border border-blue-200 bg-white p-3 shadow-sm">
+            <div className="flex items-start justify-between gap-3 px-1">
+                <div>
+                    <p className="text-sm font-black text-slate-900">Parcelamento para compartilhar</p>
+                    <p className="mt-0.5 text-xs text-slate-500">Escolha o conteúdo e selecione uma parcela na tabela.</p>
+                </div>
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-blue-700">
+                    Orçamento
+                </span>
+            </div>
+
+            {items.length > 1 && (
+                <label className="block rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                        Calcular e compartilhar
+                    </span>
+                    <select
+                        aria-label="Itens do orçamento"
+                        value={budgetScope}
+                        onChange={(event) => {
+                            setBudgetScope(event.target.value);
+                            setCartMixedPaymentState(null);
+                        }}
+                        className="w-full bg-transparent text-sm font-bold text-slate-800 outline-none"
+                    >
+                        <option value="all">Todos os itens do carrinho</option>
+                        {items.map(item => (
+                            <option key={item.id} value={item.id}>
+                                {item.product.name}{item.quantity > 1 ? ` (${item.quantity} un.)` : ''} — {formatCurrency(item.unit_price * item.quantity)}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            )}
+
+            {budgetScope === 'all' && items.length > 1 && (
+                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
+                    <button
+                        type="button"
+                        onClick={() => setBudgetMode('separate')}
+                        className={`rounded-xl px-3 py-2 text-xs font-bold transition ${budgetMode === 'separate' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
+                    >
+                        Itens separados
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setBudgetMode('total')}
+                        className={`rounded-xl px-3 py-2 text-xs font-bold transition ${budgetMode === 'total' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
+                    >
+                        Somar tudo
+                    </button>
+                </div>
+            )}
+
+            <MixedPaymentSimulator
+                key={budgetScope}
+                totalPrice={selectedBudgetTotalCents}
+                onChange={setCartMixedPaymentState}
+            />
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                    <input
+                        type="checkbox"
+                        checked={budgetIncludeInstallments}
+                        onChange={(event) => setBudgetIncludeInstallments(event.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    Incluir parcelas na mensagem
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                    <input
+                        type="checkbox"
+                        checked={budgetIncludeCalculator}
+                        onChange={(event) => setBudgetIncludeCalculator(event.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    Incluir calculadora
+                </label>
+            </div>
+            <button
+                onClick={handleCopyBudget}
+                disabled={generatingBudget || selectedBudgetItems.length === 0}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50/60 py-3 text-sm font-medium text-blue-700 transition-all hover:bg-blue-100 active:scale-95 disabled:opacity-60"
+            >
+                {budgetCopied ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardCopy className="h-4 w-4" />}
+                {generatingBudget ? 'Gerando...' : budgetCopied ? 'Copiado!' : '📋 Copiar opção para o cliente'}
+            </button>
+        </div>
+    );
+
     const summaryPanel = (
         <div className="space-y-3">
             {/* Resumo */}
@@ -875,7 +987,6 @@ function CartPageContent() {
                             externalWarrantyProductId={eligibleProductId}
                             externalWarrantyImageUrl={eligibleImageUrl}
                             onCoinDiscountChange={handleCoinDiscountChange}
-                            onMixedPaymentChange={setCartMixedPaymentState}
                         />
                     </div>
                 )}
@@ -910,56 +1021,7 @@ function CartPageContent() {
             </div>
 
             {/* ── Botão ADMIN: Copiar Orçamento ── */}
-            {customer?.customer_type === 'ADMIN' && (
-                <div className="space-y-2">
-                    {items.length > 1 && (
-                        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
-                            <button
-                                type="button"
-                                onClick={() => setBudgetMode('separate')}
-                                className={`rounded-xl px-3 py-2 text-xs font-bold transition ${budgetMode === 'separate' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
-                            >
-                                Separado
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setBudgetMode('total')}
-                                className={`rounded-xl px-3 py-2 text-xs font-bold transition ${budgetMode === 'total' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
-                            >
-                                Somar tudo
-                            </button>
-                        </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-2">
-                        <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-                            <input
-                                type="checkbox"
-                                checked={budgetIncludeInstallments}
-                                onChange={(event) => setBudgetIncludeInstallments(event.target.checked)}
-                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            Parcelas 1-12x
-                        </label>
-                        <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-                            <input
-                                type="checkbox"
-                                checked={budgetIncludeCalculator}
-                                onChange={(event) => setBudgetIncludeCalculator(event.target.checked)}
-                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            Calculadora
-                        </label>
-                    </div>
-                    <button
-                        onClick={handleCopyBudget}
-                        disabled={generatingBudget}
-                        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-blue-300 text-blue-700 font-medium text-sm bg-blue-50/60 hover:bg-blue-100 active:scale-95 transition-all disabled:opacity-60"
-                    >
-                        {budgetCopied ? <Check className="w-4 h-4 text-green-600" /> : <ClipboardCopy className="w-4 h-4" />}
-                        {generatingBudget ? 'Gerando...' : budgetCopied ? 'Copiado!' : '📋 Copiar Orçamento'}
-                    </button>
-                </div>
-            )}
+            {adminBudgetPanel}
 
             {/* ── Botão Novo Pedido (cliente) ── */}
             {customer?.customer_type !== 'ADMIN' && (
@@ -1028,56 +1090,7 @@ function CartPageContent() {
                     {itemsList}
 
                     {/* ── Botão ADMIN: Copiar Orçamento ── */}
-                    {customer?.customer_type === 'ADMIN' && (
-                        <div className="space-y-2">
-                            {items.length > 1 && (
-                                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setBudgetMode('separate')}
-                                        className={`rounded-xl px-3 py-2 text-xs font-bold transition ${budgetMode === 'separate' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
-                                    >
-                                        Separado
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setBudgetMode('total')}
-                                        className={`rounded-xl px-3 py-2 text-xs font-bold transition ${budgetMode === 'total' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
-                                    >
-                                        Somar tudo
-                                    </button>
-                                </div>
-                            )}
-                            <div className="grid grid-cols-2 gap-2">
-                                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-                                    <input
-                                        type="checkbox"
-                                        checked={budgetIncludeInstallments}
-                                        onChange={(event) => setBudgetIncludeInstallments(event.target.checked)}
-                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    Parcelas 1-12x
-                                </label>
-                                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-                                    <input
-                                        type="checkbox"
-                                        checked={budgetIncludeCalculator}
-                                        onChange={(event) => setBudgetIncludeCalculator(event.target.checked)}
-                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    Calculadora
-                                </label>
-                            </div>
-                            <button
-                                onClick={handleCopyBudget}
-                                disabled={generatingBudget}
-                                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-blue-300 text-blue-700 font-medium text-sm bg-blue-50/60 hover:bg-blue-100 active:scale-95 transition-all disabled:opacity-60"
-                            >
-                                {budgetCopied ? <Check className="w-4 h-4 text-green-600" /> : <ClipboardCopy className="w-4 h-4" />}
-                                {generatingBudget ? 'Gerando...' : budgetCopied ? 'Copiado!' : '📋 Copiar Orçamento'}
-                            </button>
-                        </div>
-                    )}
+                    {adminBudgetPanel}
 
                     {continueShoppingBtn}
                     {optionsPanel}
@@ -1147,7 +1160,6 @@ function CartPageContent() {
                                                 externalWarrantyProductId={eligibleProductId}
                                                 externalWarrantyImageUrl={eligibleImageUrl}
                                                 onCoinDiscountChange={handleCoinDiscountChange}
-                                                onMixedPaymentChange={setCartMixedPaymentState}
                                             />
                                         </div>
                                     )}

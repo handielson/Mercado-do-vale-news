@@ -1,9 +1,9 @@
-# v1.2.520-catalog-family-parent
+# v1.2.521-stock-store-quotes
 
 Data: 2026-09-30. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.520-catalog-family-parent
-Release principal: `/var/www/mdv-site/releases/20260930-122342-v1-2-520-catalog-family-parent`.
+Tag: v1.2.521-stock-store-quotes
+Release principal: `/var/www/mdv-site/releases/20260930-132954-v1-2-521-stock-store-quotes`.
 
-O catalogo agora prioriza a familia explicita definida por `parent_id`, evitando separar variacoes do mesmo produto por diferencas no nome, como o sufixo `Cor:Lilas`.
+As baixas e ajustes de estoque feitos localmente agora disparam a sincronizacao dos marketplaces apos a confirmacao da gravacao, evitando que uma venda no PDV deixe saldo antigo na Shopee.
 
-Tambem foi criado o plano para evoluir o cadastro de familias para uma grade unica de variacoes, seguindo o fluxo observado no Bling sem alterar dados naquele sistema.
+Os filtros de produtos permitem selecionar uma loja Shopee especifica e distinguir itens enviados dos ainda nao enviados. No carrinho, a tabela de parcelamento fica visivel e permite compartilhar uma opcao para todos os itens ou somente para produtos selecionados.

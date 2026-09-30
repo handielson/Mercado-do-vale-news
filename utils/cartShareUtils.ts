@@ -41,6 +41,7 @@ export interface BudgetTextOptions {
     mixedPaymentState?: MixedPaymentState | null;
     includeInstallments?: boolean;
     includeCalculatorLink?: boolean;
+    expandSiblingVariants?: boolean;
 }
 
 type QuoteCalculatorItem = {
@@ -475,7 +476,9 @@ export async function generateBudgetText(
     for (const item of items) {
         const { product, unit_price, quantity } = item;
 
-        const budgetVariants = await fetchSiblingBudgetVariantGroups(product);
+        const budgetVariants = options.expandSiblingVariants === false
+            ? []
+            : await fetchSiblingBudgetVariantGroups(product);
         if (budgetVariants.length > 0) {
             for (const variant of budgetVariants) {
                 categoryRows.push({
@@ -522,15 +525,11 @@ export async function generateBudgetText(
         const total = row.price * row.quantity;
         const plans = await calculateInstallments(total, 12);
         const pixPlan = plans[0];
-        const plan12 = plans.find(p => p.installments === 12);
         const qtyLabel = row.quantity > 1 ? ` (${row.quantity}x)` : '';
 
         lines.push(`${index + 1}. ${row.name}${qtyLabel}`);
         lines.push(`   📱 ${row.specLine}`);
         lines.push(`   💰 ${brl(pixPlan?.total ?? total)} à vista no PIX`);
-        if (plan12) {
-            lines.push(`   💳 Cartão: 12x de ${brl(plan12.value)} (total ${brl(plan12.total)})`);
-        }
         lines.push(...buildSharedColorLines(row.colors));
         lines.push(`   🔗 ${row.url}`);
         if (!shouldTotalize && includeInstallments) {
@@ -579,14 +578,10 @@ export async function generateBudgetText(
         const totalBudgetCents = options.totalBudgetCents ?? categoryRows.reduce((sum, row) => sum + row.price * row.quantity, 0);
         const plans = await calculateInstallments(totalBudgetCents, 12);
         const pixPlan = plans[0];
-        const plan12 = plans.find(p => p.installments === 12);
 
         lines.push('━━━━━━━━━━━━━━━━━━━━━━');
         lines.push('Resumo somado');
         lines.push(`💰 Total à vista no PIX: ${brl(pixPlan?.total ?? totalBudgetCents)}`);
-        if (plan12) {
-            lines.push(`💳 Cartão total: 12x de ${brl(plan12.value)} (total ${brl(plan12.total)})`);
-        }
         if (includeInstallments) {
             appendMixedPaymentLines(lines, totalBudgetCents, options.mixedPaymentState, 'Orcamento somado', `${categoryRows.length} aparelho(s)`, calculatorItems);
             if (!includeCalculatorLink && lines.length >= 3) {

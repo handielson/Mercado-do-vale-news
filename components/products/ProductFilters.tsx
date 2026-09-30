@@ -220,7 +220,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                             const shopeeStore = event.target.value as ProductFiltersState['shopeeStore'];
                             applyChange({
                                 shopeeStore,
-                                ...(shopeeStore !== 'all' ? { salesChannel: 'shopee' as const, channelStatus: 'linked' as const } : {}),
+                                ...(shopeeStore !== 'all' ? { salesChannel: 'shopee' as const } : {}),
                             });
                         }}
                         className={controlClass}
@@ -233,13 +233,27 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
 
                 {filters.salesChannel !== 'all' && (
                     <label className={cardClass}>
-                        <span className={labelClass}>Situação no canal</span>
+                        <span className={labelClass}>
+                            {filters.salesChannel === 'shopee' && filters.shopeeStore !== 'all' ? 'Situação na loja' : 'Situação no canal'}
+                        </span>
                         <select aria-label="Situação no canal" value={filters.channelStatus}
                             onChange={event => applyChange({ channelStatus: event.target.value as ProductFiltersState['channelStatus'] })}
                             className={controlClass}>
                             <option value="all">Todas</option>
-                            <option value="linked">{['loja_3d', 'mercado_do_vale'].includes(filters.salesChannel || '') ? 'No catálogo do site' : 'Com vínculo'}</option>
-                            <option value="unlinked">{['loja_3d', 'mercado_do_vale'].includes(filters.salesChannel || '') ? 'Fora do catálogo do site' : 'Sem vínculo'}</option>
+                            <option value="linked">{
+                                ['loja_3d', 'mercado_do_vale'].includes(filters.salesChannel || '')
+                                    ? 'No catálogo do site'
+                                    : filters.salesChannel === 'shopee' && filters.shopeeStore !== 'all'
+                                        ? 'Enviado para esta loja'
+                                        : 'Com vínculo'
+                            }</option>
+                            <option value="unlinked">{
+                                ['loja_3d', 'mercado_do_vale'].includes(filters.salesChannel || '')
+                                    ? 'Fora do catálogo do site'
+                                    : filters.salesChannel === 'shopee' && filters.shopeeStore !== 'all'
+                                        ? 'Ainda não enviado'
+                                        : 'Sem vínculo'
+                            }</option>
                         </select>
                     </label>
                 )}
