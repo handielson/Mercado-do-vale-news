@@ -50,10 +50,10 @@ function MarketplaceSaleDetailsContent({ sale: initialSale, onClose }: { sale: M
                     </div>
                     <div className="flex items-center gap-1"><button onClick={() => void refresh()} disabled={isRefreshing} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" aria-label="Atualizar situação"><RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} /></button><button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Fechar"><X size={20} /></button></div>
                 </div>
-                <div className="grid gap-4 p-5 sm:grid-cols-3">
-                    <div><p className="text-xs text-slate-500">Cliente</p><p className="font-medium text-slate-800">{sale.customer_name}</p></div>
+                <div className="grid gap-4 p-5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto]">
+                    <div className="min-w-0"><p className="text-xs text-slate-500">Cliente</p><p className="break-words font-medium text-slate-800 [overflow-wrap:anywhere]">{sale.customer_name}</p></div>
                     <div><p className="text-xs text-slate-500">Situação no marketplace</p><p className="font-medium text-slate-800">{formatMarketplaceStatus(sale.status)}</p><p className="mt-1 text-[11px] text-slate-400">{isRefreshing ? 'Atualizando…' : 'Atualizado agora'}</p></div>
-                    <div><p className="text-xs text-slate-500">Total</p><p className="font-bold text-slate-900">{money(sale.total_cents)}</p></div>
+                    <div className="min-w-0"><p className="text-xs text-slate-500">Total</p><p className="whitespace-nowrap font-bold text-slate-900">{money(sale.total_cents)}</p></div>
                 </div>
                 <div className="border-t border-slate-200 p-5">
                     <h4 className="mb-3 font-semibold text-slate-800">Itens ({items.length})</h4>

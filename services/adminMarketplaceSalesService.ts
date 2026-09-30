@@ -37,6 +37,14 @@ export interface MarketplaceSale {
 }
 
 const MARKETPLACE_STATUS_LABELS: Record<string, string> = {
+    PAID: 'Pago',
+    PARTIALLY_PAID: 'Pago parcialmente',
+    PAYMENT_REQUIRED: 'Aguardando pagamento',
+    PAYMENT_IN_PROCESS: 'Pagamento em processamento',
+    PARTIALLY_REFUNDED: 'Reembolsado parcialmente',
+    REFUNDED: 'Reembolsado',
+    PENDING_CANCEL: 'Cancelamento pendente',
+    INVALID: 'Pedido inválido',
     UNPAID: 'Aguardando pagamento',
     TO_CONFIRM_RECEIVE: 'Aguardando recebimento',
     READY_TO_SHIP: 'Aguardando envio',
