@@ -11,6 +11,10 @@ function formatCurrency(cents: number) {
   }).format((Number(cents) || 0) / 100);
 }
 
+function formatOptionalCurrency(cents: number | null | undefined) {
+  return Number(cents) > 0 ? formatCurrency(Number(cents)) : '—';
+}
+
 const emptyDigest: DigestState = {
   detailedRows: [],
   summaryRows: [],
@@ -165,9 +169,9 @@ export const DashboardSalesDigest: React.FC = () => {
                       <td className="px-4 py-3 font-medium text-slate-900">{row.model}</td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-500">{row.sku || '—'}</td>
                       <td className="px-4 py-3 text-right font-semibold text-slate-800">{row.quantity}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">{row.currentStock}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.lastPurchasePriceCents)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-blue-700">{formatCurrency(row.lastSalePriceCents)}</td>
+                      <td className="px-4 py-3 text-right text-slate-700">{row.currentStock ?? '—'}</td>
+                      <td className="px-4 py-3 text-right text-slate-700">{formatOptionalCurrency(row.lastPurchasePriceCents)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-blue-700">{formatOptionalCurrency(row.lastSalePriceCents)}</td>
                     </tr>
                   ))
                 )}
@@ -214,9 +218,9 @@ export const DashboardSalesDigest: React.FC = () => {
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{row.sku || '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{row.channels}</td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-800">{row.totalQuantity}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{row.currentStock}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.lastPurchasePriceCents)}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-blue-700">{formatCurrency(row.lastSalePriceCents)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{row.currentStock ?? '—'}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{formatOptionalCurrency(row.lastPurchasePriceCents)}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-blue-700">{formatOptionalCurrency(row.lastSalePriceCents)}</td>
                   </tr>
                 ))
               )}

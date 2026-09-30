@@ -1,9 +1,9 @@
-# v1.2.523-marketplace-modal-status
+# v1.2.524-dashboard-tabelas
 
 Data: 2026-09-30. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.523-marketplace-modal-status
-Release principal: `/var/www/mdv-site/releases/20260930-155423-v1-2-523-marketplace-modal-status`.
+Tag: v1.2.524-dashboard-tabelas
+Release principal: `/var/www/mdv-site/releases/20260930-160135-v1-2-524-dashboard-tabelas`.
 
-O resumo do pedido de marketplace agora mantem nomes extensos de clientes dentro da coluna correspondente, sem sobrepor a situacao ou o valor total.
+As tabelas de vendas do dashboard agora carregam todo o catalogo paginado, inclusive produtos alem do limite inicial de 2.000 registros.
 
-Os status de pagamento e pedido retornados pelo Mercado Livre passam a ser apresentados em portugues, incluindo pago, pagamento em processamento, reembolso e cancelamento pendente.
+Estoque zero real permanece como `0`; dados sem correspondencia aparecem como `—`. Ultima venda usa o preco praticado na transacao e ultima compra aproveita o custo registrado no item quando disponivel.

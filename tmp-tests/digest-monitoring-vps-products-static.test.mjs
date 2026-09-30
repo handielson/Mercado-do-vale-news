@@ -4,8 +4,8 @@ import { resolve } from 'node:path';
 
 const digest = readFileSync(resolve('services/dashboardSalesDigestService.js'), 'utf8');
 assert(
-  /vpsApiService\.getProducts\(\{\s*status:\s*'all'[\s\S]*limit:\s*5000/.test(digest),
-  'dashboard sales digest should load its product catalog from VPS',
+  /const pageSize = 2000[\s\S]*vpsApiService\.getProducts\(\{[\s\S]*limit:\s*pageSize,[\s\S]*offset,[\s\S]*if \(page\.length < pageSize\) break/.test(digest),
+  'dashboard sales digest should paginate the complete VPS product catalog',
 );
 assert(
   !/from\('products'\)|supabase\s*\.\s*from\('products'\)/.test(digest),

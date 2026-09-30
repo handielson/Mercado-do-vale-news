@@ -42,6 +42,14 @@ function toCentsFromMajorUnits(value) {
   return Math.round(numeric * 100);
 }
 
+function positiveNumberOrNull(...values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  }
+  return null;
+}
+
 function buildCatalogMaps(productCatalog = []) {
   const byId = new Map();
   const bySku = new Map();
@@ -72,9 +80,10 @@ function enrichWithCatalog(baseRow, catalogMaps) {
     ...baseRow,
     model: normalizeText(baseRow.model, product?.name || 'Produto'),
     sku: normalizeSku(baseRow.sku),
-    currentStock: Number(product?.stock_quantity) || 0,
-    lastPurchasePriceCents: Number(product?.price_cost) || 0,
-    lastSalePriceCents: Number(product?.price_retail) || 0,
+    catalogMatched: Boolean(product),
+    currentStock: product ? (Number(product.stock_quantity) || 0) : null,
+    lastPurchasePriceCents: positiveNumberOrNull(product?.price_cost, baseRow.purchasePriceCents),
+    lastSalePriceCents: positiveNumberOrNull(baseRow.salePriceCents, product?.price_retail),
   };
 }
 
@@ -102,6 +111,8 @@ function normalizePdvRows(pdvSales = [], now = new Date()) {
         sku: item?.product_sku,
         quantity,
         revenueCents: Number(item?.total) || ((Number(item?.unit_price) || 0) * quantity),
+        purchasePriceCents: Number(item?.unit_cost) || 0,
+        salePriceCents: Number(item?.unit_price) || ((Number(item?.total) || 0) / quantity),
         productId: item?.product_id || '',
       });
     }
@@ -147,6 +158,7 @@ function normalizeShopeeRows(shopeeOrders = [], now = new Date()) {
         sku: item?.model_sku || item?.item_sku,
         quantity,
         revenueCents: toCentsFromMajorUnits(totalValueMajor) * quantity,
+        salePriceCents: toCentsFromMajorUnits(totalValueMajor),
         productId: item?.item_id ? String(item.item_id) : '',
       });
     }
@@ -187,6 +199,7 @@ function normalizeBlingRows(blingInvoices = [], now = new Date()) {
         sku: item?.codigo || item?.sku,
         quantity,
         revenueCents: toCentsFromMajorUnits(totalMajor),
+        salePriceCents: toCentsFromMajorUnits(totalMajor / quantity),
         productId: item?.product_id ? String(item.product_id) : '',
       });
     }
@@ -362,14 +375,23 @@ async function loadPdvSales(now) {
 
 async function loadProductCatalog() {
   const { vpsApiService } = await import('./vpsApiService');
-  const products = await vpsApiService.getProducts({
-    status: 'all',
-    limit: 5000,
-    compact: true,
-    noCache: true,
-  });
+  const products = [];
+  const pageSize = 2000;
 
-  return Array.isArray(products) ? products : [];
+  for (let offset = 0; offset < 200000; offset += pageSize) {
+    const page = await vpsApiService.getProducts({
+      status: 'all',
+      limit: pageSize,
+      offset,
+      compact: true,
+      noCache: true,
+    });
+    if (!Array.isArray(page) || page.length === 0) break;
+    products.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return products;
 }
 
 function extractBlingDetailItems(detailPayload) {

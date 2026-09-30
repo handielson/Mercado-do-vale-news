@@ -103,7 +103,7 @@ assert.deepEqual(
       quantity: 3,
       stock: 2,
       lastPurchase: 2100,
-      lastSale: 4500,
+      lastSale: 4000,
     },
     {
       channel: 'Shopee',
@@ -121,7 +121,7 @@ assert.deepEqual(
       quantity: 2,
       stock: 5,
       lastPurchase: 1200,
-      lastSale: 3500,
+      lastSale: 3000,
     },
   ],
 );
@@ -203,5 +203,29 @@ assert.equal(fallbackDigest.referenceDate, '2026-04-17');
 assert.equal(fallbackDigest.periodMode, 'latest');
 assert.equal(fallbackDigest.detailedRows.length, 1);
 assert.equal(fallbackDigest.summaryRows[0].totalQuantity, 1);
+
+const transactionFallbackDigest = buildDashboardSalesDigest({
+  now: new Date('2026-04-19T18:00:00-03:00'),
+  pdvSales: [{
+    id: 'sale-without-catalog-match',
+    created_at: '2026-04-19T14:00:00-03:00',
+    status: 'completed',
+    items: [{
+      product_id: 'outside-first-catalog-page',
+      product_name: 'Produto fora da primeira pagina',
+      product_sku: 'PAGINA-2',
+      quantity: 2,
+      total: 5000,
+      unit_price: 2500,
+      unit_cost: 1400,
+    }],
+  }],
+  productCatalog: [],
+});
+
+assert.equal(transactionFallbackDigest.detailedRows[0].catalogMatched, false);
+assert.equal(transactionFallbackDigest.detailedRows[0].currentStock, null);
+assert.equal(transactionFallbackDigest.detailedRows[0].lastPurchasePriceCents, 1400);
+assert.equal(transactionFallbackDigest.detailedRows[0].lastSalePriceCents, 2500);
 
 console.log('dashboardSalesDigestService.test.mjs: ok');

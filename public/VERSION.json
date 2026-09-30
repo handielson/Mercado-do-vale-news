@@ -1,14 +1,16 @@
 {
-  "version": "v1.2.523-marketplace-modal-status",
+  "version": "v1.2.524-dashboard-tabelas",
   "date": "2026-09-30",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.523-marketplace-modal-status",
-  "release_vps": "/var/www/mdv-site/releases/20260930-155423-v1-2-523-marketplace-modal-status",
+  "tag": "v1.2.524-dashboard-tabelas",
+  "release_vps": "/var/www/mdv-site/releases/20260930-160135-v1-2-524-dashboard-tabelas",
   "release_print3d_vps": null,
-  "summary": "Marketplace sale details keep long customer names inside their column and translate Mercado Livre payment and order statuses to Portuguese.",
+  "summary": "Dashboard sales tables load the complete product catalog and show transaction prices without presenting missing data as zero.",
   "changed_files": [
-    "components/admin/sales/MarketplaceSaleDetailsModal.tsx",
-    "services/adminMarketplaceSalesService.ts"
+    "components/admin/dashboard/DashboardSalesDigest.tsx",
+    "services/dashboardSalesDigestService.js",
+    "services/dashboardSalesDigestService.test.mjs",
+    "tmp-tests/digest-monitoring-vps-products-static.test.mjs"
   ]
 }
