@@ -1,9 +1,9 @@
-# v1.2.521-stock-store-quotes
+# v1.2.522-delivery-admin-reason
 
 Data: 2026-09-30. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.521-stock-store-quotes
-Release principal: `/var/www/mdv-site/releases/20260930-132954-v1-2-521-stock-store-quotes`.
+Tag: v1.2.522-delivery-admin-reason
+Release principal: `/var/www/mdv-site/releases/20260930-154617-v1-2-522-delivery-admin-reason`.
 
-As baixas e ajustes de estoque feitos localmente agora disparam a sincronizacao dos marketplaces apos a confirmacao da gravacao, evitando que uma venda no PDV deixe saldo antigo na Shopee.
+Entregas com pendencias operacionais, como endereco, rota ou entregador ausentes, agora podem receber baixa administrativa quando o operador informa uma justificativa obrigatoria. O motivo fica registrado no historico da entrega.
 
-Os filtros de produtos permitem selecionar uma loja Shopee especifica e distinguir itens enviados dos ainda nao enviados. No carrinho, a tabela de parcelamento fica visivel e permite compartilhar uma opcao para todos os itens ou somente para produtos selecionados.
+A tela continua exibindo todas as pendencias antes da liberacao e deixa claro que a excecao depende do motivo informado. A baixa comum, sem justificativa administrativa, permanece sujeita a todas as validacoes existentes.

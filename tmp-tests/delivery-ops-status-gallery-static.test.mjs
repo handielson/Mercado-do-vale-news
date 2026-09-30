@@ -77,15 +77,17 @@ assert.match(salesPage, /isSaleDeliveryComplete/, 'Sales page must check deliver
 assert.match(deliveryService, /proofs\?: CustomerDeliveryProof\[]/, 'delivery service must type proofs array');
 assert.match(modal, /deliveryProofs/, 'sale modal must load delivery proof gallery');
 assert.match(modal, /deliveryLogs/, 'sale modal must load delivery logs');
-assert.match(modal, /Baixar entrega/, 'sale modal must expose admin delivery completion');
+assert.match(modal, /Liberar e marcar como entregue/, 'sale modal must expose admin delivery completion');
 assert.match(modal, /adminCompletionReason/, 'sale modal must require an admin completion reason');
 assert.match(modal, /getDeliveryCompletionBlockers/, 'sale modal must calculate operational blockers');
 assert.match(modal, /if \(options\?\.adminOverride\) return \[];/, 'sale modal must skip every operational blocker for administrative completion');
+assert.match(modal, /const deliveryCompletionBlockers = getDeliveryCompletionBlockers\(deliveryJob, deliveryProofs\);/, 'sale modal must display the normal pending requirements before administrative override');
 assert.match(modal, /const canAdminCompleteDelivery = Boolean\(adminCompletionReason\.trim\(\)\)/, 'sale modal admin completion must require only an administrative reason');
 assert.match(modal, /if \(!options\?\.adminOverride && job\.payment_status !== 'approved'/, 'sale modal must not block administrative completion on pending delivery Pix');
 assert.match(modal, /if \(!options\?\.adminOverride && !proofs\.some/, 'sale modal must not block administrative completion on missing proof photo');
 assert.doesNotMatch(modal, /if \(deliveryCompletionBlockers\.length > 0\)/, 'sale modal must not block administrative completion on operational pending data');
 assert.match(modal, /Pendencias para concluir/, 'sale modal must explain what still blocks delivery completion');
+assert.match(modal, /podem ser liberadas pelo operador[\s\S]*motivo seja informado e registrado/, 'sale modal must explain that a recorded reason authorizes the exception');
 
 assert.match(deliveryPage, /const \[proofs, setProofs\]/, 'delivery page must keep proof gallery state');
 assert.match(deliveryPage, /proofs\.map/, 'delivery page must render all uploaded proof photos');

@@ -1,17 +1,14 @@
 {
-  "version": "v1.2.521-stock-store-quotes",
+  "version": "v1.2.522-delivery-admin-reason",
   "date": "2026-09-30",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.521-stock-store-quotes",
-  "release_vps": "/var/www/mdv-site/releases/20260930-132954-v1-2-521-stock-store-quotes",
+  "tag": "v1.2.522-delivery-admin-reason",
+  "release_vps": "/var/www/mdv-site/releases/20260930-154617-v1-2-522-delivery-admin-reason",
   "release_print3d_vps": null,
-  "summary": "Local stock mutations now synchronize marketplaces, Shopee store filters expose sent and pending products, and cart quotes show selectable installment tables.",
+  "summary": "Administrative delivery completion can release pending address, route, assignee, payment, or proof requirements only after a mandatory reason is recorded.",
   "changed_files": [
-    "components/products/ProductFilters.tsx",
-    "hooks/adminProductFilters.ts",
-    "pages/store/CartPage.tsx",
-    "utils/cartShareUtils.ts",
+    "components/admin/sales/SaleDetailsModal.tsx",
     "vps_server.js",
     "vps_server.cjs"
   ]

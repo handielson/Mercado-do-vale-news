@@ -4576,8 +4576,8 @@ async function processCustomerDeliveryMercadoPagoPayment(payment) {
 }
 
 function getCustomerDeliveryCompletionBlockers(job, proof, options = {}) {
-  if (isUnassignedStoreDeliveryJob(job)) return ['Entrega da loja exige identificar quem realizou a entrega'];
   if (options?.adminOverride) return [];
+  if (isUnassignedStoreDeliveryJob(job)) return ['Entrega da loja exige identificar quem realizou a entrega'];
   const blockers = [];
   const addressText = String(job?.delivery_address_text || '').trim();
   const routeUrl = String(job?.delivery_route_url || '').trim();
