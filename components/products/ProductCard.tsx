@@ -26,7 +26,7 @@ import { unitService } from '../../services/units';
 import { deleteImageFromBank, uploadImagesToBank } from '../../services/productImageBank';
 import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct, validateShopeeItemForProduct } from './productCardShopee.js';
 import { getAdminProductCardStatus } from './productCardStatus.js';
-import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
+import { ShopeeSyncModal, type LocalProduct, type ShopeeBulkAutoPreset, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
 import TikTokShopSyncModal from '../../pages/admin/settings/components/TikTokShopSyncModal';
 import type { TikTokShopProductLink } from '../../services/tiktokShopService';
 import type { ProductStockLocation } from '../../types/stock-location';
@@ -396,6 +396,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [selectedShopeeConnectionId, setSelectedShopeeConnectionId] = useState(PRIMARY_SHOPEE_CONNECTION_ID);
     const [selectedShopeeStoreLabel, setSelectedShopeeStoreLabel] = useState('Mercado do Vale (M)');
     const [selectedShopeeShopId, setSelectedShopeeShopId] = useState<string | null>(null);
+    const [publishToBothShopeeStores, setPublishToBothShopeeStores] = useState(false);
+    const [shopeeMirrorAutoPublish, setShopeeMirrorAutoPublish] = useState(false);
+    const [shopeeMirrorPreset, setShopeeMirrorPreset] = useState<ShopeeBulkAutoPreset | null>(null);
     const [isTikTokModalOpen, setIsTikTokModalOpen] = useState(false);
     const [currentTikTokProductLink, setCurrentTikTokProductLink] = useState<TikTokShopProductLink | null>(
         () => tiktokProductLink,
@@ -891,12 +894,81 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             ]);
             setSelectedShopeeShopId(company?.shopee_shop_id || null);
             setShopeeConnections(connections.filter((connection) => connection.active));
+            setPublishToBothShopeeStores(false);
+            setShopeeMirrorAutoPublish(false);
+            setShopeeMirrorPreset(null);
             setIsShopeeStorePickerOpen(true);
         } catch (error) {
             console.error('[ProductCard] Erro ao carregar lojas Shopee:', error);
             toast.error('Não foi possível carregar as lojas Shopee.');
         } finally {
             setIsPreparingShopeeModal(false);
+        }
+    };
+
+    const getOtherShopeeStore = () => {
+        if (selectedShopeeConnectionId !== PRIMARY_SHOPEE_CONNECTION_ID) {
+            if (!shopeeCompany?.shopee_shop_id) return null;
+            return {
+                connectionId: PRIMARY_SHOPEE_CONNECTION_ID,
+                storeLabel: 'Mercado do Vale (M)',
+                shopId: shopeeCompany.shopee_shop_id,
+            };
+        }
+
+        const connection = shopeeConnections.find((candidate) => (
+            candidate.active
+            && candidate.authorization_status === 'connected'
+            && Boolean(candidate.shopee_shop_id)
+            && candidate.id !== selectedShopeeConnectionId
+        ));
+        if (!connection?.shopee_shop_id) return null;
+        return {
+            connectionId: connection.id,
+            storeLabel: `${connection.display_name || 'Glaucia'} (G)`,
+            shopId: connection.shopee_shop_id,
+        };
+    };
+
+    const finishShopeePublication = async () => {
+        try {
+            await refreshShopeeLinkState(selectedShopeeConnectionId);
+
+            if (!publishToBothShopeeStores || shopeeMirrorAutoPublish) {
+                setIsShopeeModalOpen(false);
+                setPublishToBothShopeeStores(false);
+                setShopeeMirrorAutoPublish(false);
+                setShopeeMirrorPreset(null);
+                return;
+            }
+
+            const otherStore = getOtherShopeeStore();
+            if (!otherStore) {
+                setIsShopeeModalOpen(false);
+                setPublishToBothShopeeStores(false);
+                toast.warning('A outra conta Shopee nao esta conectada. A primeira publicacao foi mantida.');
+                return;
+            }
+
+            const existingItemId = await shopeeProductService.getItemIdByProductId(product.id, otherStore.connectionId);
+            if (existingItemId) {
+                setIsShopeeModalOpen(false);
+                setPublishToBothShopeeStores(false);
+                await refreshShopeeLinkState(otherStore.connectionId);
+                toast.info(`${otherStore.storeLabel} ja possui vinculo com este produto. O segundo envio foi ignorado.`);
+                return;
+            }
+
+            setIsShopeeModalOpen(false);
+            setShopeeMirrorAutoPublish(true);
+            toast.info(`Primeira conta concluida. Enviando agora para ${otherStore.storeLabel}.`);
+            await openShopeeSyncModal(otherStore.connectionId, otherStore.storeLabel, otherStore.shopId);
+        } catch (error) {
+            console.error('[ProductCard] Erro ao iniciar publicacao na segunda conta Shopee:', error);
+            setIsShopeeModalOpen(false);
+            setPublishToBothShopeeStores(false);
+            setShopeeMirrorAutoPublish(false);
+            toast.error('A primeira conta foi publicada, mas nao foi possivel iniciar o envio para a outra conta.');
         }
     };
 
@@ -2090,6 +2162,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                     </button>
                                 );
                             })}
+                            <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+                                <input
+                                    type="checkbox"
+                                    checked={publishToBothShopeeStores}
+                                    onChange={(event) => setPublishToBothShopeeStores(event.target.checked)}
+                                    disabled={!shopeeCompany?.shopee_shop_id || !shopeeConnections.some((connection) => (
+                                        connection.active
+                                        && connection.authorization_status === 'connected'
+                                        && Boolean(connection.shopee_shop_id)
+                                    ))}
+                                    className="mt-0.5 h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500 disabled:opacity-50"
+                                />
+                                <span>
+                                    <span className="block text-sm font-bold text-slate-900">Publicar tambem na outra conta</span>
+                                    <span className="mt-0.5 block text-xs text-slate-600">
+                                        Depois da primeira publicacao, o sistema reutiliza categoria e template e envia para a outra loja sem duplicar vinculos existentes.
+                                    </span>
+                                </span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -2097,17 +2188,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
 
             {isShopeeModalOpen && (
                 <ShopeeSyncModal
+                    key={selectedShopeeConnectionId}
                     product={shopeeModalProduct}
                     company={shopeeCompany}
                     historicalProducts={emptyShopeeHistory}
                     connectionId={selectedShopeeConnectionId}
                     storeLabel={selectedShopeeStoreLabel}
                     shopeeShopId={selectedShopeeShopId}
+                    autoPublish={shopeeMirrorAutoPublish}
+                    bulkAutoPreset={shopeeMirrorPreset}
+                    onBulkAutoPresetReady={setShopeeMirrorPreset}
+                    onPublished={() => void finishShopeePublication()}
                     onClose={() => setIsShopeeModalOpen(false)}
-                    onSuccess={() => {
-                        setIsShopeeModalOpen(false);
-                        refreshShopeeLinkState(selectedShopeeConnectionId);
-                    }}
+                    onSuccess={() => setIsShopeeModalOpen(false)}
                 />
             )}
 

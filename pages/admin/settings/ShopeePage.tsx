@@ -205,7 +205,7 @@ type BulkRunItem = {
     message?: string;
 };
 
-type ShopeeBulkAutoPreset = {
+export type ShopeeBulkAutoPreset = {
     templateId?: string;
     categoryId: number;
     categoryName?: string;
@@ -3200,8 +3200,8 @@ export default function ShopeePage() {
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────
 export function ShopeeSyncModal({
-    product, company, historicalProducts, variationGroups, connectionId = PRIMARY_SHOPEE_CONNECTION_ID, storeLabel = 'Mercado do Vale (M)', shopeeShopId = null, autoPublish = false, bulkAutoPreset = null, onBulkAutoPresetReady, onClose, onSuccess, onError
-}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; connectionId?: string; storeLabel?: string; shopeeShopId?: string | null; autoPublish?: boolean; bulkAutoPreset?: ShopeeBulkAutoPreset | null; onBulkAutoPresetReady?: (preset: ShopeeBulkAutoPreset) => void; onClose: () => void; onSuccess: (publishedProductIds?: string[]) => void; onError?: (message: string) => void }) {
+    product, company, historicalProducts, variationGroups, connectionId = PRIMARY_SHOPEE_CONNECTION_ID, storeLabel = 'Mercado do Vale (M)', shopeeShopId = null, autoPublish = false, bulkAutoPreset = null, onBulkAutoPresetReady, onPublished, onClose, onSuccess, onError
+}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; connectionId?: string; storeLabel?: string; shopeeShopId?: string | null; autoPublish?: boolean; bulkAutoPreset?: ShopeeBulkAutoPreset | null; onBulkAutoPresetReady?: (preset: ShopeeBulkAutoPreset) => void; onPublished?: (publishedProductIds?: string[]) => void; onClose: () => void; onSuccess: (publishedProductIds?: string[]) => void; onError?: (message: string) => void }) {
     const shopeeConnectionUrl = useCallback(
         (url: string) => withShopeeConnection(url, connectionId),
         [connectionId],
@@ -5231,6 +5231,7 @@ export function ShopeeSyncModal({
                 message: existingProductItemId ? 'Produto atualizado na Shopee.' : 'Produto publicado na Shopee.',
                 publishedProductIds: syncedProductIds,
             });
+            onPublished?.(syncedProductIds);
         } catch (e: any) {
             pushSyncDebug('sync:error', e?.message || e);
             const errorMessage = e?.message || 'Erro ao sincronizar produto.';

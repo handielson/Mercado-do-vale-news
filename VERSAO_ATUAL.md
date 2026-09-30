@@ -1,9 +1,11 @@
-# v1.2.524-dashboard-tabelas
+# v1.2.525-shopee-duas-contas-auto
 
 Data: 2026-09-30. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.524-dashboard-tabelas
-Release principal: `/var/www/mdv-site/releases/20260930-160135-v1-2-524-dashboard-tabelas`.
+Tag: v1.2.525-shopee-duas-contas-auto
+Release principal: `/var/www/mdv-site/releases/20260930-194126-shopee-duas-contas-auto`.
 
-As tabelas de vendas do dashboard agora carregam todo o catalogo paginado, inclusive produtos alem do limite inicial de 2.000 registros.
+O seletor de loja Shopee agora oferece a opcao `Publicar tambem na outra conta`.
 
-Estoque zero real permanece como `0`; dados sem correspondencia aparecem como `—`. Ultima venda usa o preco praticado na transacao e ultima compra aproveita o custo registrado no item quando disponivel.
+A primeira publicacao continua revisada pelo operador. Depois do sucesso, categoria e template sao reaproveitados para iniciar automaticamente a publicacao na segunda conta.
+
+Vinculos existentes na conta de destino sao ignorados para evitar duplicidade. Se a segunda conta exigir revisao, o modal permanece aberto sem desfazer a publicacao concluida na primeira conta.

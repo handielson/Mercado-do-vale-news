@@ -1,16 +1,15 @@
 {
-  "version": "v1.2.524-dashboard-tabelas",
+  "version": "v1.2.525-shopee-duas-contas-auto",
   "date": "2026-09-30",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.524-dashboard-tabelas",
-  "release_vps": "/var/www/mdv-site/releases/20260930-160135-v1-2-524-dashboard-tabelas",
+  "tag": "v1.2.525-shopee-duas-contas-auto",
+  "release_vps": "/var/www/mdv-site/releases/20260930-194126-shopee-duas-contas-auto",
   "release_print3d_vps": null,
-  "summary": "Dashboard sales tables load the complete product catalog and show transaction prices without presenting missing data as zero.",
+  "summary": "A publicacao Shopee pode enviar o produto automaticamente para a segunda conta, preservando vinculos independentes e evitando duplicidade.",
   "changed_files": [
-    "components/admin/dashboard/DashboardSalesDigest.tsx",
-    "services/dashboardSalesDigestService.js",
-    "services/dashboardSalesDigestService.test.mjs",
-    "tmp-tests/digest-monitoring-vps-products-static.test.mjs"
+    "components/products/ProductCard.tsx",
+    "pages/admin/settings/ShopeePage.tsx",
+    "tmp-tests/shopee-dual-account-auto-publish-static.test.mjs"
   ]
 }
