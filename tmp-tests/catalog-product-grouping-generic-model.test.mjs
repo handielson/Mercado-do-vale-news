@@ -70,4 +70,44 @@ const unrelatedColoredProducts = [
 
 assert.equal(new Set(unrelatedColoredProducts.map(generateCatalogGroupKey)).size, 2);
 
+const explicitFamilyProducts = [
+  {
+    id: 'poco-x8-pro-blue',
+    parent_id: 'poco-x8-pro-family',
+    model_id: 'poco-x8-pro-model',
+    brand: 'Lcx',
+    name: 'Capa de Silicone para Poco X8 PrÃ³ 5G',
+    sku: 'CSPX8P5GAZES',
+    specs: { color: 'Azul Escuro' },
+  },
+  {
+    id: 'poco-x8-pro-lilac',
+    parent_id: 'poco-x8-pro-family',
+    model_id: 'poco-x8-pro-model',
+    brand: 'Lcx',
+    name: 'Capa de Silicone para Poco X8 PrÃ³ 5G Cor:LilÃ¡s',
+    sku: 'CSPX8P5GLIL',
+    specs: { color: 'LilÃ¡s' },
+  },
+];
+
+assert.equal(
+  new Set(explicitFamilyProducts.map(generateCatalogGroupKey)).size,
+  1,
+  'products linked to the same explicit parent must share one catalog family even when names differ'
+);
+
+assert.equal(
+  generateCatalogGroupKey({
+    ...explicitFamilyProducts[0],
+    id: 'poco-x8-pro-max',
+    parent_id: 'poco-x8-pro-max-family',
+    model_id: 'poco-x8-pro-max-model',
+    name: 'Capa de Silicone para Poco X8 PrÃ³ Max',
+    sku: 'CSPX8PMAXAZL',
+  }) === generateCatalogGroupKey(explicitFamilyProducts[0]),
+  false,
+  'different explicit parents must remain separate catalog families'
+);
+
 console.log('catalog-product-grouping-generic-model.test.mjs: ok');

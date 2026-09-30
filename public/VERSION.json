@@ -1,20 +1,15 @@
 {
-  "version": "v1.2.519-product-filters-shopee-store",
+  "version": "v1.2.520-catalog-family-parent",
   "date": "2026-09-30",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.519-product-filters-shopee-store",
-  "release_vps": "/var/www/mdv-site/releases/20260930-115605-v1-2-519-product-filters-shopee-store",
+  "tag": "v1.2.520-catalog-family-parent",
+  "release_vps": "/var/www/mdv-site/releases/20260930-122342-v1-2-520-catalog-family-parent",
   "release_print3d_vps": null,
-  "summary": "Compact product filters now include Shopee store selection, and pagination returns the catalog to the top.",
+  "summary": "Catalog grouping now prioritizes the explicit parent family, including products whose names contain labeled color suffixes.",
   "changed_files": [
-    "components/products/ProductFilters.tsx",
-    "hooks/adminProductFilters.ts",
-    "hooks/useProducts.ts",
-    "pages/admin/products/ProductListPage.tsx",
-    "tmp-tests/admin-product-channel-filter.test.ts",
-    "tmp-tests/admin-product-filter-serialized-search.test.ts",
-    "tmp-tests/admin-product-page-jump-static.test.mjs",
-    "tmp-tests/product-list-shopee-link-state-static.test.mjs"
+    "docs/planos/cadastro-produtos-variacoes-modelo-bling.md",
+    "services/productGroupingCore.js",
+    "tmp-tests/catalog-product-grouping-generic-model.test.mjs"
   ]
 }

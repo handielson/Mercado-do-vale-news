@@ -1,9 +1,9 @@
-# v1.2.519-product-filters-shopee-store
+# v1.2.520-catalog-family-parent
 
 Data: 2026-09-30. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.519-product-filters-shopee-store
-Release principal: `/var/www/mdv-site/releases/20260930-115605-v1-2-519-product-filters-shopee-store`.
+Tag: v1.2.520-catalog-family-parent
+Release principal: `/var/www/mdv-site/releases/20260930-122342-v1-2-520-catalog-family-parent`.
 
-Os filtros do catalogo administrativo foram reorganizados em cards compactos e agora permitem selecionar as lojas Shopee Mercado do Vale ou Glaucia.
+O catalogo agora prioriza a familia explicita definida por `parent_id`, evitando separar variacoes do mesmo produto por diferencas no nome, como o sufixo `Cor:Lilas`.
 
-Ao trocar de pagina pelas setas ou pelo campo `Ir para`, a tela retorna suavemente ao topo do catalogo.
+Tambem foi criado o plano para evoluir o cadastro de familias para uma grade unica de variacoes, seguindo o fluxo observado no Bling sem alterar dados naquele sistema.

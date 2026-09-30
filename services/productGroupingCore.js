@@ -74,6 +74,16 @@ export function generateFallbackGroupKey(product) {
 }
 
 export function generateCatalogGroupKey(product) {
+  const explicitParentId = toCleanString(product?.parent_id);
+  if (explicitParentId) {
+    return `family:${explicitParentId}`;
+  }
+
+  const explicitProductId = toCleanString(product?.id);
+  if (Number(product?.is_parent) === 1 && explicitProductId) {
+    return `family:${explicitProductId}`;
+  }
+
   if (product?.model_id && hasCatalogVariantSpecs(product)) {
     return `${product.model_id}_${generateFamilySignature(product)}`;
   }
