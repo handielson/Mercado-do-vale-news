@@ -1,19 +1,17 @@
 {
-  "version": "v1.2.527-payjoy-boleto-mensagens",
+  "version": "v1.2.528-product-handoff-notification",
   "date": "2026-10-01",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.527-payjoy-boleto-mensagens",
-  "release_vps": "/var/www/mdv-site/releases/20261001-144717-v12527-payjoy-boleto-mensagens",
+  "tag": "v1.2.528-product-handoff-notification",
+  "release_vps": "/var/www/mdv-site/releases/20261001-144559-v12528-product-handoff-notification",
   "release_print3d_vps": null,
-  "summary": "Divide a resposta sobre boleto PayJoy em três mensagens curtas e preserva o link oficial e o acompanhamento da análise.",
+  "summary": "Corrige o handoff silencioso após buscas inconclusivas e aciona o canal real de aviso aos administradores.",
   "changed_files": [
-    "tmp-tests/n8n-payjoy-workflow-patch.cjs",
-    "tmp-tests/n8n-payjoy-workflow-patch.test.cjs",
-    "tmp-tests/n8n-deploy-payjoy-workflow.cjs",
-    "tmp-tests/n8n-payjoy-copy-update.test.cjs",
+    "tmp-tests/n8n-fix-product-specialist-handoff-notification.cjs",
+    "tmp-tests/n8n-product-specialist-handoff-notification.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-01-v1.2.527-payjoy-boleto-mensagens.md"
+    "docs/versoes/2026-10-01-v1.2.528-product-handoff-notification.md"
   ]
 }
