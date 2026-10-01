@@ -1,9 +1,9 @@
-# v1.2.528-product-handoff-notification
+# v1.2.529-used-phone-priority
 
 Data: 2026-10-01. Status: publicada. Branch: main.
-Tag: `v1.2.528-product-handoff-notification`.
-Release principal: `/var/www/mdv-site/releases/20261001-144559-v12528-product-handoff-notification`.
+Tag: `v1.2.529-used-phone-priority`.
+Release principal: `/var/www/mdv-site/releases/20261001-145431-v12529-used-phone-priority`.
 
-Buscas de produto sem resultado conclusivo que precisem de conferência humana agora usam o handoff `bot-handoff-request`. Esse identificador aciona o sistema existente de aviso aos administradores antes de deixar o atendimento sob responsabilidade humana.
+Perguntas sobre celulares usados ou seminovos agora têm prioridade sobre as respostas de formas de pagamento e PayJoy.
 
-A correção elimina o caso em que o bot dizia ter encaminhado o pedido, pausava a conversa por duas horas e não avisava ninguém da equipe.
+O fluxo responde que o Mercado do Vale trabalha somente com celulares novos e não desvia esse tipo de pergunta para Pix, cartão, boleto ou financiamento.

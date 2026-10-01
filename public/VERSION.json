@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.528-product-handoff-notification",
+  "version": "v1.2.529-used-phone-priority",
   "date": "2026-10-01",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.528-product-handoff-notification",
-  "release_vps": "/var/www/mdv-site/releases/20261001-144559-v12528-product-handoff-notification",
+  "tag": "v1.2.529-used-phone-priority",
+  "release_vps": "/var/www/mdv-site/releases/20261001-145431-v12529-used-phone-priority",
   "release_print3d_vps": null,
-  "summary": "Corrige o handoff silencioso após buscas inconclusivas e aciona o canal real de aviso aos administradores.",
+  "summary": "Restaura a prioridade da política de celulares seminovos antes das respostas de pagamento e PayJoy.",
   "changed_files": [
-    "tmp-tests/n8n-fix-product-specialist-handoff-notification.cjs",
-    "tmp-tests/n8n-product-specialist-handoff-notification.test.cjs",
+    "tmp-tests/n8n-fix-used-phone-payjoy-regression.cjs",
+    "tmp-tests/n8n-used-phone-payjoy-regression.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-01-v1.2.528-product-handoff-notification.md"
+    "docs/versoes/2026-10-01-v1.2.529-used-phone-priority.md"
   ]
 }
