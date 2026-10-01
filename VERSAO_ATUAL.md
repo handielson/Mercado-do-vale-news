@@ -1,11 +1,11 @@
-# v1.2.525-shopee-duas-contas-auto
+# v1.2.526-whatsapp-catalog-cards
 
-Data: 2026-09-30. Status: pronta para publicacao. Branch: main.
-Tag: v1.2.525-shopee-duas-contas-auto
-Release principal: `/var/www/mdv-site/releases/20260930-194126-shopee-duas-contas-auto`.
+Data: 2026-10-01. Status: pronta para publicação. Branch: main.
+Tag: v1.2.526-whatsapp-catalog-cards
+Release principal: `/var/www/mdv-site/releases/20261001-132636-whatsapp-catalog-cards`.
 
-O seletor de loja Shopee agora oferece a opcao `Publicar tambem na outra conta`.
+O compartilhamento de smartphones pelo site agora segue o cartão textual usado no atendimento: características verificadas, memória, preço no PIX, 12x com a taxa cadastrada, cores e link do produto.
 
-A primeira publicacao continua revisada pelo operador. Depois do sucesso, categoria e template sao reaproveitados para iniciar automaticamente a publicacao na segunda conta.
+No WhatsApp, pedidos por faixa de preço recebem uma introdução natural em mensagem separada antes da lista. Eventos vazios não pausam mais o bot, e perguntas sobre parcelas usam a tabela real da máquina.
 
-Vinculos existentes na conta de destino sao ignorados para evitar duplicidade. Se a segunda conta exigir revisao, o modal permanece aberto sem desfazer a publicacao concluida na primeira conta.
+Os links continuam exclusivos do compartilhamento feito pelo site; o catálogo enviado pelo n8n permanece sem links.

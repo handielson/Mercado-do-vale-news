@@ -1,15 +1,18 @@
 {
-  "version": "v1.2.525-shopee-duas-contas-auto",
-  "date": "2026-09-30",
+  "version": "v1.2.526-whatsapp-catalog-cards",
+  "date": "2026-10-01",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.525-shopee-duas-contas-auto",
-  "release_vps": "/var/www/mdv-site/releases/20260930-194126-shopee-duas-contas-auto",
+  "tag": "v1.2.526-whatsapp-catalog-cards",
+  "release_vps": "/var/www/mdv-site/releases/20261001-132636-whatsapp-catalog-cards",
   "release_print3d_vps": null,
-  "summary": "A publicacao Shopee pode enviar o produto automaticamente para a segunda conta, preservando vinculos independentes e evitando duplicidade.",
+  "summary": "Padroniza o compartilhamento de smartphones do site e protege o atendimento do WhatsApp contra pausas vazias e parcelamentos sem taxas.",
   "changed_files": [
-    "components/products/ProductCard.tsx",
-    "pages/admin/settings/ShopeePage.tsx",
-    "tmp-tests/shopee-dual-account-auto-publish-static.test.mjs"
+    "utils/cartShareUtils.ts",
+    "tmp-tests/site-shared-smartphone-card.test.ts",
+    "tmp-tests/shared-budget-message-format.test.mjs",
+    "tmp-tests/catalog-share-brand-budget-format-static.test.mjs",
+    "tmp-tests/n8n-fix-installment-quote-guard.cjs",
+    "tmp-tests/n8n-fix-sales-list-intro-and-empty-handoff.cjs"
   ]
 }

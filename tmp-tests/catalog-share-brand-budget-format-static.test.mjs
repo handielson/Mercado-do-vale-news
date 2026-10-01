@@ -29,7 +29,7 @@ assert(
 );
 
 assert(
-  /message \+= `\*[^`]*\$\{brand[^`]*\}\*\\n\\n`;/.test(catalogSource),
+  catalogSource.includes("return [`*${brand}*`, productBlocks.join("),
   'copied category message must print the brand name before its products',
 );
 

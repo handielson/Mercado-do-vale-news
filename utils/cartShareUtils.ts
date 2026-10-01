@@ -9,8 +9,8 @@ import { calculateInstallments, formatPrice } from '@/services/installmentCalcul
 import { vpsApiService } from '@/services/vpsApiService';
 import { getMemorySpecs, normalizeSpecValue, readSpecValue } from '@/utils/productSpecUtils';
 import {
-    buildSharedColorLines,
     formatSharedColor,
+    normalizeSharedColors,
     stripSharedProductColorVariation,
 } from '@/utils/sharedMessageFormatting';
 import type { MixedPaymentState } from '@/components/catalog/MixedPaymentSimulator';
@@ -290,6 +290,55 @@ function brl(cents: number): string {
     return formatPrice(cents);
 }
 
+function positiveNumberFromSpec(value: unknown): number {
+    const match = String(value ?? '').replace(',', '.').match(/\d+(?:\.\d+)?/);
+    const parsed = match ? Number(match[0]) : 0;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function formatDecimalPtBr(value: number): string {
+    return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+}
+
+/** Keep site smartphone cards aligned with the verified feature line used by the n8n catalog. */
+export function buildSharedPhoneFeatureSummary(product: any): string {
+    const specs = product?.specs || {};
+    const { ram, storage } = getMemorySpecs(product);
+    if (!ram && !storage) return '';
+
+    const displayTypeRaw = readSpecValue(specs, ['tipo_de_display', 'display_type', 'tipo_tela']);
+    const displayType = displayTypeRaw.match(/AMOLED|OLED|IPS\s*LCD|LCD/i)?.[0]
+        ?.toUpperCase()
+        .replace(/IPS\s*LCD/i, 'IPS LCD') || '';
+    const screenInches = positiveNumberFromSpec(readSpecValue(specs, ['display', 'screen_size', 'tamanho_tela']));
+    const batteryMah = positiveNumberFromSpec(readSpecValue(specs, ['battery_mah', 'bateria_mah', 'bateria']));
+    const mainCameraMp = positiveNumberFromSpec(readSpecValue(specs, ['cam_principal_mpx', 'camera_principal_mp', 'camera_principal']));
+    const chargingRaw = readSpecValue(specs, ['carregamento', 'charging', 'carregamento_w', 'charging_w']);
+    const chargingWatts = chargingRaw.match(/\d+(?:[.,]\d+)?\s*W/i)?.[0]?.replace(/\s+/g, ' ') || '';
+    const resistanceRaw = readSpecValue(specs, ['resistencia', 'resistance', 'certificacao_ip']);
+    const resistance = resistanceRaw.match(/\bIP\d{2}\b/i)?.[0]?.toUpperCase() || '';
+
+    const screen = screenInches
+        ? `tela${displayType ? ` ${displayType}` : ''} de ${formatDecimalPtBr(screenInches)}”`
+        : (displayType ? `tela ${displayType}` : '');
+    const battery = batteryMah ? `bateria de ${Math.round(batteryMah).toLocaleString('pt-BR')} mAh` : '';
+    const camera = mainCameraMp ? `câmera de ${formatDecimalPtBr(mainCameraMp)} MP` : '';
+    const charging = chargingWatts ? `carregamento de ${chargingWatts.replace(/\s*w$/i, ' W')}` : '';
+    const strongResistance = /^IP(?:6[789]|[789]\d)$/i.test(resistance) ? `resistência ${resistance}` : '';
+    const selected = [screen, battery, camera, charging].filter(Boolean).slice(0, 4);
+
+    if (strongResistance) {
+        if (selected.length >= 4) selected.splice(2, 1);
+        selected.push(strongResistance);
+    }
+    if (selected.length === 0) return '';
+
+    const summary = selected.length === 1
+        ? selected[0]
+        : `${selected.slice(0, -1).join(', ')} e ${selected.at(-1)}`;
+    return `✨ ${summary.charAt(0).toUpperCase()}${summary.slice(1)}.`;
+}
+
 function buildQuoteCalculatorUrl(
     totalCents: number,
     cashCents = 0,
@@ -471,6 +520,7 @@ export async function generateBudgetText(
         quantity: number;
         colors: string[];
         url: string;
+        product: any;
     }> = [];
 
     for (const item of items) {
@@ -488,6 +538,7 @@ export async function generateBudgetText(
                     quantity: 1,
                     colors: variant.colors,
                     url: getProductUrl(variant.products[0] || product),
+                    product: variant.products[0] || product,
                 });
             }
             continue;
@@ -500,6 +551,7 @@ export async function generateBudgetText(
             quantity,
             colors: [formatSharedColor(getBudgetVariantColor(product))].filter(Boolean),
             url: getProductUrl(product),
+            product,
         });
     }
 
@@ -525,32 +577,49 @@ export async function generateBudgetText(
         const total = row.price * row.quantity;
         const plans = await calculateInstallments(total, 12);
         const pixPlan = plans[0];
+        const plan12 = plans.find(plan => plan.installments === 12);
         const qtyLabel = row.quantity > 1 ? ` (${row.quantity}x)` : '';
+        const featureSummary = buildSharedPhoneFeatureSummary(row.product);
+        const colors = normalizeSharedColors(row.colors);
+
+        if (index > 0) {
+            lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+            lines.push('');
+        }
 
         lines.push(`${index + 1}. ${row.name}${qtyLabel}`);
-        lines.push(`   📱 ${row.specLine}`);
+        if (featureSummary) lines.push(`   ${featureSummary}`);
+        if (row.specLine && row.specLine !== 'Opcao disponivel') lines.push(`   📱 ${row.specLine}`);
         lines.push(`   💰 ${brl(pixPlan?.total ?? total)} à vista no PIX`);
-        lines.push(...buildSharedColorLines(row.colors));
-        lines.push(`   🔗 ${row.url}`);
         if (!shouldTotalize && includeInstallments) {
             const rowMixedPaymentState = buildRowMixedPaymentState(
                 options.mixedPaymentState,
                 total,
                 categoryRowsTotalCents
             );
-            const paymentStartIndex = lines.length;
-            appendMixedPaymentLines(
-                lines,
-                total,
-                rowMixedPaymentState,
-                row.name,
-                row.specLine,
-                calculatorItems
+            const hasCustomPayment = Boolean(
+                rowMixedPaymentState?.selectedInstallment
+                || Number(rowMixedPaymentState?.cashCents || 0) > 0
             );
-            if (lines.length >= paymentStartIndex + 3) {
-                lines.splice(lines.length - 3, 3);
+            if (hasCustomPayment) {
+                const paymentStartIndex = lines.length;
+                appendMixedPaymentLines(
+                    lines,
+                    total,
+                    rowMixedPaymentState,
+                    row.name,
+                    row.specLine,
+                    calculatorItems
+                );
+                if (lines.length >= paymentStartIndex + 3) {
+                    lines.splice(lines.length - 3, 3);
+                }
+            } else if (plan12) {
+                lines.push(`   💳 Cartão: 12x de ${brl(plan12.value)} (total ${brl(plan12.total)})`);
             }
         }
+        lines.push(`   🎨 Cores: ${colors.length > 0 ? colors.join(', ') : 'Consultar'}`);
+        lines.push(`   🔗 ${row.url}`);
         lines.push('');
     }
 

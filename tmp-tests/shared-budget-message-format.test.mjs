@@ -38,7 +38,13 @@ for (const [name, source] of [
     ['catalog copy', catalogShareSource],
 ]) {
     assert.match(source, /stripSharedProductColorVariation/, `${name} must clean the product name`);
-    assert.match(source, /buildSharedColorLines/, `${name} must print one color per line`);
 }
+
+assert.match(catalogShareSource, /buildSharedColorLines/, 'catalog copy must print one color per numbered line');
+assert.match(
+    cartShareSource,
+    /🎨 Cores: \$\{colors\.length > 0 \? colors\.join\(', '\) : 'Consultar'\}/,
+    'site budget cards must keep colors on the compact n8n-style line',
+);
 
 console.log('shared budget message format checks passed');
