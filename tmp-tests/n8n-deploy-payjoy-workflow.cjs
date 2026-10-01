@@ -3,7 +3,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Client } = require('ssh2');
 const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
-const { transformWorkflow } = require('./n8n-payjoy-workflow-patch.cjs');
+const { transformWorkflow, updateExistingPayJoyWorkflow } = require('./n8n-payjoy-workflow-patch.cjs');
 
 const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
@@ -66,7 +66,10 @@ async function main() {
     if (current.id !== WORKFLOW_ID || !current.activeVersionId) throw new Error('Active workflow could not be verified');
     const backupPath = path.join(os.tmpdir(), `mdv-payjoy-workflow-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
     fs.writeFileSync(backupPath, JSON.stringify(current));
-    const updated = transformWorkflow(current);
+    const alreadyIntegrated = current.nodes.some((node) => node.name === 'PayJoy - Buscar Configuracao');
+    const updated = alreadyIntegrated
+      ? updateExistingPayJoyWorkflow(current)
+      : transformWorkflow(current);
     const versions = [...new Set([current.versionId, current.activeVersionId])].filter(Boolean);
     const sql = `BEGIN;
 UPDATE workflow_entity
@@ -86,11 +89,17 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM workflow_history WHERE "workflowId"=${quote(WORKFLOW_ID)} AND "versionId"=${quote(current.activeVersionId)} AND nodes::text LIKE '%payjoy-config-v1%') THEN
     RAISE EXCEPTION 'Active workflow history update missing';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM workflow_entity WHERE id=${quote(WORKFLOW_ID)} AND nodes::text LIKE '%Sim! Temos financiamento de celulares pela PayJoy%') THEN
+    RAISE EXCEPTION 'Updated PayJoy customer copy missing';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM workflow_history WHERE "workflowId"=${quote(WORKFLOW_ID)} AND "versionId"=${quote(current.activeVersionId)} AND nodes::text LIKE '%Sim! Temos financiamento de celulares pela PayJoy%') THEN
+    RAISE EXCEPTION 'Updated PayJoy customer copy missing from active history';
+  END IF;
 END $$;
 COMMIT;
-COPY (SELECT json_build_object('versionAligned',"versionId"="activeVersionId",'payjoyNode',nodes::text LIKE '%payjoy-config-v1%','activeHistory',(SELECT nodes::text LIKE '%payjoy-config-v1%' FROM workflow_history WHERE "workflowId"=${quote(WORKFLOW_ID)} AND "versionId"=${quote(current.activeVersionId)} LIMIT 1)) FROM workflow_entity WHERE id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
+COPY (SELECT json_build_object('versionAligned',"versionId"="activeVersionId",'payjoyNode',nodes::text LIKE '%payjoy-config-v1%','updatedCopy',nodes::text LIKE '%Sim! Temos financiamento de celulares pela PayJoy%','activeHistory',(SELECT nodes::text LIKE '%payjoy-config-v1%' AND nodes::text LIKE '%Sim! Temos financiamento de celulares pela PayJoy%' FROM workflow_history WHERE "workflowId"=${quote(WORKFLOW_ID)} AND "versionId"=${quote(current.activeVersionId)} LIMIT 1)) FROM workflow_entity WHERE id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
     const result = JSON.parse((await psql(sql)).trim());
-    if (!result.versionAligned || !result.payjoyNode || !result.activeHistory) throw new Error('PayJoy workflow verification failed');
+    if (!result.versionAligned || !result.payjoyNode || !result.updatedCopy || !result.activeHistory) throw new Error('PayJoy workflow verification failed');
     console.log(JSON.stringify({ backupPath, ...result }));
   } finally {
     try {

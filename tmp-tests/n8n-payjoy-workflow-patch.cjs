@@ -40,7 +40,7 @@ if ((contextual || payjoyMention) && denied) {
   } else if (/\b(?:aprovacao|aprovar|analise|link|boleto|financiamento|parcelar|comprar)\b/.test(normalized) || /^payjoy[?!.\s]*$/.test(normalized)) {
     if (officialLink) {
       remember('awaiting_result');
-      output = 'Temos a opção de financiar celular pela PayJoy e pagar as parcelas por boleto ou Pix, conforme a análise de crédito. 😊|||Você pode começar por este link:||' + officialLink + '||Quando aparecer o resultado, me avise por aqui para continuarmos sua compra com o Mercado do Vale. Se a página direcionar você para outra loja, me avise antes de prosseguir.';
+      output = 'Sim! Temos financiamento de celulares pela PayJoy, com parcelas pagas por boleto ou Pix. 😊|||A aprovação e as condições dependem da análise de crédito da PayJoy. Faça sua análise pelo link abaixo: 👇||' + officialLink + '|||Quando sair o resultado, me avise por aqui para continuarmos sua compra no Mercado do Vale. 📱||Se a página mostrar outra loja, fale comigo antes de prosseguir.';
       payjoyFollowupKind = 'analysis_check';
     } else {
       output = 'Vou confirmar o link oficial da PayJoy com nossa equipe e enviar para você por aqui. 😊';
@@ -65,6 +65,18 @@ function cloneNode(nodes, name, newName, newId, position) {
   const original = nodes.find((node) => node.name === name);
   if (!original) throw new Error(`Missing node: ${name}`);
   return { ...structuredClone(original), id: newId, name: newName, position };
+}
+
+function updateExistingPayJoyWorkflow(input) {
+  const workflow = structuredClone(input);
+  const paymentNode = workflow.nodes.find((node) => node.name === 'Pagamento - Politica');
+  if (!paymentNode) throw new Error('Missing node: Pagamento - Politica');
+  const currentCode = String(paymentNode.parameters?.jsCode || '');
+  if (!currentCode.includes('payjoyByJid') || !currentCode.includes('payjoyFollowupKind')) {
+    throw new Error('PayJoy payment policy changed; review before updating the customer copy');
+  }
+  paymentNode.parameters.jsCode = paymentCode;
+  return workflow;
 }
 
 function transformWorkflow(input) {
@@ -152,4 +164,4 @@ if (require.main === module) {
   fs.writeFileSync(outputPath, JSON.stringify(transformWorkflow(JSON.parse(fs.readFileSync(inputPath, 'utf8')))));
 }
 
-module.exports = { transformWorkflow, paymentCode };
+module.exports = { transformWorkflow, updateExistingPayJoyWorkflow, paymentCode };

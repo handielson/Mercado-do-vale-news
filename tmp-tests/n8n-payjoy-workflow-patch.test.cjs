@@ -1,12 +1,15 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { transformWorkflow, paymentCode } = require('./n8n-payjoy-workflow-patch.cjs');
+const { transformWorkflow, updateExistingPayJoyWorkflow, paymentCode } = require('./n8n-payjoy-workflow-patch.cjs');
 
 const liveSnapshotPath = process.env.MDV_PAYJOY_WORKFLOW_SNAPSHOT;
 if (!liveSnapshotPath || !fs.existsSync(liveSnapshotPath)) {
   throw new Error('Set MDV_PAYJOY_WORKFLOW_SNAPSHOT to a read-only export of the active workflow');
 }
-const workflow = transformWorkflow(JSON.parse(fs.readFileSync(liveSnapshotPath, 'utf8')));
+const snapshot = JSON.parse(fs.readFileSync(liveSnapshotPath, 'utf8'));
+const workflow = snapshot.nodes.some((node) => node.name === 'PayJoy - Buscar Configuracao')
+  ? updateExistingPayJoyWorkflow(snapshot)
+  : transformWorkflow(snapshot);
 for (const name of ['Resolver Acao de Conversacao', 'Pagamento - Politica', 'Dividir mensagens', 'Atendente - Horario']) {
   new Function(workflow.nodes.find((node) => node.name === name).parameters.jsCode);
 }
@@ -29,6 +32,10 @@ function reply(message, customConfig = config) {
 let result = reply('Aceita boleto?');
 assert.match(result.output, /PayJoy/);
 assert.match(result.output, /app\.payjoy\.com/);
+assert.equal(result.output.split('|||').length, 3);
+assert.match(result.output, /^Sim! Temos financiamento de celulares pela PayJoy/);
+assert.match(result.output, /A aprovação e as condições dependem da análise de crédito da PayJoy/);
+assert.match(result.output, /Quando sair o resultado, me avise por aqui/);
 assert.equal(result.payjoyFollowupKind, 'analysis_check');
 
 result = reply('Fui aprovado');
