@@ -5,6 +5,15 @@ const os = require('node:os');
 
 const fail = (message, statusCode = 409) => Object.assign(new Error(message), { statusCode });
 const object = v => v && typeof v === 'object' && !Array.isArray(v);
+function catalogMeasures(product) {
+  let dimensions=product.dimensions;
+  if(typeof dimensions==='string') {try{dimensions=JSON.parse(dimensions);}catch{dimensions=null;}}
+  const positive=v=>Number.isFinite(Number(v)) && Number(v)>0;
+  return {
+    ...(positive(product.weight_kg)?{grams:Math.ceil(Number(product.weight_kg)*1000)}:{}),
+    ...(object(dimensions) && ['height_cm','width_cm','depth_cm'].every(k=>positive(dimensions[k]))?{height:Math.ceil(Number(dimensions.height_cm)),width:Math.ceil(Number(dimensions.width_cm)),length:Math.ceil(Number(dimensions.depth_cm))}:{})
+  };
+}
 const https = v => { try { const u = new URL(v); return u.protocol === 'https:' && !u.username && !u.password; } catch { return false; } };
 const PRODUCT_COLUMNS = `id,sku,name,description,
   (SELECT b.name FROM brands b WHERE CAST(b.id AS CHAR)=products.brand OR b.name=products.brand LIMIT 1) AS brand,
@@ -124,11 +133,15 @@ function buildPublication(draft, product, mode, category, definitions) {
   const title = confirmed(mode === 'legacy' ? 'title' : 'familyName');
   if (typeof title !== 'string' || !title.trim() || title.length > (Number(category.settings?.max_title_length) || 60)) throw fail('Título/nome da família excede o limite da categoria.');
   if (typeof value('description') !== 'string' || !value('description').trim() || value('description').length > 50000) throw fail('Descrição inválida.');
+  const measures=catalogMeasures(product),packageAttributes={};
+  for(const [id,key,unit] of [['SELLER_PACKAGE_HEIGHT','height','cm'],['SELLER_PACKAGE_WIDTH','width','cm'],['SELLER_PACKAGE_LENGTH','length','cm'],['SELLER_PACKAGE_WEIGHT','grams','g']]) {
+    if(measures[key] && definitions.some(d=>d.id===id && !d.tags?.read_only)) packageAttributes[id]=`${measures[key]} ${unit}`;
+  }
   return { site_id:'MLB', category_id:category.id, currency_id:'BRL', buying_mode:'buy_it_now',
     price:value('priceCents')/100, available_quantity:value('quantity'), condition:value('condition'), listing_type_id:policy.listingTypeId,
     [mode === 'legacy' ? 'title' : 'family_name']:title,
     pictures:photos.map(p => ({source:p.url})),
-    attributes:Object.entries({...attributes,...(gtin ? {GTIN:gtin} : {}),SELLER_SKU:product.sku}).map(([id,value_name]) => ({id,value_name})),
+    attributes:Object.entries({...attributes,...packageAttributes,...(gtin ? {GTIN:gtin} : {}),SELLER_SKU:product.sku}).map(([id,value_name]) => ({id,value_name})),
     sale_terms:[{id:'WARRANTY_TYPE',value_name:policy.warranty},...(policy.warrantyTime ? [{id:'WARRANTY_TIME',value_name:policy.warrantyTime}] : [])], shipping:{mode:policy.shipping.mode,free_shipping:policy.shipping.freeShipping} };
 }
 
@@ -181,11 +194,13 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
     const a=await account(); if(body.sellerId!==a.sellerId) throw fail('Conta mudou. Recarregue o catálogo.');
     const draft=body.draft,id=draft?.productId;
     if(!/^[a-f0-9-]{36}$/i.test(id || '')) throw fail('Produto inválido.',400);
-    const [rows]=await pool.query('SELECT id,sku,price_cost FROM products WHERE id=?',[id]);
+    const [rows]=await pool.query('SELECT id,sku,price_cost,weight_kg,dimensions FROM products WHERE id=?',[id]);
     if(!rows[0] || rows[0].sku!==draft.sku) throw fail('Produto/SKU mudou.');
     const commercial=draft.fields?.commercialPolicy?.value,categoryId=draft.fields?.categoryId?.value;
     if(!/^MLB\d+$/.test(categoryId || '') || !['gold_special','gold_pro'].includes(commercial?.listingTypeId) || !['me2','custom'].includes(commercial?.shipping?.mode)) throw fail('Defina categoria, tipo do anúncio e modo de envio antes de calcular.');
     const policy=pricingPolicy(chosenPriceCents===undefined ? (body.pricingPolicy || commercial.pricing) : commercial.pricing);
+    const measures=catalogMeasures(rows[0]);
+    if(measures.grams) policy.billableWeightGrams=measures.grams;
     const pricing=await calculatePrice(Number(rows[0].price_cost),policy,async price=>{
       const query=new URLSearchParams({category_id:categoryId,price:(price/100).toFixed(2),currency_id:'BRL',listing_type_id:commercial.listingTypeId,shipping_mode:commercial.shipping.mode,logistic_type:policy.logisticType,billable_weight:String(policy.billableWeightGrams)});
       const resource=`/sites/MLB/listing_prices?${query}`;
@@ -271,4 +286,4 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
     },
   };
 }
-module.exports={buildPublication,createPublicationHandlers,createFileJournal,modeOf,publicProduct,pricingPolicy,pricingBreakdown,calculatePrice,officialFees};
+module.exports={buildPublication,createPublicationHandlers,createFileJournal,modeOf,publicProduct,pricingPolicy,pricingBreakdown,calculatePrice,officialFees,catalogMeasures};

@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.537-ml-validacao",
+  "version": "v1.2.538-ml-medidas",
   "date": "2026-10-02",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.537-ml-validacao",
-  "release_vps": "/var/www/mdv-site/releases/20261002-150705-ml-validacao",
-  "summary": "Avisos oficiais do validador Mercado Livre não bloqueiam publicação; erros reais continuam bloqueados.",
+  "tag": "v1.2.538-ml-medidas",
+  "release_vps": "/var/www/mdv-site/releases/20261002-151817-ml-medidas",
+  "summary": "Peso e medidas do cadastro usados automaticamente em cada anúncio Mercado Livre.",
   "changed_files": [
-    "services/mercadoLivreServer.cjs",
-    "pages/admin/settings/MercadoLivrePreparationPage.tsx",
+    "services/mercadoLivrePublication.cjs",
+    "pages/admin/settings/MercadoLivrePricingPolicy.tsx",
     "tmp-tests/mercado-livre-publication.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-02-v1.2.537-ml-validacao.md"
+    "docs/versoes/2026-10-02-v1.2.538-ml-medidas.md"
   ]
 }

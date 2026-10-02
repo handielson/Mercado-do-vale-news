@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {buildPublication,createPublicationHandlers,modeOf,calculatePrice,officialFees}=require('../services/mercadoLivrePublication.cjs');
+const {buildPublication,createPublicationHandlers,modeOf,calculatePrice,officialFees,catalogMeasures}=require('../services/mercadoLivrePublication.cjs');
 const {listingRows,isNonBlockingValidation}=require('../services/mercadoLivreServer.cjs');
 const {sanitizePacket,parseResult,localResearchPlugin}=require('../scripts/mercado-livre-local-codex.cjs');
 const id='11111111-1111-4111-8111-111111111111';
@@ -9,6 +9,15 @@ const policy={marginBps:2000,taxBps:500,adsBps:100,otherBps:0,packagingCents:100
 const category={id:'MLB123',settings:{listing_allowed:true,max_title_length:60,item_conditions:['new']}};
 const defs=[{id:'BRAND',name:'Marca',tags:{required:true}},{id:'GTIN',tags:{}},{id:'ANATEL',tags:{}}];
 const field=value=>({value,confirmed:true,sources:[{kind:'catalog',reference:'cadastro conferido'}]});
+test('medidas de cada produto usam cadastro, inteiros com unidade e arredondamento para cima',()=>{
+  const p={...product,weight_kg:'0.1000',dimensions:JSON.stringify({height_cm:17,width_cm:8,depth_cm:1.5})};
+  assert.deepEqual(catalogMeasures(p),{grams:100,height:17,width:8,length:2});
+  assert.deepEqual(catalogMeasures({weight_kg:NaN,dimensions:'inválido'}),{});
+  const ids=['SELLER_PACKAGE_HEIGHT','SELLER_PACKAGE_WIDTH','SELLER_PACKAGE_LENGTH','SELLER_PACKAGE_WEIGHT'];
+  const payload=buildPublication(draft(),p,'user_products',category,[...defs,...ids.map(id=>({id,tags:{}}))]);
+  assert.deepEqual(Object.fromEntries(payload.attributes.filter(a=>ids.includes(a.id)).map(a=>[a.id,a.value_name])),{SELLER_PACKAGE_HEIGHT:'17 cm',SELLER_PACKAGE_WIDTH:'8 cm',SELLER_PACKAGE_LENGTH:'2 cm',SELLER_PACKAGE_WEIGHT:'100 g'});
+  assert.equal(buildPublication(draft(),p,'user_products',category,defs).attributes.some(a=>ids.includes(a.id)),false);
+});
 test('validador aceita somente avisos explícitos, nunca erros ou falhas de criação',()=>{
   const warning={error:'validation_error',cause:[{type:'warning',code:'shipping.lost_me1_by_user'}]};
   assert.equal(isNonBlockingValidation('/items/validate',400,warning),true);
@@ -20,7 +29,7 @@ function draft() {
     commercialPolicy:{pricing:policy,listingTypeId:'gold_special',warranty:'Garantia do vendedor',warrantyTime:'90 dias',shipping:{mode:'me2',freeShipping:false,payer:'buyer'}}};
   return {productId:id,sku:'SKU-1',fields:Object.fromEntries(Object.entries(values).map(([key,value])=>[key,field(value)]))};
 }
-function fixture({timeout=false,descriptionFailure=false,existingSku=false,brokenInventory=false,lock=true,feeRate=0.15,costChanged=false}={}) {
+function fixture({timeout=false,descriptionFailure=false,existingSku=false,brokenInventory=false,lock=true,feeRate=0.15,costChanged=false,catalogWeight}={}) {
   const records=new Map(),calls=[];let item=null,description=null,linked=false,failDescription=descriptionFailure;
   const journal={read:async k=>records.get(k),write:async(k,v)=>records.set(k,structuredClone(v))};
   const connection={beginTransaction:async()=>{},commit:async()=>{},rollback:async()=>{},release:()=>{},query:async(sql,args)=>{
@@ -34,7 +43,7 @@ function fixture({timeout=false,descriptionFailure=false,existingSku=false,broke
   }};
   const pool={getConnection:async()=>connection,query:async(sql,args)=>{
     if(sql==='SELECT id FROM products WHERE sku=?')return [[{id}]];
-    if(sql.includes('FROM products'))return [[{...structuredClone(product),...(costChanged && sql.includes('stock_quantity,status,price_cost')?{price_cost:6000}:{})}]];
+    if(sql.includes('FROM products'))return [[{...structuredClone(product),weight_kg:catalogWeight,...(costChanged && sql.includes('stock_quantity,status,price_cost')?{price_cost:6000}:{})}]];
     if(sql.includes('FROM mercado_livre_products'))return [linked?[{item_id:'MLB999'}]:[]];
     throw new Error('SQL inesperado: '+sql);
   }};
@@ -58,6 +67,13 @@ function fixture({timeout=false,descriptionFailure=false,existingSku=false,broke
   return {handlers:createPublicationHandlers({pool,settings:async()=>({user_id:'123'}),request,listingRows,journal}),calls,records};
 }
 const body=()=>({sellerId:'123',draft:draft(),confirmPublication:true});
+test('cotação usa peso atual do produto em vez do peso global herdado de outro anúncio',async()=>{
+  for(const [catalogWeight,grams] of [[0.100,100],[0.4501,451],[undefined,1000]]) {
+    const f=fixture({catalogWeight});const q=await f.handlers.pricing({body:body()});
+    assert.equal(q.policy.billableWeightGrams,grams);
+    assert.ok(f.calls.filter(c=>c.resource.startsWith('/sites/MLB/listing_prices?')).every(c=>new URL('https://api.example'+c.resource).searchParams.get('billable_weight')===String(grams)));
+  }
+});
 test('rascunho grande preserva anúncios e vínculos completos sem guardar produtos alheios',()=>{
   const {draftFile,restoreDraftFile,parseSnapshot,createBatch,createDraft}=require('../services/mercadoLivrePreparation.ts');
   const parent={...product,id:'22222222-2222-4222-8222-222222222222',sku:'PAI',is_parent:1};
