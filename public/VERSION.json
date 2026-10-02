@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.536-ml-rascunho",
+  "version": "v1.2.537-ml-validacao",
   "date": "2026-10-02",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.536-ml-rascunho",
-  "release_vps": "/var/www/mdv-site/releases/20261002-145331-ml-rascunho",
-  "summary": "Rascunhos Mercado Livre preservados sem exceder armazenamento do navegador.",
+  "tag": "v1.2.537-ml-validacao",
+  "release_vps": "/var/www/mdv-site/releases/20261002-150705-ml-validacao",
+  "summary": "Avisos oficiais do validador Mercado Livre não bloqueiam publicação; erros reais continuam bloqueados.",
   "changed_files": [
-    "services/mercadoLivrePreparation.ts",
+    "services/mercadoLivreServer.cjs",
     "pages/admin/settings/MercadoLivrePreparationPage.tsx",
     "tmp-tests/mercado-livre-publication.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-02-v1.2.536-ml-rascunho.md"
+    "docs/versoes/2026-10-02-v1.2.537-ml-validacao.md"
   ]
 }

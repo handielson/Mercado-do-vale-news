@@ -360,6 +360,11 @@ async function getAccessToken(pool) {
   return refreshAccessToken(pool);
 }
 
+function isNonBlockingValidation(resource, status, body) {
+  return resource === '/items/validate' && status === 400 && body?.error === 'validation_error'
+    && Array.isArray(body.cause) && body.cause.length > 0 && body.cause.every(cause => cause?.type === 'warning');
+}
+
 async function mlRequest(pool, resource, options = {}, retry = true) {
   const token = await getAccessToken(pool);
   const response = await fetch(`${ML_API_ORIGIN}${resource}`, {
@@ -372,6 +377,14 @@ async function mlRequest(pool, resource, options = {}, retry = true) {
     return mlRequest(pool, resource, options, false);
   }
   if (!response.ok) {
+    if (resource === '/items/validate' && response.status === 400) {
+      const validation = await response.clone().json().catch(() => null);
+      if (isNonBlockingValidation(resource, response.status, validation)) return response;
+      if (validation?.error === 'validation_error') {
+        const codes = Array.isArray(validation.cause) ? validation.cause.filter(cause => cause?.type === 'error').map(cause => cause.code).filter(code => typeof code === 'string' && /^[a-z0-9_.-]+$/i.test(code)) : [];
+        throw Object.assign(new Error(`Mercado Livre recusou a validação${codes.length ? ': ' + codes.join(', ') : '. Revise os dados do anúncio.'}`), { statusCode: 400, remoteStatus: 400 });
+      }
+    }
     const body = await response.text();
     throw Object.assign(new Error(`Mercado Livre API ${response.status}: ${body.slice(0, 800)}`), { remoteStatus: response.status });
   }
@@ -769,6 +782,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
 }
 
 module.exports = {
+  isNonBlockingValidation,
   listingRows, suggestListingLinks, createListingHandlers,
   ensureMercadoLivreTables,
   registerMercadoLivreRoutes,

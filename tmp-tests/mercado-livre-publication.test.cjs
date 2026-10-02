@@ -1,7 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {buildPublication,createPublicationHandlers,modeOf,calculatePrice,officialFees}=require('../services/mercadoLivrePublication.cjs');
-const {listingRows}=require('../services/mercadoLivreServer.cjs');
+const {listingRows,isNonBlockingValidation}=require('../services/mercadoLivreServer.cjs');
 const {sanitizePacket,parseResult,localResearchPlugin}=require('../scripts/mercado-livre-local-codex.cjs');
 const id='11111111-1111-4111-8111-111111111111';
 const product={id,sku:'SKU-1',name:'Produto teste',price_cost:5000,price_retail:12345,stock_quantity:3,status:'active',is_parent:0};
@@ -9,6 +9,11 @@ const policy={marginBps:2000,taxBps:500,adsBps:100,otherBps:0,packagingCents:100
 const category={id:'MLB123',settings:{listing_allowed:true,max_title_length:60,item_conditions:['new']}};
 const defs=[{id:'BRAND',name:'Marca',tags:{required:true}},{id:'GTIN',tags:{}},{id:'ANATEL',tags:{}}];
 const field=value=>({value,confirmed:true,sources:[{kind:'catalog',reference:'cadastro conferido'}]});
+test('validador aceita somente avisos explícitos, nunca erros ou falhas de criação',()=>{
+  const warning={error:'validation_error',cause:[{type:'warning',code:'shipping.lost_me1_by_user'}]};
+  assert.equal(isNonBlockingValidation('/items/validate',400,warning),true);
+  for(const [resource,status,data] of [['/items',400,warning],['/items/validate',500,warning],['/items/validate',400,{...warning,cause:[]}],['/items/validate',400,{...warning,cause:[...warning.cause,{type:'error'}]}],['/items/validate',400,{...warning,cause:[{}]}],['/items/validate',400,{cause:warning.cause}]]) assert.equal(isNonBlockingValidation(resource,status,data),false);
+});
 function draft() {
   const values={title:'Produto teste',familyName:'Produto teste',description:'Descrição original',categoryId:'MLB123',condition:'new',priceCents:12345,quantity:2,
     photos:[{url:'https://loja.example/foto.png',rights:'own',evidence:'original'}],attributes:{BRAND:'Marca teste'},
