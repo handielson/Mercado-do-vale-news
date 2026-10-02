@@ -63,7 +63,8 @@ try{
   await page.getByRole('combobox',{name:'Quem paga o frete?'}).selectOption('buyer');
   await page.getByRole('textbox',{name:'Margem líquida desejada (%)',exact:true}).fill('20');
   await page.getByRole('combobox',{name:'Modalidade logística'}).selectOption('drop_off');
-  await page.getByRole('spinbutton',{name:'Peso faturável (gramas)'}).fill('1000');
+  assert.equal(await page.getByRole('spinbutton',{name:'Peso faturável (gramas)'}).inputValue(),'100');
+  assert.equal(await page.getByRole('spinbutton',{name:'Peso faturável (gramas)'}).isDisabled(),true);
   await page.getByRole('button',{name:'Calcular preço deste anúncio'}).click();
   await page.getByText('Lucro estimado por unidade',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Declarar autoria das fotos cadastradas'}).click();
@@ -76,6 +77,35 @@ try{
   assert.equal(await page.getByRole('button',{name:'Validar anúncio no Mercado Livre'}).isDisabled(),true);
   assert.ok(await page.evaluate(()=>localStorage.getItem('mdv.ml.last-draft')));
   assert.equal(JSON.parse(await page.evaluate(()=>localStorage.getItem('mdv.ml.pricing-policy.123'))).marginBps,'20');
+  const reviewed=JSON.parse(await page.evaluate(()=>localStorage.getItem('mdv.ml.last-draft'))).batch.drafts[0];
+  snapshot.mode='user_products';
+  snapshot.products=[{...snapshot.products[0],id:'parent',sku:'FAMILIA',name:'Família simulada',is_parent:1,stock_quantity:0},...Array.from({length:5},(_,n)=>({...snapshot.products[0],id:`child-${n}`,sku:`COR-${n}`,parent_id:'parent',color:`Cor ${n}`,stock_quantity:n===4?0:1}))];
+  snapshot.links=[{product_id:'child-0',item_id:'MLB100'}];
+  await page.getByRole('button',{name:'1. Carregar produtos do sistema'}).click();
+  await page.getByRole('checkbox',{name:'Selecionar família FAMILIA'}).waitFor();
+  assert.equal(await page.getByRole('checkbox',{name:'Selecionar família FAMILIA'}).count(),1);
+  await page.getByRole('checkbox',{name:'Selecionar família FAMILIA'}).check();
+  await page.getByText('1 famílias/produtos selecionados • 3 variações/produtos para preparar.',{exact:false}).waitFor();
+  await page.getByText('COR-0 — Cor 0 • Estoque: 1 • Já anunciado',{exact:false}).waitFor();
+  await page.getByText('COR-4 — Cor 4 • Estoque: 0 • Sem estoque disponível',{exact:false}).waitFor();
+  const familyFile=JSON.parse(await page.evaluate(()=>localStorage.getItem('mdv.ml.last-draft')));
+  assert.deepEqual(familyFile.batch.drafts.map(d=>d.sku),['COR-1','COR-2','COR-3']);
+  familyFile.batch.drafts=familyFile.batch.drafts.map(d=>({...d,fields:structuredClone(reviewed.fields)}));
+  for(const d of familyFile.batch.drafts){d.fields.familyName={value:'Família simulada Marca',sources:[source],confirmed:false};d.fields.quantity.value=1;}
+  await page.getByLabel('Reabrir rascunho salvo').setInputFiles({name:'familia.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(familyFile))});
+  await page.getByText('Configuração da conta',{exact:false}).click();
+  await page.getByRole('button',{name:'Confirmar modo verificado'}).click();
+  for(const d of familyFile.batch.drafts){
+    await page.getByRole('combobox',{name:'Rascunho em revisão'}).selectOption(d.productId);
+    const reviews=page.getByRole('checkbox',{name:'Conferi valor e fontes'});
+    for(let i=0;i<await reviews.count();i++)if(await reviews.nth(i).isEnabled())await reviews.nth(i).check();
+  }
+  await page.getByRole('button',{name:'Validar família no Mercado Livre'}).click();
+  await page.getByRole('button',{name:'Enviar todas as variações validadas'}).waitFor();
+  assert.equal(published,1);
+  await page.getByRole('button',{name:'Enviar todas as variações validadas'}).click();
+  await page.getByText('Família enviada:',{exact:false}).waitFor();assert.equal(published,4);
+  assert.equal(await page.getByRole('button',{name:'Validar família no Mercado Livre'}).isDisabled(),true);
   assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
   await mkdir('output/mercado-livre',{recursive:true});await page.screenshot({path:'output/mercado-livre/automacao-validada.png',fullPage:true});
   console.log('UI PASS: catálogo, pesquisa local simulada, conflito, exigências, revisão, validação, publicação simulada e bloqueio de repetição; zero rede externa.');

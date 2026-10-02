@@ -83,6 +83,25 @@ test('rascunho grande preserva anúncios e vínculos completos sem guardar produ
   const batch=createBatch(s);batch.drafts=[createDraft(s.products.find(p=>p.id===child.id),s)];
   const saved=draftFile(batch);assert.ok(JSON.stringify(saved).length<100000);assert.equal(saved.batch.snapshot.products.length,2);assert.deepEqual(saved.batch.snapshot.links,s.links);assert.deepEqual(saved.batch.snapshot.listings,s.listings);assert.equal(restoreDraftFile(saved).drafts[0].sku,child.sku);
 });
+test('selecionar pai inclui todos os filhos vendáveis sem duplicar vinculados ou sem estoque',()=>{
+  const {productGroups,selectionBlock,selectProductGroup,selectedGroupCount,createBatch,parseSnapshot,draftFile,restoreDraftFile}=require('../services/mercadoLivrePreparation.ts');
+  const parent={...product,id:'pai',sku:'PAI',brand:'Marca',is_parent:1,stock_quantity:0};
+  const children=Array.from({length:8},(_,n)=>({...product,id:'filho-'+n,sku:'SKU-'+n,parent_id:'pai',stock_quantity:n===7?0:1}));
+  const s=parseSnapshot({schema:'mdv.ml.catalog.v1',sellerId:'123',capturedAt:new Date().toISOString(),complete:true,products:[parent,...children],links:[{product_id:'filho-0',item_id:'MLB123'}],listings:[{itemId:'MLB124',sku:'SKU-1',status:'paused'}]});
+  assert.equal(productGroups(s).length,1);assert.equal(productGroups(s)[0].members.length,8);
+  assert.equal(selectionBlock(s,s.products[1]),'Já anunciado');
+  const selected=selectProductGroup(createBatch(s),'pai');assert.equal(selected.drafts.length,5);assert.equal(selectedGroupCount(selected),1);
+  assert.ok(selected.drafts.every(d=>d.fields.familyName.value==='Produto teste Marca' && d.fields.quantity.value===1 && !d.fields.variations.value.length));
+  const edited={...selected.drafts[0],fields:{...selected.drafts[0].fields,title:field('Revisado')}};
+  const partial={...selected,drafts:[edited]};const complete=selectProductGroup(partial,'pai');assert.equal(complete.drafts.length,5);assert.equal(complete.drafts[0],edited);
+  assert.equal(selectProductGroup(complete,'pai').drafts.length,0);
+  const saved=draftFile(complete);assert.equal(saved.batch.snapshot.products.length,9);assert.equal(productGroups(restoreDraftFile(saved).snapshot)[0].members.length,8);
+});
+test('produto simples e filho sem pai no snapshot continuam selecionáveis',()=>{
+  const {productGroups,selectProductGroup,createBatch,parseSnapshot}=require('../services/mercadoLivrePreparation.ts');
+  const s=parseSnapshot({schema:'mdv.ml.catalog.v1',sellerId:'123',capturedAt:new Date().toISOString(),complete:true,products:[product,{...product,id:'orfao',sku:'ORFAO',parent_id:'ausente'}],links:[],listings:[]});
+  assert.equal(productGroups(s).length,2);assert.equal(selectProductGroup(createBatch(s),'orfao').drafts.length,1);
+});
 test('snapshot assíncrono reutiliza consulta em andamento e entrega resultado sem segredos',async()=>{
   const f=fixture();const job=await f.handlers.startSnapshot();const same=await f.handlers.startSnapshot();assert.equal(same.id,job.id);
   await new Promise(resolve=>setImmediate(resolve));

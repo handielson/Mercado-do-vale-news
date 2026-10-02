@@ -1,17 +1,18 @@
 {
-  "version": "v1.2.538-ml-medidas",
+  "version": "v1.2.539-ml-familias",
   "date": "2026-10-02",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.538-ml-medidas",
-  "release_vps": "/var/www/mdv-site/releases/20261002-151817-ml-medidas",
-  "summary": "Peso e medidas do cadastro usados automaticamente em cada anúncio Mercado Livre.",
+  "tag": "v1.2.539-ml-familias",
+  "release_vps": "/var/www/mdv-site/releases/20261002-175110-ml-familias",
+  "summary": "Seleção pelo produto pai e envio conjunto das variações disponíveis da família Mercado Livre.",
   "changed_files": [
-    "services/mercadoLivrePublication.cjs",
-    "pages/admin/settings/MercadoLivrePricingPolicy.tsx",
+    "services/mercadoLivrePreparation.ts",
+    "pages/admin/settings/MercadoLivrePreparationPage.tsx",
+    "tmp-tests/mercado-livre-publication-ui.test.mjs",
     "tmp-tests/mercado-livre-publication.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-02-v1.2.538-ml-medidas.md"
+    "docs/versoes/2026-10-02-v1.2.539-ml-familias.md"
   ]
 }

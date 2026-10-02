@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import MercadoLivrePricingPolicy, { PricingSummary } from './MercadoLivrePricingPolicy';
 import { mercadoLivreService } from '../../../services/mercadoLivreService';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
-import { FIELD_NAMES, createBatch, createDraft, editField, confirmField, resolveConflict, parseSnapshot, importProposals, evaluateBatch, previewContract, researchPacket, restoreDraftFile, draftFile } from '../../../services/mercadoLivrePreparation';
+import { FIELD_NAMES, createBatch, editField, confirmField, resolveConflict, parseSnapshot, importProposals, evaluateBatch, previewContract, researchPacket, restoreDraftFile, draftFile, productGroups, selectionBlock, selectProductGroup, selectedGroupCount } from '../../../services/mercadoLivrePreparation';
 import type { Batch, FieldName, SourceKind } from '../../../services/mercadoLivrePreparation';
 
 const labels: Record<FieldName, string> = { title: 'Título legado', familyName: 'Nome da família (User Products)', description: 'Descrição', categoryId: 'Categoria', categoryRequirements: 'Requisitos oficiais da categoria', condition: 'Condição', priceCents: 'Preço', quantity: 'Quantidade', photos: 'Fotos e autorização', attributes: 'Atributos', gtin: 'GTIN', certificates: 'Certificações e evidências', commercialPolicy: 'Política comercial', variations: 'Variantes' };
@@ -18,9 +18,10 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
   const [error, setError] = useState(''), [field, setField] = useState<FieldName>('title'), [value, setValue] = useState('');
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const [preview, setPreview] = useState<any>(null), [officialAttributes, setOfficialAttributes] = useState<any[]>([]);
+  const [familyPreviews, setFamilyPreviews] = useState<{productId:string; data:any}[]>([]);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  useEffect(() => { setPreview(null); }, [batch, active]);
+  useEffect(() => { setPreview(null); setFamilyPreviews([]); }, [batch, active]);
   useEffect(() => {
     if(!batch?.drafts.length) return;
     try { localStorage.setItem('mdv.ml.last-draft',JSON.stringify(draftFile(batch))); } catch { /* Manual file export remains available when browser storage is full. */ }
@@ -30,6 +31,8 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
   useEffect(() => { const timer = setInterval(() => refreshClock(n => n + 1), 30000); return () => clearInterval(timer); }, []);
   const reports = batch ? evaluateBatch(batch) : [];
   const draft = batch?.drafts.find(d => d.productId === active), report = reports.find(r => r.productId === active);
+  const activeParent = batch?.snapshot.products.find(p => p.id === active)?.parent_id;
+  const familyDrafts = batch?.drafts.filter(d => activeParent && batch.snapshot.products.find(p => p.id === d.productId)?.parent_id === activeParent) || [];
   const update = (next: typeof draft) => { if (batch && next) setBatch({ ...batch, drafts: batch.drafts.map(d => d.productId === next.productId ? next : d) }); };
   const selectField = (name: FieldName) => { setField(name); const f = draft?.fields[name]; setValue(structured.has(name) ? JSON.stringify(f?.value ?? (name === 'photos' || name === 'variations' ? [] : {}), null, 2) : String(f?.value ?? '')); setKind(f?.sources[0]?.kind || 'operator'); setReference(f?.sources[0]?.reference || ''); };
   useEffect(() => { selectField('title'); }, [active]);
@@ -63,13 +66,16 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
     const next = createBatch(parseSnapshot(raw));
     next.accountMode = {value:raw.mode,confirmed:true,sources:[{kind:'official_document',reference:`https://api.mercadolibre.com/users/${raw.sellerId}`} ]};
     setBatch(next); setActive(''); setModeSource(next.accountMode.sources[0].reference);
-    setNotice('Catálogo e anúncios consultados. Selecione até 5 produtos para pesquisar.');
+    setNotice('Catálogo e anúncios consultados. Selecione até 5 famílias ou produtos simples. Ao marcar o pai, todas as variações disponíveis e ainda não anunciadas serão incluídas.');
   });
   const research = () => run(async () => {
     if (!batch) return;
     if (!import.meta.env.DEV || !['localhost','127.0.0.1','[::1]'].includes(location.hostname)) throw new Error('Abra o sistema no computador com npm run dev para usar o Codex local.');
     const headers = {'Content-Type':'application/json','x-mdv-local-research':'1'};
-    const started = await fetch('/__ml-local/research', {method:'POST',headers,body:JSON.stringify(researchPacket(batch))});
+    let researched = batch;
+    for (let offset=0; offset<batch.drafts.length; offset+=5) {
+    const chunk={...batch,drafts:batch.drafts.slice(offset,offset+5)};
+    const started = await fetch('/__ml-local/research', {method:'POST',headers,body:JSON.stringify(researchPacket(chunk))});
     const job = await started.json(); if (!started.ok) throw new Error(job.error || 'Codex local indisponível.');
     setNotice('Codex pesquisando modelos e comparando anúncios. Você pode aguardar nesta tela.');
     const deadline=Date.now()+920000;
@@ -77,9 +83,11 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
       await new Promise(resolve=>setTimeout(resolve,2500)); if(!alive.current) return;
       const response=await fetch(`/__ml-local/research?id=${encodeURIComponent(job.id)}`,{headers}); const result=await response.json();
       if(!response.ok || result.status==='failed') throw new Error(result.error || 'Pesquisa indisponível.');
-      if(result.status==='complete') {setBatch(importProposals(batch,result.result));setNotice(['Pesquisa recebida. Confira propostas e resolva diferenças.',...(result.result.notes || [])].join('\n'));return;}
+      if(result.status==='complete') {researched=importProposals(researched,result.result);setBatch(researched);setNotice(['Pesquisa recebida. Confira propostas e resolva diferenças.',...(result.result.notes || [])].join('\n'));break;}
     }
-    if(alive.current) throw new Error('Tempo de espera excedido. Confira o Codex local.');
+    if(!alive.current) return;
+    if(Date.now()>=deadline) throw new Error('Tempo de espera excedido. Confira o Codex local.');
+    }
   });
   const loadRequirements = () => run(async () => {
     if(!draft) return; const id=String(draft.fields.categoryId?.value || '');
@@ -95,10 +103,38 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
     if(!batch || !draft || !preview || !window.confirm(`Publicar ${draft.sku} na conta ${batch.snapshot.nickname || batch.sellerId}, com preço e frete revisados?`)) return;
     void run(async () => {const result=await mercadoLivreService.publishPrepared(batch.sellerId,draft);setPreview(null);setBatch({...batch,snapshot:{...batch.snapshot,links:[...batch.snapshot.links,{product_id:draft.productId,item_id:result.itemId,variation_id:''}]}});setNotice(`Anúncio ${result.itemId} publicado e vinculado ao produto.`);});
   };
+  const validateFamily = () => run(async () => {
+    if (!batch || !familyDrafts.length) return;
+    setFamilyPreviews([]);
+    if (batch.accountMode.value !== 'user_products') throw new Error('Envio agrupado de família exige uma conta User Products. Confira o modo da conta.');
+    if (familyDrafts.some(d => reports.find(r => r.productId === d.productId)?.status !== 'ready_for_local_preview')) throw new Error('Confira as pendências de todas as variações da família antes de validar.');
+    const signature = (d:typeof familyDrafts[number]) => JSON.stringify([d.fields.familyName?.value,d.fields.categoryId?.value,d.fields.condition?.value,d.fields.attributes?.value?.BRAND,d.fields.attributes?.value?.MODEL]);
+    if (new Set(familyDrafts.map(signature)).size !== 1) throw new Error('Nome da família, categoria, condição, marca e modelo precisam coincidir entre as variações.');
+    const validated=[];
+    for(const d of familyDrafts) validated.push({productId:d.productId,data:await mercadoLivreService.previewPublication(batch.sellerId,d)});
+    setFamilyPreviews(validated);setNotice(`${validated.length} variações da família validadas. Confira os preços e estoques antes de enviar.`);
+  });
+  const publishFamily = () => {
+    if(!batch || !familyPreviews.length || !window.confirm(`Enviar ${familyPreviews.length} variações da família para ${batch.snapshot.nickname || batch.sellerId}? Cada variação terá seu SKU, fotos, preço e estoque revisados.`)) return;
+    void run(async()=>{
+      let next=batch; const completed:string[]=[];
+      for(const validated of familyPreviews) {
+        const d=next.drafts.find(d=>d.productId===validated.productId);
+        if(!d) throw new Error('Seleção mudou. Valide a família novamente.');
+        try {
+          const result=await mercadoLivreService.publishPrepared(next.sellerId,d);
+          completed.push(`${d.sku}: ${result.itemId}`);
+          next={...next,snapshot:{...next.snapshot,links:[...next.snapshot.links,{product_id:d.productId,item_id:result.itemId,variation_id:''}]}};
+          setBatch(next);setNotice(`Envios concluídos: ${completed.join(' • ')}`);
+        } catch(e) { throw new Error(`Envio interrompido em ${d.sku}. ${completed.length} variações concluídas e vinculadas. Recarregue o catálogo para continuar sem duplicar. ${e instanceof Error?e.message:''}`); }
+      }
+      setFamilyPreviews([]);setNotice(`Família enviada: ${completed.join(' • ')}. Recarregue o catálogo para conferir os vínculos.`);
+    });
+  };
   return <main className="max-w-6xl mx-auto p-6 space-y-5 text-gray-900">
     <h1 className="text-2xl font-bold">Criar anúncios • Mercado Livre</h1>
     <p>Carregue os produtos, pesquise com o Codex local e revise as informações. Depois valide e publique na conta conectada.</p>
-    <p className="bg-amber-50 border p-3 rounded">A pesquisa usa seu login do Codex neste computador. Dados e regras comerciais precisam de revisão. Salve o rascunho antes de sair. Publique produtos simples ou variantes individuais; produtos pai precisam ser separados por variante.</p>
+    <p className="bg-amber-50 border p-3 rounded">Selecione o produto pai para preparar sua família completa. Variações já anunciadas ou sem estoque ficam identificadas no grupo. Confira os dados de cada variação, valide a família e envie todas as selecionadas.</p>
     {notice && <p role="status" className="whitespace-pre-wrap bg-blue-50 p-3">{notice}</p>}
     {busy && <p role="status">Trabalhando, aguarde…</p>}
     <fieldset disabled={busy} className="contents">
@@ -122,11 +158,13 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
       </details>
       <section className="border rounded p-4">
         <h2 className="font-bold">2. Selecionar produtos locais</h2><input aria-label="Filtrar produtos" value={query} onChange={e => setQuery(e.target.value)} placeholder="Nome ou SKU" className="border p-2 w-full my-2" />
-        <div className="max-h-72 overflow-auto">{batch.snapshot.products.filter(p => `${p.name} ${p.sku}`.toLowerCase().includes(query.toLowerCase())).map(p => {
-          const selected = batch.drafts.some(d => d.productId === p.id), linked = batch.snapshot.links.some(l => l.product_id === p.id), listed = batch.snapshot.listings.some(l => l.sku && l.sku === p.sku);
-          return <label key={p.id} className="flex gap-2 border-b py-2"><input type="checkbox" checked={selected} onChange={() => { setBatch({ ...batch, drafts: selected ? batch.drafts.filter(d => d.productId !== p.id) : [...batch.drafts, createDraft(p, batch.snapshot)] }); if (!selected) setActive(p.id); }} />{p.sku || 'SEM SKU'} — {p.name} {linked ? '• vínculo existente' : listed ? '• SKU já anunciado' : ''}{p.parent_id ? ' • variante' : ''}</label>;
+        <div className="max-h-96 overflow-auto">{productGroups(batch.snapshot).filter(g => [g.product,...g.members].some(p=>`${p.name} ${p.sku} ${p.color || ''}`.toLowerCase().includes(query.toLowerCase()))).map(g => {
+          const eligible=g.members.filter(p=>!selectionBlock(batch.snapshot,p)), count=eligible.filter(p=>batch.drafts.some(d=>d.productId===p.id)).length;
+          const selected=eligible.length>0 && count===eligible.length;
+          return <div key={g.product.id} className="border-b py-2"><label className="flex gap-2 font-semibold"><input type="checkbox" aria-label={g.family?`Selecionar família ${g.product.sku}`:undefined} checked={selected} disabled={!eligible.length || (!count && selectedGroupCount(batch)>=5)} onChange={()=>{const next=selectProductGroup(batch,g.product.id);setBatch(next);if(!selected)setActive(next.drafts.find(d=>eligible.some(p=>p.id===d.productId))?.productId || '');else if(g.members.some(p=>p.id===active))setActive(next.drafts[0]?.productId || '');}} />{g.product.sku || 'SEM SKU'} — {g.product.name}{g.family?` • ${g.members.length} variações • ${count}/${eligible.length} selecionadas`:selectionBlock(batch.snapshot,g.product)?` • ${selectionBlock(batch.snapshot,g.product)}`:''}</label>{g.family && <ul className="pl-7 text-sm">{g.members.map(p=><li key={p.id} className="py-1">{batch.drafts.some(d=>d.productId===p.id)?'✓ ':''}{p.sku} — {p.color || p.name} • Estoque: {p.stock_quantity ?? 'não informado'} • {selectionBlock(batch.snapshot,p) || 'Disponível para envio'}</li>)}</ul>}</div>;
         })}</div>
-        <button disabled={!batch.drafts.length || batch.drafts.length>5} onClick={research} className="rounded bg-yellow-400 p-3 mt-3 font-semibold">Pesquisar e comparar com o Codex local</button>
+        <p className="text-sm mt-2">{selectedGroupCount(batch)} famílias/produtos selecionados • {batch.drafts.length} variações/produtos para preparar. A pesquisa ocorre em lotes de até 5 variações.</p>
+        <button disabled={!batch.drafts.length || selectedGroupCount(batch)>5} onClick={research} className="rounded bg-yellow-400 p-3 mt-3 font-semibold">Pesquisar e comparar com o Codex local</button>
         <button disabled={!batch.drafts.length} onClick={() => download('ml-pesquisa-assistida.json', researchPacket(batch))} className="border p-2 mt-3 ml-2">Exportar pesquisa manual</button>
       </section>
       <section className="border rounded p-4 space-y-3">
@@ -165,7 +203,8 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
         <button onClick={() => download('ml-relatorio-local.json', { batch, reports, previews: batch.drafts.map(d => previewContract(batch, d)) })} className="border p-2">Exportar relatório e propostas revisadas</button>
         <button onClick={() => download('ml-rascunho-local.json', draftFile(batch))} className="border p-2 ml-2">Salvar rascunho em arquivo</button>
         <div className="border-t pt-4 space-y-3">
-          <button disabled={!draft || report?.status!=='ready_for_local_preview'} onClick={validateRemote} className="rounded bg-slate-900 text-white p-3 disabled:opacity-50">Validar anúncio no Mercado Livre</button>
+          {familyDrafts.length>0 && <section className="bg-blue-50 rounded p-3 space-y-2"><h3 className="font-semibold">Envio da família • {familyDrafts.length} variações selecionadas</h3><p>Revise cada rascunho. Já anunciadas e sem estoque não geram novos envios.</p><button disabled={familyDrafts.some(d=>reports.find(r=>r.productId===d.productId)?.status!=='ready_for_local_preview')} onClick={validateFamily} className="border rounded p-3">Validar família no Mercado Livre</button>{familyPreviews.length>0 && <><ul>{familyPreviews.map(p=><li key={p.productId}>{batch.drafts.find(d=>d.productId===p.productId)?.sku} • {Number(p.data.payload.price).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})} • Estoque: {p.data.payload.available_quantity}</li>)}</ul><button onClick={publishFamily} className="rounded bg-green-700 text-white p-3">Enviar todas as variações validadas</button></>}</section>}
+          {!activeParent && <button disabled={!draft || report?.status!=='ready_for_local_preview'} onClick={validateRemote} className="rounded bg-slate-900 text-white p-3 disabled:opacity-50">Validar anúncio no Mercado Livre</button>}
           {preview?.pricing && <PricingSummary quote={preview.pricing} />}
           {preview?.validation?.cause?.filter((cause: any) => cause.type === 'warning').map((cause: any, index: number) => <p key={`${cause.code}-${index}`} role="status">Aviso do Mercado Livre: {cause.message || cause.code}</p>)}
           {preview && <><p>Preço: {Number(preview.payload.price).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})} • Quantidade: {preview.payload.available_quantity} • Frete grátis: {preview.payload.shipping.free_shipping ? 'sim' : 'não'}</p><details><summary>Ver detalhes do envio</summary><pre className="text-xs whitespace-pre-wrap">{JSON.stringify(preview.payload,null,2)}</pre></details><button onClick={publish} className="rounded bg-green-700 text-white p-3">Publicar anúncio revisado</button></>}

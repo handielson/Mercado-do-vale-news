@@ -1,15 +1,15 @@
-# v1.2.538-ml-medidas
+# v1.2.539-ml-familias
 
 Data: 2026-10-02. Status: pronta para publicação. Branch: main.
-Tag: v1.2.538-ml-medidas.
-Release: /var/www/mdv-site/releases/20261002-151817-ml-medidas.
+Tag: v1.2.539-ml-familias.
+Release: /var/www/mdv-site/releases/20261002-175110-ml-familias.
 
-Peso e medidas do cadastro usados automaticamente em cada anúncio Mercado Livre.
+Preparação agrupada por família; selecionar o pai inclui os filhos disponíveis e ainda não anunciados. Validação e envio conjunto para contas User Products.
 
-Conforme escolha do operador, usar os dados existentes no cadastro por padrão. Cálculo por produto usa peso atual do MySQL, sem herdar peso de outro anúncio. UI exibe peso automático e permite preencher apenas quando ausente. Publicação incorpora SELLER_PACKAGE_HEIGHT/WIDTH/LENGTH/WEIGHT quando a categoria admite os atributos, com cm/g inteiros arredondados para cima. Não escreve PACKAGE_* somente leitura. Dados ausentes não são inventados. O frete monetário continua configurado manualmente.
+Cinco famílias/produtos por seleção; pesquisa em lotes de cinco variantes. Cada filho preserva SKU, fotos, saldo e preço. Salvar rascunho preserva todos os membros. Falha de envio interrompe o lote e registra os vínculos já concluídos. Sem alteração de estoque ou anúncio real nesta entrega.
 
-Validações: regressão de medidas, pesos distintos e fallback; suíte Mercado Livre; sintaxe API; build com trava Supabase; prévia real. Deploy não cria anúncio.
+Validações: 26 testes de publicação/preparação; UI simulada com seleção do pai, três envios, exclusão de já anunciado e estoque zero, bloqueio de repetição; suíte Mercado Livre; build com trava Supabase. Deploy somente do frontend, sem reinício da API.
 
-Fonte: https://developers.mercadolivre.com.br/pt_br/api-docs-pt-br/atributos
+Fonte: https://developers.mercadolivre.com.br/pt_br/publicacao-de-produtos/user-products
 
-Arquivos: services/mercadoLivrePublication.cjs, pages/admin/settings/MercadoLivrePricingPolicy.tsx, tmp-tests/mercado-livre-publication.test.cjs, public/VERSION.json, VERSAO_ATUAL.md, docs/versoes/2026-10-02-v1.2.538-ml-medidas.md.
+Arquivos: services/mercadoLivrePreparation.ts, pages/admin/settings/MercadoLivrePreparationPage.tsx, tmp-tests/mercado-livre-publication.test.cjs, tmp-tests/mercado-livre-publication-ui.test.mjs e os três registros de versão.

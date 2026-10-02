@@ -51,12 +51,45 @@ export function parseSnapshot(raw: any): Snapshot {
 export function createBatch(snapshot: Snapshot): Batch {
   return { schema: PREPARATION_SCHEMA, sellerId: snapshot.sellerId, snapshot, accountMode: { value: 'unknown', confirmed: false, sources: [] }, drafts: [] };
 }
+export function productGroups(snapshot: Snapshot) {
+  const parents = new Set([...snapshot.products.filter(p => p.is_parent).map(p => p.id), ...snapshot.products.map(p=>p.parent_id).filter((id):id is string=>Boolean(id))]);
+  const existing = new Set(snapshot.products.map(p=>p.id));
+  return snapshot.products.filter(p => !p.parent_id || !existing.has(p.parent_id)).map(product => ({
+    product, members: parents.has(product.id) ? snapshot.products.filter(p => p.parent_id === product.id) : [product],
+    family: parents.has(product.id),
+  }));
+}
+export function selectionBlock(snapshot: Snapshot, product: LocalProduct): string {
+  if (snapshot.links.some(l => l.product_id === product.id) || snapshot.listings.some(l => l.sku && l.sku === product.sku)) return 'Já anunciado';
+  if (product.is_parent || product.is_virtual || product.is_gift || (product.status && product.status !== 'active')) return 'Não disponível para venda';
+  if (!Number.isSafeInteger(product.stock_quantity) || product.stock_quantity! < 1) return 'Sem estoque disponível';
+  return '';
+}
+export function selectProductGroup(batch: Batch, productId: string): Batch {
+  const group = productGroups(batch.snapshot).find(g => g.product.id === productId);
+  if (!group) throw new Error('Família não encontrada no catálogo.');
+  const eligible = group.members.filter(p => !selectionBlock(batch.snapshot, p));
+  if (!eligible.length) return batch;
+  const selected = eligible.every(p => batch.drafts.some(d => d.productId === p.id));
+  const ids = new Set(group.members.map(p => p.id));
+  if (selected) return {...batch, drafts: batch.drafts.filter(d => !ids.has(d.productId))};
+  const drafts = [...batch.drafts];
+  for (const p of eligible) if (!drafts.some(d => d.productId === p.id)) {
+    const draft = createDraft(p, batch.snapshot);
+    if (group.family) draft.fields.familyName = catalogField(group.product, 'name/brand', [group.product.name, group.product.brand].filter(Boolean).join(' '));
+    drafts.push(draft);
+  }
+  return {...batch, drafts};
+}
+export function selectedGroupCount(batch: Batch): number {
+  return new Set(batch.drafts.map(d => batch.snapshot.products.find(p => p.id === d.productId)?.parent_id || d.productId)).size;
+}
 // Keep complete listing/link evidence, but persist only the product families in this draft.
 // A full catalog can exceed the browser's storage quota even for a single selected SKU.
 export function draftFile(batch: Batch) {
   const selected=new Set(batch.drafts.map(d=>d.productId));
   const parents=new Set(batch.snapshot.products.filter(p=>selected.has(p.id)).map(p=>p.parent_id).filter(Boolean));
-  return {schema:'mdv.ml.draft-file.v1',batch:{...batch,snapshot:{...batch.snapshot,products:batch.snapshot.products.filter(p=>selected.has(p.id) || selected.has(p.parent_id || '') || parents.has(p.id))}}};
+  return {schema:'mdv.ml.draft-file.v1',batch:{...batch,snapshot:{...batch.snapshot,products:batch.snapshot.products.filter(p=>selected.has(p.id) || selected.has(p.parent_id || '') || parents.has(p.id) || parents.has(p.parent_id))}}};
 }
 export function restoreDraftFile(raw: any): Batch {
   if (!plain(raw) || raw.schema !== 'mdv.ml.draft-file.v1' || !plain(raw.batch) || raw.batch.schema !== PREPARATION_SCHEMA || !Array.isArray(raw.batch.drafts) || raw.batch.drafts.length > 100) throw new Error('Arquivo de rascunho inválido.');
