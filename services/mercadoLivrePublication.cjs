@@ -250,6 +250,24 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
       return {schema:'mdv.ml.catalog.v1',...a,capturedAt,complete:true,products,links,listings};
   };
   return {
+    async discoverCategory(req) {
+      const title=req.body?.title;
+      if(typeof title!=='string' || title.trim().length<5 || title.length>300)throw fail('Preencha o nome do produto para localizar a categoria.',400);
+      const result=await request(`/sites/MLB/domain_discovery/search?${new URLSearchParams({q:title.trim(),limit:'3'})}`);
+      if(!Array.isArray(result))throw fail('Preditor de categorias indisponível. Escolha manualmente.');
+      const seen=new Set();
+      const suggestions=result.filter(row=>/^MLB\d+$/.test(row?.category_id || '') && typeof row.category_name==='string' && !seen.has(row.category_id) && seen.add(row.category_id)).map(row=>({id:row.category_id,name:row.category_name}));
+      return {suggestions};
+    },
+    async browseCategories(req) {
+      const parent=req.query?.parentId;
+      if(parent!==undefined && !/^MLB\d+$/.test(parent))throw fail('Categoria inválida.',400);
+      const result=await request(parent?`/categories/${parent}`:'/sites/MLB/categories');
+      if(parent && result?.id!==parent)throw fail('Categoria consultada diverge da seleção.');
+      const rows=parent?result?.children_categories:result;
+      if(!Array.isArray(rows))throw fail('Lista de categorias indisponível.');
+      return {categories:rows.filter(row=>/^MLB\d+$/.test(row?.id || '') && typeof row.name==='string').map(row=>({id:row.id,name:row.name})),parent:parent?{id:result.id,name:result.name}:null};
+    },
     async saveCatalogAttributes(req) {
       const id=String(req.params?.productId || ''),body=req.body || {};
       if(!/^[a-f0-9-]{36}$/i.test(id) || !object(body.attributes) || Object.entries(body.attributes).some(([key,value])=>! /^[A-Z][A-Z0-9_]*$/.test(key) || typeof value!=='string' || !value.trim() || value.length>5000)) throw fail('Atributos do cadastro inválidos.',400);

@@ -32,6 +32,14 @@ export interface MercadoLivrePrintJob {
 }
 
 export const mercadoLivreService = {
+  rememberCatalogSelection: async (product:{id:string;category_id?:string;model_id?:string;specs?:Record<string,any>}) => {
+    const ml=product.specs?.mercado_livre;
+    if(!ml || !/^MLB\d+$/.test(ml.category_id || '') || ml.remember_model===false)return true;
+    try {
+      await mercadoLivreService.saveCatalogAttributes(product.id,{categoryId:ml.category_id,attributes:ml.attributes || {},saveForModel:!!product.model_id,saveCategorySchema:!!product.category_id,expectedCategoryId:product.category_id,expectedModelId:product.model_id});
+      return true;
+    }catch{return false;}
+  },
   getPreparationSnapshot: async () => {
     const job=await vpsClient.post<{id:string}>('/mercado-livre/preparation/snapshot-jobs',{});
     const deadline=Date.now()+900000;
@@ -45,6 +53,8 @@ export const mercadoLivreService = {
   },
   calculateListingPrice: (sellerId: string, draft: unknown, pricingPolicy: unknown) => vpsClient.post<any>('/mercado-livre/preparation/pricing', { sellerId, draft, pricingPolicy }),
   getCategoryRequirements: (id: string) => vpsClient.get<any>(`/mercado-livre/preparation/categories/${encodeURIComponent(id)}`),
+  discoverCategory: (title:string) => vpsClient.post<{suggestions:Array<{id:string;name:string}>}>('/mercado-livre/catalog/category-discovery',{title}),
+  browseCategories: (parentId='') => vpsClient.get<{categories:Array<{id:string;name:string}>;parent:{id:string;name:string}|null}>(`/mercado-livre/catalog/categories${parentId?`?parentId=${encodeURIComponent(parentId)}`:''}`),
   saveCatalogAttributes: (productId:string,input:{categoryId:string;attributes:Record<string,string>;saveForFamily?:boolean;saveForModel?:boolean;saveCategorySchema?:boolean;expectedCategoryId?:string;expectedModelId?:string}) => vpsClient.post<any>(`/mercado-livre/catalog/products/${encodeURIComponent(productId)}/attributes`,input),
   previewPublication: (sellerId: string, draft: unknown) => vpsClient.post<any>('/mercado-livre/preparation/preview', { sellerId, draft }),
   publishPrepared: (sellerId: string, draft: unknown, resumeOnly = false) => vpsClient.post<{itemId:string;alreadyPublished:boolean}>('/mercado-livre/preparation/publish', { sellerId, draft, confirmPublication:true, resumeOnly }),

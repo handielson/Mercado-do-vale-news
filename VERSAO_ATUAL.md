@@ -1,13 +1,11 @@
-# v1.2.541-ml-cadastro
+# v1.2.542-ml-categoria-auto
 
 Data: 2026-10-02. Status: pronta para publicação. Branch: main.
-Tag: v1.2.541-ml-cadastro.
-Release: /var/www/mdv-site/releases/20261002-190012-ml-cadastro.
+Tag: v1.2.542-ml-categoria-auto.
+Release: /var/www/mdv-site/releases/20261002-193535-ml-categoria-auto.
 
-A categoria local guarda a ficha oficial Mercado Livre. O cadastro do produto permite preencher e salvar seus atributos, compartilhar os dados comuns com a família e guardá-los no modelo para novos produtos iguais. Cor, SKU, GTIN e dados específicos não são copiados como padrão.
+Ao preencher o nome no cadastro, o preditor oficial do Mercado Livre busca a categoria. Uma única sugestão é selecionada; múltiplas sugestões exigem escolha. Sem resultado ou com erro, o operador escolhe pela árvore manual ou código opcional. A categoria carrega os atributos oficiais e a escolha é guardada no produto e no modelo ao salvar.
 
-A API grava somente o namespace mercado_livre nos JSONs existentes, com transação e validação da ficha oficial. Novos rascunhos recebem os valores do produto, pai e modelo da categoria correspondente. Informações não comprovadas continuam pendentes; anúncios existentes não são alterados por este salvamento.
+Validações: 33 testes de publicação/cadastro; UI com resultado único, ambiguidade, ausência de resultado, escolha manual, preservação de categoria salva e resposta atrasada; suíte Mercado Livre; sintaxe dos servidores e módulos; build com trava Supabase.
 
-Validações: 31 testes de publicação/preparação/cadastro; UI simulada de preenchimento, persistência e reutilização; suíte Mercado Livre; sintaxe de servidores e módulos; build com trava Supabase.
-
-Publicação seletiva da API e frontend pelo fluxo oficial. Arquivos e detalhes: docs/versoes/2026-10-02-v1.2.541-ml-cadastro.md.
+Detalhes e arquivos: docs/versoes/2026-10-02-v1.2.542-ml-categoria-auto.md.

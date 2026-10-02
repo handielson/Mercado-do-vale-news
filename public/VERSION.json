@@ -1,26 +1,21 @@
 {
-  "version": "v1.2.541-ml-cadastro",
+  "version": "v1.2.542-ml-categoria-auto",
   "date": "2026-10-02",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.541-ml-cadastro",
-  "release_vps": "/var/www/mdv-site/releases/20261002-190012-ml-cadastro",
-  "summary": "Ficha Mercado Livre persistida na categoria, produto, família e modelo para reaproveitar nos próximos anúncios.",
+  "tag": "v1.2.542-ml-categoria-auto",
+  "release_vps": "/var/www/mdv-site/releases/20261002-193535-ml-categoria-auto",
+  "summary": "Categoria Mercado Livre localizada no cadastro com escolha manual e reaproveitamento pelo modelo.",
   "changed_files": [
-    "components/categories/CategoryEditPage.tsx",
-    "components/categories/sections/MercadoLivreCategorySection.tsx",
-    "components/products/ProductForm.tsx",
     "components/products/sections/MercadoLivreCatalogAttributes.tsx",
-    "components/ui/MercadoLivreAttributeInput.tsx",
-    "pages/admin/settings/MercadoLivrePreparationPage.tsx",
-    "services/mercadoLivrePreparation.ts",
     "services/mercadoLivrePublication.cjs",
     "services/mercadoLivreServer.cjs",
     "services/mercadoLivreService.ts",
-    "tmp-tests/mercado-livre-publication-ui.test.mjs",
+    "services/products.ts",
     "tmp-tests/mercado-livre-publication.test.cjs",
+    "tmp-tests/mercado-livre-publication-ui.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-02-v1.2.541-ml-cadastro.md"
+    "docs/versoes/2026-10-02-v1.2.542-ml-categoria-auto.md"
   ]
 }

@@ -11,6 +11,8 @@ import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
 import { shopeeProductService } from './shopeeProducts';
 import { markLocalNameManaged } from './blingNameSyncPolicy.js';
 import { isLocalCatalogPreviewRuntime } from './localCatalogPreview';
+import { mercadoLivreService } from './mercadoLivreService';
+import { toast } from 'sonner';
 
 /**
  * PRODUCT SERVICE — VPS MySQL (fonte exclusiva de verdade)
@@ -491,6 +493,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
     if (!persistedRow) throw new Error('Produto salvo, mas não foi possível reler os preços. Recarregue antes de continuar.');
     const savedProduct = transformFromDB(persistedRow || { ...payload, id: resolvedId }) as ProductWithPriceAdjustment;
     if (isLocalCatalogPreviewRuntime()) return savedProduct;
+    if (!await mercadoLivreService.rememberCatalogSelection(savedProduct)) toast.warning('Produto salvo. Não foi possível guardar a categoria Mercado Livre para os próximos cadastros; tente novamente em Atributos Mercado Livre.');
     const priceAdjustment = await syncVariationPrices(savedProduct);
     if (priceAdjustment) {
         savedProduct.priceAdjustment = priceAdjustment;
@@ -620,6 +623,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
     if (!persistedRow) throw new Error('Produto salvo, mas não foi possível reler os preços. Recarregue antes de continuar.');
     const savedProduct = transformFromDB(persistedRow) as ProductWithPriceAdjustment;
     if (isLocalCatalogPreviewRuntime()) return savedProduct;
+    if (!await mercadoLivreService.rememberCatalogSelection(savedProduct)) toast.warning('Produto salvo. Não foi possível guardar a categoria Mercado Livre para os próximos cadastros; tente novamente em Atributos Mercado Livre.');
 
     // Log price change (usa VPS — tabela price_history não está na VPS)
     try {

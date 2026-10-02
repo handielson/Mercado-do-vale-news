@@ -4,6 +4,27 @@ const {buildPublication,createPublicationHandlers,modeOf,calculatePrice,official
 const {listingRows,isNonBlockingValidation}=require('../services/mercadoLivreServer.cjs');
 const {sanitizePacket,parseResult,localResearchPlugin}=require('../scripts/mercado-livre-local-codex.cjs');
 const id='11111111-1111-4111-8111-111111111111';
+test('salvar cadastro lembra categoria no modelo e mantém produto salvo se reaproveitamento falhar',async()=>{
+  const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'../services/mercadoLivreService.ts'),'utf8');
+  const ts=require('typescript');const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+  const calls=[];let failing=false;const module={exports:{}};
+  new Function('require','module','exports',code)(name=>{assert.equal(name,'./vpsClient');return {vpsClient:{post:async(path,body)=>{if(failing)throw Error('offline');calls.push({path,body});return {ok:true};}}};},module,module.exports);
+  const service=module.exports.mercadoLivreService,p={id,category_id:'local',model_id:'modelo',specs:{mercado_livre:{category_id:'MLB5095',attributes:{BRAND:'Lcx'}}}};
+  assert.equal(await service.rememberCatalogSelection(p),true);assert.equal(calls[0].body.saveForModel,true);assert.equal(calls[0].body.expectedModelId,'modelo');assert.deepEqual(calls[0].body.attributes,{BRAND:'Lcx'});
+  failing=true;assert.equal(await service.rememberCatalogSelection(p),false);assert.equal(p.id,id);
+  assert.equal(await service.rememberCatalogSelection({...p,specs:{mercado_livre:{...p.specs.mercado_livre,remember_model:false}}}),true);
+});
+test('cadastro consulta preditor oficial e árvore manual sem escrever ou publicar',async()=>{
+  const calls=[];let output=[{category_id:'MLB5095',category_name:'Capas'},{category_id:'MLB5095',category_name:'Duplicada'},{category_id:'MLA1',category_name:'Outro país'}];
+  const handlers=createPublicationHandlers({pool:{query:()=>{throw Error('Não deveria gravar');}},settings:async()=>({}),listingRows:()=>[],request:async resource=>{calls.push(resource);return output;}});
+  assert.deepEqual(await handlers.discoverCategory({body:{title:'Capa para Realme C85 5G'}}),{suggestions:[{id:'MLB5095',name:'Capas'}]});
+  assert.equal(calls[0],'/sites/MLB/domain_discovery/search?q=Capa+para+Realme+C85+5G&limit=3');
+  output=[];assert.deepEqual(await handlers.discoverCategory({body:{title:'Produto desconhecido'}}),{suggestions:[]});
+  await assert.rejects(handlers.discoverCategory({body:{title:'x'}}),/nome do produto/);
+  output=[{id:'MLB1',name:'Acessórios'},{id:'MLA1',name:'Outro país'}];assert.deepEqual((await handlers.browseCategories({query:{}})).categories,[{id:'MLB1',name:'Acessórios'}]);
+  output={id:'MLB1',name:'Acessórios',children_categories:[{id:'MLB5095',name:'Capas'}]};assert.equal((await handlers.browseCategories({query:{parentId:'MLB1'}})).categories[0].name,'Capas');
+  await assert.rejects(handlers.browseCategories({query:{parentId:'MLB2'}}),/diverge/);
+});
 const product={id,sku:'SKU-1',name:'Produto teste',price_cost:5000,price_retail:12345,stock_quantity:3,status:'active',is_parent:0};
 const policy={marginBps:2000,taxBps:500,adsBps:100,otherBps:0,packagingCents:100,shippingCents:200,otherFixedCents:0,logisticType:'drop_off',billableWeightGrams:1000};
 const category={id:'MLB123',settings:{listing_allowed:true,max_title_length:60,item_conditions:['new']}};
