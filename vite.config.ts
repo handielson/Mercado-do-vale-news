@@ -2,6 +2,7 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import * as fs from 'fs';
+import localCodex from './scripts/mercado-livre-local-codex.cjs';
 
 const deferStylesheets = () => ({
   name: 'defer-render-blocking-stylesheets',
@@ -120,7 +121,7 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    plugins: [react(), deferStylesheets()],
+    plugins: [react(), deferStylesheets(), localCodex.localResearchPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

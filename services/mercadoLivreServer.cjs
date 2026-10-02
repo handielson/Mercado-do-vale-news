@@ -373,7 +373,7 @@ async function mlRequest(pool, resource, options = {}, retry = true) {
   }
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Mercado Livre API ${response.status}: ${body.slice(0, 800)}`);
+    throw Object.assign(new Error(`Mercado Livre API ${response.status}: ${body.slice(0, 800)}`), { remoteStatus: response.status });
   }
   return response;
 }
@@ -481,6 +481,24 @@ async function syncMercadoLivreStockFromBlingTargets(pool, stockTargets = []) {
 
 function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin = requireSyncKey }) {
   const protectedRoute = { preHandler: requireSyncKeyOrAdmin };
+  const { createPublicationHandlers } = require('./mercadoLivrePublication.cjs');
+  const publication = createPublicationHandlers({ pool, settings: () => loadSettings(pool), listingRows,
+    request: async (resource, options) => {
+      const response = await mlRequest(pool, resource, { ...options, signal: AbortSignal.timeout(20000) });
+      return response.status === 204 ? null : response.json();
+    } });
+  const publicationRoute = handler => async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try { return await handler(req); }
+    catch (error) {
+      return reply.code(error.statusCode || 502).send({ error: error.statusCode ? error.message : 'Mercado Livre indisponível. Se o envio já começou, confira o anúncio ou retome para concluir a descrição e o vínculo.' });
+    }
+  };
+  registerAliases(fastify, 'get', '/mercado-livre/preparation/snapshot', protectedRoute, publicationRoute(publication.snapshot));
+  registerAliases(fastify, 'get', '/mercado-livre/preparation/categories/:categoryId', protectedRoute, publicationRoute(publication.category));
+  registerAliases(fastify, 'post', '/mercado-livre/preparation/preview', protectedRoute, publicationRoute(publication.preview));
+  registerAliases(fastify, 'post', '/mercado-livre/preparation/pricing', protectedRoute, publicationRoute(publication.pricing));
+  registerAliases(fastify, 'post', '/mercado-livre/preparation/publish', protectedRoute, publicationRoute(publication.publish));
 
   const getSettings = async () => safeStatus(await loadSettings(pool));
   const patchSettings = async (request, reply) => {

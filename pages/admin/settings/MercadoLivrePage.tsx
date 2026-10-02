@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ExternalLink, Loader2, RefreshCw, Save, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { mercadoLivreService, type MercadoLivrePrintJob, type MercadoLivreStatus } from '../../../services/mercadoLivreService';
@@ -82,6 +82,7 @@ export default function MercadoLivrePage() {
       </div>
     </header>
 
+    <Link to="/admin/settings/mercado-livre/preparacao" className="inline-flex rounded-lg bg-yellow-400 px-4 py-3 font-semibold">Preparar novos anúncios com o Codex local</Link>
     <MercadoLivreLinkReview connected={Boolean(status?.connected)} />
     {productId && <section className="space-y-3 rounded-xl border border-yellow-300 bg-yellow-50 p-5">
       <h2 className="text-lg font-semibold">Vincular anúncio existente · SKU {productSku || productId}</h2>

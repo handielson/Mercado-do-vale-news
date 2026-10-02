@@ -36,6 +36,7 @@ const smartphonePhotoIntakeServiceFiles = [
   'services/modelBlingMapping.mjs',
 ];
 const mercadoLivreServicePath = 'services/mercadoLivreServer.cjs';
+const mercadoLivrePublicationPath = 'services/mercadoLivrePublication.cjs';
 const tiktokShopFulfillmentServicePath = 'services/tiktokShopFulfillmentService.cjs';
 const tiktokShopAutomationPaths = [
   tiktokShopFulfillmentServicePath,
@@ -242,6 +243,7 @@ async function uploadMercadoLivreFiles(appDir) {
     remotePathJoin(appDir, mercadoLivreServicePath),
   );
   console.log(`Uploaded ${mercadoLivreServicePath}`);
+  await upload(path.join(__dirname, mercadoLivrePublicationPath), remotePathJoin(appDir, mercadoLivrePublicationPath));
 }
 
 async function ensureRemoteFirebaseCredentials(appDir) {
@@ -579,8 +581,13 @@ async function main() {
     const backupDir = `${appDir}/backups/mercado-livre-${Date.now()}`;
     await exec(`mkdir -p ${backupDir}`);
     await exec(`cp -p ${target} ${backupDir}/mercadoLivreServer.cjs`);
+    const publicationTarget = `${appDir}/${mercadoLivrePublicationPath}`;
+    await exec(`if [ -f ${publicationTarget} ]; then cp -p ${publicationTarget} ${backupDir}/mercadoLivrePublication.cjs; fi`);
+    await upload(path.join(__dirname, mercadoLivrePublicationPath), `${publicationTarget}.next.cjs`);
+    await exec(`node --check ${publicationTarget}.next.cjs`);
     await upload(path.join(__dirname, mercadoLivreServicePath), staged);
     await exec(`node --check ${staged}`);
+    await exec(`mv ${publicationTarget}.next.cjs ${publicationTarget}`);
     await exec(`mv ${staged} ${target}`);
     console.log((await exec('pm2 restart mdv-api')).trim());
     console.log(`Mercado Livre backup: ${backupDir}`);
@@ -607,6 +614,11 @@ async function main() {
     await exec(`cp -p ${serverTarget} ${backupDir}/${runtimeFile} && cp -p ${mercadoLivreTarget} ${backupDir}/mercadoLivreServer.cjs`);
     await upload(localRuntime, `${serverTarget}.next.cjs`);
     await upload(path.join(__dirname, mercadoLivreServicePath), `${mercadoLivreTarget}.next.cjs`);
+    const publicationTarget = `${appDir}/${mercadoLivrePublicationPath}`;
+    await exec(`if [ -f ${publicationTarget} ]; then cp -p ${publicationTarget} ${backupDir}/mercadoLivrePublication.cjs; fi`);
+    await upload(path.join(__dirname, mercadoLivrePublicationPath), `${publicationTarget}.next.cjs`);
+    await exec(`node --check ${publicationTarget}.next.cjs`);
+    await exec(`mv ${publicationTarget}.next.cjs ${publicationTarget}`);
     await exec(`node --check ${serverTarget}.next.cjs && node --check ${mercadoLivreTarget}.next.cjs`);
     await exec(`mv ${serverTarget}.next.cjs ${serverTarget} && mv ${mercadoLivreTarget}.next.cjs ${mercadoLivreTarget}`);
     console.log((await exec('pm2 restart mdv-api --update-env')).trim());

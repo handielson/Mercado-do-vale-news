@@ -154,6 +154,7 @@ const ShopeePage = lazy(() => import('../pages/admin/settings/ShopeePage'));
 const ShopeeTemplatesPage = lazy(() => import('../pages/admin/settings/ShopeeTemplatesPage'));
 const TikTokShopPage = lazy(() => import('../pages/admin/settings/TikTokShopPage'));
 const MercadoLivrePage = lazy(() => import('../pages/admin/settings/MercadoLivrePage'));
+const MercadoLivrePreparationPage = lazy(() => import('../pages/admin/settings/MercadoLivrePreparationPage'));
 const CheckoutPage = lazy(() => import('../pages/store/CheckoutPage'));
 const PublicProductPage = lazy(() => import('../pages/store/PublicProductPage').then(module => ({ default: module.PublicProductPage })));
 const QuoteCalculatorPage = lazy(() => import('../pages/store/QuoteCalculatorPage'));
@@ -1191,6 +1192,10 @@ export const router = createBrowserRouter([
         <FAQPage />
       </MaintenanceGuard>
     )
+  },
+  {
+    path: "/admin/settings/mercado-livre/preparacao",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><MercadoLivrePreparationPage /></AdminLayout></ProtectedRoute>
   },
   {
     path: "/admin/settings/mercado-livre",

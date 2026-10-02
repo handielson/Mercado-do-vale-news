@@ -32,6 +32,11 @@ export interface MercadoLivrePrintJob {
 }
 
 export const mercadoLivreService = {
+  getPreparationSnapshot: () => vpsClient.get<any>('/mercado-livre/preparation/snapshot'),
+  calculateListingPrice: (sellerId: string, draft: unknown, pricingPolicy: unknown) => vpsClient.post<any>('/mercado-livre/preparation/pricing', { sellerId, draft, pricingPolicy }),
+  getCategoryRequirements: (id: string) => vpsClient.get<any>(`/mercado-livre/preparation/categories/${encodeURIComponent(id)}`),
+  previewPublication: (sellerId: string, draft: unknown) => vpsClient.post<any>('/mercado-livre/preparation/preview', { sellerId, draft }),
+  publishPrepared: (sellerId: string, draft: unknown, resumeOnly = false) => vpsClient.post<{itemId:string;alreadyPublished:boolean}>('/mercado-livre/preparation/publish', { sellerId, draft, confirmPublication:true, resumeOnly }),
   discoverProducts: (cursor = '') => vpsClient.get<MercadoLivreDiscovery>(`/mercado-livre/products/discover${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
   findCandidates: (q: string) => vpsClient.get<{ items: MercadoLivreCandidate[] }>(`/mercado-livre/products/candidates?q=${encodeURIComponent(q)}`),
   getProductLinks: () => vpsClient.get<{ items: Array<{ product_id: string; item_id: string; variation_id?: string; last_error?: string | null }> }>('/mercado-livre/products/links'),
