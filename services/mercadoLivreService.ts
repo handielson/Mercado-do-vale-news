@@ -32,7 +32,17 @@ export interface MercadoLivrePrintJob {
 }
 
 export const mercadoLivreService = {
-  getPreparationSnapshot: () => vpsClient.get<any>('/mercado-livre/preparation/snapshot'),
+  getPreparationSnapshot: async () => {
+    const job=await vpsClient.post<{id:string}>('/mercado-livre/preparation/snapshot-jobs',{});
+    const deadline=Date.now()+900000;
+    while(Date.now()<deadline) {
+      const state=await vpsClient.get<any>(`/mercado-livre/preparation/snapshot-jobs/${encodeURIComponent(job.id)}`);
+      if(state.status==='complete') return state.result;
+      if(state.status==='failed') throw new Error(state.error || 'Falha ao carregar catálogo.');
+      await new Promise(resolve=>setTimeout(resolve,3000));
+    }
+    throw new Error('A consulta ainda não terminou. Carregue novamente para acompanhar a consulta em andamento.');
+  },
   calculateListingPrice: (sellerId: string, draft: unknown, pricingPolicy: unknown) => vpsClient.post<any>('/mercado-livre/preparation/pricing', { sellerId, draft, pricingPolicy }),
   getCategoryRequirements: (id: string) => vpsClient.get<any>(`/mercado-livre/preparation/categories/${encodeURIComponent(id)}`),
   previewPublication: (sellerId: string, draft: unknown) => vpsClient.post<any>('/mercado-livre/preparation/preview', { sellerId, draft }),

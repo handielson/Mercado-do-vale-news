@@ -34,7 +34,9 @@ Recibos de publicação ficam em `MERCADO_LIVRE_PUBLICATION_DIR`, quando configu
 
 Antes do POST de criação, um recibo `sending` é gravado atomicamente. Se a resposta se perder, a automação bloqueia outro POST: o operador deve conferir e reconciliar o anúncio real. A retomada de um recibo com MLB conhecido conclui vínculo/descrição sem criar outro anúncio. `Retomar envio interrompido` rejeita solicitações sem recibo anterior.
 
-O pacote da API inclui `services/mercadoLivreServer.cjs` e `services/mercadoLivrePublication.cjs`. Não executar o deploy apenas do primeiro arquivo. O script de publicação foi ajustado para incluir a dependência nos caminhos seletivo e geral; nenhuma publicação foi executada nesta implementação.
+O pacote da API inclui `services/mercadoLivreServer.cjs` e `services/mercadoLivrePublication.cjs`. Não executar o deploy apenas do primeiro arquivo. A implementação foi publicada na v1.2.533. A consulta do catálogo e inventário remoto agora usa `POST /preparation/snapshot-jobs` e acompanhamento autenticado por ID, para evitar timeout do proxy; reutiliza a consulta da conta enquanto estiver em andamento. Jobs ficam em memória e uma reinicialização exige iniciar nova consulta. Publicação real do anúncio ainda depende da revisão comercial.
+
+Para custo médio com despesas de aquisição, consultar [o procedimento de importação por SKU](bling-custo-aquisicao.md). Cadastro de fornecedor não comprova custo médio.
 
 ## Limites atuais
 

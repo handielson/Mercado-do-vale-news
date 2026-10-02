@@ -273,7 +273,9 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
             codigo: data.codigo || null,
             gtin: data.gtin || parentData?.gtin || null,
             preco: data.preco ?? parentData?.preco ?? null,
-            precoCusto: data.precoCusto ?? data.precoCompra ?? parentData?.precoCusto ?? parentData?.precoCompra ?? null,
+            // Product/supplier fields are not the weighted acquisition ledger.
+            // Acquisition costs are imported separately, per SKU, with evidence.
+            precoCusto: null,
             precoCompra: data.precoCompra ?? parentData?.precoCompra ?? null,
             situacao: data.situacao || 'A',
             formato: data.formato,
@@ -754,7 +756,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         price_retail: basePrice,
         price_reseller: resellerPrice,
         price_wholesale: wholesalePrice,
-        price_cost: item.precoCusto ? Math.round(item.precoCusto * 100) : null,
+        price_cost: null, // No acquisition ledger in the product API; preserve existing cost on upsert.
         // Fiscal
         ncm: trib.ncm || null,
         cest: trib.cest || null,
@@ -905,7 +907,7 @@ export async function fetchAllBlingProducts(onProgress?: (p: FetchProgress) => v
             codigo: item.codigo || null,
             gtin: item.gtin || null,
             preco: item.preco || null,
-            precoCusto: item.precoCusto || null,
+            precoCusto: null,
             situacao: item.situacao || 'A',
             stock_quantity: 0, // Será preenchido abaixo
             categoria: item.categoria || undefined,
@@ -1046,7 +1048,7 @@ export async function searchBlingProducts(query: string, onProgress?: (p: FetchP
             codigo: item.codigo || null,
             gtin: item.gtin || null,
             preco: item.preco || null,
-            precoCusto: item.precoCusto || null,
+            precoCusto: null,
             situacao: item.situacao || 'A',
             stock_quantity: 0, // Será preenchido abaixo
             categoria: item.categoria || undefined,
@@ -2035,7 +2037,7 @@ export async function reimportModelProductsFromBling(modelId: string): Promise<n
         const updateData: any = {};
         if (detail.codigo) updateData.sku = detail.codigo;
         if (detail.gtin) updateData.ean = detail.gtin;
-        if (detail.precoCusto) updateData.price_cost = Math.round(detail.precoCusto * 100);
+        // Preserve the separately reviewed acquisition cost during product reimport.
         if (detail.preco) updateData.price_retail = Math.round(detail.preco * 100);
         
         // Verifica e extrai imagens

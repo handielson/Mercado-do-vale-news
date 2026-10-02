@@ -53,6 +53,17 @@ function fixture({timeout=false,descriptionFailure=false,existingSku=false,broke
   return {handlers:createPublicationHandlers({pool,settings:async()=>({user_id:'123'}),request,listingRows,journal}),calls,records};
 }
 const body=()=>({sellerId:'123',draft:draft(),confirmPublication:true});
+test('snapshot assíncrono reutiliza consulta em andamento e entrega resultado sem segredos',async()=>{
+  const f=fixture();const job=await f.handlers.startSnapshot();const same=await f.handlers.startSnapshot();assert.equal(same.id,job.id);
+  await new Promise(resolve=>setImmediate(resolve));
+  const status=await f.handlers.snapshotStatus({params:{jobId:job.id}});assert.equal(status.status,'complete');assert.equal(status.result.complete,true);assert.equal(status.result.sellerId,'123');
+  await assert.rejects(f.handlers.snapshotStatus({params:{jobId:'ausente'}}),/não encontrada/);
+});
+test('snapshot com inventário incompleto termina em falha e permite nova consulta',async()=>{
+  const f=fixture({brokenInventory:true});const job=await f.handlers.startSnapshot();await new Promise(resolve=>setImmediate(resolve));
+  const status=await f.handlers.snapshotStatus({params:{jobId:job.id}});assert.equal(status.status,'failed');assert.equal(status.result,undefined);
+  const next=await f.handlers.startSnapshot();assert.notEqual(next.id,job.id);
+});
 test('dinheiro em centavos e contratos legado/User Products separados',()=>{
   const a=buildPublication(draft(),product,'legacy',category,defs),b=buildPublication(draft(),product,'user_products',category,defs);
   assert.equal(a.price,123.45);assert.equal(a.title,'Produto teste');assert.equal(b.family_name,'Produto teste');assert.equal(b.title,undefined);assert.equal(b.variations,undefined);assert.equal(b.sale_terms[1].value_name,'90 dias');

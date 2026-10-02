@@ -133,6 +133,7 @@ function createFileJournal(directory = process.env.MERCADO_LIVRE_PUBLICATION_DIR
 }
 
 function createPublicationHandlers({pool,settings,request,listingRows,journal=createFileJournal()}) {
+  const snapshots=new Map();
   const account = async () => { const s=await settings(); if(!/^\d+$/.test(String(s.user_id || ''))) throw fail('Conecte a conta Mercado Livre.'); const p=await request(`/users/${s.user_id}`); if(String(p.id)!==String(s.user_id)) throw fail('Conta não corresponde à conexão.'); return {sellerId:String(p.id),nickname:p.nickname,mode:modeOf(p)}; };
   const inventory = async seller => {
     const rows=[]; let cursor='',seen=0,expected=null; const cursors=new Set(),itemIds=new Set();
@@ -184,12 +185,30 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
     },chosenPriceCents);
     return pricing;
   };
-  return {
-    async snapshot() {
+  const snapshot = async () => {
       const a=await account(); const capturedAt=new Date().toISOString(); const products=await catalog(); const listings=await inventory(a.sellerId);
       const [links]=await pool.query('SELECT product_id,item_id,variation_id FROM mercado_livre_products');
       const latest=await settings(); if(String(latest.user_id)!==a.sellerId) throw fail('Conta mudou durante a consulta.');
       return {schema:'mdv.ml.catalog.v1',...a,capturedAt,complete:true,products,links,listings};
+  };
+  return {
+    snapshot,
+    async startSnapshot() {
+      const a=await account();
+      for(const [id,job] of snapshots) {
+        if(job.status==='running' && job.sellerId===a.sellerId) return {id,status:'running'};
+        if(job.status!=='running' && Date.now()-job.createdAt>3600000) snapshots.delete(id);
+      }
+      const id=crypto.randomUUID(),job={sellerId:a.sellerId,status:'running',createdAt:Date.now()};
+      snapshots.set(id,job);
+      snapshot().then(result=>Object.assign(job,{status:'complete',result})).catch(error=>Object.assign(job,{status:'failed',error:error.statusCode?error.message:'Não foi possível concluir a consulta do catálogo e anúncios.'}));
+      return {id,status:'running'};
+    },
+    async snapshotStatus(req) {
+      const job=snapshots.get(req.params.jobId);
+      if(!job) throw fail('Consulta não encontrada. Recarregue o catálogo.',404);
+      if(String((await settings()).user_id)!==job.sellerId) throw fail('Conta mudou durante a consulta.');
+      return {status:job.status,...(job.result?{result:job.result}:{}),...(job.error?{error:job.error}:{})};
     },
     category: req => categoryData(req.params.categoryId),
     pricing: req => priceFor(req.body || {}),

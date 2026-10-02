@@ -31,7 +31,9 @@ try{
     const url=decodeURIComponent(route.request().url());
     if(url.includes('/mercado-livre/preparation/')){
       let response;
-      if(url.includes('/snapshot'))response=snapshot;
+      if(url.includes('/snapshot-jobs/'))response={status:'complete',result:snapshot};
+      else if(url.includes('/snapshot-jobs'))response={id:'consulta-simulada'};
+      else if(url.includes('/snapshot'))response=snapshot;
       else if(url.includes('/categories/'))response={category:{id:'MLB123'},attributes:[{id:'BRAND',name:'Marca',tags:{required:true}}]};
       else if(url.includes('/pricing')){const body=route.request().postDataJSON();assert.equal(body.pricingPolicy.marginBps,2000);response={priceCents:12345,costCents:6000,saleFeeCents:1852,listingFeeCents:0,taxCents:0,adsCents:0,otherPercentCents:0,packagingCents:0,shippingCents:0,otherFixedCents:0,profitCents:4493,marginBps:3639,targetMarginBps:2000,policy:body.pricingPolicy,feeReference:'https://api.mercadolibre.com/sites/MLB/listing_prices',quotedAt:new Date().toISOString()};}
       else if(url.includes('/preview'))response={sellerId:'123',mode:'legacy',payload:{price:123.45,available_quantity:3,shipping:{free_shipping:false},listing_type_id:'gold_special'}};

@@ -10551,20 +10551,9 @@ async function fetchBlingProductDetailForWebhookVps(blingId, accessToken) {
 }
 
 function readBlingCostPriceForWebhookVps(productData, detail) {
-  const cost = productData?.precoCusto
-    ?? productData?.precoCompra
-    ?? productData?.preco_custo
-    ?? productData?.preco_compra
-    ?? productData?.fornecedor?.precoCusto
-    ?? productData?.fornecedor?.precoCompra
-    ?? detail?.precoCusto
-    ?? detail?.precoCompra
-    ?? detail?.preco_custo
-    ?? detail?.preco_compra
-    ?? detail?.fornecedor?.precoCusto
-    ?? detail?.fornecedor?.precoCompra;
-  const numericCost = Number(cost);
-  return Number.isFinite(numericCost) && numericCost > 0 ? numericCost : null;
+  // Product/supplier prices cannot replace the local weighted acquisition cost.
+  // Only a reviewed stock ledger supplies costs, independently of Bling settings.
+  return null;
 }
 
 function pickBlingPriceStockUpdatesVps(updates = {}) {
@@ -11075,7 +11064,7 @@ async function handleBlingWebhookVps(request, reply) {
       if (!blingId && !resolvedSku) return reply.code(200).send({ ok: true, message: 'No product identifier in product event' });
 
       let detail = null;
-      if (accessToken && blingId && (!resolvedName || !resolvedSku || readBlingCostPriceForWebhookVps(productData, null) === null)) {
+      if (accessToken && blingId && (!resolvedName || !resolvedSku)) {
         detail = await fetchBlingProductDetailForWebhookVps(blingId, accessToken);
         resolvedName = resolvedName || detail?.nome;
         resolvedSku = resolvedSku || detail?.codigo;

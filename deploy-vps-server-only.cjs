@@ -508,6 +508,13 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--bling-acquisition-cost-only')) {
+    await require('./scripts/deploy-bling-acquisition-cost.cjs')({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--print3d-only') || process.argv.includes('--print3d-check')) {
     const result = await require('./scripts/deploy-print3d.cjs').deployPrint3d({
       appDir, apiProc, exec, upload, root: __dirname,
