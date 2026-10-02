@@ -8,6 +8,14 @@ const object = v => v && typeof v === 'object' && !Array.isArray(v);
 const https = v => { try { const u = new URL(v); return u.protocol === 'https:' && !u.username && !u.password; } catch { return false; } };
 const PRODUCT_COLUMNS = `id,sku,name,description,
   (SELECT b.name FROM brands b WHERE CAST(b.id AS CHAR)=products.brand OR b.name=products.brand LIMIT 1) AS brand,
+  (SELECT m.name FROM models m WHERE m.id=products.model_id LIMIT 1) AS model_name,
+  warranty_type,
+  CASE warranty_type
+    WHEN 'brand' THEN (SELECT b.warranty_days FROM brands b WHERE CAST(b.id AS CHAR)=products.brand OR b.name=products.brand LIMIT 1)
+    WHEN 'category' THEN (SELECT c.warranty_days FROM categories c WHERE c.id=products.category_id LIMIT 1)
+  END AS warranty_days,
+  JSON_UNQUOTE(JSON_EXTRACT(specs,'$.color')) AS color,
+  products.\`condition\`,weight_kg,dimensions,
   ean,alternative_eans,images,price_retail,stock_quantity,status,is_parent,parent_id,is_virtual,is_gift,is_combo`;
 function publicProduct(row) {
   const jsonArray = value => { try { const v=typeof value==='string'?JSON.parse(value):value;return Array.isArray(v)?v:[]; } catch {return [];} };

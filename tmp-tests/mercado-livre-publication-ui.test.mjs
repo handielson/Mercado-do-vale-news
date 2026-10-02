@@ -7,7 +7,7 @@ import {mkdir} from 'node:fs/promises';
 import local from '../scripts/mercado-livre-local-codex.cjs';
 const id='11111111-1111-4111-8111-111111111111';
 const snapshot={schema:'mdv.ml.catalog.v1',sellerId:'123',nickname:'CONTA SIMULADA',mode:'legacy',capturedAt:new Date().toISOString(),complete:true,
-  products:[{id,sku:'TESTE-1',name:'Produto simulado',description:'Descrição do cadastro',brand:'Marca',price_retail:12345,stock_quantity:3,status:'active',images:['https://loja.example/foto.png']}],links:[],listings:[]};
+  products:[{id,sku:'TESTE-1',name:'Produto simulado',description:'Descrição do cadastro',brand:'Marca',color:'Ciano',model_name:'Modelo teste',warranty_type:'brand',warranty_days:90,weight_kg:'0.1000',dimensions:'{"height_cm":17,"width_cm":8,"depth_cm":1.5}',price_retail:12345,stock_quantity:3,status:'active',images:['https://loja.example/foto.png']}],links:[],listings:[]};
 const source={kind:'manufacturer',reference:'https://fabricante.example/modelo',note:'Fonte simulada'};
 const proposal={schema:'mdv.ml.preparation.v1',sellerId:'123',proposals:[{productId:id,sku:'TESTE-1',fields:{title:{value:'Título pesquisado',sources:[source]},categoryId:{value:'MLB123',sources:[source]},condition:{value:'new',sources:[source]}}}],notes:['Pesquisa simulada para teste; nenhum acesso real.']};
 const entry={name:'ml-ui-test-entry',resolveId(id){if(id==='/__ml-entry.tsx')return id;},load(id){if(id==='/__ml-entry.tsx')return `import React from 'react';import {createRoot} from 'react-dom/client';import Page from '${process.cwd().replaceAll('\\','/')}/pages/admin/settings/MercadoLivrePreparationPage.tsx';import '${process.cwd().replaceAll('\\','/')}/index.css';createRoot(document.getElementById('root')).render(<Page/>);`;}};
@@ -46,6 +46,12 @@ try{
   await page.goto(origin+'/__ml-ui');
   await page.getByRole('button',{name:'1. Carregar produtos do sistema'}).click();
   await page.getByText('TESTE-1 — Produto simulado').locator('input').check();
+  await page.getByText('Dados aproveitados do cadastro:',{exact:false}).waitFor();
+  assert.match(await page.getByText('Dados aproveitados do cadastro:',{exact:false}).innerText(),/cor Ciano.*100 g.*17 × 8 × 1.5 cm.*garantia 90 dias/);
+  assert.equal(await page.getByRole('textbox',{name:'Prazo da garantia',exact:false}).inputValue(),'90 dias');
+  await page.getByRole('button',{name:'Atributos',exact:true}).click();
+  const catalogAttributes=JSON.parse(await page.getByRole('textbox',{name:'Valor de Atributos',exact:true}).inputValue());
+  assert.deepEqual(catalogAttributes,{BRAND:'Marca',MODEL:'Modelo teste',COLOR:'Ciano'});
   await page.getByRole('button',{name:'Pesquisar e comparar com o Codex local'}).click();
   await page.getByText('Pesquisa recebida.',{exact:false}).waitFor();
   await page.getByRole('button',{name:'Aceitar proposta'}).click();

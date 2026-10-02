@@ -132,6 +132,19 @@ test('pesquisa permite somente catálogo público e não importa aprovações',(
   assert.equal(parseResult(raw,packet).proposals[0].fields.description.confirmed,false);
   raw.proposals[0].fields[0].name='priceCents';assert.throws(()=>parseResult(raw,packet));
 });
+
+test('pesquisa preserva cor e modelo do cadastro sem exportar specs privados',()=>{
+  const packet=sanitizePacket({schema:'mdv.ml.preparation.v1',sellerId:'123',products:[{product:{...product,color:'Ciano',model_name:'Realme C85 5G',condition:null,specs:{imei:'SEGREDO'}}}]});
+  assert.equal(packet.products[0].color,'Ciano');assert.equal(packet.products[0].modelName,'Realme C85 5G');assert.equal(packet.products[0].condition,undefined);assert.ok(!JSON.stringify(packet).includes('SEGREDO'));
+});
+test('atributos inválidos da IA não descartam descrição válida nem aprovam campos',()=>{
+  const packet={sellerId:'123',products:[{productId:id,sku:'SKU-1'}]};
+  const sources=[{kind:'catalog',reference:'cadastro conferido'}];
+  for(const attributes of [[{name:'Marca',value:'Lcx'}],{'Marca da capa':'Lcx'},{BRAND:12}]) {
+    const result=parseResult({proposals:[{productId:id,sku:'SKU-1',fields:[{name:'description',valueJson:'"Descrição"',sources},{name:'attributes',valueJson:JSON.stringify(attributes),sources}]}]},packet);
+    assert.equal(result.proposals[0].fields.description.value,'Descrição');assert.equal(result.proposals[0].fields.description.confirmed,false);assert.equal(result.proposals[0].fields.attributes,undefined);assert.match(result.notes[0],/formato inválido/);
+  }
+});
 test('middleware local bloqueia outras origens e aceita pesquisa com execução injetada',async()=>{
   const {Readable}=require('node:stream');let handler;const plugin=localResearchPlugin({research:async()=>({proposals:[]})});plugin.configureServer({middlewares:{use:h=>handler=h}});
   const invoke=async({address='127.0.0.1',origin='http://localhost:3010',marker='1',method='POST'}={})=>{

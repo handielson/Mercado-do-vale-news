@@ -38,7 +38,7 @@ const jsonOutput = execFileSync(process.execPath, [
 });
 
 const plan = JSON.parse(jsonOutput);
-assert.equal(plan.target, 'both', 'Mixed frontend/API files must classify as both.');
+assert.equal(plan.target, 'multiple', 'Mixed frontend/API files must classify as multiple targets.');
 assert.equal(plan.needs.site, true, 'Frontend/version files must require site deploy.');
 assert.equal(plan.needs.api, true, 'API files must require API deploy.');
 assert.ok(
@@ -51,3 +51,5 @@ assert.ok(
 );
 
 console.log('publish VPS plan static checks passed');
+const mlPlan=JSON.parse(execFileSync(process.execPath,['scripts/publish-vps-plan.cjs','--json','--mock-files','services/mercadoLivrePublication.cjs'],{encoding:'utf8'}));
+assert.equal(mlPlan.needs.api,true,'Publication runtime changes require API deployment.');

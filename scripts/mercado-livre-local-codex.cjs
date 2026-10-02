@@ -16,24 +16,27 @@ function sanitizePacket(raw) {
   return {sellerId:raw.sellerId,products:raw.products.map(row=>{
     const p=row.product;
     if(!p || !/^[a-f0-9-]{36}$/i.test(p.id || '') || typeof p.sku!=='string' || !p.sku || typeof p.name!=='string') throw new Error('Produto inválido.');
-    return {productId:p.id,sku:p.sku.slice(0,100),name:p.name.slice(0,300),description:String(p.description || '').slice(0,8000),brand:String(p.brand || '').slice(0,100)};
+    return {productId:p.id,sku:p.sku.slice(0,100),name:p.name.slice(0,300),description:String(p.description || '').slice(0,8000),brand:String(p.brand || '').slice(0,100),modelName:String(p.model_name || '').slice(0,200),color:String(p.color || '').slice(0,100),condition:['new','used','not_specified'].includes(p.condition)?p.condition:undefined};
   })};
 }
 function parseResult(raw,packet) {
   if(!Array.isArray(raw?.proposals) || raw.proposals.length>packet.products.length) throw new Error('Resposta inválida do Codex.');
-  const seen=new Set();
+  const seen=new Set(), notes=Array.isArray(raw.notes)?[...raw.notes]:[];
   const proposals=raw.proposals.map(p=>{
     if(seen.has(p.productId) || !packet.products.some(x=>x.productId===p.productId && x.sku===p.sku) || !Array.isArray(p.fields)) throw new Error('Resposta contém produto fora da seleção.');
     seen.add(p.productId); const fields={};
     for(const f of p.fields) {
       if(!names.includes(f.name) || fields[f.name] || !Array.isArray(f.sources) || !f.sources.length) throw new Error('Campo/fonte inválido.');
       const value=JSON.parse(f.valueJson);
+      if(f.name==='attributes' && (!value || typeof value!=='object' || Array.isArray(value) || Object.entries(value).some(([key,v])=>! /^[A-Z][A-Z0-9_]*$/.test(key) || typeof v!=='string'))) {
+        notes.push(`${p.sku}: atributos da pesquisa omitidos por formato inválido; complete pelos IDs oficiais da categoria. Os demais campos foram preservados.`);continue;
+      }
       if(f.name==='attributes' ? !value || typeof value!=='object' || Array.isArray(value) : typeof value!=='string') throw new Error('Valor inválido.');
       fields[f.name]={value,sources:f.sources,confirmed:false};
     }
     return {productId:p.productId,sku:p.sku,fields};
   });
-  return {schema:'mdv.ml.preparation.v1',sellerId:packet.sellerId,proposals,notes:Array.isArray(raw.notes)?raw.notes:[]};
+  return {schema:'mdv.ml.preparation.v1',sellerId:packet.sellerId,proposals,notes};
 }
 async function resolveCodex() {
   if(process.env.MDV_CODEX_EXECUTABLE) return process.env.MDV_CODEX_EXECUTABLE;
@@ -60,7 +63,7 @@ async function runResearch(packet,{executable,spawnProcess=spawn}={}) {
       const timer=setTimeout(()=>{child.kill();reject(new Error('Pesquisa excedeu 15 minutos. Tente um lote menor.'));},900000);
       child.once('error',()=>{clearTimeout(timer);reject(new Error('Não foi possível iniciar o Codex local.'));});
       child.once('close',code=>{clearTimeout(timer);code===0?resolve():reject(new Error('Codex não concluiu a pesquisa. Confira o login e os limites do plano.'));});
-      child.stdin.on('error',()=>{}); child.stdin.end(prompt);
+      child.stdin.on('error',()=>{}); child.stdin.end(prompt+' Use primeiro os dados do cadastro fornecido; pesquise somente lacunas ou divergências. Preserve cor e modelo cadastrados. Para attributes, valueJson deve codificar um objeto de IDs oficiais com valores string, por exemplo {"BRAND":"Lcx","COLOR":"Ciano"}; nunca uma lista nem nomes traduzidos como chaves. Não infira condição a partir de estoque ou fotos.');
     });
     return parseResult(JSON.parse(await fs.readFile(output,'utf8')),packet);
   } finally { // Delete only the known output files, never recursively remove a computed directory.

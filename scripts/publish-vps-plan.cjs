@@ -19,6 +19,7 @@ const API_PATTERNS = [
   /(?:^|\/)(?:webhook|cron|server|api)[^/]*\.(?:js|cjs|ts)$/,
   /^services\/autoresponder\/engine\//,
   /^services\/marketingCampaignApi\.cjs$/,
+  /^services\/mercadoLivrePublication\.cjs$/,
   /^services\/mobileSalesPushService\.cjs$/,
   /^services\/.*Vault\.cjs$/,
   /^services\/.*Server\.(?:js|cjs|ts)$/i,

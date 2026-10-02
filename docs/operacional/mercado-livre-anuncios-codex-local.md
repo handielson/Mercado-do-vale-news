@@ -14,6 +14,12 @@ Implementação no checkout principal. Ainda depende da publicação da API e fr
 
 Rascunhos são salvos no navegador; podem ser exportados em arquivo e restaurados. Restaurar um arquivo remove as confirmações, exigindo nova conferência. Limpar os dados do navegador elimina o salvamento local.
 
+### Aproveitamento do cadastro
+
+A consulta da preparação inclui cor estruturada, modelo, condição explicitamente cadastrada, peso, medidas e prazo de garantia resolvido pela escolha do produto (marca ou categoria). Garantia personalizada permanece pendente: a tabela atual contém texto do termo, sem prazo estruturado. Ao selecionar o produto, preenche marca/modelo/cor nos atributos e o prazo da garantia nas condições comerciais, com fonte do cadastro e revisão pendente. Zero dias é preservado; prazo ausente não vira 90 dias. Peso e medidas são exibidos como dados cadastrados, sem presumir que incluem embalagem. Não exporta specs completos, IMEI, custo ou dados fiscais para a pesquisa.
+
+A pesquisa prioriza o cadastro e procura lacunas/divergências. Atributos em formato inválido são descartados com aviso, preservando título e descrição válidos. IDs e requisitos devem vir da categoria oficial. Clássico/Premium continuam selecionáveis por anúncio. Dados de aquisição não alteram o preço de varejo; nenhuma seleção ou pesquisa publica automaticamente.
+
 ## Política de preço
 
 A margem é o lucro estimado dividido pelo preço de venda, depois de deduzir custo de compra e despesas. A margem inicial fica vazia, para definição pelo operador. Campos configuráveis: imposto, publicidade e outras despesas em percentual da venda; embalagem, frete da loja e outras despesas fixas por unidade. Os demais campos começam em zero, que deve ser conferido como declaração de ausência da despesa. Não presumir alíquotas fiscais ou custos.

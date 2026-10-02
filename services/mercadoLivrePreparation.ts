@@ -6,7 +6,7 @@ export type AccountMode = 'unknown' | 'legacy' | 'user_products';
 export type SourceKind = 'catalog' | 'manufacturer' | 'official_catalog' | 'official_document' | 'operator' | 'authorized_photo' | 'marketplace_reference';
 export interface Evidence { kind: SourceKind; reference: string; note?: string }
 export interface Field { value: any; sources: Evidence[]; confirmed: boolean; conflict?: { value: any; sources: Evidence[] } }
-export interface LocalProduct { id: string; sku: string; name: string; price_retail: number; stock_quantity?: number; images?: string[]; description?: string; brand?: string; eans?: string[]; parent_id?: string; is_parent?: boolean; product_format?: string; status?: string; is_virtual?: boolean; is_gift?: boolean }
+export interface LocalProduct { id: string; sku: string; name: string; price_retail: number; stock_quantity?: number; images?: string[]; description?: string; brand?: string; model_name?: string; color?: string; condition?: string; weight_kg?: number; dimensions?: {height_cm:number;width_cm:number;depth_cm:number}; warranty_type?: string; warranty_days?: number; eans?: string[]; parent_id?: string; is_parent?: boolean; product_format?: string; status?: string; is_virtual?: boolean; is_gift?: boolean }
 export interface Link { product_id: string; item_id: string; variation_id?: string }
 export interface Listing { itemId: string; variationId: string; sku: string; title?: string; status?: string }
 export interface Snapshot { schema: 'mdv.ml.catalog.v1'; sellerId: string; nickname?: string; capturedAt: string; complete: boolean; products: LocalProduct[]; links: Link[]; listings: Listing[] }
@@ -29,7 +29,13 @@ export function normalizeProduct(raw: any): LocalProduct {
   if (!plain(raw) || !text(raw.id) || !text(raw.name)) throw new Error('Produto precisa de ID e nome.');
   let images = raw.images; if (typeof images === 'string') { try { images = JSON.parse(images); } catch { images = []; } }
   let eans = raw.eans; if (typeof eans === 'string') { try { eans = JSON.parse(eans); } catch { eans = []; } }
+  let dimensions=raw.dimensions; if(typeof dimensions==='string') {try{dimensions=JSON.parse(dimensions);}catch{dimensions=null;}}
+  const measured=plain(dimensions) && ['height_cm','width_cm','depth_cm'].every(k=>Number.isFinite(Number(dimensions[k])) && Number(dimensions[k])>0);
+  const days=raw.warranty_days==null?undefined:Number(raw.warranty_days);
   return { id: text(raw.id), name: text(raw.name), sku: text(raw.sku), price_retail: Number(raw.price_retail), stock_quantity: raw.stock_quantity == null ? undefined : Number(raw.stock_quantity),
+    model_name:text(raw.model_name),color:text(raw.color),condition:['new','used','not_specified'].includes(raw.condition)?raw.condition:undefined,
+    weight_kg:Number(raw.weight_kg)>0?Number(raw.weight_kg):undefined,dimensions:measured?{height_cm:Number(dimensions.height_cm),width_cm:Number(dimensions.width_cm),depth_cm:Number(dimensions.depth_cm)}:undefined,
+    warranty_type:text(raw.warranty_type),warranty_days:Number.isSafeInteger(days) && days!>=0?days:undefined,
     images: array(images).filter(x => typeof x === 'string'), eans: [...new Set([...array(eans).filter(x => typeof x === 'string'), ...(text(raw.ean) ? [text(raw.ean)] : [])])], description: text(raw.description), brand: text(raw.brand), parent_id: text(raw.parent_id),
     is_parent: raw.is_parent === true || raw.is_parent === 1, product_format: text(raw.product_format), status: text(raw.status), is_virtual: raw.is_virtual === true || raw.is_virtual === 1, is_gift: raw.is_gift === true || raw.is_gift === 1 };
 }
@@ -72,7 +78,9 @@ export function createDraft(product: LocalProduct, snapshot: Snapshot): Draft {
     title: catalogField(product, 'name', product.name), familyName: catalogField(product, 'name', product.name), description: catalogField(product, 'description', product.description || ''),
     priceCents: catalogField(product, 'price_retail', product.price_retail), quantity: catalogField(product, 'stock_quantity', product.stock_quantity ?? null),
     photos: catalogField(product, 'images', (product.images || []).map(u => ({ url: u, rights: 'unknown', evidence: '' }))),
-    attributes: catalogField(product, 'brand', product.brand ? { BRAND: product.brand } : {}),
+    attributes: catalogField(product, 'brand/model_name/color', { ...(product.brand ? {BRAND:product.brand}:{}), ...(product.model_name ? {MODEL:product.model_name}:{}), ...(product.color ? {COLOR:product.color}:{}) }),
+    ...(product.condition ? {condition:catalogField(product,'condition',product.condition)}:{}),
+    ...(product.warranty_days!==undefined ? {commercialPolicy:catalogField(product,`warranty_type:${product.warranty_type}`,{warranty:product.warranty_days===0?'Sem garantia':'Garantia do vendedor',...(product.warranty_days>0?{warrantyTime:`${product.warranty_days} dias`}:{})})}:{}),
     gtin: catalogField(product, 'eans', product.eans?.[0] || ''),
     variations: catalogField(product, 'children', children.map(p => ({ productId: p.id, sku: p.sku, priceCents: p.price_retail, quantity: p.stock_quantity ?? null, attributes: {}, photos: [] }))),
   } };
