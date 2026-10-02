@@ -1,21 +1,95 @@
 {
   "schema_version": 1,
   "pilot_id": "suporte-lnb-3x3",
-  "status": "aguardando_dados_manuais",
+  "status": "familia_identificada_aguardando_fichas_por_variante",
+  "catalog_audit": {
+    "checked_at": "2026-10-01",
+    "planned_sku_found": true,
+    "planned_sku": "SFKU3XMV",
+    "sku_source": "central_system",
+    "product_id": "e2b33395-d233-4deb-8839-d19624ea4545",
+    "is_parent": true,
+    "variants": [
+      {
+        "sku": "SFKU3XMVCIN",
+        "product_id": "52f3a32a-9480-4fbd-aa22-9be454bb457d",
+        "color": "Cinza"
+      },
+      {
+        "sku": "SFKU3XMVB",
+        "product_id": "5e72ccd8-f501-4d23-a550-0ad7a9ef8403",
+        "color": "Branco"
+      },
+      {
+        "sku": "SFKU3XMVP",
+        "product_id": "3b6b106f-bec7-419f-bf66-e466f2a77a4a",
+        "color": "Preto"
+      }
+    ],
+    "category_found": true,
+    "category_id": "24cf03ad-d214-493b-a7a7-671d5317ed2e",
+    "category_name": "Suportes para antena",
+    "category_storefronts": [
+      "loja_3d"
+    ],
+    "note": "A família 3x3 já existe no cadastro central. O SKU pai e os SKUs das variantes são imutáveis; arquivos e fichas de produção devem ser vinculados às variantes vendáveis existentes."
+  },
   "product_draft": {
-    "name": "Suporte LNB 3x3",
-    "sku": "3D-SUP-LNB-3X3-V2",
+    "name": "Suporte Flange para Antena KU 3cm x 2cm",
+    "sku": "SFKU3XMV",
+    "sku_source": "central_system",
+    "product_id": "e2b33395-d233-4deb-8839-d19624ea4545",
+    "is_parent": true,
     "is_print3d": true,
-    "category": null,
+    "category": {
+      "id": "24cf03ad-d214-493b-a7a7-671d5317ed2e",
+      "name": "Suportes para antena"
+    },
+    "price_source": "system_editable",
     "storefront_price_cents": null,
-    "ready_stock_quantity": null,
-    "preorder_enabled": null,
+    "ready_stock_quantity": 0,
+    "preorder_enabled": false,
     "production_days": null,
-    "preorder_limit": null
+    "preorder_limit": null,
+    "print_file_required_before_publish": true
   },
   "recipe_revision": {
     "code": "flange-3x3-v2-2026-08-19",
     "pieces_per_batch": 11,
+    "project_metadata_observed": {
+      "source": "Suporte Flange 3x3 v2 (mesa com 11 pares).3mf",
+      "printer_model": "Bambu Lab A1",
+      "nozzle_mm": 0.4,
+      "print_profile": "0.20mm Standard @BBL A1",
+      "bed_type": "Textured PEI Plate",
+      "filament_profile": "Bambu PLA Basic @BBL A1",
+      "filament_type_saved": [
+        "PETG",
+        "PETG",
+        "PETG",
+        "PETG"
+      ],
+      "filament_colors_saved": [
+        "#0086D6",
+        "#FFFF00",
+        "#FFFFFF",
+        "#000000"
+      ],
+      "sliced_totals_available": false,
+      "note": "A impressora e o perfil foram lidos do projeto, mas precisam ser confirmados como os dados realmente usados. O arquivo não contém totais confiáveis de gramas e tempo."
+    },
+    "slicing_audit": {
+      "checked_at": "2026-10-01",
+      "application": "Bambu Studio",
+      "application_version": "02.08.02.61",
+      "source_project_sha256": "2f1de3c5798109bf159af13b03843733a3077d95bcca9d8ecc788bfdd5becf12",
+      "prediction_seconds": 32609,
+      "material_grams": 196.13,
+      "support_used": true,
+      "filament_type": "PETG",
+      "filament_color": "#0086D6",
+      "note": "Valores obtidos por fatiamento local do projeto original, sem envio para impressora. A inclusão de purga no peso deve ser confirmada antes da ativação."
+    },
     "unit_composition": [
       {
         "name": "Parte 1",
@@ -28,12 +102,44 @@
         "model_file": "Suporte Flange 3x3 v2 (2).stl"
       }
     ],
-    "print_summary": null,
-    "filaments": [],
+    "print_summary": {
+      "material_gramas": 196.13,
+      "tempo_impressao_minutos": 543.4833333333333,
+      "prediction_seconds": 32609,
+      "pieces_per_batch": 11,
+      "allocated_material_grams_per_unit": 17.83,
+      "allocated_time_minutes_per_unit": 49.41,
+      "support_used": true,
+      "purge_included": null,
+      "source": "bambu_studio_cli_slice",
+      "confirmed": false
+    },
+    "filaments": [
+      {
+        "material": "PETG",
+        "color_hex": "#0086D6",
+        "grams": 196.13,
+        "source": "bambu_studio_cli_slice",
+        "confirmed": false
+      }
+    ],
     "supplies": [],
-    "printer_profile": null
+    "printer_profile": {
+      "printer": "Bambu Lab A1",
+      "nozzle_mm": 0.4,
+      "profile": "0.20mm Standard @BBL A1",
+      "bed_type": "Textured PEI Plate",
+      "source": "bambu_studio_cli_slice",
+      "confirmed": false
+    }
   },
   "source_root": "Fusion 360/Projetos/Próprio/Suporte LNB 3x3",
+  "source_files_audit": {
+    "checked_at": "2026-10-01",
+    "all_files_found": true,
+    "all_sizes_match": true,
+    "all_sha256_match": true
+  },
   "files": [
     {
       "kind": "model",
@@ -77,13 +183,9 @@
     "observacoes_producao": "texto_opcional"
   },
   "missing_required_data": [
-    "material total e tempo total informados manualmente para a mesa de 11 pares",
-    "material e cor de cada filamento",
-    "impressora e perfil usados",
-    "categoria da oferta",
-    "preço da loja 3D",
-    "quantidade pronta em estoque",
-    "aceitação, prazo e limite de encomendas",
+    "confirmar os totais calculados de 196,13 g e 9h03min29s para a mesa de 11 pares",
+    "confirmar PETG, cor #0086D6 e se o peso calculado inclui toda a purga",
+    "confirmar se Bambu Lab A1, bico 0,4 mm e perfil 0,20 mm Standard são os dados realmente usados",
     "peso e dimensões do produto montado para frete",
     "embalagem e demais insumos",
     "fotos comerciais"

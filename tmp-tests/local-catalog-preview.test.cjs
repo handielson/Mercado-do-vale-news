@@ -38,6 +38,11 @@ test('prévia local usa descrição do pai e só grava na API central após apro
 
   const save = await fetch(`${base}/products/${childId}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ description: '<p>Rascunho da variante</p>', price_retail: 2090 }) });
   assert.equal(save.status, 200);
+  const changedSku = await fetch(`${base}/products/${childId}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sku: 'SKU-ALTERADO' }) });
+  assert.equal(changedSku.status, 409);
+  assert.match((await changedSku.json()).error, /não pode ser alterado/);
+  const preserved = await (await fetch(`${base}/products/${childId}`)).json();
+  assert.equal(preserved.sku, 'SFKU3XMVB');
   assert.deepEqual(upstreamWrites, [], 'salvar no localhost não pode escrever na API central');
 
   const catalog = await (await fetch(`${base}/storefronts/loja_3d/products?limit=20`)).json();

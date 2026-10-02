@@ -33,7 +33,7 @@ export const print3dAvailableStock = (product: Print3dStoreProduct) =>
 export const print3dAvailability = (product: Print3dStoreProduct) => print3dAvailableStock(product) > 0
   ? `${print3dAvailableStock(product)} em estoque`
   : product.print3d_preorder_enabled
-    ? Number(product.production_days) > 0 ? `${product.production_days} dias úteis estimados` : 'Prazo sob consulta'
+    ? Number(product.production_days) > 0 ? `${product.production_days} dias úteis estimados` : 'Prazo a combinar'
     : 'Indisponível';
 
 export const print3dGroupKey = (product: Print3dStoreProduct) => String(product.model_id || '').trim() || product.id;

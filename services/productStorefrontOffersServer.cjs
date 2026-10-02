@@ -36,7 +36,11 @@ function parseJson(value, fallback) {
 }
 
 function eligibilitySql(storefront) {
-  if (storefront === 'loja_3d') return "o.publication_status = 'published' AND p.is_print3d = 1 AND o.price_retail > 0";
+  if (storefront === 'loja_3d') return `o.publication_status = 'published' AND p.is_print3d = 1 AND o.price_retail > 0
+    AND EXISTS (SELECT 1 FROM print3d_active_recipes active_recipe
+      JOIN print3d_recipe_files recipe_file ON recipe_file.id = active_recipe.primary_file_id
+       AND recipe_file.recipe_id = active_recipe.recipe_id
+      WHERE active_recipe.product_id = p.id AND recipe_file.kind IN ('model', 'project', 'gcode'))`;
   return `((o.publication_status = 'published' AND o.price_retail > 0)
     OR (o.product_id IS NULL AND COALESCE(p.is_print3d, 0) = 0
       AND COALESCE(p.hide_from_catalog, 0) = 0 AND p.price_retail > 0))`;
@@ -85,7 +89,11 @@ async function loadPrint3dQuote(pool, requested) {
           ON o.product_id = p.id AND o.storefront = 'loja_3d'
         WHERE p.id IN (${ids.map(() => '?').join(',')})
           AND p.status = 'active' AND COALESCE(p.is_parent, 0) = 0 AND p.is_print3d = 1
-          AND o.publication_status = 'published' AND o.price_retail > 0`, ids);
+          AND o.publication_status = 'published' AND o.price_retail > 0
+          AND EXISTS (SELECT 1 FROM print3d_active_recipes active_recipe
+            JOIN print3d_recipe_files recipe_file ON recipe_file.id = active_recipe.primary_file_id
+             AND recipe_file.recipe_id = active_recipe.recipe_id
+            WHERE active_recipe.product_id = p.id AND recipe_file.kind IN ('model', 'project', 'gcode'))`, ids);
       const byId = new Map(rows.map((row) => [String(row.id), row]));
       const items = requested.map(({ product_id, quantity }) => {
         const row = byId.get(product_id);
@@ -196,10 +204,23 @@ function registerProductStorefrontOfferRoutes(fastify, {
       return reply.code(409).send({ error: 'A publicação de preços próprios do Mercado do Vale aguarda a migração do site, checkout e bot.' });
     }
     try {
-      const [products] = await pool.query('SELECT id, is_print3d, status, is_parent FROM products WHERE id = ? LIMIT 1', [productId]);
+      const [products] = await pool.query(`SELECT id, is_print3d, status, is_parent,
+        EXISTS(
+          SELECT 1
+            FROM print3d_active_recipes active_recipe
+            JOIN print3d_recipe_files recipe_file
+              ON recipe_file.id = active_recipe.primary_file_id
+             AND recipe_file.recipe_id = active_recipe.recipe_id
+           WHERE active_recipe.product_id = products.id
+             AND recipe_file.kind IN ('model', 'project', 'gcode')
+        ) AS has_printable_file
+        FROM products WHERE id = ? LIMIT 1`, [productId]);
       if (!products.length) return reply.code(404).send({ error: 'Produto não encontrado.' });
       if (offer.publication_status === 'published' && (products[0].status !== 'active' || Number(products[0].is_parent) === 1)) return reply.code(400).send({ error: 'Ative uma variante vendável antes de publicar.' });
       if (storefront === 'loja_3d' && offer.publication_status === 'published' && Number(products[0].is_print3d) !== 1) return reply.code(400).send({ error: 'Marque o SKU como produto 3D antes de publicá-lo nesta loja.' });
+      if (offer.publication_status === 'published' && Number(products[0].is_print3d) === 1 && Number(products[0].has_printable_file) !== 1) {
+        return reply.code(409).send({ error: 'Envie o arquivo de impressão e selecione a ficha principal antes de publicar este produto 3D.' });
+      }
       await pool.query(`INSERT INTO product_storefront_offers
         (product_id, storefront, publication_status, title, description, category_label, slug, price_retail,
          price_reseller, price_wholesale, price_promo, meta_title, meta_description)

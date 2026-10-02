@@ -5,8 +5,8 @@ const { normalizeDeadlineRequest, normalizeAdminUpdate, deadlineLabel, buildAdmi
 const { eligibleProduct } = require('../services/productDeadlineRequestsServer.cjs');
 
 test('prazo vazio vira consulta e prazo informado continua editável', () => {
-  assert.equal(deadlineLabel(null), 'Prazo sob consulta');
-  assert.equal(deadlineLabel(0), 'Prazo sob consulta');
+  assert.equal(deadlineLabel(null), 'Prazo a combinar');
+  assert.equal(deadlineLabel(0), 'Prazo a combinar');
   assert.equal(deadlineLabel(1), '1 dia útil estimado');
   assert.equal(deadlineLabel(12), '12 dias úteis estimados');
 });
@@ -33,6 +33,6 @@ test('atualização administrativa aceita prazo negociado e mensagem identifica 
   assert.deepEqual(normalizeAdminUpdate({status:'negotiating',negotiated_business_days:20,admin_notes:'Confirmar cor'}),
     {status:'negotiating',negotiated_business_days:20,admin_notes:'Confirmar cor'});
   const message = buildAdminNotification({storefront:'loja_3d',public_code:'PRZ-1234',product_name:'Peça',sku:'P1',quantity:100,
-    lead_time_label:'Prazo sob consulta',customer_name:'Cliente',customer_phone:'5587999999999'});
+    lead_time_label:'Prazo a combinar',customer_name:'Cliente',customer_phone:'5587999999999'});
   assert.match(message,/Loja 3D/); assert.match(message,/100/); assert.match(message,/PRZ-1234/);
 });

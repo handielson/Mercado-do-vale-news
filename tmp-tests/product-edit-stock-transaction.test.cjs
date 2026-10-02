@@ -12,7 +12,9 @@ for(const filename of ['vps_server.cjs','vps_server.js']) {
    assert.equal((sql.match(/\?/g)||[]).length,params.length);
    writes++;return [{affectedRows:1}];
   }};
-  const context={fastify:{put:(path,options,fn)=>{handler=fn;}},requireSyncKey(){},pool:{},
+  const context={fastify:{put:(path,options,fn)=>{handler=fn;}},requireSyncKey(){},pool:{
+   query:async(sql,params)=>{assert.match(sql,/SELECT sku FROM products/);assert.equal(params.length,1);assert.equal(params[0],'test');return [[{sku:'SYSTEM-SKU'}]];}
+  },
    normalizePrint3dProductOffer(){},collectProductSerializedIdentifiers:()=>[],findProductSerializedIdentifierConflict:async()=>null,
    withSmartphonePriceWrite:async(pool,input,write,options)=>{assert.equal(options.transactional,true);return write(connection,input);},
    require:()=>({reconcileExternalStock:async(pool,options)=>{assert.equal(options.connection,connection);reconciled++;return conflict?{ok:false,error:'external_stock_below_reserved'}:{ok:true};}}),
@@ -20,12 +22,16 @@ for(const filename of ['vps_server.cjs','vps_server.js']) {
    normalizeProductSpecsRam:()=>null,optionalBool:()=>null,
   };
   vm.runInNewContext(route,context);
-  const request=body=>handler({body,params:{id:'test'}},{});
+  const request=body=>handler({body,params:{id:'test'}},{code(status){return {send(payload){return {status,payload};}};}});
   assert.equal((await request({name:'x',stock_quantity:3})).ok,true);
   assert.equal(reconciled,1);assert.equal(writes,1);
   await request({name:'x'});assert.equal(reconciled,1);assert.equal(writes,2);
   conflict=true;
   await assert.rejects(request({stock_quantity:0}),e=>e.statusCode===409);
+  assert.equal(writes,2);
+  const rejected=await request({name:'x',sku:'CHANGED-SKU'});
+  assert.equal(rejected.status,409);
+  assert.match(rejected.payload.error,/não pode ser alterado/);
   assert.equal(writes,2);
  });
 }

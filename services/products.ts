@@ -463,10 +463,10 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
         meta_description: input.meta_description || null,
         keywords: input.keywords ? input.keywords.join(',') : null,
         kits: input.kits && input.kits.length > 0 ? input.kits : null,
-        production_days: input.production_days != null ? input.production_days : null,
+        production_days: input.is_print3d ? null : (input.production_days != null ? input.production_days : null),
         is_print3d: input.is_print3d ?? false,
-        print3d_preorder_enabled: input.print3d_preorder_enabled ?? false,
-        print3d_preorder_limit: input.print3d_preorder_limit ?? null,
+        print3d_preorder_enabled: input.is_print3d ? !input.is_parent : (input.print3d_preorder_enabled ?? false),
+        print3d_preorder_limit: input.is_print3d ? null : (input.print3d_preorder_limit ?? null),
     };
 
     // Auto-tag: garante que a marca apareça em specs.tags_venda (cross-sell).
@@ -504,6 +504,13 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
     const oldProduct = await getById(id);
     if (!oldProduct) throw new Error(`Produto não encontrado: ${id}`);
 
+    const systemSku = String(oldProduct.sku || '').trim();
+    const skuWasSubmitted = input.sku !== undefined && input.sku !== null;
+    const incomingSku = skuWasSubmitted ? String(input.sku).trim() : systemSku;
+    if (skuWasSubmitted && incomingSku !== systemSku) {
+        throw new Error('O SKU é definido pelo sistema no cadastro inicial e não pode ser alterado.');
+    }
+
     // Preserva model_id existente quando o form não envia (produtos legados sem modelo associado).
     const trimmedInputModelId = input.model_id?.trim() || '';
     const effectiveModelId = trimmedInputModelId || oldProduct.model_id || null;
@@ -527,37 +534,15 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
     const dimensions = input.dimensions || modelData?.template_values?.dimensions || oldProduct.dimensions;
     const weight_kg = input.weight_kg || modelData?.template_values?.weight_kg || oldProduct.weight_kg;
 
-    const isSerializedCategory = !(input.is_print3d ?? oldProduct.is_print3d) && await isSerializedProductCategory(category_id);
-
-    // SKU uniqueness check — busca exata na VPS (fonte da verdade), excluindo o próprio produto editado
-    // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
-    const UNIT_CODES = ['PCS', 'UN', 'PC', 'CX'];
-    if (input.sku && !UNIT_CODES.includes(input.sku.toUpperCase())) {
-        const skuConflict = await vpsApiService.getProducts({ sku: input.sku, limit: 5 });
-
-        const exactMatch = (skuConflict || []).filter(
-            (p: any) => p.sku?.toLowerCase() === input.sku!.toLowerCase() && p.id !== id
-        );
-
-        if (exactMatch.length > 0) {
-            const conflict = exactMatch[0];
-            if (isSerializedCategory) {
-                console.warn(`[WARNING] SKU "${input.sku}" já existe (produto "${conflict.name}"). Atualização permitida (categoria serializada).`);
-            } else {
-                throw new Error(`SKU "${input.sku}" já está em uso pelo produto "${conflict.name}". Cada produto deve ter um SKU único.`);
-            }
-        }
-    }
-
     let finalVideoUrl = input.video_url || null;
-    if (!finalVideoUrl && modelData?.template_values?.has_video && input.sku) {
+    if (!finalVideoUrl && modelData?.template_values?.has_video && systemSku) {
         try {
             const { companySettingsService } = await import('./companySettingsService');
             const settings = await companySettingsService.get() as any;
             const videoBaseUrl = settings?.synology_video_base_url || settings?.synologyVideoBaseUrl;
             if (videoBaseUrl) {
                 const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
-                finalVideoUrl = buildProductVideoUrl(videoBaseUrl, input.sku, ext);
+                finalVideoUrl = buildProductVideoUrl(videoBaseUrl, systemSku, ext);
             }
         } catch (e) { console.error('Failed to auto-generate video URL:', e); }
     }
@@ -573,7 +558,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
         brand,
         category_id,
         name: input.name,
-        sku: input.sku || null,
+        sku: oldProduct.sku || null,
         description: input.description || null,
         ean: input.eans?.[0] || null,
         alternative_eans: input.eans || [],
@@ -612,10 +597,12 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
         meta_description: input.meta_description || null,
         keywords: input.keywords ? input.keywords.join(',') : null,
         kits: input.kits && input.kits.length > 0 ? input.kits : null,
-        production_days: input.production_days != null ? input.production_days : null,
+        production_days: (input.is_print3d ?? oldProduct.is_print3d) ? null : (input.production_days != null ? input.production_days : null),
         is_print3d: input.is_print3d ?? oldProduct.is_print3d ?? false,
-        print3d_preorder_enabled: input.print3d_preorder_enabled ?? oldProduct.print3d_preorder_enabled ?? false,
-        print3d_preorder_limit: input.print3d_preorder_limit !== undefined ? input.print3d_preorder_limit : (oldProduct.print3d_preorder_limit ?? null),
+        print3d_preorder_enabled: (input.is_print3d ?? oldProduct.is_print3d)
+            ? !(input.is_parent ?? oldProduct.is_parent)
+            : (input.print3d_preorder_enabled ?? oldProduct.print3d_preorder_enabled ?? false),
+        print3d_preorder_limit: (input.is_print3d ?? oldProduct.is_print3d) ? null : (input.print3d_preorder_limit !== undefined ? input.print3d_preorder_limit : (oldProduct.print3d_preorder_limit ?? null)),
     };
 
     // Auto-tag: garante que a marca atual apareça em specs.tags_venda.

@@ -9,7 +9,8 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 test('a API pública separa a consulta e a elegibilidade de cada storefront', () => {
   const source = read('services/productStorefrontOffersServer.cjs');
   assert.match(source, /o\.storefront = \?/);
-  assert.match(source, /if \(storefront === 'loja_3d'\) return "o\.publication_status = 'published' AND p\.is_print3d = 1/);
+  assert.match(source, /if \(storefront === 'loja_3d'\) return [`"]o\.publication_status = 'published' AND p\.is_print3d = 1/);
+  assert.match(source, /print3d_active_recipes/);
   assert.match(source, /storefront,\s+publication_status: legacyMdv/);
 });
 

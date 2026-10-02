@@ -16,7 +16,7 @@ export function productDeadlineLabel(days?: number | null) {
   const value = Number(days);
   return Number.isInteger(value) && value > 0
     ? `${value} ${value === 1 ? 'dia útil estimado' : 'dias úteis estimados'}`
-    : 'Prazo sob consulta';
+    : 'Prazo a combinar';
 }
 
 export default function ProductDeadlineRequest({ storefront, product, defaultName = '', defaultPhone = '', defaultEmail = '', initialQuantity }: Props) {

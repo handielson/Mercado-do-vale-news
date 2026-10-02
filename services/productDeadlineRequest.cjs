@@ -49,7 +49,7 @@ function deadlineLabel(days) {
   const value = Number(days);
   return Number.isSafeInteger(value) && value > 0
     ? `${value} ${value === 1 ? 'dia útil estimado' : 'dias úteis estimados'}`
-    : 'Prazo sob consulta';
+    : 'Prazo a combinar';
 }
 
 function normalizeAdminUpdate(input) {

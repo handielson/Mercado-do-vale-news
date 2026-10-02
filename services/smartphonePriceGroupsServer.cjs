@@ -193,8 +193,16 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey }) {
   });
 }
 async function patchProductWithGroupPrices(pool, id, payload) {
-  return withSmartphonePriceWrite(pool, { ...payload, id }, async (db, controlled) => {
-    const keys = [...new Set([...Object.keys(payload).filter(k => k !== 'id'), ...core.SALE_FIELDS.filter(f => controlled[f] !== undefined)])];
+  const [registeredProducts] = await pool.query('SELECT sku FROM products WHERE id=? LIMIT 1', [id]);
+  const registeredSku = registeredProducts[0]?.sku ?? null;
+  if (registeredProducts.length && Object.hasOwn(payload || {}, 'sku')
+    && String(payload.sku ?? '').trim() !== String(registeredSku ?? '').trim()) {
+    throw conflict('O SKU é definido pelo sistema no cadastro inicial e não pode ser alterado.');
+  }
+  const safePayload = { ...(payload || {}) };
+  delete safePayload.sku;
+  return withSmartphonePriceWrite(pool, { ...safePayload, id }, async (db, controlled) => {
+    const keys = [...new Set([...Object.keys(safePayload).filter(k => k !== 'id'), ...core.SALE_FIELDS.filter(f => controlled[f] !== undefined)])];
     if (!keys.length) return;
     if (keys.some(k => !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k))) throw new Error('Campo inválido');
     await db.query(`UPDATE products SET ${keys.map(k => `\`${k}\`=?`).join(',')} WHERE id=?`,
@@ -226,12 +234,17 @@ async function insertProductRecordsWithGroupPrices(pool, records, upsert = false
         const [current] = await connection.query('SELECT * FROM products WHERE id=? FOR UPDATE', [existing.id]);
         if (!current[0] || current[0].model_id !== existing.model_id) throw conflict('Produto alterado. Recarregue antes de salvar.');
         existing = current[0];
+        if (Object.hasOwn(item.incoming, 'sku')
+          && String(item.incoming.sku ?? '').trim() !== String(existing.sku ?? '').trim()) {
+          throw conflict('O SKU é definido pelo sistema no cadastro inicial e não pode ser alterado.');
+        }
+        item.incoming.sku = existing.sku;
       }
       const inherited = await inheritSmartphonePrices(connection, { ...existing, ...item.incoming, model_id: item.modelId }, models.get(item.modelId), existing);
       const payload = { ...item.incoming, ...(inherited.controlled ? Object.fromEntries(core.SALE_FIELDS.map(f => [f, inherited.product[f]])) : {}) };
       const keys = Object.keys(payload).filter(k => payload[k] !== undefined);
       if (keys.some(k => !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k))) throw new Error('Campo inválido');
-      const updates = keys.filter(k => k !== 'id' && k !== conflictColumn).map(k => `\`${k}\`=VALUES(\`${k}\`)`).join(',');
+      const updates = keys.filter(k => k !== 'id' && k !== conflictColumn && (!existing || k !== 'sku')).map(k => `\`${k}\`=VALUES(\`${k}\`)`).join(',');
       await connection.query(`INSERT INTO products (${keys.map(k => `\`${k}\``).join(',')}) VALUES (${keys.map(() => '?').join(',')})${upsert ? ` ON DUPLICATE KEY UPDATE ${updates || 'id=id'}` : ''}`,
         keys.map(k => payload[k] != null && typeof payload[k] === 'object' ? JSON.stringify(payload[k]) : payload[k]));
     }

@@ -294,6 +294,16 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         }
     });
 
+    const isPrint3d = Boolean(watch('is_print3d'));
+    const isParentProduct = Boolean(watch('is_parent'));
+    const isVendablePrint3d = isPrint3d && !isParentProduct;
+    useEffect(() => {
+        if (!isPrint3d) return;
+        setValue('print3d_preorder_enabled', isVendablePrint3d, { shouldValidate: true });
+        setValue('print3d_preorder_limit', null, { shouldValidate: true });
+        setValue('production_days', null, { shouldValidate: true });
+    }, [isPrint3d, isVendablePrint3d, setValue]);
+
     // Reset form when initialData changes (for edit mode)
     useEffect(() => {
         if (initialData) {
@@ -1410,17 +1420,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             mergedData.meta_description = currentMetaDescription || null;
             mergedData.keywords = currentKeywords || null;
 
-            // Campos vazios representam prazo sob consulta e ausência de limite.
+            // Campos vazios representam prazo a combinar e ausência de limite.
             const currentProductionDays = watch('production_days');
             mergedData.production_days = currentProductionDays != null && currentProductionDays !== '' as any
                 ? parseInt(String(currentProductionDays))
                 : null;
             mergedData.is_print3d = Boolean(watch('is_print3d'));
-            mergedData.print3d_preorder_enabled = Boolean(watch('print3d_preorder_enabled'));
+            const isParent = Boolean(mergedData.is_parent);
+            mergedData.print3d_preorder_enabled = mergedData.is_print3d ? !isParent : Boolean(watch('print3d_preorder_enabled'));
             const currentPreorderLimit = watch('print3d_preorder_limit');
-            mergedData.print3d_preorder_limit = currentPreorderLimit != null && currentPreorderLimit !== '' as any
+            mergedData.print3d_preorder_limit = mergedData.is_print3d ? null : currentPreorderLimit != null && currentPreorderLimit !== '' as any
                 ? Number(currentPreorderLimit)
                 : null;
+            if (mergedData.is_print3d) mergedData.production_days = null;
 
             if (data.model) {
                 try {
@@ -1495,6 +1507,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 mergedData.bling_parent_id = blingParentId;
             }
             mergedData.shopee_item_id = shopeeItemId;
+
+            // O SKU identifica o produto em todos os canais e torna-se imutável após o cadastro.
+            // Mesmo que um valor adulterado chegue ao estado do formulário, a edição preserva
+            // exatamente o SKU carregado da fonte central.
+            if (initialData?.id) {
+                mergedData.sku = initialData.sku;
+            }
 
             // 1. Salvar produto(s)
             console.log('📤 [ProductForm] Sending to onSubmit:', mergedData);
@@ -2306,13 +2325,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
 
 
-            {/* Prazo estimado; vazio significa consulta conforme a quantidade. */}
-            <div className="bg-amber-50 border border-amber-200 p-5 rounded-xl shadow-sm">
+            {/* Prazo estimado para produtos que não seguem a política fixa da linha 3D. */}
+            {!isPrint3d && <div className="bg-amber-50 border border-amber-200 p-5 rounded-xl shadow-sm">
                 <h3 className="font-semibold text-amber-800 mb-1 flex items-center gap-2">
                     ⚙️ Prazo para encomenda
                 </h3>
                 <p className="text-xs text-amber-700 mb-3">
-                    Deixe em branco para mostrar “Prazo sob consulta”. Se houver uma estimativa padrão para este SKU, informe-a abaixo; o prazo final será negociado conforme a quantidade solicitada.
+                    Deixe em branco para mostrar “Prazo a combinar”. Se houver uma estimativa padrão para este SKU, informe-a abaixo; o prazo final será negociado conforme a quantidade solicitada.
                 </p>
                 <div className="flex items-center gap-3">
                     <input
@@ -2320,7 +2339,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         min="0"
                         value={watch('production_days') ?? ''}
                         onChange={(e) => setValue('production_days' as any, e.target.value === '' ? null : parseInt(e.target.value) || 0)}
-                        placeholder="Vazio = Prazo sob consulta"
+                        placeholder="Vazio = Prazo a combinar"
                         className="w-40 px-3 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white text-sm"
                     />
                     <span className="text-sm text-amber-700">dias úteis antes do envio</span>
@@ -2330,11 +2349,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                             onClick={() => setValue('production_days' as any, null)}
                             className="text-xs text-amber-600 underline hover:text-amber-800"
                         >
-                            Usar “Prazo sob consulta”
+                            Usar “Prazo a combinar”
                         </button>
                     )}
                 </div>
-            </div>
+            </div>}
 
             {/* Política por SKU para a futura loja de impressão 3D. */}
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -2348,34 +2367,27 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     <input type="checkbox" className="mt-0.5 h-4 w-4" checked={Boolean(watch('is_print3d'))}
                         onChange={(event) => {
                             setValue('is_print3d', event.target.checked, { shouldValidate: true });
-                            if (!event.target.checked) setValue('print3d_preorder_enabled', false, { shouldValidate: true });
+                            setValue('print3d_preorder_enabled', event.target.checked && !isParentProduct, { shouldValidate: true });
+                            setValue('print3d_preorder_limit', null, { shouldValidate: true });
+                            if (event.target.checked) setValue('production_days', null, { shouldValidate: true });
                         }} />
                     <span>Este SKU pertence à linha de impressão 3D</span>
                 </label>
                 {watch('is_print3d') && <div className="space-y-3 rounded-lg border border-violet-200 bg-white p-4">
                     <p className="text-xs text-slate-600">A quantidade pronta fica no estoque central acima. Encomenda é uma demanda de fabricação, não saldo negativo.</p>
-                    {initialData?.id && initialData?.sku ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-violet-200 bg-violet-50 p-3">
+                    {!isParentProduct && initialData?.id && initialData?.sku ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-violet-200 bg-violet-50 p-3">
                         <div>
                             <p className="text-sm font-semibold text-violet-950">Arquivos e ficha de produção</p>
                             <p className="mt-1 text-xs text-violet-800">Envie STL, 3MF, G-code, JSON e instruções; registre também o link opcional do MakerWorld ou outro site.</p>
                         </div>
                         <Link to={`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(initialData.id)}#ficha-producao-3d`} className="rounded-md bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-800">Abrir produção 3D</Link>
-                    </div> : <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-800">Salve este produto para liberar arquivos, custos e revisões de produção.</p>}
-                    <label className="flex items-start gap-3 text-sm text-slate-700">
-                        <input type="checkbox" className="mt-0.5 h-4 w-4" checked={Boolean(watch('print3d_preorder_enabled'))}
-                            onChange={(event) => setValue('print3d_preorder_enabled', event.target.checked, { shouldValidate: true })} />
-                        <span>Aceitar encomendas deste SKU</span>
-                    </label>
-                    {watch('print3d_preorder_enabled') && <div className="grid gap-3 md:grid-cols-2">
-                        <label className="text-sm text-slate-700">Limite opcional para solicitações
-                            <input type="number" min="1" max="10000" step="1" className="mt-1 w-full rounded-lg border border-slate-300 p-2"
-                                value={watch('print3d_preorder_limit') ?? ''}
-                                placeholder="Vazio = sem limite"
-                                onChange={(event) => setValue('print3d_preorder_limit', event.target.value.trim() === '' ? null : Number(event.target.value), { shouldValidate: true })} />
-                            {errors.print3d_preorder_limit && <span className="text-xs text-red-700">{errors.print3d_preorder_limit.message}</span>}
-                        </label>
-                        <p className="self-center text-xs text-slate-600">O cliente informa a quantidade desejada. O sistema registra a solicitação e o administrador negocia o prazo antes de criar o pedido. Deixe este campo vazio para não aplicar limite cadastrado.</p>
-                    </div>}
+                    </div> : !isParentProduct ? <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-800">Salve este produto para liberar arquivos, custos e revisões de produção.</p> : null}
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                        <strong>Política padrão da linha 3D</strong>
+                        <p className="mt-1">{isParentProduct
+                            ? 'Este cadastro organiza a família e fornece a descrição compartilhada. Arquivos e encomendas são vinculados às variantes vendáveis.'
+                            : 'Esta variante sempre aceita encomendas, sem limite de quantidade cadastrado e com prazo a combinar conforme o pedido.'}</p>
+                    </div>
                     {errors.print3d_preorder_enabled && <p className="text-xs text-red-700">{errors.print3d_preorder_enabled.message}</p>}
                     {errors.production_days && <p className="text-xs text-red-700">{errors.production_days.message}</p>}
                     <p className="text-xs text-amber-800">Peças prontas continuam disponíveis para compra. Quantidades sob encomenda seguem primeiro para consulta, sem cobrança ou reserva automática.</p>

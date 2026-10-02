@@ -55,6 +55,18 @@ function mergeProduct(base, draft) {
   return { ...base, ...draft.patch, specs: { ...(base?.specs || {}), ...(draft.patch.specs || {}) } };
 }
 
+function normalizeSku(value) {
+  return String(value ?? '').trim();
+}
+
+function preserveSystemSku(patch, systemSku) {
+  const normalizedSystemSku = normalizeSku(systemSku);
+  if (Object.hasOwn(patch, 'sku') && normalizeSku(patch.sku) !== normalizedSystemSku) {
+    throw Object.assign(new Error('O SKU é definido pelo sistema no cadastro inicial e não pode ser alterado.'), { statusCode: 409 });
+  }
+  return { ...patch, sku: systemSku ?? null };
+}
+
 function mergeOfferList(offers, drafts, productId) {
   const byStorefront = new Map((offers || []).map(offer => [offer.storefront, offer]));
   for (const [storefront, draft] of Object.entries(drafts.offers?.[productId] || {})) {
@@ -286,8 +298,15 @@ function createLocalCatalogPreviewServer({
       }
 
       if (method === 'PUT' && productMatch) {
-        const patch = copyAllowed(await readBody(req), LOCAL_PRODUCT_FIELDS);
+        let patch = copyAllowed(await readBody(req), LOCAL_PRODUCT_FIELDS);
         const drafts = await store.read();
+        const existingDraft = drafts.products[productMatch[1]];
+        if (existingDraft?.local_only) {
+          patch = preserveSystemSku(patch, existingDraft.patch?.sku);
+        } else {
+          const centralProduct = await remote(`/products/${encodeURIComponent(productMatch[1])}`);
+          patch = preserveSystemSku(patch, centralProduct?.sku);
+        }
         drafts.products[productMatch[1]] = {
           patch: { ...(drafts.products[productMatch[1]]?.patch || {}), ...patch },
           local_only: Boolean(drafts.products[productMatch[1]]?.local_only),

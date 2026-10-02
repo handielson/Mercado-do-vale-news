@@ -158,6 +158,18 @@ test('divergent legacy stock remains editable without selecting a new price; new
   await assert.rejects(withSmartphonePriceWrite(f.pool, phone('C'), async () => {}), /divergentes/);
 });
 
+test('generic product patch preserves the system SKU', async t => {
+  const f = fixture(t);
+  await assert.rejects(
+    patchProductWithGroupPrices(f.pool, 'R15C8256A', { sku: 'SKU-ALTERADO', price_retail: 150000 }),
+    /não pode ser alterado/
+  );
+  assert.equal(f.state().products[0].sku, 'R15C8256A');
+  await patchProductWithGroupPrices(f.pool, 'R15C8256A', { sku: 'R15C8256A', stock_quantity: 3 });
+  assert.equal(f.state().products[0].sku, 'R15C8256A');
+  assert.equal(f.state().products[0].stock_quantity, 3);
+});
+
 test('atomic bulk insert rolls back all products and price definitions on a later failure', async t => {
   const f = fixture(t, { products: [] });
   await assert.rejects(insertProductRecordsWithGroupPrices(f.pool, [phone('first'), phone('FAIL')]), /simulated insert failure/);

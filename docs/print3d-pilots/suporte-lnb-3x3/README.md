@@ -4,7 +4,9 @@ Produto piloto escolhido para a primeira homologação da loja 3D.
 
 ## Revisão identificada
 
-- SKU provisório: `3D-SUP-LNB-3X3-V2`.
+- SKU pai do sistema: `SFKU3XMV` (imutável).
+- Variantes vendáveis existentes: `SFKU3XMVCIN` (cinza), `SFKU3XMVB` (branco) e `SFKU3XMVP` (preto).
+- Os arquivos e a ficha de produção devem ser associados à variante vendável correspondente; nenhum SKU novo deve ser inventado a partir do nome da pasta técnica.
 - Revisão: `flange-3x3-v2-2026-08-19`.
 - Projeto da mesa: `Suporte Flange 3x3 v2 (mesa com 11 pares).3mf`.
 - Lote: 11 unidades completas.
@@ -35,4 +37,4 @@ Como esta impressão não passou pelo programa que gera o JSON, deve ser usada a
 
 A ficha ficará identificada como entrada manual e poderá ser ativada sem um arquivo JSON. Os valores devem ser medidos na produção; nenhum valor estimado foi incluído no cadastro.
 
-O manifesto técnico está em `manifest.json`. Nenhum produto foi criado no banco e nenhum arquivo foi enviado ao NAS, pois as rotas 3D continuam desligadas até a publicação e a homologação controlada.
+O manifesto técnico está em `manifest.json`. A família já existe no cadastro central; nenhum produto nem SKU novo será criado. Os arquivos ainda não foram enviados ao NAS, pois as rotas 3D continuam desligadas até a publicação e a homologação controlada.

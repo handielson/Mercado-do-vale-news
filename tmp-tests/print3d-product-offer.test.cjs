@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { normalizePrint3dProductOffer } = require('../services/print3dProductOffer.cjs');
+const { normalizePrint3dProductOffer, applyPrint3dProductPolicy } = require('../services/print3dProductOffer.cjs');
 
 const valid = () => ({
   is_print3d: true,
@@ -15,10 +15,14 @@ const valid = () => ({
   stock_quantity: 0,
 });
 
-test('aceita SKU 3D sem peças prontas com prazo e limite opcionais', () => {
+test('todo SKU 3D aceita encomenda, sem limite e com prazo a combinar', () => {
   assert.deepEqual(normalizePrint3dProductOffer(valid()), {
-    isPrint3d: 1, preorderEnabled: 1, limit: 8, days: 4,
+    isPrint3d: 1, preorderEnabled: 1, limit: null, days: null,
   });
+  const payload = applyPrint3dProductPolicy({ ...valid(), print3d_preorder_enabled: false });
+  assert.equal(payload.print3d_preorder_enabled, true);
+  assert.equal(payload.print3d_preorder_limit, null);
+  assert.equal(payload.production_days, null);
 });
 
 test('prazo e limite vazios deixam a encomenda sob consulta', () => {
@@ -36,11 +40,19 @@ test('não exige política 3D nos produtos antigos', () => {
   });
 });
 
+test('produto pai 3D organiza a família sem receber encomenda ou arquivo próprio', () => {
+  const payload = { ...valid(), is_parent: true, track_inventory: false, print3d_preorder_enabled: true };
+  assert.deepEqual(normalizePrint3dProductOffer(payload), {
+    isPrint3d: 1, preorderEnabled: 0, limit: null, days: null,
+  });
+  assert.equal(payload.print3d_preorder_enabled, false);
+  assert.equal(payload.print3d_preorder_limit, null);
+  assert.equal(payload.production_days, null);
+});
+
 for (const [name, change] of [
-  ['produto fora da linha 3D', { is_print3d: false }],
   ['sem controle de estoque', { track_inventory: false }],
   ['produto virtual', { is_virtual: true }],
-  ['produto pai', { is_parent: true }],
   ['limite fracionário', { print3d_preorder_limit: 1.5 }],
 ]) {
   test(`rejeita encomenda: ${name}`, () => {

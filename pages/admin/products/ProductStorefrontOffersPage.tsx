@@ -7,6 +7,7 @@ import { productStorefrontOffersService, type StorefrontCode, type StorefrontOff
 import { categoryService } from '@/services/categories';
 import type { Category } from '@/types/category';
 import { fillStorefrontOfferFromProduct } from '@/utils/storefrontOfferDefaults.mjs';
+import { print3dRecipesService } from '@/services/print3dRecipes';
 
 const ALL_SITES: { code: StorefrontCode; label: string }[] = [
   { code: 'mercado_do_vale', label: 'Mercado do Vale' },
@@ -44,11 +45,12 @@ export default function ProductStorefrontOffersPage({ storefront }: { storefront
   const [creatingCategoryFor, setCreatingCategoryFor] = useState<StorefrontCode | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const [printFileReady, setPrintFileReady] = useState<boolean | null>(null);
 
   const load = async (targetSku: string) => {
     const normalizedSku = targetSku.trim();
     if (!normalizedSku) return;
-    setLoading(true); setCategoriesLoading(true); setError(''); setNotice(''); setProduct(null); setFamilyProducts([]); setFamilyName('');
+    setLoading(true); setCategoriesLoading(true); setError(''); setNotice(''); setProduct(null); setFamilyProducts([]); setFamilyName(''); setPrintFileReady(null);
     try {
       const [matches, categoryRows] = await Promise.all([
         vpsApiService.getProducts({ sku: normalizedSku, status: 'all', limit: 10, noCache: true }),
@@ -56,9 +58,10 @@ export default function ProductStorefrontOffersPage({ storefront }: { storefront
       ]);
       const found = matches?.find(row => String(row.sku).toLowerCase() === normalizedSku.toLowerCase());
       if (!found) throw new Error('SKU não encontrado no cadastro central. Salve o produto antes de configurar os sites.');
-      const [{ offers: saved }, fullProduct] = await Promise.all([
+      const [{ offers: saved }, fullProduct, activeRecipeResult] = await Promise.all([
         productStorefrontOffersService.list(found.id),
         vpsApiService.getProductById(found.id, true),
+        print3dRecipesService.active(found.id).catch(() => ({ activeRecipe: null })),
       ]);
       const central = { ...found, ...(fullProduct || {}) } as CentralProduct;
       const familyId = central.is_parent ? central.id : central.parent_id;
@@ -75,6 +78,7 @@ export default function ProductStorefrontOffersPage({ storefront }: { storefront
       const categoryName = central.category_name || categoryRows.find(category => category.id === central.category_id)?.name || null;
       setCategories(categoryRows);
       setProduct(central);
+      setPrintFileReady(Boolean(activeRecipeResult.activeRecipe));
       setOffers({
         mercado_do_vale: fillStorefrontOfferFromProduct('mercado_do_vale', saved.find(row => row.storefront === 'mercado_do_vale'), central, categoryName),
         loja_3d: fillStorefrontOfferFromProduct('loja_3d', saved.find(row => row.storefront === 'loja_3d'), central, categoryName),
@@ -139,6 +143,10 @@ export default function ProductStorefrontOffersPage({ storefront }: { storefront
       setError(`Informe o preço de venda do ${SITES.find(item => item.code === site)?.label} antes de publicar.`);
       return;
     }
+    if (offers[site].publication_status === 'published' && product.is_print3d && printFileReady !== true) {
+      setError('Envie o arquivo de impressão e selecione a ficha principal antes de publicar este produto 3D.');
+      return;
+    }
     setSaving(site); setError(''); setNotice('');
     try {
       const updated = await productStorefrontOffersService.save(product.id, offers[site]);
@@ -162,13 +170,17 @@ export default function ProductStorefrontOffersPage({ storefront }: { storefront
         const current = central.id === product.id
           ? offers[site]
           : fillStorefrontOfferFromProduct(site, saved.find(row => row.storefront === site), central, categoryName);
-        return { product: central, offer: { ...current, publication_status: 'published' as const,
+        const activeRecipe = Number(central.is_print3d)
+          ? await print3dRecipesService.active(central.id).catch(() => ({ activeRecipe: null }))
+          : { activeRecipe: null };
+        return { product: central, hasPrintableFile: !Number(central.is_print3d) || Boolean(activeRecipe.activeRecipe), offer: { ...current, publication_status: 'published' as const,
           category_label: offers[site].category_label } };
       }));
-      const problems = prepared.flatMap(({ product: item, offer }) => {
+      const problems = prepared.flatMap(({ product: item, offer, hasPrintableFile }) => {
         const fields: string[] = [];
         if (item.status !== 'active') fields.push('produto inativo');
         if (site === 'loja_3d' && !Number(item.is_print3d)) fields.push('não marcado como produto 3D');
+        if (Number(item.is_print3d) && !hasPrintableFile) fields.push('sem arquivo de impressão ativo');
         if (!offer.category_label?.trim()) fields.push('sem categoria');
         if (!(Number(offer.price_retail) > 0)) fields.push('sem preço de venda');
         return fields.length ? [`${item.sku}: ${fields.join(', ')}`] : [];
@@ -186,7 +198,7 @@ export default function ProductStorefrontOffersPage({ storefront }: { storefront
     <form onSubmit={event => { event.preventDefault(); void load(sku); }} className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-5"><label className="min-w-64 flex-1 text-sm font-medium">SKU do produto<input value={sku} onChange={event => setSku(event.target.value)} className={fieldClass} placeholder="Informe o SKU cadastrado" /></label><button type="submit" disabled={loading} className="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{loading ? 'Buscando...' : 'Abrir produto'}</button></form>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
     {notice && <p role="status" className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">{notice}</p>}
-    {product && <><ProductWorkspaceNav productId={product.id} sku={product.sku} active="storefronts" /><div className="rounded-xl border bg-white p-5"><strong>{product.name}</strong><p className="mt-1 text-sm text-slate-600">SKU {product.sku} · Estoque central: {product.stock_quantity} · {product.images?.length || 0} fotos · Produto 3D: {product.is_print3d ? 'sim' : 'não'}</p>{storefront === 'loja_3d' && !product.is_print3d && <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Este SKU ainda não está marcado como produto 3D. <Link className="font-semibold underline" to={`/admin/products/${product.id}`}>Abra o cadastro do produto</Link>, marque a opção de impressão 3D e salve antes de publicá-lo na Loja 3D.</p>}</div>
+    {product && <><ProductWorkspaceNav productId={product.id} sku={product.sku} active="storefronts" /><div className="rounded-xl border bg-white p-5"><strong>{product.name}</strong><p className="mt-1 text-sm text-slate-600">SKU {product.sku} · Estoque central: {product.stock_quantity} · {product.images?.length || 0} fotos · Produto 3D: {product.is_print3d ? 'sim' : 'não'}</p>{storefront === 'loja_3d' && !product.is_print3d && <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Este SKU ainda não está marcado como produto 3D. <Link className="font-semibold underline" to={`/admin/products/${product.id}`}>Abra o cadastro do produto</Link>, marque a opção de impressão 3D e salve antes de publicá-lo na Loja 3D.</p>}{product.is_print3d && printFileReady === false && <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Falta o arquivo obrigatório de impressão. <Link className="font-semibold underline" to={`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(product.id)}#ficha-producao-3d`}>Abrir Produção 3D para enviar e selecionar o arquivo principal</Link>.</p>}{product.is_print3d && printFileReady === true && <p className="mt-3 text-sm font-medium text-emerald-700">Arquivo de impressão principal configurado.</p>}</div>
     {familyProducts.length > 1 && <section className="rounded-xl border border-violet-200 bg-violet-50 p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div><h2 className="font-bold text-violet-950">Família: {familyName}</h2><p className="mt-1 text-sm text-violet-800">{familyProducts.length} variações vinculadas. A categoria desta tela será compartilhada; cada filho mantém descrição, nome, preço, estoque e SKU próprios no cadastro central.</p></div>
@@ -232,7 +244,7 @@ export default function ProductStorefrontOffersPage({ storefront }: { storefront
         <label className="block text-sm font-medium">Endereço do produto (slug)<input value={offer.slug || ''} onChange={event => change(site.code, { slug: event.target.value || null })} className={fieldClass} placeholder="Ex.: suporte-antena-ku" /><span className="mt-1 block text-xs font-normal text-slate-500">Opcional. É a parte final do link do produto; use letras, números e hífens.</span></label>
         <label className="block text-sm font-medium">Título para Google e buscas<input value={offer.meta_title || ''} onChange={event => change(site.code, { meta_title: event.target.value || null })} className={fieldClass} placeholder="Opcional" /><span className="mt-1 block text-xs font-normal text-slate-500">Opcional. Pode repetir o nome do produto.</span></label>
         <label className="block text-sm font-medium">Descrição para Google e buscas<textarea value={offer.meta_description || ''} onChange={event => change(site.code, { meta_description: event.target.value || null })} className={fieldClass} rows={2} placeholder="Resumo curto do produto" /><span className="mt-1 block text-xs font-normal text-slate-500">Opcional. Escreva um resumo curto para resultados de busca.</span></label>
-        <button type="button" onClick={() => void save(site.code)} disabled={saving !== null || categoriesLoading || (offer.publication_status === 'published' && (!offer.category_label || !(Number(offer.price_retail) > 0) || (site.code === 'loja_3d' && !product.is_print3d)))} className={`w-full rounded-md px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${site.code === 'loja_3d' ? 'bg-[var(--print3d-accent)] hover:bg-[var(--print3d-accent-hover)]' : 'bg-blue-700'}`}>{saving === site.code ? 'Salvando...' : site.code === 'loja_3d' && offer.publication_status === 'published' && !product.is_print3d ? 'Marque o produto como 3D antes de publicar' : offer.publication_status === 'published' && !offer.category_label ? 'Escolha uma categoria para publicar' : offer.publication_status === 'published' && !(Number(offer.price_retail) > 0) ? 'Informe o preço de venda para publicar' : `Salvar ${site.label}`}</button>
+        <button type="button" onClick={() => void save(site.code)} disabled={saving !== null || categoriesLoading || (offer.publication_status === 'published' && (!offer.category_label || !(Number(offer.price_retail) > 0) || (site.code === 'loja_3d' && !product.is_print3d) || (product.is_print3d && printFileReady !== true)))} className={`w-full rounded-md px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${site.code === 'loja_3d' ? 'bg-[var(--print3d-accent)] hover:bg-[var(--print3d-accent-hover)]' : 'bg-blue-700'}`}>{saving === site.code ? 'Salvando...' : site.code === 'loja_3d' && offer.publication_status === 'published' && !product.is_print3d ? 'Marque o produto como 3D antes de publicar' : offer.publication_status === 'published' && product.is_print3d && printFileReady !== true ? 'Envie o arquivo de impressão para publicar' : offer.publication_status === 'published' && !offer.category_label ? 'Escolha uma categoria para publicar' : offer.publication_status === 'published' && !(Number(offer.price_retail) > 0) ? 'Informe o preço de venda para publicar' : `Salvar ${site.label}`}</button>
       </section>;
     })}</div><p className="text-xs text-amber-800">A publicação da oferta não habilita a compra: o checkout deve validar o preço e a disponibilidade do site antes de aceitar pedidos. O catálogo atual e o bot da Val ainda usam o fluxo legado do Mercado do Vale. Por segurança, publicar uma oferta do Mercado do Vale fica bloqueado até a migração conjunta do site, checkout e bot.</p></>}
   </div>;

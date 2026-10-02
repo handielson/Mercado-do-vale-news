@@ -198,10 +198,15 @@ export const productSchema = z.object({
             path: ['parent_id'],
         });
     }
-    if (data.print3d_preorder_enabled) {
-        if (!data.is_print3d || !data.track_inventory || data.is_virtual) {
+    if (data.is_print3d && !data.is_parent) {
+        if (!data.track_inventory || data.is_virtual) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Encomendas 3D exigem produto físico com controle de estoque.', path: ['print3d_preorder_enabled'] });
         }
+        if (data.print3d_preorder_enabled !== true || data.print3d_preorder_limit != null || data.production_days != null) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Produtos 3D aceitam encomendas sem limite e com prazo a combinar.', path: ['print3d_preorder_enabled'] });
+        }
+    } else if (data.print3d_preorder_enabled) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Marque o produto como impressão 3D antes de aceitar encomendas.', path: ['print3d_preorder_enabled'] });
     }
     const imei1 = data.specs?.imei1;
     if (imei1 !== undefined && imei1 !== null && String(imei1).trim() !== '' && !IMEI_REGEX.test(String(imei1).trim())) {

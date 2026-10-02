@@ -355,10 +355,21 @@ export function ProductBasicInfo({
                         <input
                             type="text"
                             value={watch('sku') || ''}
-                            onChange={(e) => setValue('sku', e.target.value)}
-                            className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            onChange={(e) => {
+                                if (!initialData?.id) setValue('sku', e.target.value);
+                            }}
+                            readOnly={Boolean(initialData?.id)}
+                            aria-readonly={Boolean(initialData?.id)}
+                            className={`w-full rounded-md border p-2 text-sm outline-none ${initialData?.id
+                                ? 'border-slate-200 bg-slate-100 font-mono text-slate-600 cursor-not-allowed'
+                                : 'border-slate-300 focus:ring-2 focus:ring-blue-500'}`}
                             placeholder="Será gerado automaticamente se deixado vazio"
                         />
+                        <p className="text-xs text-slate-500">
+                            {initialData?.id
+                                ? 'SKU definido pelo sistema. Depois do cadastro, ele não pode ser alterado.'
+                                : 'Informe o SKU do sistema ou deixe vazio para gerar no primeiro cadastro.'}
+                        </p>
                     </div>
 
                     <div className="space-y-1">

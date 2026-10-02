@@ -56,7 +56,7 @@ function fixture({ configured = false } = {}) {
   return { app, rows };
 }
 
-test('cliente registra quantidade e prazo sob consulta mesmo sem WhatsApp 3D configurado', async t => {
+test('cliente registra quantidade e prazo a combinar mesmo sem WhatsApp 3D configurado', async t => {
   const { app, rows } = fixture();
   t.after(() => app.close());
   const response = await app.inject({
@@ -65,7 +65,7 @@ test('cliente registra quantidade e prazo sob consulta mesmo sem WhatsApp 3D con
   });
   assert.equal(response.statusCode, 201);
   assert.match(response.json().public_code, /^PRZ-[A-F0-9]{8}$/);
-  assert.equal(response.json().lead_time_label, 'Prazo sob consulta');
+  assert.equal(response.json().lead_time_label, 'Prazo a combinar');
   assert.equal(response.json().notification_status, 'unconfigured');
   assert.equal(rows[0].quantity_requested, 100);
   assert.equal(rows[0].customer_phone, '5587999999999');

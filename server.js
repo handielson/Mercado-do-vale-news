@@ -19730,7 +19730,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
         ON DUPLICATE KEY UPDATE
           name=IF(VALUES(name) IS NULL, name, VALUES(name)),
           slug=IF(VALUES(slug) IS NULL, slug, VALUES(slug)),
-          sku=IF(VALUES(sku) IS NULL, sku, VALUES(sku)),
+          sku=sku,
           ean=IF(VALUES(ean) IS NULL, ean, VALUES(ean)),
           alternative_eans=IF(VALUES(alternative_eans) IS NULL, alternative_eans, VALUES(alternative_eans)),
           description=IF(VALUES(description) IS NULL, description, VALUES(description)),
@@ -19896,7 +19896,13 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
 
 // Single product update
 fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) => {
-  await withSmartphonePriceWrite(pool, { ...req.body, id: req.params.id }, async (priceDb, p) => {
+  const [registeredProducts] = await pool.query('SELECT sku FROM products WHERE id=? LIMIT 1', [req.params.id]);
+  if (!registeredProducts.length) return reply.code(404).send({ error: 'Produto não encontrado.' });
+  const registeredSku = registeredProducts[0].sku ?? null;
+  if (Object.hasOwn(req.body || {}, 'sku') && String(req.body.sku ?? '').trim() !== String(registeredSku ?? '').trim()) {
+    return reply.code(409).send({ error: 'O SKU é definido pelo sistema no cadastro inicial e não pode ser alterado.' });
+  }
+  await withSmartphonePriceWrite(pool, { ...(req.body || {}), sku: registeredSku, id: req.params.id }, async (priceDb, p) => {
   await priceDb.query(
     `UPDATE products SET
       name=?, slug=?, sku=?, ean=?, alternative_eans=?,
@@ -20412,6 +20418,16 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    const [registeredCombos] = await connection.query('SELECT sku FROM products WHERE id=? FOR UPDATE', [comboId]);
+    if (!registeredCombos.length) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Produto não encontrado.' });
+    }
+    const registeredSku = registeredCombos[0].sku ?? null;
+    if (Object.hasOwn(p || {}, 'sku') && String(p.sku ?? '').trim() !== String(registeredSku ?? '').trim()) {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'O SKU é definido pelo sistema no cadastro inicial e não pode ser alterado.' });
+    }
     await connection.query(
       `UPDATE products SET 
         name=?, slug=?, sku=?, is_combo=1, combo_discount_type=?, combo_discount_value=?,
@@ -20422,7 +20438,7 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
         updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
       [
-        p.name, p.slug || null, p.sku || null, p.combo_discount_type || null, p.combo_discount_value || 0,
+        p.name, p.slug || null, registeredSku, p.combo_discount_type || null, p.combo_discount_value || 0,
         p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
         p.status || 'active', jsonStr(p.images), p.category_id || null, p.brand || null,
         sanitizeDescription(p.description), jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0,
