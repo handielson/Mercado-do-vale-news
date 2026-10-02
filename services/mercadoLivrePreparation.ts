@@ -51,6 +51,13 @@ export function parseSnapshot(raw: any): Snapshot {
 export function createBatch(snapshot: Snapshot): Batch {
   return { schema: PREPARATION_SCHEMA, sellerId: snapshot.sellerId, snapshot, accountMode: { value: 'unknown', confirmed: false, sources: [] }, drafts: [] };
 }
+// Keep complete listing/link evidence, but persist only the product families in this draft.
+// A full catalog can exceed the browser's storage quota even for a single selected SKU.
+export function draftFile(batch: Batch) {
+  const selected=new Set(batch.drafts.map(d=>d.productId));
+  const parents=new Set(batch.snapshot.products.filter(p=>selected.has(p.id)).map(p=>p.parent_id).filter(Boolean));
+  return {schema:'mdv.ml.draft-file.v1',batch:{...batch,snapshot:{...batch.snapshot,products:batch.snapshot.products.filter(p=>selected.has(p.id) || selected.has(p.parent_id || '') || parents.has(p.id))}}};
+}
 export function restoreDraftFile(raw: any): Batch {
   if (!plain(raw) || raw.schema !== 'mdv.ml.draft-file.v1' || !plain(raw.batch) || raw.batch.schema !== PREPARATION_SCHEMA || !Array.isArray(raw.batch.drafts) || raw.batch.drafts.length > 100) throw new Error('Arquivo de rascunho inválido.');
   const snapshot = parseSnapshot(raw.batch.snapshot), batch = createBatch(snapshot);

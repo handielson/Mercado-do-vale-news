@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import MercadoLivrePricingPolicy, { PricingSummary } from './MercadoLivrePricingPolicy';
 import { mercadoLivreService } from '../../../services/mercadoLivreService';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
-import { FIELD_NAMES, createBatch, createDraft, editField, confirmField, resolveConflict, parseSnapshot, importProposals, evaluateBatch, previewContract, researchPacket, restoreDraftFile } from '../../../services/mercadoLivrePreparation';
+import { FIELD_NAMES, createBatch, createDraft, editField, confirmField, resolveConflict, parseSnapshot, importProposals, evaluateBatch, previewContract, researchPacket, restoreDraftFile, draftFile } from '../../../services/mercadoLivrePreparation';
 import type { Batch, FieldName, SourceKind } from '../../../services/mercadoLivrePreparation';
 
 const labels: Record<FieldName, string> = { title: 'Título legado', familyName: 'Nome da família (User Products)', description: 'Descrição', categoryId: 'Categoria', categoryRequirements: 'Requisitos oficiais da categoria', condition: 'Condição', priceCents: 'Preço', quantity: 'Quantidade', photos: 'Fotos e autorização', attributes: 'Atributos', gtin: 'GTIN', certificates: 'Certificações e evidências', commercialPolicy: 'Política comercial', variations: 'Variantes' };
@@ -23,7 +23,7 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
   useEffect(() => { setPreview(null); }, [batch, active]);
   useEffect(() => {
     if(!batch?.drafts.length) return;
-    try { localStorage.setItem('mdv.ml.last-draft',JSON.stringify({schema:'mdv.ml.draft-file.v1',batch})); } catch { /* Manual file export remains available when browser storage is full. */ }
+    try { localStorage.setItem('mdv.ml.last-draft',JSON.stringify(draftFile(batch))); } catch { /* Manual file export remains available when browser storage is full. */ }
   }, [batch]);
   const [kind, setKind] = useState<SourceKind>('operator'), [reference, setReference] = useState(''), [modeSource, setModeSource] = useState('');
   const [, refreshClock] = useState(0);
@@ -163,7 +163,7 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
           </div></div>
         </>}
         <button onClick={() => download('ml-relatorio-local.json', { batch, reports, previews: batch.drafts.map(d => previewContract(batch, d)) })} className="border p-2">Exportar relatório e propostas revisadas</button>
-        <button onClick={() => download('ml-rascunho-local.json', { schema:'mdv.ml.draft-file.v1', batch })} className="border p-2 ml-2">Salvar rascunho em arquivo</button>
+        <button onClick={() => download('ml-rascunho-local.json', draftFile(batch))} className="border p-2 ml-2">Salvar rascunho em arquivo</button>
         <div className="border-t pt-4 space-y-3">
           <button disabled={!draft || report?.status!=='ready_for_local_preview'} onClick={validateRemote} className="rounded bg-slate-900 text-white p-3 disabled:opacity-50">Validar anúncio no Mercado Livre</button>
           {preview?.pricing && <PricingSummary quote={preview.pricing} />}

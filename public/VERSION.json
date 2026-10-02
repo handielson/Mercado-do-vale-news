@@ -1,23 +1,17 @@
 {
-  "version": "v1.2.535-ml-cadastro",
+  "version": "v1.2.536-ml-rascunho",
   "date": "2026-10-02",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.535-ml-cadastro",
-  "release_vps": "/var/www/mdv-site/releases/20261002-143905-ml-cadastro",
-  "summary": "Preparação Mercado Livre aproveita cor, modelo, peso, medidas e garantia do cadastro.",
+  "tag": "v1.2.536-ml-rascunho",
+  "release_vps": "/var/www/mdv-site/releases/20261002-145331-ml-rascunho",
+  "summary": "Rascunhos Mercado Livre preservados sem exceder armazenamento do navegador.",
   "changed_files": [
     "services/mercadoLivrePreparation.ts",
     "pages/admin/settings/MercadoLivrePreparationPage.tsx",
-    "services/mercadoLivrePublication.cjs",
-    "scripts/mercado-livre-local-codex.cjs",
-    "scripts/publish-vps-plan.cjs",
     "tmp-tests/mercado-livre-publication.test.cjs",
-    "tmp-tests/mercado-livre-publication-ui.test.mjs",
-    "tmp-tests/publish-vps-plan-static.test.mjs",
-    "docs/operacional/mercado-livre-anuncios-codex-local.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-02-v1.2.535-ml-cadastro.md"
+    "docs/versoes/2026-10-02-v1.2.536-ml-rascunho.md"
   ]
 }

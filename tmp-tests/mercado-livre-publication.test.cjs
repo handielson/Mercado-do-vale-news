@@ -53,6 +53,15 @@ function fixture({timeout=false,descriptionFailure=false,existingSku=false,broke
   return {handlers:createPublicationHandlers({pool,settings:async()=>({user_id:'123'}),request,listingRows,journal}),calls,records};
 }
 const body=()=>({sellerId:'123',draft:draft(),confirmPublication:true});
+test('rascunho grande preserva anúncios e vínculos completos sem guardar produtos alheios',()=>{
+  const {draftFile,restoreDraftFile,parseSnapshot,createBatch,createDraft}=require('../services/mercadoLivrePreparation.ts');
+  const parent={...product,id:'22222222-2222-4222-8222-222222222222',sku:'PAI',is_parent:1};
+  const child={...product,parent_id:parent.id};
+  const unrelated=Array.from({length:2700},(_,n)=>({...product,id:'outro-'+n,sku:'OUTRO-'+n,description:'x'.repeat(4000)}));
+  const s=parseSnapshot({schema:'mdv.ml.catalog.v1',sellerId:'123',capturedAt:new Date().toISOString(),complete:true,products:[parent,child,...unrelated],links:[{product_id:'outro-1',item_id:'MLB123'}],listings:[{itemId:'MLB123',sku:'OUTRO-1'}]});
+  const batch=createBatch(s);batch.drafts=[createDraft(s.products.find(p=>p.id===child.id),s)];
+  const saved=draftFile(batch);assert.ok(JSON.stringify(saved).length<100000);assert.equal(saved.batch.snapshot.products.length,2);assert.deepEqual(saved.batch.snapshot.links,s.links);assert.deepEqual(saved.batch.snapshot.listings,s.listings);assert.equal(restoreDraftFile(saved).drafts[0].sku,child.sku);
+});
 test('snapshot assíncrono reutiliza consulta em andamento e entrega resultado sem segredos',async()=>{
   const f=fixture();const job=await f.handlers.startSnapshot();const same=await f.handlers.startSnapshot();assert.equal(same.id,job.id);
   await new Promise(resolve=>setImmediate(resolve));
