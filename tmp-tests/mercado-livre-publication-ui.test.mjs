@@ -10,14 +10,14 @@ const snapshot={schema:'mdv.ml.catalog.v1',sellerId:'123',nickname:'CONTA SIMULA
   products:[{id,sku:'TESTE-1',name:'Produto simulado',description:'Descrição do cadastro',brand:'Marca',color:'Ciano',model_name:'Modelo teste',warranty_type:'brand',warranty_days:90,weight_kg:'0.1000',dimensions:'{"height_cm":17,"width_cm":8,"depth_cm":1.5}',price_retail:12345,stock_quantity:3,status:'active',images:['https://loja.example/foto.png']}],links:[],listings:[]};
 const source={kind:'manufacturer',reference:'https://fabricante.example/modelo',note:'Fonte simulada'};
 const proposal={schema:'mdv.ml.preparation.v1',sellerId:'123',proposals:[{productId:id,sku:'TESTE-1',fields:{title:{value:'Título pesquisado',sources:[source]},categoryId:{value:'MLB123',sources:[source]},condition:{value:'new',sources:[source]}}}],notes:['Pesquisa simulada para teste; nenhum acesso real.']};
-const entry={name:'ml-ui-test-entry',resolveId(id){if(id==='/__ml-entry.tsx')return id;},load(id){if(id==='/__ml-entry.tsx')return `import React from 'react';import {createRoot} from 'react-dom/client';import Page from '${process.cwd().replaceAll('\\','/')}/pages/admin/settings/MercadoLivrePreparationPage.tsx';import '${process.cwd().replaceAll('\\','/')}/index.css';createRoot(document.getElementById('root')).render(<Page/>);`;}};
+const entry={name:'ml-ui-test-entry',resolveId(id){if(id==='/__ml-entry.tsx')return id;},load(id){if(id==='/__ml-entry.tsx')return `import React from 'react';import {createRoot} from 'react-dom/client';import Page from '${process.cwd().replaceAll('\\','/')}/pages/admin/settings/MercadoLivrePreparationPage.tsx';import Catalog from '${process.cwd().replaceAll('\\','/')}/components/products/sections/MercadoLivreCatalogAttributes.tsx';import '${process.cwd().replaceAll('\\','/')}/index.css';function CatalogTest(){const [fields,setFields]=React.useState({'is_parent':true,'model_id':'modelo','category_id':'cat-local','specs.color':'Ciano'});return <Catalog productId='${id}' categoryConfig={{mercado_livre:{category_id:'MLB123',category_name:'Capas',attributes:[{id:'MATERIAL',name:'Material do exterior',tags:{},value_type:'string'},{id:'WATERPROOF',name:'À prova de água',tags:{},value_type:'boolean',values:[{id:'1',name:'Sim'},{id:'2',name:'Não'}]},{id:'COLOR',name:'Cor',tags:{allow_variations:true}},{id:'INTERNAL',name:'Campo interno',tags:{read_only:true}}]}}} watch={key=>fields[key]} setValue={(key,value)=>setFields(previous=>({...previous,[key]:value}))}/>;}createRoot(document.getElementById('root')).render(location.pathname==='/__ml-catalog-ui'?<CatalogTest/>:<Page/>);`;}};
 const bundle=await build({configFile:false,envDir:'tmp-tests/no-env',resolve:{alias:{'@':process.cwd()}},define:{'import.meta.env.DEV':'true'},plugins:[react(),entry],logLevel:'error',build:{write:false,rollupOptions:{input:'/__ml-entry.tsx',output:{inlineDynamicImports:true}}}});
 const files=new Map(bundle.output.map(file=>['/'+file.fileName,file]));
 const script=bundle.output.find(file=>file.type==='chunk' && file.isEntry).fileName;
 const styles=bundle.output.filter(file=>file.fileName.endsWith('.css')).map(file=>`<link rel="stylesheet" href="/${file.fileName}">`).join('');
 let middleware;local.localResearchPlugin({research:async()=>proposal}).configureServer({middlewares:{use:handler=>middleware=handler}});
 const server=createServer((req,res)=>middleware(req,res,()=>{
-  if(req.url==='/__ml-ui'){res.setHeader('Content-Type','text/html');return res.end(`${styles}<div id="root"></div><script type="module" src="/${script}"></script>`);}
+  if(req.url==='/__ml-ui' || req.url==='/__ml-catalog-ui'){res.setHeader('Content-Type','text/html');return res.end(`${styles}<div id="root"></div><script type="module" src="/${script}"></script>`);}
   const file=files.get(req.url);if(!file){res.statusCode=404;return res.end();}res.setHeader('Content-Type',file.fileName.endsWith('.css')?'text/css':'application/javascript');res.end(file.type==='chunk'?file.code:file.source);
 }));
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
@@ -30,6 +30,10 @@ try{
   page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
   await page.route('**/*',async route=>{
     const url=decodeURIComponent(route.request().url());
+    if(url.includes('/mercado-livre/catalog/products/')) {
+      const body=route.request().postDataJSON();assert.deepEqual(body.attributes,{MATERIAL:'Silicone',WATERPROOF:'Não'});assert.equal(body.saveForFamily,true);assert.equal(body.saveForModel,true);assert.equal(body.saveCategorySchema,true);assert.equal(body.expectedCategoryId,'cat-local');assert.equal(body.expectedModelId,'modelo');assert.equal(body.price,undefined);assert.equal(body.stock_quantity,undefined);
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,affectedProducts:6,savedForModel:true,savedCategorySchema:true,categoryId:'MLB123',attributes:body.attributes})});
+    }
     if(url.includes('/mercado-livre/preparation/')){
       let response;
       if(url.includes('/snapshot-jobs/'))response={status:'complete',result:snapshot};
@@ -128,6 +132,14 @@ try{
   await page.getByRole('button',{name:'Enviar todas as variações validadas'}).click();
   await page.getByText('Família enviada:',{exact:false}).waitFor();assert.equal(published,4);
   assert.equal(await page.getByRole('button',{name:'Validar família no Mercado Livre'}).isDisabled(),true);
+  await page.goto(origin+'/__ml-catalog-ui');
+  await page.getByRole('textbox',{name:'Material do exterior',exact:true}).fill('Silicone');
+  await page.getByRole('combobox',{name:'À prova de água',exact:true}).selectOption('Não');
+  assert.equal(await page.getByRole('textbox',{name:'Cor',exact:true}).inputValue(),'Ciano');assert.equal(await page.getByRole('textbox',{name:'Cor',exact:true}).isDisabled(),true);
+  await page.getByRole('checkbox',{name:'Salvar atributos comuns no pai',exact:false}).check();
+  await page.getByRole('checkbox',{name:'Usar atributos comuns como padrão do modelo',exact:false}).check();
+  await page.getByRole('button',{name:'Salvar atributos no nosso sistema',exact:true}).click();
+  await page.getByText('Atributos salvos no sistema para 6 produto(s)',{exact:false}).waitFor();
   assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
   await mkdir('output/mercado-livre',{recursive:true});await page.screenshot({path:'output/mercado-livre/automacao-validada.png',fullPage:true});
   console.log('UI PASS: catálogo, pesquisa local simulada, conflito, exigências, revisão, validação, publicação simulada e bloqueio de repetição; zero rede externa.');

@@ -23,6 +23,7 @@ import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText, Trash2, 
 import { useEANAutofill } from './hooks/useEANAutofill';
 import { useModelTemplate } from './hooks/useModelTemplate';
 import { ProductSpecifications } from './sections/ProductSpecifications';
+import MercadoLivreCatalogAttributes from './sections/MercadoLivreCatalogAttributes';
 import { ProductPricing } from './sections/ProductPricing';
 import { ProductImages } from './sections/ProductImages';
 import { ProductBasicInfo } from './sections/ProductBasicInfo';
@@ -1922,6 +1923,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 currentProductId={initialData?.id}
             />
 
+            <MercadoLivreCatalogAttributes categoryConfig={categoryConfig} watch={watch} setValue={setValue} productId={initialData?.id}/>
             {/* BOTÃO ADICIONAR À LISTA + LISTA DE CADASTRO EM MASSA */}
             {!initialData && (
                 <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-sm space-y-3">

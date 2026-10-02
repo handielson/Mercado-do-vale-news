@@ -7,6 +7,7 @@ import { BasicInfoSection } from './sections/BasicInfoSection';
 import { UniqueFieldsSection } from './sections/UniqueFieldsSection';
 import { FieldConfigSection } from './sections/FieldConfigSection';
 import { CustomFieldsSection } from './sections/CustomFieldsSection';
+import MercadoLivreCategorySection from './sections/MercadoLivreCategorySection';
 import { toast } from 'react-hot-toast';
 import { vpsApiService, FieldPreset } from '../../services/vpsApiService';
 
@@ -323,6 +324,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                         </label>
                     </div>
 
+                    <MercadoLivreCategorySection value={config.mercado_livre} onChange={value=>setConfig(previous=>({...previous,mercado_livre:value}))}/>
                     {/* Section 2: Unique Fields */}
                     <UniqueFieldsSection
                         config={config}

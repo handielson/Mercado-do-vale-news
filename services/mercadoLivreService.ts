@@ -45,6 +45,7 @@ export const mercadoLivreService = {
   },
   calculateListingPrice: (sellerId: string, draft: unknown, pricingPolicy: unknown) => vpsClient.post<any>('/mercado-livre/preparation/pricing', { sellerId, draft, pricingPolicy }),
   getCategoryRequirements: (id: string) => vpsClient.get<any>(`/mercado-livre/preparation/categories/${encodeURIComponent(id)}`),
+  saveCatalogAttributes: (productId:string,input:{categoryId:string;attributes:Record<string,string>;saveForFamily?:boolean;saveForModel?:boolean;saveCategorySchema?:boolean;expectedCategoryId?:string;expectedModelId?:string}) => vpsClient.post<any>(`/mercado-livre/catalog/products/${encodeURIComponent(productId)}/attributes`,input),
   previewPublication: (sellerId: string, draft: unknown) => vpsClient.post<any>('/mercado-livre/preparation/preview', { sellerId, draft }),
   publishPrepared: (sellerId: string, draft: unknown, resumeOnly = false) => vpsClient.post<{itemId:string;alreadyPublished:boolean}>('/mercado-livre/preparation/publish', { sellerId, draft, confirmPublication:true, resumeOnly }),
   discoverProducts: (cursor = '') => vpsClient.get<MercadoLivreDiscovery>(`/mercado-livre/products/discover${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),

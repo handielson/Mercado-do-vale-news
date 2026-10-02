@@ -511,6 +511,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   registerAliases(fastify, 'post', '/mercado-livre/preparation/snapshot-jobs', protectedRoute, publicationRoute(publication.startSnapshot));
   registerAliases(fastify, 'get', '/mercado-livre/preparation/snapshot-jobs/:jobId', protectedRoute, publicationRoute(publication.snapshotStatus));
   registerAliases(fastify, 'get', '/mercado-livre/preparation/categories/:categoryId', protectedRoute, publicationRoute(publication.category));
+  registerAliases(fastify, 'post', '/mercado-livre/catalog/products/:productId/attributes', protectedRoute, publicationRoute(publication.saveCatalogAttributes));
   registerAliases(fastify, 'post', '/mercado-livre/preparation/preview', protectedRoute, publicationRoute(publication.preview));
   registerAliases(fastify, 'post', '/mercado-livre/preparation/pricing', protectedRoute, publicationRoute(publication.pricing));
   registerAliases(fastify, 'post', '/mercado-livre/preparation/publish', protectedRoute, publicationRoute(publication.publish));

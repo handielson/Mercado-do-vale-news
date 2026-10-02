@@ -2,25 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import MercadoLivrePricingPolicy, { PricingSummary } from './MercadoLivrePricingPolicy';
 import { mercadoLivreService } from '../../../services/mercadoLivreService';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
+import { MercadoLivreAttributeInput as AttributeInput, ML_NOT_APPLICABLE as notApplicable, mlAttributeRequired as attributeRequired } from '../../../components/ui/MercadoLivreAttributeInput';
 import { FIELD_NAMES, createBatch, editField, confirmField, resolveConflict, parseSnapshot, importProposals, evaluateBatch, previewContract, researchPacket, restoreDraftFile, draftFile, productGroups, selectionBlock, selectProductGroup, selectedGroupCount } from '../../../services/mercadoLivrePreparation';
 import type { Batch, FieldName, SourceKind } from '../../../services/mercadoLivrePreparation';
 
 const labels: Record<FieldName, string> = { title: 'Título legado', familyName: 'Nome da família (User Products)', description: 'Descrição', categoryId: 'Categoria', categoryRequirements: 'Requisitos oficiais da categoria', condition: 'Condição', priceCents: 'Preço', quantity: 'Quantidade', photos: 'Fotos e autorização', attributes: 'Atributos', gtin: 'GTIN', certificates: 'Certificações e evidências', commercialPolicy: 'Política comercial', variations: 'Variantes' };
 const structured = new Set<FieldName>(['categoryRequirements', 'photos', 'attributes', 'certificates', 'commercialPolicy', 'variations']);
 const kinds: SourceKind[] = ['catalog', 'manufacturer', 'official_catalog', 'official_document', 'operator', 'authorized_photo', 'marketplace_reference'];
-// String marker in the draft; the publication service serializes the official value_id -1.
-const notApplicable = '__ML_NOT_APPLICABLE__';
-const attributeRequired = (a:any, condition:unknown) => !!(a.tags?.required || (condition==='new' && a.tags?.new_required));
-function AttributeInput({attribute:a,value,onChange,disabled=false}:{attribute:any;value:string;onChange:(value:string)=>void;disabled?:boolean}) {
-  const options=a.values || [], units=a.allowed_units || [];
-  const common={className:'border rounded p-2 block w-full',disabled,'aria-label':a.name};
-  if(a.value_type==='boolean') return <select {...common} value={value} onChange={e=>onChange(e.target.value)}><option value="">Selecione</option>{value && !options.some((v:any)=>v.name===value) && <option value={value}>{value}</option>}{options.map((v:any)=><option key={v.id} value={v.name}>{v.name}</option>)}</select>;
-  if(a.value_type==='number_unit' && units.length) {
-    const match=value.match(/^(.*?)\s+([^\s]+)$/), amount=match?match[1]:value, unit=match?match[2]:(a.default_unit || units[0].id);
-    return <div className="flex gap-2"><input {...common} type="text" inputMode="decimal" value={amount} placeholder="Valor" onChange={e=>onChange(e.target.value?`${e.target.value} ${unit}`:'')} /><select className="border rounded p-2" aria-label={`Unidade de ${a.name}`} disabled={disabled} value={unit} onChange={e=>onChange(amount?`${amount} ${e.target.value}`:'')}>{!units.some((u:any)=>u.id===unit) && <option value={unit}>{unit}</option>}{units.map((u:any)=><option key={u.id} value={u.id}>{u.name}</option>)}</select></div>;
-  }
-  return <><input {...common} type="text" inputMode={a.value_type==='number'?'decimal':undefined} maxLength={a.value_max_length} value={value} list={options.length?`ml-attribute-${a.id}`:undefined} placeholder={a.tags?.multivalued?'Valores separados por vírgula':'Preencher com informação comprovada'} onChange={e=>onChange(e.target.value)} />{options.length>0 && <datalist id={`ml-attribute-${a.id}`}>{options.map((v:any)=><option key={v.id} value={v.name}/>)}</datalist>}</>;
-}
 const download = (name: string, value: unknown) => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);

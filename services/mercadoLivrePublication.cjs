@@ -25,10 +25,45 @@ const PRODUCT_COLUMNS = `id,sku,name,description,
   END AS warranty_days,
   JSON_UNQUOTE(JSON_EXTRACT(specs,'$.color')) AS color,
   products.\`condition\`,weight_kg,dimensions,
+  products.category_id,products.model_id,
+  JSON_EXTRACT(specs,'$.mercado_livre') AS ml_product,
+  (SELECT JSON_EXTRACT(p.specs,'$.mercado_livre') FROM products p WHERE p.id=products.parent_id LIMIT 1) AS ml_parent,
+  (SELECT JSON_EXTRACT(m.template_values,'$.mercado_livre') FROM models m WHERE m.id=products.model_id LIMIT 1) AS ml_model,
+  (SELECT JSON_OBJECT('category_id',JSON_UNQUOTE(JSON_EXTRACT(c.config,'$.mercado_livre.category_id'))) FROM categories c WHERE c.id=products.category_id LIMIT 1) AS ml_category,
   ean,alternative_eans,images,price_retail,stock_quantity,status,is_parent,parent_id,is_virtual,is_gift,is_combo`;
 function publicProduct(row) {
   const jsonArray = value => { try { const v=typeof value==='string'?JSON.parse(value):value;return Array.isArray(v)?v:[]; } catch {return [];} };
-  return {...row,images:jsonArray(row.images).filter(https),eans:jsonArray(row.alternative_eans).filter(v=>typeof v==='string')};
+  const {ml_product,ml_parent,ml_model,ml_category,...product}=row;
+  const own=jsonObject(ml_product),parent=jsonObject(ml_parent),model=jsonObject(ml_model),category=jsonObject(ml_category);
+  const categoryId=own.category_id || parent.category_id || model.category_id || category.category_id;
+  const attrs=data=>data.category_id===categoryId && object(data.attributes)?Object.fromEntries(Object.entries(data.attributes).filter(([id,value])=>/^[A-Z][A-Z0-9_]*$/.test(id) && typeof value==='string')):{};
+  const definitions=Array.isArray(category.attributes)?category.attributes:[];
+  const attributes={...reusableAttributes(attrs(model),definitions),...reusableAttributes(attrs(parent),definitions),...attrs(own)};
+  return {...product,images:jsonArray(row.images).filter(https),eans:jsonArray(row.alternative_eans).filter(v=>typeof v==='string'),...(/^MLB\d+$/.test(categoryId || '')?{mercado_livre:{categoryId,attributes}}:{})};
+}
+function jsonObject(value) {try{const parsed=typeof value==='string'?JSON.parse(value):value;return object(parsed)?parsed:{};}catch{return {};}}
+const managedAttribute=id=>['GTIN','SELLER_SKU','ITEM_CONDITION'].includes(id) || id.startsWith('SELLER_PACKAGE_') || id.startsWith('PACKAGE_');
+function reusableAttributes(attributes,definitions) {
+  return Object.fromEntries(Object.entries(attributes || {}).filter(([id])=>{
+    const def=definitions.find(a=>a.id===id);
+    return !managedAttribute(id) && !['COLOR','MAIN_COLOR','PATTERN_NAME','SIZE'].includes(id) && !/ANATEL|INMETRO/i.test(id) && !def?.tags?.read_only && !def?.tags?.allow_variations && !def?.tags?.variation_attribute;
+  }));
+}
+function serializeAttribute(id,value_name,definitions,condition) {
+  const def=definitions.find(d=>d.id===id);
+  if(value_name==='__ML_NOT_APPLICABLE__') {
+    if(!def || def.tags?.allow_variations || def.tags?.required || (condition==='new' && def.tags?.new_required)) throw fail(`Não se aplica não permitido: ${def?.name || id}.`);
+    return {id,value_id:'-1',value_name:null};
+  }
+  if(def?.value_max_length && value_name.length>def.value_max_length) throw fail(`Valor excede o limite: ${def.name || id}.`);
+  const option=def?.values?.find(v=>v.name===value_name);
+  if(def?.value_type==='boolean' && !option) throw fail(`Selecione uma opção oficial: ${def.name || id}.`);
+  if(def?.value_type==='number' && !/^-?\d+(?:[.,]\d+)?$/.test(value_name)) throw fail(`Informe um número: ${def.name || id}.`);
+  if(def?.value_type==='number_unit') {
+    const parts=value_name.match(/^(-?\d+(?:[.,]\d+)?)\s+(.+)$/);
+    if(!parts || !def.allowed_units?.some(u=>u.id===parts[2])) throw fail(`Confira valor e unidade: ${def.name || id}.`);
+  }
+  return {id,...(option?{value_id:option.id}:{}),value_name};
 }
 const modeOf = profile => { if (!Array.isArray(profile.tags)) throw fail('Modelo da conta indisponível.'); return profile.tags.includes('user_product_seller') ? 'user_products' : 'legacy'; };
 
@@ -141,22 +176,7 @@ function buildPublication(draft, product, mode, category, definitions) {
     price:value('priceCents')/100, available_quantity:value('quantity'), condition:value('condition'), listing_type_id:policy.listingTypeId,
     [mode === 'legacy' ? 'title' : 'family_name']:title,
     pictures:photos.map(p => ({source:p.url})),
-    attributes:Object.entries({...attributes,...packageAttributes,...(gtin ? {GTIN:gtin} : {}),SELLER_SKU:product.sku}).map(([id,value_name]) => {
-      const def=definitions.find(d=>d.id===id);
-      if(value_name==='__ML_NOT_APPLICABLE__') {
-        if(!def || def.tags?.allow_variations || def.tags?.required || (value('condition')==='new' && def.tags?.new_required)) throw fail(`Não se aplica não permitido: ${def?.name || id}.`);
-        return {id,value_id:'-1',value_name:null};
-      }
-      if(def?.value_max_length && value_name.length>def.value_max_length) throw fail(`Valor excede o limite: ${def.name || id}.`);
-      const option=def?.values?.find(v=>v.name===value_name);
-      if(def?.value_type==='boolean' && !option) throw fail(`Selecione uma opção oficial: ${def.name || id}.`);
-      if(def?.value_type==='number' && !/^-?\d+(?:[.,]\d+)?$/.test(value_name)) throw fail(`Informe um número: ${def.name || id}.`);
-      if(def?.value_type==='number_unit') {
-        const parts=value_name.match(/^(-?\d+(?:[.,]\d+)?)\s+(.+)$/);
-        if(!parts || !def.allowed_units?.some(u=>u.id===parts[2])) throw fail(`Confira valor e unidade: ${def.name || id}.`);
-      }
-      return {id,...(option?{value_id:option.id}:{}),value_name};
-    }),
+    attributes:Object.entries({...attributes,...packageAttributes,...(gtin ? {GTIN:gtin} : {}),SELLER_SKU:product.sku}).map(([id,value_name]) => serializeAttribute(id,value_name,definitions,value('condition'))),
     sale_terms:[{id:'WARRANTY_TYPE',value_name:policy.warranty},...(policy.warrantyTime ? [{id:'WARRANTY_TIME',value_name:policy.warrantyTime}] : [])], shipping:{mode:policy.shipping.mode,free_shipping:policy.shipping.freeShipping} };
 }
 
@@ -230,6 +250,52 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
       return {schema:'mdv.ml.catalog.v1',...a,capturedAt,complete:true,products,links,listings};
   };
   return {
+    async saveCatalogAttributes(req) {
+      const id=String(req.params?.productId || ''),body=req.body || {};
+      if(!/^[a-f0-9-]{36}$/i.test(id) || !object(body.attributes) || Object.entries(body.attributes).some(([key,value])=>! /^[A-Z][A-Z0-9_]*$/.test(key) || typeof value!=='string' || !value.trim() || value.length>5000)) throw fail('Atributos do cadastro inválidos.',400);
+      for(const key of ['saveForFamily','saveForModel','saveCategorySchema']) if(body[key]!==undefined && typeof body[key]!=='boolean') throw fail('Escopo do cadastro inválido.',400);
+      const data=await categoryData(body.categoryId);
+      const definitions=data.attributes;
+      if(!Array.isArray(definitions)) throw fail('Ficha oficial indisponível.');
+      for(const [key,value] of Object.entries(body.attributes)) {
+        const def=definitions.find(a=>a.id===key);
+        if(!def || def.tags?.read_only || def.tags?.fixed || def.tags?.inferred || managedAttribute(key)) throw fail(`Campo do cadastro não permitido: ${key}.`);
+        serializeAttribute(key,value,definitions,'new');
+      }
+      const connection=await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        const [products]=await connection.query('SELECT id,sku,category_id,model_id,is_parent,specs FROM products WHERE id=? FOR UPDATE',[id]);
+        const product=products[0];if(!product) throw fail('Produto não encontrado.',404);
+        if(body.saveCategorySchema && body.expectedCategoryId!==undefined && body.expectedCategoryId!==product.category_id) throw fail('Salve primeiro a alteração da categoria local do produto.');
+        if(body.saveForModel && body.expectedModelId!==product.model_id) throw fail('Salve primeiro a associação correta do modelo do produto.');
+        if(body.saveForFamily && !Number(product.is_parent)) throw fail('Selecione o produto pai para salvar na família.');
+        if(body.saveForModel && !product.model_id) throw fail('Associe um modelo para reutilizar em outros produtos iguais.');
+        const common=reusableAttributes(body.attributes,definitions);
+        const selected=body.saveForFamily?common:body.attributes;
+        const writeProduct=async(row,attributes,merge)=>{
+          const current=jsonObject(jsonObject(row.specs).mercado_livre);
+          const existing=merge && current.category_id===data.category.id?current.attributes || {}:{};
+          const oldCommon=new Set(Object.keys(reusableAttributes(existing,definitions)));
+          const namespace={category_id:data.category.id,attributes:{...Object.fromEntries(Object.entries(existing).filter(([key])=>!oldCommon.has(key))),...attributes}};
+          await connection.query("UPDATE products SET specs=JSON_SET(COALESCE(specs,JSON_OBJECT()),'$.mercado_livre',JSON_EXTRACT(?,'$')) WHERE id=?",[JSON.stringify(namespace),row.id]);
+        };
+        await writeProduct(product,selected,false);
+        let affected=1;
+        if(body.saveForFamily) {
+          const [children]=await connection.query('SELECT id,specs FROM products WHERE parent_id=? ORDER BY id FOR UPDATE',[id]);
+          for(const child of children) await writeProduct(child,common,true);
+          affected+=children.length;
+        }
+        if(body.saveForModel) await connection.query("UPDATE models SET template_values=JSON_SET(COALESCE(template_values,JSON_OBJECT()),'$.mercado_livre',JSON_EXTRACT(?,'$')) WHERE id=?",[JSON.stringify({category_id:data.category.id,attributes:common}),product.model_id]);
+        if(body.saveCategorySchema) {
+          if(!product.category_id) throw fail('Associe uma categoria local antes de salvar a ficha.');
+          await connection.query("UPDATE categories SET config=JSON_SET(COALESCE(config,JSON_OBJECT()),'$.mercado_livre',JSON_EXTRACT(?,'$')) WHERE id=?",[JSON.stringify({category_id:data.category.id,category_name:data.category.name,attributes:definitions,fetched_at:new Date().toISOString()}),product.category_id]);
+        }
+        await connection.commit();
+        return {ok:true,affectedProducts:affected,savedForModel:!!body.saveForModel,savedCategorySchema:!!body.saveCategorySchema,categoryId:data.category.id,attributes:selected};
+      }catch(e){await connection.rollback();throw e;}finally{connection.release();}
+    },
     snapshot,
     async startSnapshot() {
       const a=await account();
@@ -301,4 +367,4 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
     },
   };
 }
-module.exports={buildPublication,createPublicationHandlers,createFileJournal,modeOf,publicProduct,pricingPolicy,pricingBreakdown,calculatePrice,officialFees,catalogMeasures};
+module.exports={buildPublication,createPublicationHandlers,createFileJournal,modeOf,publicProduct,reusableAttributes,pricingPolicy,pricingBreakdown,calculatePrice,officialFees,catalogMeasures};

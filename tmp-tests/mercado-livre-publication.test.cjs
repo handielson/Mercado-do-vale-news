@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {buildPublication,createPublicationHandlers,modeOf,calculatePrice,officialFees,catalogMeasures}=require('../services/mercadoLivrePublication.cjs');
+const {buildPublication,createPublicationHandlers,modeOf,calculatePrice,officialFees,catalogMeasures,publicProduct,reusableAttributes}=require('../services/mercadoLivrePublication.cjs');
 const {listingRows,isNonBlockingValidation}=require('../services/mercadoLivreServer.cjs');
 const {sanitizePacket,parseResult,localResearchPlugin}=require('../scripts/mercado-livre-local-codex.cjs');
 const id='11111111-1111-4111-8111-111111111111';
@@ -9,6 +9,39 @@ const policy={marginBps:2000,taxBps:500,adsBps:100,otherBps:0,packagingCents:100
 const category={id:'MLB123',settings:{listing_allowed:true,max_title_length:60,item_conditions:['new']}};
 const defs=[{id:'BRAND',name:'Marca',tags:{required:true}},{id:'GTIN',tags:{}},{id:'ANATEL',tags:{}}];
 const field=value=>({value,confirmed:true,sources:[{kind:'catalog',reference:'cadastro conferido'}]});
+test('catálogo herda atributos do modelo/família da mesma categoria, conservando valores próprios',()=>{
+  const row={...product,ml_category:{category_id:'MLB123'},ml_model:{category_id:'MLB123',attributes:{MATERIAL:'Silicone',COLOR:'Azul',GTIN:'123'}},ml_parent:{category_id:'MLB123',attributes:{INTERIOR:'Microfibra',MATERIAL:'TPU'}},ml_product:{category_id:'MLB123',attributes:{MATERIAL:'Silicone líquido'}}};
+  assert.deepEqual(publicProduct(row).mercado_livre,{categoryId:'MLB123',attributes:{MATERIAL:'Silicone líquido',INTERIOR:'Microfibra'}});
+  assert.deepEqual(publicProduct({...row,ml_model:{category_id:'MLB999',attributes:{WRONG:'Outro modelo'}}}).mercado_livre.attributes,{INTERIOR:'Microfibra',MATERIAL:'Silicone líquido'});
+  assert.equal(publicProduct(row).ml_model,undefined);
+  assert.deepEqual(reusableAttributes({COLOR:'Ciano',OPTION:'valor',INTERNAL:'interno',MATERIAL:'Silicone'},[{id:'OPTION',tags:{variation_attribute:true}},{id:'INTERNAL',tags:{read_only:true}},{id:'MATERIAL',tags:{}}]),{MATERIAL:'Silicone'});
+});
+test('cadastro guarda ficha na categoria e valores comuns no pai, filhos e modelo preservando outros dados',async()=>{
+  const rows=[{...product,category_id:'cat-local',model_id:'modelo',is_parent:1,specs:{color:'Ciano',bling_family:{preservar:true}}},{id:'22222222-2222-4222-8222-222222222222',specs:{color:'Verde',mercado_livre:{category_id:'MLB123',attributes:{COLOR:'Verde',INTERIOR:'Existente'}}}}];
+  const categoryRow={config:{ram:'off',custom_fields:[{key:'outro'}]}},modelRow={template_values:{price_cost:100,bling_family:{id:'preservar'}}};
+  const writes=[];let committed=false;
+  const connection={beginTransaction:async()=>{},commit:async()=>{committed=true;},rollback:async()=>{},release:()=>{},query:async(sql,args)=>{
+    if(sql.startsWith('SELECT id,sku'))return [[rows[0]]];if(sql.startsWith('SELECT id,specs'))return [[rows[1]]];
+    const namespace=JSON.parse(args[0]);writes.push(sql);
+    if(sql.startsWith('UPDATE products'))rows.find(r=>r.id===args[1]).specs.mercado_livre=namespace;
+    else if(sql.startsWith('UPDATE models'))modelRow.template_values.mercado_livre=namespace;
+    else if(sql.startsWith('UPDATE categories'))categoryRow.config.mercado_livre=namespace;
+    else throw Error(sql);return [{affectedRows:1}];
+  }};
+  const definitions=[{id:'MATERIAL',name:'Material',tags:{}},{id:'COLOR',tags:{allow_variations:true}},{id:'INTERNAL',tags:{read_only:true}}];
+  const handlers=createPublicationHandlers({pool:{getConnection:async()=>connection},settings:async()=>({}),request:async resource=>resource.endsWith('/attributes')?definitions:{id:'MLB123',name:'Capas'},listingRows});
+  const body={categoryId:'MLB123',attributes:{MATERIAL:'Silicone',COLOR:'Ciano'},saveForFamily:true,saveForModel:true,expectedModelId:'modelo',saveCategorySchema:true,expectedCategoryId:'cat-local'};
+  const result=await handlers.saveCatalogAttributes({params:{productId:id},body});assert.equal(result.affectedProducts,2);assert.ok(committed);
+  assert.deepEqual(rows[0].specs.mercado_livre.attributes,{MATERIAL:'Silicone'});assert.equal(rows[1].specs.color,'Verde');assert.equal(rows[1].specs.mercado_livre.attributes.COLOR,'Verde');
+  assert.deepEqual(rows[0].specs.bling_family,{preservar:true});assert.equal(modelRow.template_values.price_cost,100);assert.deepEqual(modelRow.template_values.mercado_livre.attributes,{MATERIAL:'Silicone'});assert.equal(categoryRow.config.ram,'off');assert.equal(categoryRow.config.custom_fields[0].key,'outro');assert.equal(categoryRow.config.mercado_livre.attributes.length,3);
+  assert.ok(writes.every(sql=>!sql.includes('stock_quantity') && !sql.includes('price_retail')));
+  const before=writes.length;await assert.rejects(()=>handlers.saveCatalogAttributes({params:{productId:id},body:{...body,expectedModelId:'outro'}}),/associação/);await assert.rejects(()=>handlers.saveCatalogAttributes({params:{productId:id},body:{...body,attributes:{INTERNAL:'x'}}}),/não permitido/);assert.equal(writes.length,before);
+});
+test('rascunho aproveita categoria e atributos persistidos sem confirmar em nome do operador',()=>{
+  const {normalizeProduct,createDraft}=require('../services/mercadoLivrePreparation.ts');
+  const p=normalizeProduct({...product,color:'Verde',mercado_livre:{categoryId:'MLB123',attributes:{MATERIAL:'Silicone',COLOR:'Azul'}},specs:{imei:'SEGREDO'}});
+  const d=createDraft(p,{products:[p]});assert.equal(d.fields.categoryId.value,'MLB123');assert.equal(d.fields.categoryId.confirmed,false);assert.equal(d.fields.attributes.value.MATERIAL,'Silicone');assert.equal(d.fields.attributes.value.COLOR,'Verde');assert.equal(d.fields.attributes.confirmed,false);assert.ok(!JSON.stringify(p).includes('SEGREDO'));
+});
 test('atributos opcionais serializam opções oficiais, unidades e não se aplica sem inventar booleanos',()=>{
   const extra=[{id:'WATERPROOF',name:'Resistência',value_type:'boolean',tags:{},values:[{id:'242085',name:'Sim'},{id:'242084',name:'Não'}]}, {id:'MATERIAL',tags:{}},{id:'HEIGHT',value_type:'number_unit',allowed_units:[{id:'cm'}],tags:{}},{id:'NEW_ATTRIBUTE',tags:{new_required:true}}];
   const d=draft();Object.assign(d.fields.attributes.value,{WATERPROOF:'Não',MATERIAL:'__ML_NOT_APPLICABLE__',HEIGHT:'17 cm',NEW_ATTRIBUTE:'Valor'});
