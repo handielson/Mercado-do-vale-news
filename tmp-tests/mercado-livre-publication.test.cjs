@@ -9,6 +9,21 @@ const policy={marginBps:2000,taxBps:500,adsBps:100,otherBps:0,packagingCents:100
 const category={id:'MLB123',settings:{listing_allowed:true,max_title_length:60,item_conditions:['new']}};
 const defs=[{id:'BRAND',name:'Marca',tags:{required:true}},{id:'GTIN',tags:{}},{id:'ANATEL',tags:{}}];
 const field=value=>({value,confirmed:true,sources:[{kind:'catalog',reference:'cadastro conferido'}]});
+test('atributos opcionais serializam opções oficiais, unidades e não se aplica sem inventar booleanos',()=>{
+  const extra=[{id:'WATERPROOF',name:'Resistência',value_type:'boolean',tags:{},values:[{id:'242085',name:'Sim'},{id:'242084',name:'Não'}]}, {id:'MATERIAL',tags:{}},{id:'HEIGHT',value_type:'number_unit',allowed_units:[{id:'cm'}],tags:{}},{id:'NEW_ATTRIBUTE',tags:{new_required:true}}];
+  const d=draft();Object.assign(d.fields.attributes.value,{WATERPROOF:'Não',MATERIAL:'__ML_NOT_APPLICABLE__',HEIGHT:'17 cm',NEW_ATTRIBUTE:'Valor'});
+  const attrs=buildPublication(d,product,'legacy',category,[...defs,...extra]).attributes;
+  assert.deepEqual(attrs.find(a=>a.id==='WATERPROOF'),{id:'WATERPROOF',value_id:'242084',value_name:'Não'});
+  assert.deepEqual(attrs.find(a=>a.id==='MATERIAL'),{id:'MATERIAL',value_id:'-1',value_name:null});
+  for(const [key,value] of [['WATERPROOF','talvez'],['HEIGHT','17 kg'],['NEW_ATTRIBUTE','__ML_NOT_APPLICABLE__']]){const bad=structuredClone(d);bad.fields.attributes.value[key]=value;assert.throws(()=>buildPublication(bad,product,'legacy',category,[...defs,...extra]));}
+  delete d.fields.attributes.value.NEW_ATTRIBUTE;assert.throws(()=>buildPublication(d,product,'legacy',category,[...defs,...extra]),/obrigatório/);
+  const varying=structuredClone(d);varying.fields.attributes.value.NEW_ATTRIBUTE='ok';assert.throws(()=>buildPublication(varying,product,'legacy',category,[...defs,...extra.map(a=>a.id==='MATERIAL'?{...a,tags:{allow_variations:true}}:a)]),/Não se aplica/);
+});
+test('pesquisa recebe atributos opcionais e opções oficiais, sem campos internos nem dados sensíveis',()=>{
+  const packet=sanitizePacket({schema:'mdv.ml.preparation.v1',sellerId:'123',products:[{product:{...product,specs:{imei:'SEGREDO'}},currentFields:{categoryId:field('MLB123'),attributes:field({MATERIAL:'Silicone'}),categoryRequirements:field({attributeDefinitions:[{id:'MATERIAL',name:'Material',value_type:'string',tags:{}},{id:'WATERPROOF',name:'À prova de água',value_type:'boolean',tags:{},values:[{id:'1',name:'Sim'}]},{id:'INTERNAL',tags:{read_only:true},name:'SEGREDO'}]})}}]});
+  assert.deepEqual(packet.products[0].categoryAttributes.map(a=>a.id),['MATERIAL','WATERPROOF']);
+  assert.equal(packet.products[0].categoryAttributes[0].currentValue,'Silicone');assert.equal(packet.products[0].categoryAttributes[1].values[0].name,'Sim');assert.ok(!JSON.stringify(packet).includes('SEGREDO'));
+});
 test('medidas de cada produto usam cadastro, inteiros com unidade e arredondamento para cima',()=>{
   const p={...product,weight_kg:'0.1000',dimensions:JSON.stringify({height_cm:17,width_cm:8,depth_cm:1.5})};
   assert.deepEqual(catalogMeasures(p),{grams:100,height:17,width:8,length:2});

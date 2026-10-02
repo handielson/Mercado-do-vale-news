@@ -110,11 +110,11 @@ function buildPublication(draft, product, mode, category, definitions) {
   if (!Array.isArray(photos) || !photos.length || photos.some(p => !https(p?.url) || !['own','authorized'].includes(p.rights) || !p.evidence)) throw fail('Confira fotos próprias ou autorizadas.');
   const attributes = value('attributes');
   if (!object(attributes) || Object.values(attributes).some(v => typeof v !== 'string' || !v.trim())) throw fail('Preencha os atributos com valores de texto verificados.');
-  for (const def of definitions.filter(d => d.tags?.required || d.tags?.conditionally_required)) {
+  for (const def of definitions.filter(d => d.tags?.required || (value('condition')==='new' && d.tags?.new_required))) {
     if (!attributes[def.id] && !(def.id === 'GTIN' && value('gtin'))) throw fail(`Atributo obrigatório: ${def.name || def.id}.`);
   }
   for (const id of Object.keys(attributes)) {
-    if (id !== 'SELLER_SKU' && !definitions.some(d => d.id === id && !d.tags?.read_only)) throw fail(`Atributo não permitido: ${id}.`);
+    if (id !== 'SELLER_SKU' && !definitions.some(d => d.id === id && !d.tags?.read_only && !d.tags?.fixed && !d.tags?.inferred)) throw fail(`Atributo não permitido: ${id}.`);
     if (/ANATEL|INMETRO/i.test(id)) {
       const cert = confirmed('certificates')?.[id];
       if (!cert?.number || cert.number !== attributes[id] || !https(cert.evidence) || !fields.certificates.sources.some(s => ['official_document','official_catalog','manufacturer'].includes(s.kind))) throw fail(`Certificação oficial pendente: ${id}.`);
@@ -141,7 +141,22 @@ function buildPublication(draft, product, mode, category, definitions) {
     price:value('priceCents')/100, available_quantity:value('quantity'), condition:value('condition'), listing_type_id:policy.listingTypeId,
     [mode === 'legacy' ? 'title' : 'family_name']:title,
     pictures:photos.map(p => ({source:p.url})),
-    attributes:Object.entries({...attributes,...packageAttributes,...(gtin ? {GTIN:gtin} : {}),SELLER_SKU:product.sku}).map(([id,value_name]) => ({id,value_name})),
+    attributes:Object.entries({...attributes,...packageAttributes,...(gtin ? {GTIN:gtin} : {}),SELLER_SKU:product.sku}).map(([id,value_name]) => {
+      const def=definitions.find(d=>d.id===id);
+      if(value_name==='__ML_NOT_APPLICABLE__') {
+        if(!def || def.tags?.allow_variations || def.tags?.required || (value('condition')==='new' && def.tags?.new_required)) throw fail(`Não se aplica não permitido: ${def?.name || id}.`);
+        return {id,value_id:'-1',value_name:null};
+      }
+      if(def?.value_max_length && value_name.length>def.value_max_length) throw fail(`Valor excede o limite: ${def.name || id}.`);
+      const option=def?.values?.find(v=>v.name===value_name);
+      if(def?.value_type==='boolean' && !option) throw fail(`Selecione uma opção oficial: ${def.name || id}.`);
+      if(def?.value_type==='number' && !/^-?\d+(?:[.,]\d+)?$/.test(value_name)) throw fail(`Informe um número: ${def.name || id}.`);
+      if(def?.value_type==='number_unit') {
+        const parts=value_name.match(/^(-?\d+(?:[.,]\d+)?)\s+(.+)$/);
+        if(!parts || !def.allowed_units?.some(u=>u.id===parts[2])) throw fail(`Confira valor e unidade: ${def.name || id}.`);
+      }
+      return {id,...(option?{value_id:option.id}:{}),value_name};
+    }),
     sale_terms:[{id:'WARRANTY_TYPE',value_name:policy.warranty},...(policy.warrantyTime ? [{id:'WARRANTY_TIME',value_name:policy.warrantyTime}] : [])], shipping:{mode:policy.shipping.mode,free_shipping:policy.shipping.freeShipping} };
 }
 

@@ -8,6 +8,19 @@ import type { Batch, FieldName, SourceKind } from '../../../services/mercadoLivr
 const labels: Record<FieldName, string> = { title: 'Título legado', familyName: 'Nome da família (User Products)', description: 'Descrição', categoryId: 'Categoria', categoryRequirements: 'Requisitos oficiais da categoria', condition: 'Condição', priceCents: 'Preço', quantity: 'Quantidade', photos: 'Fotos e autorização', attributes: 'Atributos', gtin: 'GTIN', certificates: 'Certificações e evidências', commercialPolicy: 'Política comercial', variations: 'Variantes' };
 const structured = new Set<FieldName>(['categoryRequirements', 'photos', 'attributes', 'certificates', 'commercialPolicy', 'variations']);
 const kinds: SourceKind[] = ['catalog', 'manufacturer', 'official_catalog', 'official_document', 'operator', 'authorized_photo', 'marketplace_reference'];
+// String marker in the draft; the publication service serializes the official value_id -1.
+const notApplicable = '__ML_NOT_APPLICABLE__';
+const attributeRequired = (a:any, condition:unknown) => !!(a.tags?.required || (condition==='new' && a.tags?.new_required));
+function AttributeInput({attribute:a,value,onChange,disabled=false}:{attribute:any;value:string;onChange:(value:string)=>void;disabled?:boolean}) {
+  const options=a.values || [], units=a.allowed_units || [];
+  const common={className:'border rounded p-2 block w-full',disabled,'aria-label':a.name};
+  if(a.value_type==='boolean') return <select {...common} value={value} onChange={e=>onChange(e.target.value)}><option value="">Selecione</option>{value && !options.some((v:any)=>v.name===value) && <option value={value}>{value}</option>}{options.map((v:any)=><option key={v.id} value={v.name}>{v.name}</option>)}</select>;
+  if(a.value_type==='number_unit' && units.length) {
+    const match=value.match(/^(.*?)\s+([^\s]+)$/), amount=match?match[1]:value, unit=match?match[2]:(a.default_unit || units[0].id);
+    return <div className="flex gap-2"><input {...common} type="text" inputMode="decimal" value={amount} placeholder="Valor" onChange={e=>onChange(e.target.value?`${e.target.value} ${unit}`:'')} /><select className="border rounded p-2" aria-label={`Unidade de ${a.name}`} disabled={disabled} value={unit} onChange={e=>onChange(amount?`${amount} ${e.target.value}`:'')}>{!units.some((u:any)=>u.id===unit) && <option value={unit}>{unit}</option>}{units.map((u:any)=><option key={u.id} value={u.id}>{u.name}</option>)}</select></div>;
+  }
+  return <><input {...common} type="text" inputMode={a.value_type==='number'?'decimal':undefined} maxLength={a.value_max_length} value={value} list={options.length?`ml-attribute-${a.id}`:undefined} placeholder={a.tags?.multivalued?'Valores separados por vírgula':'Preencher com informação comprovada'} onChange={e=>onChange(e.target.value)} />{options.length>0 && <datalist id={`ml-attribute-${a.id}`}>{options.map((v:any)=><option key={v.id} value={v.name}/>)}</datalist>}</>;
+}
 const download = (name: string, value: unknown) => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -17,7 +30,9 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
   const [batch, setBatch] = useState<Batch | null>(null), [active, setActive] = useState(''), [query, setQuery] = useState('');
   const [error, setError] = useState(''), [field, setField] = useState<FieldName>('title'), [value, setValue] = useState('');
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
-  const [preview, setPreview] = useState<any>(null), [officialAttributes, setOfficialAttributes] = useState<any[]>([]);
+  const [preview, setPreview] = useState<any>(null);
+  const [categoryData, setCategoryData] = useState<Record<string,any>>({}), [categoryLoading,setCategoryLoading]=useState(false), [categoryError,setCategoryError]=useState(''), [categoryReload,setCategoryReload]=useState(0);
+  const categoryRequests=useRef(new Map<string,Promise<any>>());
   const [familyPreviews, setFamilyPreviews] = useState<{productId:string; data:any}[]>([]);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -31,6 +46,40 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
   useEffect(() => { const timer = setInterval(() => refreshClock(n => n + 1), 30000); return () => clearInterval(timer); }, []);
   const reports = batch ? evaluateBatch(batch) : [];
   const draft = batch?.drafts.find(d => d.productId === active), report = reports.find(r => r.productId === active);
+  const categoryId=String(draft?.fields.categoryId?.value || ''), condition=draft?.fields.condition?.value;
+  const officialAttributes=categoryData[categoryId]?.attributes || [];
+  useEffect(()=>{
+    let cancelled=false;
+    setCategoryError('');setCategoryLoading(false);
+    if(!draft || !/^MLB\d+$/.test(categoryId)) return;
+    const productId=draft.productId;
+    const apply=(data:any)=>{
+      if(cancelled || !alive.current) return;
+      setCategoryData(previous=>({...previous,[categoryId]:data}));
+      setBatch(previous=>{
+        if(!previous) return previous;
+        const current=previous.drafts.find(d=>d.productId===productId);
+        if(!current || current.fields.categoryId?.value!==categoryId) return previous;
+        const required=data.attributes.filter((a:any)=>attributeRequired(a,current.fields.condition?.value));
+        const requirements={categoryId,requiredAttributes:required.map((a:any)=>a.id),requiredCertificates:required.filter((a:any)=>/ANATEL|INMETRO/i.test(a.id)).map((a:any)=>a.id),allowsLegacyVariations:false,attributeDefinitions:data.attributes};
+        if(JSON.stringify(current.fields.categoryRequirements?.value)===JSON.stringify(requirements) && current.fields.categoryRequirements?.sources.some(s=>s.kind==='official_document')) return previous;
+        const next=editField(current,'categoryRequirements',requirements,{kind:'official_document',reference:`https://api.mercadolibre.com/categories/${categoryId}/attributes`});
+        return {...previous,drafts:previous.drafts.map(d=>d.productId===productId?next:d)};
+      });
+    };
+    if(categoryData[categoryId]) {apply(categoryData[categoryId]);return ()=>{cancelled=true;};}
+    setCategoryLoading(true);
+    let request=categoryRequests.current.get(categoryId);
+    if(!request) {
+      request=mercadoLivreService.getCategoryRequirements(categoryId).then(data=>{
+        if(data.category?.id!==categoryId || !Array.isArray(data.attributes)) throw new Error('Ficha oficial da categoria indisponível.');
+        return data;
+      }).finally(()=>categoryRequests.current.delete(categoryId));
+      categoryRequests.current.set(categoryId,request);
+    }
+    request.then(apply).catch(e=>{if(!cancelled && alive.current)setCategoryError(e instanceof Error?e.message:'Falha ao consultar atributos.');}).finally(()=>{if(!cancelled && alive.current)setCategoryLoading(false);});
+    return ()=>{cancelled=true;};
+  },[active,categoryId,condition,categoryReload]);
   const activeParent = batch?.snapshot.products.find(p => p.id === active)?.parent_id;
   const familyDrafts = batch?.drafts.filter(d => activeParent && batch.snapshot.products.find(p => p.id === d.productId)?.parent_id === activeParent) || [];
   const update = (next: typeof draft) => { if (batch && next) setBatch({ ...batch, drafts: batch.drafts.map(d => d.productId === next.productId ? next : d) }); };
@@ -74,7 +123,10 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
     const headers = {'Content-Type':'application/json','x-mdv-local-research':'1'};
     let researched = batch;
     for (let offset=0; offset<batch.drafts.length; offset+=5) {
-    const chunk={...batch,drafts:batch.drafts.slice(offset,offset+5)};
+    const chunk={...batch,drafts:batch.drafts.slice(offset,offset+5).map(d=>{
+      const id=String(d.fields.categoryId?.value || ''), definitions=categoryData[id]?.attributes;
+      return definitions?{...d,fields:{...d.fields,categoryRequirements:{value:{...(d.fields.categoryRequirements?.value || {}),attributeDefinitions:definitions},sources:d.fields.categoryRequirements?.sources || [],confirmed:false}}}:d;
+    })};
     const started = await fetch('/__ml-local/research', {method:'POST',headers,body:JSON.stringify(researchPacket(chunk))});
     const job = await started.json(); if (!started.ok) throw new Error(job.error || 'Codex local indisponível.');
     setNotice('Codex pesquisando modelos e comparando anúncios. Você pode aguardar nesta tela.');
@@ -89,15 +141,7 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
     if(Date.now()>=deadline) throw new Error('Tempo de espera excedido. Confira o Codex local.');
     }
   });
-  const loadRequirements = () => run(async () => {
-    if(!draft) return; const id=String(draft.fields.categoryId?.value || '');
-    const data=await mercadoLivreService.getCategoryRequirements(id);
-    if(!Array.isArray(data.attributes)) throw new Error('Exigências da categoria indisponíveis.');
-    const required=data.attributes.filter((a:any)=>a.tags?.required || a.tags?.conditionally_required);
-    update(editField(draft,'categoryRequirements',{categoryId:id,requiredAttributes:required.map((a:any)=>a.id),requiredCertificates:required.filter((a:any)=>/ANATEL|INMETRO/i.test(a.id)).map((a:any)=>a.id),allowsLegacyVariations:false},{kind:'official_document',reference:`https://api.mercadolibre.com/categories/${id}/attributes`}));
-    setOfficialAttributes(data.attributes.filter((a:any)=>!a.tags?.read_only));
-    setNotice('Exigências oficiais carregadas. Confira os atributos e confirme a revisão.');
-  });
+  const loadRequirements = () => {setCategoryData(previous=>{const next={...previous};delete next[categoryId];return next;});setCategoryReload(n=>n+1);};
   const validateRemote = () => run(async () => { if(!batch || !draft) return; setPreview(await mercadoLivreService.previewPublication(batch.sellerId,draft)); setNotice('Prévia validada pelo Mercado Livre. Confira antes de publicar.'); });
   const publish = () => {
     if(!batch || !draft || !preview || !window.confirm(`Publicar ${draft.sku} na conta ${batch.snapshot.nickname || batch.sellerId}, com preço e frete revisados?`)) return;
@@ -183,8 +227,24 @@ export default function MercadoLivrePreparationPage({ localPilotFile }: {localPi
             <label className="block text-sm">Quem paga o frete?<select className="block border rounded p-2" value={draft.fields.commercialPolicy?.value?.shipping?.payer || ''} onChange={e=>update(editField(draft,'commercialPolicy',{...(draft.fields.commercialPolicy?.value || {}),shipping:{...(draft.fields.commercialPolicy?.value?.shipping || {}),payer:e.target.value,freeShipping:e.target.value==='seller'}},{kind:'operator',reference:`frete revisado:${draft.sku}`}))}><option value="">Selecione</option><option value="buyer">Comprador</option><option value="seller">Vendedor — grátis para o comprador</option></select></label>
             <button className="border rounded p-2" onClick={()=>{if(window.confirm('Todas as fotos cadastradas são suas e podem ser usadas neste anúncio?')) update(editField(draft,'photos',(draft.fields.photos?.value || []).map((p:any)=>({...p,rights:'own',evidence:`Declaração do operador: fotos próprias do produto ${draft.sku}`})),{kind:'operator',reference:`fotos próprias:${draft.sku}`}));}}>Declarar autoria das fotos cadastradas</button>
           </section>
-          <button onClick={loadRequirements} disabled={!draft.fields.categoryId?.value} className="border rounded p-3">Consultar exigências oficiais da categoria</button>
-          {officialAttributes.length>0 && <div className="grid gap-3 sm:grid-cols-2">{officialAttributes.map(a=><label key={a.id} className="text-sm">{a.name}{a.tags?.required || a.tags?.conditionally_required ? ' • obrigatório' : ''}<input className="border rounded p-2 block w-full" value={draft.fields.attributes?.value?.[a.id] || ''} placeholder={a.values?.slice(0,3).map((v:any)=>v.name).join(', ')} onChange={e=>{const attributes={...(draft.fields.attributes?.value || {})};if(e.target.value)attributes[a.id]=e.target.value;else delete attributes[a.id];update(editField(draft,'attributes',attributes,{kind:'operator',reference:`revisão:${draft.sku}`}));}} /></label>)}</div>}
+          <section aria-label="Ficha técnica da categoria" className="border rounded p-4 space-y-3">
+            <h3 className="font-semibold">Todos os atributos da categoria {categoryData[categoryId]?.category?.name || categoryId}</h3>
+            <p className="text-sm">A ficha é carregada automaticamente ao definir a categoria. Aproveite o cadastro, pesquise as lacunas e confira cada informação antes do envio.</p>
+            <button onClick={loadRequirements} disabled={!/^MLB\d+$/.test(categoryId) || categoryLoading} className="border rounded p-3">Consultar exigências oficiais da categoria</button>
+            {categoryLoading && <p role="status">Carregando todos os atributos oficiais…</p>}
+            {categoryError && <p role="alert" className="text-red-700">{categoryError} Tente consultar novamente.</p>}
+            {officialAttributes.length>0 && Object.keys(draft.fields.attributes?.value || {}).some(id=>!officialAttributes.some((a:any)=>a.id===id)) && <p role="alert" className="text-amber-800">Há atributos preenchidos que não pertencem a esta categoria: {Object.keys(draft.fields.attributes?.value || {}).filter(id=>!officialAttributes.some((a:any)=>a.id===id)).join(', ')}. Revise o mapa de Atributos antes de enviar.</p>}
+            {officialAttributes.length>0 && <button onClick={research} className="rounded bg-yellow-400 p-3">Pesquisar atributos pendentes com o Codex local</button>}
+            {!categoryId && <p>Defina a categoria para carregar a ficha técnica.</p>}
+            {officialAttributes.length>0 && <><p className="text-sm">{officialAttributes.length} atributos oficiais • {officialAttributes.filter((a:any)=>!a.tags?.read_only && !a.tags?.fixed && !a.tags?.inferred && !draft.fields.attributes?.value?.[a.id] && !(a.id==='GTIN' && draft.fields.gtin?.value) && !['SELLER_SKU','ITEM_CONDITION','SELLER_PACKAGE_HEIGHT','SELLER_PACKAGE_WIDTH','SELLER_PACKAGE_LENGTH','SELLER_PACKAGE_WEIGHT'].includes(a.id)).length} campos sem informação. Campos internos são preenchidos pelo Mercado Livre.</p><div className="grid gap-3 sm:grid-cols-2">{officialAttributes.map((a:any)=>{
+              const p=batch.snapshot.products.find(p=>p.id===draft.productId);
+              const managed:Record<string,string>={GTIN:String(draft.fields.gtin?.value || ''),SELLER_SKU:draft.sku,ITEM_CONDITION:({new:'Novo',used:'Usado',not_specified:'Não especificado'} as Record<string,string>)[String(condition)] || '',SELLER_PACKAGE_HEIGHT:p?.dimensions?`${Math.ceil(p.dimensions.height_cm)} cm`:'',SELLER_PACKAGE_WIDTH:p?.dimensions?`${Math.ceil(p.dimensions.width_cm)} cm`:'',SELLER_PACKAGE_LENGTH:p?.dimensions?`${Math.ceil(p.dimensions.depth_cm)} cm`:'',SELLER_PACKAGE_WEIGHT:p?.weight_kg?`${Math.ceil(p.weight_kg*1000)} g`:''};
+              const internal=!!(a.tags?.read_only || a.tags?.fixed || a.tags?.inferred), isManaged=Object.prototype.hasOwnProperty.call(managed,a.id);
+              const current=isManaged?managed[a.id]:String(draft.fields.attributes?.value?.[a.id] || (a.tags?.fixed?a.values?.[0]?.name || '':''));
+              const change=(value:string)=>{const attributes={...(draft.fields.attributes?.value || {})};if(value)attributes[a.id]=value;else delete attributes[a.id];update(editField(draft,'attributes',attributes,{kind:'operator',reference:`revisão:${draft.sku}`}));};
+              return <div key={a.id} className="border rounded p-3 text-sm"><label className="font-medium">{a.name} • {internal?'Gerenciado pelo Mercado Livre':isManaged?'Dados do cadastro/rascunho':attributeRequired(a,condition)?'Obrigatório':a.tags?.conditional_required || a.tags?.conditionally_required?'Condicional':'Opcional'}</label><span className="block text-xs text-gray-500">{a.id}{a.tags?.multivalued?' • aceita vários valores':''}</span><AttributeInput attribute={a} value={current===notApplicable?'':current} onChange={change} disabled={internal || isManaged || current===notApplicable}/>{!internal && !isManaged && !attributeRequired(a,condition) && !a.tags?.allow_variations && <label className="block mt-1"><input type="checkbox" checked={current===notApplicable} onChange={e=>change(e.target.checked?notApplicable:'')}/> Não se aplica — somente quando verdadeiro</label>}{!current && !internal && <p className="text-amber-800">Pendente: buscar informação ou confirmar.</p>}{isManaged && <p className="text-xs">Confira no campo correspondente do rascunho{a.id.startsWith('SELLER_PACKAGE_')?' e inclua a embalagem nas medidas':''}.</p>}</div>;
+            })}</div></>}
+          </section>
           <div className="grid md:grid-cols-2 gap-4"><div className="space-y-2">{FIELD_NAMES.map(name => { const f = draft.fields[name]; return <div key={name} className="border p-2 rounded">
             <button className="underline font-semibold" onClick={() => selectField(name)}>{labels[name]}</button> • {f?.conflict ? 'Conflito' : f?.confirmed ? 'Confirmado' : 'Pendente'}
             {structured.has(name) ? <details className="text-sm"><summary>Ver informações de {labels[name].toLowerCase()}</summary><pre className="text-xs overflow-auto max-h-48 whitespace-pre-wrap">{JSON.stringify(f?.value ?? null,null,2)}</pre></details> : <p className="whitespace-pre-wrap text-sm">{name==='priceCents' ? (Number(f?.value || 0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) : name==='condition' ? ({new:'Novo',used:'Usado',not_specified:'Não especificado'}[String(f?.value)] || 'Não informado') : String(f?.value ?? 'Não informado')}</p>}

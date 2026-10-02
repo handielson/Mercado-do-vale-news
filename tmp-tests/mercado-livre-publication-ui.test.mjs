@@ -25,7 +25,8 @@ let browser;
 try{
   browser=await chromium.launch({channel:'msedge',headless:true});
   const page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(20000);
-  const errors=[],unexpected=[];let published=0;
+  const errors=[],unexpected=[];let published=0, categoryCalls=0;
+  let releaseOther, markOtherReady;const otherReady=new Promise(resolve=>markOtherReady=resolve);
   page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
   await page.route('**/*',async route=>{
     const url=decodeURIComponent(route.request().url());
@@ -34,7 +35,7 @@ try{
       if(url.includes('/snapshot-jobs/'))response={status:'complete',result:snapshot};
       else if(url.includes('/snapshot-jobs'))response={id:'consulta-simulada'};
       else if(url.includes('/snapshot'))response=snapshot;
-      else if(url.includes('/categories/'))response={category:{id:'MLB123'},attributes:[{id:'BRAND',name:'Marca',tags:{required:true}}]};
+      else if(url.includes('/categories/')){categoryCalls++;const other=url.endsWith('/MLB124');if(other)await new Promise(resolve=>{releaseOther=resolve;markOtherReady();});response={category:{id:url.split('/categories/')[1],name:'Categoria simulada'},attributes:other?[{id:'OTHER',name:'Campo de outra categoria',tags:{}}]:[{id:'BRAND',name:'Marca',tags:{required:true}},{id:'MATERIAL',name:'Material do exterior',value_type:'string',tags:{}},{id:'WATERPROOF',name:'É à prova de água',value_type:'boolean',tags:{},values:[{id:'1',name:'Sim'},{id:'2',name:'Não'}]},{id:'LENGTH',name:'Comprimento',value_type:'number_unit',allowed_units:[{id:'cm',name:'cm'},{id:'mm',name:'mm'}],default_unit:'cm',tags:{}},{id:'INTERNAL',name:'Campo interno',tags:{read_only:true}},{id:'GTIN',name:'Código universal',tags:{}}]};}
       else if(url.includes('/pricing')){const body=route.request().postDataJSON();assert.equal(body.pricingPolicy.marginBps,2000);response={priceCents:12345,costCents:6000,saleFeeCents:1852,listingFeeCents:0,taxCents:0,adsCents:0,otherPercentCents:0,packagingCents:0,shippingCents:0,otherFixedCents:0,profitCents:4493,marginBps:3639,targetMarginBps:2000,policy:body.pricingPolicy,feeReference:'https://api.mercadolibre.com/sites/MLB/listing_prices',quotedAt:new Date().toISOString()};}
       else if(url.includes('/preview'))response={sellerId:'123',mode:'legacy',payload:{price:123.45,available_quantity:3,shipping:{free_shipping:false},listing_type_id:'gold_special'}};
       else if(url.includes('/publish')){published++;response={itemId:'MLB999',alreadyPublished:false};}
@@ -55,7 +56,28 @@ try{
   await page.getByRole('button',{name:'Pesquisar e comparar com o Codex local'}).click();
   await page.getByText('Pesquisa recebida.',{exact:false}).waitFor();
   await page.getByRole('button',{name:'Aceitar proposta'}).click();
+  await page.getByRole('textbox',{name:'Material do exterior',exact:true}).waitFor();assert.equal(categoryCalls,1);
+  await page.getByRole('textbox',{name:'Material do exterior',exact:true}).fill('Silicone');
+  await page.getByRole('combobox',{name:'É à prova de água',exact:true}).selectOption('Não');
+  await page.getByRole('textbox',{name:'Comprimento',exact:true}).fill('17');
+  await page.getByRole('combobox',{name:'Unidade de Comprimento',exact:true}).selectOption('mm');
+  assert.equal(await page.getByRole('textbox',{name:'Campo interno',exact:true}).isDisabled(),true);
+  const attrCard=page.getByRole('textbox',{name:'Material do exterior',exact:true}).locator('..');
+  await attrCard.getByRole('checkbox').check();assert.equal(await page.getByRole('textbox',{name:'Material do exterior',exact:true}).isDisabled(),true);
+  await attrCard.getByRole('checkbox').uncheck();await page.getByRole('textbox',{name:'Material do exterior',exact:true}).fill('Silicone');
+  await page.getByRole('button',{name:'Categoria',exact:true}).click();
+  await page.getByRole('textbox',{name:'Valor de Categoria',exact:true}).fill('MLB124');
+  await page.getByRole('button',{name:'Salvar edição e revisar confirmação'}).click();await otherReady;
+  assert.equal(await page.getByRole('textbox',{name:'Material do exterior',exact:true}).count(),0);
+  await page.getByRole('textbox',{name:'Valor de Categoria',exact:true}).fill('MLB123');
+  await page.getByRole('button',{name:'Salvar edição e revisar confirmação'}).click();
+  await page.getByRole('textbox',{name:'Material do exterior',exact:true}).waitFor();
+  const otherResponse=page.waitForResponse(r=>decodeURIComponent(r.url()).includes('/categories/MLB124'));releaseOther();await otherResponse;
+  assert.equal(await page.getByRole('textbox',{name:'Campo de outra categoria',exact:true}).count(),0);
+  assert.equal(await page.getByRole('textbox',{name:'Material do exterior',exact:true}).inputValue(),'Silicone');
   await page.getByRole('button',{name:'Consultar exigências oficiais da categoria'}).click();
+  await page.getByText('Carregando todos os atributos oficiais…',{exact:true}).waitFor({state:'hidden'});
+  assert.equal(await page.getByRole('textbox',{name:'Material do exterior',exact:true}).inputValue(),'Silicone');
   await page.getByRole('combobox',{name:'Tipo do anúncio'}).selectOption('gold_special');
   await page.getByRole('textbox',{name:'Tipo da garantia',exact:false}).fill('Garantia do vendedor');
   await page.getByRole('textbox',{name:'Prazo da garantia',exact:false}).fill('90 dias');

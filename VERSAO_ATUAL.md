@@ -1,15 +1,17 @@
-# v1.2.539-ml-familias
+# v1.2.540-ml-atributos
 
 Data: 2026-10-02. Status: pronta para publicação. Branch: main.
-Tag: v1.2.539-ml-familias.
-Release: /var/www/mdv-site/releases/20261002-175110-ml-familias.
+Tag: v1.2.540-ml-atributos.
+Release: /var/www/mdv-site/releases/20261002-184215-ml-atributos.
 
-Preparação agrupada por família; selecionar o pai inclui os filhos disponíveis e ainda não anunciados. Validação e envio conjunto para contas User Products.
+A seleção da categoria carrega todos os atributos oficiais automaticamente. A tela distingue obrigatórios, condicionais, opcionais e campos gerenciados pelo Mercado Livre; conserva os dados existentes e protege contra respostas atrasadas de outra categoria.
 
-Cinco famílias/produtos por seleção; pesquisa em lotes de cinco variantes. Cada filho preserva SKU, fotos, saldo e preço. Salvar rascunho preserva todos os membros. Falha de envio interrompe o lote e registra os vínculos já concluídos. Sem alteração de estoque ou anúncio real nesta entrega.
+Opções oficiais, booleanos, unidades, limite de texto e “Não se aplica” explícito. GTIN, SKU, condição e medidas usam os campos canônicos do rascunho/cadastro. Pesquisa local recebe os atributos editáveis da categoria, inclusive opcionais, e mantém lacunas sem comprovação como pendências. API serializa IDs oficiais e rejeita valores inválidos ou campos internos.
 
-Validações: 26 testes de publicação/preparação; UI simulada com seleção do pai, três envios, exclusão de já anunciado e estoque zero, bloqueio de repetição; suíte Mercado Livre; build com trava Supabase. Deploy somente do frontend, sem reinício da API.
+Validações: 28 testes de publicação/preparação; UI simulada com carregamento automático, troca de categoria durante consulta, edição de campos opcionais e envio da família; suíte Mercado Livre; sintaxe dos servidores e módulos; build com trava Supabase.
 
-Fonte: https://developers.mercadolivre.com.br/pt_br/publicacao-de-produtos/user-products
+Publicação do frontend e API pelo fluxo oficial. Esta entrega não altera os atributos dos anúncios já publicados; os materiais físicos ainda dependem de confirmação do operador.
 
-Arquivos: services/mercadoLivrePreparation.ts, pages/admin/settings/MercadoLivrePreparationPage.tsx, tmp-tests/mercado-livre-publication.test.cjs, tmp-tests/mercado-livre-publication-ui.test.mjs e os três registros de versão.
+Fonte: https://developers.mercadolivre.com.br/pt_br/api-docs-pt-br/atributos
+
+Arquivos: pages/admin/settings/MercadoLivrePreparationPage.tsx, scripts/mercado-livre-local-codex.cjs, services/mercadoLivrePublication.cjs, tmp-tests/mercado-livre-publication-ui.test.mjs, tmp-tests/mercado-livre-publication.test.cjs e registros de versão.

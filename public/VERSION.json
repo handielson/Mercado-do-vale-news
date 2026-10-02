@@ -1,18 +1,19 @@
 {
-  "version": "v1.2.539-ml-familias",
+  "version": "v1.2.540-ml-atributos",
   "date": "2026-10-02",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.539-ml-familias",
-  "release_vps": "/var/www/mdv-site/releases/20261002-175110-ml-familias",
-  "summary": "Seleção pelo produto pai e envio conjunto das variações disponíveis da família Mercado Livre.",
+  "tag": "v1.2.540-ml-atributos",
+  "release_vps": "/var/www/mdv-site/releases/20261002-184215-ml-atributos",
+  "summary": "Ficha completa da categoria Mercado Livre carregada automaticamente, com opções oficiais e pesquisa de atributos pendentes.",
   "changed_files": [
-    "services/mercadoLivrePreparation.ts",
     "pages/admin/settings/MercadoLivrePreparationPage.tsx",
+    "scripts/mercado-livre-local-codex.cjs",
+    "services/mercadoLivrePublication.cjs",
     "tmp-tests/mercado-livre-publication-ui.test.mjs",
     "tmp-tests/mercado-livre-publication.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-02-v1.2.539-ml-familias.md"
+    "docs/versoes/2026-10-02-v1.2.540-ml-atributos.md"
   ]
 }

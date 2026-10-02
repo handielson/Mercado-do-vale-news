@@ -16,7 +16,10 @@ function sanitizePacket(raw) {
   return {sellerId:raw.sellerId,products:raw.products.map(row=>{
     const p=row.product;
     if(!p || !/^[a-f0-9-]{36}$/i.test(p.id || '') || typeof p.sku!=='string' || !p.sku || typeof p.name!=='string') throw new Error('Produto inválido.');
-    return {productId:p.id,sku:p.sku.slice(0,100),name:p.name.slice(0,300),description:String(p.description || '').slice(0,8000),brand:String(p.brand || '').slice(0,100),modelName:String(p.model_name || '').slice(0,200),color:String(p.color || '').slice(0,100),condition:['new','used','not_specified'].includes(p.condition)?p.condition:undefined};
+    const requirements=row.currentFields?.categoryRequirements?.value;
+    const definitions=Array.isArray(requirements?.attributeDefinitions)?requirements.attributeDefinitions:[];
+    const categoryAttributes=definitions.filter(a=>a && /^[A-Z][A-Z0-9_]*$/.test(a.id || '') && !a.tags?.read_only && !a.tags?.inferred && !a.tags?.fixed).slice(0,200).map(a=>({id:a.id,name:String(a.name || '').slice(0,200),valueType:String(a.value_type || ''),required:!!a.tags?.required,multivalued:!!a.tags?.multivalued,values:(Array.isArray(a.values)?a.values:[]).slice(0,100).map(v=>({id:String(v.id),name:String(v.name).slice(0,200)})),allowedUnits:(Array.isArray(a.allowed_units)?a.allowed_units:[]).map(u=>String(u.id)),currentValue:typeof row.currentFields?.attributes?.value?.[a.id]==='string'?row.currentFields.attributes.value[a.id].slice(0,500):''}));
+    return {productId:p.id,sku:p.sku.slice(0,100),name:p.name.slice(0,300),description:String(p.description || '').slice(0,8000),brand:String(p.brand || '').slice(0,100),modelName:String(p.model_name || '').slice(0,200),color:String(p.color || '').slice(0,100),condition:['new','used','not_specified'].includes(p.condition)?p.condition:undefined,categoryId:String(row.currentFields?.categoryId?.value || ''),categoryAttributes};
   })};
 }
 function parseResult(raw,packet) {
@@ -63,7 +66,7 @@ async function runResearch(packet,{executable,spawnProcess=spawn}={}) {
       const timer=setTimeout(()=>{child.kill();reject(new Error('Pesquisa excedeu 15 minutos. Tente um lote menor.'));},900000);
       child.once('error',()=>{clearTimeout(timer);reject(new Error('Não foi possível iniciar o Codex local.'));});
       child.once('close',code=>{clearTimeout(timer);code===0?resolve():reject(new Error('Codex não concluiu a pesquisa. Confira o login e os limites do plano.'));});
-      child.stdin.on('error',()=>{}); child.stdin.end(prompt+' Use primeiro os dados do cadastro fornecido; pesquise somente lacunas ou divergências. Preserve cor e modelo cadastrados. Para attributes, valueJson deve codificar um objeto de IDs oficiais com valores string, por exemplo {"BRAND":"Lcx","COLOR":"Ciano"}; nunca uma lista nem nomes traduzidos como chaves. Não infira condição a partir de estoque ou fotos.');
+      child.stdin.on('error',()=>{}); child.stdin.end(prompt+' Use primeiro os dados do cadastro fornecido; pesquise somente lacunas ou divergências. Preserve a descrição integral do cadastro, cor e modelo cadastrados. Quando categoryAttributes estiver presente, examine todos os atributos editáveis, inclusive opcionais, usando seus IDs e opções oficiais. Preserve os currentValue existentes no mapa proposto. Campos sem comprovação permanecem vazios e devem ser relacionados em notes; nunca trate desconhecido como Não ou Não se aplica. Não proponha GTIN, SKU, dados internos ou medidas de embalagem. Booleanos usam o nome de uma opção oficial; medidas usam número e unidade permitida. Para attributes, valueJson deve codificar um objeto de IDs oficiais com valores string, por exemplo {"BRAND":"Lcx","COLOR":"Ciano"}; nunca uma lista nem nomes traduzidos como chaves. Não infira condição a partir de estoque ou fotos.');
     });
     return parseResult(JSON.parse(await fs.readFile(output,'utf8')),packet);
   } finally { // Delete only the known output files, never recursively remove a computed directory.
