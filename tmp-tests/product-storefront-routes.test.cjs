@@ -27,6 +27,7 @@ test('cotação 3D usa preço do servidor e exige consulta para quantidade acima
   assert.match(calls[0].sql, /o\.storefront = 'loja_3d'/);
   assert.match(calls[0].sql, /psl\.quantity - psl\.reserved_quantity/);
   assert.match(calls[0].sql, /print3d_active_recipes/);
+  assert.match(calls[0].sql, /BINARY recipe_file\.id = BINARY active_recipe\.primary_file_id/);
   assert.deepEqual(calls[0].params, ['p1']);
   await app.close();
 });
@@ -77,6 +78,7 @@ test('API pública entrega somente a projeção comercial do site, sem custo', a
   assert.match(calls[0].sql, /o\.publication_status = 'published'/);
   assert.match(calls[0].sql, /p\.is_print3d = 1/);
   assert.match(calls[0].sql, /print3d_active_recipes/);
+  assert.match(calls[0].sql, /BINARY active_recipe\.product_id = BINARY p\.id/);
   assert.match(calls[0].sql, /psl\.quantity - psl\.reserved_quantity/);
   await app.close();
 });

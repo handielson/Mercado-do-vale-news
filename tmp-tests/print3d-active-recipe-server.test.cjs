@@ -95,3 +95,9 @@ test('seleciona revisão manual sem exigir arquivo JSON separado', async t => {
   assert.equal(response.json().changed,true);
   assert.equal(state.writes,1);
 });
+
+test('consultas de receita ativa são independentes da collation dos IDs', () => {
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'services', 'print3dActiveRecipeServer.cjs'), 'utf8');
+  assert.match(source, /BINARY r\.id=BINARY a\.recipe_id/);
+  assert.match(source, /BINARY f\.id=BINARY a\.primary_file_id/);
+});

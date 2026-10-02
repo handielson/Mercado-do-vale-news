@@ -27,8 +27,8 @@ function registerPrint3dActiveRecipeRoutes(app, {
               r.revision,r.sku_snapshot,f.kind AS primary_file_kind,
               f.original_name AS primary_file_name,f.printer_profile
          FROM print3d_active_recipes a
-         JOIN print3d_recipe_revisions r ON r.id=a.recipe_id
-         JOIN print3d_recipe_files f ON f.id=a.primary_file_id
+         JOIN print3d_recipe_revisions r ON BINARY r.id=BINARY a.recipe_id
+         JOIN print3d_recipe_files f ON BINARY f.id=BINARY a.primary_file_id
         WHERE a.product_id=? LIMIT 1`, [productId]
     );
     return { activeRecipe: rows[0] || null };

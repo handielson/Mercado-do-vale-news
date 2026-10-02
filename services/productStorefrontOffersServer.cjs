@@ -38,9 +38,9 @@ function parseJson(value, fallback) {
 function eligibilitySql(storefront) {
   if (storefront === 'loja_3d') return `o.publication_status = 'published' AND p.is_print3d = 1 AND o.price_retail > 0
     AND EXISTS (SELECT 1 FROM print3d_active_recipes active_recipe
-      JOIN print3d_recipe_files recipe_file ON recipe_file.id = active_recipe.primary_file_id
-       AND recipe_file.recipe_id = active_recipe.recipe_id
-      WHERE active_recipe.product_id = p.id AND recipe_file.kind IN ('model', 'project', 'gcode'))`;
+      JOIN print3d_recipe_files recipe_file ON BINARY recipe_file.id = BINARY active_recipe.primary_file_id
+       AND BINARY recipe_file.recipe_id = BINARY active_recipe.recipe_id
+      WHERE BINARY active_recipe.product_id = BINARY p.id AND recipe_file.kind IN ('model', 'project', 'gcode'))`;
   return `((o.publication_status = 'published' AND o.price_retail > 0)
     OR (o.product_id IS NULL AND COALESCE(p.is_print3d, 0) = 0
       AND COALESCE(p.hide_from_catalog, 0) = 0 AND p.price_retail > 0))`;
@@ -91,9 +91,9 @@ async function loadPrint3dQuote(pool, requested) {
           AND p.status = 'active' AND COALESCE(p.is_parent, 0) = 0 AND p.is_print3d = 1
           AND o.publication_status = 'published' AND o.price_retail > 0
           AND EXISTS (SELECT 1 FROM print3d_active_recipes active_recipe
-            JOIN print3d_recipe_files recipe_file ON recipe_file.id = active_recipe.primary_file_id
-             AND recipe_file.recipe_id = active_recipe.recipe_id
-            WHERE active_recipe.product_id = p.id AND recipe_file.kind IN ('model', 'project', 'gcode'))`, ids);
+            JOIN print3d_recipe_files recipe_file ON BINARY recipe_file.id = BINARY active_recipe.primary_file_id
+             AND BINARY recipe_file.recipe_id = BINARY active_recipe.recipe_id
+            WHERE BINARY active_recipe.product_id = BINARY p.id AND recipe_file.kind IN ('model', 'project', 'gcode'))`, ids);
       const byId = new Map(rows.map((row) => [String(row.id), row]));
       const items = requested.map(({ product_id, quantity }) => {
         const row = byId.get(product_id);
@@ -209,9 +209,9 @@ function registerProductStorefrontOfferRoutes(fastify, {
           SELECT 1
             FROM print3d_active_recipes active_recipe
             JOIN print3d_recipe_files recipe_file
-              ON recipe_file.id = active_recipe.primary_file_id
-             AND recipe_file.recipe_id = active_recipe.recipe_id
-           WHERE active_recipe.product_id = products.id
+              ON BINARY recipe_file.id = BINARY active_recipe.primary_file_id
+             AND BINARY recipe_file.recipe_id = BINARY active_recipe.recipe_id
+           WHERE BINARY active_recipe.product_id = BINARY products.id
              AND recipe_file.kind IN ('model', 'project', 'gcode')
         ) AS has_printable_file
         FROM products WHERE id = ? LIMIT 1`, [productId]);
