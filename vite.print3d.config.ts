@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -9,6 +10,15 @@ export default defineConfig({
   envPrefix: 'PRINT3D_PUBLIC_',
   publicDir: false,
   plugins: [react(), {
+    name: 'print3d-version-file',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'VERSION.json',
+        source: fs.readFileSync(path.resolve(__dirname, 'public/VERSION.json')),
+      });
+    },
+  }, {
     name: 'print3d-local-api-disabled',
     configureServer(server) {
       server.middlewares.use(createPrint3dPublicProxy({apiOrigin:process.env.PRINT3D_LOCAL_API_ORIGIN}));

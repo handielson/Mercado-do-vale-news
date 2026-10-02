@@ -1,19 +1,17 @@
 {
-  "version": "v1.2.531-loja-3d-collation",
+  "version": "v1.2.532-loja-3d-version",
   "date": "2026-10-02",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.531-loja-3d-collation",
-  "release_vps": "/var/www/mdv-site/releases/20261002-033352-v12531-loja-3d-collation",
-  "release_print3d_vps": "/var/www/print3d-site/releases/20261002-033352-v12531-loja-3d-collation",
-  "summary": "Corrige as comparações de IDs das receitas 3D entre tabelas MySQL com collations diferentes.",
+  "tag": "v1.2.532-loja-3d-version",
+  "release_vps": "/var/www/mdv-site/releases/20261002-034100-v12532-loja-3d-version",
+  "release_print3d_vps": "/var/www/print3d-site/releases/20261002-034100-v12532-loja-3d-version",
+  "summary": "Publica o mesmo arquivo de versão canônico nos sites Mercado do Vale e 3DMV.",
   "changed_files": [
-    "services/productStorefrontOffersServer.cjs",
-    "services/print3dActiveRecipeServer.cjs",
-    "tmp-tests/print3d-active-recipe-server.test.cjs",
-    "tmp-tests/product-storefront-routes.test.cjs",
+    "vite.print3d.config.ts",
+    "tmp-tests/print3d-version-file-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-02-v1.2.531-loja-3d-collation.md"
+    "docs/versoes/2026-10-02-v1.2.532-loja-3d-version.md"
   ]
 }
