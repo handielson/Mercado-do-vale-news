@@ -1,21 +1,29 @@
 {
-  "version": "v1.2.542-ml-categoria-auto",
-  "date": "2026-10-02",
+  "version": "v1.2.543-contabilidade-simples",
+  "date": "2026-10-04",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.542-ml-categoria-auto",
-  "release_vps": "/var/www/mdv-site/releases/20261002-193535-ml-categoria-auto",
-  "summary": "Categoria Mercado Livre localizada no cadastro com escolha manual e reaproveitamento pelo modelo.",
+  "tag": "v1.2.543-contabilidade-simples",
+  "release_vps": "/var/www/mdv-site/releases/20261004-150259-contabilidade-simples",
+  "summary": "Corrige faixas do Simples, usa meses completos anteriores à competência e consulta faturamento operacional sem duplicar notas fiscais.",
   "changed_files": [
-    "components/products/sections/MercadoLivreCatalogAttributes.tsx",
-    "services/mercadoLivrePublication.cjs",
-    "services/mercadoLivreServer.cjs",
-    "services/mercadoLivreService.ts",
-    "services/products.ts",
-    "tmp-tests/mercado-livre-publication.test.cjs",
-    "tmp-tests/mercado-livre-publication-ui.test.mjs",
+    "pages/admin/accounting/AccountingPage.tsx",
+    "pages/admin/settings/components/ShopeeFinanceTab.tsx",
+    "services/simplesNacional.ts",
+    "tmp-tests/simples-nacional.test.mjs",
+    "tmp-tests/accounting-page-browser.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-02-v1.2.542-ml-categoria-auto.md"
+    "docs/versoes/2026-10-04-v1.2.543-contabilidade-simples.md"
+  ],
+  "validations": [
+    "10 testes de Simples, faturamento e navegador",
+    "test:money",
+    "build com trava Supabase"
+  ],
+  "known_limitations": [
+    "Histórico operacional incompleto não confirma a faixa declarada no PGDAS-D.",
+    "Simulação por competência limitada a 2018–2026; regras de 2027 exigem revisão.",
+    "Suíte ampliada do contador: 50/51; teste preexistente de cancelamento usa autorização fixa de 24/09/2026, fora da janela de 23 horas."
   ]
 }

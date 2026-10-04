@@ -1,11 +1,13 @@
-# v1.2.542-ml-categoria-auto
+# v1.2.543-contabilidade-simples
 
-Data: 2026-10-02. Status: pronta para publicação. Branch: main.
-Tag: v1.2.542-ml-categoria-auto.
-Release: /var/www/mdv-site/releases/20261002-193535-ml-categoria-auto.
+Data: 2026-10-04. Status: pronta para publicação. Branch: main.
+Tag: v1.2.543-contabilidade-simples.
+Release: /var/www/mdv-site/releases/20261004-150259-contabilidade-simples.
 
-Ao preencher o nome no cadastro, o preditor oficial do Mercado Livre busca a categoria. Uma única sugestão é selecionada; múltiplas sugestões exigem escolha. Sem resultado ou com erro, o operador escolhe pela árvore manual ou código opcional. A categoria carrega os atributos oficiais e a escolha é guardada no produto e no modelo ao salvar.
+Faixas oficiais compartilhadas pela Contabilidade e Finanças Shopee. RBT12 por meses completos anteriores à competência, com faturamento do relatório operacional sem duplicar notas e aviso de histórico incompleto. Valor manual do contador restrito à competência escolhida.
 
-Validações: 33 testes de publicação/cadastro; UI com resultado único, ambiguidade, ausência de resultado, escolha manual, preservação de categoria salva e resposta atrasada; suíte Mercado Livre; sintaxe dos servidores e módulos; build com trava Supabase.
+Validações: 10 testes de cálculo, faturamento e navegador; teste monetário; build com trava Supabase. Falha preexistente na suíte ampliada do contador por data fixa de cancelamento vencida (50/51).
 
-Detalhes e arquivos: docs/versoes/2026-10-02-v1.2.542-ml-categoria-auto.md.
+Entrega somente do frontend, em checkout limpo. Sem alterações na API ou no banco. Competências a partir de 2027 exigem revisão das regras.
+
+Detalhes: docs/versoes/2026-10-04-v1.2.543-contabilidade-simples.md.

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { withShopeeConnection } from '../../../../services/shopeeConnections';
+import { SIMPLES_ANEXOS, calcSimples } from '../../../../services/simplesNacional';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,80 +36,7 @@ const fmt = (val: number) =>
 const fmtPct = (val: number) =>
     `${(val * 100).toFixed(2)}%`;
 
-// ─── Simples Nacional Engine ──────────────────────────────────────────────────
-
-interface SimplesAnexo { name: string; faixas: { limite: number; aliquota: number; deducao: number }[]; }
-
-const SIMPLES_ANEXOS: Record<string, SimplesAnexo> = {
-    I: {
-        name: 'Anexo I — Comércio',
-        faixas: [
-            { limite: 180000,   aliquota: 0.04,  deducao: 0       },
-            { limite: 360000,   aliquota: 0.073, deducao: 5940    },
-            { limite: 720000,   aliquota: 0.095, deducao: 13860   },
-            { limite: 1440000,  aliquota: 0.107, deducao: 22500   },
-            { limite: 1800000,  aliquota: 0.143, deducao: 87300   },
-            { limite: 3600000,  aliquota: 0.19,  deducao: 378000  },
-        ],
-    },
-    II: {
-        name: 'Anexo II — Indústria',
-        faixas: [
-            { limite: 180000,   aliquota: 0.045, deducao: 0       },
-            { limite: 360000,   aliquota: 0.078, deducao: 5940    },
-            { limite: 720000,   aliquota: 0.10,  deducao: 13860   },
-            { limite: 1440000,  aliquota: 0.112, deducao: 22500   },
-            { limite: 1800000,  aliquota: 0.147, deducao: 85500   },
-            { limite: 3600000,  aliquota: 0.30,  deducao: 720000  },
-        ],
-    },
-    III: {
-        name: 'Anexo III — Serviços (locação, creche, etc.)',
-        faixas: [
-            { limite: 180000,   aliquota: 0.06,  deducao: 0       },
-            { limite: 360000,   aliquota: 0.112, deducao: 9360    },
-            { limite: 720000,   aliquota: 0.135, deducao: 17640   },
-            { limite: 1440000,  aliquota: 0.16,  deducao: 35640   },
-            { limite: 1800000,  aliquota: 0.21,  deducao: 125640  },
-            { limite: 3600000,  aliquota: 0.33,  deducao: 648000  },
-        ],
-    },
-    IV: {
-        name: 'Anexo IV — Serviços (construção, vigilância, etc.)',
-        faixas: [
-            { limite: 180000,   aliquota: 0.045, deducao: 0       },
-            { limite: 360000,   aliquota: 0.09,  deducao: 8100    },
-            { limite: 720000,   aliquota: 0.102, deducao: 12420   },
-            { limite: 1440000,  aliquota: 0.14,  deducao: 39780   },
-            { limite: 1800000,  aliquota: 0.22,  deducao: 183780  },
-            { limite: 3600000,  aliquota: 0.33,  deducao: 828000  },
-        ],
-    },
-    V: {
-        name: 'Anexo V — Serviços (TI, publicidade, etc.)',
-        faixas: [
-            { limite: 180000,   aliquota: 0.155, deducao: 0       },
-            { limite: 360000,   aliquota: 0.18,  deducao: 4500    },
-            { limite: 720000,   aliquota: 0.195, deducao: 9900    },
-            { limite: 1440000,  aliquota: 0.205, deducao: 17100   },
-            { limite: 1800000,  aliquota: 0.23,  deducao: 62100   },
-            { limite: 3600000,  aliquota: 0.305, deducao: 540000  },
-        ],
-    },
-};
-
-interface TaxResult { faixa: number; aliquotaNominal: number; deducao: number; aliquotaEfetiva: number; }
-
-function calcSimples(rbt12: number, anexo: string): TaxResult | null {
-    if (!rbt12 || rbt12 <= 0) return null;
-    const tabela = SIMPLES_ANEXOS[anexo];
-    if (!tabela) return null;
-    const idx = tabela.faixas.findIndex(f => rbt12 <= f.limite);
-    const faixaIdx = idx === -1 ? tabela.faixas.length - 1 : idx;
-    const { aliquota, deducao } = tabela.faixas[faixaIdx];
-    const aliquotaEfetiva = (rbt12 * aliquota - deducao) / rbt12;
-    return { faixa: faixaIdx + 1, aliquotaNominal: aliquota, deducao, aliquotaEfetiva: Math.max(0, aliquotaEfetiva) };
-}
+// Tabela compartilhada com a Contabilidade.
 
 interface TaxConfig { rbt12: number; anexo: string; baseCalculo: 'bruto' | 'semFrete'; }
 
