@@ -41,7 +41,7 @@ function invalidImport(message) {
   return error;
 }
 
-async function collectBlingFiscalDocuments({ listPage, getDetail, getXml, pause = async () => {}, maxDocuments = 120 }) {
+async function collectBlingFiscalDocuments({ listPage, getDetail, getXml, pause = async () => {}, maxDocuments = 120, skipDocument = () => false }) {
   const documents = [];
   for (const type of ['nfe', 'nfce']) {
     for (const status of [5, 2]) {
@@ -49,9 +49,11 @@ async function collectBlingFiscalDocuments({ listPage, getDetail, getXml, pause 
         await pause();
         const items = await listPage(type, status, page);
         if (!Array.isArray(items)) throw invalidImport(`Resposta inválida na listagem ${type}, situação ${status}, página ${page}.`);
-        if (documents.length + items.length > maxDocuments) throw invalidImport('Período com notas demais para uma importação segura. Divida em períodos menores.');
+        const pendingItems = items.filter(item => !skipDocument(type, item));
+        if (documents.length + pendingItems.length > maxDocuments) throw invalidImport('Período com notas demais para uma importação segura. Divida em períodos menores.');
         for (const item of items) {
           if (!item?.id || Number(item.situacao) !== status) throw invalidImport(`Situação ou identificador divergente na listagem ${type}, página ${page}.`);
+          if (skipDocument(type, item)) continue;
           await pause();
           const detail = await getDetail(type, item.id);
           if (String(detail?.id) !== String(item.id) || Number(detail?.situacao) !== status) {

@@ -52,7 +52,7 @@ test('conferência de cancelamento lê pedido atual e SEFAZ sem gravar nem cance
   registerAccountantPortalRoutes(app, { pool, enabled:true,
     getBearerAuthContext:async () => ({ customerId:'admin', userId:'admin', isAdmin:true }),
     getLiveMarketplaceOrder:async (channel, id) => { marketplaceReads++; assert.equal(channel,'shopee'); assert.equal(id,'ORDER-1'); return { order_sn:id, order_status:'CANCELLED' }; },
-    consultSefazInvoice:async () => { sefazReads++; return { situation:'authorized', cStat:'100', authorizationProtocol:'126260000000001', authorizedAt:'2026-09-24T10:00:00-03:00' }; },
+    consultSefazInvoice:async () => { sefazReads++; return { situation:'authorized', cStat:'100', authorizationProtocol:'126260000000001', authorizedAt:new Date(Date.now() - 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z') }; },
   });
   const route = routes.get('get:/admin/fiscal-companies/:id/fiscal-documents/:documentId/cancellation-assessment');
   const req = { params:{ id:'primary', documentId:'note-1' } };
@@ -247,6 +247,7 @@ test('importação usa a prévia correspondente e grava somente após a conferê
   const db = {
     beginTransaction: async () => actions.push('begin'),
     query: async (sql, params) => {
+      if (sql.includes('WHERE access_key=? FOR UPDATE')) return [[]];
       if (sql.includes('FROM mobile_sale_events')) { actions.push('match'); return [params[0] === 'order-123' ? [{ channel:'shopee', external_id:'order-123' }] : [{ channel:'tiktok', external_id:'ORDER-456' }]]; }
       if (sql.includes('INSERT INTO company_fiscal_documents')) savedDocuments.push(params);
       actions.push(sql.includes('company_fiscal_documents') ? 'document' : 'event');

@@ -3,6 +3,7 @@ const { problem } = require('./companyFiscalCore.cjs');
 const { blingReference, normalizeTaxValidation, taxValidationView, applyOperationReviews } = require('./fiscalTaxValidationCore.cjs');
 const { buildRevenueReport, validPeriod } = require('./accountantPortalCore.cjs');
 const { fiscalDocumentTotals } = require('./blingFiscalImportCore.cjs');
+const { saveBlingFiscalDocuments } = require('./blingFiscalPersistence.cjs');
 const { readAccountantSale } = require('./accountantSaleDetails.cjs');
 const { validateArchivedXml, readArchivedXml, renderFiscalPdf } = require('./fiscalDocumentArchive.cjs');
 const certificateVault = require('./fiscalCertificateVault.cjs');
@@ -45,7 +46,7 @@ function companyView(profile) {
   };
 }
 
-function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabled = process.env.MDV_COMPANY_FISCAL_ENABLED === '1', importBlingDocuments, consultSefazInvoice = certificateVault.consultInvoice, getLiveMarketplaceOrder, configureSequence = configureNfceSequence }) {
+function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabled = process.env.MDV_COMPANY_FISCAL_ENABLED === '1', importBlingDocuments, fiscalSyncStatus, consultSefazInvoice = certificateVault.consultInvoice, getLiveMarketplaceOrder, configureSequence = configureNfceSequence }) {
   const auth = async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     const context = await getBearerAuthContext(req);
@@ -73,6 +74,10 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     req.accountantProfile = profile;
     req.accountantActor = String(req.accountantAuth.userId);
   };
+
+  app.get('/admin/fiscal-companies/bling-sync-status', { preHandler: admin }, async () => {
+    return fiscalSyncStatus ? fiscalSyncStatus() : { enabled: false, state: 'unavailable' };
+  });
 
   app.get('/accountant/companies', { preHandler: auth }, async req => {
     if (!enabled) return { enabled: false, companies: [] };
@@ -402,53 +407,7 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     if (!/^[a-f0-9]{64}$/u.test(String(req.body?.fingerprint || '')) || req.body.fingerprint !== fingerprint) {
       throw problem('As notas mudaram desde a prévia. Confira o período novamente antes de importar.', 409);
     }
-    let imported = 0;
-    const db = await pool.getConnection();
-    try {
-      await db.beginTransaction();
-      for (const document of documents) {
-        let channel = 'bling';
-        let externalSaleId = document.marketplaceOrderId || document.externalSaleId;
-        if (document.marketplaceOrderId) {
-          const [candidateRows] = await db.query(
-            "SELECT DISTINCT channel, external_id FROM mobile_sale_events WHERE external_id=? AND channel IN ('shopee','tiktok')",
-            [document.marketplaceOrderId]
-          );
-          const matches = [...new Set(candidateRows.filter(row => String(row.external_id) === document.marketplaceOrderId).map(row => row.channel))];
-          if (matches.length === 1) {
-            channel = matches[0];
-            externalSaleId = document.marketplaceOrderId;
-          }
-        }
-        await db.query(
-          `INSERT INTO company_fiscal_documents
-            (id,profile_id,channel,external_sale_id,model,status,access_key,document_number,series,issued_at,total_cents,source,source_reference,created_by)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-           ON DUPLICATE KEY UPDATE channel=VALUES(channel),external_sale_id=VALUES(external_sale_id),status=IF(status='cancelled','cancelled',VALUES(status)),access_key=COALESCE(VALUES(access_key),access_key),document_number=VALUES(document_number),series=VALUES(series),issued_at=VALUES(issued_at),total_cents=VALUES(total_cents),updated_at=CURRENT_TIMESTAMP`,
-          [randomUUID(),profile.id,channel,externalSaleId,document.model,document.status,document.accessKey,document.documentNumber,document.series,document.issuedAt,document.totalCents,document.source,document.sourceReference,String(req.accountantAuth.userId)]
-        );
-        if (document.authorizedXml) {
-          const [saved] = await db.query('SELECT id FROM company_fiscal_documents WHERE profile_id=? AND source=? AND source_reference=? AND model=? LIMIT 1',[profile.id,document.source,document.sourceReference,document.model]);
-          if (!saved[0]) throw problem('Não foi possível localizar a nota importada para arquivar o XML.',409);
-          const digest = createHash('sha256').update(document.authorizedXml).digest('hex');
-          await db.query('INSERT IGNORE INTO company_fiscal_document_xmls (document_id,profile_id,authorized_xml,xml_sha256,archived_by) VALUES (?,?,?,?,?)',[saved[0].id,profile.id,document.authorizedXml,digest,String(req.accountantAuth.userId)]);
-          const [archive] = await db.query('SELECT xml_sha256 FROM company_fiscal_document_xmls WHERE document_id=? AND profile_id=?',[saved[0].id,profile.id]);
-          if (archive[0]?.xml_sha256 !== digest) throw problem('O XML importado diverge do original arquivado. Importação interrompida.',409);
-        }
-        imported += 1;
-      }
-      await db.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)', [profile.id,String(req.accountantAuth.userId),'bling_fiscal_documents_import',JSON.stringify({ from,to,documents:imported })]);
-      await db.commit();
-    } catch (error) {
-      await db.rollback();
-      throw error;
-    } finally { db.release(); }
-    return {
-      imported,
-      authorized: documents.filter(document => document.status === 'authorized').length,
-      cancelled: documents.filter(document => document.status === 'cancelled').length,
-      from, to, source: 'bling_import',
-    };
+    return saveBlingFiscalDocuments(pool, { profile, from, to, documents, actor: String(req.accountantAuth.userId) });
   });
 
   app.get('/admin/fiscal-companies/:id/accountant-access', { preHandler: admin }, async req => {

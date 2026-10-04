@@ -9926,7 +9926,7 @@ async function getBlingProductDetailAuthHeaderVps(request) {
   return accessToken ? `Bearer ${accessToken}` : '';
 }
 
-async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to, includeXml = false }) {
+async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to, includeXml = false, maxDocuments = 25, skipDocument }) {
   const authHeader = await getBlingProductDetailAuthHeaderVps(request);
   if (!authHeader) {
     const error = new Error('Conecte o Bling antes de importar o histórico fiscal.');
@@ -9965,7 +9965,8 @@ async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to, inc
     getDetail: (type, id) => read(type, null, null, id),
     getXml: includeXml ? async detail => (await downloadBlingNfeXmlVps(detail)).toString('utf8') : undefined,
     pause: () => sleepBlingReconcileVps(450),
-    maxDocuments: 25,
+    maxDocuments,
+    skipDocument,
   });
 }
 
@@ -42894,15 +42895,20 @@ const getLiveFiscalMarketplaceOrder = async (channel, orderId) => {
     }
     return null;
   };
+const blingFiscalAutomation = require('./services/blingFiscalAutomation.cjs').createBlingFiscalAutomation({
+  pool, fetchDocuments: fetchBlingFiscalDocumentsForMigrationVps,
+});
 require('./services/accountantPortalServer.cjs').registerAccountantPortalRoutes(fastify, {
   pool,
   getBearerAuthContext: getVpsBearerAuthContext,
   importBlingDocuments: fetchBlingFiscalDocumentsForMigrationVps,
+  fiscalSyncStatus: blingFiscalAutomation.getStatus,
   getLiveMarketplaceOrder: getLiveFiscalMarketplaceOrder,
 });
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {
+  blingFiscalAutomation.start();
   if (process.env.MDV_FISCAL_AUTO_CANCEL_ENABLED === '1' && process.env.MDV_FISCAL_AUTO_CANCEL_HOMOLOGATED === '1') {
     const fiscalCancellation = require('./services/fiscalCancellationAutomation.cjs').createFiscalCancellationAutomation({
       pool, getLiveMarketplaceOrder: getLiveFiscalMarketplaceOrder,

@@ -3,14 +3,16 @@ const path = require('node:path');
 const files = [
   'services/accountantPortalCore.cjs', 'services/accountantPortalServer.cjs',
   'services/accountantSaleDetails.cjs', 'services/blingFiscalImportCore.cjs',
+  'services/blingFiscalPersistence.cjs', 'services/blingFiscalAutomation.cjs',
   'services/fiscalDocumentArchive.cjs', 'services/fiscalNfceAccessKey.cjs',
   'services/danfeNfceCore.cjs', 'services/fiscalNfceDanfeRead.cjs',
 ];
 
 // Exact anchors make a divergent runtime fail before any replacement.
 function patchServer(source) {
-  const oldSignature = 'async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to }) {';
-  const signature = 'async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to, includeXml = false }) {';
+  const extra = source.includes('maxDocuments = 25, skipDocument') ? ', maxDocuments = 25, skipDocument' : '';
+  const oldSignature = `async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to${extra} }) {`;
+  const signature = `async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to, includeXml = false${extra} }) {`;
   const anchor = '    getDetail: (type, id) => read(type, null, null, id),';
   const addition = "    getXml: includeXml ? async detail => (await downloadBlingNfeXmlVps(detail)).toString('utf8') : undefined,";
   for (const marker of [source.includes(signature) ? signature : oldSignature, anchor]) {
@@ -76,4 +78,53 @@ async function deployAccountantPortal({ appDir, apiProc, exec, upload, root, che
   console.log(`Accountant API deployed; backup: ${backup}`);
 }
 
-module.exports = { files, patchServer, deployAccountantPortal };
+const fiscalSyncFiles = ['services/accountantPortalServer.cjs', 'services/blingFiscalImportCore.cjs', 'services/fiscalDocumentArchive.cjs', 'services/blingFiscalPersistence.cjs', 'services/blingFiscalAutomation.cjs'];
+
+function patchBlingFiscalSync(source) {
+  const signature = 'async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to, includeXml = false';
+  const register = "require('./services/accountantPortalServer.cjs').registerAccountantPortalRoutes(fastify, {";
+  const startup = 'runMigrations().then(() => {';
+  for (const marker of [signature, register, startup]) {
+    if (source.split(marker).length !== 2) throw new Error('Unexpected fiscal sync runtime anchor');
+  }
+  if (!source.includes(signature + ', maxDocuments = 25, skipDocument })')) {
+    source = source.replace(signature + ' })', signature + ', maxDocuments = 25, skipDocument })');
+    const start = source.indexOf(signature), end = source.indexOf('\nfunction ', start);
+    const block = source.slice(start, end);
+    if (!block.includes('    maxDocuments: 25,')) throw new Error('Unexpected fiscal sync collector limit');
+    source = source.slice(0, start) + block.replace('    maxDocuments: 25,', '    maxDocuments,\n    skipDocument,') + source.slice(end);
+  }
+  if (!source.includes('const blingFiscalAutomation =')) source = source.replace(register,
+    "const blingFiscalAutomation = require('./services/blingFiscalAutomation.cjs').createBlingFiscalAutomation({\n  pool, fetchDocuments: fetchBlingFiscalDocumentsForMigrationVps,\n});\n" + register);
+  if (!source.includes('  fiscalSyncStatus: blingFiscalAutomation.getStatus,')) source = source.replace('  importBlingDocuments: fetchBlingFiscalDocumentsForMigrationVps,', '  importBlingDocuments: fetchBlingFiscalDocumentsForMigrationVps,\n  fiscalSyncStatus: blingFiscalAutomation.getStatus,');
+  if (!source.includes('  blingFiscalAutomation.start();')) source = source.replace(startup, startup + '\n  blingFiscalAutomation.start();');
+  return source;
+}
+
+async function deployBlingFiscalSync({ appDir, apiProc, exec, upload, root, checkOnly = false }) {
+  if (appDir !== '/var/www/mdv-api' || apiProc.name !== 'mdv-api') throw new Error('Unexpected API target');
+  const entries = ['server.js', 'vps_server.js', 'vps_server.cjs'];
+  const run = source => exec(`cd ${appDir} && node -e "eval(Buffer.from('${Buffer.from(source).toString('base64')}','base64').toString())"`);
+  await run(`const fs=require('fs');for(const file of ${JSON.stringify(entries)}) (${patchBlingFiscalSync.toString()})(fs.readFileSync(file,'utf8'));console.log('Fiscal sync runtime anchors verified');`);
+  if (checkOnly) return;
+  const backup = `${appDir}/backups/bling-fiscal-sync-${Date.now()}`;
+  await exec(`mkdir -p ${backup}/services && chmod 700 ${backup}`);
+  for (const file of [...entries, ...fiscalSyncFiles]) await exec(`if test -f ${appDir}/${file}; then cp -p ${appDir}/${file} ${backup}/${file}; fi`);
+  for (const file of fiscalSyncFiles) {
+    await upload(path.join(root, file), `${appDir}/${file}.next.cjs`);
+    await exec(`node --check ${appDir}/${file}.next.cjs`);
+  }
+  await run(`const fs=require('fs');for(const file of ${JSON.stringify(entries)}) fs.writeFileSync(file+'.next.cjs',(${patchBlingFiscalSync.toString()})(fs.readFileSync(file,'utf8')));`);
+  for (const file of entries) await exec(`node --check ${appDir}/${file}.next.cjs`);
+  try {
+    for (const file of [...fiscalSyncFiles, ...entries]) await exec(`mv ${appDir}/${file}.next.cjs ${appDir}/${file}`);
+    await exec('pm2 restart mdv-api');
+    await run(`(async()=>{for(let i=0;i<20;i++){try{const r=await fetch('http://127.0.0.1:4000/status');const s=await r.json();if(r.ok&&s.mysql?.ok){console.log('Fiscal sync API and MySQL healthy');return;}}catch{}await new Promise(r=>setTimeout(r,1000));}throw new Error('API health check failed');})().catch(e=>{console.error(e.message);process.exit(1)});`);
+  } catch (error) {
+    for (const file of [...fiscalSyncFiles, ...entries]) await exec(`if test -f ${backup}/${file}; then cp -p ${backup}/${file} ${appDir}/${file}; fi`);
+    await exec('pm2 restart mdv-api'); throw error;
+  }
+  console.log(`Bling fiscal sync deployed; backup: ${backup}`);
+}
+
+module.exports = { files, patchServer, deployAccountantPortal, fiscalSyncFiles, patchBlingFiscalSync, deployBlingFiscalSync };

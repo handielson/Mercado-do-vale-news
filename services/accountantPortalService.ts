@@ -165,7 +165,19 @@ export interface BlingFiscalPreview {
   source: 'bling_preview';
 }
 
+export interface BlingFiscalSyncStatus {
+  enabled: boolean;
+  state: string;
+  running?: boolean;
+  lastAttemptAt?: string | null;
+  lastSuccessAt?: string | null;
+  imported?: number;
+  intervalMinutes?: number;
+  lookbackDays?: number;
+}
+
 export const accountantAccessAdminService = {
+  blingSyncStatus: () => vpsClient.get<BlingFiscalSyncStatus>('/admin/fiscal-companies/bling-sync-status'),
   cancellationAssessment: (companyId: string, documentId: string) => vpsClient.get<FiscalCancellationAssessment>(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/fiscal-documents/${encodeURIComponent(documentId)}/cancellation-assessment`),
   cancellationAlerts: (companyId: string) => vpsClient.get<{ enabled: boolean; alerts: FiscalCancellationAlert[] }>(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/fiscal-cancellation-alerts`),
   list: (companyId: string) => vpsClient.get<{ company: AccountantCompany; access: AccountantAccess[] }>(`/admin/fiscal-companies/${encodeURIComponent(companyId)}/accountant-access`),

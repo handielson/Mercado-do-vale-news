@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DownloadCloud, UserPlus, XCircle } from 'lucide-react';
 import { companyFiscalService, type FiscalCompany } from '../../services/companyFiscalService';
-import { accountantAccessAdminService, type AccountantAccess, type BlingFiscalPreview } from '../../services/accountantPortalService';
+import { accountantAccessAdminService, type AccountantAccess, type BlingFiscalPreview, type BlingFiscalSyncStatus } from '../../services/accountantPortalService';
 
 const money = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 const localToday = () => {
@@ -27,6 +27,17 @@ export function CompanyAccountantAccessPanel() {
   const [oversizedPeriod, setOversizedPeriod] = useState(false);
   const [lastImportedDay, setLastImportedDay] = useState('');
   const [preview, setPreview] = useState<(BlingFiscalPreview & { companyId: string }) | null>(null);
+  const [syncStatus, setSyncStatus] = useState<BlingFiscalSyncStatus | null>(null);
+  const [syncUnavailable, setSyncUnavailable] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => accountantAccessAdminService.blingSyncStatus().then(result => {
+      if (active) { setSyncStatus(result); setSyncUnavailable(false); }
+    }).catch(() => { if (active) setSyncUnavailable(true); });
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 60_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
   const selectedCompany = companies.find(company => company.id === selected);
   const previewMatches = preview?.companyId === selected && preview.from === importFrom && preview.to === importTo;
 
@@ -80,6 +91,11 @@ export function CompanyAccountantAccessPanel() {
     <div className="flex flex-col gap-2 sm:flex-row"><input type="email" className="flex-1 rounded-lg border border-slate-300 px-3 py-2" placeholder="E-mail da conta do contador" value={email} onChange={event => setEmail(event.target.value)} /><button type="button" disabled={busy || !email.trim()} onClick={grant} className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"><UserPlus size={17}/>Conceder acesso</button></div>
     <p className="text-xs text-slate-500">Se a conta ainda não existir, o contador deve criá-la em “Criar conta” na página de login. Depois, conceda o acesso pelo e-mail cadastrado.</p>
     <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
+      {selectedCompany?.primary && <div className="rounded-lg bg-white p-3 text-sm text-blue-950" role="status">
+        <p className="font-bold">Importação automática do Bling</p>
+        <p>{syncUnavailable ? 'Não foi possível consultar o estado da sincronização.' : !syncStatus ? 'Consultando sincronização…' : !syncStatus.enabled ? 'Desativada.' : syncStatus.running ? 'Conferindo notas e arquivando XMLs…' : syncStatus.state === 'disconnected' ? 'Reconecte o Bling para retomar a importação.' : syncStatus.state === 'error' ? 'A última sincronização falhou. As notas já arquivadas estão preservadas; uma nova tentativa será feita automaticamente.' : syncStatus.state === 'missing_profile' ? 'Salve o cadastro fiscal da empresa para iniciar.' : 'Ativa: confere NF-e e NFC-e a cada 15 minutos, incluindo cancelamentos dos últimos 90 dias.'}</p>
+        {syncStatus?.lastSuccessAt && <p>Última conferência concluída: {new Date(syncStatus.lastSuccessAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.</p>}
+      </div>}
       <div><h3 className="font-bold text-blue-950">Copiar histórico fiscal do Bling</h3><p className="text-sm text-blue-900">Importa NF-e e NFC-e de saída, autorizadas e canceladas, para a nossa base. Valores e situação são conferidos no detalhe de cada nota. Comece por um dia; o limite de segurança é 120 notas por conferência. A operação apenas consulta o Bling: não altera nem exclui documentos lá. A conexão atual pertence à empresa principal; cada empresa adicional precisará da própria conexão.</p></div>
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto]"><label className="text-sm font-semibold text-slate-800">De<input type="date" value={importFrom} onChange={event => { setImportFrom(event.target.value); setPreview(null); setOversizedPeriod(false); setLastImportedDay(''); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label><label className="text-sm font-semibold text-slate-800">Até<input type="date" value={importTo} onChange={event => { setImportTo(event.target.value); setPreview(null); setOversizedPeriod(false); setLastImportedDay(''); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label><button type="button" disabled={busy || !selected || !selectedCompany?.primary || !importFrom || !importTo || importFrom > importTo} onClick={previewBling} className="mt-6 inline-flex h-10 items-center justify-center rounded-lg border border-blue-700 px-4 font-semibold text-blue-800 disabled:opacity-50">Conferir prévia</button><button type="button" disabled={busy || !previewMatches || !preview?.count || !selectedCompany?.primary} onClick={importBling} className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 font-semibold text-white disabled:opacity-50"><DownloadCloud size={17}/>Importar notas</button></div>
       {oversizedPeriod && importFrom < importTo && <button type="button" disabled={busy} onClick={() => { setImportTo(importFrom); setPreview(null); setError(''); setOversizedPeriod(false); }} className="rounded-lg border border-blue-700 px-3 py-2 text-sm font-semibold text-blue-800 disabled:opacity-50">Conferir somente {importFrom}</button>}

@@ -6,7 +6,7 @@ import { build } from 'vite';
 import react from '@vitejs/plugin-react';
 import { chromium } from 'playwright';
 
-test('Contabilidade: período fechado, sem duplicar notas, override por competência, erros e respostas atrasadas', { timeout: 60000 }, async t => {
+test('Contabilidade: somente notas autorizadas por emissão, cobertura fiscal, limites, erros e respostas atrasadas', { timeout: 60000 }, async t => {
     const stub = `export const accountantPortalService = {
         list: async () => ({ enabled:true, companies:[{id:'primary',regime:window.regime || 'simples_nacional'}] }),
         revenue: async (id,from,to) => {
@@ -15,9 +15,16 @@ test('Contabilidade: período fechado, sem duplicar notas, override por competê
             const delay = window.delays?.[from] || 0; if(delay) await new Promise(r=>setTimeout(r,delay));
             const previous = from.slice(0,7)!==to.slice(0,7);
             const sale = {channel:'pdv',externalSaleId:'sale-1',operationalState:'completed',fiscalState:'invoiced',occurredAt:to,totalCents:previous?22434874:100000};
-            return { period:{from,to},coverage:{available:true},months:[{competence:to.slice(0,7)}],
+            const docTotal = window.large || (previous?17002749:802179);
+            return { period:{from,to},coverage:{available:true},months:[{competence:from.slice(0,7)},{competence:to.slice(0,7)}],
                 sales:[sale,{...sale,externalSaleId:'cancel',operationalState:'cancelled',totalCents:99999999}],
-                documents:[{issuedAt:to,model:'65',status:'authorized',totalCents:sale.totalCents}] };
+                documents: window.noDocs ? [] : [
+                    {issuedAt:to,model:'55',status:'authorized',totalCents:docTotal-10000,channel:'shopee'},
+                    {issuedAt:to,model:'65',status:'authorized',totalCents:10000,channel:'pdv'},
+                    {issuedAt:to,model:'55',status:'cancelled',totalCents:99999999,channel:'pdv'},
+                    {issuedAt:to,model:'55',status:'draft',totalCents:99999999,channel:'pdv'},
+                    {issuedAt:to,model:'57',status:'authorized',totalCents:99999999,channel:'pdv'},
+                ] };
         }
     };`;
     const entry = `import React from 'react';import {createRoot} from 'react-dom/client';import {MemoryRouter} from 'react-router-dom';import AccountingPage from '${process.cwd().replaceAll('\\','/')}/pages/admin/accounting/AccountingPage.tsx';createRoot(document.getElementById('root')).render(<MemoryRouter><AccountingPage /></MemoryRouter>);`;
@@ -49,27 +56,36 @@ test('Contabilidade: período fechado, sem duplicar notas, override por competê
     const result=page.getByRole('region',{name:'Resultado do Simples Nacional'});
     try { await result.waitFor({timeout:5000}); }
     catch(e) { throw new Error(`${e.message}\n${await page.locator('body').innerText()}\n${JSON.stringify(errors)}`); }
-    assert.match(await result.innerText(), /224\.348,74/);
-    assert.match(await result.innerText(), /2ª faixa/);
-    assert.match(await result.innerText(), /4\.65%/);
+    assert.match(await result.innerText(), /170\.027,49/);
+    assert.match(await result.innerText(), /1ª faixa/);
+    assert.match(await result.innerText(), /4\.00%/);
+    assert.doesNotMatch(await result.innerText(), /224\.348,74/);
+    assert.match(await page.locator('body').innerText(), /8\.021,79/);
     assert.match(await page.getByRole('note').innerText(), /10\/2025/);
     assert.match(await page.getByRole('note').innerText(), /cobertura não confirmada/);
     assert.deepEqual((await page.evaluate(()=>window.calls)).slice(-2),[
         {id:'primary',from:'2025-10-01',to:'2026-09-30'},
         {id:'primary',from:'2026-10-01',to:'2026-10-31'},
     ]);
-    const input=page.getByRole('textbox',{name:'RBT12 confirmado pelo contador (opcional)'});
-    await input.fill('1500000,00');await input.blur();
-    assert.match(await result.innerText(), /4ª faixa/);
-    await input.fill('4000000,00');await input.blur();
+    assert.equal(await page.getByRole('textbox',{name:'RBT12 confirmado pelo contador (opcional)'}).count(),0);
+    await page.evaluate(()=>window.large=400000000);
+    await page.getByRole('button',{name:'Atualizar faturamento'}).click();
+    await page.getByRole('alert').waitFor();
     assert.match(await result.innerText(), /6ª faixa/);
     assert.match(await page.getByRole('alert').innerText(), /sublimite/);
-    await input.fill('4800000,01');await input.blur();
+    await page.evaluate(()=>window.large=480000001);
+    await page.getByRole('button',{name:'Atualizar faturamento'}).click();
+    await page.waitForFunction(()=>document.body.innerText.includes('cálculo bloqueado'));
     assert.match(await result.innerText(), /Indisponível/);
     assert.match(await page.getByRole('alert').innerText(), /cálculo bloqueado/);
+    await page.evaluate(()=>{window.large=0;window.noDocs=true;});
+    await page.getByRole('button',{name:'Atualizar faturamento'}).click();
+    await page.waitForFunction(()=>document.body.innerText.replaceAll('\u00a0',' ').includes('R$ 0,00') && !document.body.innerText.includes('cálculo bloqueado'));
+    assert.match(await result.innerText(), /Indisponível/);
+    assert.match(await page.getByRole('note').innerText(), /Meses sem notas autorizadas registradas/);
+    await page.evaluate(()=>window.noDocs=false);
     await month.fill('2026-09');await result.waitFor();
-    assert.match(await result.innerText(), /224\.348,74/);
-    assert.equal(await input.inputValue(),'');
+    assert.match(await result.innerText(), /170\.027,49/);
     await page.evaluate(()=>window.fail=true);
     await page.getByRole('button',{name:'Atualizar faturamento'}).click();
     await page.getByRole('alert').waitFor();

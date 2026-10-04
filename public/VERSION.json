@@ -1,29 +1,42 @@
 {
-  "version": "v1.2.543-contabilidade-simples",
+  "version": "v1.2.544-bling-fiscal-auto",
   "date": "2026-10-04",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.543-contabilidade-simples",
-  "release_vps": "/var/www/mdv-site/releases/20261004-150259-contabilidade-simples",
-  "summary": "Corrige faixas do Simples, usa meses completos anteriores à competência e consulta faturamento operacional sem duplicar notas fiscais.",
+  "tag": "v1.2.544-bling-fiscal-auto",
+  "release_vps": "/var/www/mdv-site/releases/20261004-160008-bling-fiscal-auto",
+  "summary": "Importa NF-e/NFC-e e XMLs automaticamente a cada 15 minutos, reconcilia cancelamentos dos últimos 90 dias e contabiliza somente notas autorizadas.",
   "changed_files": [
+    "components/company/CompanyAccountantAccessPanel.tsx",
     "pages/admin/accounting/AccountingPage.tsx",
-    "pages/admin/settings/components/ShopeeFinanceTab.tsx",
-    "services/simplesNacional.ts",
-    "tmp-tests/simples-nacional.test.mjs",
+    "services/accountantPortalService.ts",
+    "services/accountantPortalServer.cjs",
+    "services/blingFiscalImportCore.cjs",
+    "services/blingFiscalPersistence.cjs",
+    "services/blingFiscalAutomation.cjs",
+    "services/fiscalDocumentArchive.cjs",
+    "vps_server.cjs",
+    "vps_server.js",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-accountant-portal.cjs",
+    "tmp-tests/bling-fiscal-automation.test.cjs",
+    "tmp-tests/accountant-portal.test.cjs",
+    "tmp-tests/accountant-deploy.test.cjs",
     "tmp-tests/accounting-page-browser.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-04-v1.2.543-contabilidade-simples.md"
+    "docs/versoes/2026-10-04-v1.2.544-bling-fiscal-auto.md"
   ],
   "validations": [
-    "10 testes de Simples, faturamento e navegador",
+    "62 testes do contador, automação e implantação",
+    "Navegador da Contabilidade",
     "test:money",
-    "build com trava Supabase"
+    "build e trava Supabase",
+    "sintaxe dos servidores"
   ],
   "known_limitations": [
-    "Histórico operacional incompleto não confirma a faixa declarada no PGDAS-D.",
-    "Simulação por competência limitada a 2018–2026; regras de 2027 exigem revisão.",
-    "Suíte ampliada do contador: 50/51; teste preexistente de cancelamento usa autorização fixa de 24/09/2026, fora da janela de 23 horas."
+    "Integração temporária: desativar com MDV_BLING_FISCAL_SYNC_ENABLED=0 ao retirar o Bling.",
+    "Conferência automática limitada aos últimos 90 dias; histórico anterior usa a importação manual.",
+    "Serviços NFS-e não são cobertos pelos modelos 55/65."
   ]
 }

@@ -3,6 +3,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { files, patchServer, deployAccountantPortal } = require('../scripts/deploy-accountant-portal.cjs');
+const { patchBlingFiscalSync, deployBlingFiscalSync } = require('../scripts/deploy-accountant-portal.cjs');
+test('fiscal automation deploy preserves unrelated runtime code and is idempotent', async () => {
+  const current = fs.readFileSync(path.join(__dirname, '../vps_server.cjs'), 'utf8');
+  const old = current.replace(', maxDocuments = 25, skipDocument', '').replace('    maxDocuments,\n    skipDocument,', '    maxDocuments: 25,').replace(/const blingFiscalAutomation =[^;]+;\r?\n/, '').replace(/  fiscalSyncStatus: blingFiscalAutomation.getStatus,\r?\n/, '').replace(/  blingFiscalAutomation.start\(\);\r?\n/, '');
+  assert.equal(patchBlingFiscalSync(old).replaceAll('\r\n', '\n'), current.replaceAll('\r\n', '\n'));
+  assert.equal(patchBlingFiscalSync(current), current);
+  assert.throws(() => patchBlingFiscalSync('unknown'), /anchor/);
+  await assert.rejects(deployBlingFiscalSync({ appDir: '/wrong', apiProc: { name: 'mdv-api' } }), /target/);
+});
 test('patch de importação é idempotente, preserva o restante do servidor e rejeita divergências', () => {
   const current=fs.readFileSync(path.join(__dirname,'../vps_server.js'),'utf8');
   const previous=current.replace(', includeXml = false','').replace(/^.*getXml: includeXml.*\r?\n/m,'');

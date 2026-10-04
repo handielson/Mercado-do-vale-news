@@ -6,7 +6,7 @@ const child = (node, name) => Array.from(node?.childNodes || []).find(item => it
 const value = (node, name) => child(node,name)?.textContent?.trim() || '';
 const hash = xml => createHash('sha256').update(xml).digest('hex');
 
-function validateArchivedXml(xml, document, cnpj) {
+function validateArchivedXml(xml, document, cnpj, expectedTotalCents) {
   if (typeof xml !== 'string' || !xml || Buffer.byteLength(xml) > 2_000_000 || /<!DOCTYPE|<!ENTITY/i.test(xml)) throw problem('XML inválido ou maior que 2 MB.',422);
   const errors = [];
   const dom = new DOMParser({ onError:(level,message) => errors.push(message) }).parseFromString(xml,'application/xml');
@@ -24,6 +24,12 @@ function validateArchivedXml(xml, document, cnpj) {
     || value(protocol,'chNFe') !== key || !/^\d{15}$/.test(value(protocol,'nProt'))
     || Number(value(ide,'nNF')) !== Number(document.document_number) || Number(value(ide,'serie')) !== Number(document.series)) {
     throw problem('XML autorizado de produção não corresponde à nota e à empresa selecionadas.',422);
+  }
+  if (expectedTotalCents !== undefined) {
+    const total = value(child(child(inf, 'total'), 'ICMSTot'), 'vNF');
+    if (!/^\d+\.\d{2}$/.test(total) || Math.round(Number(total) * 100) !== expectedTotalCents) {
+      throw problem('Valor da nota no Bling diverge do XML autorizado.', 422);
+    }
   }
   return { xml, hash:hash(xml), key };
 }

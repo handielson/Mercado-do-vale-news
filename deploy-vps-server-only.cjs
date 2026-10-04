@@ -551,6 +551,11 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--bling-fiscal-sync-only') || process.argv.includes('--bling-fiscal-sync-check')) {
+    await require('./scripts/deploy-accountant-portal.cjs').deployBlingFiscalSync({appDir,apiProc,exec,upload,root:__dirname,checkOnly:process.argv.includes('--bling-fiscal-sync-check')});
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--accountant-portal-only') || process.argv.includes('--accountant-portal-check')) {
     await require('./scripts/deploy-accountant-portal.cjs').deployAccountantPortal({appDir,apiProc,exec,upload,root:__dirname,checkOnly:process.argv.includes('--accountant-portal-check')});
     conn.end();
