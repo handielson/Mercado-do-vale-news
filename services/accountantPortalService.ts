@@ -107,6 +107,13 @@ export interface FiscalCancellationAlert {
 }
 
 const BASE = '/accountant/companies';
+export interface AccountingHistory {
+  schema: 'mdv.pgdas-history.v1'; cnpj: string; basis: 'accrual' | 'cash';
+  source: { kind: 'pgdas_pdf'; filename: string; sha256: string; competence: string; generatedOn: string };
+  months: Array<{ competence: string; totalCents: number }>;
+  declared: { rbt12Cents: number; rpaCents: number; rbaCents: number; rbaaCents: number; dasCents: number; commerceCents: number; servicesCents: number };
+}
+export interface AccountingHistoryResponse { version: number; history: AccountingHistory | null; importedAt?: string }
 export interface AccountantFiscalFile { filename: string; mimeType: string; base64: string }
 
 export interface AccountantSaleDetails {
@@ -120,6 +127,8 @@ export interface AccountantSaleDetails {
 }
 
 export const accountantPortalService = {
+  accountingHistory: (id: string) => vpsClient.get<AccountingHistoryResponse>(`${BASE}/${encodeURIComponent(id)}/accounting-history`),
+  importAccountingHistory: (id: string, history: AccountingHistory, version: number) => vpsClient.post<AccountingHistoryResponse>(`${BASE}/${encodeURIComponent(id)}/accounting-history`,{history,version}),
   saleDetails: (id: string, channel: string, saleId: string) => vpsClient.get<AccountantSaleDetails>(`${BASE}/${encodeURIComponent(id)}/sales/${encodeURIComponent(channel)}/${encodeURIComponent(saleId)}`),
   saleReceipt: (id: string, saleId: string, format: 'pdf' | 'xml') => vpsClient.get<AccountantFiscalFile>(`${BASE}/${encodeURIComponent(id)}/sales/pdv/${encodeURIComponent(saleId)}/receipt?format=${format}`),
   documentFile: (id: string, documentId: string, format: 'pdf' | 'xml') => vpsClient.get<AccountantFiscalFile>(`${BASE}/${encodeURIComponent(id)}/fiscal-documents/${encodeURIComponent(documentId)}/file?format=${format}`),

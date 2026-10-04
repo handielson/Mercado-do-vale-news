@@ -10,6 +10,7 @@ const certificateVault = require('./fiscalCertificateVault.cjs');
 const { marketplaceCancellationEvidence, assessNfeCancellation } = require('./fiscalCancellationCore.cjs');
 const { normalizeDocumentReview, documentReviewView } = require('./fiscalDocumentReviewCore.cjs');
 const { configureNfceSequence } = require('./fiscalNfceNumbering.cjs');
+const { readAccountingHistory, saveAccountingHistory } = require('./accountingHistoryCore.cjs');
 
 const parseJson = value => {
   if (!value) return null;
@@ -77,6 +78,14 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
 
   app.get('/admin/fiscal-companies/bling-sync-status', { preHandler: admin }, async () => {
     return fiscalSyncStatus ? fiscalSyncStatus() : { enabled: false, state: 'unavailable' };
+  });
+
+  app.get('/accountant/companies/:id/accounting-history', { preHandler: requireCompanyAccess('view') }, async req => {
+    return readAccountingHistory(pool,req.accountantProfile.id);
+  });
+  app.post('/accountant/companies/:id/accounting-history', { preHandler: requireCompanyAccess('view') }, async req => {
+    if (!req.accountantAuth.isAdmin) throw problem('Somente o administrador pode importar o histórico contábil.',403);
+    return saveAccountingHistory(pool,req.accountantProfile,req.body || {},req.accountantActor);
   });
 
   app.get('/accountant/companies', { preHandler: auth }, async req => {

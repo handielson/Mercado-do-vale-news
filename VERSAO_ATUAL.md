@@ -1,13 +1,13 @@
-# v1.2.544-bling-fiscal-auto
+# v1.2.545-pgdas-history
 
 Data: 2026-10-04. Status: pronta para publicação. Branch: main.
-Tag: v1.2.544-bling-fiscal-auto.
-Release: /var/www/mdv-site/releases/20261004-160008-bling-fiscal-auto.
+Tag: v1.2.545-pgdas-history.
+Release: /var/www/mdv-site/releases/20261004-164053-pgdas-history.
 
-Sincronização temporária do Bling a cada 15 minutos, recuperando NF-e/NFC-e e XMLs dos últimos 90 dias. Confere cancelamentos, preserva notas canceladas, valida emitente/valor/XML e impede duplicação ou execuções concorrentes. Contabilidade soma somente notas autorizadas por data de emissão. O painel mostra conexão, execução, falhas e última conferência.
+O histórico declarado do PGDAS-D passa a alimentar o RBT12. Cada mês usa a receita declarada quando importada, incluindo serviços; os demais usam notas autorizadas. Faturamento corrente continua somando somente notas. A fonte é identificada por documento, competência e SHA256; os totais do extrato são conferidos antes da gravação.
 
-Sem migrations. Desativação: MDV_BLING_FISCAL_SYNC_ENABLED=0 e restart da API.
+Sem migrations. Snapshots imutáveis no diário fiscal existente, com isolamento por empresa, versão e trava transacional. Não altera notas, aprovação fiscal ou emissão.
 
-Validações: 62 testes fiscais/deploy, navegador da Contabilidade, testes monetários, build e sintaxe.
+Validações: 48 testes fiscais/histórico/deploy, navegador da Contabilidade, testes monetários, build e sintaxe.
 
-Detalhes: docs/versoes/2026-10-04-v1.2.544-bling-fiscal-auto.md.
+Detalhes: docs/versoes/2026-10-04-v1.2.545-pgdas-history.md.

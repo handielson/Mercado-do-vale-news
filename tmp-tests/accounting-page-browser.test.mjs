@@ -8,6 +8,7 @@ import { chromium } from 'playwright';
 
 test('Contabilidade: somente notas autorizadas por emissão, cobertura fiscal, limites, erros e respostas atrasadas', { timeout: 60000 }, async t => {
     const stub = `export const accountantPortalService = {
+        accountingHistory: async () => ({version:window.historyData?1:0,history:window.historyData||null}),
         list: async () => ({ enabled:true, companies:[{id:'primary',regime:window.regime || 'simples_nacional'}] }),
         revenue: async (id,from,to) => {
             window.calls ||= []; window.calls.push({id,from,to});
@@ -86,6 +87,18 @@ test('Contabilidade: somente notas autorizadas por emissão, cobertura fiscal, l
     await page.evaluate(()=>window.noDocs=false);
     await month.fill('2026-09');await result.waitFor();
     assert.match(await result.innerText(), /170\.027,49/);
+    await page.evaluate(()=>window.historyData={basis:'accrual',source:{filename:'extrato-fixture.pdf',competence:'2026-08'},
+        months:Array.from({length:12},(_,i)=>({competence:new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),totalCents:100000})),
+        declared:{rpaCents:802179,commerceCents:682179,servicesCents:120000,dasCents:34487}});
+    await page.getByRole('button',{name:'Atualizar faturamento'}).click();
+    await page.getByRole('region',{name:'Histórico contábil declarado'}).getByText(/extrato-fixture/).waitFor();
+    assert.match(await result.innerText(), /12\.000,00/);
+    assert.doesNotMatch(await result.innerText(), /170\.027,49/);
+    assert.match(await page.getByRole('note').innerText(), /12 meses de histórico declarado/);
+    assert.doesNotMatch(await page.getByRole('note').innerText(), /Meses sem notas/);
+    assert.match(await page.locator('body').innerText(), /Serviços:.*1\.200,00/);
+    assert.match(await page.locator('body').innerText(), /Notas autorizadas registradas:.*8\.021,79/);
+    await page.evaluate(()=>window.historyData=null);
     await page.evaluate(()=>window.fail=true);
     await page.getByRole('button',{name:'Atualizar faturamento'}).click();
     await page.getByRole('alert').waitFor();

@@ -1,6 +1,7 @@
 const path = require('node:path');
 
 const files = [
+  'services/accountingHistoryCore.cjs',
   'services/accountantPortalCore.cjs', 'services/accountantPortalServer.cjs',
   'services/accountantSaleDetails.cjs', 'services/blingFiscalImportCore.cjs',
   'services/blingFiscalPersistence.cjs', 'services/blingFiscalAutomation.cjs',
@@ -78,7 +79,7 @@ async function deployAccountantPortal({ appDir, apiProc, exec, upload, root, che
   console.log(`Accountant API deployed; backup: ${backup}`);
 }
 
-const fiscalSyncFiles = ['services/accountantPortalServer.cjs', 'services/blingFiscalImportCore.cjs', 'services/fiscalDocumentArchive.cjs', 'services/blingFiscalPersistence.cjs', 'services/blingFiscalAutomation.cjs'];
+const fiscalSyncFiles = ['services/accountingHistoryCore.cjs', 'services/accountantPortalServer.cjs', 'services/blingFiscalImportCore.cjs', 'services/fiscalDocumentArchive.cjs', 'services/blingFiscalPersistence.cjs', 'services/blingFiscalAutomation.cjs'];
 
 function patchBlingFiscalSync(source) {
   const signature = 'async function fetchBlingFiscalDocumentsForMigrationVps(request, { from, to, includeXml = false';

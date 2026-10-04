@@ -1,42 +1,32 @@
 {
-  "version": "v1.2.544-bling-fiscal-auto",
+  "version": "v1.2.545-pgdas-history",
   "date": "2026-10-04",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.544-bling-fiscal-auto",
-  "release_vps": "/var/www/mdv-site/releases/20261004-160008-bling-fiscal-auto",
-  "summary": "Importa NF-e/NFC-e e XMLs automaticamente a cada 15 minutos, reconcilia cancelamentos dos últimos 90 dias e contabiliza somente notas autorizadas.",
+  "tag": "v1.2.545-pgdas-history",
+  "release_vps": "/var/www/mdv-site/releases/20261004-164053-pgdas-history",
+  "summary": "Histórico declarado do PGDAS-D alimenta o RBT12; faturamento corrente segue pelas notas autorizadas, sem duplicação.",
   "changed_files": [
-    "components/company/CompanyAccountantAccessPanel.tsx",
     "pages/admin/accounting/AccountingPage.tsx",
     "services/accountantPortalService.ts",
     "services/accountantPortalServer.cjs",
-    "services/blingFiscalImportCore.cjs",
-    "services/blingFiscalPersistence.cjs",
-    "services/blingFiscalAutomation.cjs",
-    "services/fiscalDocumentArchive.cjs",
-    "vps_server.cjs",
-    "vps_server.js",
-    "deploy-vps-server-only.cjs",
+    "services/accountingHistoryCore.cjs",
     "scripts/deploy-accountant-portal.cjs",
-    "tmp-tests/bling-fiscal-automation.test.cjs",
-    "tmp-tests/accountant-portal.test.cjs",
-    "tmp-tests/accountant-deploy.test.cjs",
     "tmp-tests/accounting-page-browser.test.mjs",
+    "tmp-tests/accounting-history.test.cjs",
+    "tmp-tests/accountant-deploy.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-04-v1.2.544-bling-fiscal-auto.md"
+    "docs/versoes/2026-10-04-v1.2.545-pgdas-history.md"
   ],
   "validations": [
-    "62 testes do contador, automação e implantação",
-    "Navegador da Contabilidade",
+    "48 testes fiscais/histórico/deploy",
+    "Navegador: histórico e notas sem duplicação",
     "test:money",
-    "build e trava Supabase",
-    "sintaxe dos servidores"
+    "build e sintaxe"
   ],
   "known_limitations": [
-    "Integração temporária: desativar com MDV_BLING_FISCAL_SYNC_ENABLED=0 ao retirar o Bling.",
-    "Conferência automática limitada aos últimos 90 dias; histórico anterior usa a importação manual.",
-    "Serviços NFS-e não são cobertos pelos modelos 55/65."
+    "Importação de arquivo estruturado extraído do PDF; o portal e-CAC exige sessão do operador.",
+    "DAS corrente é uma simulação; regime de caixa e segregações exigem tratamento próprio."
   ]
 }
