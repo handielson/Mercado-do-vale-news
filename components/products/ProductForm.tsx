@@ -43,6 +43,7 @@ import { unitService } from '../../services/units';
 import { fetchBlingProductDetail, findBlingProductByExactSku, importBlingProducts, isBlingReconnectRequired } from '../../services/blingService';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
+import { MercadoLivreFamilyLinks } from './sections/MercadoLivreFamilyLinks';
 import { ProductKitsSection } from './sections/ProductKitsSection';
 import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl } from '../../utils/video-url';
 import { buildSerializedBatchPlan, findSerializedBatchDuplicates, findSerializedBatchInvalidImeis, hasSerializedIdentity, resolveSerializedBatchItemImages } from './serializedBatch.js';
@@ -1923,6 +1924,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 currentProductId={initialData?.id}
             />
 
+            {isParentProduct && initialData?.id && <MercadoLivreFamilyLinks parentId={initialData.id} />}
+            {initialData?.parent_id && <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4"><Link to={`/admin/products/${initialData.parent_id}`} className="font-semibold text-blue-700">Abrir família para ajustar anúncio e calcular preço no Mercado Livre</Link></div>}
             <MercadoLivreCatalogAttributes categoryConfig={categoryConfig} watch={watch} setValue={setValue} productId={initialData?.id}/>
             {/* BOTÃO ADICIONAR À LISTA + LISTA DE CADASTRO EM MASSA */}
             {!initialData && (

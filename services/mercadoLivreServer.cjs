@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { createListingPriceHandlers } = require('./mercadoLivreListingPrice.cjs');
 
 const ML_API_ORIGIN = 'https://api.mercadolibre.com';
 const ML_AUTH_ORIGIN = 'https://auth.mercadolivre.com.br';
@@ -797,6 +798,10 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
     catch (error) { return reply.code(error.statusCode || 502).send({ error: error.statusCode ? error.message : 'Consulta ao Mercado Livre indisponível. Confira a conexão; se a busca expirou, reinicie a consulta.' }); }
   };
   const linkProduct = presentListingError(listingHandlers.link);
+  const listingPrices = createListingPriceHandlers({ pool, settings: () => loadSettings(pool),
+    request: async (path, options) => (await mlRequest(pool, path, options)).json() });
+  registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/price', protectedRoute, presentListingError(listingPrices.read));
+  registerAliases(fastify, 'post', '/mercado-livre/products/items/:itemId/price', protectedRoute, presentListingError(listingPrices.update));
   registerAliases(fastify, 'get', '/mercado-livre/products/discover', protectedRoute, presentListingError(listingHandlers.discover));
   registerAliases(fastify, 'get', '/mercado-livre/products/candidates', protectedRoute, presentListingError(listingHandlers.candidates));
   registerAliases(fastify, 'post', '/mercado-livre/products/link', protectedRoute, linkProduct);

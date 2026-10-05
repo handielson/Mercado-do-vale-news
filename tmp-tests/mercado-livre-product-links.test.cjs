@@ -69,7 +69,7 @@ test('impede anúncio de outra conta, variação inválida, produto ausente e tr
 test('rotas de descoberta, busca manual e confirmação exigem autenticação inclusive aliases',async()=>{
   const app=require('fastify')();
   registerMercadoLivreRoutes(app,{pool:{query:()=>{throw Error('Não deveria consultar');}},requireSyncKeyOrAdmin:async(_req,reply)=>reply.code(401).send({error:'Unauthorized'})});
-  for(const prefix of ['', '/api'])for(const [method,path] of [['GET','discover'],['GET','candidates'],['POST','link']]) {
+  for(const prefix of ['', '/api'])for(const [method,path] of [['GET','discover'],['GET','candidates'],['POST','link'],['GET','items/MLB123/price'],['POST','items/MLB123/price']]) {
     assert.equal((await app.inject({method,url:`${prefix}/mercado-livre/products/${path}`})).statusCode,401);
   }
   await app.close();

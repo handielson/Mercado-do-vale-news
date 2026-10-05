@@ -37,6 +37,7 @@ const smartphonePhotoIntakeServiceFiles = [
 ];
 const mercadoLivreServicePath = 'services/mercadoLivreServer.cjs';
 const mercadoLivrePublicationPath = 'services/mercadoLivrePublication.cjs';
+const mercadoLivreListingPricePath = 'services/mercadoLivreListingPrice.cjs';
 const tiktokShopFulfillmentServicePath = 'services/tiktokShopFulfillmentService.cjs';
 const tiktokShopAutomationPaths = [
   tiktokShopFulfillmentServicePath,
@@ -243,6 +244,7 @@ async function uploadMercadoLivreFiles(appDir) {
     remotePathJoin(appDir, mercadoLivreServicePath),
   );
   console.log(`Uploaded ${mercadoLivreServicePath}`);
+  await upload(path.join(__dirname, mercadoLivreListingPricePath), remotePathJoin(appDir, mercadoLivreListingPricePath));
   await upload(path.join(__dirname, mercadoLivrePublicationPath), remotePathJoin(appDir, mercadoLivrePublicationPath));
 }
 
@@ -599,6 +601,11 @@ async function main() {
     await exec(`node --check ${publicationTarget}.next.cjs`);
     await upload(path.join(__dirname, mercadoLivreServicePath), staged);
     await exec(`node --check ${staged}`);
+    const priceTarget = `${appDir}/${mercadoLivreListingPricePath}`;
+    await exec(`if [ -f ${priceTarget} ]; then cp -p ${priceTarget} ${backupDir}/mercadoLivreListingPrice.cjs; fi`);
+    await upload(path.join(__dirname, mercadoLivreListingPricePath), `${priceTarget}.next.cjs`);
+    await exec(`node --check ${priceTarget}.next.cjs`);
+    await exec(`mv ${priceTarget}.next.cjs ${priceTarget}`);
     await exec(`mv ${publicationTarget}.next.cjs ${publicationTarget}`);
     await exec(`mv ${staged} ${target}`);
     console.log((await exec('pm2 restart mdv-api')).trim());

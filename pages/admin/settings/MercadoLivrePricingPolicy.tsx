@@ -13,12 +13,12 @@ export function PricingSummary({quote}:{quote:any}) {
   const labels:Record<string,string>={costCents:'Custo cadastrado',saleFeeCents:'Tarifa de venda (inclui tarifa fixa)',listingFeeCents:'Tarifa de anúncio',taxCents:'Impostos',adsCents:'Publicidade',otherPercentCents:'Outras despesas percentuais',packagingCents:'Embalagem',shippingCents:'Frete configurado da loja',otherFixedCents:'Outras despesas fixas',profitCents:'Lucro estimado por unidade'};
   return <div className="bg-blue-50 p-3 rounded"><p className="font-semibold">Preço calculado: {money(quote.priceCents)} • Margem estimada: {(quote.marginBps/100).toLocaleString('pt-BR')}% • Meta: {quote.targetMarginBps/100}%</p><dl>{Object.entries(labels).map(([key,label])=><div key={key} className="flex justify-between gap-3 text-sm"><dt>{label}</dt><dd>{money(quote[key])}</dd></div>)}</dl><p className="text-xs mt-2">Tarifas consultadas em {quote.quotedAt}. Frete e demais despesas são os valores configurados; revise-os conforme o produto e a logística.</p></div>;
 }
-export default function MercadoLivrePricingPolicy({batch,active,onApply,run}:{batch:Batch;active:string;onApply:(drafts:Draft[])=>void;run:(operation:()=>Promise<void>)=>Promise<void>}) {
+export default function MercadoLivrePricingPolicy({batch,active,onApply,run,existingListing=false,logisticType=''}:{batch:Batch;active:string;onApply:(drafts:Draft[])=>void;run:(operation:()=>Promise<void>)=>Promise<void>;existingListing?:boolean;logisticType?:string}) {
   const storageKey=`mdv.ml.pricing-policy.${batch.sellerId}`;
   const [config,setConfig]=useState(empty);
   const product=batch.snapshot.products.find(p=>p.id===active);
   const catalogWeight=product?.weight_kg?Math.ceil(product.weight_kg*1000):undefined;
-  useEffect(()=>{try {const saved=localStorage.getItem(storageKey);setConfig(saved?{...empty(),...JSON.parse(saved)}:empty());}catch{setConfig(empty());}},[storageKey]);
+  useEffect(()=>{try {const saved=localStorage.getItem(storageKey);setConfig({...empty(),...(saved?JSON.parse(saved):{}),...(logisticType?{logisticType}:{})});}catch{setConfig({...empty(),logisticType});}},[storageKey,logisticType]);
   const calculate=(all:boolean)=>void run(async()=>{
     const policy:any={...config};
     for(const key of Object.keys(percentLabels)) {
@@ -53,8 +53,8 @@ export default function MercadoLivrePricingPolicy({batch,active,onApply,run}:{ba
       <label>Peso faturável (gramas)<input aria-label="Peso faturável (gramas)" type="number" min="1" step="1" className="border p-2 block" value={catalogWeight ?? config.billableWeightGrams} disabled={Boolean(catalogWeight)} onChange={e=>change('billableWeightGrams',e.target.value)} /></label>
     </div>
     <p className="text-sm">Peso e medidas são aproveitados automaticamente do cadastro de cada produto. Medidas fracionadas são arredondadas para cima no envio ao Mercado Livre. Quando o peso não estiver cadastrado, preencha-o para calcular. As tarifas de venda são consultadas por categoria, preço, anúncio e logística. O frete da loja é configurado manualmente nesta versão.</p>
-    <button disabled={!active} onClick={()=>calculate(false)} className="border rounded p-2">Calcular preço deste anúncio</button>
-    <button disabled={!batch.drafts.length || batch.drafts.length>5} onClick={()=>calculate(true)} className="border rounded p-2 ml-2">Aplicar política aos selecionados</button>
-    <p className="text-sm">Configuração salva neste navegador ao calcular. Confira o preço e confirme novamente as condições comerciais. O sistema consulta as tarifas e confere o custo atual antes de publicar.</p>
+    <button type="button" disabled={!active} onClick={()=>calculate(false)} className="border rounded p-2">Calcular preço deste anúncio</button>
+    {!existingListing && <button type="button" disabled={!batch.drafts.length || batch.drafts.length>5} onClick={()=>calculate(true)} className="border rounded p-2 ml-2">Aplicar política aos selecionados</button>}
+    <p className="text-sm">{existingListing ? 'Calcula uma sugestão para este SKU com o custo cadastrado e as tarifas consultadas. Para enviar o preço, use o botão Atualizar no Mercado Livre.' : 'Configuração salva neste navegador ao calcular. Confira o preço e confirme novamente as condições comerciais. O sistema consulta as tarifas e confere o custo atual antes de publicar.'}</p>
   </section>;
 }

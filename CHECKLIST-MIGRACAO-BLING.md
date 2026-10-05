@@ -129,3 +129,6 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 | Data | Itens | Resultado | Evidência | Próximo passo |
 |---|---|---|---|---|
 | 2026-09-22 | D01–D05 | Diagnóstico registrado; 3 testes locais passaram e 1 teste estático fiscal falhou | E01–E06 em evidencias.md | F01/F02 e resolução documentada de D06–D08; F03 antes de migrar histórico |
+
+- [x] Preparada publicacao isolada v1.2.550 de preco/calculadora Mercado Livre na ficha do pai; demais alteracoes locais fiscais, estoque e organizacao das abas preservadas fora da release.
+- [ ] Validar consulta/cotacao autenticada em producao e gravacao de preco escolhida pelo operador; nenhum preco real alterado no deploy.

@@ -61,6 +61,8 @@ export const mercadoLivreService = {
   discoverProducts: (cursor = '') => vpsClient.get<MercadoLivreDiscovery>(`/mercado-livre/products/discover${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
   findCandidates: (q: string) => vpsClient.get<{ items: MercadoLivreCandidate[] }>(`/mercado-livre/products/candidates?q=${encodeURIComponent(q)}`),
   getProductLinks: () => vpsClient.get<{ items: Array<{ product_id: string; item_id: string; variation_id?: string; last_error?: string | null }> }>('/mercado-livre/products/links'),
+  getListingPrice: (itemId: string, parentId: string) => vpsClient.get<any>(`/mercado-livre/products/items/${encodeURIComponent(itemId)}/price?parentId=${encodeURIComponent(parentId)}`),
+  updateListingPrice: (itemId: string, input: { parentId: string; priceCents: number; expectedPriceCents: number; confirmAllVariations: boolean; confirmPromotionEffect: boolean }) => vpsClient.post<{ ok: boolean; priceCents: number }>(`/mercado-livre/products/items/${encodeURIComponent(itemId)}/price`, input),
   getStatus: () => vpsClient.get<MercadoLivreStatus>('/mercado-livre/settings'),
   updateSettings: (input: Partial<{
     clientId: string;

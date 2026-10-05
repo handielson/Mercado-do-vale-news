@@ -1,32 +1,29 @@
 {
-  "version": "v1.2.549-ml-gestao-push",
+  "version": "v1.2.550-ml-preco-calculadora",
   "date": "2026-10-05",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.549-ml-gestao-push",
-  "release_vps": "/var/www/mdv-site/releases/20261005-220500-v12549-ml-gestao-push",
+  "tag": "v1.2.550-ml-preco-calculadora",
+  "release_vps": "/var/www/mdv-site/releases/20261005-233500-v12550-ml-preco-calculadora",
   "release_print3d_vps": null,
-  "summary": "Notificações Mercado Livre no Gestão MDV, com lista de vendas e abertura dos detalhes.",
+  "summary": "Consulta e edicao do preco Mercado Livre com calculadora de tarifas e lucro na familia.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "services/mobileSalesPushService.cjs",
+    "components/products/ProductForm.tsx",
+    "components/products/sections/MercadoLivreFamilyLinks.tsx",
+    "components/products/sections/MercadoLivreListingPrice.tsx",
+    "components/products/sections/mercadoLivreFamilyLinkCore.js",
+    "services/mercadoLivreService.ts",
     "services/mercadoLivreServer.cjs",
-    "vps_server.cjs",
-    "vps_server.js",
-    "android/admin-estoque/app/build.gradle.kts",
-    "android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/MainActivity.kt",
-    "android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/domain/SaleSummary.kt",
-    "tmp-tests/mercado-livre-mobile-push.test.cjs",
-    "public/VERSION.json",
-    "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-05-v1.2.549-ml-gestao-push.md"
+    "services/mercadoLivreListingPrice.cjs",
+    "pages/admin/settings/MercadoLivrePricingPolicy.tsx",
+    "deploy-vps-server-only.cjs"
   ],
   "validations": [
-    "8 testes de notificações, deduplicação, listagem e contrato Android",
-    "Build APK 0.13.9 código 66; instalação USB confirmada",
-    "Sintaxe dos servidores e build completo do site com proteção contra Supabase passaram"
+    "Testes de familia, precos, calculadora e autenticacao",
+    "Build completo e protecao contra Supabase"
   ]
 }
