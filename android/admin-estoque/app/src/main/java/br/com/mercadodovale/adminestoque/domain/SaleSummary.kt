@@ -14,7 +14,8 @@ enum class SalesChannel(
     ONLINE("online", "Online", "Pedidos pagos pelo site"),
     PDV("pdv", "PDV", "Vendas realizadas no caixa"),
     SHOPEE("shopee", "Shopee", "Pedidos recebidos na Shopee"),
-    TIKTOK("tiktok", "TikTok", "Pedidos do TikTok Shop");
+    TIKTOK("tiktok", "TikTok", "Pedidos do TikTok Shop"),
+    MERCADO_LIVRE("mercado_livre", "Mercado Livre", "Pedidos do Mercado Livre");
 
     companion object {
         fun fromApiKey(value: String?): SalesChannel? =

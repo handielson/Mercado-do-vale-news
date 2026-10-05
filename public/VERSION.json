@@ -1,22 +1,32 @@
 {
-  "version": "v1.2.548-bling-stock-webhook",
+  "version": "v1.2.549-ml-gestao-push",
   "date": "2026-10-05",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.548-bling-stock-webhook",
-  "release_vps": "/var/www/mdv-site/releases/20261005-183500-v12548-bling-stock-webhook",
+  "tag": "v1.2.549-ml-gestao-push",
+  "release_vps": "/var/www/mdv-site/releases/20261005-220500-v12549-ml-gestao-push",
   "release_print3d_vps": null,
-  "summary": "Recupera o recebimento de webhooks de estoque Bling com fila persistente, resposta rápida e novas tentativas.",
+  "summary": "Notificações Mercado Livre no Gestão MDV, com lista de vendas e abertura dos detalhes.",
+  "gestao_mdv_android": {
+    "version_name": "0.13.9",
+    "version_code": 66
+  },
   "changed_files": [
+    "services/mobileSalesPushService.cjs",
+    "services/mercadoLivreServer.cjs",
     "vps_server.cjs",
-    "services/blingStockWebhookQueue.cjs",
-    "tmp-tests/bling-stock-webhook-queue.test.cjs",
+    "vps_server.js",
+    "android/admin-estoque/app/build.gradle.kts",
+    "android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/MainActivity.kt",
+    "android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/domain/SaleSummary.kt",
+    "tmp-tests/mercado-livre-mobile-push.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-05-v1.2.548-bling-stock-webhook.md"
+    "docs/versoes/2026-10-05-v1.2.549-ml-gestao-push.md"
   ],
   "validations": [
-    "MySQL isolado: confirmação rápida, deduplicação, falha com HTTP 503, retry, recuperação após reinício e exclusão entre workers",
-    "node --check dos servidores e módulo"
+    "8 testes de notificações, deduplicação, listagem e contrato Android",
+    "Build APK 0.13.9 código 66; instalação USB confirmada",
+    "Sintaxe dos servidores e build completo do site com proteção contra Supabase passaram"
   ]
 }

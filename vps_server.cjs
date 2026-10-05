@@ -25,6 +25,7 @@ const { ensureProductDeadlineRequestsTable, registerProductDeadlineRequestRoutes
 const {
   ensureMercadoLivreTables,
   registerMercadoLivreRoutes,
+  loadMercadoLivreSales,
   syncMercadoLivreStockFromBlingTargets,
 } = require('./services/mercadoLivreServer.cjs');
 const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
@@ -13770,6 +13771,13 @@ fastify.get('/admin/mobile-sales', { preHandler: requireAdminBearerToken }, asyn
         warning = error.message || 'TikTok Shop indisponivel.';
         sales = await mobileSalesPushService.listRecordedSales(channel, limit);
       }
+    } else if (channel === 'mercado_livre') {
+      try {
+        sales = await loadMercadoLivreSales(pool, limit, '', startDate, endDate);
+      } catch (error) {
+        warning = error.message || 'Mercado Livre indisponível.';
+        sales = await mobileSalesPushService.listRecordedSales(channel, limit);
+      }
     } else {
       return reply.code(400).send({ error: 'Canal de venda invalido.' });
     }
@@ -13799,6 +13807,7 @@ fastify.get('/admin/mobile-sales/:channel/:saleId', { preHandler: requireAdminBe
     else if (channel === 'online') sale = (await loadMobileOnlineSalesVps(1, saleId))[0] || null;
     else if (channel === 'shopee') sale = (await loadMobileShopeeSalesVps(1, saleId, connectionId))[0] || null;
     else if (channel === 'tiktok') sale = (await loadMobileTikTokSalesVps(1, saleId))[0] || null;
+    else if (channel === 'mercado_livre') sale = (await loadMercadoLivreSales(pool, 1, saleId))[0] || null;
     else return reply.code(400).send({ error: 'Canal de venda invalido.' });
 
     if (!sale) sale = await mobileSalesPushService.getRecordedSale(channel, saleId);
@@ -42870,7 +42879,10 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 // Start
 registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname });
 registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey });
-registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin });
+registerMercadoLivreRoutes(fastify, {
+  pool, requireSyncKey, requireSyncKeyOrAdmin,
+  onSale: (sale) => mobileSalesPushService.recordSaleEvent(sale),
+});
 const tiktokPrint = registerTikTokPrintRoutes(fastify, {
   pool, requireSyncKey, requireSyncKeyOrAdmin,
   callApi: callTikTokShopOpenApiVps, loadSettings: loadTikTokShopOAuthSettingsVps,

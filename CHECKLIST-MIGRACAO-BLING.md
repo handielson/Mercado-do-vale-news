@@ -118,6 +118,7 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 - [ ] M03 — Compras e recebimento parcial/XML sem entrada duplicada; ligar contas a pagar e custo.
 - [ ] M04 — Financeiro próprio, parcelas, baixas parciais, juros, descontos, taxas, estornos e conciliação.
 - [ ] M05 — Substituir caminhos Bling dos demais canais efetivamente usados e validar cada ciclo.
+- [ ] M05a — Notificações Mercado Livre → Gestão MDV (E102). Falha confirmada na VPS: eventos orders_v2 chegam, mas a integração não chamava o serviço de push e o canal não era aceito. Correção conecta pedidos pagos e remessas ao serviço canônico, com deduplicação por pedido e filtro de idade. O app 0.13.9/código 66 foi instalado por USB, com card, lista e detalhes do Mercado Livre. Oito testes focados e oito testes gerais Mercado Livre passaram; build completo do site e APK passaram. **Pendente:** publicar API/site, conferir lista/detalhes no celular e observar entrega de uma nova venda real. Sem replay de vendas antigas.
 - [ ] M06 — Migrar histórico e saldos de abertura separadamente; comparar contagens e totais por empresa, estado e período.
 - [ ] M07 — Ensaiar corte, delta final e recuperação; manter um único responsável por cada efeito comercial durante a transição.
 - [ ] M08 — Validar operação sem chamadas operacionais ao Bling, incluindo jobs, webhooks, relatórios, imagens, notas e logística.

@@ -165,6 +165,55 @@ function mercadoLivreOrderToAdminSale(order = {}) {
   };
 }
 
+function mercadoLivrePaidOrderToMobileSale(order = {}) {
+  if (String(order.status || '').toLowerCase() !== 'paid' || !order.id) return null;
+  // Missing timestamps must not turn an old order into a new sale notification.
+  if (!order.date_closed && !order.date_created) return null;
+  if (Number.isNaN(new Date(order.date_closed || order.date_created).getTime())) return null;
+  return mercadoLivreOrderToAdminSale(order);
+}
+
+async function loadMercadoLivreSales(pool, limitValue = 50, saleId = '', startDateValue = '', endDateValue = '') {
+  if (saleId) {
+    if (!/^\d+$/.test(String(saleId))) throw Object.assign(new Error('Pedido Mercado Livre inválido.'), { statusCode: 400 });
+    const order = await (await mlRequest(pool, `/orders/${saleId}`)).json();
+    return [mercadoLivreOrderToAdminSale(order)];
+  }
+  const settings = await loadSettings(pool);
+  const sellerId = String(settings.user_id || '').trim();
+  if (!/^\d+$/.test(sellerId)) throw Object.assign(new Error('Conecte a conta do Mercado Livre.'), { statusCode: 409 });
+
+  const limit = Math.max(1, Math.min(500, Number(limitValue) || 50));
+  const startDate = String(startDateValue || '').trim();
+  const endDate = String(endDateValue || '').trim();
+  const sales = [];
+  let offset = 0;
+  let total = Number.POSITIVE_INFINITY;
+
+  while (sales.length < limit && offset < total) {
+    const query = new URLSearchParams({
+      seller: sellerId,
+      sort: 'date_desc',
+      limit: String(Math.min(50, limit - sales.length)),
+      offset: String(offset),
+    });
+    if (startDate && !Number.isNaN(new Date(startDate).getTime())) {
+      query.set('order.date_created.from', new Date(startDate).toISOString());
+    }
+    if (endDate && !Number.isNaN(new Date(endDate).getTime())) {
+      query.set('order.date_created.to', new Date(endDate).toISOString());
+    }
+    const response = await mlRequest(pool, `/orders/search?${query.toString()}`);
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.results) ? payload.results : [];
+    sales.push(...rows.map(mercadoLivreOrderToAdminSale).filter((sale) => sale.external_id));
+    total = Number(payload?.paging?.total) || sales.length;
+    offset += rows.length;
+    if (!rows.length) break;
+  }
+  return sales.slice(0, limit);
+}
+
 function buildEventKey(payload = {}) {
   return crypto.createHash('sha256').update(JSON.stringify({
     id: payload._id || payload.id || '',
@@ -426,12 +475,14 @@ async function autoLinkOrderItems(pool, order) {
   }
 }
 
-async function processNotification(pool, eventKey, parsed) {
+async function processNotification(pool, eventKey, parsed, { onSale = async () => {} } = {}) {
   try {
     let order;
     let shipment;
     if (parsed.kind === 'order') {
       order = await (await mlRequest(pool, `/orders/${parsed.resourceId}`)).json();
+      const sale = mercadoLivrePaidOrderToMobileSale(order);
+      if (sale) await onSale(sale);
       const shipmentId = order.shipping?.id;
       if (!shipmentId) throw new Error('Pedido sem remessa associada');
       shipment = await (await mlRequest(pool, `/shipments/${shipmentId}`)).json();
@@ -440,6 +491,8 @@ async function processNotification(pool, eventKey, parsed) {
       const orderId = shipment.order_id || shipment.order?.id;
       if (!orderId) throw new Error('Remessa sem pedido associado');
       order = await (await mlRequest(pool, `/orders/${orderId}`)).json();
+      const sale = mercadoLivrePaidOrderToMobileSale(order);
+      if (sale) await onSale(sale);
     }
     await autoLinkOrderItems(pool, order);
     let job = await upsertPrintJob(pool, order, shipment);
@@ -492,7 +545,7 @@ async function syncMercadoLivreStockFromBlingTargets(pool, stockTargets = []) {
   return result;
 }
 
-function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin = requireSyncKey }) {
+function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin = requireSyncKey, onSale }) {
   const protectedRoute = { preHandler: requireSyncKeyOrAdmin };
   const { createPublicationHandlers } = require('./mercadoLivrePublication.cjs');
   const publication = createPublicationHandlers({ pool, settings: () => loadSettings(pool), listingRows,
@@ -603,7 +656,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
       [eventKey, parsed.topic, payload.resource, payload.user_id ? String(payload.user_id) : null, JSON.stringify(payload)],
     );
     reply.code(200).send({ ok: true, duplicate: inserted.affectedRows === 0 });
-    if (inserted.affectedRows) setImmediate(() => processNotification(pool, eventKey, parsed).catch(error => fastify.log.error({ error }, 'Mercado Livre webhook processing failed')));
+    if (inserted.affectedRows) setImmediate(() => processNotification(pool, eventKey, parsed, { onSale }).catch(error => fastify.log.error({ error }, 'Mercado Livre webhook processing failed')));
     return reply;
   };
   registerAliases(fastify, 'post', '/mercado-livre/webhook', {}, webhook);
@@ -618,40 +671,9 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   registerAliases(fastify, 'get', '/mercado-livre/print-jobs', protectedRoute, listJobs);
 
   const listOrders = async (request, reply) => {
-    const settings = await loadSettings(pool);
-    const sellerId = String(settings.user_id || '').trim();
-    if (!/^\d+$/.test(sellerId)) return reply.code(409).send({ error: 'Conecte a conta do Mercado Livre.' });
-
-    const limit = Math.max(1, Math.min(500, Number(request.query?.limit) || 500));
-    const startDate = String(request.query?.start_date || '').trim();
-    const endDate = String(request.query?.end_date || '').trim();
-    const sales = [];
-    let offset = 0;
-    let total = Number.POSITIVE_INFINITY;
-
-    while (sales.length < limit && offset < total) {
-      const query = new URLSearchParams({
-        seller: sellerId,
-        sort: 'date_desc',
-        limit: String(Math.min(50, limit - sales.length)),
-        offset: String(offset),
-      });
-      if (startDate && !Number.isNaN(new Date(startDate).getTime())) {
-        query.set('order.date_created.from', new Date(startDate).toISOString());
-      }
-      if (endDate && !Number.isNaN(new Date(endDate).getTime())) {
-        query.set('order.date_created.to', new Date(endDate).toISOString());
-      }
-      const response = await mlRequest(pool, `/orders/search?${query.toString()}`);
-      const payload = await response.json();
-      const rows = Array.isArray(payload?.results) ? payload.results : [];
-      sales.push(...rows.map(mercadoLivreOrderToAdminSale).filter((sale) => sale.external_id));
-      total = Number(payload?.paging?.total) || sales.length;
-      offset += rows.length;
-      if (!rows.length) break;
-    }
+    const sales = await loadMercadoLivreSales(pool, request.query?.limit || 500, '', request.query?.start_date, request.query?.end_date);
     reply.header('Cache-Control', 'no-store');
-    return { channel: 'mercado_livre', count: sales.length, sales: sales.slice(0, limit) };
+    return { channel: 'mercado_livre', count: sales.length, sales };
   };
   registerAliases(fastify, 'get', '/mercado-livre/orders', protectedRoute, listOrders);
 
@@ -785,6 +807,8 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
 }
 
 module.exports = {
+  loadMercadoLivreSales,
+  mercadoLivrePaidOrderToMobileSale,
   isNonBlockingValidation,
   listingRows, suggestListingLinks, createListingHandlers,
   ensureMercadoLivreTables,

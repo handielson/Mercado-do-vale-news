@@ -495,3 +495,15 @@ Item: F11a, ainda aberto. O teste de integração fiscal passou a instalar a mig
 **Bling:** reativada a configuração existente de Estoques, mantendo URL, versão e ações. Reload confirmou Webhook ativo. Teste público sintético sem identificador de produto: HTTP 200 em 211 ms; inbox done, uma tentativa, sem erro. Nenhum saldo foi modificado por esse teste ou por ajuste manual nesta recuperação.
 
 **Pendência honesta:** ainda não foi observado um evento real de estoque depois da reativação. A confirmação do recebimento real e do saldo do SKU nos canais permanece aberta em M02a. Não habilitado cron de aplicação nem reproduzidos eventos antigos para corrigir saldos.
+
+## E102 — Notificações de vendas Mercado Livre no Gestão MDV (05/10/2026)
+
+**Diagnóstico somente de leitura na VPS:** orders_v2 tinha 184 eventos processados, último em 05/10/2026 18:42:09 UTC; shipments tinha 178 processados. mobile_sale_events continha Online, PDV, Shopee e TikTok, sem Mercado Livre. Havia um dispositivo push ativo. O módulo Mercado Livre não chamava recordSaleEvent e o serviço de notificações aceitava somente os quatro canais anteriores. Recebimento do webhook não significava envio de push.
+
+**Correção:** canal mercado_livre no serviço canônico; callback onSale nos entrypoints e no processamento de pedidos/remessas. Somente status paid com identificador e data válida é convertido. Registro antes de impressão/DCE, valores em centavos, deduplicação canal + pedido e filtro de idade preservados. Nenhum evento antigo reproduzido nem notificação real disparada na preparação.
+
+**Aplicativo:** Gestão MDV 0.13.9/código 66 instalado por USB no RMX5011 com install -r, assinatura existente aceita e dados preservados. Card Mercado Livre, enum reconhecido para navegação de notificações, listagem e detalhes consultados pela API autenticada. A listagem compartilha o loader de pedidos do painel; consulta por ID usa GET /orders/id; cache registrado pode ser usado em falha da integração.
+
+**Validação:** oito testes em tmp-tests/mercado-livre-mobile-push.test.cjs e oito testes gerais Mercado Livre passaram no ambiente isolado; sintaxe dos módulos/entrypoints passou. Build completo com proteção contra Supabase passou. A guarda antiga mobile-sales-push-static exige igualdade integral entre entrypoints que já divergem no HEAD anterior em áreas alheias a esta correção; esse check continua falhando e não foi considerado aprovado. O ambiente isolado resolveu a dependência PDF ausente no node_modules primário, sem alterá-lo.
+
+**Publicação:** preparada v1.2.549-ml-gestao-push; ainda pendente deploy e validação pública. Os módulos remotos coincidem com HEAD anterior; alterações dos servidores serão aplicadas por substituições com pré-imagem verificada, preservando diferenças remotas. Pendências M05a: validação autenticada da lista/detalhes no celular e recebimento de nova venda real via webhook/FCM.

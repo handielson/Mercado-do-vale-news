@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 
-const CHANNELS = new Set(['online', 'pdv', 'shopee', 'tiktok']);
+const CHANNELS = new Set(['online', 'pdv', 'shopee', 'tiktok', 'mercado_livre']);
 const OPERATIONAL_CHANNELS = new Set([...CHANNELS, 'n8n']);
 const INVALID_FCM_TOKEN_CODES = new Set([
   'messaging/invalid-registration-token',
@@ -105,6 +105,7 @@ function channelLabel(channel) {
     pdv: 'PDV',
     shopee: 'Shopee',
     tiktok: 'TikTok Shop',
+    mercado_livre: 'Mercado Livre',
   }[channel] || channel;
 }
 

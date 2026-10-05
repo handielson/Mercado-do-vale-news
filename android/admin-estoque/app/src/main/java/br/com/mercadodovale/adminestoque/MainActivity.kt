@@ -971,6 +971,9 @@ class MainActivity : Activity() {
         )
         root.addView(salesChannelRow(SalesChannel.ONLINE, SalesChannel.PDV))
         root.addView(salesChannelRow(SalesChannel.SHOPEE, SalesChannel.TIKTOK))
+        root.addView(salesChannelCard(SalesChannel.MERCADO_LIVRE), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(130),
+        ).apply { bottomMargin = dp(14) })
         root.addView(
             card(
                 "Atendimento Shopee",
@@ -1434,6 +1437,7 @@ class MainActivity : Activity() {
         SalesChannel.PDV -> green
         SalesChannel.SHOPEE -> Color.rgb(238, 77, 45)
         SalesChannel.TIKTOK -> Color.rgb(15, 23, 42)
+        SalesChannel.MERCADO_LIVRE -> Color.rgb(133, 100, 4)
     }
 
     private fun showSalesList(channel: SalesChannel) {
