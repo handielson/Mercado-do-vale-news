@@ -18,9 +18,21 @@ async function reconcileExternalStock(pool,{productId,targetQuantity,reason,note
     }
     const companyId=product.company_id||await getDefaultCompanyId?.();
     if(!companyId) throw new Error('Empresa do produto não configurada.');
-    const [rows]=await connection.query(`SELECT psl.* FROM product_stock_locations psl
-      LEFT JOIN stock_deposits sd ON sd.id=psl.deposit_id LEFT JOIN stock_locations sl ON sl.id=psl.location_id
-      WHERE psl.product_id=? ORDER BY sd.is_default DESC,sl.is_default DESC,psl.quantity DESC,psl.id FOR UPDATE`,[productId]);
+    // Lock only balances. A joined FOR UPDATE also locks deposit/location rows;
+    // getIncoming uses the pool to update those rows and would wait on our own transaction.
+    const [rows]=await connection.query('SELECT * FROM product_stock_locations WHERE product_id=? FOR UPDATE',[productId]);
+    if(rows.length) {
+      const [priority]=await connection.query(`SELECT psl.id,sd.is_default AS deposit_default,sl.is_default AS location_default
+        FROM product_stock_locations psl
+        LEFT JOIN stock_deposits sd ON sd.id=psl.deposit_id
+        LEFT JOIN stock_locations sl ON sl.id=psl.location_id
+        WHERE psl.product_id=?`,[productId]);
+      const byId=new Map(priority.map(row=>[row.id,row]));
+      rows.sort((a,b)=>Number(byId.get(b.id)?.deposit_default||0)-Number(byId.get(a.id)?.deposit_default||0)
+        || Number(byId.get(b.id)?.location_default||0)-Number(byId.get(a.id)?.location_default||0)
+        || Number(b.quantity)-Number(a.quantity)
+        || String(a.id).localeCompare(String(b.id)));
+    }
     for(const row of rows) {
       row.quantity=Number(row.quantity);row.reserved_quantity=Number(row.reserved_quantity);
       if(!Number.isSafeInteger(row.quantity)||!Number.isSafeInteger(row.reserved_quantity)||row.quantity<row.reserved_quantity||row.reserved_quantity<0
