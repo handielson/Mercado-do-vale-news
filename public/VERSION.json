@@ -1,32 +1,24 @@
 {
-  "version": "v1.2.545-pgdas-history",
-  "date": "2026-10-04",
+  "version": "v1.2.546-manual-media-handoff",
+  "date": "2026-10-05",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.545-pgdas-history",
-  "release_vps": "/var/www/mdv-site/releases/20261004-164053-pgdas-history",
-  "summary": "Histórico declarado do PGDAS-D alimenta o RBT12; faturamento corrente segue pelas notas autorizadas, sem duplicação.",
+  "tag": "v1.2.546-manual-media-handoff",
+  "release_vps": "/var/www/mdv-site/releases/20261005-143017-v12546-manual-media-handoff",
+  "release_print3d_vps": null,
+  "summary": "Pausa o bot quando um atendente envia áudio ou outra mídia manual, mesmo sem texto ou legenda.",
   "changed_files": [
-    "pages/admin/accounting/AccountingPage.tsx",
-    "services/accountantPortalService.ts",
-    "services/accountantPortalServer.cjs",
-    "services/accountingHistoryCore.cjs",
-    "scripts/deploy-accountant-portal.cjs",
-    "tmp-tests/accounting-page-browser.test.mjs",
-    "tmp-tests/accounting-history.test.cjs",
-    "tmp-tests/accountant-deploy.test.cjs",
+    "tmp-tests/n8n-fix-persistent-handoff-context.cjs",
+    "tmp-tests/n8n-fix-manual-media-handoff.cjs",
+    "tmp-tests/n8n-manual-media-handoff.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-04-v1.2.545-pgdas-history.md"
+    "docs/versoes/2026-10-05-v1.2.546-manual-media-handoff.md"
   ],
   "validations": [
-    "48 testes fiscais/histórico/deploy",
-    "Navegador: histórico e notas sem duplicação",
-    "test:money",
-    "build e sintaxe"
-  ],
-  "known_limitations": [
-    "Importação de arquivo estruturado extraído do PDF; o portal e-CAC exige sessão do operador.",
-    "DAS corrente é uma simulação; regime de caixa e segregações exigem tratamento próprio."
+    "11 cenários de handoff manual por texto e mídia",
+    "testes de contexto persistente do n8n",
+    "workflow ativo e histórico alinhados",
+    "build do site"
   ]
 }

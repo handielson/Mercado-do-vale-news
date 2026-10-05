@@ -108,13 +108,40 @@ if (staticData.botSentMessageIds[messageId]) {
 }
 if (/^(api|bot|automation|n8n)$/.test(messageSource)) return [];
 
-const message = String(
+const messageObject = webhookData.message && typeof webhookData.message === 'object'
+  ? webhookData.message
+  : {};
+const messageType = String(source.messageType || webhookData.messageType || '').trim();
+const normalizedMessageType = messageType.toLowerCase().replace(/[^a-z]/g, '');
+const contentKey = Object.keys(messageObject).find((key) => /^(?:audioMessage|imageMessage|videoMessage|documentMessage|stickerMessage|locationMessage|liveLocationMessage|contactMessage|contactsArrayMessage|reactionMessage)$/.test(key)) || '';
+const normalizedContentType = String(contentKey || normalizedMessageType).toLowerCase();
+const rawMessage = String(
   source.conversation
   || source.text
   || webhookData.message?.conversation
   || webhookData.message?.extendedTextMessage?.text
+  || webhookData.message?.imageMessage?.caption
+  || webhookData.message?.videoMessage?.caption
+  || webhookData.message?.documentMessage?.caption
   || ''
 ).trim();
+
+// manual-handoff-nonempty-message-v1 / manual-media-handoff-v1:
+// empty echoes stay ignored, while real manual media pauses the bot without requiring a caption.
+const manualContentLabels = [
+  [/audio|ptt/, '[Áudio enviado pelo atendente]'],
+  [/image/, '[Imagem enviada pelo atendente]'],
+  [/video/, '[Vídeo enviado pelo atendente]'],
+  [/document/, '[Documento enviado pelo atendente]'],
+  [/sticker/, '[Figurinha enviada pelo atendente]'],
+  [/liveLocation|location/i, '[Localização enviada pelo atendente]'],
+  [/contactsArray|contact/i, '[Contato enviado pelo atendente]'],
+  [/reaction/, '[Reação enviada pelo atendente]'],
+];
+const contentLabel = manualContentLabels.find(([pattern]) => pattern.test(normalizedContentType))?.[1] || '';
+const message = rawMessage || contentLabel;
+
+if (!message) return [];
 
 return [{ json: {
   remoteJid,
@@ -291,4 +318,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { patchWorkflow, wrapPromptWithHistory, main };
+module.exports = { applyClientControlCode, registerManualCode, patchWorkflow, wrapPromptWithHistory, main };

@@ -1,13 +1,9 @@
-# v1.2.545-pgdas-history
+# v1.2.546-manual-media-handoff
 
-Data: 2026-10-04. Status: pronta para publicação. Branch: main.
-Tag: v1.2.545-pgdas-history.
-Release: /var/www/mdv-site/releases/20261004-164053-pgdas-history.
+Data: 2026-10-05. Status: pronta para publicação. Branch: main.
+Tag: `v1.2.546-manual-media-handoff`.
+Release principal: `/var/www/mdv-site/releases/20261005-143017-v12546-manual-media-handoff`.
 
-O histórico declarado do PGDAS-D passa a alimentar o RBT12. Cada mês usa a receita declarada quando importada, incluindo serviços; os demais usam notas autorizadas. Faturamento corrente continua somando somente notas. A fonte é identificada por documento, competência e SHA256; os totais do extrato são conferidos antes da gravação.
+O atendimento humano agora pausa o bot quando o atendente envia áudio, imagem, vídeo, documento, figurinha, localização, contato ou reação pelo WhatsApp Web ou celular, mesmo sem texto ou legenda.
 
-Sem migrations. Snapshots imutáveis no diário fiscal existente, com isolamento por empresa, versão e trava transacional. Não altera notas, aprovação fiscal ou emissão.
-
-Validações: 48 testes fiscais/histórico/deploy, navegador da Contabilidade, testes monetários, build e sintaxe.
-
-Detalhes: docs/versoes/2026-10-04-v1.2.545-pgdas-history.md.
+Eventos vazios, atualizações de status, mensagens identificadas como envio do próprio bot e conteúdos originados pela API continuam sem criar uma pausa humana.
