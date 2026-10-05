@@ -1,23 +1,22 @@
 {
-  "version": "v1.2.547-bling-stock-lock",
+  "version": "v1.2.548-bling-stock-webhook",
   "date": "2026-10-05",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.547-bling-stock-lock",
-  "release_vps": "/var/www/mdv-site/releases/20261005-165818-v12547-bling-stock-lock",
+  "tag": "v1.2.548-bling-stock-webhook",
+  "release_vps": "/var/www/mdv-site/releases/20261005-183500-v12548-bling-stock-webhook",
   "release_print3d_vps": null,
-  "summary": "Corrige bloqueio na reconciliação de estoque Bling e torna o cron local e inicialmente somente de conferência.",
+  "summary": "Recupera o recebimento de webhooks de estoque Bling com fila persistente, resposta rápida e novas tentativas.",
   "changed_files": [
-    "services/externalStockReconciliation.cjs",
-    "scripts/bling-reconcile-cron.sh",
-    "tmp-tests/external-stock-reconciliation-mysql.test.cjs",
+    "vps_server.cjs",
+    "services/blingStockWebhookQueue.cjs",
+    "tmp-tests/bling-stock-webhook-queue.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-05-v1.2.547-bling-stock-lock.md"
+    "docs/versoes/2026-10-05-v1.2.548-bling-stock-webhook.md"
   ],
   "validations": [
-    "Teste MySQL isolado reproduziu o lock antigo e validou a reconciliação de zero para um",
-    "node --check dos arquivos da API",
-    "sh -n do cron"
+    "MySQL isolado: confirmação rápida, deduplicação, falha com HTTP 503, retry, recuperação após reinício e exclusão entre workers",
+    "node --check dos servidores e módulo"
   ]
 }
