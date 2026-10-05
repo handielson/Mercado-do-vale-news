@@ -84,6 +84,8 @@ test('Android recognizes Mercado Livre for notification navigation and the sales
   assert.match(model, /MERCADO_LIVRE\("mercado_livre", "Mercado Livre"/);
   assert.match(activity, /salesChannelCard\(SalesChannel.MERCADO_LIVRE\)/);
   assert.match(activity, /SalesChannel.MERCADO_LIVRE -> Color/);
+  assert.match(activity, /Online, PDV, Shopee, TikTok e Mercado Livre/);
+  assert.match(activity, /override fun onStart\(\) \{\s*super.onStart\(\)\s*if \(!token.isNullOrBlank\(\)\) PushRegistration.refresh\(applicationContext\)/);
   for (const file of ['vps_server.js', 'vps_server.cjs']) {
     const server = fs.readFileSync(require.resolve(`../${file}`), 'utf8');
     assert.match(server, /sales = await loadMercadoLivreSales\(pool, limit, '', startDate, endDate\)/);

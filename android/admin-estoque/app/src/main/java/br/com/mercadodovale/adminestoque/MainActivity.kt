@@ -286,6 +286,7 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        if (!token.isNullOrBlank()) PushRegistration.refresh(applicationContext)
         if (!saleReceiverRegistered) {
             val filter = IntentFilter(SalesNotificationContract.ACTION_SALE_RECEIVED)
             ContextCompat.registerReceiver(
@@ -409,7 +410,7 @@ class MainActivity : Activity() {
         root.addView(
             card(
                 "Vendas e notificações",
-                "Online, PDV, Shopee e TikTok com detalhes e avisos automáticos.",
+                "Online, PDV, Shopee, TikTok e Mercado Livre com detalhes e avisos automáticos.",
             ) { showSalesOverview() },
         )
         root.addView(card("Movimentar estoque", "Consultar caixas e os produtos guardados em cada local.") { showStockLocations() })
