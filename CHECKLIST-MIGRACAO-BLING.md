@@ -114,6 +114,7 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 
 - [ ] M01 — Produtos/cadastros independentes, vínculos externos preservados e imagens/documentos sem dependência de links do Bling.
 - [ ] M02 — Estoque consolidado por depósito, unidade, composição e reserva; testar inventário e transferências.
+- [ ] M02a — Recuperar sincronização automática Bling → sistema próprio (E101). Publicada `v1.2.548`: inbox MySQL durável, resposta rápida, deduplicação, retry com erro registrado e recuperação após reinício. Estoques estava inativo por erros na operação no Bling; reativado e persistência conferida após reload. Teste sintético sem produto: HTTP 200 em 211 ms e recibo done/attempts=1. Cron permanece somente conferência. **Pendente:** observar o próximo evento real de estoque e confirmar o SKU nos canais; nenhuma correção manual de saldo foi executada nesta recuperação. A aplicação manual anterior não substitui a correção da integração solicitada pelo operador.
 - [ ] M03 — Compras e recebimento parcial/XML sem entrada duplicada; ligar contas a pagar e custo.
 - [ ] M04 — Financeiro próprio, parcelas, baixas parciais, juros, descontos, taxas, estornos e conciliação.
 - [ ] M05 — Substituir caminhos Bling dos demais canais efetivamente usados e validar cada ciclo.
