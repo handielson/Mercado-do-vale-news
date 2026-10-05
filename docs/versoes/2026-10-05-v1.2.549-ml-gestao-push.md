@@ -1,12 +1,14 @@
 # v1.2.549-ml-gestao-push
 
 Data: 2026-10-05. Branch: main. Tag: v1.2.549-ml-gestao-push.
-Release prevista: /var/www/mdv-site/releases/20261005-220500-v12549-ml-gestao-push. Status: preparada; publicação e validação pública pendentes.
+Release: /var/www/mdv-site/releases/20261005-220500-v12549-ml-gestao-push. Status: publicada e validada; pendente venda real.
 
 Conecta pedidos pagos e eventos de remessa do Mercado Livre ao serviço de notificações do Gestão MDV. O mesmo pedido usa uma única chave, e vendas antigas, canceladas ou sem data válida não geram alerta. A etapa de impressão não bloqueia o registro da venda.
 
 Gestão MDV 0.13.9 (código 66): card Mercado Livre, reconhecimento do canal nas notificações e abertura dos detalhes. API mobile lista pedidos com paginação/período e consulta o pedido selecionado diretamente no Mercado Livre; em falha da integração pode usar registros recebidos por webhook. Nenhuma venda antiga é reproduzida para enviar notificações.
 
-Validação: 8 testes focados passaram; 8 testes gerais Mercado Livre passaram; build completo do site e sintaxe conferidos; APK debug assinado com a chave existente foi instalado por USB sem desinstalar ou apagar dados. Publicação da API/site e conferência de lista/detalhes no aparelho ainda pendentes. Entrega de uma nova venda real pelo FCM permanece pendente no checklist M05a/E102.
+Validação: 8 testes focados passaram; 8 testes gerais Mercado Livre passaram; build completo do site e sintaxe conferidos; APK debug assinado com a chave existente foi instalado por USB sem desinstalar ou apagar dados. API/site publicados e saudáveis; consulta real da lista/detalhes no servidor passou. Alerta técnico exclusivo ao celular conectado foi recebido e identificado nas notificações Android. Navegação por toque no aparelho permanece pendente porque a tela estava bloqueada. Entrega de uma nova venda real pelo FCM permanece pendente no checklist M05a/E102.
 
 Arquivos: services/mobileSalesPushService.cjs, services/mercadoLivreServer.cjs, vps_server.cjs, vps_server.js, android/admin-estoque/app/build.gradle.kts, android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/MainActivity.kt, android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/domain/SaleSummary.kt, tmp-tests/mercado-livre-mobile-push.test.cjs, public/VERSION.json, VERSAO_ATUAL.md, docs/versoes/2026-10-05-v1.2.549-ml-gestao-push.md.
+
+Publicação: c8aaa78b; complemento Android 66809161; tag v1.2.549-ml-gestao-push. APK instalado 0.13.9/código 66. Sem apagar dados ou publicar no Google Play. Alterações preexistentes preservadas.
