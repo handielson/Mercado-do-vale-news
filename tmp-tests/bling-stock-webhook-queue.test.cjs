@@ -77,4 +77,3 @@ test('stock receipt acknowledges before processing; durable deduplication, retry
   const [[finished]] = await pool.query("SELECT COUNT(*) AS total FROM bling_stock_webhook_inbox WHERE status='done'");
   assert.equal(finished.total, 2); assert.equal(failures, 1);
 });
-

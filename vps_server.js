@@ -10548,7 +10548,7 @@ async function patchVpsJsonForWebhookVps(request, pathname, body) {
   const syncKey = getVpsSyncKeyForBlingSyncPrices();
   if (!syncKey) return { ok: false, skipped: 'missing_sync_key' };
   try {
-    const response = await fetch(`${getVpsBatchBaseUrl(request)}${pathname}`, {
+    const response = await fetch(`http://127.0.0.1:${Number(process.env.PORT || 4000)}${pathname}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'x-sync-key': syncKey },
       body: JSON.stringify(body),
@@ -10919,7 +10919,30 @@ async function patchVpsJsonForBlingAdminVps(request, method, pathname, body) {
   }
 }
 
+const { createBlingStockWebhookQueue, isBlingStockEvent } = require('./services/blingStockWebhookQueue.cjs');
+const blingStockWebhookQueue = createBlingStockWebhookQueue({
+  pool,
+  processEvent: async (request) => {
+    let result;
+    const reply = { code() { return this; }, send(value) { result = value; return value; } };
+    await processBlingWebhookVps(request, reply);
+    return result;
+  },
+});
+
 async function handleBlingWebhookVps(request, reply) {
+  if (request.method === 'POST' && !isMercadoPagoWebhookPayload(request.body) && isBlingStockEvent(request.body)) {
+    try {
+      return reply.code(200).send(await blingStockWebhookQueue.enqueue(request));
+    } catch (error) {
+      console.error('[bling-stock-inbox] Receipt not persisted:', error.message);
+      return reply.code(503).send({ ok: false, error: 'Stock receipt could not be persisted; retry delivery' });
+    }
+  }
+  return processBlingWebhookVps(request, reply);
+}
+
+async function processBlingWebhookVps(request, reply) {
   if (request.method === 'GET') {
     return reply.code(200).send({ ok: true, mode: 'vps-fastify', accepts: 'POST' });
   }
@@ -10965,22 +10988,8 @@ async function handleBlingWebhookVps(request, reply) {
         stockQty = await fetchBlingStockForWebhookVps(blingId, accessToken);
       }
       if (stockQty === null) {
-        const payloadStock = readBlingPayloadStockForWebhookDetailsVps(productData, body);
-        const payloadQty = payloadStock.value !== undefined ? Number(payloadStock.value) : null;
-        if (accessToken && (payloadQty === null || (payloadQty === 0 && !payloadStock.hasExplicitTotal))) {
-          return reply.code(200).send({
-            ok: false,
-            message: 'API failed and payload returned 0 - update aborted to avoid an incorrect zero stock',
-            reason: 'refusing to zero stock incorrectly',
-            blingId,
-            sku,
-          });
-        }
-        if (payloadQty === null || !Number.isFinite(payloadQty)) {
-          return reply.code(200).send({ ok: false, message: 'No Bling token and no stock in payload' });
-        }
-        stockQty = payloadQty;
-        stockSource = accessToken ? 'payload_api_fallback' : 'payload_no_token';
+        // Always fetch the current total: delayed receipts must not replay an old balance.
+        return reply.code(200).send({ ok: false, reason: 'Bling current stock unavailable; retained for retry' });
       }
 
       let resolvedSku = sku;
@@ -43032,7 +43041,8 @@ require('./services/accountantPortalServer.cjs').registerAccountantPortalRoutes(
 });
 scheduleNextSystemBackup();
 
-runMigrations().then(() => {
+runMigrations().then(async () => {
+  await blingStockWebhookQueue.start();
   blingFiscalAutomation.start();
   if (process.env.MDV_FISCAL_AUTO_CANCEL_ENABLED === '1' && process.env.MDV_FISCAL_AUTO_CANCEL_HOMOLOGATED === '1') {
     const fiscalCancellation = require('./services/fiscalCancellationAutomation.cjs').createFiscalCancellationAutomation({

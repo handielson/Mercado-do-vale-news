@@ -16,8 +16,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 
   assert.match(source, /event\.includes\('stock'\)[\s\S]*event\.includes\('estoque'\)[\s\S]*event\.includes\('movimentacao'\)/, `${file} must handle stock webhook events`);
   assert.match(source, /fetchBlingStockForWebhookVps/, `${file} must fetch Bling stock when a token is available`);
-  assert.match(source, /payload_api_fallback/, `${file} must keep non-zero payload fallback when Bling stock fetch fails`);
-  assert.match(source, /refusing to zero stock incorrectly/, `${file} must avoid zeroing stock when API fails and payload is zero or absent`);
+  assert.match(source, /blingStockWebhookQueue.enqueue\(request\)/, `${file} must persist stock receipts before acknowledgement`);
+  assert.match(source, /Bling current stock unavailable; retained for retry/, `${file} must retry current stock instead of replaying stale payloads`);
   assert.match(source, /patchVpsJsonForWebhookVps\(\s*request,\s*'\/products\/stock'/, `${file} must update VPS stock endpoint`);
   assert.match(source, /vpsDbPatch\('products'[\s\S]*stock_quantity/, `${file} must update local product stock as legacy did`);
 
