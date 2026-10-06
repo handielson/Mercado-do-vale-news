@@ -35,6 +35,7 @@ import { SignedWarrantyDocumentSection } from './SignedWarrantyDocumentSection';
 import { formatBrazilDateTime } from '../../../utils/brazilDateTime';
 import { getSaleItemRecordedIdentifier, getWarrantySaleItems } from '../../../utils/warrantySaleItems';
 import { SaleItemInventoryInfo } from './SaleItemInventoryInfo';
+import { SaleStockReconciliation } from './SaleStockReconciliation';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -754,6 +755,9 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 </p>
                                 {sale.finalization_error_summary && (
                                     <p className="mt-1 text-xs whitespace-pre-line">{sale.finalization_error_summary}</p>
+                                )}
+                                {saleNeedsReview && sale.finalization_error_summary?.includes('stock_decrement') && (
+                                    <SaleStockReconciliation key={sale.id} saleId={sale.id} onReconciled={() => { onStatusChange(); onClose(); }} />
                                 )}
                                 {saleFinalizationWarnings.length > 0 && (
                                     <div className="mt-2 space-y-1 text-xs font-medium">

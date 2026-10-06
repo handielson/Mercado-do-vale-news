@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),cp=require('node:child_process');
+const patch=require('../scripts/deploy-pdv-stock-recovery.cjs').patch;
+const p=require('../scripts/pdv-stock-recovery-api-patch.json');
+const original=cp.execFileSync('git',['show','cdaace45:vps_server.cjs'],{encoding:'utf8',maxBuffer:16e6}).replace(/\r\n/g,'\n');
+assert.equal(patch(original),fs.readFileSync('vps_server.cjs','utf8').replace(/\r\n/g,'\n'));
+assert.equal(patch('hotfix prefix\n'+p.before+'\nhotfix suffix'),'hotfix prefix\n'+p.after+'\nhotfix suffix');
+assert.equal(patch(p.after),p.after);
+assert.throws(()=>patch(p.before+p.before));assert.throws(()=>patch('divergent'));
+for(const file of ['server.js','vps_server.js','vps_server.cjs'])assert.ok(fs.readFileSync(file,'utf8').replace(/\r\n/g,'\n').includes(p.after));
+console.log('PDV selective deployment: preserves hotfixes, rejects divergence, all server aliases covered.');

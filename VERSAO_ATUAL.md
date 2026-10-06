@@ -1,4 +1,18 @@
-# v1.2.553-familias-imei
+# v1.2.554-pdv-baixa-segura
+
+Data: 2026-10-06. Branch: main. Tag: v1.2.554-pdv-baixa-segura.
+Release VPS: /var/www/mdv-site/releases/20261006-140147-pdv-baixa-segura
+Status: preparada; publicacao e validacao publica pendentes.
+
+Baixa numerica do PDV com idempotencia por venda/produto, rollback e ate tres tentativas para timeout/deadlock. Travas limitadas a venda, produto e seus saldos. Itens repetidos agrupados; erros identificam SKU, produto e quantidade.
+
+Detalhes da venda oferecem conferencia administrativa dos movimentos. Evidencia explicita do Bling permite registrar baixa externa ja refletida no saldo sem descontar novamente. Preserva erro original, responsavel e outras pendencias. Quantidades parciais ou excedentes bloqueiam a conferencia.
+
+Publicacao seletiva nas tres entradas do servidor e dois helpers, com backup e bloqueio por divergencia. Sem migrations ou alteracoes de saldos/vendas. B11B6196 aguarda registro da conferencia.
+
+Validacoes: rollback, concorrencia, idempotencia, reconciliacao, patch seletivo, regressoes de prioridade/finalizacao/unidades, sintaxe e build com trava Supabase. Compilador TypeScript completo indisponivel.
+
+## Release anterior: v1.2.553-familias-imei
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.553-familias-imei.
 Release VPS: /var/www/mdv-site/releases/20261006-034340-familias-imei

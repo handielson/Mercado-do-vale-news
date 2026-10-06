@@ -19376,66 +19376,32 @@ async function insertStockMovement(row) {
   );
 }
 
+fastify.get('/sales/:id/stock-reconciliation', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  try {
+    const {report}=await require('./services/saleStockReconciliation.cjs').loadReport(pool,req.params.id);
+    return {report};
+  } catch(error){if(!error.statusCode)throw error;return reply.code(error.statusCode).send({error:error.message});}
+});
+fastify.post('/sales/:id/stock-reconciliation', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  try {
+    const actor=await getVpsBearerAuthContext(req);
+    return await require('./services/saleStockReconciliation.cjs').reconcileStock(pool,req.params.id,req.body?.evidence||[],actor.userId||actor.customerId);
+  } catch(error){if(!error.statusCode)throw error;return reply.code(error.statusCode).send({error:error.message});}
+});
+
 fastify.post('/stock-locations/priority-decrements', { preHandler: requireSyncKey }, async (req, reply) => {
   const input = req.body || {};
-  const quantity = stockNumber(input.quantity);
-  if (!input.product_id || quantity <= 0) return reply.code(400).send({ error: 'Produto e quantidade sao obrigatorios.' });
-  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
-  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
-  const sources = await getPriorityStockSources(input.product_id);
-  const totalAvailable = sources.reduce((sum, row) => sum + Math.max(0, stockNumber(row.quantity) - stockNumber(row.reserved_quantity)), 0);
-  if (totalAvailable < quantity) return reply.code(400).send({ error: 'insufficient_stock_by_location' });
-
-  let remaining = quantity;
-  const result = [];
-  for (const source of sources) {
-    if (remaining <= 0) break;
-    const previous = stockNumber(source.quantity);
-    const available = Math.max(0, previous - stockNumber(source.reserved_quantity));
-    const decrement = Math.min(remaining, available);
-    if (decrement <= 0) continue;
-    const next = previous - decrement;
-    await upsertStockLocationBalance({
-      companyId: source.company_id || product.company_id,
-      productId: input.product_id,
-      depositId: source.deposit_id,
-      locationId: source.location_id,
-      quantity: next,
-      reservedQuantity: stockNumber(source.reserved_quantity),
-    });
-    await insertStockMovement({
-      company_id: source.company_id || product.company_id,
-      product_id: input.product_id,
-      from_deposit_id: source.deposit_id,
-      from_location_id: source.location_id,
-      quantity: decrement,
-      movement_type: 'sale',
-      reason: String(input.reason || '').trim() || 'Baixa por prioridade',
-      reference_type: input.reference_type || null,
-      reference_id: input.reference_id || null,
-      previous_from_quantity: previous,
-      new_from_quantity: next,
-      notes: input.notes || null,
-    });
-    result.push({
-      stock_location_id: source.id,
-      deposit_id: source.deposit_id,
-      location_id: source.location_id,
-      deposit_name: source.deposit_name || null,
-      deposit_code: source.deposit_code || null,
-      deposit_type: source.deposit_type || null,
-      deposit_is_default: Boolean(source.deposit_is_default),
-      location_name: source.location_name || null,
-      location_code: source.location_code || null,
-      location_is_default: Boolean(source.location_is_default),
-      quantity_decremented: decrement,
-      previous_quantity: previous,
-      new_quantity: next,
-    });
-    remaining -= decrement;
+  let outcome;
+  try {
+    outcome = await require('./services/priorityStockDecrement.cjs').decrementPriorityStock(pool, input);
+  } catch(error) {
+    if(!['ER_LOCK_WAIT_TIMEOUT','ER_LOCK_DEADLOCK'].includes(error.code))throw error;
+    return reply.code(503).send({error:'stock_busy',code:error.code,message:'Baixa de estoque bloqueada após 3 tentativas. Confira a auditoria da venda antes de repetir.',
+      debug:{product_id:input.product_id,quantity:input.quantity,reference_id:input.reference_id}});
   }
-  await syncProductStockFromLocations(input.product_id);
-  return result;
+  if (outcome.error) return reply.code(outcome.status).send({ error: outcome.error });
+  if (!outcome.already_applied) await syncMarketplaceStockAfterLocalMutationVps([input.product_id], 'priority_stock_decrement');
+  return outcome.decrements;
 });
 
 fastify.post('/stock-locations/priority-reservations', { preHandler: requireSyncKey }, async (req, reply) => {

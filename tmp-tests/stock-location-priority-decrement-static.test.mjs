@@ -5,19 +5,19 @@ import path from 'node:path';
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
-const migration = read('supabase/migrations/20260509000001_multi_deposit_stock.sql');
+const runtime = read('services/priorityStockDecrement.cjs');
 const service = read('services/stockLocationService.ts');
 const types = read('types/stock-location.ts');
 const estoque = read('Estoque.md');
 const saleService = read('services/saleService.ts');
 const orderService = read('services/orderService.ts');
 
-assert.match(migration, /CREATE OR REPLACE FUNCTION decrement_product_stock_by_priority/, 'migration must define priority decrement RPC');
-assert.match(migration, /FOR UPDATE/, 'priority decrement must lock stock rows');
-assert.match(migration, /is_default DESC/, 'priority decrement must consume default deposit first');
-assert.match(migration, /RAISE EXCEPTION 'insufficient_stock_by_location'/, 'priority decrement must fail before partial decrement when total is insufficient');
-assert.match(migration, /movement_type[\s\S]*'sale'|'out'/, 'priority decrement must record stock movement rows');
-assert.match(migration, /PERFORM recalculate_product_stock_from_locations/, 'priority decrement must keep products.stock_quantity in sync');
+assert.match(runtime, /beginTransaction/, 'priority decrement must be transactional');
+assert.match(runtime, /SELECT id FROM product_stock_locations[^\n]*FOR UPDATE/, 'priority decrement must lock only stock rows');
+assert.match(runtime, /is_default DESC/, 'priority decrement must consume default deposit first');
+assert.match(runtime, /insufficient_stock_by_location/, 'priority decrement must fail before partial decrement when total is insufficient');
+assert.match(runtime, /INSERT INTO stock_location_movements/, 'priority decrement must record stock movement rows');
+assert.match(runtime, /UPDATE products SET stock_quantity=/, 'priority decrement must keep products.stock_quantity in sync');
 
 assert.match(types, /StockLocationPriorityDecrementInput/, 'types must define priority decrement input');
 assert.match(types, /StockLocationPriorityDecrementResult/, 'types must define priority decrement result rows');

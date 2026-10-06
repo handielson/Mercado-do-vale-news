@@ -728,7 +728,14 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         const itemsWithInventory = saleItemsPersisted ? saleInput.items.filter(
             item => item.track_inventory && item.product_id && !(item as any).serialized_unit?.unitId
         ) : [];
+        // Uma baixa por produto/venda: linhas repetidas no carrinho precisam somar
+        // antes de usar a chave idempotente da API.
+        const numericStockItems = new Map<string, SaleItem>();
         for (const item of itemsWithInventory) {
+            const previous = numericStockItems.get(item.product_id!);
+            numericStockItems.set(item.product_id!, { ...item, quantity: (previous?.quantity || 0) + item.quantity });
+        }
+        for (const item of numericStockItems.values()) {
             try {
                 const decrements = await decrementSaleStockByPriority(item, sale.id);
                 const fallbackSources = decrements.filter(row => !isMainStoreStockDecrement(row));
@@ -741,7 +748,9 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
                     );
                 }
             } catch (stockError) {
-                recordFinalizationIssue('stock_decrement', stockError);
+                const issue = normalizeFinalizationError(stockError, 'stock_decrement');
+                issue.debug = { product_id: item.product_id, sku: item.product_sku, quantity: item.quantity, upstream: issue.debug };
+                finalizationIssues.push(issue);
             }
         }
 

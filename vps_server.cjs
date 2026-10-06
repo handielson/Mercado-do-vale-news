@@ -27386,11 +27386,31 @@ async function insertStockMovement(row) {
   );
 }
 
+fastify.get('/sales/:id/stock-reconciliation', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  try {
+    const {report}=await require('./services/saleStockReconciliation.cjs').loadReport(pool,req.params.id);
+    return {report};
+  } catch(error){if(!error.statusCode)throw error;return reply.code(error.statusCode).send({error:error.message});}
+});
+fastify.post('/sales/:id/stock-reconciliation', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  try {
+    const actor=await getVpsBearerAuthContext(req);
+    return await require('./services/saleStockReconciliation.cjs').reconcileStock(pool,req.params.id,req.body?.evidence||[],actor.userId||actor.customerId);
+  } catch(error){if(!error.statusCode)throw error;return reply.code(error.statusCode).send({error:error.message});}
+});
+
 fastify.post('/stock-locations/priority-decrements', { preHandler: requireSyncKey }, async (req, reply) => {
   const input = req.body || {};
-  const outcome = await require('./services/priorityStockDecrement.cjs').decrementPriorityStock(pool, input);
+  let outcome;
+  try {
+    outcome = await require('./services/priorityStockDecrement.cjs').decrementPriorityStock(pool, input);
+  } catch(error) {
+    if(!['ER_LOCK_WAIT_TIMEOUT','ER_LOCK_DEADLOCK'].includes(error.code))throw error;
+    return reply.code(503).send({error:'stock_busy',code:error.code,message:'Baixa de estoque bloqueada após 3 tentativas. Confira a auditoria da venda antes de repetir.',
+      debug:{product_id:input.product_id,quantity:input.quantity,reference_id:input.reference_id}});
+  }
   if (outcome.error) return reply.code(outcome.status).send({ error: outcome.error });
-  await syncMarketplaceStockAfterLocalMutationVps([input.product_id], 'priority_stock_decrement');
+  if (!outcome.already_applied) await syncMarketplaceStockAfterLocalMutationVps([input.product_id], 'priority_stock_decrement');
   return outcome.decrements;
 });
 

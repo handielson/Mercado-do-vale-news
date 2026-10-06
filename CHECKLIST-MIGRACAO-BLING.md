@@ -151,3 +151,13 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 - [ ] Revisar pais antigos vazios do piloto.
 - [x] Publicar API e site v1.2.553-familias-imei; health, versao e painel/PDV conferidos.
 - [ ] Aplicar em producao somente as ocultacoes escolhidas pelo operador (rascunhos locais nao migrados).
+
+## Diagnostico 2026-10-06 — venda B11B6196
+
+- [x] Conferir venda, itens e movimentos em leitura: timeout na pelicula; fone com baixa vinculada.
+- [x] Conferir no Bling: ambos tem uma unica saida da venda B11B6196. Saldos alinhados (pelicula 29; fone 2). Fone tinha saida anterior de maio, justificando total 2.
+- [x] Implementar localmente concorrencia/idempotencia na baixa do PDV: travas por venda/produto, rollback, ate tres tentativas para bloqueios e protecao contra repeticao. Testes e build passaram; ainda nao publicado.
+- [x] Implementar localmente conferencia administrativa dos movimentos, com evidencia explicita do Bling quando faltar baixa local; preservar erro original e outras pendencias, sem alterar estoque.
+- [ ] Publicar API, helper de reconciliacao e interface; validar a conferencia nos detalhes da venda em producao.
+- [ ] Reconciliar marcador needs_review somente apos comprovar os movimentos.
+- Evidencias: docs/operacional/2026-10-06-pdv-venda-b11b6196-estoque.md. Nenhum estoque alterado neste diagnostico.

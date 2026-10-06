@@ -82,6 +82,7 @@ const print3dRecipeRuntimePaths = [
   'services/priorityStockReservation.cjs',
   'services/productFamilyInheritance.cjs',
   'services/priorityStockDecrement.cjs',
+  'services/saleStockReconciliation.cjs',
   'services/orderStockReservation.cjs',
   'services/manualStockMovement.cjs',
   'services/externalStockReconciliation.cjs',
@@ -511,6 +512,13 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--pdv-stock-recovery-only')) {
+    await require('./scripts/deploy-pdv-stock-recovery.cjs')({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--families-units-only')) {
     await require('./scripts/deploy-families-units.cjs')({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
