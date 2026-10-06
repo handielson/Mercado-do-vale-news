@@ -2,7 +2,7 @@
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.557-marketing-tabelas.
 Release VPS: /var/www/mdv-site/releases/20261006-164255-marketing-tabelas
-Status: preparada para publicacao; validacao publica obrigatoria apos deploy.
+Status: publicada e validada em producao.
 
 Marketing com visao geral e menu por tarefa: Criar, Planejar, Agendar e Revisar.
 Tabelas de celulares em area propria, com Xiaomi, POCO e realme; sem preco, preco a vista no Pix ou parcelas e total no cartao. Formato de lista aprovado, ate 14 configuracoes por pagina. Geracao usa estoque e precos atuais; cartao reutiliza taxas presenciais cadastradas, ate 12x. Stories pontuais separados da programacao semanal do Instagram. Geracao antiga de cards do bot preservada.
@@ -10,6 +10,8 @@ Tabelas de celulares em area propria, com Xiaomi, POCO e realme; sem preco, prec
 Validacoes: 35 testes aprovados, um teste n8n fora do escopo ignorado; dinheiro, baixa por local de estoque, sintaxe, navegacao desktop/celular e build com trava Supabase. Nove artes conferidas com dados reais por leitura. Sem migrations, alteracoes comerciais ou envios de mensagens.
 
 API: deploy seletivo --phone-price-list-only, com backup, protecao contra divergencia nos modulos e patch apenas da dependencia de cartao nas entradas de servidor. Preserva os demais fluxos da API.
+
+Codigo 8a54f7cb enviado a origin/main com a tag da release. Site ativo no caminho acima; API mdv-api reiniciada e online, backup /var/www/mdv-api/backups/phone-price-list-1791305288174. Home e VERSION HTTP 200, versao correspondente, /status mysql.ok=true. Geracao autenticada dos tres tipos para Xiaomi, POCO e realme retornou nove PNGs 1080x1920 e 30 configuracoes, sem avisos. Painel administrativo renderizado em producao; troca entre Pix, cartao e sem preco conferida, sem erros ou avisos no console. Auditoria preservou 34 worktrees historicas: 25 dirty e 9 not_merged_into_origin_main; nenhum candidato a remocao.
 
 ## Release anterior: v1.2.556-familia-smartphone-automatica
 
