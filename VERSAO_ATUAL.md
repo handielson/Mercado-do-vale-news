@@ -2,11 +2,13 @@
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.561-tabelas-diarias.
 Release VPS: /var/www/mdv-site/releases/20261006-190333-tabelas-diarias
-Status: preparada para publicacao.
+Status: publicada e validada em producao.
 
 Novos agendamentos de tabelas guardam marcas, formato e tipo de preco. A cada horario, o worker consulta o estoque e os precos atuais pelo gerador canonico e substitui as paginas antes de qualquer envio ao Instagram ou WhatsApp. Ambos usam a mesma geracao. Ocultos e indisponiveis ficam fora; sem estoque, a ocorrencia e cancelada. Falha de geracao bloqueia a previa antiga e tenta novamente em cinco minutos. Uma tabela adicional guarda o estado por ocorrencia e permite variar o numero de paginas. Agendamentos antigos devem ser recriados.
 
-Validacoes: 34 testes focados, sintaxe e build com trava Supabase. Deploy seletivo preserva demais modulos e entradas da API, cria somente a tabela adicional e faz backup antes da troca. Rollback restaura codigo; tabela adicional compativel permanece sem alterar dados antigos. Validacao do fluxo em tabelas temporarias na VPS, sem Stories reais.
+Validacoes: 35 testes focados, sintaxe e build com trava Supabase. Deploy seletivo preserva demais modulos e entradas da API, cria somente a tabela adicional e faz backup antes da troca. Rollback restaura codigo; tabela adicional compativel permanece sem alterar dados antigos. Validacao do fluxo em tabelas temporarias na VPS, sem Stories reais.
+
+Codigo a6924da9 e tag enviados a origin/main. Site ativo na release acima; home e VERSION HTTP 200, versao correspondente. API mdv-api online, mysql.ok=true. Backup /var/www/mdv-api/backups/phone-price-list-1791313566135. Teste MySQL com tabelas temporarias: 2, 1 e 0 paginas por ocorrencia, mesma midia para dois destinos, cancelamento por estoque vazio, falha com retry e bloqueio da previa antiga, sem repetir geracao. Agendamentos reais e estados das unidades preservados; zero publicacoes reais. Painel recarregado: 27 configuracoes, 6 artes, console sem erros/avisos. Auditoria: nenhum candidato seguro, 34 worktrees historicas preservadas por sujeira ou commits nao integrados. Checkout principal limpo em main.
 
 ## Release anterior: v1.2.560-unidades-ocultas-schema
 
