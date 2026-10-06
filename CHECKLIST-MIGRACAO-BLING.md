@@ -149,3 +149,5 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 - [ ] Validar gravacao e venda completa em produto teste.
 - [ ] Aprovar piloto Poco X8 e somente depois agrupar outros modelos.
 - [ ] Revisar pais antigos vazios do piloto.
+- [x] Publicar API e site v1.2.553-familias-imei; health, versao e painel/PDV conferidos.
+- [ ] Aplicar em producao somente as ocultacoes escolhidas pelo operador (rascunhos locais nao migrados).
