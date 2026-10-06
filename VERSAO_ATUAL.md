@@ -2,11 +2,13 @@
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.559-marketing-agrupamento-modelo.
 Release VPS: /var/www/mdv-site/releases/20261006-183031-marketing-agrupamento-modelo
-Status: preparada; validar geracao em producao.
+Status: publicada e validada em producao.
 
 Gerador de tabelas passa a agrupar por marca, model_id, RAM fisica e armazenamento. Cores da mesma configuracao com nomes distintos deixam de aparecer repetidas. Nome exibido vem do modelo cadastrado; produtos sem model_id preservam agrupamento por nome e memoria. Configuracoes diferentes e modelos diferentes permanecem separados. Maior preco entre cores disponiveis, filtros de estoque e selecao explicita do bot preservados. Vale para cards com fotos e listas nos tres tipos de preco.
 
 Validacoes: teste reproduziu a falha antes da correcao; 28 testes focados passaram, sintaxe e build com trava Supabase. Deploy seletivo da API com backup e site para nova versao. Nenhum cadastro, preco, estoque ou agendamento alterado.
+
+Codigo efebaf33 e tag enviados a origin/main. Site ativo na release acima, home e VERSION HTTP 200 com versao correspondente. API mdv-api online, mysql.ok=true, backup /var/www/mdv-api/backups/phone-price-list-1791311488134. Previews POCO nos dois formatos e tres tipos de preco: oito configuracoes, sem avisos. Lista visual conferida em producao: X8 Pro aparece apenas em 8/256 (R$ 2.660,00) e 12/512 (R$ 2.630,00). Painel carregado sem erros ou avisos no console. Auditoria preservou 34 worktrees historicas (25 dirty e 9 not_merged_into_origin_main), nenhum candidato seguro.
 
 ## Release anterior: v1.2.558-marketing-dois-formatos
 
