@@ -1,26 +1,25 @@
 {
-  "version": "v1.2.558-marketing-dois-formatos",
+  "version": "v1.2.559-marketing-agrupamento-modelo",
   "date": "2026-10-06",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.558-marketing-dois-formatos",
-  "release_vps": "/var/www/mdv-site/releases/20261006-180545-marketing-dois-formatos",
+  "tag": "v1.2.559-marketing-agrupamento-modelo",
+  "release_vps": "/var/www/mdv-site/releases/20261006-183031-marketing-agrupamento-modelo",
   "release_print3d_vps": null,
-  "summary": "Marketing permite escolher tabela com imagens dos celulares ou lista de modelos e precos.",
+  "summary": "Tabelas agrupam cores pelo modelo cadastrado e memoria, evitando repeticoes por nomes diferentes.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "pages/admin/settings/marketing/SocialStorySchedulerPanel.tsx",
-    "services/socialStoryScheduleService.ts",
-    "tmp-tests/social-story-scheduler-static.test.mjs",
+    "services/phonePriceListServer.cjs",
+    "tmp-tests/phone-price-list-server.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-06-v1.2.558-marketing-dois-formatos.md"
+    "docs/versoes/2026-10-06-v1.2.559-marketing-agrupamento-modelo.md"
   ],
   "validations": [
-    "29 testes focados aprovados: seletor, payload de previa e agendamento, API e renderizadores existentes",
+    "28 testes focados aprovados: modelo e memoria, cores, estoque, maior preco disponivel, API e dois renderizadores",
     "Build com trava Supabase e sintaxe dos servidores",
     "Validacao publica dos dois formatos obrigatoria apos deploy"
   ]

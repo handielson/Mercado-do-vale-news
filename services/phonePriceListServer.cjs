@@ -70,9 +70,13 @@ function buildPriceListGroups(rows, requestedGroups, brands = DEFAULT_BRANDS, pr
     const brand = resolveBrand(product);
     if (!brands.includes(brand)) continue;
     const identity = productIdentity(product);
-    // Same commercial rule as the official bot list: one price per name/memory,
-    // taking the maximum registered retail price across available color variants.
-    const key = [brand, normalize(identity.name), normalize(identity.memory)].join('|');
+    const modelId = String(product.model_id || '').trim();
+    // Registered model + physical memory is the commercial configuration;
+    // product names may contain network, NFC, memory or color suffixes.
+    // Keep the name fallback for products without a registered model.
+    const modelKey = modelId ? `model:${modelId}` : `name:${normalize(identity.name)}`;
+    if (modelId && String(product.model_name || '').trim()) identity.name = String(product.model_name).trim();
+    const key = [brand, modelKey, normalize(identity.memory)].join('|');
     if (!groups.has(key)) groups.set(key, { id: key, ...identity, brand, priceCents: 0, products: [] });
     const group = groups.get(key);
     group.priceCents = Math.max(group.priceCents, Number(product.price_retail) || 0);
@@ -150,8 +154,9 @@ function registerPhonePriceListRoutes(fastify, dependencies) {
       p.price_retail,p.stock_quantity,p.status,p.hide_from_catalog,p.offer_visibility,p.is_parent,p.is_combo,
       (SELECT COUNT(*) FROM units phone_units WHERE phone_units.product_id=p.id) AS serialized_unit_count,
       (SELECT COUNT(*) FROM units available_phone_units WHERE available_phone_units.product_id=p.id AND available_phone_units.status='available') AS available_serialized_units,
-      c.name AS category_name,b.name AS brand_name FROM products p
+      c.name AS category_name,b.name AS brand_name,m.name AS model_name FROM products p
       LEFT JOIN categories c ON c.id=p.category_id LEFT JOIN brands b ON b.id=p.brand
+      LEFT JOIN models m ON m.id=p.model_id
       WHERE p.status='active' ${ids ? 'AND p.id IN (?)' : ''} ORDER BY p.name,p.id`, ids ? [ids] : []);
     const groups = buildPriceListGroups(rows, selection.groups, selection.brands, selection.priceMode);
     if (selection.priceMode === 'card' && groups.length) {

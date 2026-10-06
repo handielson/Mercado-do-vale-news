@@ -28,6 +28,29 @@ test('separates POCO from Xiaomi, physical RAM, groups colors at official maximu
   assert.equal(groups[0].memory, '8GB RAM • 256GB');
   assert.equal(groups[0].name, 'POCO X7');
 });
+test('registered model and physical memory merge inconsistent names without merging configurations', () => {
+  const variant = (id, name, ram, storage, price_retail, extra = {}) => phone({ id, name,
+    model_id: 'x8-pro', model_name: 'POCO X8 Pro', specs: { ram, storage, color: id }, price_retail, ...extra });
+  const rows = [
+    variant('black', 'Poco X8 Pró', '8GB', '256GB', 260000),
+    variant('yellow', 'Poco X8 Pró 5G', '8+8GB', '256 GB', 266000),
+    variant('green', 'Poco X8 Pró 5G, NFC, 256GB, 8GB Ram, Global Cor:Verde', '8 GB', '256GB', 265000),
+    variant('white', 'Poco X8 Pró 5G', '12GB', '512GB', 263000),
+    variant('gone', 'Poco X8 Pró', '8GB', '256GB', 999900, { stock_quantity: 0 }),
+    variant('other', 'Poco X8 Pró', '8GB', '256GB', 300000, { model_id: 'different-model', model_name: 'Other model' }),
+  ];
+  for (const mode of ['none', 'cash', 'card']) {
+    const groups = buildPriceListGroups(rows, undefined, ['POCO'], mode);
+    assert.equal(groups.length, 3);
+    const merged = groups.find(g => g.products.some(p => p.id === 'black'));
+    assert.equal(merged.name, 'POCO X8 Pro');
+    assert.equal(merged.memory, '8GB RAM • 256GB');
+    assert.equal(merged.priceCents, 266000);
+    assert.deepEqual(merged.products.map(p => p.id), ['black', 'yellow', 'green']);
+    assert.ok(groups.some(g => g.memory === '12GB RAM • 512GB'));
+  }
+});
+
 test('excludes unavailable/hidden/accessory/parent and invalid prices', () => {
   for (const overrides of [{ stock_quantity: 0 }, { hide_from_catalog: 1 }, { status: 'draft' },
     { offer_visibility: 'hidden' }, { category_name: 'Acessórios para celulares' }, { is_parent: 1 },
