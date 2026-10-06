@@ -2,11 +2,13 @@
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.556-familia-smartphone-automatica.
 Release VPS: /var/www/mdv-site/releases/20261006-160727-familia-smartphone-automatica
-Status: preparada; publicacao e verificacao pendentes.
+Status: publicada e validada tecnicamente. Confirmacao operacional controlada pendente.
 
 Na confirmacao por foto, a API cria ou reutiliza o pai do modelo e empresa e vincula as variacoes elegiveis sem pai. Trava transacional do modelo evita pais duplicados entre confirmacoes simultaneas. Preserva custos, precos, estoque, IMEIs e vinculos externos dos filhos. Pais incompatíveis ou multiplos bloqueiam a operacao.
 
 Validacoes: 12 testes da familia e 12 testes de vinculo Bling, suite de confirmacao por foto, sintaxe e build com trava Supabase. Simulacao do Redmi 17 por leitura identificou quatro filhos elegiveis; nenhum cadastro foi alterado.
+
+Publicacao concluida: codigo 0e504d74 enviado a origin/main e tag. API publicada com --photo-intake-only e PM2 online; backup /var/www/mdv-api/backups/photo-intake-1791302913927. Hashes do helper e da rota iguais aos arquivos locais. Helper instalado consultado em transacao somente leitura: quatro filhos elegiveis do Redmi 17. /status confirmou mysql.ok=true. Home HTTP 200, VERSION correspondente, painel Produtos renderizado com a nova versao e nenhum erro de console observado. Nenhum produto, estoque ou IMEI foi gravado para validar. Auditoria preservou 34 worktrees historicas bloqueadas por dirty ou not_merged_into_origin_main.
 
 Deploy seletivo da API: --photo-intake-only. Sem migration nem ajustes de estoque. Outros caminhos de cadastro e agrupamento retroativo dos quatro Redmi 17 permanecem pendentes no checklist.
 

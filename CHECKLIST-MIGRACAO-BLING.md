@@ -9,7 +9,8 @@ Atualizado em 2026-09-24. Objetivo aprovado: eliminar a dependência operacional
 - [x] Implementação local: na confirmação do cadastro por foto, reutilizar o pai do modelo e empresa ou criar um único pai e vincular as variações sem pai. Preservar custos, preços, estoque, unidades/IMEIs e vínculos externos dos filhos. Reutilizar pai importado do Bling compatível.
 - [x] Testes locais: concorrência, reutilização, isolamento entre empresas, conflitos de pais, rollback e integração com a finalização; 12 testes de família e 12 testes de vínculo Bling aprovados, além da suíte de confirmação por foto.
 - [x] Conferência do Redmi 17 em produção apenas em leitura: simulação identificou quatro filhos elegíveis para um pai `Redmi 17 4G`. Nenhum produto, estoque ou IMEI foi alterado.
-- [ ] Publicar o módulo da API e validar confirmação controlada no ambiente operacional. A rotina cobre a confirmação por foto; outros caminhos de cadastro não foram alterados.
+- [x] Módulo publicado na API em v1.2.556-familia-smartphone-automatica, PM2 online, hashes conferidos, MySQL saudável e simulação somente leitura do helper instalado aprovada.
+- [ ] Validar confirmação controlada no ambiente operacional. A rotina cobre a confirmação por foto; outros caminhos de cadastro não foram alterados.
 - [ ] Agrupar os quatro cadastros antigos do Redmi 17 em operação controlada. A simulação não gravou o pai; famílias antigas não foram convertidas em lote.
 
 
