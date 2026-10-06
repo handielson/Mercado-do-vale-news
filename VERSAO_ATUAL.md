@@ -2,11 +2,13 @@
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.562-cancelamento-visivel.
 Release VPS: /var/www/mdv-site/releases/20261006-201723-cancelamento-visivel
-Status: preparada para publicacao.
+Status: publicada e validada em producao.
 
 Area de tabelas mantem a lista de agendamentos sempre visivel, sem precisar expandir o formulario de um novo lote. Cancelar pendentes continua disponivel para lotes aguardando aprovacao, aprovados ou publicando. Alteracao somente frontend; nenhum deploy/restart da API necessario.
 
-Antes do deploy, a pedido do operador, cancelados os dois agendamentos ativos (Tabela de celulares, 72 entregas, e Story avulso, 6 entregas) pela API canonica. Releitura confirmou zero agendamentos Stories ativos, zero horarios semanais e nenhuma campanha WhatsApp ativa. Historico preservado. Validacoes: 13 testes focados, sintaxe e build com trava Supabase; painel e versao publica devem ser conferidos apos deploy.
+Antes do deploy, a pedido do operador, cancelados os dois agendamentos ativos (Tabela de celulares, 72 entregas, e Story avulso, 6 entregas) pela API canonica. Releitura confirmou zero agendamentos Stories ativos, zero horarios semanais e nenhuma campanha WhatsApp ativa. Historico preservado. Validacoes: 13 testes focados, sintaxe e build com trava Supabase.
+
+Codigo 79362dbb e tag enviados a origin/main. Site ativo na release registrada; home e VERSION HTTP 200, versao correspondente. Painel recarregado mostrou Agendamentos sem expandir formulario, dois lotes Cancelados, console sem erros/avisos. API nao publicada nem reiniciada nesta entrega. Releitura das entregas: 72+6 canceladas, nenhuma entrega pendente ou processando. Auditoria preservou 34 worktrees bloqueadas (25 dirty, 9 not_merged_into_origin_main), zero candidatas seguras. Main limpo e sincronizado.
 
 ## Release anterior: v1.2.561-tabelas-diarias
 
