@@ -563,7 +563,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
           </>}
         </div>
 
-        <div hidden={isTables && !showTableSchedule}>
+        <div>
           <h3 className="font-black text-slate-800 mb-3">Agendamentos</h3>
           <div className="space-y-3 max-h-[720px] overflow-y-auto pr-1">
             {schedules.map((scheduleRow) => (

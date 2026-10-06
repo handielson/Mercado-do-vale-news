@@ -53,6 +53,8 @@ test('deployment ships the daily batch dependency with the generator and support
 });
 
 test('Story scheduling requires approval and creates idempotent deliveries', () => {
+  assert.doesNotMatch(panel, /<div hidden=\{isTables && !showTableSchedule\}>/);
+  assert.match(panel, /Cancelar pendentes/);
   assert.match(api, /SOCIAL_STORY_SCHEDULE_ACTION/);
   assert.match(api, /'pending_approval'/);
   assert.match(api, /waiting_approval/);
