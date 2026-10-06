@@ -1,4 +1,14 @@
-# v1.2.557-marketing-tabelas
+# v1.2.558-marketing-dois-formatos
+
+Data: 2026-10-06. Branch: main. Tag: v1.2.558-marketing-dois-formatos.
+Release VPS: /var/www/mdv-site/releases/20261006-180545-marketing-dois-formatos
+Status: preparada para publicacao; validar os dois formatos em producao.
+
+Restaurado o seletor Formato da arte no gerador de tabelas. Com imagens dos celulares reutiliza os cards originais de seis aparelhos por pagina com preco a vista no Pix e e a opcao inicial. Lista de modelos e precos preserva ate 14 configuracoes por pagina e os tres tipos de preco. Previa automatica e regeneracao ao agendar usam o mesmo formato selecionado. A API existente ja suporta ambos; somente o site precisa de deploy.
+
+Validacoes: 29 testes focados aprovados; build com trava Supabase e sintaxe dos servidores. Nenhuma alteracao de produtos, precos, estoque ou agendamentos.
+
+## Release anterior: v1.2.557-marketing-tabelas
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.557-marketing-tabelas.
 Release VPS: /var/www/mdv-site/releases/20261006-164255-marketing-tabelas

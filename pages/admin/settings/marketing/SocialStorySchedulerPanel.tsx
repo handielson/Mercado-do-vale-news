@@ -14,6 +14,7 @@ import {
   type SocialStorySchedule,
   type PhonePriceListBrand,
   type PhonePriceListMode,
+  type PhonePriceListLayout,
   type PhonePriceListPreview,
 } from '../../../../services/socialStoryScheduleService';
 import { prepareSocialStoryScheduleDates } from '../../../../services/socialStoryScheduleTime.js';
@@ -77,6 +78,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
   const [mode, setMode] = useState<'catalog' | 'standalone' | 'whatsapp_campaign' | 'phone_price_list'>(isTables ? 'phone_price_list' : 'catalog');
   const [phoneBrands, setPhoneBrands] = useState<PhonePriceListBrand[]>(['Xiaomi', 'POCO', 'realme']);
   const [phonePriceMode, setPhonePriceMode] = useState<PhonePriceListMode>('cash');
+  const [phoneLayout, setPhoneLayout] = useState<PhonePriceListLayout>('cards');
   const [phonePreview, setPhonePreview] = useState<PhonePriceListPreview | null>(null);
   const previewRequestRef = useRef(0);
   const [title, setTitle] = useState(isTables ? 'Tabela de celulares' : 'Stories de produtos');
@@ -140,7 +142,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
     setItems([]);
     setPhonePreview(null);
     try {
-      const preview = await socialStoryScheduleService.previewPhonePriceList(phoneBrands, phonePriceMode);
+      const preview = await socialStoryScheduleService.previewPhonePriceList(phoneBrands, phonePriceMode, phoneLayout);
       if (requestId !== previewRequestRef.current) return;
       unavailableMediaRef.current.clear();
       setItems(preview.items);
@@ -158,7 +160,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
     return () => window.clearTimeout(timer);
   // The selected brands are the source of this automatic preview.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, phoneBrands, phonePriceMode]);
+  }, [mode, phoneBrands, phonePriceMode, phoneLayout]);
 
   useEffect(() => {
     if (mode !== 'catalog') return;
@@ -279,7 +281,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
     setBusy(true);
     try {
       const currentItems = mode === 'phone_price_list'
-        ? (await socialStoryScheduleService.previewPhonePriceList(phoneBrands, phonePriceMode)).items
+        ? (await socialStoryScheduleService.previewPhonePriceList(phoneBrands, phonePriceMode, phoneLayout)).items
         : items;
       if (!currentItems.length) throw new Error('Nenhum celular disponível para as marcas selecionadas.');
       const scheduledDates = schedulePlan.entries.flatMap(({ instant }) => instant ? [instant.toISOString()] : []);
@@ -357,9 +359,24 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
           {mode === 'phone_price_list' ? (
             <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
               <p className="text-sm font-black text-slate-800">Tabela de smartphones por marca</p>
-              <p className="text-xs text-slate-600">Lista com modelo e memória, logo e WhatsApp da loja. Até 14 configurações por arte em 1080 × 1920; listas maiores continuam na próxima página.</p>
+              <label className="block text-xs font-bold text-slate-600">Formato da arte
+                <select disabled={busy} value={phoneLayout} onChange={(event) => {
+                  previewRequestRef.current += 1;
+                  const layout = event.target.value as PhonePriceListLayout;
+                  setPhoneLayout(layout);
+                  if (layout === 'cards') setPhonePriceMode('cash');
+                  setItems([]);
+                  setPhonePreview(null);
+                }} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:opacity-50">
+                  <option value="cards">Com imagens dos celulares</option>
+                  <option value="list">Lista de modelos e preços</option>
+                </select>
+              </label>
+              <p className="text-xs text-slate-600">{phoneLayout === 'cards'
+                ? 'Formato original com fotos, modelo, memória e preço à vista no Pix. Até 6 celulares por arte em 1080 × 1920.'
+                : 'Lista com modelo e memória, logo e WhatsApp da loja. Até 14 configurações por arte em 1080 × 1920; listas maiores continuam na próxima página.'}</p>
               <label className="block text-xs font-bold text-slate-600">Tipo de tabela
-                <select disabled={busy} value={phonePriceMode} onChange={(event) => {
+                <select disabled={busy || phoneLayout === 'cards'} value={phonePriceMode} onChange={(event) => {
                   previewRequestRef.current += 1;
                   setPhonePriceMode(event.target.value as PhonePriceListMode);
                   setItems([]);

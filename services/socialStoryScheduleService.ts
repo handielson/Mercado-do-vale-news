@@ -4,6 +4,7 @@ export type SocialStoryDestination = 'instagram' | 'whatsapp';
 export type SocialStoryMediaType = 'image' | 'video';
 export type PhonePriceListBrand = 'Xiaomi' | 'POCO' | 'realme';
 export type PhonePriceListMode = 'none' | 'cash' | 'card';
+export type PhonePriceListLayout = 'cards' | 'list';
 
 export interface PhonePriceListPreview {
   ok: true;
@@ -70,8 +71,8 @@ export interface CreateSocialStoryScheduleInput {
 }
 
 export const socialStoryScheduleService = {
-  async previewPhonePriceList(brands: PhonePriceListBrand[], priceMode: PhonePriceListMode = 'cash'): Promise<PhonePriceListPreview> {
-    return await vpsClient.post('/admin/marketing/phone-price-list/preview', { brands, priceMode, layout: 'list' });
+  async previewPhonePriceList(brands: PhonePriceListBrand[], priceMode: PhonePriceListMode = 'cash', layout: PhonePriceListLayout = 'list'): Promise<PhonePriceListPreview> {
+    return await vpsClient.post('/admin/marketing/phone-price-list/preview', { brands, priceMode, layout });
   },
 
   async list(): Promise<SocialStorySchedule[]> {

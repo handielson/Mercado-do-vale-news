@@ -11,9 +11,15 @@ const marketingPage = await readFile(new URL('../pages/admin/settings/MarketingP
 const client = await readFile(new URL('../services/socialStoryScheduleService.ts', import.meta.url), 'utf8');
 
 test('Phone price lists use server snapshots and the existing approval schedule', () => {
-  assert.match(client, /post\('\/admin\/marketing\/phone-price-list\/preview', \{ brands, priceMode, layout: 'list' \}\)/);
-  assert.match(panel, /previewPhonePriceList\(phoneBrands, phonePriceMode\)/);
-  assert.match(panel, /\[mode, phoneBrands, phonePriceMode\]/);
+  assert.match(client, /post\('\/admin\/marketing\/phone-price-list\/preview', \{ brands, priceMode, layout \}\)/);
+  assert.equal((panel.match(/previewPhonePriceList\(phoneBrands, phonePriceMode, phoneLayout\)/g) || []).length, 2);
+  assert.match(panel, /\[mode, phoneBrands, phonePriceMode, phoneLayout\]/);
+  assert.match(panel, /useState<PhonePriceListLayout>\('cards'\)/);
+  assert.match(panel, /Formato da arte/);
+  assert.match(panel, /<option value="cards">Com imagens dos celulares<\/option>/);
+  assert.match(panel, /<option value="list">Lista de modelos e preços<\/option>/);
+  assert.match(panel, /if \(layout === 'cards'\) setPhonePriceMode\('cash'\)/);
+  assert.match(panel, /disabled=\{busy \|\| phoneLayout === 'cards'\}/);
   for (const mode of ['none', 'cash', 'card']) assert.ok(panel.includes(`value="${mode}"`));
   assert.match(panel, /requestId !== previewRequestRef\.current/);
   assert.match(panel, /setPhonePreview\(null\)/);
