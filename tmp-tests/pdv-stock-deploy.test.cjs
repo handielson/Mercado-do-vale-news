@@ -2,6 +2,13 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),cp=require('node:child_process');
 const patch=require('../scripts/deploy-pdv-stock-recovery.cjs').patch;
 const p=require('../scripts/pdv-stock-recovery-api-patch.json');
+const helperMatches=require('../scripts/deploy-pdv-stock-recovery.cjs').helperMatches;
+const deployedHelper=cp.execFileSync('git',['show','f8641361:services/priorityStockDecrement.cjs'],{encoding:'utf8'});
+const newHelper=fs.readFileSync('services/priorityStockDecrement.cjs','utf8');
+assert.ok(helperMatches(deployedHelper,newHelper,p.helperBefore));
+assert.ok(helperMatches(newHelper,newHelper,p.helperBefore));
+assert.ok(helperMatches(p.helperBefore,newHelper,p.helperBefore));
+assert.equal(helperMatches(deployedHelper+'\n// hotfix',newHelper,p.helperBefore),false);
 const original=cp.execFileSync('git',['show','cdaace45:vps_server.cjs'],{encoding:'utf8',maxBuffer:16e6}).replace(/\r\n/g,'\n');
 assert.equal(patch(original),fs.readFileSync('vps_server.cjs','utf8').replace(/\r\n/g,'\n'));
 assert.equal(patch('hotfix prefix\n'+p.before+'\nhotfix suffix'),'hotfix prefix\n'+p.after+'\nhotfix suffix');

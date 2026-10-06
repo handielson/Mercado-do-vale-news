@@ -159,5 +159,7 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 - [x] Implementar localmente concorrencia/idempotencia na baixa do PDV: travas por venda/produto, rollback, ate tres tentativas para bloqueios e protecao contra repeticao. Testes e build passaram; ainda nao publicado.
 - [x] Implementar localmente conferencia administrativa dos movimentos, com evidencia explicita do Bling quando faltar baixa local; preservar erro original e outras pendencias, sem alterar estoque.
 - [x] Publicar API, helpers e interface v1.2.554-pdv-baixa-segura; API/MySQL saudaveis, versao publica confirmada e consulta autenticada da venda B11B6196 validada. Nenhuma conferencia gravada ou saldo alterado.
-- [ ] Reconciliar marcador needs_review somente apos comprovar os movimentos.
+- [x] Reconciliar marcador needs_review apos comprovar os movimentos: conferencia registrada em 06/10/2026 as 11:12:07 (Sao Paulo), status success; erro original preservado na auditoria. Estoques mantidos em 29 (pelicula) e 2 (fone), sem novos movimentos.
+- [x] Implementar localmente registro tecnico por tentativa e etapa da baixa: identificador de operacao, venda/produto, conexao MySQL, tempos, codigo de falha, rollback e decisao de repetir. Recuperacao e descarte de conexao tambem registrados; sem SQL ou dados pessoais. Testes focados e regressoes passaram.
+- [ ] Publicar a instrumentacao de bloqueios e observar os registros em uma falha futura; nao provoca bloqueios ou altera estoque para validar em producao.
 - Evidencias: docs/operacional/2026-10-06-pdv-venda-b11b6196-estoque.md. Nenhum estoque alterado neste diagnostico.

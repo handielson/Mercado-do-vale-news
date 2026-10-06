@@ -1,4 +1,16 @@
-# v1.2.554-pdv-baixa-segura
+# v1.2.555-pdv-log-bloqueios
+
+Data: 2026-10-06. Branch: main. Tag: v1.2.555-pdv-log-bloqueios.
+Release VPS: /var/www/mdv-site/releases/20261006-142420-pdv-log-bloqueios
+Status: preparada para publicacao.
+
+Diagnostico JSON na API por operacao, tentativa, etapa, tempo de espera, conexao MySQL e resultado do rollback; registra recuperacao e descarte de conexao. Sem SQL, notas ou dados do cliente. Logger indisponivel nao impede rollback ou provoca baixa duplicada. Contrato HTTP e limites de repeticao preservados.
+
+Validacoes: teste comportamental de recuperacao e diagnostico, patch seletivo e preflight; regressoes PDV, prioridade, finalizacao e sincronizacao de canais; sintaxe e build com trava Supabase. Nenhuma migration ou alteracao de estoque nesta publicacao. A venda B11B6196 ja foi conferida, com status success e saldos 29/2 preservados.
+
+Autoajuste: preflight reconhece os helpers de estoque como API; deploy seletivo aceita o hash exato da v1.2.554 e continua rejeitando divergencias.
+
+## Release anterior: v1.2.554-pdv-baixa-segura
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.554-pdv-baixa-segura.
 Release VPS: /var/www/mdv-site/releases/20261006-140147-pdv-baixa-segura

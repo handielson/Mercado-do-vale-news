@@ -2,6 +2,13 @@
 const fs=require('node:fs'),path=require('node:path');
 const payload=require('./pdv-stock-recovery-api-patch.json');
 const normalize=s=>s.replace(/\r\n/g,'\n');
+function helperMatches(original,content,expected) {
+  const normalized=normalize(original);
+  // Versao v1.2.554 ja publicada: aceitar somente seu hash exato, o baseline antigo ou o destino.
+  const hash=require('node:crypto').createHash('sha256').update(normalized).digest('hex');
+  return normalized===normalize(expected)||normalized===normalize(content)
+    ||hash==='4ba5466ff81328b4c0fe6e57d8451c9ddfbb95cb24d4d063e76785296a68543f';
+}
 function patch(remote) {
   const content=normalize(remote);
   if(content.includes(payload.after))return content;
@@ -17,7 +24,8 @@ module.exports=async function({appDir,apiProc,exec,root,read,write}) {
   for(const file of ['services/priorityStockDecrement.cjs','services/saleStockReconciliation.cjs']) {
     const original=await read(appDir+'/'+file),content=fs.readFileSync(path.join(root,file),'utf8');
     const expected=file.includes('priorityStockDecrement')?payload.helperBefore:'';
-    if(normalize(original)!==normalize(expected)&&normalize(original)!==normalize(content))throw new Error('Helper diverge em producao: '+file);
+    if(file.includes('priorityStockDecrement')?!helperMatches(original,content,expected)
+      :normalize(original)!==normalize(content))throw new Error('Helper diverge em producao: '+file);
     staged.push({file,original,content});
   }
   const backup=appDir+'/backups/pdv-stock-recovery-'+Date.now();await exec('mkdir -p '+backup+'/services');
@@ -29,3 +37,4 @@ module.exports=async function({appDir,apiProc,exec,root,read,write}) {
   console.log(await exec('pm2 restart mdv-api'));console.log('Backup: '+backup);
 };
 module.exports.patch=patch;
+module.exports.helperMatches=helperMatches;

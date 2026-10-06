@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.554-pdv-baixa-segura",
+  "version": "v1.2.555-pdv-log-bloqueios",
   "date": "2026-10-06",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.554-pdv-baixa-segura",
-  "release_vps": "/var/www/mdv-site/releases/20261006-140147-pdv-baixa-segura",
+  "tag": "v1.2.555-pdv-log-bloqueios",
+  "release_vps": "/var/www/mdv-site/releases/20261006-142420-pdv-log-bloqueios",
   "release_print3d_vps": null,
-  "summary": "Baixa idempotente do PDV com retry de bloqueios e conferencia administrativa sem alterar estoque.",
+  "summary": "Diagnostico seguro por etapa e tentativa dos bloqueios de estoque do PDV.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,26 +14,18 @@
   "changed_files": [
     "CHECKLIST-MIGRACAO-BLING.md",
     "VERSAO_ATUAL.md",
-    "components/admin/sales/SaleDetailsModal.tsx",
-    "components/admin/sales/SaleStockReconciliation.tsx",
-    "deploy-vps-server-only.cjs",
     "docs/operacional/2026-10-06-pdv-venda-b11b6196-estoque.md",
-    "docs/versoes/2026-10-06-v1.2.554-pdv-baixa-segura.md",
+    "docs/versoes/2026-10-06-v1.2.555-pdv-log-bloqueios.md",
     "public/VERSION.json",
     "scripts/deploy-pdv-stock-recovery.cjs",
-    "scripts/pdv-stock-recovery-api-patch.json",
-    "server.js",
+    "scripts/publish-vps-plan.cjs",
     "services/priorityStockDecrement.cjs",
-    "services/saleService.ts",
-    "services/saleStockReconciliation.cjs",
     "tmp-tests/pdv-stock-deploy.test.cjs",
     "tmp-tests/pdv-stock-recovery.test.cjs",
-    "tmp-tests/stock-location-priority-decrement-static.test.mjs",
-    "vps_server.cjs",
-    "vps_server.js"
+    "tmp-tests/publish-vps-plan-static.test.mjs"
   ],
   "validations": [
-    "Rollback, concorrencia, idempotencia e conferencia sem alterar estoque",
+    "Logs por etapa, rollback, concorrencia, idempotencia e logger indisponivel",
     "Patch seletivo preserva hotfixes e rejeita divergencias",
     "Regressoes PDV, prioridade e unidades",
     "Sintaxe dos tres servidores e helpers; build com trava Supabase",

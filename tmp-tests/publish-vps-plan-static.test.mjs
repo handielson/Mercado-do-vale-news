@@ -53,3 +53,6 @@ assert.ok(
 console.log('publish VPS plan static checks passed');
 const mlPlan=JSON.parse(execFileSync(process.execPath,['scripts/publish-vps-plan.cjs','--json','--mock-files','services/mercadoLivrePublication.cjs'],{encoding:'utf8'}));
 assert.equal(mlPlan.needs.api,true,'Publication runtime changes require API deployment.');
+const stockPlan=JSON.parse(execFileSync(process.execPath,['scripts/publish-vps-plan.cjs','--json','--mock-files','services/priorityStockDecrement.cjs,services/saleStockReconciliation.cjs'],{encoding:'utf8'}));
+assert.equal(stockPlan.needs.api,true,'Stock helpers run in the API.');
+assert.equal(stockPlan.needs.site,false,'Stock helpers do not run in the browser.');

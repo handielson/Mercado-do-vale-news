@@ -21,6 +21,7 @@ const API_PATTERNS = [
   /^services\/marketingCampaignApi\.cjs$/,
   /^services\/mercadoLivrePublication\.cjs$/,
   /^services\/mobileSalesPushService\.cjs$/,
+  /^services\/(?:priorityStockDecrement|saleStockReconciliation)\.cjs$/,
   /^services\/.*Vault\.cjs$/,
   /^services\/.*Server\.(?:js|cjs|ts)$/i,
   /^tools\/install-autoresponder/,
@@ -128,7 +129,8 @@ function matchesAny(file, patterns) {
 
 function classifyFiles(files) {
   const normalized = unique(files.map(normalizeFile));
-  const siteFiles = normalized.filter((file) => matchesAny(file, SITE_PATTERNS));
+  const siteFiles = normalized.filter((file) => matchesAny(file, SITE_PATTERNS)
+    && !/^services\/(?:priorityStockDecrement|saleStockReconciliation)\.cjs$/.test(file));
   const apiFiles = normalized.filter((file) => matchesAny(file, API_PATTERNS));
   const n8nFiles = normalized.filter((file) => matchesAny(file, N8N_WORKFLOW_PATTERNS));
   const versionFiles = normalized.filter((file) => (
