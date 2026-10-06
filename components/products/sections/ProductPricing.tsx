@@ -12,6 +12,7 @@ interface ProductPricingProps {
     setValue: UseFormSetValue<ProductInput>;
     errors?: any;
     modelId?: string;
+    costInherited?: boolean;
 }
 
 interface StockAverages {
@@ -53,7 +54,7 @@ function toPositiveNumber(value: unknown): number {
 
 const SMARTPHONE_CATEGORY_LABEL = 'Smartphones';
 
-export function ProductPricing({ watch, setValue, errors, modelId }: ProductPricingProps) {
+export function ProductPricing({ watch, setValue, errors, modelId, costInherited = false }: ProductPricingProps) {
     const cost = watch('price_cost') || 0;
     const priceRetail = watch('price_retail') || 0;
     const priceReseller = watch('price_reseller') || 0;
@@ -283,11 +284,12 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
                         <p className="text-sm font-semibold text-slate-800">💰 Preço de Custo</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Valor pago na compra do produto</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{costInherited ? 'Herdado do pai. Para usar custo próprio, desmarque a herança na aba Variações do pai.' : 'Valor pago na compra do produto'}</p>
                     </div>
                     <div className="w-full sm:w-52">
                         <CurrencyInput
                             value={cost}
+                            disabled={costInherited}
                             onChange={(val) => setValue('price_cost', val)}
                         />
                     </div>

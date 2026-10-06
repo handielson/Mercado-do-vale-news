@@ -132,3 +132,6 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 
 - [x] Preparada publicacao isolada v1.2.550 de preco/calculadora Mercado Livre na ficha do pai; demais alteracoes locais fiscais, estoque e organizacao das abas preservadas fora da release.
 - [ ] Validar consulta/cotacao autenticada em producao e gravacao de preco escolhida pelo operador; nenhum preco real alterado no deploy.
+
+- [x] v1.2.551-familia-custo preparada: pai por abas, filhos em janela, heranca continua de custo opcional, copia unica e Selecionar todos. Build isolado, moeda, sintaxe e tres testes de contrato aprovados.
+- [ ] Validar heranca em familia de teste na VPS apos deploy; heranca automatica de outros campos e demais pendencias locais continuam abertas.

@@ -43,6 +43,8 @@ import { unitService } from '../../services/units';
 import { fetchBlingProductDetail, findBlingProductByExactSku, importBlingProducts, isBlingReconnectRequired } from '../../services/blingService';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
+import { ShopeeFamilyLinks } from './sections/ShopeeFamilyLinks';
+import { ProductSalesChannelTabs, type ProductSalesChannel } from './ProductSalesChannelTabs';
 import { MercadoLivreFamilyLinks } from './sections/MercadoLivreFamilyLinks';
 import { ProductKitsSection } from './sections/ProductKitsSection';
 import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl } from '../../utils/video-url';
@@ -71,8 +73,15 @@ type ProductSaveResult = Product & {
 
 const DEFAULT_PRODUCT_VERSION = 'Global';
 const DEFAULT_BATTERY_HEALTH = '100';
+type FormSection = 'basic' | 'specs' | 'media' | 'channels' | 'commercial' | 'fiscal';
 
 export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, isLoading }: ProductFormProps) {
+    const [activeSection, setActiveSection] = useState<FormSection>(() => window.location.hash === '#fiscal' ? 'fiscal' : window.location.hash === '#commercial' ? 'commercial' : 'basic');
+    const [activeSalesChannel, setActiveSalesChannel] = useState<ProductSalesChannel>('mercado-livre');
+    const selectSection = (section: FormSection) => {
+        setActiveSection(section);
+        window.requestAnimationFrame(() => document.getElementById('product-form-sections')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    };
     const [imagePreviews, setImagePreviews] = useState<string[]>(initialData?.images || []);
     const [isCompressing, setIsCompressing] = useState(false);
     const [blingId, setBlingId] = useState<number | undefined>(initialData?.bling_id);
@@ -299,6 +308,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const isPrint3d = Boolean(watch('is_print3d'));
     const isParentProduct = Boolean(watch('is_parent'));
     const isVendablePrint3d = isPrint3d && !isParentProduct;
+    useEffect(() => {
+        if (isParentProduct && activeSection === 'commercial') setActiveSection('basic');
+    }, [isParentProduct, activeSection]);
     useEffect(() => {
         if (!isPrint3d) return;
         setValue('print3d_preorder_enabled', isVendablePrint3d, { shouldValidate: true });
@@ -1786,6 +1798,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         },
         (errors) => {
             console.error('Validation errors:', errors);
+            const firstInvalid = Object.keys(errors)[0] || '';
+            if (/^(specs|custom_fields|serial|imei)/.test(firstInvalid)) setActiveSection('specs');
+            else if (/^(images|video_url|description|slug|meta_|keywords|marketing_)/.test(firstInvalid)) setActiveSection('media');
+            else if (/^(price_|stock_|track_inventory|kits|production_days|is_print3d|print3d_)/.test(firstInvalid)) setActiveSection('commercial');
+            else if (/^(ncm|cest|origin|fiscal_product|warranty_)/.test(firstInvalid)) setActiveSection('fiscal');
+            else setActiveSection('basic');
 
             // Função recursiva para extrair erros aninhados
             const extractErrors = (obj: any, path: string = ''): string[] => {
@@ -1855,6 +1873,18 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
     return (
         <form onSubmit={handleFormSubmit} className="space-y-6 pb-20">
+            <nav id="product-form-sections" aria-label="Seções do cadastro" className="sticky top-0 z-20 flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur scroll-mt-4">
+                {([
+                    ['basic', 'Dados básicos'],
+                    ['specs', 'Características'],
+                    ['media', 'Fotos e descrição'],
+                    ['channels', 'Canais de venda'],
+                    ...(!isParentProduct ? [['commercial', 'Estoque e preços'] as const] : []),
+                    ['fiscal', 'Fiscal e garantia'],
+                ] as const).map(([section, label]) => <button key={section} type="button" aria-current={activeSection === section ? 'page' : undefined}
+                    onClick={() => selectSection(section)}
+                    className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold ${activeSection === section ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}
+            </nav>
             {hasValidationErrors && validationErrorList.length > 0 && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm mb-6 animate-in fade-in slide-in-from-top-4">
                     <h3 className="font-semibold text-red-800 flex items-center gap-2 mb-2">
@@ -1873,6 +1903,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             )}
 
             {/* 0. SCANNER EAN + MODELO + DADOS DO TEMPLATE */}
+            <div id="product-basic-section" className={activeSection === 'basic' ? 'scroll-mt-20' : 'hidden'}>
+            {isParentProduct && <section className="mb-4 rounded-xl border border-slate-200 bg-white p-6" aria-label="Custo da família">
+                <label className="block text-sm font-semibold text-slate-800 mb-2">Preço de custo da família</label>
+                <p className="text-sm text-slate-500 mb-3">Valor de compra por unidade. Ao salvar, as variações marcadas para herdar acompanham esse custo automaticamente. Configure a herança na aba Variações.</p>
+                <div className="max-w-xs"><CurrencyInput value={watch('price_cost') || 0} onChange={(value) => setValue('price_cost', value, { shouldDirty: true, shouldValidate: true })} /></div>
+                {errors.price_cost && <p className="mt-2 text-sm text-red-600">{errors.price_cost.message}</p>}
+            </section>}
             <ProductBasicInfo
                 watch={watch}
                 setValue={setValue}
@@ -1886,9 +1923,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 isAutoLinkingBling={isAutoLinkingBling}
                 blingLookupError={blingLookupError}
             />
+            </div>
 
             {/* 1. TIPO DE PRODUTO */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div className={activeSection === 'basic' ? 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' : 'hidden'}>
                 <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                     <Globe size={18} className="text-blue-600" />
                     Tipo de Produto
@@ -1913,6 +1951,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             </div>
 
             {/* 2. ESPECIFICAÇÕES TÉCNICAS */}
+            <div id="product-specifications-section" className={activeSection === 'specs' ? 'scroll-mt-20' : 'hidden'}>
             <ProductSpecifications
                 categoryConfig={categoryConfig}
                 watch={watch}
@@ -1923,10 +1962,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 templateValues={selectedModel?.template_values}
                 currentProductId={initialData?.id}
             />
+            </div>
 
-            {isParentProduct && initialData?.id && <MercadoLivreFamilyLinks parentId={initialData.id} />}
-            {initialData?.parent_id && <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4"><Link to={`/admin/products/${initialData.parent_id}`} className="font-semibold text-blue-700">Abrir família para ajustar anúncio e calcular preço no Mercado Livre</Link></div>}
-            <MercadoLivreCatalogAttributes categoryConfig={categoryConfig} watch={watch} setValue={setValue} productId={initialData?.id}/>
             {/* BOTÃO ADICIONAR À LISTA + LISTA DE CADASTRO EM MASSA */}
             {!initialData && (
                 <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-sm space-y-3">
@@ -2040,7 +2077,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
 
             {/* 3. GARANTIA */}
-            <div id="product-warranty-section" className="scroll-mt-24">
+            {activeSection === 'channels' && <ProductSalesChannelTabs activeChannel={activeSalesChannel} onSelect={setActiveSalesChannel} />}
+            <div id="product-marketplace-section" className={activeSection === 'channels' && activeSalesChannel === 'mercado-livre' ? 'scroll-mt-20' : 'hidden'}>
+                <div id="product-channel-panel-mercado-livre" role="tabpanel" aria-labelledby="product-channel-tab-mercado-livre">
+                {isParentProduct && initialData?.id && <MercadoLivreFamilyLinks parentId={initialData.id} />}
+                {!isParentProduct && initialData?.parent_id && <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm">
+                    <p>O anúncio desta família é vinculado na ficha do produto pai. Lá você escolhe a opção correspondente a cada filho.</p>
+                    <Link to={`/admin/products/${initialData.parent_id}`} className="mt-2 inline-flex font-semibold text-blue-700 hover:underline">Abrir produto pai para vincular o anúncio</Link>
+                </div>}
+                <MercadoLivreCatalogAttributes categoryConfig={categoryConfig} watch={watch} setValue={setValue} productId={initialData?.id}/>
+                {initialData?.id && !isParentProduct && !initialData.parent_id && <Link to={`/admin/settings/mercado-livre?productId=${encodeURIComponent(initialData.id)}&sku=${encodeURIComponent(initialData.sku || '')}`} className="mt-3 inline-flex rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-2 text-sm font-semibold text-yellow-900">Gerenciar anúncios no Mercado Livre</Link>}
+                </div>
+            </div>
+            <div id="product-warranty-section" className={activeSection === 'fiscal' ? 'scroll-mt-20' : 'hidden'}>
                 <ProductWarranty
                     warrantyType={watch('warranty_type') || 'brand'}
                     warrantyTemplateId={watch('warranty_template_id') || ''}
@@ -2066,6 +2115,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             />
 
             {/* 4. IMAGENS & VÍDEO */}
+            <div id="product-media-section" className={activeSection === 'media' ? 'scroll-mt-20' : 'hidden'}>
             <ProductImages
                 imagePreviews={imagePreviews}
                 isCompressing={isCompressing}
@@ -2080,9 +2130,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 hasDefaultImages={!!selectedModel?.id && !!selectedColor}
                 updatedAt={initialData?.updated || initialData?.created}
             />
+            </div>
 
             {/* VÍDEO DO PRODUTO */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mt-4">
+            <div className={activeSection === 'media' ? 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm mt-4' : 'hidden'}>
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
                     Vídeo do Produto (Opcional)
@@ -2130,7 +2181,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 </div>
             </div>
 
-            <div className="bg-white p-6 rounded-xl border border-emerald-200 shadow-sm mt-4">
+            <div className={activeSection === 'media' ? 'bg-white p-6 rounded-xl border border-emerald-200 shadow-sm mt-4' : 'hidden'}>
                 <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
                     <ImageIcon size={18} className="text-emerald-600" />
                     Mídia de Marketing (Opcional)
@@ -2172,6 +2223,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 </div>
             </div>
 
+            <div id="product-channel-panel-bling" role="tabpanel" aria-labelledby="product-channel-tab-bling" className={activeSection === 'channels' && activeSalesChannel === 'bling' ? 'space-y-6' : 'hidden'}>
             <BlingLinkSection
                 blingId={blingId}
                 blingParentId={blingParentId}
@@ -2188,17 +2240,25 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     setBlingParentId(undefined);
                 }}
             />
+            </div>
 
             {/* VÍNCULO COM SHOPEE */}
-            <ShopeeLinkSection
+            <div id="product-channel-panel-shopee" role="tabpanel" aria-labelledby="product-channel-tab-shopee" className={activeSection === 'channels' && activeSalesChannel === 'shopee' ? 'space-y-6' : 'hidden'}>
+            {isParentProduct && initialData?.id ? <ShopeeFamilyLinks parentId={initialData.id} /> : <ShopeeLinkSection
                 productId={initialData?.id}
                 shopeeItemId={shopeeItemId}
                 onLink={(id) => setShopeeItemId(id)}
                 onUnlink={() => setShopeeItemId(undefined)}
-            />
+            />}
+            </div>
+            <div id="product-channel-panel-tiktok" role="tabpanel" aria-labelledby="product-channel-tab-tiktok" className={activeSection === 'channels' && activeSalesChannel === 'tiktok' ? 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm' : 'hidden'}>
+                <h3 className="font-semibold text-slate-800">TikTok Shop</h3>
+                <p className="mt-1 text-sm text-slate-600">Gerencie a categoria, os atributos, os preços e a publicação deste produto na central do TikTok Shop.</p>
+                {initialData?.id ? <Link to={`/admin/settings/tiktok-shop?product_id=${encodeURIComponent(initialData.id)}`} className="mt-3 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Gerenciar produto no TikTok Shop</Link> : <p className="mt-2 text-sm text-slate-500">Salve o produto primeiro para abrir a integração.</p>}
+            </div>
 
             {/* OTIMIZAÇÃO DE SEO */}
-            <div className="bg-white p-6 rounded-xl border border-purple-200 shadow-sm space-y-4">
+            <div className={activeSection === 'media' ? 'bg-white p-6 rounded-xl border border-purple-200 shadow-sm space-y-4' : 'hidden'}>
                 <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                     <FileText size={18} className="text-purple-600" />
                     Otimização para Buscadores (SEO)
@@ -2215,7 +2275,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
             {/* 5. CONTROLE DE ESTOQUE */}
             {!watch('is_virtual') && (
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <div id="product-stock-section" className={activeSection === 'commercial' ? 'scroll-mt-20 bg-white p-6 rounded-xl border border-slate-200 shadow-sm' : 'hidden'}>
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <Package size={18} className="text-blue-600" />
                     Controle de Estoque
@@ -2271,9 +2331,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             )}
 
             {/* 6. PRECIFICAÇÃO */}
-            <ProductPricing watch={watch} setValue={setValue} errors={errors} modelId={watch('model_id') || undefined} />
+            <div id="product-pricing-section" className={activeSection === 'commercial' ? 'scroll-mt-20' : 'hidden'}>
+                <ProductPricing watch={watch} setValue={setValue} errors={errors} modelId={watch('model_id') || undefined} costInherited={Boolean(initialData?.parent_id && initialData.custom_fields?.inherit_parent_cost === true)} />
+            </div>
 
             {/* 6.5 KITS E DESCONTOS POR VOLUME */}
+            <div className={activeSection === 'commercial' ? '' : 'hidden'}>
             <ProductKitsSection
                 control={control}
                 register={register}
@@ -2281,9 +2344,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 watch={watch}
                 setValue={setValue}
             />
+            </div>
 
             {/* 7. FISCAL & AUTOMAÇÃO */}
-            < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" >
+            <div className={activeSection === 'fiscal' ? 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' : 'hidden'}>
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <FileText size={18} className="text-slate-500" />
                     Fiscal & Automação
@@ -2331,7 +2395,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
 
             {/* Prazo estimado para produtos que não seguem a política fixa da linha 3D. */}
-            {!isPrint3d && <div className="bg-amber-50 border border-amber-200 p-5 rounded-xl shadow-sm">
+            {!isPrint3d && <div className={activeSection === 'commercial' ? 'bg-amber-50 border border-amber-200 p-5 rounded-xl shadow-sm' : 'hidden'}>
                 <h3 className="font-semibold text-amber-800 mb-1 flex items-center gap-2">
                     ⚙️ Prazo para encomenda
                 </h3>
@@ -2361,12 +2425,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             </div>}
 
             {/* Política por SKU para a futura loja de impressão 3D. */}
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div id="product-channel-panel-sites" role="tabpanel" aria-labelledby="product-channel-tab-sites" className={activeSection === 'channels' && activeSalesChannel === 'sites' ? 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm' : 'hidden'}>
                 <h3 className="font-semibold text-slate-800">Sites e preços</h3>
                 <p className="mt-1 text-sm text-slate-600">Após salvar o SKU, configure separadamente preço, nome, descrição e visibilidade do Mercado do Vale e da Loja 3D. Fotos, características e estoque são compartilhados.</p>
                 {initialData?.sku ? <Link to={`/admin/products/storefronts?sku=${encodeURIComponent(initialData.sku)}`} className="mt-3 inline-flex rounded-md border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Configurar publicação nos sites</Link> : <p className="mt-2 text-xs text-slate-500">Salve o produto primeiro para configurar as ofertas.</p>}
             </div>
-            <div className="bg-violet-50 p-5 rounded-xl border border-violet-200 shadow-sm space-y-4">
+            <div className={activeSection === 'commercial' ? 'bg-violet-50 p-5 rounded-xl border border-violet-200 shadow-sm space-y-4' : 'hidden'}>
                 <h3 className="font-semibold text-violet-900">Impressão 3D</h3>
                 <label className="flex items-start gap-3 text-sm text-slate-700">
                     <input type="checkbox" className="mt-0.5 h-4 w-4" checked={Boolean(watch('is_print3d'))}
@@ -2399,7 +2463,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 </div>}
             </div>
 
-            <div className="flex flex-col gap-3 pt-4 border-t border-slate-200">
+            <div className="sticky bottom-0 z-20 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
                 {isSavingOperation && (
                     <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
                         <div className="flex items-center justify-between gap-3 text-sm">
@@ -2430,7 +2494,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 >
                     <span className="inline-flex items-center gap-2">
                         {isSavingOperation && <Loader2 size={16} className="animate-spin" />}
-                        {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
+                        {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : serialList.length > 1 ? `Salvar entrada de ${serialList.length} aparelhos` : separatesUnitEntry && !showsUnitEntry ? 'Salvar ficha sem estoque' : 'Salvar Produto'}
                     </span>
                 </button>
                 </div>

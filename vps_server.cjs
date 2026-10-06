@@ -28556,6 +28556,46 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
   return results;
 });
 
+// Explicit, per-child propagation. Preview and commit use the same locked snapshot.
+fastify.post('/products/:id/family-inheritance', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { buildFamilyInheritancePlan } = require('./services/productFamilyInheritance.cjs');
+  const selections = req.body?.selections;
+  const apply = req.body?.apply === true;
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [parents] = await connection.query('SELECT * FROM products WHERE id=? FOR UPDATE', [req.params.id]);
+    if (!parents.length) { await connection.rollback(); return reply.code(404).send({ error: 'Produto pai não encontrado.' }); }
+    if (!Array.isArray(selections) || selections.length < 1 || selections.length > 100) { await connection.rollback(); return reply.code(400).send({ error: 'Selecione de 1 a 100 variações.' }); }
+    const ids = selections.map(row => String(row?.child_id || ''));
+    if (ids.some(id => !/^[0-9a-f-]{36}$/i.test(id))) { await connection.rollback(); return reply.code(400).send({ error: 'ID de variação inválido.' }); }
+    const placeholders = ids.map(() => '?').join(',');
+    const [children] = await connection.query(`SELECT * FROM products WHERE id IN (${placeholders}) ORDER BY id FOR UPDATE`, ids);
+    const plan = buildFamilyInheritancePlan(parents[0], children, selections);
+    if (apply) {
+      if (!req.body?.fingerprint || req.body.fingerprint !== plan.fingerprint) { await connection.rollback(); return reply.code(409).send({ error: 'A ficha mudou desde a prévia. Confira novamente antes de aplicar.' }); }
+      for (const row of plan.changes) {
+        const entries = Object.entries(row.changed);
+        if (!entries.length) continue;
+        await connection.query(
+          `UPDATE products SET ${entries.map(([field]) => `${field}=?`).join(',')}, updated_at=CURRENT_TIMESTAMP WHERE id=? AND parent_id=?`,
+          [...entries.map(([field, value]) => field === 'custom_fields' ? JSON.stringify(value.to) : field === 'description' || field === 'technical_specifications' ? sanitizeDescription(value.to) : value.to), row.child_id, req.params.id]
+        );
+      }
+      await connection.commit();
+      return { ok: true, updated: plan.changed_count, changes: plan.changes };
+    }
+    await connection.rollback();
+    return { ok: true, ...plan };
+  } catch (error) {
+    await connection.rollback();
+    if (error.statusCode) return reply.code(error.statusCode).send({ error: error.message });
+    throw error;
+  } finally {
+    connection.release();
+  }
+});
+
 // Single product update
 fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   const [registeredProducts] = await pool.query('SELECT sku FROM products WHERE id=? LIMIT 1', [req.params.id]);
@@ -28574,6 +28614,17 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
 
   await withSmartphonePriceWrite(pool, { ...p, id: req.params.id }, async (priceDb, controlledProduct) => {
   p = controlledProduct;
+  const familyCost = require('./services/productFamilyInheritance.cjs');
+  const [currentRows] = await priceDb.query('SELECT * FROM products WHERE id=? FOR UPDATE', [req.params.id]);
+  const currentProduct = currentRows[0];
+  const currentCustomFields = familyCost.customFields(currentProduct);
+  p.custom_fields = { ...familyCost.customFields(p) };
+  if (Object.hasOwn(currentCustomFields, 'inherit_parent_cost')) p.custom_fields.inherit_parent_cost = currentCustomFields.inherit_parent_cost === true;
+  else delete p.custom_fields.inherit_parent_cost;
+  if (familyCost.inheritsParentCost(currentProduct)) {
+    const [parentRows] = await priceDb.query('SELECT * FROM products WHERE id=?', [p.parent_id || currentProduct.parent_id]);
+    Object.assign(p, familyCost.inheritedCostPatch(parentRows[0], { ...currentProduct, parent_id: p.parent_id || currentProduct.parent_id }));
+  }
   if (req.body.stock_quantity !== undefined) {
     const stock = await require('./services/externalStockReconciliation.cjs').reconcileExternalStock(pool, {
       connection: priceDb, productId: req.params.id, targetQuantity: req.body.stock_quantity,
@@ -28624,6 +28675,13 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       req.params.id,
     ]
   );
+  if (Number(p.is_parent ?? currentProduct.is_parent) === 1) {
+    const [children] = await priceDb.query('SELECT * FROM products WHERE parent_id=? ORDER BY id FOR UPDATE', [req.params.id]);
+    for (const child of children) {
+      const patch = familyCost.inheritedCostPatch({ ...currentProduct, ...p, id: req.params.id }, child);
+      if (Object.hasOwn(patch, 'price_cost')) await priceDb.query('UPDATE products SET price_cost=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND parent_id=?', [patch.price_cost, child.id, req.params.id]);
+    }
+  }
   }, { transactional: true });
   return { ok: true };
 });

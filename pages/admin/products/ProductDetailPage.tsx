@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, ExternalLink, MapPin, Package, Plus, ShieldCheck, Tags } from 'lucide-react';
+import { ArrowLeft, ExternalLink, MapPin, Package, Plus, Tags } from 'lucide-react';
 import { Product, ProductInput } from '../../../types/product';
 import { Unit, UnitInput } from '../../../types/unit';
 import { productService } from '../../../services/products';
@@ -10,13 +10,13 @@ import { unitService } from '../../../services/units';
 import { autoResponderService } from '../../../services/autoResponderService';
 import type { AutoResponderTag } from '../../../types/autoResponder';
 import { ProductForm } from '../../../components/products/ProductForm';
+import { ProductFamilyInheritance } from '../../../components/products/ProductFamilyInheritance';
 import { UnitList } from '../../../components/units/UnitList';
 import { UnitForm } from '../../../components/units/UnitForm';
-import { NcmSearchWidget } from '../../../components/admin/NcmSearchWidget';
 import { InmetroWidget } from '../../../components/admin/InmetroWidget';
 import { getFamilyChildState } from '../../../services/productClonePrefill.js';
 
-type TabType = 'product' | 'inventory';
+type TabType = 'product' | 'family' | 'inventory' | 'extras';
 
 function parseProductTagIds(value: Product['tag_ids']): number[] {
     if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
@@ -105,6 +105,11 @@ export const ProductDetailPage: React.FC = () => {
     const navigate = useNavigate();
 
     const [activeTab, setActiveTab] = useState<TabType>('product');
+    useEffect(() => { setActiveTab('product'); }, [id]);
+    const selectTab = (nextTab: TabType) => {
+        setActiveTab(nextTab);
+        window.requestAnimationFrame(() => document.getElementById('product-tab-menu')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    };
     const [product, setProduct] = useState<Product | undefined>();
     const [units, setUnits] = useState<Unit[]>([]);
     const [stats, setStats] = useState({ total: 0, available: 0, reserved: 0, sold: 0, rma: 0 });
@@ -186,7 +191,8 @@ export const ProductDetailPage: React.FC = () => {
             setIsSaving(true);
             await productService.update(id, data);
             toast.success('Produto atualizado com sucesso!');
-            navigate('/admin/products');
+            if (Number(product?.is_parent) === 1) await fetchProduct();
+            else navigate('/admin/products');
         } catch (error) {
             console.error('Error updating product:', error);
             toast.error('Erro ao atualizar produto');
@@ -260,13 +266,6 @@ export const ProductDetailPage: React.FC = () => {
     const locationSearchTerm = encodeURIComponent(product?.sku || product?.name || '');
     const stockLocationsHref = `/admin/inventory/locations?search=${locationSearchTerm}`;
 
-    const handleWarrantyShortcut = () => {
-        setActiveTab('product');
-        window.setTimeout(() => {
-            document.getElementById('product-warranty-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 80);
-    };
-
     // Loading state
     if (isLoadingProduct) {
         return (
@@ -327,24 +326,30 @@ export const ProductDetailPage: React.FC = () => {
                             <ExternalLink className="h-4 w-4" />
                             Ver no site
                         </a>
-                        <button
+                        {Number(product.is_parent) !== 1 && <button
                             type="button"
                             onClick={() => navigate(stockLocationsHref)}
                             className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
                         >
-                            <MapPin className="h-4 w-4" />
-                            Locais de estoque
-                        </button>
+                            <MapPin className="h-4 w-4" /> Locais de estoque
+                        </button>}
                     </div>
                 </div>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-8 items-start">
-                {/* Menu Lateral */}
-                <div className="w-full md:w-64 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm sticky top-24">
-                    <nav className="flex flex-col gap-1.5">
+            {Number(product.is_parent) === 1 && (
+                <div className="mb-5 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+                    <strong>Cadastro da família.</strong> Edite os dados compartilhados em Cadastro, incluindo o custo da família. Na aba Variações, escolha exatamente o que cada filho receberá. SKU, preços de venda, imagens e estoque continuam próprios de cada filho.
+                </div>
+            )}
+
+            <div className="space-y-5">
+                <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-sm">
+                    <nav id="product-tab-menu" aria-label="Menu do produto" className="flex flex-wrap items-center gap-2 scroll-mt-4">
                         <button
-                            onClick={() => setActiveTab('product')}
+                            type="button"
+                            aria-current={activeTab === 'product' ? 'page' : undefined}
+                            onClick={() => selectTab('product')}
                             className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'product'
                                 ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
                                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
@@ -352,13 +357,19 @@ export const ProductDetailPage: React.FC = () => {
                         >
                             <div className="flex items-center gap-3">
                                 <Package className={`w-5 h-5 ${activeTab === 'product' ? 'text-blue-600' : 'text-slate-400'}`} />
-                                Editar Produto
+                                Cadastro
                             </div>
                             {activeTab === 'product' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                         </button>
 
-                        <button
-                            onClick={() => setActiveTab('inventory')}
+                        {Number(product.is_parent) === 1 && <button type="button" aria-current={activeTab === 'family' ? 'page' : undefined} onClick={() => selectTab('family')}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium border ${activeTab === 'family' ? 'bg-violet-50 text-violet-800 border-violet-200' : 'text-slate-600 border-transparent hover:bg-slate-50'}`}>
+                            <Tags className="w-5 h-5" /> Variações
+                        </button>}
+                        {Number(product.is_parent) !== 1 && <button
+                            type="button"
+                            aria-current={activeTab === 'inventory' ? 'page' : undefined}
+                            onClick={() => selectTab('inventory')}
                             className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'inventory'
                                 ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
                                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
@@ -374,31 +385,23 @@ export const ProductDetailPage: React.FC = () => {
                                 )}
                             </div>
                             {activeTab === 'inventory' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
-                        </button>
+                        </button>}
 
-                        <button
-                            onClick={handleWarrantyShortcut}
-                            className="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 text-slate-600 hover:bg-blue-50 hover:text-blue-800 border border-transparent"
-                        >
-                            <div className="flex items-center gap-3">
-                                <ShieldCheck className="w-5 h-5 text-slate-400" />
-                                Garantias
-                            </div>
+                        <button type="button" aria-current={activeTab === 'extras' ? 'page' : undefined} onClick={() => selectTab('extras')}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium border ${activeTab === 'extras' ? 'bg-blue-50 text-blue-800 border-blue-200' : 'text-slate-600 border-transparent hover:bg-slate-50'}`}>
+                            <Tags className="w-5 h-5" /> Consultas e tags
                         </button>
                     </nav>
                 </div>
 
                 {/* Tab Content */}
-                <div className="flex-1 min-w-0 space-y-6">
-                    {activeTab === 'product' && (
+                <div className="w-full min-w-0 space-y-6">
+                    <div className={activeTab === 'product' ? '' : 'hidden'}>
+                        <ProductForm key={product.id} initialData={product} onSubmit={handleProductSubmit} onCancel={handleCancel} isLoading={isSaving} />
+                    </div>
+                    {Number(product.is_parent) === 1 && <div className={activeTab === 'family' ? '' : 'hidden'}><ProductFamilyInheritance parent={product} /></div>}
+                    {activeTab === 'extras' && (
                         <>
-                            <ProductForm
-                                initialData={product}
-                                onSubmit={handleProductSubmit}
-                                onCancel={handleCancel}
-                                isLoading={isSaving}
-                            />
-
                             <ProductTagPicker
                                 tags={autoResponderTags}
                                 selectedTagIds={productTagIds}
@@ -408,21 +411,14 @@ export const ProductDetailPage: React.FC = () => {
                                 onSave={saveProductTags}
                             />
 
-                            {/* ─── Seção Fiscal (VPS-first) ─── */}
+                            {/* Consulta rápida; edição fiscal fica somente no cadastro do produto. */}
                             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                                 <div className="flex items-center gap-2 mb-4">
                                     <span className="text-sm font-bold text-slate-700">Informações Fiscais</span>
-                                    <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full font-semibold">VPS → Bling → Shopee</span>
+                                    <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full font-semibold">Fonte: cadastro do produto</span>
                                 </div>
+                                <p className="mb-3 text-xs text-slate-600">NCM: <strong>{product.ncm || 'não informado'}</strong> · CEST: <strong>{product.cest || 'não informado'}</strong>. Para consultar ou corrigir, use Fiscal e garantia na ficha do produto.</p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <NcmSearchWidget
-                                        productId={product.id}
-                                        sku={product.sku}
-                                        productName={product.name}
-                                        currentNcm={product.ncm || ''}
-                                        autoSave={true}
-                                        onSaved={(ncm) => toast.success(`NCM ${ncm} salvo.`)}
-                                    />
                                     <InmetroWidget
                                         productId={product.id}
                                         productName={product.name}

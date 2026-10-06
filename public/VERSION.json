@@ -1,29 +1,32 @@
 {
-  "version": "v1.2.550-ml-preco-calculadora",
+  "version": "v1.2.551-familia-custo",
   "date": "2026-10-05",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.550-ml-preco-calculadora",
-  "release_vps": "/var/www/mdv-site/releases/20261005-233500-v12550-ml-preco-calculadora",
+  "tag": "v1.2.551-familia-custo",
+  "release_vps": "/var/www/mdv-site/releases/20261005-224845-v12551-familia-custo",
   "release_print3d_vps": null,
-  "summary": "Consulta e edicao do preco Mercado Livre com calculadora de tarifas e lucro na familia.",
+  "summary": "Ficha do pai organizada por abas, edicao dos filhos em janela e heranca opcional de custo com selecao de campos.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
+    "components/products/ProductFamilyInheritance.tsx",
     "components/products/ProductForm.tsx",
-    "components/products/sections/MercadoLivreFamilyLinks.tsx",
-    "components/products/sections/MercadoLivreListingPrice.tsx",
-    "components/products/sections/mercadoLivreFamilyLinkCore.js",
-    "services/mercadoLivreService.ts",
-    "services/mercadoLivreServer.cjs",
-    "services/mercadoLivreListingPrice.cjs",
-    "pages/admin/settings/MercadoLivrePricingPolicy.tsx",
-    "deploy-vps-server-only.cjs"
+    "components/products/ProductSalesChannelTabs.tsx",
+    "components/products/sections/ProductPricing.tsx",
+    "components/products/sections/ShopeeFamilyLinks.tsx",
+    "deploy-vps-server-only.cjs",
+    "pages/admin/products/ProductDetailPage.tsx",
+    "services/productFamilyInheritance.cjs",
+    "tmp-tests/product-family-release.test.cjs",
+    "vps_server.cjs"
   ],
   "validations": [
-    "Testes de familia, precos, calculadora e autenticacao",
-    "Build completo e protecao contra Supabase"
+    "Build npm em checkout isolado e trava Supabase",
+    "3 testes de contrato da familia, transacao e JSON MySQL",
+    "Sintaxe dos servidores e teste de moeda",
+    "Validacao publica apos deploy"
   ]
 }

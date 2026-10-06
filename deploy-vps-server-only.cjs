@@ -80,6 +80,7 @@ const print3dRecipeRuntimePaths = [
   'services/print3dRecipesServer.cjs',
   'services/print3dActiveRecipeServer.cjs',
   'services/priorityStockReservation.cjs',
+  'services/productFamilyInheritance.cjs',
   'services/priorityStockDecrement.cjs',
   'services/orderStockReservation.cjs',
   'services/manualStockMovement.cjs',
