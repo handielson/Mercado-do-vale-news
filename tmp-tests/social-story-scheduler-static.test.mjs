@@ -24,13 +24,32 @@ test('Phone price lists use server snapshots and the existing approval schedule'
   assert.match(panel, /requestId !== previewRequestRef\.current/);
   assert.match(panel, /setPhonePreview\(null\)/);
   assert.match(panel, /Gerado em/);
-  assert.match(panel, /A lista é atualizada automaticamente ao selecionar as marcas/);
+  assert.match(panel, /Em cada horário agendado, a tabela será gerada novamente antes do envio/);
   assert.match(panel, /Atualizando lista automaticamente/);
   assert.doesNotMatch(panel, /Gerar lista agora/);
   assert.match(panel, /Abrir arte para baixar/);
   assert.match(panel, /max-w-\[432px\]/);
   assert.match(panel, /sourceType: mode === 'whatsapp_campaign' \? 'whatsapp_campaign' : 'standalone'/);
   assert.match(panel, /items: mode !== 'whatsapp_campaign' \? currentItems : undefined/);
+  assert.match(panel, /phonePriceList: mode === 'phone_price_list' \? \{ brands: phoneBrands, priceMode: phonePriceMode, layout: phoneLayout \}/);
+});
+
+test('dynamic tables are regenerated before claiming and unavailable generation cannot fall back to saved media', () => {
+  const worker = api.slice(api.indexOf('async function runNextSocialStoryDelivery'), api.indexOf('async function runNextSocialStoryDelivery') + 600);
+  assert.ok(worker.indexOf('refreshNextPriceListBatch') < worker.indexOf('claimNextSocialStoryDelivery'));
+  assert.match(api, /NOT EXISTS \(SELECT 1 FROM social_story_price_list_batches b[\s\S]*?b\.generated_at IS NULL/);
+  assert.match(api, /await ensurePriceListBatchTable\(pool\)/);
+  assert.match(api, /phonePriceList: tableRecipe, regenerateBeforeDelivery: true/);
+});
+
+test('deployment ships the daily batch dependency with the generator and supports selective release', async () => {
+  const deploy = await readFile(new URL('../deploy-vps-server-only.cjs', import.meta.url), 'utf8');
+  const selective = await readFile(new URL('../scripts/deploy-phone-price-list.cjs', import.meta.url), 'utf8');
+  assert.match(deploy, /'services\/socialStoryPriceListBatches\.cjs'/);
+  assert.match(deploy, /--dynamic-price-tables-only/);
+  assert.match(selective, /'services\/marketingCampaignApi\.cjs', 'services\/socialStoryPriceListBatches\.cjs'/);
+  assert.match(selective, /ensurePriceListBatchTable\(db\)/);
+  assert.match(selective, /Remote module differs from release baseline/);
 });
 
 test('Story scheduling requires approval and creates idempotent deliveries', () => {

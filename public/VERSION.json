@@ -1,32 +1,33 @@
 {
-  "version": "v1.2.560-unidades-ocultas-schema",
+  "version": "v1.2.561-tabelas-diarias",
   "date": "2026-10-06",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.560-unidades-ocultas-schema",
-  "release_vps": "/var/www/mdv-site/releases/20261006-184620-unidades-ocultas-schema",
+  "tag": "v1.2.561-tabelas-diarias",
+  "release_vps": "/var/www/mdv-site/releases/20261006-190333-tabelas-diarias",
   "release_print3d_vps": null,
-  "summary": "Corrige schema legado das unidades para permitir ocultacao e reativacao de aparelhos.",
+  "summary": "Gera tabelas atuais antes de cada envio agendado no Instagram e WhatsApp.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "services/unitStatusSchema.cjs",
-    "services/unitVisibility.cjs",
-    "scripts/deploy-unit-visibility-schema.cjs",
+    "pages/admin/settings/marketing/SocialStorySchedulerPanel.tsx",
+    "services/phonePriceListServer.cjs",
+    "services/marketingCampaignApi.cjs",
+    "services/socialStoryPriceListBatches.cjs",
+    "services/socialStoryScheduleService.ts",
+    "scripts/deploy-phone-price-list.cjs",
     "deploy-vps-server-only.cjs",
-    "vps_server.cjs",
-    "vps_server.js",
-    "tmp-tests/unit-status-schema.test.cjs",
-    "tmp-tests/unit-visibility.test.cjs",
+    "tmp-tests/social-story-price-list-batches.test.cjs",
+    "tmp-tests/social-story-scheduler-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-06-v1.2.560-unidades-ocultas-schema.md"
+    "docs/versoes/2026-10-06-v1.2.561-tabelas-diarias.md"
   ],
   "validations": [
-    "16 testes focados aprovados: enum legado, idempotencia, hide/restore, API de tabelas e preservacao de estados",
+    "35 testes focados: geracao por horario, paginas variaveis, dois canais, estoque vazio, falhas, deploy e bloqueio da arte antiga",
     "Build com trava Supabase e sintaxe dos servidores",
-    "Validacao publica e teste transacional com rollback obrigatorios apos deploy"
+    "Validacao publica e fluxo em tabelas temporarias na VPS, sem envio real"
   ]
 }

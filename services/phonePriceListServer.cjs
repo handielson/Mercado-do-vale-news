@@ -136,17 +136,14 @@ async function readPublicImage(value) {
     .resize(920, 652, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
 }
 
-function registerPhonePriceListRoutes(fastify, dependencies) {
-  const { pool, requireSyncKeyOrAdmin, uploadsDir } = dependencies;
+function createPhonePriceListGenerator(dependencies) {
+  const { pool, uploadsDir } = dependencies;
   const publicApiUrl = String(dependencies.publicApiUrl || 'https://api.xiaomipetrolina.com.br').replace(/\/+$/, '');
   // Limits expensive rendering while coalescing identical concurrent bot requests.
   const inFlight = new Map();
   let activeJobs = 0;
-  fastify.post('/admin/marketing/phone-price-list/preview', {
-    preHandler: requireSyncKeyOrAdmin,
-    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-  }, async (req, reply) => {
-    const selection = validateSelection(req.body);
+  return async (input) => {
+    const selection = validateSelection(input);
     const ids = selection.groups?.flatMap((g) => g.productIds);
     const [rows] = await pool.query(`SELECT p.id,p.name,p.brand,p.model_id,p.specs,p.custom_fields,
       CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(p.images,'$[0]')) LIKE 'https://%'
@@ -178,7 +175,6 @@ function registerPhonePriceListRoutes(fastify, dependencies) {
     const pages = paginatePhonePriceList(groups.map((g) => ({ ...g, products: g.products.map((p) => hydratedById.get(p.id) || p) })), selection.layout === 'list' ? 14 : 6);
     const renderSettings = { layout: selection.layout, priceMode: selection.priceMode, version: 4 };
     const requestKey = hash(JSON.stringify({ pages, company, day, ...renderSettings }));
-    reply.header('Cache-Control', 'no-store');
     if (inFlight.has(requestKey)) return inFlight.get(requestKey);
     if (activeJobs >= 2) throw failure('A geração está ocupada. Tente novamente em instantes.', 503);
     const job = (async () => {
@@ -239,7 +235,19 @@ function registerPhonePriceListRoutes(fastify, dependencies) {
     })();
     inFlight.set(requestKey, job);
     try { return await job; } finally { inFlight.delete(requestKey); }
+  };
+}
+
+function registerPhonePriceListRoutes(fastify, dependencies) {
+  const generate = createPhonePriceListGenerator(dependencies);
+  dependencies.generatePhonePriceList = generate;
+  fastify.post('/admin/marketing/phone-price-list/preview', {
+    preHandler: dependencies.requireSyncKeyOrAdmin,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return generate(req.body);
   });
 }
 
-module.exports = { registerPhonePriceListRoutes, buildPriceListGroups, validateSelection, isEligible, resolveBrand, productIdentity, readPublicImage };
+module.exports = { registerPhonePriceListRoutes, createPhonePriceListGenerator, buildPriceListGroups, validateSelection, isEligible, resolveBrand, productIdentity, readPublicImage };

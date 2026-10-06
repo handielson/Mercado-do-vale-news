@@ -291,6 +291,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
         scheduledAt: scheduledDates[0], scheduledDates, destinations,
         includePrice: mode === 'whatsapp_campaign' ? includePrice : undefined,
         items: mode !== 'whatsapp_campaign' ? currentItems : undefined,
+        phonePriceList: mode === 'phone_price_list' ? { brands: phoneBrands, priceMode: phonePriceMode, layout: phoneLayout } : undefined,
       });
       toast.success(`1 aprovação criada para ${result.dayCount} dia(s), com ${result.itemCount} Stories.`);
       setItems([]);
@@ -398,7 +399,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
                   }} className={`rounded-lg border px-4 py-2 text-sm font-bold disabled:opacity-50 ${phoneBrands.includes(brand) ? 'border-violet-400 bg-violet-100 text-violet-800' : 'border-slate-200 bg-white text-slate-500'}`}>{brand}</button>
                 ))}
               </div>
-              <p className="text-xs text-slate-600">A lista é atualizada automaticamente ao selecionar as marcas e novamente ao solicitar o agendamento. Preços alterados e aparelhos sem estoque saem na próxima atualização, sem precisar gerar manualmente.</p>
+              <p className="text-xs text-slate-600">A prévia usa os preços e o estoque atuais. Em cada horário agendado, a tabela será gerada novamente antes do envio ao Instagram e ao WhatsApp, respeitando as marcas, o formato e o tipo de preço escolhidos. Aparelhos ocultos ou sem estoque ficam de fora; a quantidade de páginas pode mudar.</p>
               {busy && <p className="flex items-center gap-2 text-xs font-bold text-violet-700"><Loader2 className="h-4 w-4 animate-spin" /> Atualizando lista automaticamente...</p>}
               {phonePreview && <div className="space-y-1 text-xs text-slate-600" role="status">
                 <p>{phonePreview.productCount} configuração(ões) · {items.length} arte(s) · Gerado em {new Date(phonePreview.generatedAt).toLocaleString('pt-BR')}</p>

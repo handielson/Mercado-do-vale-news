@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const { registerPhonePriceListRoutes } = require('./phonePriceListServer.cjs');
+const { STRIDE, priceListRecipe, ensurePriceListBatchTable, refreshNextPriceListBatch } = require('./socialStoryPriceListBatches.cjs');
 
 const APPROVAL_STATUSES = new Set([
   'pending', 'approved', 'rejected', 'executing', 'succeeded', 'failed', 'cancelled', 'expired',
@@ -258,6 +259,7 @@ async function ensureMarketingCampaignTables(pool) {
       INDEX idx_social_story_delivery_schedule (schedule_id, item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  await ensurePriceListBatchTable(pool);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS meta_marketing_oauth_states (
       state_hash CHAR(64) NOT NULL PRIMARY KEY,
@@ -1910,6 +1912,8 @@ async function claimNextSocialStoryDelivery(pool) {
        JOIN social_story_items i ON i.id=d.item_id
        JOIN social_story_schedules s ON s.id=d.schedule_id
        WHERE d.status='pending' AND s.status IN ('approved','processing') AND i.scheduled_at<=NOW()
+         AND NOT EXISTS (SELECT 1 FROM social_story_price_list_batches b
+           WHERE b.schedule_id=i.schedule_id AND b.batch_index=FLOOR(i.sequence_index/${STRIDE}) AND b.generated_at IS NULL)
          AND (d.attempt_count=0 OR d.updated_at<=DATE_SUB(NOW(),INTERVAL ${SOCIAL_STORY_MEDIA_RETRY_DELAY_MINUTES} MINUTE))
          AND NOT EXISTS (
            SELECT 1 FROM social_story_items pi
@@ -2003,6 +2007,8 @@ async function syncSocialStoryApprovalOutcomes(pool) {
 
 async function runNextSocialStoryDelivery(pool, dependencies) {
   await syncSocialStoryApprovalOutcomes(pool);
+  const refreshed = await refreshNextPriceListBatch(pool, dependencies);
+  if (refreshed && !refreshed.retry) await refreshSocialStoryScheduleStatus(pool, refreshed.scheduleId);
   const delivery = await claimNextSocialStoryDelivery(pool);
   if (!delivery) return null;
   try {
@@ -3526,6 +3532,8 @@ function registerSocialStoryRoutes(fastify, dependencies) {
     const auth = await getBearerAuthContext(req);
     const title = text(body.title, 255);
     const sourceType = body.sourceType === 'whatsapp_campaign' ? 'whatsapp_campaign' : 'standalone';
+    const tableRecipe = priceListRecipe(body.phonePriceList);
+    if (tableRecipe && sourceType !== 'standalone') return reply.code(400).send({ error: 'A tabela dinâmica deve ser um agendamento de tabela.' });
     const sourceId = sourceType === 'whatsapp_campaign' ? text(body.sourceId, 36) : null;
     const includePrice = body.includePrice !== false;
     const rawScheduledDates = Array.isArray(body.scheduledDates) && body.scheduledDates.length
@@ -3550,9 +3558,12 @@ function registerSocialStoryRoutes(fastify, dependencies) {
       if (!sourceId || typeof dependencies.buildWhatsAppStoryItems !== 'function') return reply.code(400).send({ error: 'WhatsApp campaign is required' });
       sourceItems = await dependencies.buildWhatsAppStoryItems(sourceId, { includePrice });
     } else {
-      sourceItems = Array.isArray(body.items) ? body.items : [];
+      sourceItems = tableRecipe
+        ? (await dependencies.generatePhonePriceList(tableRecipe)).items
+        : Array.isArray(body.items) ? body.items : [];
     }
     const delaySeconds = Math.max(5, Math.min(300, Number(body.mediaDelaySeconds || 15) || 15));
+    if (tableRecipe && sourceItems.length > 80) return reply.code(400).send({ error: 'Selecione menos marcas: a tabela ultrapassa 80 páginas por envio.' });
     const limitedSourceItems = sourceItems.slice(0, 80);
     const normalizedItems = limitedSourceItems.map((item, index) => ({
       media_type: item.mediaType === 'video' ? 'video' : 'image',
@@ -3573,6 +3584,7 @@ function registerSocialStoryRoutes(fastify, dependencies) {
       title, sourceType, sourceId, scheduledAt,
       scheduledDates: scheduledDates.map((date) => sqlDateTime(date)),
       destinations, includePrice, items: normalizedItems,
+      ...(tableRecipe ? { phonePriceList: tableRecipe, regenerateBeforeDelivery: true } : {}),
     };
     const contentHash = sha256(JSON.stringify(snapshot));
     const channel = destinations.length === 2 ? 'multichannel' : destinations[0];
@@ -3586,18 +3598,26 @@ function registerSocialStoryRoutes(fastify, dependencies) {
         [id, title, sourceType, sourceId, scheduledAt, jsonValue(destinations), approvalId, contentHash, auth.userId || null],
       );
       for (const [index, item] of scheduledItems.entries()) {
+        const sequenceIndex = tableRecipe ? item.day_index * STRIDE + item.source_item_index : index;
         const itemId = crypto.randomUUID();
         await connection.query(
           `INSERT INTO social_story_items (id,schedule_id,sequence_index,media_type,media_url,label,caption,scheduled_at)
            VALUES (?,?,?,?,?,?,?,?)`,
-          [itemId, id, index, item.media_type, item.media_url, item.label || null, item.caption || null, sqlDateTime(item.scheduled_at)],
+          [itemId, id, sequenceIndex, item.media_type, item.media_url, item.label || null, item.caption || null, sqlDateTime(item.scheduled_at)],
         );
         for (const destination of destinations) {
           await connection.query(
             `INSERT INTO social_story_deliveries (id,schedule_id,item_id,destination,idempotency_key,status)
              VALUES (?,?,?,?,?,'waiting_approval')`,
-            [crypto.randomUUID(), id, itemId, destination, sha256(`${id}:${index}:${destination}`)],
+            [crypto.randomUUID(), id, itemId, destination, sha256(`${id}:${sequenceIndex}:${destination}`)],
           );
+        }
+      }
+      if (tableRecipe) {
+        for (const [dayIndex, date] of scheduledDates.entries()) {
+          await connection.query(`INSERT INTO social_story_price_list_batches
+            (schedule_id,batch_index,scheduled_at,recipe,delay_seconds) VALUES (?,?,?,?,?)`,
+          [id, dayIndex, sqlDateTime(date), jsonValue(tableRecipe), delaySeconds]);
         }
       }
       const requestedBy = auth.userId || 'marketing-admin';
@@ -3606,11 +3626,12 @@ function registerSocialStoryRoutes(fastify, dependencies) {
           (id,channel,action_type,title,target_type,target_id,target_name,status,execution_mode,current_state,proposed_state,evidence,
            financial_impact,success_criteria,rollback_plan,execution_payload,requested_by,requested_by_label,idempotency_key,approval_expires_at)
          VALUES (?,?,?,?,?,?,?,'pending','vps_meta_api',?,?,?,?,?,?,?,?,?,?,DATE_ADD(NOW(),INTERVAL 7 DAY))`,
-        [approvalId, channel, SOCIAL_STORY_SCHEDULE_ACTION, `Agendar Stories: ${title}`, 'social_story_schedule', id, title,
+        [approvalId, channel, SOCIAL_STORY_SCHEDULE_ACTION, `Agendar Stories${tableRecipe ? ' · tabela dinâmica' : ''}: ${title}`, 'social_story_schedule', id, title,
           jsonValue({ status: 'draft', publicationExecuted: false }), jsonValue(snapshot),
           jsonValue({ dayCount: scheduledDates.length, sourceItemCount: normalizedItems.length, itemCount: scheduledItems.length, destinations, sourceType, sourceId }),
           jsonValue({ currency: 'BRL', amount: 0, recurring: false }),
-          jsonValue({ expectedDeliveries: scheduledItems.length * destinations.length, ordered: true, noDuplicates: true }),
+          jsonValue({ expectedDeliveries: scheduledItems.length * destinations.length, ordered: true, noDuplicates: true,
+            ...(tableRecipe ? { regenerateBeforeDelivery: true, pageCountMayChange: true } : {}) }),
           'Cancelar o agendamento e as entregas ainda não publicadas.',
           jsonValue({ schedule_id: id, content_hash: contentHash }), requestedBy, 'Administrador Gestão MV', `social-story:${id}`],
       );

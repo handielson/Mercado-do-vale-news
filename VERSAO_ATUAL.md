@@ -1,4 +1,14 @@
-# v1.2.560-unidades-ocultas-schema
+# v1.2.561-tabelas-diarias
+
+Data: 2026-10-06. Branch: main. Tag: v1.2.561-tabelas-diarias.
+Release VPS: /var/www/mdv-site/releases/20261006-190333-tabelas-diarias
+Status: preparada para publicacao.
+
+Novos agendamentos de tabelas guardam marcas, formato e tipo de preco. A cada horario, o worker consulta o estoque e os precos atuais pelo gerador canonico e substitui as paginas antes de qualquer envio ao Instagram ou WhatsApp. Ambos usam a mesma geracao. Ocultos e indisponiveis ficam fora; sem estoque, a ocorrencia e cancelada. Falha de geracao bloqueia a previa antiga e tenta novamente em cinco minutos. Uma tabela adicional guarda o estado por ocorrencia e permite variar o numero de paginas. Agendamentos antigos devem ser recriados.
+
+Validacoes: 34 testes focados, sintaxe e build com trava Supabase. Deploy seletivo preserva demais modulos e entradas da API, cria somente a tabela adicional e faz backup antes da troca. Rollback restaura codigo; tabela adicional compativel permanece sem alterar dados antigos. Validacao do fluxo em tabelas temporarias na VPS, sem Stories reais.
+
+## Release anterior: v1.2.560-unidades-ocultas-schema
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.560-unidades-ocultas-schema.
 Release VPS: /var/www/mdv-site/releases/20261006-184620-unidades-ocultas-schema

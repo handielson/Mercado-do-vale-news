@@ -19,6 +19,7 @@ const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_P
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
 const phonePriceListServicePaths = [
+  'services/socialStoryPriceListBatches.cjs',
   'services/phonePriceListArtwork.cjs',
   'services/phonePriceListServer.cjs',
 ];
@@ -520,10 +521,11 @@ async function main() {
     });
     conn.end(); return;
   }
-  if (process.argv.includes('--phone-price-list-only')) {
+  if (process.argv.includes('--phone-price-list-only') || process.argv.includes('--dynamic-price-tables-only')) {
     await require('./scripts/deploy-phone-price-list.cjs').deployPhonePriceList({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
       write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      dynamicTables: process.argv.includes('--dynamic-price-tables-only'),
     });
     conn.end(); return;
   }

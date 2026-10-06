@@ -68,6 +68,7 @@ export interface CreateSocialStoryScheduleInput {
   includePrice?: boolean;
   mediaDelaySeconds?: number;
   items?: SocialStoryDraftItem[];
+  phonePriceList?: { brands: PhonePriceListBrand[]; priceMode: PhonePriceListMode; layout: PhonePriceListLayout };
 }
 
 export const socialStoryScheduleService = {
