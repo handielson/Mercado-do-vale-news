@@ -2,11 +2,13 @@
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.563-cancelar-dia.
 Release VPS: /var/www/mdv-site/releases/20261006-210618-cancelar-dia
-Status: preparada para publicacao.
+Status: publicada e validada em producao.
 
 Calendario exibe botao com lixeira e texto Cancelar publicacoes deste dia no rodape do cartao. Painel e cartoes respeitam largura disponivel, sem esconder a acao na rolagem horizontal. Stories usam endpoint autenticado cancel-items: cancela somente entregas pendentes dos IDs escolhidos, preserva outros dias e publicacoes realizadas, bloqueia publicacao em andamento e IDs desatualizados. Tabelas dinamicas canceladas nao regeneram, e suas paginas devem ser canceladas em conjunto. Cancelar pendentes na area de tabelas continua cancelando o lote inteiro.
 
-Validacoes: 35 testes focados, test:marketing-calendar, sintaxe e build com trava Supabase. Deploy seletivo de modulos com backup, sem mudanca de schema. Validacao MySQL em tabelas temporarias e calendario publicado obrigatorias, sem cancelar registros reais durante teste.
+Validacoes: 35 testes focados, test:marketing-calendar, sintaxe e build com trava Supabase. Deploy seletivo de modulos com backup, sem mudanca de schema. Validacao MySQL em tabelas temporarias e calendario publicado concluida, sem cancelar registros reais durante teste.
+
+Codigo c2a2d3b1 e tag enviados a origin/main. Site ativo na release registrada, home e VERSION HTTP 200 com versao correspondente. API mdv-api online, mysql.ok=true; backup /var/www/mdv-api/backups/phone-price-list-1791320850666. Teste na VPS confirmou cancelamento de um dia, preservacao dos demais e publicados, bloqueio de IDs externos e envio em andamento, ausencia de regeneracao apos cancelar e encerramento do ultimo dia. Registros reais e estados das unidades preservados. Calendario publicado no dia 9 conferido em painel estreito: botao visivel sem transbordamento horizontal, console sem erros/avisos. Evidencia local: .local/cancelar-dia-publicado.png. Auditoria preservou 34 worktrees bloqueadas (25 dirty, 9 not_merged_into_origin_main), nenhum candidato seguro a remocao.
 
 ## Release anterior: v1.2.562-cancelamento-visivel
 
