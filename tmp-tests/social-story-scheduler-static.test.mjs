@@ -50,6 +50,7 @@ test('deployment ships the daily batch dependency with the generator and support
   assert.match(selective, /'services\/marketingCampaignApi\.cjs', 'services\/socialStoryPriceListBatches\.cjs'/);
   assert.match(selective, /ensurePriceListBatchTable\(db\)/);
   assert.match(selective, /Remote module differs from release baseline/);
+  assert.match(selective, /\['ls-tree', 'HEAD\^', '--', file\]/);
 });
 
 test('Story scheduling requires approval and creates idempotent deliveries', () => {

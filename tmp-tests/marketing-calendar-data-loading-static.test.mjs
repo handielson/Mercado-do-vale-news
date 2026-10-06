@@ -124,8 +124,8 @@ assert.match(
 );
 assert.match(
   calendar,
-  /socialStoryScheduleService\.cancel\(targetId\)/,
-  'Story schedules must use the canonical cancellation endpoint',
+  /socialStoryScheduleService\.cancelItems\(targetId, itemIds\)/,
+  'Story calendar action must cancel only the selected day items',
 );
 assert.match(
   calendar,
@@ -144,8 +144,8 @@ assert.match(
 );
 assert.match(
   calendar,
-  /Todos os Stories ainda pendentes deste lote, inclusive em outros dias/,
-  'Multi-day Story deletion must disclose that the whole batch is cancelled',
+  /Os outros dias do lote serão mantidos/,
+  'Day cancellation must explicitly preserve the remaining days',
 );
 assert.match(
   calendar,

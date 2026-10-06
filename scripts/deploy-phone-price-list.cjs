@@ -25,7 +25,8 @@ async function deployPhonePriceList({ appDir, apiProc, exec, root, read, write, 
   for (const file of modules) {
     const original = await read(`${appDir}/${file}`);
     const updated = fs.readFileSync(path.join(root, file), 'utf8');
-    const previous = file.endsWith('socialStoryPriceListBatches.cjs') ? '' : execFileSync('git', ['show', `HEAD^:${file}`], { cwd: root, encoding: 'utf8' });
+    const trackedBefore = execFileSync('git', ['ls-tree', 'HEAD^', '--', file], { cwd: root, encoding: 'utf8' }).trim();
+    const previous = trackedBefore ? execFileSync('git', ['show', `HEAD^:${file}`], { cwd: root, encoding: 'utf8' }) : '';
     if (![normalize(previous), normalize(updated)].includes(normalize(original))) throw new Error(`Remote module differs from release baseline: ${file}`);
     changes.push({ file, original, updated });
   }

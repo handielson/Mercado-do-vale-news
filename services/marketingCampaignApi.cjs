@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const { registerPhonePriceListRoutes } = require('./phonePriceListServer.cjs');
-const { STRIDE, priceListRecipe, ensurePriceListBatchTable, refreshNextPriceListBatch } = require('./socialStoryPriceListBatches.cjs');
+const { STRIDE, priceListRecipe, ensurePriceListBatchTable, refreshNextPriceListBatch, cancelStoryItems } = require('./socialStoryPriceListBatches.cjs');
 
 const APPROVAL_STATUSES = new Set([
   'pending', 'approved', 'rejected', 'executing', 'succeeded', 'failed', 'cancelled', 'expired',
@@ -3642,6 +3642,13 @@ function registerSocialStoryRoutes(fastify, dependencies) {
       await connection.rollback();
       throw error;
     } finally { connection.release(); }
+  });
+
+  fastify.post('/admin/marketing/stories/:id/cancel-items', { preHandler: requireAdminBearerToken }, async (req) => {
+    const id = text(req.params?.id, 36);
+    const result = await cancelStoryItems(pool, id, req.body?.itemIds);
+    await refreshSocialStoryScheduleStatus(pool, id);
+    return result;
   });
 
   fastify.post('/admin/marketing/stories/:id/cancel', { preHandler: requireAdminBearerToken }, async (req, reply) => {

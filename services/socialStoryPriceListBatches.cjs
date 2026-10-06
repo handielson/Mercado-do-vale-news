@@ -87,4 +87,39 @@ async function refreshNextPriceListBatch(pool, dependencies) {
   } finally { connection.release(); }
 }
 
-module.exports = { STRIDE, priceListRecipe, ensurePriceListBatchTable, refreshNextPriceListBatch };
+async function cancelStoryItems(pool, scheduleId, itemIds) {
+  if (!Array.isArray(itemIds) || !itemIds.length || itemIds.length > 2400 || new Set(itemIds).size !== itemIds.length
+    || itemIds.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9-]{1,36}$/.test(id))) {
+    throw Object.assign(new Error('Selecione as publicações do dia.'), { statusCode: 400 });
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [[schedule]] = await connection.query('SELECT status FROM social_story_schedules WHERE id=? FOR UPDATE', [scheduleId]);
+    if (!schedule || !['pending_approval', 'approved', 'processing'].includes(schedule.status)) throw Object.assign(new Error('Este agendamento não possui publicações pendentes.'), { statusCode: 409 });
+    const [items] = await connection.query('SELECT id,sequence_index FROM social_story_items WHERE schedule_id=? AND id IN (?)', [scheduleId, itemIds]);
+    if (items.length !== itemIds.length) throw Object.assign(new Error('A programação foi atualizada. Recarregue o calendário.'), { statusCode: 409 });
+    const [deliveries] = await connection.query('SELECT id,status FROM social_story_deliveries WHERE schedule_id=? AND item_id IN (?) FOR UPDATE', [scheduleId, itemIds]);
+    if (deliveries.some(delivery => delivery.status === 'processing')) throw Object.assign(new Error('Há uma publicação sendo enviada. Aguarde e atualize o calendário.'), { statusCode: 409 });
+    const [batches] = await connection.query('SELECT batch_index FROM social_story_price_list_batches WHERE schedule_id=? FOR UPDATE', [scheduleId]);
+    for (const batch of batches) {
+      const first = Number(batch.batch_index) * STRIDE;
+      if (!items.some(item => item.sequence_index >= first && item.sequence_index < first + STRIDE)) continue;
+      const [batchItems] = await connection.query('SELECT id FROM social_story_items WHERE schedule_id=? AND sequence_index>=? AND sequence_index<?', [scheduleId, first, first + STRIDE]);
+      if (batchItems.some(item => !itemIds.includes(item.id))) throw Object.assign(new Error('Cancele todas as páginas da tabela desse horário.'), { statusCode: 409 });
+      await connection.query('UPDATE social_story_price_list_batches SET generated_at=COALESCE(generated_at,NOW()),retry_at=NULL WHERE schedule_id=? AND batch_index=?', [scheduleId, batch.batch_index]);
+    }
+    const [result] = await connection.query("UPDATE social_story_deliveries SET status='cancelled' WHERE schedule_id=? AND item_id IN (?) AND status IN ('waiting_approval','pending')", [scheduleId, itemIds]);
+    if (!result.affectedRows) throw Object.assign(new Error('Estas publicações já foram enviadas ou canceladas.'), { statusCode: 409 });
+    const [[remaining]] = await connection.query("SELECT SUM(status IN ('waiting_approval','pending','processing')) AS pending,SUM(status='published') AS published FROM social_story_deliveries WHERE schedule_id=?", [scheduleId]);
+    if (!Number(remaining.pending) && !Number(remaining.published)) {
+      await connection.query("UPDATE social_story_schedules SET status='cancelled' WHERE id=?", [scheduleId]);
+      await connection.query("UPDATE marketing_approval_requests SET status='cancelled' WHERE target_type='social_story_schedule' AND target_id=? AND status IN ('pending','approved')", [scheduleId]);
+    }
+    await connection.commit();
+    return { ok: true, cancelledDeliveries: result.affectedRows };
+  } catch (error) { await connection.rollback(); throw error; }
+  finally { connection.release(); }
+}
+
+module.exports = { STRIDE, priceListRecipe, ensurePriceListBatchTable, refreshNextPriceListBatch, cancelStoryItems };

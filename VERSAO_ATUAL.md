@@ -1,4 +1,14 @@
-# v1.2.562-cancelamento-visivel
+# v1.2.563-cancelar-dia
+
+Data: 2026-10-06. Branch: main. Tag: v1.2.563-cancelar-dia.
+Release VPS: /var/www/mdv-site/releases/20261006-210618-cancelar-dia
+Status: preparada para publicacao.
+
+Calendario exibe botao com lixeira e texto Cancelar publicacoes deste dia no rodape do cartao. Painel e cartoes respeitam largura disponivel, sem esconder a acao na rolagem horizontal. Stories usam endpoint autenticado cancel-items: cancela somente entregas pendentes dos IDs escolhidos, preserva outros dias e publicacoes realizadas, bloqueia publicacao em andamento e IDs desatualizados. Tabelas dinamicas canceladas nao regeneram, e suas paginas devem ser canceladas em conjunto. Cancelar pendentes na area de tabelas continua cancelando o lote inteiro.
+
+Validacoes: 35 testes focados, test:marketing-calendar, sintaxe e build com trava Supabase. Deploy seletivo de modulos com backup, sem mudanca de schema. Validacao MySQL em tabelas temporarias e calendario publicado obrigatorias, sem cancelar registros reais durante teste.
+
+## Release anterior: v1.2.562-cancelamento-visivel
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.562-cancelamento-visivel.
 Release VPS: /var/www/mdv-site/releases/20261006-201723-cancelamento-visivel

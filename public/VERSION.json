@@ -1,26 +1,32 @@
 {
-  "version": "v1.2.562-cancelamento-visivel",
+  "version": "v1.2.563-cancelar-dia",
   "date": "2026-10-06",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.562-cancelamento-visivel",
-  "release_vps": "/var/www/mdv-site/releases/20261006-201723-cancelamento-visivel",
+  "tag": "v1.2.563-cancelar-dia",
+  "release_vps": "/var/www/mdv-site/releases/20261006-210618-cancelar-dia",
   "release_print3d_vps": null,
-  "summary": "Lista de agendamentos e cancelamento sempre visiveis na area de tabelas.",
+  "summary": "Botao visivel no calendario cancela somente as publicacoes do dia escolhido.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "pages/admin/settings/marketing/SocialStorySchedulerPanel.tsx",
+    "pages/admin/settings/marketing/MarketingCalendarPanel.tsx",
+    "services/marketingCampaignApi.cjs",
+    "services/socialStoryPriceListBatches.cjs",
+    "services/socialStoryScheduleService.ts",
+    "scripts/deploy-phone-price-list.cjs",
+    "tmp-tests/marketing-calendar-data-loading-static.test.mjs",
+    "tmp-tests/social-story-cancel-items.test.cjs",
     "tmp-tests/social-story-scheduler-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-06-v1.2.562-cancelamento-visivel.md"
+    "docs/versoes/2026-10-06-v1.2.563-cancelar-dia.md"
   ],
   "validations": [
-    "13 testes focados do agendamento, incluindo visibilidade do cancelamento",
+    "35 testes focados e verificacoes do calendario: cancelar dia, preservar outros dias e impedir regeneracao",
     "Build com trava Supabase e sintaxe dos servidores",
-    "Cancelamento dos dois agendamentos ativos antes do deploy e releitura sem agendamentos ativos"
+    "Validacao publica do calendario e teste MySQL em tabelas temporarias sem envios reais"
   ]
 }

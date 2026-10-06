@@ -534,7 +534,7 @@ export default function MarketingCalendarPanel({
 
   const canDeleteEvent = (event: CalendarEvent): boolean => {
     if (event.type === 'approval_request') return false;
-    if (event.type === 'story_schedule') return ['pending', 'approved', 'executing'].includes(event.status);
+    if (event.type === 'story_schedule') return event.rawPayload?.dayItems?.some((item: any) => item.deliveries?.some((delivery: any) => ['waiting_approval', 'pending'].includes(delivery.status))) ?? false;
     if (event.type === 'facebook_schedule') return event.rawPayload?.schedule?.status !== 'published';
     return true;
   };
@@ -553,7 +553,7 @@ export default function MarketingCalendarPanel({
     }
 
     const confirmation = event.type === 'story_schedule'
-      ? 'Excluir esta programação? Todos os Stories ainda pendentes deste lote, inclusive em outros dias, serão cancelados.'
+      ? 'Cancelar as publicações pendentes deste cartão somente neste dia? Os outros dias do lote serão mantidos.'
       : event.type === 'weekly_slot'
       ? 'Excluir esta programação semanal? Ela será removida de todos os dias em que se repete.'
       : event.type === 'whatsapp_campaign'
@@ -565,7 +565,8 @@ export default function MarketingCalendarPanel({
     setDeletingEventId(event.id);
     try {
       if (event.type === 'story_schedule') {
-        await socialStoryScheduleService.cancel(targetId);
+        const itemIds = event.rawPayload.dayItems.map((item: any) => item.id);
+        await socialStoryScheduleService.cancelItems(targetId, itemIds);
       } else if (event.type === 'weekly_slot') {
         await instagramScheduleService.delete(targetId);
       } else if (event.type === 'whatsapp_campaign') {
@@ -575,7 +576,7 @@ export default function MarketingCalendarPanel({
       }
 
       await loadData();
-      toast.success('Programação excluída do calendário.');
+      toast.success(event.type === 'story_schedule' ? 'Publicações deste dia canceladas.' : 'Programação excluída do calendário.');
     } catch (error) {
       console.error('Erro ao excluir programação pelo calendário:', error);
       toast.error(error instanceof Error ? error.message : 'Não foi possível excluir a programação.');
@@ -645,6 +646,8 @@ export default function MarketingCalendarPanel({
         }
 
         for (const [dateKey, dayItems] of itemsByDate.entries()) {
+          const dayDeliveries = dayItems.flatMap(item => item.deliveries || []);
+          const dayCancelled = dayDeliveries.length > 0 && dayDeliveries.every(delivery => delivery.status === 'cancelled');
           const firstItem = dayItems[0];
           const timeStr = parseTimeStr(firstItem?.scheduled_at || schedule.scheduled_at);
           const firstMedia = dayItems.find((it) => it.media_url);
@@ -659,8 +662,8 @@ export default function MarketingCalendarPanel({
             dateKey,
             timeStr,
             destinations,
-            status: normalizedStatus,
-            statusLabel,
+            status: dayCancelled ? 'cancelled' : normalizedStatus,
+            statusLabel: dayCancelled ? 'Cancelado' : statusLabel,
             itemsCount: dayItems.length,
             thumbnailUrl: firstMedia?.media_url ? toBrowserSafeMediaUrl(firstMedia.media_url) : null,
             thumbnailMediaType: firstMedia?.media_type || null,
@@ -1229,8 +1232,8 @@ export default function MarketingCalendarPanel({
         </div>
 
         {/* Selected Day Timeline & Details */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
+        <div className="min-w-0 lg:col-span-4 space-y-4">
+          <div className="min-w-0 bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
             <div className="flex items-start justify-between pb-4 border-b border-slate-100">
               <div>
                 <span className="text-[11px] font-extrabold uppercase tracking-wider text-pink-600">
@@ -1269,16 +1272,16 @@ export default function MarketingCalendarPanel({
               )}
             </div>
 
-            <div className="mt-4 flex-1 overflow-y-auto space-y-3 max-h-[550px] pr-1">
+            <div className="mt-4 min-w-0 flex-1 overflow-y-auto overflow-x-hidden space-y-3 max-h-[550px] pr-1">
               {selectedDayData && selectedDayData.events.length > 0 ? (
                 selectedDayData.events.map((event) => {
                   const duplicates = duplicateDestinations(event, selectedDayData.events);
                   return (
                     <div
                       key={event.id}
-                      className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all flex flex-col gap-2"
+                      className="min-w-0 max-w-full p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all flex flex-col gap-2"
                     >
-                    <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
                           <Clock className="w-3 h-3 text-slate-400" />
@@ -1309,20 +1312,6 @@ export default function MarketingCalendarPanel({
                           <span className="p-1 bg-blue-50 text-blue-600 rounded" title="Facebook Marketplace">
                             <Facebook className="w-3.5 h-3.5" />
                           </span>
-                        )}
-                        {canDeleteEvent(event) && (
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteEvent(event)}
-                            disabled={deletingEventId !== null}
-                            className="p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 rounded transition-colors disabled:cursor-wait disabled:opacity-50"
-                            title="Excluir programação"
-                            aria-label={`Excluir programação ${event.title}`}
-                          >
-                            {deletingEventId === event.id
-                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              : <Trash2 className="w-3.5 h-3.5" />}
-                          </button>
                         )}
                       </div>
                     </div>
@@ -1362,7 +1351,7 @@ export default function MarketingCalendarPanel({
                             : `${event.itemsCount} arte(s) / storie(s) neste dia`}
                         </p>
                         {Array.isArray(event.rawPayload?.dayItems) && event.rawPayload.dayItems.length > 1 && (
-                          <div className="mt-2.5 space-y-1.5 pt-2 border-t border-slate-200/60 max-h-36 overflow-y-auto pr-1">
+                          <div className="mt-2.5 min-w-0 space-y-1.5 pt-2 border-t border-slate-200/60 max-h-36 overflow-y-auto overflow-x-hidden pr-1">
                             {event.rawPayload.dayItems.map((it: any, i: number) => (
                               <div key={it.id || i} className="flex items-center gap-2 text-[11px] text-slate-700 bg-white/70 p-1 rounded border border-slate-200/40">
                                 {it.media_url ? (
@@ -1375,7 +1364,7 @@ export default function MarketingCalendarPanel({
                                 ) : (
                                   <div className="w-5 h-7 rounded bg-slate-100 shrink-0" />
                                 )}
-                                <span className="truncate font-medium">{it.label || `Story ${i + 1}`}</span>
+                                <span className="min-w-0 truncate font-medium">{it.label || `Story ${i + 1}`}</span>
                               </div>
                             ))}
                           </div>
@@ -1409,6 +1398,12 @@ export default function MarketingCalendarPanel({
                         )}
                       </div>
                     </div>
+                    {canDeleteEvent(event) && <button type="button" onClick={() => void handleDeleteEvent(event)} disabled={deletingEventId !== null}
+                      className="flex w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-rose-200 px-2 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                      title="Excluir programação" aria-label={`${event.type === 'story_schedule' ? 'Cancelar publicações deste dia' : 'Excluir programação'} ${event.title}`}>
+                      {deletingEventId === event.id ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Trash2 className="h-4 w-4 shrink-0" />}
+                      <span>{event.type === 'story_schedule' ? 'Cancelar publicações deste dia' : 'Excluir programação'}</span>
+                    </button>}
                     {event.type === 'story_schedule' && (
                       <>
                         <StoryDeliveryDetails items={event.rawPayload?.dayItems || []} />

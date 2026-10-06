@@ -93,4 +93,7 @@ export const socialStoryScheduleService = {
   async cancel(id: string): Promise<void> {
     await vpsClient.post(`/admin/marketing/stories/${encodeURIComponent(id)}/cancel`, {});
   },
+  async cancelItems(id: string, itemIds: string[]): Promise<void> {
+    await vpsClient.post(`/admin/marketing/stories/${encodeURIComponent(id)}/cancel-items`, { itemIds });
+  },
 };
