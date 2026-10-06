@@ -1,10 +1,10 @@
 {
-  "version": "v1.2.551-familia-custo",
+  "version": "v1.2.552-familia-custo",
   "date": "2026-10-05",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.551-familia-custo",
-  "release_vps": "/var/www/mdv-site/releases/20261005-224845-v12551-familia-custo",
+  "tag": "v1.2.552-familia-custo",
+  "release_vps": "/var/www/mdv-site/releases/20261005-225900-v12552-familia-custo",
   "release_print3d_vps": null,
   "summary": "Ficha do pai organizada por abas, edicao dos filhos em janela e heranca opcional de custo com selecao de campos.",
   "gestao_mdv_android": {

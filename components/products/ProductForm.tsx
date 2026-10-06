@@ -2494,7 +2494,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 >
                     <span className="inline-flex items-center gap-2">
                         {isSavingOperation && <Loader2 size={16} className="animate-spin" />}
-                        {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : serialList.length > 1 ? `Salvar entrada de ${serialList.length} aparelhos` : separatesUnitEntry && !showsUnitEntry ? 'Salvar ficha sem estoque' : 'Salvar Produto'}
+                        {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
                     </span>
                 </button>
                 </div>
