@@ -135,3 +135,6 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 
 - [x] v1.2.551-familia-custo preparada: pai por abas, filhos em janela, heranca continua de custo opcional, copia unica e Selecionar todos. Build isolado, moeda, sintaxe e tres testes de contrato aprovados.
 - [ ] Validar heranca em familia de teste na VPS apos deploy; heranca automatica de outros campos e demais pendencias locais continuam abertas.
+
+- [x] 2026-10-05: publicada v1.2.552-familia-custo; pai, janela de filhos e Selecionar todos conferidos em producao. API/MySQL saudaveis.
+- [ ] Familia/custo: validar gravacao e propagacao em produto teste; heranca continua dos demais campos permanece pendente (copia unica).
