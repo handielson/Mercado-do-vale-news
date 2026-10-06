@@ -127,6 +127,13 @@ export const unitService = {
     listByProduct,
     create,
     updateStatus,
+    async setVisibility(id: string, hidden: boolean, reason: string): Promise<Unit> {
+        const row = await vpsClient.put<any>(`/units/${encodeURIComponent(id)}`, {
+            visibility_action: hidden ? 'hide' : 'restore', reason,
+        });
+        vpsApiService.invalidateProductCache();
+        return transformFromDB(row);
+    },
     delete: deleteUnit,
     getStatsByProduct,
 

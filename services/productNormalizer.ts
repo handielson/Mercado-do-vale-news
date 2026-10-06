@@ -57,6 +57,7 @@ export interface NormalizedProduct {
   brand?: string;
   model_id?: string;
   parent_id?: string | null;
+  parent_name?: string | null;
 
   // Conteúdo
   description?: string;
@@ -199,6 +200,7 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
     brand: p.brand,
     model_id: p.model_id,
     parent_id: p.parent_id ?? null,
+    parent_name: typeof p.parent_name === 'string' ? p.parent_name.trim() : null,
     description: p.description,
     specs: p.specs ?? {},
     custom_fields: p.custom_fields ?? {},

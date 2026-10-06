@@ -138,3 +138,14 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 
 - [x] 2026-10-05: publicada v1.2.552-familia-custo; pai, janela de filhos e Selecionar todos conferidos em producao. API/MySQL saudaveis.
 - [ ] Familia/custo: validar gravacao e propagacao em produto teste; heranca continua dos demais campos permanece pendente (copia unica).
+
+## Publicacao 2026-10-06 — familias e IMEIs
+
+- [x] Nome do pai no catalogo e na troca de variacao.
+- [x] Familia agrupada por memoria e cor.
+- [x] Painel com disponiveis, vendidos e ocultos separados.
+- [x] Ocultar/reativar com historico e protecao contra concorrencia.
+- [x] PDV encontra ocultos por IMEI e exige reativacao confirmada antes de selecionar para venda.
+- [ ] Validar gravacao e venda completa em produto teste.
+- [ ] Aprovar piloto Poco X8 e somente depois agrupar outros modelos.
+- [ ] Revisar pais antigos vazios do piloto.

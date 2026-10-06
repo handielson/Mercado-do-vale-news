@@ -522,6 +522,12 @@ export const PublicProductPage: React.FC = () => {
                 // VPS é a única fonte de verdade para description/technical_specifications.
                 // Migração do VPS → VPS concluída em 31/03/2026 (568 produtos).
                 
+                // Compatibilidade com APIs anteriores: resolve o pai antes de exibir o titulo.
+                if (data.parent_id && !data.parent_name) {
+                    const familyParent = await vpsApiService.getProductById(String(data.parent_id), true);
+                    if (!familyParent?.name?.trim()) throw new Error('Nome do produto pai indisponivel. Confira o cadastro da familia.');
+                    data = { ...data, parent_name: familyParent.name };
+                }
                 const formattedProduct = {
                     ...normalizeProduct(data),
                     // Garante que o frontend ache que tem uma string de marca
@@ -796,7 +802,7 @@ export const PublicProductPage: React.FC = () => {
     ]);
 
     const publicProductName = getPublicProductName(product);
-    const publicProductTitle = toTitleCase(publicProductName);
+    const publicProductTitle = product.parent_id && product.parent_name ? publicProductName : toTitleCase(publicProductName);
     const title = `${publicProductTitle} | Mercado do Vale`;
     const description = product.meta_description || resolvedDescription || `Compre ${publicProductName} no Mercado do Vale.`;
 
@@ -1114,6 +1120,7 @@ export const PublicProductPage: React.FC = () => {
         const resolvedImages = await resolveModelColorImagesForProduct(sib);
         const mergedVariant = {
             ...sib,
+            parent_name: sib.parent_name || (sib.parent_id && sib.parent_id === product.parent_id ? product.parent_name : null),
             images: resolvedImages.length > 0 ? resolvedImages : sib.images,
             image_url: resolvedImages[0] || (sib as any).image_url,
             description: sib.description || product.description,
@@ -1356,7 +1363,7 @@ export const PublicProductPage: React.FC = () => {
                             ) : selectedImage && selectedImage !== 'VIDEO' && selectedImage !== 'MOSAIC' ? (
                                 <img
                                     src={getCacheBustedUrl(selectedImage, product.updated_at || product.created_at)}
-                                    alt={product.meta_title || publicProductTitle}
+                                    alt={product.parent_id ? publicProductTitle : product.meta_title || publicProductTitle}
                                     className="w-full h-full object-contain"
                                 />
                             ) : (
@@ -1397,7 +1404,7 @@ export const PublicProductPage: React.FC = () => {
                                         onClick={() => setSelectedImage(img)}
                                         className={`w-20 h-20 flex-shrink-0 bg-white rounded-lg border-2 overflow-hidden ${selectedImage === img ? 'border-blue-600' : 'border-slate-200 hover:border-slate-300'}`}
                                     >
-                                        <img src={getCacheBustedUrl(img, product.updated_at || product.created_at)} alt={`${product.meta_title || publicProductTitle} - Ângulo ${idx + 1}`} className="w-full h-full object-contain p-1" />
+                                        <img src={getCacheBustedUrl(img, product.updated_at || product.created_at)} alt={`${product.parent_id ? publicProductTitle : product.meta_title || publicProductTitle} - Ângulo ${idx + 1}`} className="w-full h-full object-contain p-1" />
                                     </button>
                                 ))}
                             </div>

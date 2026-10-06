@@ -3,6 +3,8 @@ import { Search, Plus, Package, Smartphone } from 'lucide-react';
 import { Product } from '../../types/product';
 import { toast } from 'sonner';
 import { unitService } from '../../services/units';
+import type { Unit } from '../../types/unit';
+import { isLocalCatalogPreviewRuntime } from '../../services/localCatalogPreview';
 import { UnitStatus } from '../../utils/field-standards';
 import {
     buildPdvSearchCards,
@@ -72,6 +74,49 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
     const imeiInputRef = useRef<HTMLInputElement>(null);
     const [pendingSerializedConfirmation, setPendingSerializedConfirmation] = useState<PendingSerializedConfirmation | null>(null);
     const [soldUnitNotices, setSoldUnitNotices] = useState<SoldUnitNotice[]>([]);
+    const [hiddenUnitNotice, setHiddenUnitNotice] = useState<{ unit: Unit & { product_name?: string }; source: SearchMode } | null>(null);
+    const [isReactivating, setIsReactivating] = useState(false);
+
+    const offerHiddenUnitReactivation = (units: Unit[], source: SearchMode) => {
+        const hidden = units.filter(unit => unit.status === UnitStatus.HIDDEN);
+        if (!hidden.length) return false;
+        if (units.length !== 1 || hidden[0].order_id || hidden[0].sale_id) {
+            toast.error('Identificador duplicado ou aparelho vinculado a pedido. Confira o cadastro antes de reativar.');
+            return true;
+        }
+        setPendingSerializedConfirmation(null);
+        setHiddenUnitNotice({ unit: hidden[0], source });
+        return true;
+    };
+
+    const reactivateHiddenUnit = async () => {
+        if (!hiddenUnitNotice || isReactivating) return;
+        setIsReactivating(true);
+        try {
+            const { unit, source } = hiddenUnitNotice;
+            const { getProductById } = await import('../../services/productService');
+            const product = await getProductById(unit.product_id);
+            if (!product || product.status !== 'active') throw new Error('Produto inexistente ou inativo. Confira o cadastro antes de vender.');
+            const restored = await unitService.setVisibility(unit.id, false, 'Aparelho localizado e conferido por IMEI/serial no PDV.');
+            if (restored.status !== UnitStatus.AVAILABLE) throw new Error('O aparelho não foi reativado. Atualize a busca antes de vender.');
+            setHiddenUnitNotice(null);
+            setSearchCards([]);
+            if (isLocalCatalogPreviewRuntime()) {
+                toast.success('Reativação salva somente na prévia local. Para vender no estoque real, publique a função e reative no PDV publicado.');
+                return;
+            }
+            const refreshedProduct = await getProductById(unit.product_id);
+            if (!refreshedProduct) throw new Error('Aparelho reativado, mas não foi possível recarregar o produto. Faça uma nova busca.');
+            const unitOptions = (await unitService.listByProduct(unit.product_id))
+                .filter(candidate => candidate.status === UnitStatus.AVAILABLE)
+                .map(buildPdvUnitOption);
+            if (!unitOptions.some(option => option.id === unit.id)) throw new Error('A situação do aparelho mudou. Faça uma nova busca antes de vender.');
+            openSerializedConfirmation(refreshedProduct, unitOptions, unit.id, source);
+            toast.success('Aparelho reativado. Confirme o IMEI para adicionar à venda.');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Não foi possível reativar o aparelho.');
+        } finally { setIsReactivating(false); }
+    };
 
     useEffect(() => {
         if (mode === 'imei') {
@@ -160,6 +205,11 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
 
         setIsSearching(true);
         try {
+            // A bipagem deve localizar ocultos, mesmo quando não há saldo disponível no SKU.
+            if (options.autoAddSingle && term.length >= 5) {
+                const units = await unitService.searchByIdentifier(term);
+                if (offerHiddenUnitReactivation(units, 'product')) return;
+            }
             const hydrated = await vpsApiService.searchPdvProducts(term, 50);
             let cards = fromHydratedPdvSearchPayload(hydrated || []);
 
@@ -223,6 +273,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
 
         setIsImeiSearching(true);
         setSoldUnitNotices([]);
+        setHiddenUnitNotice(null);
         try {
             const units = await unitService.searchByIdentifier(query);
 
@@ -241,6 +292,8 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                 })));
                 return;
             }
+
+            if (offerHiddenUnitReactivation(units, 'imei')) return;
 
             const availableUnits = units.filter(unit => unit.status === UnitStatus.AVAILABLE);
             if (availableUnits.length === 0) {
@@ -542,6 +595,21 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                     </div>
                 </div>
             )}
+
+            {hiddenUnitNotice && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="hidden-pdv-unit-title">
+                <div className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-2xl">
+                    <h4 id="hidden-pdv-unit-title" className="text-xl font-bold text-amber-800">Aparelho oculto / não localizado</h4>
+                    <p className="font-semibold text-slate-900">{hiddenUnitNotice.unit.product_name}</p>
+                    <p className="break-words font-mono text-sm">{buildPdvUnitOption(hiddenUnitNotice.unit).label}</p>
+                    <p className="text-sm text-slate-700">Este aparelho estava oculto e não pode ser vendido nessa situação. Se você está com ele em mãos e conferiu a etiqueta, reative para continuar.</p>
+                    {hiddenUnitNotice.unit.internal_notes && <p className="max-h-32 overflow-y-auto whitespace-pre-line rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{hiddenUnitNotice.unit.internal_notes}</p>}
+                    {isLocalCatalogPreviewRuntime() && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Prévia local: reativar aqui salva somente um teste neste computador. Não altera o estoque real nem adiciona o aparelho à venda.</p>}
+                    <div className="flex justify-end gap-3">
+                        <button type="button" disabled={isReactivating} onClick={() => setHiddenUnitNotice(null)} className="rounded-lg border px-4 py-3 font-semibold">Cancelar</button>
+                        <button type="button" disabled={isReactivating} onClick={reactivateHiddenUnit} className="rounded-lg bg-green-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{isReactivating ? 'Reativando...' : isLocalCatalogPreviewRuntime() ? 'Testar reativação local' : 'Reativar e continuar'}</button>
+                    </div>
+                </div>
+            </div>}
 
             {pendingSerializedConfirmation && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-imei-title">

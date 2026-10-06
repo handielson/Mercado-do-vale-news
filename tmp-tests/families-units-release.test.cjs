@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),cp=require('node:child_process');
+const {patch}=require('../scripts/deploy-families-units.cjs');
+const base=cp.execFileSync('git',['show','b48e5073:vps_server.cjs'],{encoding:'utf8',maxBuffer:16e6});
+const expected=fs.readFileSync('vps_server.cjs','utf8').replace(/\r\n/g,'\n');
+assert.equal(patch(base),expected);assert.equal(patch(expected),expected);
+assert.equal(patch(base+'\n// hotfix independente'),expected+'\n// hotfix independente');
+assert.throws(()=>patch('incompatible runtime'),/diverge/);
+const search=fs.readFileSync('components/pdv/ProductSearchSection.tsx','utf8');
+assert.match(search,/visibility|Reactiv|Reativ/);
+const deps=fs.readFileSync('vite.config.ts','utf8');assert.match(deps,/@mdv\/installment-calculations/);assert.match(deps,/@mdv\/danfe-nfce-core/);
+console.log('Publicacao seletiva: patch exato, idempotencia, hotfix preservado e divergencia bloqueada.');

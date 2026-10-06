@@ -41,6 +41,9 @@ export default defineConfig(({ mode }) => {
   const localPreviewPort = Number(env.VITE_LOCAL_PREVIEW_API_PORT || 3101);
   const localPreviewOrigin = `http://127.0.0.1:${localPreviewPort}`;
   return {
+    optimizeDeps: {
+      include: ['@mdv/installment-calculations', '@mdv/danfe-nfce-core'],
+    },
     server: {
       port: 3000,
       host: '0.0.0.0',
@@ -124,6 +127,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), deferStylesheets(), localCodex.localResearchPlugin()],
     resolve: {
       alias: {
+        '@mdv/installment-calculations': path.resolve(__dirname, 'utils/installmentCalculations.cjs'),
+        '@mdv/danfe-nfce-core': path.resolve(__dirname, 'services/danfeNfceCore.cjs'),
         '@': path.resolve(__dirname, '.'),
       },
     },

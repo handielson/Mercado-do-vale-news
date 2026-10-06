@@ -149,7 +149,7 @@ function addUnitToTotals(target, unit) {
   }
   if (unit.status === 'reserved') target.reservedCount += 1;
   if (unit.status === 'rma') target.rmaCount += 1;
-  if (['available', 'reserved', 'sold', 'rma'].includes(unit.status)) {
+  if (['available', 'reserved', 'sold', 'rma', 'hidden'].includes(unit.status)) {
     target.investedValue += unit.costValue;
   }
 }
@@ -528,7 +528,35 @@ export function getProductVariationSpecs(product) {
   };
 }
 
+// A product's cached IMEI does not establish availability; unit status does.
+export function getModelIdentifierSections(colorGroup) {
+  const units = colorGroup.units || [];
+  const keys = (record) => [
+    ...[record.imei1, record.imei2].filter(Boolean).map(value => `imei:${String(value).trim()}`),
+    ...(record.serial ? [`serial:${String(record.serial).trim()}`] : []),
+  ];
+  const known = new Set(units.flatMap(keys));
+  const seen = new Set();
+  const unconfirmed = (colorGroup.skuGroups || []).flatMap(group => group.identifiers || [])
+    .filter(identifier => {
+      const identity = keys(identifier);
+      if (identity.some(key => known.has(key) || seen.has(key))) return false;
+      identity.forEach(key => seen.add(key));
+      return identity.length > 0;
+    });
+  return {
+    available: units.filter(unit => unit.status === 'available'),
+    sold: units.filter(unit => unit.status === 'sold'),
+    hidden: units.filter(unit => unit.status === 'hidden'),
+    other: units.filter(unit => !['available', 'sold', 'hidden'].includes(unit.status)),
+    unconfirmed,
+  };
+}
+
 export function aggregateModelProducts(input) {
+  const parentProducts = (input.products || []).filter((product) => Number(product.is_parent) === 1)
+    .map((product) => ({ ...product, ...productLinks(product) }));
+  const variantProducts = (input.products || []).filter((product) => Number(product.is_parent) !== 1);
   const saleReturnByUnitId = input.saleReturnByUnitId || {};
   const locationsByProductId = input.locationsByProductId || {};
   const unitsByProductId = new Map();
@@ -540,27 +568,43 @@ export function aggregateModelProducts(input) {
   }
 
   const memoryGroupMap = new Map();
-  const saleStatsByProductId = buildSaleStatsByProduct(input.products || [], input.sales || [], input.saleItems || []);
+  const saleStatsByProductId = buildSaleStatsByProduct(variantProducts, input.sales || [], input.saleItems || []);
   const serializedSaleInfoByUnitId = buildSerializedSaleInfoByUnitId(input.sales || [], input.saleItems || [], input.customers || []);
 
-  for (const product of input.products || []) {
+  for (const product of variantProducts) {
     const { ram, storage, color } = getProductVariationSpecs(product);
-    const missingFields = [
-      !ram ? 'ram' : '',
-      !storage ? 'storage' : '',
-      !color ? 'color' : '',
-    ].filter(Boolean);
+    const category = input.categoriesById?.[product.category_id || input.model?.category_id] || input.category;
+    const config = category?.config || {};
+    // Match the category, never a product name such as "suporte para celular".
+    const memoryCategory = /^(smartphones?|celulares?|tablets?|iphones?)(\b|$)/u.test(
+      normalizeKey(category?.name || product.category_name || input.model?.category_name)
+    );
+    const specs = { ram, storage, color };
+    const missingFields = Object.keys(specs).filter((field) => {
+      const required = config[field] === 'required'
+        || (config[field] == null && memoryCategory && field !== 'color');
+      return required && !specs[field];
+    });
+    const showMemory = ['ram', 'storage'].some((field) =>
+      config[field] !== 'off' && config[field] !== 'hidden'
+      && (specs[field] || config[field] === 'required' || (config[field] == null && memoryCategory))
+    );
+    const groupRam = showMemory && config.ram !== 'off' && config.ram !== 'hidden' ? ram : '';
+    const groupStorage = showMemory && config.storage !== 'off' && config.storage !== 'hidden' ? storage : '';
     const incompleteIdentity = normalizeKey(product.sku) || normalizeKey(product.id);
     const memoryKey = missingFields.length
-      ? `incomplete|${normalizeKey(ram)}|${normalizeKey(storage)}|${incompleteIdentity}`
-      : `${normalizeKey(ram)}|${normalizeKey(storage)}`;
+      ? `incomplete|${normalizeKey(groupRam)}|${normalizeKey(groupStorage)}|${incompleteIdentity}`
+      : `${normalizeKey(groupRam)}|${normalizeKey(groupStorage)}`;
 
     let memoryGroup = memoryGroupMap.get(memoryKey);
     if (!memoryGroup) {
       memoryGroup = {
         key: memoryKey,
-        ram: ram || 'Dados incompletos',
-        storage: storage || 'Dados incompletos',
+        ram: groupRam,
+        storage: groupStorage,
+        label: showMemory
+          ? [groupRam && `RAM ${groupRam}`, groupStorage && `Armazenamento ${groupStorage}`].filter(Boolean).join(' · ') || 'Memória não informada'
+          : 'Variações do modelo',
         isIncomplete: missingFields.length > 0,
         missingFields,
         products: [],
@@ -593,7 +637,7 @@ export function aggregateModelProducts(input) {
     if (!colorGroup) {
       colorGroup = {
         key: colorKey,
-        color: color || 'Dados incompletos',
+        color: color || 'Sem cor definida',
         products: [],
         units: [],
         locations: [],
@@ -704,6 +748,7 @@ export function aggregateModelProducts(input) {
 
   return {
     model: input.model,
+    parentProducts,
     totals,
     memoryGroups,
   };

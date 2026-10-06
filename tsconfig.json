@@ -19,6 +19,8 @@
     "allowJs": true,
     "jsx": "react-jsx",
     "paths": {
+      "@mdv/installment-calculations": ["./utils/installmentCalculations.cjs"],
+      "@mdv/danfe-nfce-core": ["./services/danfeNfceCore.cjs"],
       "@/*": [
         "./*"
       ]

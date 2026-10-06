@@ -3,6 +3,16 @@ import { readFileSync } from 'node:fs';
 
 const search = readFileSync('components/pdv/ProductSearchSection.tsx', 'utf8');
 
+assert.match(search, /offerHiddenUnitReactivation\(units, 'product'\)/, 'scanner Enter in product mode must also find hidden units');
+assert.match(search, /offerHiddenUnitReactivation\(units, 'imei'\)/, 'IMEI mode must offer reactivation for hidden units');
+assert.match(search, /units\.length !== 1 \|\| hidden\[0\]\.order_id \|\| hidden\[0\]\.sale_id/, 'ambiguous or linked identifiers must not offer reactivation');
+assert.match(search, /await unitService\.setVisibility\(unit\.id, false,/, 'reactivation must use the guarded visibility endpoint');
+assert.match(search, /restored\.status !== UnitStatus\.AVAILABLE/, 'reactivation must confirm the returned status');
+assert.match(search, /isLocalCatalogPreviewRuntime\(\)[\s\S]{0,350}return;[\s\S]*openSerializedConfirmation\(refreshedProduct, unitOptions, unit\.id, source\)/, 'local drafts must stop before the real sale confirmation');
+assert.match(search, /unitOptions\.some\(option => option\.id === unit\.id\)/, 'only the reactivated unit still available after refresh may continue');
+const reactivation = search.slice(search.indexOf('const reactivateHiddenUnit'), search.indexOf('useEffect(()'));
+assert.doesNotMatch(reactivation, /onAddToCart\(/, 'reactivation must not skip the cashier IMEI confirmation');
+
 assert.match(
   search,
   /openSerializedConfirmation\(card\.product, card\.unitOptions, selectedUnit\.id, 'product'\)/,

@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Trash2, Package } from 'lucide-react';
 import { Unit } from '../../types/unit';
 import { UnitStatus } from '../../utils/field-standards';
@@ -19,6 +19,8 @@ export const UnitList: React.FC<UnitListProps> = ({
     isLoading = false,
     onDelete
 }) => {
+    const [showHidden, setShowHidden] = useState(false);
+    const visibleUnits = units.filter(unit => showHidden || unit.status !== UnitStatus.HIDDEN);
     // Loading state
     if (isLoading) {
         return (
@@ -65,14 +67,16 @@ export const UnitList: React.FC<UnitListProps> = ({
             [UnitStatus.AVAILABLE]: 'bg-green-100 text-green-800',
             [UnitStatus.RESERVED]: 'bg-yellow-100 text-yellow-800',
             [UnitStatus.SOLD]: 'bg-blue-100 text-blue-800',
-            [UnitStatus.RMA]: 'bg-red-100 text-red-800'
+            [UnitStatus.RMA]: 'bg-red-100 text-red-800',
+            [UnitStatus.HIDDEN]: 'bg-slate-100 text-slate-700'
         };
 
         const labels = {
             [UnitStatus.AVAILABLE]: 'Disponível',
             [UnitStatus.RESERVED]: 'Reservado',
             [UnitStatus.SOLD]: 'Vendido',
-            [UnitStatus.RMA]: 'RMA'
+            [UnitStatus.RMA]: 'RMA',
+            [UnitStatus.HIDDEN]: 'Oculto / não localizado'
         };
 
         return (
@@ -84,6 +88,7 @@ export const UnitList: React.FC<UnitListProps> = ({
 
     return (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <label className="flex items-center gap-2 border-b p-3 text-sm text-slate-600"><input type="checkbox" checked={showHidden} onChange={event => setShowHidden(event.target.checked)} />Mostrar aparelhos ocultos ({units.filter(unit => unit.status === UnitStatus.HIDDEN).length})</label>
             <div className="overflow-x-auto">
                 <table className="w-full">
                     <thead className="bg-slate-50 border-b border-slate-200">
@@ -109,7 +114,7 @@ export const UnitList: React.FC<UnitListProps> = ({
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                        {units.map((unit) => (
+                        {visibleUnits.map((unit) => (
                             <tr key={unit.id} className="hover:bg-slate-50 transition-colors">
                                 <td className="px-4 py-3 text-sm font-mono text-slate-900">
                                     {unit.imei_1}

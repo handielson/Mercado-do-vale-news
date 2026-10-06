@@ -1,7 +1,7 @@
 import type { CatalogProduct, ProductVariant, ProductGroup } from '@/types/catalog';
 import { ProductStatus } from '@/utils/field-standards';
 import { getColorHex } from './colors';
-import { generateCatalogGroupKey } from './productGroupingCore.js';
+import { generateCatalogGroupKey, getCatalogFamilyName } from './productGroupingCore.js';
 
 /**
  * Color option with hex value
@@ -190,7 +190,7 @@ export function groupProductsByVariants(products: CatalogProduct[], includeOutOf
         // Prioriza representante com imagem para evitar placeholder em cards agrupados.
         const representative = modelProducts.find(hasProductMedia) || modelProducts[0];
         // Derive clean display name from product.name (strip RAM/Storage variant suffix)
-        const cleanName = (representative.name || representative.model || '')
+        const cleanName = getCatalogFamilyName(representative) || (representative.name || representative.model || '')
             .replace(/,?\s*\d+GB\/\d+GB/gi, '')
             .trim();
 

@@ -53,6 +53,7 @@ const STATUS_LABEL: Record<string, string> = {
     sold: 'Entregue',
     scrapped: 'Descartada',
     rma: 'RMA',
+    hidden: 'Oculto / não localizado',
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -61,6 +62,7 @@ const STATUS_COLOR: Record<string, string> = {
     sold: 'bg-blue-100 text-blue-800',
     scrapped: 'bg-red-100 text-red-800',
     rma: 'bg-orange-100 text-orange-800',
+    hidden: 'bg-slate-100 text-slate-700',
 };
 
 const STATUS_ICON: Record<string, JSX.Element> = {
@@ -488,6 +490,7 @@ export default function SerializedUnitsPage() {
     // ─── Filtros ────────────────────────────────────────────────────────────
 
     const filtered = units.filter(u => {
+        if (!filterStatus && u.status === UnitStatus.HIDDEN) return false;
         if (!search) return true;
         const s = search.toLowerCase();
         return (

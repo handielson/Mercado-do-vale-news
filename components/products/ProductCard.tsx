@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef , type ReactNode } from 'react';
 import { Barcode, ChevronDown, ChevronUp, Copy, Edit, Eye, EyeOff, ImagePlus, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
@@ -33,6 +33,7 @@ import type { ProductStockLocation } from '../../types/stock-location';
 
 interface ProductCardProps {
     product: Product;
+    familyVariants?: ReactNode;
     onEdit?: (product: Product) => void;
     onDelete?: (product: Product) => void;
     selectionMode?: boolean;
@@ -345,7 +346,7 @@ const pollSynologyUploadStatus = async (uploadId: string, token: string | undefi
  * ProductCard Component
  * Displays product information in a card format with image, prices, and status
  */
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariants, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
     const equivalentProductIds = product.equivalent_product_ids?.length
         ? product.equivalent_product_ids
         : [product.id];
@@ -1603,7 +1604,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         <button
                             onClick={() => onEdit?.(product)}
                             className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="Editar produto"
+                            title={familyVariants ? 'Editar produto pai da família' : 'Editar produto'}
                         >
                             <Edit className="w-4 h-4 text-slate-600" />
                         </button>
@@ -1673,21 +1674,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                 {product.name}
                             </a>
                         </h3>
-                        {/* Specs: cor + memória/RAM */}
-                        <p className="font-mono text-xs text-slate-500 mt-0.5">
-                            {[
-                                product.specs?.color,
-                                product.specs?.storage,
-                                product.specs?.ram ? `${product.specs.ram} RAM` : undefined,
-                            ].filter(Boolean).join(' · ')}
-                        </p>
-                        {/* SKU sempre visível */}
-                        {product.sku && (
-                            <p className="font-mono text-[10px] text-slate-400 mt-0.5">SKU: {product.sku}</p>
-                        )}
+                        {familyVariants || <>
+                            {/* Specs: cor + memória/RAM */}
+                            <p className="font-mono text-xs text-slate-500 mt-0.5">
+                                {[
+                                    product.specs?.color,
+                                    product.specs?.storage,
+                                    product.specs?.ram ? `${product.specs.ram} RAM` : undefined,
+                                ].filter(Boolean).join(' · ')}
+                            </p>
+                            {/* SKU sempre visível */}
+                            {product.sku && (
+                                <p className="font-mono text-[10px] text-slate-400 mt-0.5">SKU: {product.sku}</p>
+                            )}
+                        </>}
                         {/* Badge Pai / Variação */}
                         <ProductPublicationChannels product={product} shopeeLinked={shopeeVisualState.isSynced} shopeeStoreCodes={shopeeVisualState.storeCodes} tiktokStatus={hasTikTokLink ? currentTikTokStatus : ''} onShopee={handleOpenShopeeModal} onTikTok={() => setIsTikTokModalOpen(true)} />
-                        {product.parent_id ? (
+                        {!familyVariants && product.parent_id ? (
                             <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200">
                                 ↳ Variação
                             </span>
@@ -1807,7 +1810,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         <button
                             onClick={() => onEdit?.(product)}
                             className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="Editar produto"
+                            title={familyVariants ? 'Editar produto pai da família' : 'Editar produto'}
                         >
                             <Edit className="w-4 h-4 text-slate-600" />
                         </button>

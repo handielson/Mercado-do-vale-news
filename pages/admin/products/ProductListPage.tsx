@@ -61,7 +61,6 @@ export const ProductListPage: React.FC = () => {
         setCurrentPage,
         itemsPerPage,
         setItemsPerPage,
-        totalPages: cardTotalPages,
         allFilteredProducts,
         familyFilteredProducts,
         allProducts,
@@ -78,11 +77,9 @@ export const ProductListPage: React.FC = () => {
         () => paginateProductFamilyGroups(familyGroups, currentPage, itemsPerPage) as { currentPage: number; totalPages: number; groups: ProductFamilyGroup[] },
         [familyGroups, currentPage, itemsPerPage],
     );
-    const totalPages = viewMode === 'families' ? familyPagination.totalPages : cardTotalPages;
+    const totalPages = familyPagination.totalPages;
     const visibleFamilyGroups = familyPagination.groups;
-    const visibleProducts = viewMode === 'families'
-        ? visibleFamilyGroups.flatMap(group => group.selectionProducts)
-        : products;
+    const visibleProducts = visibleFamilyGroups.flatMap(group => group.selectionProducts);
     const visibleProductIdsKey = Array.from(new Set(
         visibleProducts.flatMap((product) => [product.id, product.parent_id].filter(Boolean) as string[]),
     )).sort().join(',');
@@ -526,14 +523,14 @@ export const ProductListPage: React.FC = () => {
             )}
 
             {/* Filters */}
-            <ProductFilters onFilterChange={handleFilterChange} showParentVisibility={viewMode === 'cards'} />
+            <ProductFilters onFilterChange={handleFilterChange} showParentVisibility={false} />
             {channelLoading && <p role="status" className="mt-3 text-sm text-slate-600">Consultando situação dos produtos no canal…</p>}
             {channelError && <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{channelError}</p>}
 
             <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <p className="text-sm font-semibold text-slate-800">Visualização dos produtos</p>
-                    <p className="text-xs text-slate-500">Em Famílias, o pai e suas variações permanecem juntos na mesma página.</p>
+                    <p className="text-xs text-slate-500">Cartões e Famílias mostram cada produto pai uma vez, com as variações dentro.</p>
                 </div>
                 <div className="inline-flex self-start rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label="Visualização dos produtos">
                     <button type="button" onClick={() => handleViewModeChange('cards')}
@@ -553,6 +550,7 @@ export const ProductListPage: React.FC = () => {
             {viewMode === 'cards' ? (
                 <ProductList
                     products={products}
+                    groups={visibleFamilyGroups}
                     isLoading={isLoading}
                     onEditProduct={handleEditProduct}
                     onDeleteProduct={handleDeleteProduct}
@@ -602,16 +600,14 @@ export const ProductListPage: React.FC = () => {
             {!isLoading && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200">
                     <div className="text-sm text-slate-500">
-                        {(viewMode === 'families' ? familyGroups.length : allFilteredProducts.length) === 0 ? (
+                        {familyGroups.length === 0 ? (
                             'Nenhum produto encontrado'
-                        ) : viewMode === 'families' ? (
-                            `Exibindo ${visibleFamilyGroups.length} de ${familyGroups.length} ${familyGroups.length === 1 ? 'família/produto' : 'famílias/produtos'} · ${familyFilteredProducts.length} ${familyFilteredProducts.length === 1 ? 'SKU encontrado' : 'SKUs encontrados'}`
                         ) : (
-                            `Exibindo ${products.length} de ${allFilteredProducts.length} ${allFilteredProducts.length === 1 ? 'produto' : 'produtos'}`
+                            `Exibindo ${visibleFamilyGroups.length} de ${familyGroups.length} ${familyGroups.length === 1 ? 'família/produto' : 'famílias/produtos'} · ${familyFilteredProducts.length} ${familyFilteredProducts.length === 1 ? 'SKU encontrado' : 'SKUs encontrados'}`
                         )}
                     </div>
 
-                    {(viewMode === 'families' ? familyGroups.length : allFilteredProducts.length) > 0 && (
+                    {familyGroups.length > 0 && (
                         <div className="flex items-center gap-4">
                             <div className="flex items-center gap-2">
                                 <span className="text-sm text-slate-500">Itens por pág:</span>

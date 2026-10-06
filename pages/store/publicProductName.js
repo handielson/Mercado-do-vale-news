@@ -1,3 +1,5 @@
+import { getCatalogFamilyName } from '../../services/productGroupingCore.js';
+
 const COMMON_COLOR_WORDS = [
   'azul',
   'preto',
@@ -43,6 +45,8 @@ function stripKnownValue(name, value) {
 }
 
 export function getPublicProductName(product) {
+  const familyName = getCatalogFamilyName(product);
+  if (familyName) return familyName;
   const modelName = compactProductName(product?.model);
   let name = compactProductName(product?.name || modelName || 'Produto');
 

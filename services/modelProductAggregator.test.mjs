@@ -621,6 +621,47 @@ assert.equal(pdvCustomerSoldUnit.orderNumber, 'PDV-C68B386F');
 assert.equal(pdvCustomerSoldUnit.customerName, 'Joao Cliente');
 
 const source = readFileSync(new URL('./modelProductAggregator.js', import.meta.url), 'utf8');
+const accessoryProducts = [
+  { id: 'parent', sku: 'OIS063', is_parent: true, stock_quantity: 99, specs: {} },
+  { id: 'white', sku: 'OIS063B', stock_quantity: 2, specs: { color: 'Branco' } },
+  { id: 'black', sku: 'OIS063P', stock_quantity: 2, specs: { color: 'Preto' } },
+];
+const accessory = aggregateModelProducts({
+  model: { name: 'Suporte para Celular', category_name: 'Acessórios para celulares' },
+  products: accessoryProducts,
+});
+assert.equal(accessory.memoryGroups.length, 1);
+assert.equal(accessory.memoryGroups[0].label, 'Variações do modelo');
+assert.equal(accessory.memoryGroups[0].isIncomplete, false);
+assert.equal(accessory.memoryGroups[0].colors.length, 2);
+assert.equal(accessory.totals.availableCount, 4);
+assert.equal(accessory.parentProducts[0].sku, 'OIS063');
+assert.equal(accessory.parentProducts[0].editUrl.includes('/parent/'), true);
+
+for (const name of ['Smartphones', 'Tablets']) {
+  const incompleteDevice = aggregateModelProducts({ model: { category_name: name }, products: [accessoryProducts[1]] });
+  assert.deepEqual(incompleteDevice.memoryGroups[0].missingFields, ['ram', 'storage']);
+}
+const optionalMemory = aggregateModelProducts({
+  model: { category_id: 'category' }, products: [accessoryProducts[1]],
+  categoriesById: { category: { name: 'Smartphones', config: { ram: 'optional', storage: 'off', color: 'required' } } },
+});
+assert.equal(optionalMemory.memoryGroups[0].isIncomplete, false);
+const productCategoryWins = aggregateModelProducts({
+  model: { category_id: 'phones' },
+  products: [{ ...accessoryProducts[1], category_id: 'accessories', specs: { color: 'Branco', ram: 'antigo' } }],
+  categoriesById: {
+    phones: { name: 'Smartphones', config: { ram: 'required', storage: 'required' } },
+    accessories: { name: 'Acessórios', config: { ram: 'hidden', storage: 'off' } },
+  },
+});
+assert.equal(productCategoryWins.memoryGroups[0].label, 'Variações do modelo');
+assert.equal(productCategoryWins.memoryGroups[0].isIncomplete, false);
+const requiredColor = aggregateModelProducts({
+  category: { name: 'Acessórios', config: { color: 'required' } },
+  products: [{ id: 'no-color', sku: 'TEST', specs: {} }],
+});
+assert.deepEqual(requiredColor.memoryGroups[0].missingFields, ['color']);
 assert.doesNotMatch(source, /supabase|vercel|VITE_SUPABASE|SUPABASE/i);
 
 console.log('model product aggregator tests passed');

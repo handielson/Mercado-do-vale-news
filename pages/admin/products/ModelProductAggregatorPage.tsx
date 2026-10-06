@@ -3,11 +3,13 @@ import { ArrowLeft, CopyPlus, ExternalLink, FileText, Loader2, MapPin, Pencil, R
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { modelService } from '../../../services/models';
+import { categoryService } from '../../../services/categories';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { vpsClient } from '../../../services/vpsClient';
 import { unitService } from '../../../services/units';
+import { isLocalCatalogPreviewRuntime } from '../../../services/localCatalogPreview';
 import { stockLocationService } from '../../../services/stockLocationService';
-import { aggregateModelProducts } from '../../../services/modelProductAggregator.js';
+import { aggregateModelProducts, getModelIdentifierSections } from '../../../services/modelProductAggregator.js';
 import { getProductCloneState } from '../../../services/productClonePrefill.js';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 
@@ -19,10 +21,11 @@ function money(cents: number): string {
 
 function statusLabel(status: string): string {
     const labels: Record<string, string> = {
-        available: 'Disponivel',
+        available: 'Disponível',
         reserved: 'Reservado',
         sold: 'Vendido',
         rma: 'RMA',
+        hidden: 'Oculto / não localizado',
     };
     return labels[status] || status || '-';
 }
@@ -63,17 +66,39 @@ export const ModelProductAggregatorPage: React.FC = () => {
     const navigate = useNavigate();
     const [data, setData] = useState<any | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [showFinancials, setShowFinancials] = useState(false);
+    const [showHidden, setShowHidden] = useState(false);
+    const [visibilityUnit, setVisibilityUnit] = useState<any | null>(null);
+    const [visibilityReason, setVisibilityReason] = useState('');
+    const [savingVisibility, setSavingVisibility] = useState(false);
+    const requestVisibility = (unit: any) => {
+        setVisibilityUnit(unit);
+        setVisibilityReason(unit.status === 'hidden' ? 'Aparelho localizado e conferido.' : 'Aparelho não localizado no estoque.');
+    };
+    const saveVisibility = async () => {
+        if (!visibilityUnit || savingVisibility) return;
+        setSavingVisibility(true);
+        try {
+            await unitService.setVisibility(visibilityUnit.id, visibilityUnit.status !== 'hidden', visibilityReason);
+            toast.success(isLocalCatalogPreviewRuntime() ? 'Teste salvo somente nesta prévia local. O estoque real não foi alterado.' : visibilityUnit.status === 'hidden' ? 'Aparelho reativado.' : 'Aparelho ocultado e retirado da disponibilidade.');
+            setVisibilityUnit(null);
+            await load();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Não foi possível alterar a visibilidade.');
+        } finally { setSavingVisibility(false); }
+    };
 
     const load = useCallback(async () => {
         if (!modelId) return;
         setIsLoading(true);
         try {
-            const [model, products, sales, saleItems, customers] = await Promise.all([
+            const [model, products, sales, saleItems, customers, categories] = await Promise.all([
                 modelService.getById(modelId),
                 vpsApiService.getProducts({ model_id: modelId, status: 'all', limit: 500, noCache: true }),
                 loadTableRows('sales'),
                 loadTableRows('sale_items'),
                 loadTableRows('customers'),
+                categoryService.list(),
             ]);
 
             if (!model) throw new Error('Modelo nao encontrado.');
@@ -95,6 +120,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
 
             setData(aggregateModelProducts({
                 model,
+                categoriesById: Object.fromEntries(categories.map((category) => [category.id, category])),
                 products: safeProducts,
                 units: unitLists.flat(),
                 locationsByProductId,
@@ -115,6 +141,17 @@ export const ModelProductAggregatorPage: React.FC = () => {
     }, [load]);
 
     const modelName = useMemo(() => String(data?.model?.name || 'Modelo'), [data]);
+    const memoryGroups = useMemo(() => [...(data?.memoryGroups || [])].sort((a, b) =>
+        Number(a.isIncomplete) - Number(b.isIncomplete)
+        || `${a.ram} ${a.storage}`.localeCompare(`${b.ram} ${b.storage}`, 'pt-BR', { numeric: true })), [data]);
+    const copySku = async (sku: string) => {
+        try {
+            await navigator.clipboard.writeText(sku);
+            toast.success(`SKU ${sku} copiado`);
+        } catch {
+            toast.error('Não foi possível copiar o SKU.');
+        }
+    };
 
     return (
         <div className="space-y-6 print:bg-white">
@@ -163,37 +200,75 @@ export const ModelProductAggregatorPage: React.FC = () => {
 
             {data && (
                 <>
-                    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                    {data.parentProducts?.length > 0 && (
+                        <details className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                            <summary className="cursor-pointer font-semibold">Cadastros de família vinculados ao modelo ({data.parentProducts.length})</summary>
+                            <p className="mt-2 text-xs text-blue-700">O estoque pertence às variações abaixo. Cada SKU de pai abre seu próprio cadastro.</p>
+                            <div className="mt-3 space-y-2">
+                            {data.parentProducts.map((parent: any) => (
+                                <div key={parent.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-white p-3">
+                                    <span className="font-semibold">{parent.name}</span>
+                                    <div className="flex items-center gap-3">
+                                    <button type="button" onClick={() => copySku(parent.sku)} className="font-mono underline" title="Copiar SKU do pai">{parent.sku}</button>
+                                    <button type="button" onClick={() => navigate(parent.editUrl)} className="font-semibold text-blue-700 hover:underline">Editar produto pai</button>
+                                    </div>
+                                </div>
+                            ))}
+                            </div>
+                        </details>
+                    )}
+                    <section className="grid gap-3 sm:grid-cols-3">
                         <SummaryCard label="Estoque atual" value={`${data.totals.availableCount} un.`} />
                         <SummaryCard label="Vendidos" value={`${data.totals.soldCount} un.`} />
-                        <SummaryCard label="Valor em estoque" value={money(data.totals.stockCostValue)} />
-                        <SummaryCard label="Preco medio estoque" value={money(data.totals.averageStockCost)} />
-                        <SummaryCard label="Valor investido" value={money(data.totals.investedValue)} />
-                        <SummaryCard label="Valor ja retornado" value={money(data.totals.returnedValue)} />
+                        <button type="button" aria-pressed={showHidden} onClick={() => setShowHidden(!showHidden)} className={`rounded-xl border p-4 text-left print:hidden ${showHidden ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                            <span className="block text-sm font-semibold text-slate-600">Ocultos / não localizados</span>
+                            <span className="mt-1 block text-xl font-bold text-slate-900">{memoryGroups.reduce((sum, group) => sum + group.colors.reduce((count: number, color: any) => count + getModelIdentifierSections(color).hidden.length, 0), 0)} un.</span>
+                            <span className="mt-2 block text-sm font-semibold text-blue-700">{showHidden ? 'Fechar lista de ocultos' : 'Mostrar aparelhos ocultos'}</span>
+                        </button>
                     </section>
+                    {showHidden && <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 print:hidden">Os aparelhos ocultos aparecem abaixo, em suas respectivas memórias e cores. Use Reativar quando o aparelho for localizado. Se o total for zero, não há aparelhos ocultos neste modelo.</p>}
+                    <details className="rounded-xl border border-slate-200 bg-white p-4 print:hidden">
+                        <summary className="cursor-pointer text-sm font-semibold text-slate-700">Resumo financeiro do modelo</summary>
+                        <p className="mt-2 text-xs text-slate-500">Valores calculados a partir dos custos e das vendas registrados no sistema.</p>
+                        <section className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <SummaryCard label="Valor em estoque" value={money(data.totals.stockCostValue)} />
+                        <SummaryCard label="Custo médio em estoque" value={money(data.totals.averageStockCost)} />
+                        <SummaryCard label="Valor investido" value={money(data.totals.investedValue)} />
+                        <SummaryCard label="Valor já retornado" value={money(data.totals.returnedValue)} />
+                        </section>
+                    </details>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+                        <nav aria-label="Memórias do modelo" className="flex flex-wrap gap-2">
+                            {memoryGroups.map((group: any, index: number) => <a key={group.key}
+                                href={`#model-memory-${index}`} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+                                {group.label} <span className="ml-1 text-xs font-normal">· {group.availableCount} un.</span>
+                            </a>)}
+                        </nav>
+                        <label className="flex items-center gap-2 text-sm text-slate-600">
+                            <input type="checkbox" checked={showFinancials} onChange={event => setShowFinancials(event.target.checked)} />
+                            Mostrar custos nas variações
+                        </label>
+                    </div>
 
                     <section className="space-y-4">
-                        {data.memoryGroups.map((memoryGroup: any) => (
-                            <article key={memoryGroup.key} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm print:border-slate-300 print:shadow-none">
+                        {memoryGroups.map((memoryGroup: any, index: number) => (
+                            <article id={`model-memory-${index}`} key={memoryGroup.key} className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm print:border-slate-300 print:shadow-none">
                                 <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
                                     <div>
                                         <h2 className="text-lg font-bold text-slate-900">
-                                            {memoryGroup.ram} / {memoryGroup.storage}
+                                            {memoryGroup.label}
                                         </h2>
                                         {memoryGroup.isIncomplete && (
                                             <p className="mt-1 text-sm font-semibold text-amber-700">
-                                                Dados incompletos: {memoryGroup.missingFields.join(', ')}
+                                                Campos obrigatórios não preenchidos: {memoryGroup.missingFields.map((field: string) => ({ ram: 'RAM', storage: 'armazenamento', color: 'cor' }[field] || field)).join(', ')}
                                             </p>
                                         )}
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-3 xl:grid-cols-6">
+                                    {data.memoryGroups.length > 1 && <div className="grid grid-cols-2 gap-2 text-sm">
                                         <Metric label="Estoque" value={`${memoryGroup.availableCount} un.`} />
                                         <Metric label="Vendidos" value={`${memoryGroup.soldCount} un.`} />
-                                        <Metric label="Em estoque" value={money(memoryGroup.stockCostValue)} />
-                                        <Metric label="Preco medio" value={money(memoryGroup.averageStockCost)} />
-                                        <Metric label="Investido" value={money(memoryGroup.investedValue)} />
-                                        <Metric label="Retornado" value={money(memoryGroup.returnedValue)} />
-                                    </div>
+                                    </div>}
                                 </div>
 
                                 <div className="mt-4 overflow-x-auto">
@@ -201,13 +276,12 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                         <thead className="border-b border-slate-100 text-xs font-bold uppercase text-slate-400">
                                             <tr>
                                                 <th className="px-3 py-3">Cor</th>
-                                                <th className="px-3 py-3">Produtos</th>
+                                                <th className="px-3 py-3">SKU</th>
                                                 <th className="px-3 py-3 text-right">Estoque</th>
                                                 <th className="px-3 py-3 text-right">Vendidos</th>
-                                                <th className="px-3 py-3 text-right">Valor estoque</th>
-                                                <th className="px-3 py-3 text-right">Preco medio</th>
-                                                <th className="px-3 py-3">Locais</th>
-                                                <th className="px-3 py-3 print:hidden">Atalhos por SKU</th>
+                                                {showFinancials && <th className="px-3 py-3 text-right">Valor estoque</th>}
+                                                {showFinancials && <th className="px-3 py-3 text-right">Custo médio</th>}
+                                                <th className="px-3 py-3 print:hidden">Ações</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -216,19 +290,15 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                     <tr className="align-top">
                                                         <td className="px-3 py-4">
                                                             <div className="font-bold text-slate-900">{colorGroup.color}</div>
-                                                            <div className="mt-1 text-xs text-slate-500">
-                                                                {money(colorGroup.investedValue)} investido
-                                                            </div>
                                                         </td>
                                                         <td className="px-3 py-4">
                                                             <div className="space-y-1">
                                                                 {(colorGroup.skuGroups || colorGroup.products).map((product: any) => (
                                                                     <div key={product.key || product.id} className="font-mono text-xs text-slate-700">
-                                                                        {product.sku || '-'}
+                                                                        {product.sku ? <button type="button" onClick={() => copySku(product.sku)} className="text-blue-700 hover:underline" title="Copiar SKU">{product.sku}</button> : '-'}
                                                                         {product.duplicateCount > 1 && (
                                                                             <span className="font-sans text-amber-600"> ({product.duplicateCount} cadastros)</span>
                                                                         )}
-                                                                        <span className="font-sans text-slate-400"> · {product.availableCount} un.</span>
                                                                         {product.hasStockDivergence && (
                                                                             <span className="block font-sans text-[11px] font-semibold text-amber-700">
                                                                                 Divergencia: {product.registeredCount} IMEIs cadastrados, {product.locationCount} em locais
@@ -238,18 +308,17 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                 ))}
                                                             </div>
                                                         </td>
-                                                        <td className="px-3 py-4 text-right font-bold text-slate-900">{colorGroup.availableCount} un.</td>
-                                                        <td className="px-3 py-4 text-right">{colorGroup.soldCount} un.</td>
-                                                        <td className="px-3 py-4 text-right font-semibold text-slate-900">{money(colorGroup.stockCostValue)}</td>
-                                                        <td className="px-3 py-4 text-right font-semibold text-slate-900">{money(colorGroup.averageStockCost)}</td>
-                                                        <td className="px-3 py-4 text-xs leading-5 text-slate-600">
-                                                            <div>{locationText(colorGroup.locations)}</div>
-                                                            {colorGroup.stockDivergences?.length > 0 && (
-                                                                <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-semibold text-amber-800">
-                                                                    Conferir locais: IMEIs cadastrados e locais nao batem.
-                                                                </div>
-                                                            )}
+                                                        <td className="px-3 py-4 text-right">
+                                                            <p className="font-bold text-slate-900">{colorGroup.availableCount} un.</p>
+                                                            <details className="mt-2 max-w-56 text-left text-xs text-slate-600">
+                                                                <summary className="cursor-pointer text-emerald-700">Locais de estoque</summary>
+                                                                <p className="mt-1 leading-5">{locationText(colorGroup.locations)}</p>
+                                                            </details>
+                                                            {colorGroup.stockDivergences?.length > 0 && <p className="mt-2 max-w-56 text-left text-xs font-semibold text-amber-700">Conferir locais: quantidades e IMEIs divergem.</p>}
                                                         </td>
+                                                        <td className="px-3 py-4 text-right">{colorGroup.soldCount} un.</td>
+                                                        {showFinancials && <td className="px-3 py-4 text-right font-semibold text-slate-900">{money(colorGroup.stockCostValue)}</td>}
+                                                        {showFinancials && <td className="px-3 py-4 text-right font-semibold text-slate-900">{money(colorGroup.averageStockCost)}</td>}
                                                         <td className="px-3 py-4 print:hidden">
                                                             <div className="space-y-2">
                                                                 {(colorGroup.skuGroups || colorGroup.products).map((product: any) => (
@@ -266,56 +335,21 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                    {(colorGroup.skuGroups || []).some((group: any) => group.identifiers?.length > 0) && (
-                                                        <tr className="bg-slate-50/70">
-                                                            <td colSpan={8} className="px-3 py-3">
-                                                                <div>
-                                                                    <div className="text-xs font-bold uppercase text-slate-500">
-                                                                        IMEIs cadastrados nos produtos
-                                                                    </div>
-                                                                    <div className="mt-3 overflow-x-auto">
-                                                                        <table className="min-w-full text-left text-xs">
-                                                                            <thead className="text-slate-500">
-                                                                                <tr>
-                                                                                    <th className="px-2 py-2">SKU</th>
-                                                                                    <th className="px-2 py-2">IMEI 1</th>
-                                                                                    <th className="px-2 py-2">IMEI 2</th>
-                                                                                    <th className="px-2 py-2">Serial</th>
-                                                                                    <th className="px-2 py-2 print:hidden">Cadastro</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody className="divide-y divide-slate-100 bg-white">
-                                                                                {(colorGroup.skuGroups || []).flatMap((group: any) => group.identifiers || []).map((identifier: any) => (
-                                                                                    <tr key={identifier.productId}>
-                                                                                        <td className="px-2 py-2 font-semibold text-slate-700">{identifier.sku || '-'}</td>
-                                                                                        <td className="px-2 py-2 font-mono">{identifier.imei1 || '-'}</td>
-                                                                                        <td className="px-2 py-2 font-mono">{identifier.imei2 || '-'}</td>
-                                                                                        <td className="px-2 py-2 font-mono">{identifier.serial || '-'}</td>
-                                                                                        <td className="px-2 py-2 print:hidden">
-                                                                                            <button
-                                                                                                type="button"
-                                                                                                onClick={() => navigate(identifier.editUrl)}
-                                                                                                className="text-xs font-semibold text-blue-700 hover:text-blue-900"
-                                                                                            >
-                                                                                                Abrir
-                                                                                            </button>
-                                                                                        </td>
-                                                                                    </tr>
-                                                                                ))}
-                                                                            </tbody>
-                                                                        </table>
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    )}
+                                                    <tr className="bg-emerald-50/40">
+                                                        <td colSpan={showFinancials ? 7 : 5} className="px-3 py-3">
+                                                            <IdentifierTable title="Disponíveis em estoque" records={getModelIdentifierSections(colorGroup).available} colorGroup={colorGroup} onNavigate={navigate} onVisibility={requestVisibility} tone="stock" />
+                                                            {showHidden && getModelIdentifierSections(colorGroup).hidden.length > 0 && <IdentifierTable title="Ocultos / não localizados" records={getModelIdentifierSections(colorGroup).hidden} colorGroup={colorGroup} onNavigate={navigate} onVisibility={requestVisibility} tone="hidden" />}
+                                                            {getModelIdentifierSections(colorGroup).other.length > 0 && <IdentifierTable title="Reservados / assistência / outras situações" records={getModelIdentifierSections(colorGroup).other} colorGroup={colorGroup} onNavigate={navigate} tone="other" />}
+                                                            {getModelIdentifierSections(colorGroup).unconfirmed.length > 0 && <IdentifierTable title="IMEIs do cadastro sem situação confirmada" records={getModelIdentifierSections(colorGroup).unconfirmed} colorGroup={colorGroup} onNavigate={navigate} tone="unknown" />}
+                                                        </td>
+                                                    </tr>
                                                     {colorGroup.units.filter((unit: any) => unit.status === 'sold').length > 0 && (
                                                         <tr className="bg-slate-50/70">
-                                                            <td colSpan={9} className="px-3 py-3">
-                                                                <div>
-                                                                    <div className="text-xs font-bold uppercase text-slate-500">
-                                                                        Unidades vendidas ({colorGroup.units.filter((unit: any) => unit.status === 'sold').length})
-                                                                    </div>
+                                                            <td colSpan={showFinancials ? 7 : 5} className="px-3 py-3">
+                                                                <details>
+                                                                    <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                                                                        Vendidos — fora do estoque ({colorGroup.units.filter((unit: any) => unit.status === 'sold').length})
+                                                                    </summary>
                                                                     <div className="mt-3 overflow-x-auto">
                                                                         <table className="min-w-full text-left text-xs">
                                                                             <thead className="text-slate-500">
@@ -367,7 +401,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                             </tbody>
                                                                         </table>
                                                                     </div>
-                                                                </div>
+                                                                </details>
                                                             </td>
                                                         </tr>
                                                     )}
@@ -381,6 +415,19 @@ export const ModelProductAggregatorPage: React.FC = () => {
                     </section>
                 </>
             )}
+            {visibilityUnit && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:hidden" role="dialog" aria-modal="true" aria-labelledby="unit-visibility-title">
+                <div className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl">
+                    <h2 id="unit-visibility-title" className="text-lg font-bold">{visibilityUnit.status === 'hidden' ? 'Reativar aparelho' : 'Ocultar aparelho não localizado'}</h2>
+                    {isLocalCatalogPreviewRuntime() && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Prévia local: esta ação será salva apenas para teste neste computador. O site publicado, o PDV e o estoque real não serão alterados.</p>}
+                    <p className="font-mono text-sm">IMEI: {visibilityUnit.imei1 || visibilityUnit.imei2 || visibilityUnit.serial || visibilityUnit.id}</p>
+                    <p className="text-sm text-slate-600">{visibilityUnit.status === 'hidden' ? 'O aparelho voltará à disponibilidade para venda. Confirme que ele foi localizado.' : 'Este aparelho sairá da disponibilidade do site, do PDV e da lista principal. O registro será preservado na lista de ocultos, sem registrar uma venda.'}</p>
+                    <label className="block text-sm font-semibold">Motivo<textarea value={visibilityReason} onChange={event => setVisibilityReason(event.target.value)} maxLength={500} className="mt-2 w-full rounded-lg border border-slate-300 p-3" /></label>
+                    <div className="flex justify-end gap-3">
+                        <button type="button" disabled={savingVisibility} onClick={() => setVisibilityUnit(null)} className="rounded-lg border px-4 py-2">Cancelar</button>
+                        <button type="button" disabled={savingVisibility || visibilityReason.trim().length < 3} onClick={saveVisibility} className="rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-50">{savingVisibility ? 'Salvando...' : visibilityUnit.status === 'hidden' ? 'Reativar aparelho' : 'Ocultar aparelho'}</button>
+                    </div>
+                </div>
+            </div>}
         </div>
     );
 };
@@ -392,6 +439,33 @@ const SummaryCard: React.FC<{ label: string; value: string }> = ({ label, value 
     </div>
 );
 
+const IdentifierTable: React.FC<{ title: string; records: any[]; colorGroup: any; onNavigate: (path: string) => void; onVisibility?: (unit: any) => void; tone: 'stock' | 'other' | 'unknown' | 'hidden' }> = ({ title, records, colorGroup, onNavigate, onVisibility, tone }) => (
+    <details open={tone === 'stock' || tone === 'hidden'} className={`mt-2 rounded-lg border p-3 ${tone === 'stock' ? 'border-emerald-200 bg-white' : 'border-amber-200 bg-amber-50'}`}>
+        <summary className={`cursor-pointer text-sm font-semibold ${tone === 'stock' ? 'text-emerald-800' : 'text-amber-800'}`}>{title} · {colorGroup.color} ({records.length})</summary>
+        {tone === 'unknown' && <p className="mt-2 text-xs text-amber-800">O IMEI está salvo na ficha, mas não há uma unidade correspondente com status confirmado. Ele não é apresentado como disponível nem vendido.</p>}
+        {records.length === 0 ? <p className="mt-2 text-xs text-slate-500">Nenhum aparelho com IMEI/serial identificado como disponível.{colorGroup.availableCount > 0 && ' Há saldo de estoque sem identificação individual nesta lista.'}</p> :
+            <div className="mt-3 overflow-x-auto">
+                <table className="min-w-full text-left text-xs">
+                    <thead className="text-slate-500"><tr>{['SKU', 'IMEI 1', 'IMEI 2', 'Serial', 'Situação', 'Local'].map(label => <th key={label} className="px-2 py-2">{label}</th>)}<th className="px-2 py-2 print:hidden">Cadastro</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">{records.map(record => {
+                        const product = colorGroup.products.find((item: any) => item.id === record.productId);
+                        return <tr key={record.id || record.productId}>
+                            <td className="px-2 py-2 font-semibold">{record.sku || product?.sku || '-'}</td>
+                            <td className="px-2 py-2 font-mono">{record.imei1 || '-'}</td>
+                            <td className="px-2 py-2 font-mono">{record.imei2 || '-'}</td>
+                            <td className="px-2 py-2 font-mono">{record.serial || '-'}</td>
+                            <td className="px-2 py-2 font-semibold">{tone === 'unknown' ? 'A conferir' : statusLabel(record.status)}</td>
+                            <td className="px-2 py-2">{tone === 'unknown' ? '-' : unitLocationText(record)}</td>
+                            <td className="px-2 py-2 print:hidden"><div className="flex flex-wrap gap-3">{(record.editUrl || product?.editUrl) && <button type="button" onClick={() => onNavigate(record.editUrl || product.editUrl)} className="font-semibold text-blue-700 hover:underline">Abrir cadastro</button>}
+                                {onVisibility && !record.isProductSpecsUnit && ['available', 'hidden'].includes(record.status) && <button type="button" onClick={() => onVisibility(record)} className="font-semibold text-amber-800 hover:underline">{record.status === 'hidden' ? 'Reativar' : 'Ocultar'}</button>}
+                            </div></td>
+                        </tr>;
+                    })}</tbody>
+                </table>
+            </div>}
+    </details>
+);
+
 const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <div className="rounded-lg bg-slate-50 px-3 py-2 print:bg-white">
         <p className="text-[10px] font-bold uppercase text-slate-400">{label}</p>
@@ -401,7 +475,7 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
 
 const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void; onDuplicate: () => void }> = ({ product, onNavigate, onDuplicate }) => (
     <div className="flex flex-wrap items-center gap-1.5">
-        <span className="min-w-[86px] font-mono text-xs font-bold text-slate-700">{product.sku || 'Sem SKU'}</span>
+        {product.duplicateCount > 1 && <span className="font-mono text-xs font-bold text-slate-700">{product.sku || 'Sem SKU'}</span>}
         <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white">
             <a
                 href={product.publicUrl}
@@ -411,7 +485,7 @@ const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => voi
                 title={`Abre a pagina publica do SKU ${product.sku || 'produto'}`}
             >
                 <ExternalLink className="h-3.5 w-3.5" />
-                Site publico
+                Site
             </a>
             <button
                 type="button"
@@ -420,7 +494,7 @@ const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => voi
                 title={`Abre a edicao do SKU ${product.sku || 'produto'}`}
             >
                 <Pencil className="h-3.5 w-3.5" />
-                Editar produto
+                Editar
             </button>
             <button
                 type="button"

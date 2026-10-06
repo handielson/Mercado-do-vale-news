@@ -1,3 +1,5 @@
+import { getCatalogFamilyName } from '../../services/productGroupingCore.js';
+
 export function productHasCatalogMedia(product) {
   if (!product || typeof product !== 'object') return false;
 
@@ -43,6 +45,8 @@ function stripTrailingVariation(name, variation) {
 }
 
 export function getCatalogCardDisplayName({ product, productGroup }) {
+  const familyName = getCatalogFamilyName(product) || getCatalogFamilyName(productGroup?.representativeProduct);
+  if (familyName) return familyName;
   const fallbackName = product?.model || product?.name || 'Produto';
   const baseName = productGroup?.model || product?.name || fallbackName;
 

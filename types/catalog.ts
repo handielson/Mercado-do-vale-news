@@ -112,6 +112,7 @@ export interface ShareOptions {
 
 // Extended Product type with catalog fields
 export interface CatalogProduct extends Product {
+    parent_name?: string | null;
     image_url?: string | null;
     tags?: string[];
     created_at?: string;

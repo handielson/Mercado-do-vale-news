@@ -2,6 +2,11 @@ function toCleanString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+// O nome da familia vem do cadastro do pai, nunca da variacao selecionada.
+export function getCatalogFamilyName(product) {
+  return toCleanString(product?.parent_id) ? toCleanString(product?.parent_name) : '';
+}
+
 function normalizeKeyPart(value) {
   return toCleanString(value)
     .normalize('NFD')

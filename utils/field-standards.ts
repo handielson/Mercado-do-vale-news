@@ -39,6 +39,7 @@ export enum UnitStatus {
   RESERVED = 'reserved',
   SOLD = 'sold',
   RMA = 'rma',
+  HIDDEN = 'hidden', // indisponível temporariamente; pode ser reativado
   SCRAPPED = 'scrapped', // descartado — perda total (não volta ao estoque)
 }
 

@@ -28,6 +28,7 @@ import {
     selectCatalogCardImageProduct,
     selectCatalogCardProduct,
 } from './modernProductCardState.js';
+import { getCatalogFamilyName } from '@/services/productGroupingCore.js';
 
 // Utility to determine if a color is dark enough to need white text
 const isDarkColor = (colorHex: string) => {
@@ -455,7 +456,8 @@ export function ModernProductCard({
     const productForDisplay = currentColorIndex === -1 && selectedVariant && selectedVariant.products.length > 0
         ? selectedVariant.products[0]
         : currentProduct;
-    const cardDisplayName = toTitleCase(getCatalogCardDisplayName({ product, productGroup }));
+    const familyName = getCatalogFamilyName(product) || getCatalogFamilyName(productGroup?.representativeProduct);
+    const cardDisplayName = familyName || toTitleCase(getCatalogCardDisplayName({ product, productGroup }));
 
     // --- LOGICA DOS KITS ---
     const originalPriceCents = getEffectivePrice(productForDisplay, customer) || product.price_retail;

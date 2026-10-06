@@ -25309,6 +25309,12 @@ function modelBlueprintSelectSql(productAlias = 'products') {
     (SELECT m.blueprint_generated_at FROM models m WHERE m.id = ${productAlias}.model_id LIMIT 1) AS blueprint_generated_at`;
 }
 
+function productFamilyNameSelectSql(productAlias = 'products') {
+  return `(SELECT family_parent.name FROM products family_parent
+    WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+    LIMIT 1) AS parent_name`;
+}
+
 function parseJsonCell(value, fallback) {
   if (value === null || value === undefined || value === '') return fallback;
   if (typeof value !== 'string') return value;
@@ -26290,6 +26296,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        ${imgCol},
        status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        ${modelBlueprintSelectSql('products')},
+       ${productFamilyNameSelectSql('products')},
        ${modelSpecsCol}
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
@@ -26305,6 +26312,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        warranty_type, warranty_template_id,
        images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        ${modelBlueprintSelectSql('products')},
+       ${productFamilyNameSelectSql('products')},
        ${modelSpecsCol}
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
@@ -26416,7 +26424,7 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
 
   const placeholders = ids.map(() => '?').join(',');
   const [rows] = await pool.query(
-    `SELECT *,
+    `SELECT *, ${productFamilyNameSelectSql('products')},
       ${modelBlueprintSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products
@@ -26437,7 +26445,7 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
 
 fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [rows] = await pool.query(
-    `SELECT *,
+    `SELECT *, ${productFamilyNameSelectSql('products')},
       ${modelBlueprintSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products WHERE id = ?`,
@@ -26462,7 +26470,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 
   let rows;
   [rows] = await pool.query(
-    `SELECT *,
+    `SELECT *, ${productFamilyNameSelectSql('products')},
       ${modelBlueprintSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products WHERE slug = ?
@@ -26480,7 +26488,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   // Fallback: slug pode ser um UUID (produto sem slug no banco)
   if (!rows.length && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(slugParam)) {
     [rows] = await pool.query(
-      `SELECT *,
+      `SELECT *, ${productFamilyNameSelectSql('products')},
         ${modelBlueprintSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products WHERE id = ?`,
@@ -26490,7 +26498,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 
   if (!rows.length) {
     const [routeCandidates] = await pool.query(
-      `SELECT *,
+      `SELECT *, ${productFamilyNameSelectSql('products')},
         ${modelBlueprintSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products
@@ -26515,7 +26523,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   // Ordena por estoque (preferindo com estoque) e nome.
   if (Number(r.is_parent) === 1) {
     const [variantRows] = await pool.query(
-      `SELECT *,
+      `SELECT *, ${productFamilyNameSelectSql('products')},
         ${modelBlueprintSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products
@@ -26568,7 +26576,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 fastify.get('/products/by-ean/:ean', async (req, reply) => {
   const ean = req.params.ean;
   const [rows] = await pool.query(
-    `SELECT *, ${modelBlueprintSelectSql('products')}, ${comboStockSql('products')} AS stock_quantity
+    `SELECT *, ${productFamilyNameSelectSql('products')}, ${modelBlueprintSelectSql('products')}, ${comboStockSql('products')} AS stock_quantity
      FROM products
      WHERE ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?))`,
     [ean, ean]
@@ -29119,6 +29127,16 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
 // Atualiza unidade (status, IMEIs, notes, vínculos com order/sale)
 fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   const u = req.body || {};
+  if ('visibility_action' in u) {
+    try {
+      return await require('./services/unitVisibility.cjs').setUnitVisibility({
+        pool, syncProductStock, id: req.params.id, action: u.visibility_action, reason: u.reason,
+      });
+    } catch (error) {
+      if (!error.statusCode) throw error;
+      return reply.code(error.statusCode).send({ error: 'unit_visibility', message: error.message });
+    }
+  }
   const allowed = [
     'imei_1', 'imei_2', 'serial', 'status', 'condition',
     'internal_notes', 'cost_price', 'order_id', 'sale_id',

@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QRCodeSVG } from 'qrcode.react';
-import { buildDanfeNfceHtml, parseNfceProcForDanfe } from '../services/danfeNfceCore.cjs';
+import { buildDanfeNfceHtml, parseNfceProcForDanfe } from '@mdv/danfe-nfce-core';
 
 /** Recebe somente XML nfeProc previamente conferido e persistido pelo emissor fiscal.
  * A checagem estrutural aqui não substitui a validação criptográfica/SEFAZ no servidor.

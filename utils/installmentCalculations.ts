@@ -1,4 +1,4 @@
-import installmentCalculationsCjs from './installmentCalculations.cjs';
+import installmentCalculationsCjs from '@mdv/installment-calculations';
 import type { PaymentInstallmentScheduleItem } from '../types/sale';
 
 export interface ValidationResult {
