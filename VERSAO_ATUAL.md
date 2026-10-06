@@ -2,11 +2,13 @@
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.560-unidades-ocultas-schema.
 Release VPS: /var/www/mdv-site/releases/20261006-184620-unidades-ocultas-schema
-Status: preparada; validar schema e fluxo em producao.
+Status: publicada e validada em producao.
 
 Ocultar aparelho falhava com WARN_DATA_TRUNCATED porque units.status era ENUM legado sem hidden. Migracao idempotente acrescenta somente hidden, preservando valores anteriores, default, collation e nulabilidade. VARCHAR compativel permanece intacto. Inicializacao do servidor e operacao de visibilidade passam pela mesma guarda. Deploy seletivo faz backup de codigo e metadados, e verifica contagens por status antes e depois.
 
 Validacoes: 16 testes focados aprovados, sintaxe, baixa por local e build com trava Supabase. Plano de producao: backup, ampliar ENUM, verificar estados inalterados, teste hide/restore dentro de transacao com rollback. Nenhum aparelho sera ocultado permanentemente apenas para validar. O operador pode repetir a tentativa apos a correcao; uma configuracao continua na tabela enquanto houver outra unidade disponivel.
+
+Codigo 14585c61 e tag enviados a origin/main. API mdv-api online; backup /var/www/mdv-api/backups/unit-status-schema-1791312480881. ENUM passou a incluir hidden; contagens por status preservadas durante migracao. Teste real do helper na unidade indicada pelo operador: hidden e restore aceitos, exclusao da disponibilidade da tabela enquanto oculta, rollback confirmado com status, notas e estoque originais. /status mysql.ok=true, home e VERSION HTTP 200 com versao correspondente. Painel Marketing renderizado sem erros ou avisos no console. Auditoria preservou 34 worktrees historicas (25 dirty, 9 not_merged_into_origin_main), nenhum candidato seguro.
 
 ## Release anterior: v1.2.559-marketing-agrupamento-modelo
 
