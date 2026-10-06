@@ -2,7 +2,7 @@
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.554-pdv-baixa-segura.
 Release VPS: /var/www/mdv-site/releases/20261006-140147-pdv-baixa-segura
-Status: preparada; publicacao e validacao publica pendentes.
+Status: publicada e validada. Codigo: a7996863, enviado a origin/main; tag v1.2.554-pdv-baixa-segura.
 
 Baixa numerica do PDV com idempotencia por venda/produto, rollback e ate tres tentativas para timeout/deadlock. Travas limitadas a venda, produto e seus saldos. Itens repetidos agrupados; erros identificam SKU, produto e quantidade.
 
@@ -11,6 +11,8 @@ Detalhes da venda oferecem conferencia administrativa dos movimentos. Evidencia 
 Publicacao seletiva nas tres entradas do servidor e dois helpers, com backup e bloqueio por divergencia. Sem migrations ou alteracoes de saldos/vendas. B11B6196 aguarda registro da conferencia.
 
 Validacoes: rollback, concorrencia, idempotencia, reconciliacao, patch seletivo, regressoes de prioridade/finalizacao/unidades, sintaxe e build com trava Supabase. Compilador TypeScript completo indisponivel.
+
+API mdv-api reiniciada e online; /status confirmou mysql.ok=true. Backup: /var/www/mdv-api/backups/pdv-stock-recovery-1791295525420. Home e VERSION HTTP 200; versao/release conferidos. Tela autenticada da venda B11B6196 consultou movimentos (pelicula 0 local, fone 1 local), exigindo evidencia e mantendo registro bloqueado sem preenchimento. Sem erros fatais no console observado. Nenhuma conferencia ou baixa gravada. Auditoria de worktrees executada; trabalhos historicos sujos/nao incorporados preservados.
 
 ## Release anterior: v1.2.553-familias-imei
 

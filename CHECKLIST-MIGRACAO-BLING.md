@@ -158,6 +158,6 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 - [x] Conferir no Bling: ambos tem uma unica saida da venda B11B6196. Saldos alinhados (pelicula 29; fone 2). Fone tinha saida anterior de maio, justificando total 2.
 - [x] Implementar localmente concorrencia/idempotencia na baixa do PDV: travas por venda/produto, rollback, ate tres tentativas para bloqueios e protecao contra repeticao. Testes e build passaram; ainda nao publicado.
 - [x] Implementar localmente conferencia administrativa dos movimentos, com evidencia explicita do Bling quando faltar baixa local; preservar erro original e outras pendencias, sem alterar estoque.
-- [ ] Publicar API, helper de reconciliacao e interface; validar a conferencia nos detalhes da venda em producao.
+- [x] Publicar API, helpers e interface v1.2.554-pdv-baixa-segura; API/MySQL saudaveis, versao publica confirmada e consulta autenticada da venda B11B6196 validada. Nenhuma conferencia gravada ou saldo alterado.
 - [ ] Reconciliar marcador needs_review somente apos comprovar os movimentos.
 - Evidencias: docs/operacional/2026-10-06-pdv-venda-b11b6196-estoque.md. Nenhum estoque alterado neste diagnostico.

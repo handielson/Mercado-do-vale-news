@@ -21,7 +21,7 @@ Pendencias:
 - [x] Implementar localmente concorrencia e idempotencia por venda/produto, com testes de rollback/retry e ausencia de baixa duplicada.
 - [x] Incluir SKU, produto e quantidade no erro da baixa; resposta de bloqueio informa esgotamento de tres tentativas.
 - [ ] Adicionar instrumentacao detalhada por tentativa/etapa SQL para identificar futuros bloqueios historicos.
-- [ ] Publicar a correcao e validar a interface de conferencia em producao.
+- [x] Publicar v1.2.554-pdv-baixa-segura e validar consulta da interface em producao; API/MySQL saudaveis, pelicula sem movimento local e fone com uma baixa. Registro da conferencia nao executado.
 - [ ] Registrar a conferencia desta venda apos publicacao. O marcador de producao permanece needs_review.
 
 Nenhum saldo, venda ou configuracao foi alterado; nenhuma publicacao ou restart feito neste diagnostico.
@@ -41,3 +41,5 @@ A baixa numerica bloqueia primeiro a venda, depois o produto e seus saldos. O JO
 Nos detalhes da venda, a conferencia administrativa compara quantidades com movimentos locais. Movimentos parciais ou excedentes bloqueiam a reconciliacao. Quando nao existe movimento local, exige confirmacao explicita por SKU, quantidade, referencia da venda e anotacao do historico do Bling. A operacao altera somente a auditoria da venda: preserva o erro original e o responsavel, remove apenas a pendencia de baixa e mantem outras falhas. A evidencia registrada tambem impede uma baixa posterior repetida desse item. Nenhum saldo e modificado pela conferencia.
 
 Validacao local: testes de rollback, bloqueios, concorrencia, repeticao e reconciliacao; regressoes de prioridade, finalizacao e unidades; verificacao de sintaxe e build de producao passaram. O compilador TypeScript nao esta instalado no projeto, portanto nao houve verificacao completa de tipos. A interface ainda precisa ser validada com a API publicada. Sem migracao de schema, alteracao de dados, publicacao ou restart neste trabalho.
+
+Publicacao posterior autorizada: commit a7996863, tag v1.2.554-pdv-baixa-segura, site /var/www/mdv-site/releases/20261006-140147-pdv-baixa-segura. API reiniciada com backup /var/www/mdv-api/backups/pdv-stock-recovery-1791295525420. Interface autenticada e consulta de movimentos validadas sem registrar conferencia. Nenhum saldo ou marcador da venda alterado.
