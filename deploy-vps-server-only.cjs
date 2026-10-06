@@ -513,6 +513,13 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--unit-status-schema-only')) {
+    await require('./scripts/deploy-unit-visibility-schema.cjs')({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--phone-price-list-only')) {
     await require('./scripts/deploy-phone-price-list.cjs').deployPhonePriceList({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

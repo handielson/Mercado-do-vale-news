@@ -7,6 +7,7 @@ function fixture(status, extra = {}) {
   const queries = [];
   const pool = { query: async (sql, args) => {
     queries.push([sql, args]);
+    if (sql.startsWith('SHOW')) return [[{ Type: 'varchar(20)' }]];
     if (sql.startsWith('SELECT')) return [[{ ...row }]];
     assert.match(sql, /AND status = \? AND order_id IS NULL AND sale_id IS NULL/);
     if (row.status !== args[3]) return [{ affectedRows: 0 }];
@@ -36,7 +37,7 @@ function fixture(status, extra = {}) {
   await assert.rejects(setUnitVisibility({ ...f.options, action: 'hide', reason: '' }), error => error.statusCode === 400);
   await assert.rejects(setUnitVisibility({ ...f.options, action: 'delete' }), error => error.statusCode === 400);
   const raced = fixture('available');
-  raced.options.pool.query = async sql => sql.startsWith('SELECT') ? [[raced.row]] : [{ affectedRows: 0 }];
+  raced.options.pool.query = async sql => sql.startsWith('SHOW') ? [[{ Type: 'varchar(20)' }]] : sql.startsWith('SELECT') ? [[raced.row]] : [{ affectedRows: 0 }];
   await assert.rejects(setUnitVisibility({ ...raced.options, action: 'hide' }), error => error.statusCode === 409);
   assert.equal(raced.synced(), 0);
   console.log('Unit visibility hide/restore safeguards passed');

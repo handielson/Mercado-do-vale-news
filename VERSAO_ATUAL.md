@@ -1,4 +1,14 @@
-# v1.2.559-marketing-agrupamento-modelo
+# v1.2.560-unidades-ocultas-schema
+
+Data: 2026-10-06. Branch: main. Tag: v1.2.560-unidades-ocultas-schema.
+Release VPS: /var/www/mdv-site/releases/20261006-184620-unidades-ocultas-schema
+Status: preparada; validar schema e fluxo em producao.
+
+Ocultar aparelho falhava com WARN_DATA_TRUNCATED porque units.status era ENUM legado sem hidden. Migracao idempotente acrescenta somente hidden, preservando valores anteriores, default, collation e nulabilidade. VARCHAR compativel permanece intacto. Inicializacao do servidor e operacao de visibilidade passam pela mesma guarda. Deploy seletivo faz backup de codigo e metadados, e verifica contagens por status antes e depois.
+
+Validacoes: 16 testes focados aprovados, sintaxe, baixa por local e build com trava Supabase. Plano de producao: backup, ampliar ENUM, verificar estados inalterados, teste hide/restore dentro de transacao com rollback. Nenhum aparelho sera ocultado permanentemente apenas para validar. O operador pode repetir a tentativa apos a correcao; uma configuracao continua na tabela enquanto houver outra unidade disponivel.
+
+## Release anterior: v1.2.559-marketing-agrupamento-modelo
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.559-marketing-agrupamento-modelo.
 Release VPS: /var/www/mdv-site/releases/20261006-183031-marketing-agrupamento-modelo

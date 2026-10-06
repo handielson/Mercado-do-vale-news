@@ -1,26 +1,32 @@
 {
-  "version": "v1.2.559-marketing-agrupamento-modelo",
+  "version": "v1.2.560-unidades-ocultas-schema",
   "date": "2026-10-06",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.559-marketing-agrupamento-modelo",
-  "release_vps": "/var/www/mdv-site/releases/20261006-183031-marketing-agrupamento-modelo",
+  "tag": "v1.2.560-unidades-ocultas-schema",
+  "release_vps": "/var/www/mdv-site/releases/20261006-184620-unidades-ocultas-schema",
   "release_print3d_vps": null,
-  "summary": "Tabelas agrupam cores pelo modelo cadastrado e memoria, evitando repeticoes por nomes diferentes.",
+  "summary": "Corrige schema legado das unidades para permitir ocultacao e reativacao de aparelhos.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "services/phonePriceListServer.cjs",
-    "tmp-tests/phone-price-list-server.test.cjs",
+    "services/unitStatusSchema.cjs",
+    "services/unitVisibility.cjs",
+    "scripts/deploy-unit-visibility-schema.cjs",
+    "deploy-vps-server-only.cjs",
+    "vps_server.cjs",
+    "vps_server.js",
+    "tmp-tests/unit-status-schema.test.cjs",
+    "tmp-tests/unit-visibility.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-06-v1.2.559-marketing-agrupamento-modelo.md"
+    "docs/versoes/2026-10-06-v1.2.560-unidades-ocultas-schema.md"
   ],
   "validations": [
-    "28 testes focados aprovados: modelo e memoria, cores, estoque, maior preco disponivel, API e dois renderizadores",
+    "16 testes focados aprovados: enum legado, idempotencia, hide/restore, API de tabelas e preservacao de estados",
     "Build com trava Supabase e sintaxe dos servidores",
-    "Validacao publica dos dois formatos obrigatoria apos deploy"
+    "Validacao publica e teste transacional com rollback obrigatorios apos deploy"
   ]
 }

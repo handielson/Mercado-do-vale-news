@@ -1,4 +1,5 @@
 'use strict';
+const { ensureUnitStatusSchema } = require('./unitStatusSchema.cjs');
 
 function validateUnitVisibility(unit, action, reason) {
   const fail = (statusCode, message) => { throw Object.assign(new Error(message), { statusCode }); };
@@ -20,6 +21,7 @@ async function setUnitVisibility({ pool, syncProductStock, id, action, reason })
   const [rows] = await pool.query('SELECT * FROM units WHERE id = ?', [id]);
   const unit = rows[0];
   const { expected, next, note } = validateUnitVisibility(unit, action, reason);
+  await ensureUnitStatusSchema(pool);
   const [result] = await pool.query(
     "UPDATE units SET status = ?, internal_notes = CONCAT_WS('\n', NULLIF(internal_notes, ''), ?) WHERE id = ? AND status = ? AND order_id IS NULL AND sale_id IS NULL",
     [next, note, id, expected],

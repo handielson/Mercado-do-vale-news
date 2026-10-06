@@ -40879,6 +40879,7 @@ async function runMigrations() {
   await addColumnIfMissing('units', 'imei_2', 'VARCHAR(20) NULL');
   await addColumnIfMissing('units', 'serial', 'VARCHAR(100) NULL');
   await addColumnIfMissing('units', 'status', "VARCHAR(20) NOT NULL DEFAULT 'available'");
+  await require('./services/unitStatusSchema.cjs').ensureUnitStatusSchema(pool);
   await addColumnIfMissing('units', 'condition', "VARCHAR(20) NOT NULL DEFAULT 'new'");
   await addColumnIfMissing('units', 'internal_notes', 'TEXT NULL');
   await addColumnIfMissing('units', 'cost_price', 'INT NULL');
