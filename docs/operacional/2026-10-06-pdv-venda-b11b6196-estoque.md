@@ -20,7 +20,7 @@ Pendencias:
 - [x] Confirmar saida da pelicula no Bling em 05/10/2026 08:12:06, 1 unidade, observacao Venda #B11B6196 — PDV Mercado do Vale, saldo 29 igual ao sistema.
 - [x] Implementar localmente concorrencia e idempotencia por venda/produto, com testes de rollback/retry e ausencia de baixa duplicada.
 - [x] Incluir SKU, produto e quantidade no erro da baixa; resposta de bloqueio informa esgotamento de tres tentativas.
-- [x] Adicionar localmente instrumentacao por tentativa/etapa SQL para diagnosticar futuros bloqueios; publicacao pendente.
+- [x] Adicionar instrumentacao por tentativa/etapa SQL para diagnosticar futuros bloqueios; publicada na v1.2.555-pdv-log-bloqueios.
 - [x] Publicar v1.2.554-pdv-baixa-segura e validar consulta da interface em producao; API/MySQL saudaveis, pelicula sem movimento local e fone com uma baixa. Registro da conferencia nao executado.
 - [x] Registrar a conferencia desta venda apos publicacao: finalization_status=success em 06/10/2026 14:12:07 UTC, sem alterar estoque.
 
@@ -60,4 +60,6 @@ O servico canonico services/priorityStockDecrement.cjs emite registros JSON prio
 
 Nao grava SQL, parametros, mensagem bruta do banco, notas, credenciais ou dados do cliente. O registro nao muda o contrato HTTP nem os limites de repeticao; erro no logger nao impede rollback nem cria uma baixa extra. Sucessos comuns e repeticoes ja aplicadas ficam silenciosos. Esta instrumentacao identifica onde a espera ocorreu; nao identifica sozinha a transacao concorrente que segurou a trava e nao recupera logs historicos inexistentes.
 
-Validacao: teste comportamental de recuperacao cobre timeout/deadlock, rollback, concorrencia, idempotencia, etapa da falha, esgotamento de tentativas, falha de conexao/rollback/restauracao, ausencia de dados livres nos logs e logger indisponivel. Sintaxe e regressoes de baixa do PDV, finalizacao, prioridade, sincronizacao de canais e patch seletivo passaram. Sem alteracao de frontend, schema ou dados reais neste ajuste. Publicacao da instrumentacao pendente.
+Validacao: teste comportamental de recuperacao cobre timeout/deadlock, rollback, concorrencia, idempotencia, etapa da falha, esgotamento de tentativas, falha de conexao/rollback/restauracao, ausencia de dados livres nos logs e logger indisponivel. Sintaxe e regressoes de baixa do PDV, finalizacao, prioridade, sincronizacao de canais e patch seletivo passaram. Sem alteracao de schema ou dados reais neste ajuste.
+
+Publicacao v1.2.555 concluida: API reiniciada, mysql.ok=true, hash do helper igual ao local e contrato de diagnostico conferido com pool simulado sem banco. Site atualizado para expor a versao; painel carregado sem erros de console observados, B11B6196 permanece concluida. Pendente observar falha futura real sem provocar bloqueio em producao.

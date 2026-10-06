@@ -161,5 +161,6 @@ Executar dois roteiros distintos: venda local que atualiza a Shopee; pedido orig
 - [x] Publicar API, helpers e interface v1.2.554-pdv-baixa-segura; API/MySQL saudaveis, versao publica confirmada e consulta autenticada da venda B11B6196 validada. Nenhuma conferencia gravada ou saldo alterado.
 - [x] Reconciliar marcador needs_review apos comprovar os movimentos: conferencia registrada em 06/10/2026 as 11:12:07 (Sao Paulo), status success; erro original preservado na auditoria. Estoques mantidos em 29 (pelicula) e 2 (fone), sem novos movimentos.
 - [x] Implementar localmente registro tecnico por tentativa e etapa da baixa: identificador de operacao, venda/produto, conexao MySQL, tempos, codigo de falha, rollback e decisao de repetir. Recuperacao e descarte de conexao tambem registrados; sem SQL ou dados pessoais. Testes focados e regressoes passaram.
-- [ ] Publicar a instrumentacao de bloqueios e observar os registros em uma falha futura; nao provoca bloqueios ou altera estoque para validar em producao.
+- [x] Publicar instrumentacao v1.2.555-pdv-log-bloqueios: API reiniciada, MySQL saudavel, hash do helper conferido e contrato de log validado com pool simulado sem banco; site/painel e versao conferidos.
+- [ ] Observar registros de bloqueios em uma falha futura; nao provocar bloqueios ou alterar estoque para validar em producao.
 - Evidencias: docs/operacional/2026-10-06-pdv-venda-b11b6196-estoque.md. Nenhum estoque alterado neste diagnostico.
