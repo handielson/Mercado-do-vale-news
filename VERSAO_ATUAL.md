@@ -1,4 +1,16 @@
-# v1.2.555-pdv-log-bloqueios
+# v1.2.556-familia-smartphone-automatica
+
+Data: 2026-10-06. Branch: main. Tag: v1.2.556-familia-smartphone-automatica.
+Release VPS: /var/www/mdv-site/releases/20261006-160727-familia-smartphone-automatica
+Status: preparada; publicacao e verificacao pendentes.
+
+Na confirmacao por foto, a API cria ou reutiliza o pai do modelo e empresa e vincula as variacoes elegiveis sem pai. Trava transacional do modelo evita pais duplicados entre confirmacoes simultaneas. Preserva custos, precos, estoque, IMEIs e vinculos externos dos filhos. Pais incompatíveis ou multiplos bloqueiam a operacao.
+
+Validacoes: 12 testes da familia e 12 testes de vinculo Bling, suite de confirmacao por foto, sintaxe e build com trava Supabase. Simulacao do Redmi 17 por leitura identificou quatro filhos elegiveis; nenhum cadastro foi alterado.
+
+Deploy seletivo da API: --photo-intake-only. Sem migration nem ajustes de estoque. Outros caminhos de cadastro e agrupamento retroativo dos quatro Redmi 17 permanecem pendentes no checklist.
+
+## Release anterior: v1.2.555-pdv-log-bloqueios
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.555-pdv-log-bloqueios.
 Release VPS: /var/www/mdv-site/releases/20261006-142420-pdv-log-bloqueios

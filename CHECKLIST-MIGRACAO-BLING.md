@@ -4,6 +4,15 @@ Atualizado em 2026-09-24. Objetivo aprovado: eliminar a dependência operacional
 
 ## Estado e próxima entrega
 
+### Família automática de smartphones por modelo — 06/10/2026
+
+- [x] Implementação local: na confirmação do cadastro por foto, reutilizar o pai do modelo e empresa ou criar um único pai e vincular as variações sem pai. Preservar custos, preços, estoque, unidades/IMEIs e vínculos externos dos filhos. Reutilizar pai importado do Bling compatível.
+- [x] Testes locais: concorrência, reutilização, isolamento entre empresas, conflitos de pais, rollback e integração com a finalização; 12 testes de família e 12 testes de vínculo Bling aprovados, além da suíte de confirmação por foto.
+- [x] Conferência do Redmi 17 em produção apenas em leitura: simulação identificou quatro filhos elegíveis para um pai `Redmi 17 4G`. Nenhum produto, estoque ou IMEI foi alterado.
+- [ ] Publicar o módulo da API e validar confirmação controlada no ambiente operacional. A rotina cobre a confirmação por foto; outros caminhos de cadastro não foram alterados.
+- [ ] Agrupar os quatro cadastros antigos do Redmi 17 em operação controlada. A simulação não gravou o pai; famílias antigas não foram convertidas em lote.
+
+
 **Marco atual: Dados da Empresa e cadastro do emitente (D06–D10 e F01).** Não iniciar F02/F03 ou emissão enquanto este marco não estiver implantado, testado em homologação e validado no ambiente operacional. F02a foi uma antecipação local já testada; permanecerá sem continuidade até encerrar o marco atual. Não emitir documento real apenas para testar.
 
 - [Diagnóstico fiscal e proposta técnica](docs/migracao-bling/diagnostico-fiscal.md)

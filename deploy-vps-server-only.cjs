@@ -28,6 +28,7 @@ const customerSelfServicePath = 'services/customerSelfServiceServer.cjs';
 const customerGoogleAuthPath = 'services/customerGoogleAuthServer.cjs';
 const autoresponderCatalogPreferencesPath = 'services/autoresponderCatalogPreferences.cjs';
 const smartphonePhotoIntakeServiceFiles = [
+  'services/smartphoneModelFamily.cjs',
   'services/physicalRamCore.cjs',
   'services/smartphonePhotoIntakeCore.cjs',
   'services/smartphonePhotoIntakeServer.cjs',

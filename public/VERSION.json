@@ -1,34 +1,34 @@
 {
-  "version": "v1.2.555-pdv-log-bloqueios",
+  "version": "v1.2.556-familia-smartphone-automatica",
   "date": "2026-10-06",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.555-pdv-log-bloqueios",
-  "release_vps": "/var/www/mdv-site/releases/20261006-142420-pdv-log-bloqueios",
+  "tag": "v1.2.556-familia-smartphone-automatica",
+  "release_vps": "/var/www/mdv-site/releases/20261006-160727-familia-smartphone-automatica",
   "release_print3d_vps": null,
-  "summary": "Diagnostico seguro por etapa e tentativa dos bloqueios de estoque do PDV.",
+  "summary": "Pai por modelo criado automaticamente na confirmacao do cadastro de aparelhos.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
     "CHECKLIST-MIGRACAO-BLING.md",
-    "VERSAO_ATUAL.md",
-    "docs/operacional/2026-10-06-pdv-venda-b11b6196-estoque.md",
-    "docs/versoes/2026-10-06-v1.2.555-pdv-log-bloqueios.md",
+    "deploy-vps-server-only.cjs",
+    "package.json",
+    "services/smartphoneModelFamily.cjs",
+    "services/smartphonePhotoIntakeServer.cjs",
+    "tmp-tests/photo-intake-bling-routes.test.mjs",
+    "tmp-tests/smartphone-model-family.test.cjs",
+    "tmp-tests/smartphone-photo-intake-deploy-static.test.mjs",
     "public/VERSION.json",
-    "scripts/deploy-pdv-stock-recovery.cjs",
-    "scripts/publish-vps-plan.cjs",
-    "services/priorityStockDecrement.cjs",
-    "tmp-tests/pdv-stock-deploy.test.cjs",
-    "tmp-tests/pdv-stock-recovery.test.cjs",
-    "tmp-tests/publish-vps-plan-static.test.mjs"
+    "VERSAO_ATUAL.md",
+    "docs/versoes/2026-10-06-v1.2.556-familia-smartphone-automatica.md"
   ],
   "validations": [
-    "Logs por etapa, rollback, concorrencia, idempotencia e logger indisponivel",
-    "Patch seletivo preserva hotfixes e rejeita divergencias",
-    "Regressoes PDV, prioridade e unidades",
-    "Sintaxe dos tres servidores e helpers; build com trava Supabase",
+    "12 testes de familia: concorrencia, isolamento, rollback e preservacao dos filhos",
+    "12 testes de vinculo Bling e regressao da confirmacao por foto",
+    "Sintaxe dos servidores e helpers; build com trava Supabase",
+    "Conferencia de quatro filhos do Redmi 17 em transacao somente leitura",
     "Validacao publica apos deploy"
   ]
 }

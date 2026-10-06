@@ -17,13 +17,14 @@ async function fixture(t, options = {}) {
   if (options.mapped !== false) family = saveIntakeBlingMapping(family, intake, 101);
   let state = { intake, model: { id: 'model', name: 'Modelo', template_values: JSON.stringify({ unrelated: true, ...(options.legacy ? {} : { bling_family: family }) }) },
     products: options.products || [], units: [] };
+  state.products.forEach(product => { product.company_id ||= 'company'; });
   let snapshot;
   const query = async (sql, params = []) => {
     const q = sql.replace(/\s+/g, ' ').trim();
     if (/^(CREATE|ALTER|SHOW)/.test(q)) return [[]];
     if (q.includes('FROM smartphone_photo_intakes') && q.includes('WHERE status IN')) return [[]];
     if (q.startsWith('SELECT * FROM smartphone_photo_intakes')) return [[structuredClone(state.intake)]];
-    if (q.includes('FROM models')) return [[structuredClone(state.model)]];
+    if (q.includes('FROM models')) return [[{ ...structuredClone(state.model), ...(q.includes('SELECT m.id,m.name,m.category_id') ? { category_name: 'Smartphones', category_id: 'category', company_id: 'company' } : {}) }]];
     if (q.startsWith('UPDATE models SET template_values')) { state.model.template_values = params[0]; return [{}]; }
     if (q.startsWith('SELECT') && q.includes('FROM products')) {
       if (q.includes('stock_quantity > 0')) return [[]];
@@ -35,10 +36,17 @@ async function fixture(t, options = {}) {
     }
     if (q.startsWith('SELECT') && q.includes('FROM model_color_images')) return [[]];
     if (q.startsWith('INSERT INTO products')) {
+      if (q.startsWith('INSERT INTO products (id,name,sku,model_id')) {
+        state.products.push({ id: params[0], name: params[1], sku: params[2], model_id: params[3], company_id: params[4], is_parent: 1 });
+        return [{}];
+      }
       state.products.push({ id: params[0], name: params[1], sku: params[3], model_id: params[12], specs: JSON.parse(params[14]), company_id: params[15] }); return [{}];
     }
     if (q.startsWith('UPDATE products SET bling_id')) {
-      Object.assign(state.products.find(p => p.id === params[3]), { bling_id: params[0], bling_parent_id: params[1], parent_id: params[2] }); return [{}];
+      Object.assign(state.products.find(p => p.id === params[2]), { bling_id: params[0], bling_parent_id: params[1] }); return [{}];
+    }
+    if (q.startsWith('UPDATE products SET parent_id')) {
+      state.products.find(p => p.id === params[1]).parent_id = params[0]; return [{ affectedRows: 1 }];
     }
     if (q.startsWith('INSERT INTO units')) { state.units.push({ id: params[0], product_id: params[1] }); return [{}]; }
     if (q.startsWith('UPDATE products SET price_cost')) return [{}];
@@ -79,7 +87,9 @@ test('existing exact product keeps local SKU and receives link without a duplica
   const f = await fixture(t, { products: [{ id: 'existing', model_id: 'model', sku: 'LOCAL', specs: { ram: '8GB', storage: '256GB', color_id: 'purple' } }] });
   const response = await f.finalize();
   assert.equal(response.statusCode, 200, response.body);
-  assert.equal(f.state().products.length, 1);
+  assert.equal(f.state().products.filter(p => !p.is_parent).length, 1);
+  assert.equal(f.state().products.filter(p => p.is_parent).length, 1);
+  assert.equal(f.state().products[0].parent_id, response.json().parent_id);
   assert.equal(f.state().products[0].sku, 'LOCAL');
   assert.equal(f.state().products[0].bling_id, 101);
 });

@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { ensureSmartphoneModelFamily } = require('./smartphoneModelFamily.cjs');
 const { inheritSmartphonePrices, loadModel: loadPriceModel } = require('./smartphonePriceGroupsServer.cjs');
 const {
   PHOTO_INTAKE_STATUS,
@@ -930,10 +931,12 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
           await connection.rollback();
           return reply.code(409).send({ error: 'O produto já possui outro vínculo Bling. Corrija o vínculo na edição do produto.' });
         }
-        const [parents] = await connection.query('SELECT id FROM products WHERE bling_id=? AND COALESCE(is_parent,0)=1 AND (company_id=? OR company_id IS NULL) LIMIT 1', [family.parent_id, intake.company_id || null]);
-        await connection.query('UPDATE products SET bling_id=?,bling_parent_id=?,parent_id=COALESCE(?,parent_id) WHERE id=?',
-          [blingChild.id, family.parent_id, parents[0]?.id || null, productId]);
+        await connection.query('UPDATE products SET bling_id=?,bling_parent_id=? WHERE id=?',
+          [blingChild.id, family.parent_id, productId]);
       }
+      const localFamily = await ensureSmartphoneModelFamily(connection, {
+        modelId: model.id, companyId: intake.company_id, defaultCompanyId, productId,
+      });
       const unitId = crypto.randomUUID();
       await connection.query(
         `INSERT INTO units (id,product_id,imei_1,imei_2,serial,status,\`condition\`,internal_notes,cost_price,intake_photo_path,intake_id)
@@ -952,7 +955,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         [PHOTO_INTAKE_STATUS.COMPLETED, productId, unitId, intake.price_retail, intake.price_reseller, intake.price_wholesale, intake.id]
       );
       await connection.commit();
-      return { intake: toPublicIntake(await loadIntake(intake.id)), product_id: productId, unit_id: unitId, idempotent: false };
+      return { intake: toPublicIntake(await loadIntake(intake.id)), product_id: productId, parent_id: localFamily.parent_id, unit_id: unitId, idempotent: false };
     } catch (error) {
       await connection.rollback().catch(() => {});
       throw error;
