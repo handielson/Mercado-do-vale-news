@@ -9,7 +9,7 @@ const carousel = await readFile(new URL('../utils/marketing-carousel.ts', import
 
 assert.match(page, /<ProductMarketingCard/);
 assert.match(page, /useState<MarketingAssetFormat>\('status'\)/);
-assert.match(page, /Gerador de Artes/);
+assert.match(await readFile(new URL('../pages/admin/settings/marketing/marketingNavigation.ts', import.meta.url), 'utf8'), /Artes de produtos/);
 assert.match(page, /META SEM PREÇO/);
 assert.match(page, /productArtworkTemplate/);
 assert.match(page, /useState<ProductMarketingTemplate>\('showcase'\)/);

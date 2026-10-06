@@ -1,34 +1,43 @@
 {
-  "version": "v1.2.556-familia-smartphone-automatica",
+  "version": "v1.2.557-marketing-tabelas",
   "date": "2026-10-06",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.556-familia-smartphone-automatica",
-  "release_vps": "/var/www/mdv-site/releases/20261006-160727-familia-smartphone-automatica",
+  "tag": "v1.2.557-marketing-tabelas",
+  "release_vps": "/var/www/mdv-site/releases/20261006-164255-marketing-tabelas",
   "release_print3d_vps": null,
-  "summary": "Pai por modelo criado automaticamente na confirmacao do cadastro de aparelhos.",
+  "summary": "Marketing organizado por tarefas e tabelas Xiaomi, POCO e realme sem preco, Pix e cartao.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "CHECKLIST-MIGRACAO-BLING.md",
     "deploy-vps-server-only.cjs",
-    "package.json",
-    "services/smartphoneModelFamily.cjs",
-    "services/smartphonePhotoIntakeServer.cjs",
-    "tmp-tests/photo-intake-bling-routes.test.mjs",
-    "tmp-tests/smartphone-model-family.test.cjs",
-    "tmp-tests/smartphone-photo-intake-deploy-static.test.mjs",
+    "scripts/deploy-phone-price-list.cjs",
+    "pages/admin/settings/MarketingPage.tsx",
+    "pages/admin/settings/marketing/MarketingWorkspace.tsx",
+    "pages/admin/settings/marketing/marketingNavigation.ts",
+    "pages/admin/settings/marketing/SocialStorySchedulerPanel.tsx",
+    "services/phonePriceListArtwork.cjs",
+    "services/phonePriceListServer.cjs",
+    "services/socialStoryScheduleService.ts",
+    "vps_server.cjs",
+    "vps_server.js",
+    "tmp-tests/phone-price-list-server.test.cjs",
+    "tmp-tests/phone-price-list-artwork.test.cjs",
+    "tmp-tests/marketing-channel-tabs-static.test.mjs",
+    "tmp-tests/product-marketing-artwork-static.test.mjs",
+    "tmp-tests/social-story-scheduler-static.test.mjs",
+    "docs/phone-price-list-cards.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-06-v1.2.556-familia-smartphone-automatica.md"
+    "docs/versoes/2026-10-06-v1.2.557-marketing-tabelas.md"
   ],
   "validations": [
-    "12 testes de familia: concorrencia, isolamento, rollback e preservacao dos filhos",
-    "12 testes de vinculo Bling e regressao da confirmacao por foto",
-    "Sintaxe dos servidores e helpers; build com trava Supabase",
-    "Conferencia de quatro filhos do Redmi 17 em transacao somente leitura",
-    "Validacao publica apos deploy"
+    "35 testes aprovados; um teste de patch do workflow n8n ignorado por nao fazer parte do escopo",
+    "Regressoes de dinheiro e baixa por local de estoque",
+    "Sintaxe dos servidores e deploy seletivo; build com trava Supabase",
+    "Navegacao local desktop e celular; nove artes com dados reais consultados sem mutacao comercial",
+    "Validacao publica obrigatoria apos deploy"
   ]
 }

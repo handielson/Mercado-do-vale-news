@@ -2,6 +2,34 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const sharp = require('sharp');
 const { paginatePhonePriceList, renderPhonePriceListPage } = require('../services/phonePriceListArtwork.cjs');
+const { buildPhoneListSvg, renderPhoneListTable } = require('../services/phonePriceListArtwork.cjs');
+
+test('approved list keeps 14 configurations per brand without losing overflow', () => {
+  const items = Array.from({ length: 30 }, (_, i) => ({ brand: i < 29 ? 'Xiaomi' : 'POCO', name: `Redmi ${i}` }));
+  const pages = paginatePhonePriceList(items, 14);
+  assert.deepEqual(pages.map(p => [p.brand, p.items.length]), [['Xiaomi', 14], ['Xiaomi', 14], ['Xiaomi', 1], ['POCO', 1]]);
+  assert.equal(pages.flatMap(p => p.items).length, items.length);
+});
+
+test('three list modes disclose only the selected price and keep portrait dimensions', async () => {
+  const options = { brand: 'Xiaomi', items: [{ name: 'Redmi teste', memory: '8GB RAM • 256GB', priceCents: 159900, cardPlan: { installments: 12, value: 14924, total: 179088 } }], generatedAt: '2026-10-06T16:00:00Z' };
+  const none = buildPhoneListSvg({ ...options, priceMode: 'none' });
+  assert.doesNotMatch(none, /R\$|1\.599|179|149|PIX|PARCELAS|Total:/);
+  assert.match(none, /Redmi teste/);
+  const cash = buildPhoneListSvg({ ...options, priceMode: 'cash' });
+  assert.match(cash, /À VISTA NO PIX/);
+  assert.match(cash, /1\.599,00/);
+  assert.doesNotMatch(cash, /12x|Total:/);
+  const card = buildPhoneListSvg({ ...options, priceMode: 'card' });
+  assert.match(card, /12x R\$.*149,24/);
+  assert.match(card, /Total: R\$.*1\.790,88/);
+  assert.doesNotMatch(card, /1\.599,00|PIX/);
+  assert.throws(() => buildPhoneListSvg({ ...options, priceMode: 'card', items: [{ priceCents: 100 }] }), /Parcelamento/);
+  for (const priceMode of ['none', 'cash', 'card']) {
+    const meta = await sharp(await renderPhoneListTable({ ...options, priceMode })).metadata();
+    assert.deepEqual([meta.width, meta.height], [1080, 1920]);
+  }
+});
 
 test('pagination keeps every variant and original objects, six per brand page', () => {
   const items = Object.freeze(Array.from({ length: 19 }, (_, i) => Object.freeze({ id: i, brand: i < 13 ? 'POCO' : i < 16 ? 'xiaomi' : 'realme' })));

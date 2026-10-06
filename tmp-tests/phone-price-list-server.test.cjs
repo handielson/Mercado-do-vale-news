@@ -6,6 +6,16 @@ const os = require('node:os');
 const sharp = require('sharp');
 const Fastify = require('fastify');
 const { buildPriceListGroups, validateSelection, registerPhonePriceListRoutes, readPublicImage } = require('../services/phonePriceListServer.cjs');
+const { patchCardDependency } = require('../scripts/deploy-phone-price-list.cjs');
+
+test('selective deployment preserves unrelated runtime code and is idempotent', () => {
+  const source = 'async function calculateAutoresponderMaxInstallment(price) {}\nregisterMarketingCampaignRoutes(fastify, {\n  buildWhatsAppStoryItems: buildWhatsAppStatusStoryItemsVps,\n  other: keepMe,\n});\nconst fiscal = untouched;';
+  const patched = patchCardDependency(source);
+  assert.equal(patchCardDependency(patched), patched);
+  assert.ok(patched.includes('  other: keepMe,\n});\nconst fiscal = untouched;'));
+  assert.throws(() => patchCardDependency(source + source), /ambiguous/);
+  assert.throws(() => patchCardDependency('no calculator'), /missing/);
+});
 const phone = (overrides = {}) => ({ id: 'a', name: 'POCO X7 Preto', brand: 'Xiaomi', category_name: 'Celulares',
   specs: { ram: '8+8GB', storage: '256GB', color: 'Preto' }, price_retail: 159900, stock_quantity: 2,
   status: 'active', hide_from_catalog: 0, is_parent: 0, is_combo: 0, ...overrides });
@@ -51,6 +61,54 @@ test('image loader rejects external and private destinations before fetching', a
     'https://api.xiaomipetrolina.com.br.evil.example/a.png', 'https://user:pass@api.xiaomipetrolina.com.br/x']) {
     assert.equal(await readPublicImage(url), null);
   }
+});
+
+test('list modes validate inputs and allow unpriced available phones only without prices', () => {
+  assert.deepEqual(validateSelection({ brands: ['POCO'] }), { brands: ['POCO'], groups: undefined, layout: 'cards', priceMode: 'cash' });
+  assert.throws(() => validateSelection({ priceMode: 'invalid' }), /Selecione/);
+  assert.throws(() => validateSelection({ priceMode: 'card', layout: 'cards' }), /layout/);
+  assert.equal(buildPriceListGroups([phone({ price_retail: 0 })], undefined, ['POCO'], 'none').length, 1);
+  assert.equal(buildPriceListGroups([phone({ price_retail: 0 })], undefined, ['POCO'], 'cash').length, 0);
+  assert.equal(buildPriceListGroups([phone({ stock_quantity: 0 })], undefined, ['POCO'], 'none').length, 0);
+});
+
+test('list API isolates mode caches and refreshes card fees, while preserving legacy cards', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-phone-list-modes-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const app = Fastify(); t.after(() => app.close());
+  const rows = Array.from({ length: 14 }, (_, i) => phone({ id: String(i), name: `POCO X${i}` }));
+  let fee = 12;
+  let available = true;
+  const bases = [];
+  registerPhonePriceListRoutes(app, {
+    uploadsDir: directory,
+    requireSyncKeyOrAdmin: async () => {},
+    pool: { query: async sql => sql.includes('FROM company_settings') ? [[{ phone: '87988032612' }]] : [rows] },
+    attachCatalogModelColorImages: async products => products,
+    readImage: async () => null,
+    calculateCardInstallment: async base => {
+      bases.push(base);
+      return available ? { installments: 12, value: Math.round(Math.round(base * (1 + fee/100))/12), total: Math.round(base * (1 + fee/100)) } : null;
+    },
+  });
+  const request = priceMode => app.inject({ method: 'POST', url: '/admin/marketing/phone-price-list/preview', payload: { brands: ['POCO'], layout: 'list', priceMode } });
+  const urls = [];
+  for (const mode of ['none', 'cash', 'card']) {
+    const response = await request(mode);
+    assert.equal(response.statusCode, 200, response.body);
+    const data = response.json();
+    assert.equal(data.productCount, 14);
+    assert.equal(data.items.length, 1);
+    assert.deepEqual(data.warnings, []);
+    urls.push(data.items[0].mediaUrl);
+  }
+  assert.equal(new Set(urls).size, 3);
+  assert.deepEqual(bases, [159900]);
+  assert.equal((await request('card')).json().items[0].mediaUrl, urls[2]);
+  fee = 15;
+  assert.notEqual((await request('card')).json().items[0].mediaUrl, urls[2]);
+  available = false;
+  assert.equal((await request('card')).statusCode, 409);
 });
 test('company logo stored as an inline image is decoded without external access', async () => {
   const source = await sharp({ create: { width: 20, height: 10, channels: 4, background: '#f80' } }).png().toBuffer();

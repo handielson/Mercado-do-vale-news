@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { flushSync } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
+import MarketingWorkspace from './marketing/MarketingWorkspace';
+import { resolveMarketingTab, type MarketingTab } from './marketing/marketingNavigation';
 import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, CheckCircle2, Calendar, CalendarClock, Trash2, Clock, ToggleLeft, ToggleRight, Facebook, Instagram, MessageCircle, ShieldCheck, BrainCircuit, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { toBlob, toPng } from 'html-to-image';
@@ -498,13 +501,16 @@ export default function MarketingPage() {
     const [benefitIcon, setBenefitIcon] = useState<ProductMarketingBenefitIcon>('sparkles');
     const [marketingPaymentFees, setMarketingPaymentFees] = useState<PaymentFee[]>([]);
     const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
-    const [activeTab, setActiveTab] = useState<'studio' | 'calendar' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'>(() => {
-        if (typeof window === 'undefined') return 'studio';
-        const tab = new URLSearchParams(window.location.search).get('tab');
-        return ['studio', 'calendar', 'instagram', 'facebook', 'whatsapp', 'campaigns', 'approvals'].includes(tab || '')
-            ? tab as 'studio' | 'calendar' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'
-            : 'studio';
-    });
+    const [searchParams, setSearchParams] = useSearchParams();
+    const activeTab = resolveMarketingTab(searchParams.get('tab'));
+    const setActiveTab = (tab: MarketingTab) => {
+        setSearchParams(previous => {
+            const next = new URLSearchParams(previous);
+            next.set('tab', tab);
+            return next;
+        });
+    };
+    const [instagramSchedulerView, setInstagramSchedulerView] = useState<'stories' | 'weekly'>('stories');
     const [whatsappSchedulerView, setWhatsappSchedulerView] = useState<'status' | 'stories'>('status');
     const safeStickerSettings = sanitizeMarketingStickerSettings(stickerSettings);
     const isStickerFormat = format === 'sticker';
@@ -1256,6 +1262,7 @@ export default function MarketingPage() {
             sort_order: scheduleSlots.filter((slot) => slot.day_of_week === todayDayIndex).length,
         });
         setShowSlotForm(true);
+        setInstagramSchedulerView('weekly');
         setActiveTab('instagram');
         recordCooldownForProduct(studioPrimaryProduct);
     };
@@ -1773,95 +1780,7 @@ export default function MarketingPage() {
     );
 
     return (
-        <div className="mx-auto max-w-[1500px] p-4 sm:p-6">
-            {/* Cabeçalho */}
-            <div className="mb-6">
-                <div className="flex items-start gap-3">
-                    <div className="rounded-xl bg-pink-50 p-3">
-                        <Sparkles className="w-6 h-6 text-pink-600" />
-                    </div>
-                    <div>
-                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Marketing e divulgação</p>
-                        <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900">Gerador de Artes</h1>
-                        <p className="mt-2 text-sm text-slate-500">
-                            Escolha um produto, confira a arte automática e baixe pronta para publicar.
-                        </p>
-                    </div>
-                </div>
-
-                <div className="mt-6 grid w-full grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-4 xl:grid-cols-7">
-                    <button
-                        onClick={() => setActiveTab('studio')}
-                        className={`col-span-2 rounded-xl px-4 py-3 text-sm font-black transition-colors md:col-span-1 ${
-                            activeTab === 'studio'
-                                ? 'bg-slate-900 text-white'
-                                : 'text-slate-600 hover:bg-slate-100'
-                        }`}
-                    >
-                        <span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4" /> Gerador de Artes</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('calendar')}
-                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-                            activeTab === 'calendar'
-                                ? 'bg-pink-600 text-white shadow-sm'
-                                : 'text-slate-600 hover:bg-pink-50 hover:text-pink-700'
-                        }`}
-                    >
-                        <span className="inline-flex items-center gap-2"><Calendar className="h-4 w-4" /> Calendário</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('instagram')}
-                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-                            activeTab === 'instagram'
-                                ? 'bg-slate-900 text-white'
-                                : 'text-slate-600 hover:bg-slate-100'
-                        }`}
-                    >
-                        <span className="inline-flex items-center gap-2"><Instagram className="h-4 w-4" /> Agenda Instagram</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('facebook')}
-                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-                            activeTab === 'facebook'
-                                ? 'bg-blue-600 text-white'
-                                : 'text-slate-600 hover:bg-blue-50 hover:text-blue-700'
-                        }`}
-                    >
-                        <span className="inline-flex items-center gap-2"><Facebook className="h-4 w-4" /> Marketplace</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('whatsapp')}
-                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-                            activeTab === 'whatsapp'
-                                ? 'bg-emerald-600 text-white'
-                                : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
-                        }`}
-                    >
-                        <span className="inline-flex items-center gap-2"><MessageCircle className="h-4 w-4" /> Status WhatsApp</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('campaigns')}
-                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-                            activeTab === 'campaigns'
-                                ? 'bg-indigo-600 text-white'
-                                : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'
-                        }`}
-                    >
-                        <span className="inline-flex items-center gap-2"><BrainCircuit className="h-4 w-4" /> Campanhas IA</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('approvals')}
-                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-                            activeTab === 'approvals'
-                                ? 'bg-emerald-600 text-white'
-                                : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
-                        }`}
-                    >
-                        <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Aprovações</span>
-                    </button>
-                </div>
-            </div>
+        <MarketingWorkspace activeTab={activeTab} onNavigate={setActiveTab}>
 
             <div className="space-y-6">
                 {activeTab === 'studio' && (
@@ -1887,7 +1806,7 @@ export default function MarketingPage() {
                     </div>
                 )}
 
-                {activeTab === 'instagram' && (
+                {activeTab === 'instagram' && instagramSchedulerView === 'weekly' && (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Agenda do Instagram</p>
@@ -2936,15 +2855,23 @@ export default function MarketingPage() {
                     )}
                     {activeTab === 'calendar' && (
                         <MarketingCalendarPanel
-                            onNavigateToTab={(t) => setActiveTab(t as any)}
-                            onSelectDateForNewSchedule={() => setActiveTab('instagram')}
+                            onNavigateToTab={(t) => setActiveTab(resolveMarketingTab(t))}
+                            onSelectDateForNewSchedule={() => { setInstagramSchedulerView('stories'); setActiveTab('instagram'); }}
                         />
                     )}
                     {activeTab === 'campaigns' && <MarketingCampaignAgentPanel />}
                     {activeTab === 'approvals' && <MarketingApprovalCenterPanel />}
+                    {activeTab === 'tables' && <SocialStorySchedulerPanel key="tables" purpose="tables" />}
                     {activeTab === 'instagram' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
-                            <SocialStorySchedulerPanel defaultDestinations={['instagram']} />
+                            <div className="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+                                <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo de agendamento do Instagram">
+                                    <button type="button" aria-pressed={instagramSchedulerView === 'stories'} onClick={() => setInstagramSchedulerView('stories')} className={`rounded-lg px-3 py-3 text-sm font-bold ${instagramSchedulerView === 'stories' ? 'bg-violet-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Stories em dias específicos</button>
+                                    <button type="button" aria-pressed={instagramSchedulerView === 'weekly'} onClick={() => setInstagramSchedulerView('weekly')} className={`rounded-lg px-3 py-3 text-sm font-bold ${instagramSchedulerView === 'weekly' ? 'bg-violet-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Programação semanal</button>
+                                </div>
+                                <p className="px-2 py-2 text-xs text-slate-500">{instagramSchedulerView === 'stories' ? 'Escolha as mídias e as datas de cada lote de Stories.' : 'Organize os horários e os conteúdos recorrentes por dia da semana.'}</p>
+                            </div>
+                            {instagramSchedulerView === 'stories' ? <SocialStorySchedulerPanel defaultDestinations={['instagram']} /> : <>
                             {/* Day Selector */}
                             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
                                 <div className="flex gap-1 overflow-x-auto pb-1">
@@ -3233,9 +3160,10 @@ export default function MarketingPage() {
                                     </div>
                                 </div>
                             )}
+                            </>}
                         </div>
                     )}
             </div>
-        </div>
+        </MarketingWorkspace>
     );
 }

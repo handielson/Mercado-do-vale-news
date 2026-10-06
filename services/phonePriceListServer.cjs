@@ -3,7 +3,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const sharp = require('sharp');
 const { normalizeProductSpecsRam } = require('./physicalRamCore.cjs');
-const { renderPhonePriceListPage, paginatePhonePriceList } = require('./phonePriceListArtwork.cjs');
+const { renderPhonePriceListPage, paginatePhonePriceList, renderPhoneListTable } = require('./phonePriceListArtwork.cjs');
 
 const DEFAULT_BRANDS = ['Xiaomi', 'POCO', 'realme'];
 const IMAGE_HOSTS = new Set(['api.xiaomipetrolina.com.br', 'imagens.xiaomipetrolina.com.br', 'mercadodovale.com.br', 'www.mercadodovale.com.br']);
@@ -27,7 +27,7 @@ function resolveBrand(product) {
   return String(product.brand_name || product.brand || 'Celulares');
 }
 
-function isEligible(product) {
+function isEligible(product, requirePrice = true) {
   const availableStock = Number(product.serialized_unit_count) > 0
     ? Number(product.available_serialized_units)
     : Number(product.stock_quantity);
@@ -35,7 +35,7 @@ function isEligible(product) {
     && ![true, 1, '1'].includes(product.hide_from_catalog)
     && product.offer_visibility !== 'hidden' && !Number(product.is_parent) && !Number(product.is_combo)
     && /^(?:celulares?|smartphones?)(?:\b|$)/.test(normalize(product.category_name))
-    && Number.isSafeInteger(Number(product.price_retail)) && Number(product.price_retail) > 0;
+    && (!requirePrice || (Number.isSafeInteger(Number(product.price_retail)) && Number(product.price_retail) > 0));
 }
 
 function productIdentity(product) {
@@ -51,8 +51,8 @@ function productIdentity(product) {
   return { name, memory };
 }
 
-function buildPriceListGroups(rows, requestedGroups, brands = DEFAULT_BRANDS) {
-  const eligible = rows.filter(isEligible);
+function buildPriceListGroups(rows, requestedGroups, brands = DEFAULT_BRANDS, priceMode = 'cash') {
+  const eligible = rows.filter(product => isEligible(product, priceMode !== 'none'));
   const byId = new Map(eligible.map((p) => [String(p.id), p]));
   if (requestedGroups) {
     return requestedGroups.map((group) => {
@@ -75,16 +75,21 @@ function buildPriceListGroups(rows, requestedGroups, brands = DEFAULT_BRANDS) {
     const key = [brand, normalize(identity.name), normalize(identity.memory)].join('|');
     if (!groups.has(key)) groups.set(key, { id: key, ...identity, brand, priceCents: 0, products: [] });
     const group = groups.get(key);
-    group.priceCents = Math.max(group.priceCents, Number(product.price_retail));
+    group.priceCents = Math.max(group.priceCents, Number(product.price_retail) || 0);
     group.products.push(product);
   }
   return [...groups.values()].sort((a, b) => a.priceCents - b.priceCents || a.name.localeCompare(b.name, 'pt-BR'));
 }
 
 function validateSelection(body = {}) {
+  const priceMode = body.priceMode ?? 'cash';
+  const layout = body.layout ?? (priceMode === 'cash' ? 'cards' : 'list');
+  if (!['none', 'cash', 'card'].includes(priceMode)) throw failure('Selecione sem preço, à vista ou cartão.');
+  if (!['cards', 'list'].includes(layout) || (layout === 'cards' && priceMode !== 'cash')) throw failure('Tipo de layout inválido.');
   const brands = body.brands ?? DEFAULT_BRANDS;
   if (!Array.isArray(brands) || !brands.length || brands.some((b) => !DEFAULT_BRANDS.includes(b))) throw failure('Selecione Xiaomi, POCO ou realme.');
   const groups = body.groups;
+  if (groups !== undefined && priceMode !== 'cash') throw failure('Seleção do bot exige preço à vista.');
   if (groups !== undefined) {
     if (!Array.isArray(groups) || !groups.length || groups.length > 500) throw failure('Envie de 1 a 500 configurações de celulares.');
     const ids = new Set();
@@ -100,7 +105,7 @@ function validateSelection(body = {}) {
     }
     if (ids.size > 2000) throw failure('A lista excede 2000 produtos.');
   }
-  return { brands: [...new Set(brands)], groups };
+  return { brands: [...new Set(brands)], groups, priceMode, layout };
 }
 
 async function readPublicImage(value) {
@@ -148,16 +153,26 @@ function registerPhonePriceListRoutes(fastify, dependencies) {
       c.name AS category_name,b.name AS brand_name FROM products p
       LEFT JOIN categories c ON c.id=p.category_id LEFT JOIN brands b ON b.id=p.brand
       WHERE p.status='active' ${ids ? 'AND p.id IN (?)' : ''} ORDER BY p.name,p.id`, ids ? [ids] : []);
-    const groups = buildPriceListGroups(rows, selection.groups, selection.brands);
+    const groups = buildPriceListGroups(rows, selection.groups, selection.brands, selection.priceMode);
+    if (selection.priceMode === 'card' && groups.length) {
+      if (!dependencies.calculateCardInstallment) throw failure('Cálculo de cartão indisponível.', 503);
+      const plans = new Map();
+      for (const group of groups) {
+        if (!plans.has(group.priceCents)) plans.set(group.priceCents, await dependencies.calculateCardInstallment(group.priceCents, 12));
+        group.cardPlan = plans.get(group.priceCents);
+        if (!group.cardPlan) throw failure('Cadastre as taxas presenciais de cartão para gerar esta tabela.', 409);
+      }
+    }
     if (!groups.length) return { ok: true, items: [], productCount: 0, generatedAt: new Date().toISOString(), warnings: ['Nenhum celular disponível para as marcas selecionadas.'] };
     const [[company]] = await pool.query('SELECT phone,logo,watermark_url,social_website FROM company_settings LIMIT 1');
     if (!company?.phone) throw failure('Cadastre o WhatsApp oficial nos dados da empresa.', 409);
     const generatedAt = new Date();
     const day = generatedAt.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-    const hydrated = await dependencies.attachCatalogModelColorImages(rows, 'https://mercadodovale.com.br');
+    const hydrated = selection.layout === 'cards' ? await dependencies.attachCatalogModelColorImages(rows, 'https://mercadodovale.com.br') : rows;
     const hydratedById = new Map(hydrated.map((p) => [p.id, p]));
-    const pages = paginatePhonePriceList(groups.map((g) => ({ ...g, products: g.products.map((p) => hydratedById.get(p.id) || p) })));
-    const requestKey = hash(JSON.stringify({ pages, company, day, layout: 3 }));
+    const pages = paginatePhonePriceList(groups.map((g) => ({ ...g, products: g.products.map((p) => hydratedById.get(p.id) || p) })), selection.layout === 'list' ? 14 : 6);
+    const renderSettings = { layout: selection.layout, priceMode: selection.priceMode, version: 4 };
+    const requestKey = hash(JSON.stringify({ pages, company, day, ...renderSettings }));
     reply.header('Cache-Control', 'no-store');
     if (inFlight.has(requestKey)) return inFlight.get(requestKey);
     if (activeJobs >= 2) throw failure('A geração está ocupada. Tente novamente em instantes.', 503);
@@ -181,7 +196,7 @@ function registerPhonePriceListRoutes(fastify, dependencies) {
         await fs.mkdir(directory, { recursive: true });
         const items = [];
         for (const page of pages) {
-          const pageKey = hash(JSON.stringify({ page, company, day, layout: 3 }));
+          const pageKey = hash(JSON.stringify({ page, company, day, ...renderSettings }));
           let filename = `${pageKey}.png`;
           let target = path.join(directory, filename);
           let cached = false;
@@ -189,6 +204,7 @@ function registerPhonePriceListRoutes(fastify, dependencies) {
           if (!cached) {
             let missingPhoto = false;
             const cards = await Promise.all(page.items.map(async (card) => {
+              if (selection.layout === 'list') return card;
               let imageBuffer;
               const urls = [...new Set(card.products.flatMap((p) => [...parse(p.resolved_images, []), ...parse(p.model_color_images, []), ...parse(p.images, [])]))];
               for (const url of urls) { imageBuffer = await image(url); if (imageBuffer) break; }
@@ -196,7 +212,8 @@ function registerPhonePriceListRoutes(fastify, dependencies) {
               if (!imageBuffer) { missingPhoto = true; warnings.push(`Foto indisponível: ${card.name} ${card.memory}`); }
               return { ...card, imageBuffer };
             }));
-            const buffer = await renderPhonePriceListPage({ ...page, items: cards, logoBuffer,
+            const render = selection.layout === 'list' ? renderPhoneListTable : renderPhonePriceListPage;
+            const buffer = await render({ ...page, items: cards, logoBuffer, priceMode: selection.priceMode,
               whatsapp: displayWhatsapp(company.phone), website: String(company.social_website || 'mercadodovale.com.br').replace(/^https?:\/\//i, '').replace(/\/$/, ''), generatedAt, priceLabel: 'à vista no Pix' });
             // A temporary image failure must be retried on the next request.
             if (missingPhoto) { filename = `${pageKey}-${crypto.randomUUID()}.png`; target = path.join(directory, filename); }
@@ -205,7 +222,7 @@ function registerPhonePriceListRoutes(fastify, dependencies) {
             await fs.rename(temporary, target);
           }
           items.push({ mediaType: 'image', mediaUrl: `${publicApiUrl}/images/phone-price-lists/${filename}`,
-            label: `Tabela ${page.brand} • ${page.pageNumber}/${page.totalPages}`,
+            label: `Tabela ${page.brand} • ${{ none: 'Sem preço', cash: 'À vista no Pix', card: 'Cartão' }[selection.priceMode]} • ${page.pageNumber}/${page.totalPages}`,
             // The rendered card already contains the useful catalog context. Sending a
             // WhatsApp caption below it only duplicates that context and makes the list
             // visually noisy. Keep the field for the preview contract, deliberately blank.

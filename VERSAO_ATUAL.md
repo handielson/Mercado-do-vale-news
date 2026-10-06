@@ -1,4 +1,17 @@
-# v1.2.556-familia-smartphone-automatica
+# v1.2.557-marketing-tabelas
+
+Data: 2026-10-06. Branch: main. Tag: v1.2.557-marketing-tabelas.
+Release VPS: /var/www/mdv-site/releases/20261006-164255-marketing-tabelas
+Status: preparada para publicacao; validacao publica obrigatoria apos deploy.
+
+Marketing com visao geral e menu por tarefa: Criar, Planejar, Agendar e Revisar.
+Tabelas de celulares em area propria, com Xiaomi, POCO e realme; sem preco, preco a vista no Pix ou parcelas e total no cartao. Formato de lista aprovado, ate 14 configuracoes por pagina. Geracao usa estoque e precos atuais; cartao reutiliza taxas presenciais cadastradas, ate 12x. Stories pontuais separados da programacao semanal do Instagram. Geracao antiga de cards do bot preservada.
+
+Validacoes: 35 testes aprovados, um teste n8n fora do escopo ignorado; dinheiro, baixa por local de estoque, sintaxe, navegacao desktop/celular e build com trava Supabase. Nove artes conferidas com dados reais por leitura. Sem migrations, alteracoes comerciais ou envios de mensagens.
+
+API: deploy seletivo --phone-price-list-only, com backup, protecao contra divergencia nos modulos e patch apenas da dependencia de cartao nas entradas de servidor. Preserva os demais fluxos da API.
+
+## Release anterior: v1.2.556-familia-smartphone-automatica
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.556-familia-smartphone-automatica.
 Release VPS: /var/www/mdv-site/releases/20261006-160727-familia-smartphone-automatica

@@ -2042,6 +2042,7 @@ registerMarketingCampaignRoutes(fastify, {
   uploadsDir: UPLOADS_DIR,
   publicApiUrl: process.env.PUBLIC_API_URL || 'https://api.xiaomipetrolina.com.br',
   buildWhatsAppStoryItems: buildWhatsAppStatusStoryItemsVps,
+  calculateCardInstallment: calculateAutoresponderMaxInstallment,
   attachCatalogModelColorImages,
   sendWhatsAppStoryMedia: sendWhatsAppStandaloneStoryMediaVps,
 });

@@ -1,5 +1,30 @@
 # Tabela dinâmica de celulares
 
+## Gerador de listas por fabricante — 06/10/2026
+
+Release `v1.2.557-marketing-tabelas`: no Marketing, a opção **Criar → Tabelas de celulares**
+usa o formato de lista aprovado, com modelo, memória, logo, contato e data.
+Selecionar Xiaomi, POCO e/ou realme e escolher o tipo:
+
+- **Sem preço:** não imprime preços, parcelas ou condição de pagamento; pode incluir
+  aparelho disponível que ainda não tenha preço válido.
+- **Preço à vista no Pix:** usa `price_retail` em centavos, sem desconto adicional.
+- **Preço no cartão:** imprime parcelas e total, reutilizando
+  `calculateAutoresponderMaxInstallment` e as taxas presenciais de `payment_fees`,
+  no maior parcelamento cadastrado até 12x. Sem taxa disponível, a geração é bloqueada.
+
+As configurações/cores são agrupadas pela regra existente de maior preço disponível.
+Cada fabricante fica em sua própria imagem; acima de 14 configurações, a lista continua
+em páginas adicionais para preservar a leitura. A troca do tipo ou marca atualiza a
+prévia e o agendamento consulta novamente os dados. O cache diferencia tipo, layout,
+parcelamento e versão do desenho. A arte aprovada continua sendo um retrato dos dados
+na geração; preços e taxas posteriores exigem uma nova geração.
+
+O endpoint aceita `{brands, priceMode: 'none' | 'cash' | 'card', layout: 'list'}`.
+Chamadas antigas sem esses campos preservam o layout de seis cards com fotos e preços
+à vista usado pelo bot. Nenhuma migration, envio, aprovação ou publicação automática
+é criada por essa alteração.
+
 Implementação local de 06/09/2026. Não publicada nesta tarefa.
 
 ## Uso no Marketing

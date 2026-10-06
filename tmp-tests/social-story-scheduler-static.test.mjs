@@ -11,8 +11,10 @@ const marketingPage = await readFile(new URL('../pages/admin/settings/MarketingP
 const client = await readFile(new URL('../services/socialStoryScheduleService.ts', import.meta.url), 'utf8');
 
 test('Phone price lists use server snapshots and the existing approval schedule', () => {
-  assert.match(client, /post\('\/admin\/marketing\/phone-price-list\/preview', \{ brands \}\)/);
-  assert.match(panel, /previewPhonePriceList\(phoneBrands\)/);
+  assert.match(client, /post\('\/admin\/marketing\/phone-price-list\/preview', \{ brands, priceMode, layout: 'list' \}\)/);
+  assert.match(panel, /previewPhonePriceList\(phoneBrands, phonePriceMode\)/);
+  assert.match(panel, /\[mode, phoneBrands, phonePriceMode\]/);
+  for (const mode of ['none', 'cash', 'card']) assert.ok(panel.includes(`value="${mode}"`));
   assert.match(panel, /requestId !== previewRequestRef\.current/);
   assert.match(panel, /setPhonePreview\(null\)/);
   assert.match(panel, /Gerado em/);
