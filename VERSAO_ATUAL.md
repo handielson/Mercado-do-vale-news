@@ -2,13 +2,15 @@
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.565-status-sistema.
 Release VPS: /var/www/mdv-site/releases/20261007-134615-status-sistema
-Status: preparada para publicacao.
+Status: publicada e validada em producao.
 
 Central em /admin/settings/system-status com 22 indicadores em quatro grupos, busca, filtro por atencao, atualizacao manual e automatica a cada 60 segundos enquanto a aba esta visivel. Distingue funcionamento verificado, autorizacao armazenada e configuracao. Falha de uma fonte nao derruba as demais nem preserva o verde anterior. Links para configuracoes e tela legada de VPS.
 
 Consulta administrativa de saude da mesma sessao WAHA usada pelos Status, somente GET, com autenticacao, cache de 30 segundos e timeout. Nao expõe dados da conta, credenciais ou erros brutos. Atendimento WhatsApp e publicacao de Status separados. Telegram, e-mail e Google Agenda aparecem explicitamente sem monitoramento. Nenhuma publicacao de midia, alteracao de agendamento, schema ou credenciais nesta entrega.
 
-Validacoes: 22 testes focados, sintaxe, guarda de baixa por local, previa local com dados de teste e layout mobile; build aprovado com trava Supabase e bundle sem dependencia operacional legada; verificacao publicada pendente. Deploy API seletivo com backup, validacao de sintaxe antes da troca e rollback. Demais modulos e entradas preservados.
+Validacoes: 22 testes focados, sintaxe, guarda de baixa por local, previa local com dados de teste e layout mobile; build aprovado com trava Supabase e bundle sem dependencia operacional legada; verificacao publicada aprovada. Deploy API seletivo com backup, validacao de sintaxe antes da troca e rollback. Demais modulos e entradas preservados.
+
+Codigo 6794a49b e tag enviados a origin/main. Site ativo na release registrada; home, pagina e VERSION HTTP 200 e versao correspondente. API seletiva mdv-api online, mysql.ok=true; backup /var/www/mdv-api/backups/system-status-1791381144257. Nova rota autenticada HTTP 200 WORKING/conectado; sem autenticacao 401. Tela publicada conferida com 22 indicadores, busca, filtros, atualizacao de 60 segundos, console limpo e mobile sem transbordamento. Backup parcial sinalizado; Telegram, e-mail e Agenda Google explicitamente sem monitoramento. Nenhum envio de midia ou alteracao de agendamento. Auditoria/aplicacao segura preservou 34 worktrees bloqueadas (25 dirty, 9 not_merged_into_origin_main), sem candidatos/remocoes. Main limpo e sincronizado apos registro final. Detalhes e lista completa dos bloqueios em docs/versoes/2026-10-07-v1.2.565-status-sistema.md.
 
 ## Release anterior: v1.2.564-busca-celulares
 
