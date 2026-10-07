@@ -1,4 +1,14 @@
-# v1.2.563-cancelar-dia
+# v1.2.564-busca-celulares
+
+Data: 2026-10-07. Branch: main. Tag: v1.2.564-busca-celulares.
+Release VPS: /var/www/mdv-site/releases/20261007-130616-busca-celulares
+Status: preparada para publicacao.
+
+Pesquisa do catalogo deixa de descartar categorias com menos de tres modelos. Redmi 15 e Redmi 15C retornavam pela API, mas suas secoes com um modelo eram omitidas entre capas e peliculas. Produtos sem categoria tambem permanecem nos resultados. Grade sem pesquisa ou com categoria selecionada preservada. Mudanca somente frontend.
+
+Validacoes: tres testes da busca (falharam antes da correcao), guardas de agrupamento e filtro por categoria, sintaxe dos servidores e build com trava Supabase. Previa local com catalogo real conferida. Antes do deploy, retomadas a pedido do operador apenas sete entregas WhatsApp de 07/10 recusadas com HTTP 422 por sessao desconectada. Sessao reconectada WORKING, backup /var/www/mdv-api/backups/whatsapp-retry-oct7-1791378447291.json; entregas Instagram e contadores de tentativas preservados. Aguardar confirmacao de publicacao e validacao do site.
+
+## Release anterior: v1.2.563-cancelar-dia
 
 Data: 2026-10-06. Branch: main. Tag: v1.2.563-cancelar-dia.
 Release VPS: /var/www/mdv-site/releases/20261006-210618-cancelar-dia

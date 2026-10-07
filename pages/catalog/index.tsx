@@ -401,7 +401,7 @@ function CatalogContent() {
         if (matched !== autoDetectedBrand) setAutoDetectedBrand(matched);
     }, [searchQuery, filterStats, autoDetectedBrand]);
 
-    // Melhoria 1 — Agrupar resultados de busca por categoria (mín. 3 produtos por categoria)
+    // Agrupar a busca sem descartar categorias com poucos modelos.
     const searchCategorySections = useMemo(() => {
         if (!hasActiveSearch || filters.categories.length > 0) return [];
 
@@ -410,22 +410,20 @@ function CatalogContent() {
 
         const catGroupMap = new Map<string, typeof productGroups>();
         for (const group of productGroups) {
-            const catId = group.representativeProduct.category_id;
-            if (!catId) continue;
+            const catId = group.representativeProduct.category_id || '';
             if (!catGroupMap.has(catId)) catGroupMap.set(catId, []);
             catGroupMap.get(catId)!.push(group);
         }
 
         return Array.from(catGroupMap.entries())
-            .filter(([, groups]) => groups.length >= 3)
             .map(([catId, groups]) => ({
                 categoryId: catId,
-                categoryName: catMap.get(catId) || 'Categoria',
+                categoryName: catMap.get(catId) || (catId ? 'Categoria' : 'Produtos'),
                 groups,
             }));
     }, [hasActiveSearch, filters.categories, productGroups, filterStats?.categories]);
 
-    // Ativa agrupamento quando há busca ativa, sem filtro de categoria e 2+ seções com 3+ itens
+    // Com duas ou mais categorias, mostrar todas as seções da busca.
     const isSearchCategoryMode = hasActiveSearch && !filters.categories.length && searchCategorySections.length >= 2;
     const isPaginatedCatalogMode = !isAllChildrenMode && !isSearchCategoryMode;
     const catalogPageSlice = useMemo(() => {

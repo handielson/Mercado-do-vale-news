@@ -1,32 +1,26 @@
 {
-  "version": "v1.2.563-cancelar-dia",
-  "date": "2026-10-06",
+  "version": "v1.2.564-busca-celulares",
+  "date": "2026-10-07",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.563-cancelar-dia",
-  "release_vps": "/var/www/mdv-site/releases/20261006-210618-cancelar-dia",
+  "tag": "v1.2.564-busca-celulares",
+  "release_vps": "/var/www/mdv-site/releases/20261007-130616-busca-celulares",
   "release_print3d_vps": null,
-  "summary": "Botao visivel no calendario cancela somente as publicacoes do dia escolhido.",
+  "summary": "Pesquisa do catalogo preserva celulares em categorias com poucos modelos.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "pages/admin/settings/marketing/MarketingCalendarPanel.tsx",
-    "services/marketingCampaignApi.cjs",
-    "services/socialStoryPriceListBatches.cjs",
-    "services/socialStoryScheduleService.ts",
-    "scripts/deploy-phone-price-list.cjs",
-    "tmp-tests/marketing-calendar-data-loading-static.test.mjs",
-    "tmp-tests/social-story-cancel-items.test.cjs",
-    "tmp-tests/social-story-scheduler-static.test.mjs",
+    "pages/catalog/index.tsx",
+    "tmp-tests/catalog-search-small-categories.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-06-v1.2.563-cancelar-dia.md"
+    "docs/versoes/2026-10-07-v1.2.564-busca-celulares.md"
   ],
   "validations": [
-    "35 testes focados e verificacoes do calendario: cancelar dia, preservar outros dias e impedir regeneracao",
+    "3 testes da busca e guardas existentes de agrupamento e filtro por categoria",
     "Build com trava Supabase e sintaxe dos servidores",
-    "Validacao publica do calendario e teste MySQL em tabelas temporarias sem envios reais"
+    "Previa local com catalogo real mostra Redmi 15 e Redmi 15C; verificar pesquisa publicada"
   ]
 }
