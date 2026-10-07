@@ -2,11 +2,13 @@
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.564-busca-celulares.
 Release VPS: /var/www/mdv-site/releases/20261007-130616-busca-celulares
-Status: preparada para publicacao.
+Status: publicada e validada em producao.
 
 Pesquisa do catalogo deixa de descartar categorias com menos de tres modelos. Redmi 15 e Redmi 15C retornavam pela API, mas suas secoes com um modelo eram omitidas entre capas e peliculas. Produtos sem categoria tambem permanecem nos resultados. Grade sem pesquisa ou com categoria selecionada preservada. Mudanca somente frontend.
 
-Validacoes: tres testes da busca (falharam antes da correcao), guardas de agrupamento e filtro por categoria, sintaxe dos servidores e build com trava Supabase. Previa local com catalogo real conferida. Antes do deploy, retomadas a pedido do operador apenas sete entregas WhatsApp de 07/10 recusadas com HTTP 422 por sessao desconectada. Sessao reconectada WORKING, backup /var/www/mdv-api/backups/whatsapp-retry-oct7-1791378447291.json; entregas Instagram e contadores de tentativas preservados. Aguardar confirmacao de publicacao e validacao do site.
+Validacoes: tres testes da busca (falharam antes da correcao), guardas de agrupamento e filtro por categoria, sintaxe dos servidores e build com trava Supabase. Busca publicada mostra Redmi 15 e Redmi 15C. Sem erros no console; aviso existente de fallback do company_id. Evidencia .local/redmi-pesquisa-publicada.png. Codigo 0f9fbd93 e tag enviados a origin/main; release ativa, home e VERSION HTTP 200, API existente mysql.ok=true sem deploy/restart.
+
+Antes do deploy, retomadas a pedido do operador apenas sete entregas WhatsApp de 07/10 recusadas com HTTP 422 por sessao desconectada. Todas publicadas: quatro confirmadas pelo provedor e tres verificadas visualmente no WhatsApp Web apos timeout do WAHA, sem reenviar. As tres foram reconciliadas como published, provider ID NULL e published_at como horario da reconciliacao. Backups /var/www/mdv-api/backups/whatsapp-retry-oct7-1791378447291.json e /var/www/mdv-api/backups/whatsapp-reconcile-oct7-1791378921523.json. Outros registros, Instagram e tentativas preservados; sessao WORKING. Timeout permanece limitacao operacional. Auditoria e limpeza segura preservaram 34 worktrees bloqueadas, zero candidatos/remocoes. Main limpo e sincronizado apos o registro final. Detalhes em docs/versoes/2026-10-07-v1.2.564-busca-celulares.md.
 
 ## Release anterior: v1.2.563-cancelar-dia
 
