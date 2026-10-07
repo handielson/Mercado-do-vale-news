@@ -1,26 +1,38 @@
 {
-  "version": "v1.2.564-busca-celulares",
+  "version": "v1.2.565-status-sistema",
   "date": "2026-10-07",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.564-busca-celulares",
-  "release_vps": "/var/www/mdv-site/releases/20261007-130616-busca-celulares",
+  "tag": "v1.2.565-status-sistema",
+  "release_vps": "/var/www/mdv-site/releases/20261007-134615-status-sistema",
   "release_print3d_vps": null,
-  "summary": "Pesquisa do catalogo preserva celulares em categorias com poucos modelos.",
+  "summary": "Central administrativa com status do sistema, integracoes e publicacoes; saude autenticada da sessao WAHA dos Status.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "pages/catalog/index.tsx",
-    "tmp-tests/catalog-search-small-categories.test.cjs",
+    "pages/admin/settings/SystemStatusPage.tsx",
+    "services/systemStatusModel.ts",
+    "services/systemStatusService.ts",
+    "services/whatsappStatusHealth.cjs",
+    "routes/index.tsx",
+    "layouts/AdminLayout.tsx",
+    "hooks/usePageTitle.ts",
+    "server.js",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-system-status.cjs",
+    "tmp-tests/system-status.test.cjs",
+    "tmp-tests/system-status-deploy.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-07-v1.2.564-busca-celulares.md"
+    "docs/versoes/2026-10-07-v1.2.565-status-sistema.md"
   ],
   "validations": [
-    "3 testes da busca e guardas existentes de agrupamento e filtro por categoria",
-    "Build com trava Supabase e sintaxe dos servidores",
-    "Previa local com catalogo real mostra Redmi 15 e Redmi 15C; verificar pesquisa publicada"
+    "22 testes de status, autenticacao, cache, configuracoes e deploy seletivo com rollback",
+    "Sintaxe das tres entradas e modulos de servidor; guarda de baixa por local",
+    "Build com trava Supabase; validacao publica apos deploy"
   ]
 }

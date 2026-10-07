@@ -514,6 +514,14 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--system-status-only') || process.argv.includes('--system-status-check')) {
+    await require('./scripts/deploy-system-status.cjs').deploySystemStatus({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--system-status-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--unit-status-schema-only')) {
     await require('./scripts/deploy-unit-visibility-schema.cjs')({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
@@ -719,6 +727,9 @@ async function main() {
     return;
   }
   console.log(`Uploading server to ${appDir}`);
+  await exec(`mkdir -p ${appDir}/services`);
+  await upload(path.join(__dirname, 'services/whatsappStatusHealth.cjs'), remotePathJoin(appDir, 'services/whatsappStatusHealth.cjs'));
+  await exec(`node --check ${appDir}/services/whatsappStatusHealth.cjs`);
   await upload(localServer, `${appDir}/vps_server.js`);
   await upload(localServerCjs, `${appDir}/vps_server.cjs`);
   await upload(localServer, `${appDir}/server.js`);

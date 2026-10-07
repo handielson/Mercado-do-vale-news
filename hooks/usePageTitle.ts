@@ -34,6 +34,7 @@ export const usePageTitle = (pageTitle?: string, companyName: string = 'Mercado 
 const getPageTitleFromRoute = (pathname: string): string => {
     const routeTitleMap: Record<string, string> = {
         '/admin': 'Dashboard',
+        '/admin/settings/system-status': 'Status do sistema',
         '/admin/products': 'Produtos',
         '/admin/products/labels': 'Etiquetas',
         '/admin/products/new': 'Novo Produto',

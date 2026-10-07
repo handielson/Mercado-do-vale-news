@@ -21181,6 +21181,7 @@ fastify.delete('/pdp-section-headers/:id', { preHandler: requireSyncKey }, async
 });
 
 // ─── VPS Status ─────────────────────────────────────────────────────────────
+require('./services/whatsappStatusHealth.cjs').registerWhatsAppStatusHealthRoute(fastify, requireAdminBearerToken);
 fastify.get('/status', async (req, reply) => {
   const t0 = Date.now();
   let mysqlOk = false; let mysqlMs = 0;

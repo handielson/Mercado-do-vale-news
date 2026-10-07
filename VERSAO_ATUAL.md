@@ -1,4 +1,16 @@
-# v1.2.564-busca-celulares
+# v1.2.565-status-sistema
+
+Data: 2026-10-07. Branch: main. Tag: v1.2.565-status-sistema.
+Release VPS: /var/www/mdv-site/releases/20261007-134615-status-sistema
+Status: preparada para publicacao.
+
+Central em /admin/settings/system-status com 22 indicadores em quatro grupos, busca, filtro por atencao, atualizacao manual e automatica a cada 60 segundos enquanto a aba esta visivel. Distingue funcionamento verificado, autorizacao armazenada e configuracao. Falha de uma fonte nao derruba as demais nem preserva o verde anterior. Links para configuracoes e tela legada de VPS.
+
+Consulta administrativa de saude da mesma sessao WAHA usada pelos Status, somente GET, com autenticacao, cache de 30 segundos e timeout. Nao expõe dados da conta, credenciais ou erros brutos. Atendimento WhatsApp e publicacao de Status separados. Telegram, e-mail e Google Agenda aparecem explicitamente sem monitoramento. Nenhuma publicacao de midia, alteracao de agendamento, schema ou credenciais nesta entrega.
+
+Validacoes: 22 testes focados, sintaxe, guarda de baixa por local, previa local com dados de teste e layout mobile; build aprovado com trava Supabase e bundle sem dependencia operacional legada; verificacao publicada pendente. Deploy API seletivo com backup, validacao de sintaxe antes da troca e rollback. Demais modulos e entradas preservados.
+
+## Release anterior: v1.2.564-busca-celulares
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.564-busca-celulares.
 Release VPS: /var/www/mdv-site/releases/20261007-130616-busca-celulares

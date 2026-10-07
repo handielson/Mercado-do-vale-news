@@ -118,6 +118,7 @@ const SEODashboardPage = lazy(() => import('../pages/admin/settings/SEODashboard
 const SEOBlacklistPage = lazy(() => import('../pages/admin/settings/SEOBlacklistPage').then(module => ({ default: module.SEOBlacklistPage })));
 const ReviewsPage = lazy(() => import('../pages/admin/catalog/ReviewsPage').then(module => ({ default: module.ReviewsPage })));
 const VpsStatusPage = lazy(() => import('../pages/admin/settings/VpsStatusPage').then(module => ({ default: module.VpsStatusPage })));
+const SystemStatusPage = lazy(() => import('../pages/admin/settings/SystemStatusPage'));
 const SystemBackupPage = lazy(() => import('../pages/admin/settings/SystemBackupPage').then(module => ({ default: module.SystemBackupPage })));
 const SynologyFilesPage = lazy(() => import('../pages/admin/settings/SynologyFilesPage').then(module => ({ default: module.SynologyFilesPage })));
 const SynologyConfigPage = lazy(() => import('../pages/admin/settings/SynologyConfigPage'));
@@ -821,6 +822,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><NovoBotPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/system-status",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SystemStatusPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

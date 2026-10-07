@@ -28743,6 +28743,7 @@ fastify.delete('/products/:id', { preHandler: requireSyncKey }, async (req, repl
     connection.release();
   }
 });
+require('./services/whatsappStatusHealth.cjs').registerWhatsAppStatusHealthRoute(fastify, requireAdminBearerToken);
 fastify.get('/admin/bot-health', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   reply.header('Cache-Control', 'no-store');
   const alerts = await mobileSalesPushService.listOperationalAlerts('n8n', 10).catch(() => []);
