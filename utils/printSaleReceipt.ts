@@ -5,6 +5,7 @@ import type { BenefitStatus } from '../services/benefitService';
 import { buildGlobalHeader, getHeaderTemplate } from './headerBuilder';
 import { buildPaymentPresentation } from './salePresentation';
 import { formatBrazilDate, formatBrazilTime } from './brazilDateTime';
+import { PAYJOY_SALE_NOTE, isPayJoySale } from './saleInformation.js';
 
 const fmt = (v: number) => `R$ ${(v / 100).toFixed(2).replace('.', ',')}`;
 
@@ -258,6 +259,7 @@ export function printSaleReceipt(
             <div>
                 <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin:0 0 2px;">Pedido</p>
                 <p style="font-size:16px;font-weight:800;color:#2563eb;">#${sale.id.slice(0, 8).toUpperCase()}</p>
+                ${isPayJoySale(sale) ? `<p style="font-size:12px;font-weight:700;color:#047857;">${PAYJOY_SALE_NOTE}</p>` : ''}
             </div>
             <div style="text-align:right;">
                 <p style="font-size:11px;color:#6b7280;">${formatBrazilDate(saleDate)}</p>

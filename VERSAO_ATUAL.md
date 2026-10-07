@@ -1,4 +1,14 @@
-# v1.2.566-catalogo-produto-exato
+# v1.2.567-venda-payjoy-informativo
+
+Data: 2026-10-07. Branch: main. Tag: v1.2.567-venda-payjoy-informativo.
+Release VPS: /var/www/mdv-site/releases/20261007-194449-venda-payjoy-informativo
+Status: preparada para publicacao.
+
+PDV permite marcar Venda via PayJoy, opcional e desmarcada inicialmente. Identificacao nas vendas, pesquisa, detalhes, previa/comprovante e historico do aparelho vendido. Gravada em sales.notes na API VPS/MySQL existente. Formas de pagamento, valores, taxas, estoque e financeiro permanecem iguais; nenhum schema ou integracao PayJoy. Deploy somente do site.
+
+Validacoes: regressao do marcador e notas, igualdade de valores/totais e HTML real do recibo; agregador, servico de vendas, normalizacao monetaria, finalizacao, estoque e comprovantes. Sintaxe das entradas de servidor e build com trava Supabase. Detalhes em docs/versoes/2026-10-07-v1.2.567-venda-payjoy-informativo.md. Quatro arquivos preexistentes da impressao Shopee ficam fora desta entrega.
+
+## Release anterior: v1.2.566-catalogo-produto-exato
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.566-catalogo-produto-exato.
 Release VPS: /var/www/mdv-site/releases/20261007-164237-catalogo-produto-exato

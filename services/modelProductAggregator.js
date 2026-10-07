@@ -1,3 +1,5 @@
+import { isPayJoySale } from '../utils/saleInformation.js';
+
 function firstText(specs, keys) {
   for (const key of keys) {
     const value = specs?.[key];
@@ -305,6 +307,7 @@ function buildSerializedSaleInfoByUnitId(sales, saleItems, customers) {
 
     infoByUnitId.set(unitId, {
       saleId,
+      payJoy: isPayJoySale(sale),
       orderId,
       orderNumber,
       customerName: saleCustomerName(sale, customerById) || String(item.customer_name || item.customerName || '').trim(),
@@ -686,6 +689,7 @@ export function aggregateModelProducts(input) {
         orderId,
         orderNumber: saleInfo.orderNumber || orderId || '',
         customerName: saleInfo.customerName || '',
+        payJoy: status === 'sold' && Boolean(saleInfo.payJoy),
         costValue,
         returnedValue,
         returnedValueEstimated,

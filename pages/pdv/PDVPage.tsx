@@ -8,6 +8,7 @@ import ProductSearchSection from '../../components/pdv/ProductSearchSection';
 import CartItemsSection from '../../components/pdv/CartItemsSection';
 import CustomerSection from '../../components/pdv/CustomerSection';
 import PaymentSection from '../../components/pdv/PaymentSection';
+import { PAYJOY_SALE_NOTE, withPayJoySaleNote } from '../../utils/saleInformation.js';
 import DeliverySection from '../../components/pdv/DeliverySection';
 import ReceiptPreview from '../../components/pdv/ReceiptPreview';
 import InstallmentCalculator from '../../components/pdv/InstallmentCalculator';
@@ -227,6 +228,7 @@ export default function PDVPage() {
 
     // Estado dos pagamentos
     const [payments, setPayments] = useState<PaymentMethod[]>([]);
+    const [saleViaPayJoy, setSaleViaPayJoy] = useState(false);
     const [isFinalizing, setIsFinalizing] = useState(false);
     const isFinalizingRef = useRef(false);
     const [finalizeSteps, setFinalizeSteps] = useState<FinalizeStep[]>([]);
@@ -561,6 +563,7 @@ export default function PDVPage() {
         if (window.confirm('Deseja realmente limpar o carrinho?')) {
             setCartItems([]);
             setPayments([]);
+            setSaleViaPayJoy(false);
             setPdvPixPayment(null);
             setFinalAdjustmentDiscount(0);
             toast.info('Carrinho limpo');
@@ -947,7 +950,7 @@ export default function PDVPage() {
             cash_session_id: activeCashSession.id,
             items: cartItems,
             payment_methods: payments,
-            notes: undefined,
+            notes: withPayJoySaleNote(undefined, saleViaPayJoy),
             delivery_type: deliveryType,
             delivery_person_id: deliveryPersonId,
             delivery_person_customer_id: extractDeliveryPersonCustomerId(deliveryPersonId, deliveryPersons),
@@ -1126,6 +1129,7 @@ export default function PDVPage() {
             setCartItems([]);
             setSelectedCustomer(undefined);
             setPayments([]);
+            setSaleViaPayJoy(false);
             setPdvPixPayment(null);
             setDeliveryType(undefined);
             setDeliveryPersonId(undefined);
@@ -1590,6 +1594,13 @@ export default function PDVPage() {
                         </div>
 
 
+                        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                            <input type="checkbox" checked={saleViaPayJoy} onChange={event => setSaleViaPayJoy(event.target.checked)} className="h-4 w-4 accent-emerald-600" />
+                            <span>
+                                <span className="block text-sm font-semibold text-emerald-900">{PAYJOY_SALE_NOTE}</span>
+                                <span className="block text-xs text-emerald-700">Identifica a venda. Os pagamentos continuam como você informar abaixo.</span>
+                            </span>
+                        </label>
                         <PaymentSection
                             total={total}
                             payments={payments}
@@ -1647,6 +1658,7 @@ export default function PDVPage() {
                             onDownloadLog={handleDownloadFinalizationLog}
                         />
                         <ReceiptPreview
+                            payJoy={saleViaPayJoy}
                             customer={selectedCustomer}
                             items={cartItems}
                             deliveryType={deliveryType}

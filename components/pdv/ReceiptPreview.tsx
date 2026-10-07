@@ -6,6 +6,7 @@ import { calculateSaleTotals, calculateSalePaymentTotals, calculatePaymentSummar
 import { companySettingsService } from '../../services/companySettingsService';
 import { CompanySettings } from '../../types/companySettings';
 import { capitalizeName } from '../../utils/customerFormUtils';
+import { PAYJOY_SALE_NOTE } from '../../utils/saleInformation.js';
 
 const QRCode = (
     (ReactQRCode as any).default?.default ||
@@ -23,6 +24,7 @@ interface Customer {
 }
 
 interface ReceiptPreviewProps {
+    payJoy?: boolean;
     customer: Customer | undefined;
     items: SaleItem[];
     deliveryType: DeliveryType | undefined;
@@ -38,6 +40,7 @@ interface ReceiptPreviewProps {
 }
 
 export default function ReceiptPreview({
+    payJoy = false,
     customer,
     items,
     deliveryType,
@@ -234,6 +237,7 @@ export default function ReceiptPreview({
                 )}
             </div>
 
+            {payJoy && <p className="mx-6 mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-center text-sm font-semibold text-emerald-800">{PAYJOY_SALE_NOTE}</p>}
             {/* Content */}
             <div className="p-6 space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto">
                 {/* Cliente */}

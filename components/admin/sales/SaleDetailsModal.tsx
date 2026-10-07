@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PAYJOY_SALE_NOTE, isPayJoySale } from '../../../utils/saleInformation.js';
 import { ShoppingBag, X, Calendar, User, UserCheck, Package, DollarSign, CreditCard, Banknote, Truck, AlertCircle, RefreshCw, FileText, Receipt, ExternalLink, Copy, Download } from 'lucide-react';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
 import { SalePartialRefund, SaleWithItems } from '../../../types/sale';
@@ -716,6 +717,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${getStatusStyle(sale.status)}`}>
                                     {getStatusLabel(sale.status)}
                                 </span>
+                                {isPayJoySale(sale) && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">{PAYJOY_SALE_NOTE}</span>}
                             </div>
                             <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
                                 <span className="flex items-center gap-1">

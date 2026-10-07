@@ -12,6 +12,7 @@ import { stockLocationService } from '../../../services/stockLocationService';
 import { aggregateModelProducts, getModelIdentifierSections } from '../../../services/modelProductAggregator.js';
 import { getProductCloneState } from '../../../services/productClonePrefill.js';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
+import { PAYJOY_SALE_NOTE } from '../../../utils/saleInformation.js';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -385,6 +386,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                                                 ) : (
                                                                                                     unit.orderNumber || '-'
                                                                                                 )}
+                                                                                                {unit.payJoy && <span className="mt-1 block w-fit rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">{PAYJOY_SALE_NOTE}</span>}
                                                                                             </td>
                                                                                             <td className="px-2 py-2">{unit.customerName || '-'}</td>
                                                                                             <td className="px-2 py-2">

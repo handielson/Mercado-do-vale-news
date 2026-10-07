@@ -8,6 +8,7 @@ import MarketplaceSaleDetailsModal from '../../../components/admin/sales/Marketp
 import { getCachedMarketplaceSales, getMarketplaceSales, MarketplaceSale, MarketplaceSaleStatus } from '../../../services/adminMarketplaceSalesService';
 import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../../../utils/salePresentation';
 import toast from 'react-hot-toast';
+import { PAYJOY_SALE_NOTE, isPayJoySale } from '../../../utils/saleInformation.js';
 
 const AUTO_REFRESH_MS = 5 * 60_000;
 
@@ -269,7 +270,8 @@ export default function SalesPage() {
         return [...localRows, ...externalRows].filter(row => {
             if (searchTerm) {
                 const s = searchTerm.toLowerCase();
-                if (!`${row.customerName} ${row.id} ${row.channelLabel}`.toLowerCase().includes(s)) return false;
+                const saleInformation = isPayJoySale(row.localSale) ? PAYJOY_SALE_NOTE : '';
+                if (!`${row.customerName} ${row.id} ${row.channelLabel} ${saleInformation}`.toLowerCase().includes(s)) return false;
             }
             if (statusFilter !== 'all' && row.normalizedStatus !== statusFilter) return false;
             if (dateFrom) {
@@ -603,6 +605,7 @@ export default function SalesPage() {
                                                     Vend: {row.localSale.seller.name.split(' ')[0]}
                                                 </div>
                                             )}
+                                            {isPayJoySale(row.localSale) && <span className="mt-1 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">{PAYJOY_SALE_NOTE}</span>}
                                         </td>
                                         <td className="min-w-0 px-2 py-4 lg:px-3">
                                             <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700" title={row.channelLabel}>
