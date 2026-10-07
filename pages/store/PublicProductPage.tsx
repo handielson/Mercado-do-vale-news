@@ -363,7 +363,7 @@ export const PublicProductPage: React.FC = () => {
 
                 // Fallback: se by-slug ainda não encontrou, tentar busca por search
                 // (cobre produtos que existem na VPS mas não têm o campo slug preenchido)
-                if (!data || data.error) {
+                if ((!data || data.error) && !isUuid) {
                     try {
                         const searchTerms = Array.from(new Set([slug, slug.replace(/-/g, ' ')]));
                         let searchResults: any[] | null = null;

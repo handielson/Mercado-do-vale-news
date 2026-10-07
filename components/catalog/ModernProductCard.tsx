@@ -21,7 +21,6 @@ import { toTitleCase } from '@/utils/stringFormatters';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
 import { buildResponsiveImageSources } from '@/utils/responsive-image-sources.js';
 import { CATALOG_RETURN_STORAGE_KEY, createCatalogReturnState } from '../../pages/catalog/catalogPagination.js';
-import { getPublicProductVariantRouteTarget } from '../../pages/store/productRouteTarget.js';
 import {
     formatCatalogVariationLabel,
     getCatalogCardDisplayName,
@@ -320,8 +319,9 @@ export function ModernProductCard({
             }
         }
 
-        const routePeers = productGroup?.variants?.flatMap(variant => variant.products) || [product, ...relatedProducts];
-        navigate(`/produto/${getPublicProductVariantRouteTarget(targetProduct, routePeers)}`);
+        // Filtered groups can omit other products sharing this slug. Resolve the
+        // selected ID first; the product page restores its readable variant URL.
+        navigate(`/produto/${encodeURIComponent(targetProduct.id)}`);
     };
 
     const handleInfoClick = (e: React.MouseEvent) => {

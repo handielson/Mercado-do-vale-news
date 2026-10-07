@@ -16,8 +16,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 }
 
 const modernCard = readFileSync('components/catalog/ModernProductCard.tsx', 'utf8');
-assert.match(modernCard, /getPublicProductVariantRouteTarget/);
-assert.match(modernCard, /productGroup\?\.variants\?\.flatMap\(variant => variant\.products\)/);
+assert.match(modernCard, /navigate\(`\/produto\/\$\{encodeURIComponent\(targetProduct\.id\)\}`\)/);
+assert.doesNotMatch(modernCard, /const routePeers =/);
 
 const adminCard = readFileSync('components/products/ProductCard.tsx', 'utf8');
 assert.match(adminCard, /href=\{`\/produto\/\$\{product\.id\}`\}/);
@@ -25,5 +25,6 @@ assert.match(adminCard, /href=\{`\/produto\/\$\{product\.id\}`\}/);
 const productPage = readFileSync('pages/store/PublicProductPage.tsx', 'utf8');
 assert.match(productPage, /isUuid[\s\S]*getPublicProductDisambiguatedRouteTarget\(data\)/);
 assert.match(productPage, /if \(canonicalRouteTarget && canonicalRouteTarget !== slug\)/);
+assert.match(productPage, /if \(\(!data \|\| data\.error\) && !isUuid\)/);
 
 console.log('duplicate product slug active priority regression: ok');

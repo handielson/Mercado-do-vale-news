@@ -1,38 +1,29 @@
 {
-  "version": "v1.2.565-status-sistema",
+  "version": "v1.2.566-catalogo-produto-exato",
   "date": "2026-10-07",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.565-status-sistema",
-  "release_vps": "/var/www/mdv-site/releases/20261007-134615-status-sistema",
+  "tag": "v1.2.566-catalogo-produto-exato",
+  "release_vps": "/var/www/mdv-site/releases/20261007-164237-catalogo-produto-exato",
   "release_print3d_vps": null,
-  "summary": "Central administrativa com status do sistema, integracoes e publicacoes; saude autenticada da sessao WAHA dos Status.",
+  "summary": "Clique no catalogo abre a variacao exata mesmo com slugs compartilhados e busca filtrada.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "pages/admin/settings/SystemStatusPage.tsx",
-    "services/systemStatusModel.ts",
-    "services/systemStatusService.ts",
-    "services/whatsappStatusHealth.cjs",
-    "routes/index.tsx",
-    "layouts/AdminLayout.tsx",
-    "hooks/usePageTitle.ts",
-    "server.js",
-    "vps_server.js",
-    "vps_server.cjs",
-    "deploy-vps-server-only.cjs",
-    "scripts/deploy-system-status.cjs",
-    "tmp-tests/system-status.test.cjs",
-    "tmp-tests/system-status-deploy.test.cjs",
+    "components/catalog/ModernProductCard.tsx",
+    "pages/store/PublicProductPage.tsx",
+    "tmp-tests/public-product-route-target.test.mjs",
+    "tmp-tests/product-duplicate-slug-active-priority-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-07-v1.2.565-status-sistema.md"
+    "docs/versoes/2026-10-07-v1.2.566-catalogo-produto-exato.md"
   ],
   "validations": [
-    "22 testes de status, autenticacao, cache, configuracoes e deploy seletivo com rollback",
-    "Sintaxe das tres entradas e modulos de servidor; guarda de baixa por local",
-    "Build com trava Supabase; validacao publica apos deploy"
+    "Handler real do card: busca filtrada, cor selecionada e produto sem slug; falha no codigo anterior",
+    "Guardas de rota, estado do card e estoque da PDP; sintaxe das tres entradas de servidor",
+    "Build com trava Supabase; validacao publica e clique no navegador apos deploy",
+    "Dois testes gerais preexistentes falham tambem em HEAD: prefixo de cache e breadcrumb mobile"
   ]
 }
