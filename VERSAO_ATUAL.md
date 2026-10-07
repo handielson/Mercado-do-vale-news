@@ -2,11 +2,13 @@
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.566-catalogo-produto-exato.
 Release VPS: /var/www/mdv-site/releases/20261007-164237-catalogo-produto-exato
-Status: preparada para publicacao.
+Status: publicada e validada em producao.
 
 Clique no card resolve o ID da variacao selecionada antes de restaurar seu endereco legivel. Grupos filtrados podem omitir outras cores com o mesmo slug; isso nao pode abrir outro SKU. Busca por ID sem resultado nao usa fallback aproximado. API existente e dados comerciais preservados; deploy somente do site. Arquivos locais da impressao Shopee no Lenovo fora deste commit.
 
 Validacoes: handler real do card com busca filtrada, selecao de cor e produto sem slug; guardas de rota, estado do card e estoque; sintaxe das entradas e build com trava Supabase. Dois testes gerais ja falham no HEAD anterior (prefixo de cache e breadcrumb mobile). Detalhes em docs/versoes/2026-10-07-v1.2.566-catalogo-produto-exato.md.
+
+Codigo 9f8c87fe e tag enviados a origin/main. Site ativo na release registrada, home e VERSION HTTP 200 com versao correspondente; API existente mysql.ok=true, sem deploy/restart. Clique publicado da busca abriu RN15P8256P preto no endereco legivel com cor e memoria, console sem erros; aviso preexistente de company_id. Evidencia .local/catalogo-produto-exato-publicado.png. Auditoria/aplicacao segura preservou 34 worktrees bloqueadas (25 dirty, 9 not_merged_into_origin_main), zero candidatos/remocoes; lista no registro da versao. Main sincronizado, somente quatro arquivos preexistentes da impressao Shopee permanecem locais. Nenhum cadastro, preco, estoque ou pedido alterado.
 
 ## Release anterior: v1.2.565-status-sistema
 
