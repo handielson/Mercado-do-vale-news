@@ -571,6 +571,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--parent-public-link-only') || process.argv.includes('--parent-public-link-check')) {
+    await require('./scripts/deploy-parent-public-link.cjs').deployParentPublicLink({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--parent-public-link-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--bling-connection-health-only') || process.argv.includes('--bling-connection-health-check')) {
     await require('./scripts/deploy-bling-connection-health.cjs').deployBlingConnectionHealth({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

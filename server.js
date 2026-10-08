@@ -9228,6 +9228,34 @@ async function loadSeoProductBySlug(slug) {
     }
   }
 
+  // O pai representa a familia: o HTML inicial precisa resolver uma variacao
+  // publica, assim como a API da pagina, antes de declarar o link indisponivel.
+  if (!rows.length) {
+    const [parents] = await pool.query(
+      `SELECT id FROM products
+       WHERE (id = ? OR slug = ?) AND is_parent = 1
+         AND (status IN ('active', 'Ativo') OR status IS NULL)
+         AND (exclude_from_seo = 0 OR exclude_from_seo IS NULL)
+       ORDER BY id ASC LIMIT 1`,
+      [slug, slug]
+    );
+    if (parents.length) {
+      [rows] = await pool.query(
+        `${select}
+         WHERE parent_id = ? ${filter}
+         ORDER BY (CASE WHEN track_inventory = 0 OR ${comboStockSql('products')} > 0 THEN 0 ELSE 1 END), name ASC, id ASC
+         LIMIT 1`,
+        [parents[0].id]
+      );
+      if (rows.length) {
+        const [routePeers] = rows[0].slug ? await pool.query(
+          `${select} WHERE slug = ? ${filter}`, [rows[0].slug]
+        ) : [[]];
+        rows[0].seo_route_target = getPublicProductVariantRouteTargetVps(rows[0], routePeers) || rows[0].id;
+      }
+    }
+  }
+
   if (!rows.length) {
     const [routeCandidates] = await pool.query(
       `${select}
