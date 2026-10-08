@@ -31,25 +31,27 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
         && !['recent', 'featured', 'bestsellers'].includes(section.section_type);
 
     useEffect(() => {
-        loadProducts();
+        let current = true;
+        loadProducts(() => current);
         // Carrega cores do banco uma vez (para resolver hex dinamicamente)
         colorService.listActive().then(colors => {
             const map: Record<string, string> = {};
             colors.forEach(c => { if (c.hex_code) map[c.name] = c.hex_code; });
             setColorHexMap(map);
         }).catch(() => {}); // silencia erro — fallback para COLOR_MAP
-    }, [section.id]);
+        return () => { current = false; };
+    }, [section.id, customer?.id, customer?.customer_type]);
 
-    const loadProducts = async () => {
+    const loadProducts = async (isCurrent: () => boolean) => {
         try {
             setLoading(true);
             const bypassCache = customer?.customer_type === 'ADMIN';
             const data = await catalogSectionsService.getProductsForSection(section, bypassCache);
-            setProducts(data);
+            if (isCurrent()) setProducts(data);
         } catch (error) {
             console.error('Erro ao carregar produtos da seção:', error);
         } finally {
-            setLoading(false);
+            if (isCurrent()) setLoading(false);
         }
     };
 

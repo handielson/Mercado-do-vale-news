@@ -514,6 +514,14 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--product-read-privacy-only') || process.argv.includes('--product-read-privacy-check')) {
+    await require('./scripts/deploy-product-read-privacy.cjs').deployProductReadPrivacy({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--product-read-privacy-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--catalog-sections-only') || process.argv.includes('--catalog-sections-check')) {
     await require('./scripts/deploy-catalog-sections.cjs').deployCatalogSections({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
@@ -737,6 +745,7 @@ async function main() {
   console.log(`Uploading server to ${appDir}`);
   await exec(`mkdir -p ${appDir}/services`);
   await upload(path.join(__dirname, 'services/whatsappStatusHealth.cjs'), remotePathJoin(appDir, 'services/whatsappStatusHealth.cjs'));
+  await upload(path.join(__dirname, 'services/productReadPrivacy.cjs'), remotePathJoin(appDir, 'services/productReadPrivacy.cjs'));
   await exec(`node --check ${appDir}/services/whatsappStatusHealth.cjs`);
   await upload(localServer, `${appDir}/vps_server.js`);
   await upload(localServerCjs, `${appDir}/vps_server.cjs`);

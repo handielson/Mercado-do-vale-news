@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from './authSession';
+import { vpsAuthService } from './vpsAuthService';
 import type { CatalogProduct } from '@/types/catalog';
 import { vpsApiService } from '@/services/vpsApiService';
 import { normalizeProduct } from '@/services/productNormalizer';
@@ -13,10 +14,10 @@ import { modelColorImagesService } from './model-color-images';
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 30 * 1000; // 30 segundos (evita cache obsoleto prolongado na UI)
-const CACHE_KEY_PREFIX = '@mv:catalog:v8:';
+const CACHE_KEY_PREFIX = '@mv:catalog:v9:';
 
 // Helper to safely access localStorage (prevents SSR errors)
-const getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
+const getStorage = () => typeof window !== 'undefined' && !vpsAuthService.getStoredToken() ? window.localStorage : null;
 
 const removeHiddenOffers = <T extends Record<string, any>>(products: T[]): T[] =>
     products.filter(product => !product.offer_type || product.offer_visibility !== 'hidden');
@@ -48,6 +49,7 @@ export const catalogService = {
         bypassCache: boolean = false,
         settingsOverride?: CatalogSettings
     ): Promise<{ products: CatalogProduct[], total: number, hasMore: boolean }> => {
+        bypassCache = bypassCache || Boolean(vpsAuthService.getStoredToken());
         const cacheKey = `${CACHE_KEY_PREFIX}products:${JSON.stringify({ filters, page, pageSize })}`;
 
         // ── Busca com termo: vai direto ao VPS (server-side) ──────────────────
@@ -101,6 +103,7 @@ export const catalogService = {
 
         // Helper para salvar no cache
         const saveToCache = (products: any[], total: number, hasMore: boolean) => {
+            if (bypassCache) return;
             if (filters?.search) return; // Buscas não são cacheadas
             const storage = getStorage();
             if (!storage) return;
@@ -422,6 +425,7 @@ export const catalogService = {
      * Buscar produtos por categoria
      */
     getProductsByCategory: async (category: string, bypassCache: boolean = false): Promise<CatalogProduct[]> => {
+        bypassCache = bypassCache || Boolean(vpsAuthService.getStoredToken());
         const cacheKey = `${CACHE_KEY_PREFIX}category:${category}`;
         if (!bypassCache) {
             const storage = getStorage();
@@ -451,6 +455,7 @@ export const catalogService = {
      * Buscar produtos em destaque
      */
     getFeaturedProducts: async (limit: number = 10, bypassCache: boolean = false): Promise<CatalogProduct[]> => {
+        bypassCache = bypassCache || Boolean(vpsAuthService.getStoredToken());
         const cacheKey = `${CACHE_KEY_PREFIX}featured:${limit}`;
         if (!bypassCache) {
             const storage = getStorage();
@@ -467,7 +472,7 @@ export const catalogService = {
         // VPS é a fonte de verdade — busca produtos em destaque
         let products: CatalogProduct[] = [];
         try {
-            const res = await fetch(buildVpsUrl(`/products?is_featured=true&limit=${limit}`));
+            const res = await fetch(buildVpsUrl(`/products?is_featured=true&limit=${limit}`), { headers: await buildAuthHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 products = removeHiddenCatalogProducts(removeHiddenOffers(data || [])).map(normalizeProduct) as unknown as CatalogProduct[];
@@ -486,6 +491,7 @@ export const catalogService = {
      * Buscar produtos novos
      */
     getNewProducts: async (limit: number = 10, bypassCache: boolean = false): Promise<CatalogProduct[]> => {
+        bypassCache = bypassCache || Boolean(vpsAuthService.getStoredToken());
         const cacheKey = `${CACHE_KEY_PREFIX}new:${limit}`;
         if (!bypassCache) {
             const storage = getStorage();
@@ -502,7 +508,7 @@ export const catalogService = {
         // VPS é a fonte de verdade — busca produtos novos
         let products: CatalogProduct[] = [];
         try {
-            const res = await fetch(buildVpsUrl(`/products?is_new=true&limit=${limit}`));
+            const res = await fetch(buildVpsUrl(`/products?is_new=true&limit=${limit}`), { headers: await buildAuthHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 products = removeHiddenCatalogProducts(removeHiddenOffers(data || [])).map(normalizeProduct) as unknown as CatalogProduct[];

@@ -1003,6 +1003,7 @@ async function getVpsBearerAuthContext(request) {
     return {
       userId: payload.userId || customer?.user_id || customer?.id || null,
       customerId: customer?.id || null,
+      customerType: customer?.customer_type || null,
       isAdmin: normalizeAuthCustomerType(customer?.customer_type) === 'ADMIN',
     };
   } catch (err) {
@@ -1010,6 +1011,10 @@ async function getVpsBearerAuthContext(request) {
     return { userId: null, customerId: null, isAdmin: false };
   }
 }
+
+require('./services/productReadPrivacy.cjs').registerProductReadPrivacy(fastify, {
+  getAuth: getVpsBearerAuthContext,
+});
 
 async function isAdminBearerToken(request) {
   const auth = await getVpsBearerAuthContext(request);

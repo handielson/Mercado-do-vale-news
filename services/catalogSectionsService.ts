@@ -5,7 +5,8 @@ import { normalizeProduct } from '@/services/productNormalizer';
 import { buildVpsUrl } from '@/services/vpsProxyBase';
 import { vpsApiService } from '@/services/vpsApiService';
 import { vpsClient } from '@/services/vpsClient';
-import { getCurrentAuthUserId } from '@/services/authSession';
+import { getCurrentAuthUserId, buildAuthHeaders } from '@/services/authSession';
+import { vpsAuthService } from '@/services/vpsAuthService';
 import { colorService } from '@/services/colors';
 import { modelColorImagesService } from '@/services/model-color-images';
 
@@ -110,10 +111,10 @@ class CatalogSectionsService {
 
     // Prefix for persistent LocalStorage caching of section products
     // ⚠️ Bump a versão aqui sempre que a lógica de fetch mudar (invalida cache antigo automaticamente)
-    private CACHE_KEY_PREFIX = '@mv:section_products:v6:';
+    private CACHE_KEY_PREFIX = '@mv:section_products:v7:';
 
     // Helper to safely access localStorage (prevents SSR errors)
-    private getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
+    private getStorage = () => typeof window !== 'undefined' && !vpsAuthService.getStoredToken() ? window.localStorage : null;
 
     private getAbortSignal = () => typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
         ? AbortSignal.timeout(PUBLIC_STOREFRONT_TIMEOUT_MS)
@@ -267,6 +268,7 @@ class CatalogSectionsService {
      * Buscar produtos para uma seção específica
      */
     async getProductsForSection(section: CatalogSection, bypassCache: boolean = false): Promise<CatalogProduct[]> {
+        bypassCache = bypassCache || Boolean(vpsAuthService.getStoredToken());
         const cacheKey = `${this.CACHE_KEY_PREFIX}${section.id}`;
 
         // 1. SWR: Return from LocalStorage immediately for fast paints (unless bypassed)
@@ -352,6 +354,7 @@ class CatalogSectionsService {
 
             // Fetch dynamic products
             const res = await fetch(buildVpsUrl(`/products?${params.toString()}`), {
+                headers: await buildAuthHeaders(),
                 signal: this.getAbortSignal(),
             });
             if (!res.ok) throw new Error(`VPS API returned ${res.status}`);
@@ -384,6 +387,7 @@ class CatalogSectionsService {
                     pinnedParams.append('in_ids', section.pinned_product_ids.join(','));
                     
                     const pinnedRes = await fetch(buildVpsUrl(`/products?${pinnedParams.toString()}`), {
+                        headers: await buildAuthHeaders(),
                         signal: this.getAbortSignal(),
                     });
                     if (pinnedRes.ok) {

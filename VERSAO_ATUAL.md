@@ -1,3 +1,13 @@
+# v1.2.572-protecao-precos
+
+Data: 2026-10-07. Branch: main. Tag: v1.2.572-protecao-precos.
+Release VPS: /var/www/mdv-site/releases/20261008-021538-protecao-precos
+Status: pronta para publicacao; validacao publica pendente.
+
+Consultas publicas de produtos removem custo e precos comerciais. Administrador autenticado conserva custo; contas comerciais autenticadas conservam revenda/atacado. Chave de transporte nao concede perfil comercial. Respostas privadas nao entram no cache anonimo; catalogo acompanha troca de sessao. API publicada seletivamente com backup, sem alteracoes de valores ou estoque. Detalhes em docs/versoes/2026-10-07-v1.2.572-protecao-precos.md.
+
+## Release anterior
+
 # v1.2.571-banner-whatsapp
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.571-banner-whatsapp.

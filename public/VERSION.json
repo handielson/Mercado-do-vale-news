@@ -1,29 +1,38 @@
 {
-  "version": "v1.2.571-banner-whatsapp",
+  "version": "v1.2.572-protecao-precos",
   "date": "2026-10-07",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.571-banner-whatsapp",
-  "release_vps": "/var/www/mdv-site/releases/20261008-011734-banner-whatsapp",
+  "tag": "v1.2.572-protecao-precos",
+  "release_vps": "/var/www/mdv-site/releases/20261008-021538-protecao-precos",
   "release_print3d_vps": null,
-  "summary": "Banner gera link de WhatsApp com numero e mensagem editaveis.",
+  "summary": "Protege custo e precos comerciais nas consultas publicas de produtos.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/admin/BannerForm.tsx",
-    "utils/bannerWhatsAppLink.ts",
-    "tmp-tests/banner-whatsapp-link.test.cjs",
-    "tmp-tests/banner-internal-name.test.cjs",
+    "components/catalog/CatalogSection.tsx",
+    "services/productReadPrivacy.cjs",
+    "services/vpsApiService.ts",
+    "services/catalogService.ts",
+    "services/catalogSectionsService.ts",
+    "server.js",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-product-read-privacy.cjs",
+    "tmp-tests/product-read-privacy.test.cjs",
+    "tmp-tests/deploy-product-read-privacy.test.cjs",
+    "docs/operacional/2026-10-07-revisao-falhas-sistema.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-07-v1.2.571-banner-whatsapp.md"
+    "docs/versoes/2026-10-07-v1.2.572-protecao-precos.md"
   ],
   "validations": [
-    "Geracao, normalizacao DDD/pais, acentos e quebra de linha",
-    "Formulario real salva link externo e recupera mensagem na edicao",
-    "Regressoes de titulo interno, links e imagens; build e trava Supabase",
-    "Validacao publica de versao e formulario apos deploy"
+    "Privacidade HTTP por perfil e transporte; isolamento de cache",
+    "Deploy seletivo idempotente; rotas de ofertas e regressoes do catalogo",
+    "Sintaxe, build e trava Supabase",
+    "Conferencia publica da API, site e versao apos deploy"
   ]
 }

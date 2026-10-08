@@ -169,6 +169,10 @@ class VpsApiService {
   }
 
   private async fetchSafe<T>(path: string, noCache = false, options: { preferProxy?: boolean; proxyOnly?: boolean } = {}): Promise<T | null> {
+    const headers = await this.authHeaders({ Accept: 'application/json' });
+    // A private response must never enter the anonymous in-memory cache.
+    const authenticated = Boolean(headers.Authorization || headers['x-sync-key'] || headers['X-Sync-Key']);
+    noCache = noCache || (authenticated && (path.startsWith('/products') || path.startsWith('/storefronts/')));
     if (!noCache) {
       const cached = this.isCached<T>(path);
       if (cached !== null) return cached;
@@ -176,7 +180,6 @@ class VpsApiService {
 
     const separator = path.includes('?') ? '&' : '?';
     const fullPath = noCache ? `${path}${separator}_t=${Date.now()}` : path;
-    const headers = await this.authHeaders({ Accept: 'application/json' });
     const cacheMode: RequestCache = noCache ? 'no-store' : 'default';
     const timeoutMs = getReadTimeoutMs(path);
     const primaryUrl = proxyUrl(fullPath, 'GET');
