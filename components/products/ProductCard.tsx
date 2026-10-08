@@ -1679,6 +1679,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                                 {product.name}
                             </a>
                         </h3>
+                        <CatalogTitleEditor product={product} inline />
                         {!familyVariants && <>
                             {/* Specs: cor + memória/RAM */}
                             <p className="font-mono text-xs text-slate-500 mt-0.5">
@@ -1701,7 +1702,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                 </button>
                 <div id={detailsId} hidden={!showDetails} className="space-y-3">
                     <div className="min-w-0">
-                        <CatalogTitleEditor product={product} />
                         {familyVariants}
                         {/* Badge Pai / Variação */}
                         <ProductPublicationChannels product={product} shopeeLinked={shopeeVisualState.isSynced} shopeeStoreCodes={shopeeVisualState.storeCodes} tiktokStatus={hasTikTokLink ? currentTikTokStatus : ''} onShopee={handleOpenShopeeModal} onTikTok={() => setIsTikTokModalOpen(true)} />

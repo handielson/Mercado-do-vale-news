@@ -7,6 +7,13 @@ const moduleStub = { exports: {} };
 new Function('exports', ts.transpileModule(fs.readFileSync('services/systemStatusModel.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(moduleStub.exports);
 const { interpretSystemStatus: state, initialSystemStatusChecks, failedSystemStatusCheck } = moduleStub.exports;
 const now = new Date('2026-10-07T13:00:00Z');
+test('Bling connection health is distinct from fiscal automation', () => {
+  assert.equal(state('blingConnection', { state: 'connected' }, now).state, 'healthy');
+  assert.equal(state('blingConnection', { state: 'disconnected' }, now).state, 'error');
+  assert.equal(state('blingConnection', { state: 'forbidden' }, now).state, 'warning');
+  assert.equal(state('blingConnection', { state: 'unavailable' }, now).state, 'unknown');
+  assert.equal(state('bling', { enabled: false }, now).state, 'unconfigured');
+});
 const env = { WAHA_STATUS_SESSION: 'private/session', WAHA_STATUS_API_KEY: 'private-key', WAHA_STATUS_SERVER_URL: 'http://localhost:18082/' };
 
 test('health probes only GET and returns no account or credential data', async () => {

@@ -9044,6 +9044,13 @@ async function handleCronDispatcherVps(request, reply) {
 
 fastify.all('/api/bling-webhook', handleBlingWebhookVps);
 fastify.all('/api/bling', handleBlingApiVps);
+const readBlingConnectionHealth = require('./services/blingConnectionHealth.cjs').createBlingConnectionHealth({
+  getAuthHeader: () => getBlingProductDetailAuthHeaderVps({ headers: {} }),
+});
+fastify.get('/admin/bling/connection-status', { preHandler: requireAdminBearerToken }, async (_request, reply) => {
+  reply.header('Cache-Control', 'no-store');
+  return readBlingConnectionHealth();
+});
 fastify.get('/api/auth/callback/bling', handleBlingOAuthCallbackVps);
 fastify.all('/api/shopee', handleShopeeOAuthVps);
 fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);

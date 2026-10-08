@@ -1,28 +1,38 @@
 {
-  "version": "v1.2.584-product-card-details",
+  "version": "v1.2.585-bling-connection-status",
   "date": "2026-10-08",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.584-product-card-details",
-  "release_vps": "/var/www/mdv-site/releases/20261008-203832-product-card-details",
+  "tag": "v1.2.585-bling-connection-status",
+  "release_vps": "/var/www/mdv-site/releases/20261008-205307-bling-connection-status",
   "release_print3d_vps": null,
-  "summary": "Foto, miniaturas, atalhos, nome e SKU visiveis em todos os cards; expansao somente dos detalhes abaixo do SKU.",
+  "summary": "Complemento abaixo do titulo do pai; debug OAuth removido apos sucesso; conexao real do Bling no Status do sistema.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
+    "components/products/CatalogTitleEditor.tsx",
     "components/products/ProductCard.tsx",
-    "components/products/ProductList.tsx",
+    "pages/admin/settings/BlingPage.tsx",
+    "services/systemStatusModel.ts",
+    "services/systemStatusService.ts",
+    "services/blingConnectionHealth.cjs",
+    "server.js",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-bling-connection-health.cjs",
+    "tmp-tests/bling-connection-health.test.cjs",
+    "tmp-tests/system-status.test.cjs",
     "tmp-tests/product-family-card-render.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-08-v1.2.584-product-card-details.md"
+    "docs/versoes/2026-10-08-v1.2.585-bling-connection-status.md"
   ],
   "validations": [
-    "Renderizacao do pai e ponto de corte comum a todos os cards.",
-    "Agrupamento, imagens, video e locais de estoque.",
-    "Build sem runtime Supabase.",
-    "Site, VERSION.json e expandir/recolher em familia e produto simples."
+    "31 testes de conexao, status, titulo e cards; guarda de estoque PDV.",
+    "Sintaxe da API e deploy seletivo; build sem runtime Supabase.",
+    "Preflight seletivo remoto; validar API, MySQL, site, versao e fluxo admin apos deploy."
   ]
 }

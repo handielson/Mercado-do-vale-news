@@ -17,6 +17,7 @@ export interface SystemStatusCheck extends SystemStatusDefinition {
 
 // Each source is queried once per refresh; multiple cards may consume that result.
 export const systemStatusDefinitions: SystemStatusDefinition[] = [
+  { id: 'blingConnection', name: 'Bling · conexão', group: 'Integrações', href: '/admin/settings/bling', source: 'blingConnection' },
   { id: 'site', name: 'Site e versão', group: 'Infraestrutura', href: '/admin', source: 'site' },
   { id: 'api', name: 'API / VPS', group: 'Infraestrutura', href: '/admin/settings/vps-status', source: 'api' },
   { id: 'mysql', name: 'Banco MySQL', group: 'Infraestrutura', href: '/admin/settings/vps-status', source: 'api' },
@@ -147,6 +148,12 @@ export function interpretSystemStatus(id: string, data: any, now = new Date()): 
       if (!active.length) return result('unconfigured', 'Sem loja ativa', 'Nenhuma conexão Shopee ativa cadastrada.');
       const connected = active.filter((c: any) => c.authorization_status === 'connected').length;
       return result(connected < active.length ? 'warning' : 'configured', connected < active.length ? 'Autorização pendente' : 'Autorizado', `${connected} de ${active.length} lojas ativas com autorização registrada. Não testa sincronização.`);
+    }
+    case 'blingConnection': {
+      if (data.state === 'connected') return result('healthy', 'Conexão confirmada', 'Consulta de leitura ao Bling concluída. Não confirma sincronização ou emissão fiscal.', data.checkedAt);
+      if (data.state === 'disconnected') return result('error', 'Reconexão necessária', 'O acesso ao Bling está ausente ou foi recusado. Reconecte nas configurações.', data.checkedAt);
+      if (data.state === 'forbidden') return result('warning', 'Permissão insuficiente', 'O Bling recusou a permissão para consultar categorias. Confira as permissões do aplicativo.', data.checkedAt);
+      return result('unknown', 'Consulta indisponível', 'Não foi possível confirmar a conexão. Uma falha temporária não significa que o vínculo foi perdido.', data.checkedAt);
     }
     case 'bling': {
       if (typeof data.enabled !== 'boolean') return unknown();

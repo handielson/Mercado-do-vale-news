@@ -14,6 +14,8 @@ import { colorService } from '../../../services/colors';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../../services/vpsProxyBase';
 import { companySettingsService } from '../../../services/companySettingsService';
+import { readSystemStatusSource } from '../../../services/systemStatusService';
+import { interpretSystemStatus } from '../../../services/systemStatusModel';
 import { Category } from '../../../types/category';
 import { Model } from '../../../types/model';
 import { Color } from '../../../types/color';
@@ -280,6 +282,8 @@ export default function BlingPage() {
             return null;
         }
     });
+    const [connectionHealth, setConnectionHealth] = useState<any>(null);
+    const [checkingConnection, setCheckingConnection] = useState(false);
 
     // ── Products import ──
     const [fetching, setFetching] = useState(false);
@@ -383,6 +387,7 @@ export default function BlingPage() {
 
         const params = new URLSearchParams(window.location.search);
         if (params.get('connected') === 'true') {
+            clearConnectDebug();
             toast.success('Bling conectado com sucesso!');
             setIsConnected(true);
             window.history.replaceState({}, '', window.location.pathname);
@@ -445,6 +450,7 @@ export default function BlingPage() {
                 });
                 setIsConnected(!!data.bling_access_token);
                 setTokenExpiresAt(data.bling_token_expires_at || null);
+                if (data.bling_access_token) await verifyConnection();
             }
         } catch (err: any) {
             toast.error('Erro ao carregar configurações: ' + err.message);
@@ -510,6 +516,25 @@ export default function BlingPage() {
         } finally {
             setSaving(false);
         }
+    }
+
+    function clearConnectDebug() {
+        setLastConnectDebug(null);
+        try { sessionStorage.removeItem(BLING_CONNECT_DEBUG_KEY); } catch { /* ignore */ }
+    }
+
+    async function verifyConnection() {
+        setCheckingConnection(true);
+        try {
+            const health: any = await readSystemStatusSource('blingConnection');
+            setConnectionHealth(health);
+            if (health.state === 'connected') {
+                setIsConnected(true);
+                clearConnectDebug();
+            } else if (health.state === 'disconnected') setIsConnected(false);
+        } catch {
+            setConnectionHealth({ state: 'unavailable' });
+        } finally { setCheckingConnection(false); }
     }
 
     function rememberConnectDebug(debug: BlingConnectDebug) {
@@ -1086,9 +1111,9 @@ export default function BlingPage() {
                     <p className="text-sm text-slate-500">Conecte e sincronize seus produtos com o Bling ERP</p>
                 </div>
                 {isConnected && !tokenExpired && (
-                    <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-100 px-3 py-1.5 rounded-full">
+                    <span className={`ml-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full ${connectionHealth?.state === 'connected' ? 'text-green-700 bg-green-100' : 'text-slate-700 bg-slate-100'}`}>
                         <CheckCircle className="w-3.5 h-3.5" />
-                        Conectado
+                        {checkingConnection ? 'Verificando conexão…' : connectionHealth?.state === 'connected' ? 'Conexão confirmada' : 'Vínculo registrado'}
                     </span>
                 )}
                 {(tokenExpired || !isConnected) && (
@@ -1098,7 +1123,11 @@ export default function BlingPage() {
                     </span>
                 )}
             </div>
-
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm" aria-live="polite">
+                <span>{checkingConnection ? 'Consultando o Bling…' : connectionHealth ? interpretSystemStatus('blingConnection', connectionHealth).detail : 'Conexão ainda não verificada.'}</span>
+                <button type="button" disabled={checkingConnection} onClick={() => void verifyConnection()} className="font-semibold text-blue-700 disabled:opacity-50">Verificar conexão</button>
+                <a href="/admin/settings/system-status" className="font-semibold text-blue-700">Status do sistema</a>
+            </div>
             <div className="flex flex-col md:flex-row gap-8 items-start">
                 {/* Menu Lateral */}
                 <div className="w-full md:w-64 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm sticky top-24">

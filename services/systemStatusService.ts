@@ -1,6 +1,7 @@
 import { vpsClient } from './vpsClient';
 
 const sourcePaths: Record<string, string> = {
+  blingConnection: '/admin/bling/connection-status',
   api: '/status', synology: '/synology/status', backup: '/admin/system-backup', bot: '/admin/bot-health',
   attendance: '/n8n-bot/whatsapp-switch/status', waha: '/admin/whatsapp-status-health',
   meta: '/admin/marketing/meta/status', stories: '/admin/marketing/stories', ml: '/mercado-livre/settings',

@@ -571,6 +571,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--bling-connection-health-only') || process.argv.includes('--bling-connection-health-check')) {
+    await require('./scripts/deploy-bling-connection-health.cjs').deployBlingConnectionHealth({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--bling-connection-health-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--system-status-only') || process.argv.includes('--system-status-check')) {
     await require('./scripts/deploy-system-status.cjs').deploySystemStatus({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

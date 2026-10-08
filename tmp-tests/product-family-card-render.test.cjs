@@ -46,6 +46,10 @@ test('todos os cards preservam mídia, atalhos, nome e SKU antes da expansão', 
   const card = fs.readFileSync('components/products/ProductCard.tsx', 'utf8');
   const cutoff = card.indexOf('<div id={detailsId} hidden={!showDetails}');
   assert.ok(cutoff > card.indexOf('SKU: {product.sku}'));
+  const titleEditor = card.indexOf('<CatalogTitleEditor product={product} inline />');
+  assert.ok(titleEditor > card.indexOf('</h3>'));
+  assert.ok(titleEditor < card.indexOf('SKU: {product.sku}'));
+  assert.equal(card.match(/<CatalogTitleEditor /g).length, 1);
   assert.ok(cutoff > card.indexOf('title="Copiar nome"'));
   assert.ok(cutoff > card.indexOf('alt={product.name}'));
   assert.ok(cutoff < card.indexOf('<ProductPublicationChannels'));
