@@ -4,9 +4,9 @@ const fs = require('node:fs');
 const Fastify = require('fastify');
 const { registerProductReadPrivacy } = require('../services/productReadPrivacy.cjs');
 const fixtures = [
-  { id: 'cheap', price_retail: 1000, status: 'active', is_parent: 0, price_cost: 500 },
-  { id: 'middle', price_retail: 1990, status: 'active', is_parent: 0, price_cost: 900 },
-  { id: 'expensive', price_retail: 3000, status: 'active', is_parent: 0, price_cost: 1500 },
+  { id: 'cheap', category_id: 'other', price_retail: 1000, status: 'active', is_parent: 0, price_cost: 500 },
+  { id: 'middle', category_id: 'phones', price_retail: 1990, status: 'active', is_parent: 0, price_cost: 900 },
+  { id: 'expensive', category_id: 'smartphones', price_retail: 3000, status: 'active', is_parent: 0, price_cost: 1500 },
   { id: 'inactive', price_retail: 1990, status: 'inactive', is_parent: 0 },
   { id: 'parent', price_retail: 1990, status: 'active', is_parent: 1 },
 ];
@@ -39,6 +39,14 @@ for (const file of ['server.js', 'vps_server.js', 'vps_server.cjs']) {
       if (max !== undefined) rows = rows.filter(x => x.price_retail <= max);
       if (status !== undefined) rows = rows.filter(x => x.status === status);
       if (sql.includes('AND (is_parent = 0 OR is_parent IS NULL)')) rows = rows.filter(x => !x.is_parent);
+      const category = parameterFor('AND category_id = ?');
+      if (category !== undefined) rows = rows.filter(x => x.category_id === category);
+      const categories = sql.match(/AND category_id IN \(([^)]+)\)/);
+      if (categories) {
+        const index = (sql.slice(0, categories.index).match(/\?/g) || []).length;
+        const selected = values.slice(index, index + (categories[1].match(/\?/g) || []).length);
+        rows = rows.filter(x => selected.includes(x.category_id));
+      }
       const limit = values[values.length - 2], offset = values[values.length - 1];
       return [rows.slice(offset, offset + limit)];
     } };
@@ -64,6 +72,10 @@ for (const file of ['server.js', 'vps_server.js', 'vps_server.cjs']) {
       assert.match(lastQuery.sql, /id IN \(\?,\?\).*LIMIT \? OFFSET \?/s);
       assert.deepEqual(lastQuery.values.slice(0, 2), ['middle', 'expensive']);
       await request({ in_ids: 'middle,expensive', offset: '1', limit: '1' }, ['expensive']);
+      await request({ category: 'phones', limit: '1' }, ['middle']);
+      await request({ category: 'phones,smartphones', limit: '1', offset: '1' }, ['expensive']);
+      assert.match(lastQuery.sql, /category_id IN \(\?,\?\).*LIMIT \? OFFSET \?/s);
+      await request({ category: 'phones,smartphones', min_price: '3000', limit: '1' }, ['expensive']);
       await request({ min_price: '1990', max_price: '1990' }, ['middle']);
       await request({ min_price: '1991', limit: '1' }, ['expensive']);
       await request({ min_price: '999999999' }, []);

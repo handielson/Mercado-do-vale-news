@@ -55,46 +55,19 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
         }
     };
 
-    // Seções que NÃO devem agrupar (cada cor/variação aparece como card individual)
-    const UNGROUPED_SECTION_TYPES = ['recent', 'new', 'bestsellers'];
-    const shouldGroup = !UNGROUPED_SECTION_TYPES.includes(section.section_type);
-
     const displayItems = React.useMemo(() => {
-        let items: any[] = [];
-        
-        if (shouldGroup) {
-            // Agrupar por modelo — exibe seletor rico de "X Cores"
-            items = groupProductsByVariants(products, false, colorHexMap).map(group => ({
-                key: group.groupKey,
-                product: group.representativeProduct,
-                productGroup: group
-            }));
-        } else {
-            // Sem agrupamento: desduplica apenas o mesmo SKU exato (mesmo modelo+cor+ram+storage)
-            const deduplicated = new Map<string, CatalogProduct>();
-            for (const p of products) {
-                const key = [
-                    p.model_id || p.model || p.name,
-                    p.specs?.color || '',
-                    p.specs?.ram || '',
-                    p.specs?.storage || '',
-                ].join('|');
-                if (!deduplicated.has(key)) {
-                    deduplicated.set(key, { ...p });
-                }
-            }
-
-            items = Array.from(deduplicated.values()).map(p => ({
-                key: p.id,
-                product: p,
-                productGroup: undefined as ProductGroup | undefined
-            }));
-        }
+        // Todas as secoes usam a mesma familia, com memorias e cores dentro do card.
+        // A ordem das familias acompanha a primeira variacao na ordenacao da secao.
+        const items = groupProductsByVariants(products, false, colorHexMap).map(group => ({
+            key: group.groupKey,
+            product: group.representativeProduct,
+            productGroup: group
+        }));
         
         // Garante que a seção exibe exatamente no máximo X CARDS, e não apenas X produtos brutos
         return items.slice(0, section.max_products);
 
-    }, [products, shouldGroup, colorHexMap, section.max_products]);
+    }, [products, colorHexMap, section.max_products]);
 
     if (loading) {
         return (

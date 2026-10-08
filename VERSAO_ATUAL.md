@@ -1,3 +1,15 @@
+# v1.2.575-secoes-categorias-familias
+
+Data: 2026-10-08. Branch: main. Tag: v1.2.575-secoes-categorias-familias.
+Release VPS: /var/www/mdv-site/releases/20261008-030814-secoes-categorias-familias
+Status: preparada; aguardando deploy e validacao publica.
+
+Itens 5 e 6: secoes enviam category com selecionadas e subcategorias diretas antes da consulta limitada; produtos fixados mantem prioridade. Todas as secoes usam agrupador canonico por familia: nome do pai, memorias, cores e precos preservados; limite conta cards depois do agrupamento. Amostra ate 200 produtos, mesmas regras das demais secoes agrupadas, sem promessa de todos os filhos fora da amostra. Cache de produtos de secoes v8 invalida amostras anteriores.
+
+Testes comportamentais com service/agrupador reais e dados sinteticos, incluindo 300 produtos alheios antes da categoria, limite de familias e preservacao das variacoes. Oito testes HTTP de filtros e privacidade aprovados; regressoes de nome, modelo generico, configuracao publica/CRUD e carregamento. Sintaxe, build e trava Supabase. Apenas site; sem API/restart ou alteracao de dados comerciais. Quatro arquivos Shopee preexistentes preservados.
+
+## Release anterior
+
 # v1.2.574-whatsapp-pos-estoque
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.574-whatsapp-pos-estoque.

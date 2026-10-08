@@ -111,7 +111,7 @@ class CatalogSectionsService {
 
     // Prefix for persistent LocalStorage caching of section products
     // ⚠️ Bump a versão aqui sempre que a lógica de fetch mudar (invalida cache antigo automaticamente)
-    private CACHE_KEY_PREFIX = '@mv:section_products:v7:';
+    private CACHE_KEY_PREFIX = '@mv:section_products:v8:';
 
     // Helper to safely access localStorage (prevents SSR errors)
     private getStorage = () => typeof window !== 'undefined' && !vpsAuthService.getStoredToken() ? window.localStorage : null;
@@ -299,10 +299,8 @@ class CatalogSectionsService {
             // Busca mais fundo porque as regras globais de visibilidade
             // (estoque/preco/status) sao aplicadas client-side apos a VPS.
             // O componente da secao ainda limita a exibicao em max_products.
-            const sectionType = section.section_type;
-            const fetchMultiplier = ['recent', 'new', 'bestsellers'].includes(sectionType) ? 4 : 20;
-            const fetchCap = ['recent', 'new', 'bestsellers'].includes(sectionType) ? 80 : 200;
-            const fetchLimit = Math.min((section.max_products || 12) * fetchMultiplier, fetchCap);
+            // O limite visual conta familias, que podem ter varias memorias/cores.
+            const fetchLimit = Math.min((section.max_products || 12) * 20, 200);
             params.append('limit', fetchLimit.toString());
 
             // App settings filters
@@ -320,8 +318,17 @@ class CatalogSectionsService {
             if (section.section_type === 'new')      params.append('is_new', 'true');
             if (section.section_type === 'promotions') params.append('has_discount', 'true');
 
-            // NOTA: O VPS só suporta ?category= (ID único). O parâmetro in_category é ignorado.
-            // O filtro por múltiplas categorias é aplicado client-side abaixo após o fetch.
+            // A VPS aplica category (IDs separados por virgula) antes de LIMIT/OFFSET.
+            // Preserva a inclusao das subcategorias diretas e a prioridade dos produtos fixados.
+            if (section.filter_categories?.length && !section.pinned_product_ids?.length) {
+                const allCats = await vpsApiService.getCategories();
+                const parentSet = new Set(section.filter_categories);
+                const allowedCats = new Set(section.filter_categories);
+                for (const cat of (allCats || [])) {
+                    if (cat.parent_id && parentSet.has(cat.parent_id)) allowedCats.add(cat.id);
+                }
+                params.append('category', [...allowedCats].join(','));
+            }
 
             if (section.filter_brands && section.filter_brands.length > 0) {
                 params.append('in_brand', section.filter_brands.join(','));
@@ -362,21 +369,6 @@ class CatalogSectionsService {
             
             // Normaliza dados da VPS para campos canônicos (elimina colisões VPS ↔ VPS)
             products = (data || []).map((p: any) => normalizeProduct(p) as unknown as CatalogProduct);
-
-            // Filtro client-side por categorias (VPS ignora in_category, só aceita category único)
-            // Expande filter_categories para incluir subcategorias da VPS
-            if (section.filter_categories && section.filter_categories.length > 0 && !section.pinned_product_ids?.length) {
-                const allCats = await vpsApiService.getCategories();
-                const parentSet = new Set(section.filter_categories);
-                const allowedCats = new Set(section.filter_categories);
-                for (const cat of (allCats || [])) {
-                    if (cat.parent_id && parentSet.has(cat.parent_id)) {
-                        allowedCats.add(cat.id);
-                    }
-                }
-                products = products.filter(p => p.category_id && allowedCats.has(p.category_id));
-                console.log(`[catalogSectionsService] Filtro client-side por categorias (expandido): ${products.length} de ${data?.length || 0} (categorias: ${[...allowedCats].length})`);
-            }
 
             // Replace with Pinned products if any (to preserve sorting and exact matching)
             // Note: Since VPS API `in_ids` would just filter them, if section defines pins we do an explicit lookup.

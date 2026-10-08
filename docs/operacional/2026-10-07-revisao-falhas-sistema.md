@@ -5,11 +5,11 @@ Revisão em 07/10/2026. Não é auditoria integral. As consultas de produção f
 | # | Prioridade | Problema | Estado |
 |---|---|---|---|
 | 1 | Alta | API pública expõe custo e preços comerciais sem autenticação | Publicado e validado — v1.2.572-protecao-precos |
-| 2 | Alta | Filtros `in_ids` e `min_price` das seções ignorados pela API | Corrigido e testado localmente; publicação pendente |
-| 3 | Alta | Venda e baixa de IMEIs não são uma operação atômica | Corrigido e testado localmente; publicação pendente |
-| 4 | Alta | Confirmação de WhatsApp iniciada antes da baixa dos aparelhos | Pendente |
-| 5 | Média | Categoria filtrada após buscar amostra limitada de produtos | Pendente |
-| 6 | Média | Recentes, novidades e mais vendidos não agrupam famílias | Pendente |
+| 2 | Alta | Filtros `in_ids` e `min_price` das seções ignorados pela API | Publicado — v1.2.573-filtros-venda-imei |
+| 3 | Alta | Venda e baixa de IMEIs não são uma operação atômica | Publicado — v1.2.573-filtros-venda-imei |
+| 4 | Alta | Confirmação de WhatsApp iniciada antes da baixa dos aparelhos | Publicado — v1.2.574-whatsapp-pos-estoque |
+| 5 | Média | Categoria filtrada após buscar amostra limitada de produtos | Corrigido e testado localmente; publicação pendente |
+| 6 | Média | Recentes, novidades e mais vendidos não agrupam famílias | Corrigido e testado localmente; publicação pendente |
 | 7 | Média | Reordenação das seções com gravações independentes | Pendente |
 | 8 | Média | Fallback de produtos em cache sem conferir validade | Pendente |
 
@@ -51,3 +51,15 @@ Itens 2 e 3 publicados em v1.2.573-filtros-venda-imei (b2388b28). API e site val
 Publicado em v1.2.574-whatsapp-pos-estoque (65fd2f17). Site e PDV validados; sem venda, baixa ou envio real no teste. A fonte dos saldos continua sendo o MySQL; services/saleService.ts coordena a persistencia dos itens e a baixa por prioridade nos depositos. A chamada de confirmacao WhatsApp so inicia depois destas etapas. Falha de itens ou baixa bloqueia a chamada, preserva needs_review e registra inventory_not_finalized no log. Falha no envio apos baixa bem-sucedida permanece aviso, sem repetir estoque. O PDV tambem bloqueia o envio automatico do termo de garantia quando a venda retorna needs_review, evitando mensagem parcial em carrinho misto. Fluxos de entrega e envio manual seguem os contratos existentes.
 
 Protecao: tmp-tests/pdv-whatsapp-inventory-sequencing.test.cjs executa o service real com transporte simulado: baixa pendente, venda numerica/mista, falha na baixa, falha na persistencia, erro de WhatsApp, venda so com unidade serializada e produto sem controle de estoque. Nenhum envio, venda ou estoque real durante a validacao.
+
+## Item 5 — categoria antes da amostra limitada
+
+Em 08/10/2026, services/catalogSectionsService.ts passou a enviar category com os IDs selecionados e suas subcategorias diretas antes da consulta de produtos. Fonte da hierarquia: vpsApiService.getCategories, cadastro categories da VPS/MySQL. A rota /products ja aceita IDs separados por virgula e aplica category_id no SQL antes de LIMIT/OFFSET; nenhum ajuste de API necessario. Removido filtro tardio no navegador. Mantidas regras globais de visibilidade, ordenacao e prioridade dos produtos fixados. Cache de produtos das secoes atualizado para v8 para nao reutilizar amostras incompletas anteriores.
+
+Teste existente de expansao ampliado para executar o service real com 300 produtos fora da categoria antes dos desejados. Confere categorias selecionadas, filhos, pins e secao sem filtro. Testes HTTP dos tres entrypoints ampliados para categoria simples/multipla, paginacao e combinacao de preco. Privacidade, configuracao publica e build aprovados. Sem publicacao ou alteracao de dados reais nesta etapa.
+
+## Item 6 — familias nas secoes da homepage
+
+Em 08/10/2026, CatalogSectionComponent passou a usar groupProductsByVariants em todas as secoes, removendo a excecao para recent/new/bestsellers. Fonte da identidade: productGroupingCore, com parent_id e parent_name quando existe pai cadastrado, e os fallbacks existentes para produtos independentes. Mantido agrupador canonico, sem nova regra de nome ou alteracao de cadastros. Cada familia ocupa um card e mantem as memorias, cores e precos das variacoes disponiveis retornadas pela consulta. Limite de cards aplicado depois de agrupar; ordem das familias segue a primeira variacao na ordenacao recebida. Busca usa a mesma amostra das demais secoes agrupadas, ate 200 produtos; nao e uma consulta ilimitada de todos os filhos do catalogo.
+
+Protecao em tmp-tests/catalog-sections-family-grouping.test.mjs executa o agrupador real e o calculo de cards da secao. Valida os tres tipos, limite de familias, produtos independentes, nome do pai, memorias, cores, precos individuais e exclusao de inativos/sem estoque. Regressoes de categoria do item 5, nome de familia, modelos genericos, carregamento e build passaram. Itens 5 e 6 aguardam publicacao. Nenhum dado real alterado.

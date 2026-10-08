@@ -1,28 +1,30 @@
 {
-  "version": "v1.2.574-whatsapp-pos-estoque",
-  "date": "2026-10-07",
+  "version": "v1.2.575-secoes-categorias-familias",
+  "date": "2026-10-08",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.574-whatsapp-pos-estoque",
-  "release_vps": "/var/www/mdv-site/releases/20261008-025831-whatsapp-pos-estoque",
+  "tag": "v1.2.575-secoes-categorias-familias",
+  "release_vps": "/var/www/mdv-site/releases/20261008-030814-secoes-categorias-familias",
   "release_print3d_vps": null,
-  "summary": "Confirmacao WhatsApp aguarda persistencia dos itens e baixa local de estoque.",
+  "summary": "Categorias antes da paginacao e cards de familias nas secoes do catalogo.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "services/saleService.ts",
-    "pages/pdv/PDVPage.tsx",
-    "tmp-tests/pdv-whatsapp-inventory-sequencing.test.cjs",
+    "components/catalog/CatalogSection.tsx",
+    "services/catalogSectionsService.ts",
+    "tmp-tests/catalog-sections-category-expansion-vps-static.test.mjs",
+    "tmp-tests/catalog-sections-family-grouping.test.mjs",
+    "tmp-tests/products-section-filters.test.cjs",
     "docs/operacional/2026-10-07-revisao-falhas-sistema.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-07-v1.2.574-whatsapp-pos-estoque.md"
+    "docs/versoes/2026-10-08-v1.2.575-secoes-categorias-familias.md"
   ],
   "validations": [
-    "17 testes de sequenciamento e transacao; regressoes PDV, estoque e termo WhatsApp",
-    "Build e trava contra runtime Supabase",
-    "Conferencia publica de VERSION, home e PDV apos deploy"
+    "Service real: categoria fora da amostra, subcategorias, pins e familias",
+    "Oito testes HTTP de filtros/privacidade e regressoes de nome, agrupamento, CRUD e configuracao publica",
+    "Sintaxe, build e trava Supabase; conferencia publica apos deploy"
   ]
 }
