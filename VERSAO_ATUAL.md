@@ -2,13 +2,51 @@
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.573-filtros-venda-imei.
 Release VPS: /var/www/mdv-site/releases/20261008-024439-filtros-venda-imei
-Status: validada localmente; publicacao em andamento.
+Status: publicada e validada em producao.
 
 Item 2: IDs e limites de preco (centavos) aplicados no MySQL antes da paginacao. Item 3: PDV grava venda, itens, IMEIs e saldos serializados em uma transacao, com rollback e repeticao idempotente. Baixa numerica de itens sem IMEI continua no fluxo anterior, inclusive em carrinhos mistos; item 4 segue pendente. Nenhum estoque corrigido manualmente.
 
 36 testes focados aprovados, regressao estatica PDV, moeda, sintaxe e build. Tabelas sales, sale_items, units, products e product_stock_locations InnoDB conferidas somente por leitura. Teste legado sale-stock-restore-by-location-static nao executavel por migration Supabase removida anteriormente; nao restaurada. Aviso conhecido Browserslist antigo.
 
 API seletiva exige blocos iguais ao baseline d1f7e3b3 ou ao codigo atual; preserva demais rotas, cria backup, valida sintaxe e faz rollback se falhar. API deve preceder site. Quatro arquivos Shopee preexistentes excluidos.
+
+Codigo b2388b28 e tag enviados a origin/main. API seletiva publicada com backup /var/www/mdv-api/backups/catalog-sale-atomic-1791427797270 e reinicio mdv-api. MySQL saudavel; filtros de IDs/preco e rejeicao de limites invertidos conferidos na API direta e proxy, preservando privacidade. Endpoint autenticado de venda rejeitou corpo vazio com HTTP 400, sem escrita. Site HTTP 200 e VERSION correta; PDV renderizado sem erros no console. Evidencia .local/filtros-venda-imei-publicado.png. Nenhuma venda real, mensagem ou mudanca manual de estoque realizada. Skill sem alteracao. Main sincronizado; quatro arquivos Shopee preexistentes preservados.
+
+Limpeza: 0 remocoes; 34 worktrees bloqueadas preservadas.
+- `C:/tmp/mdv-model-fix-clean`: `dirty`.
+- `C:/tmp/mdv-phone-filter`: `dirty`.
+- `C:/tmp/mdv-publish-surgical-20260612-b`: `dirty`.
+- `C:/tmp/mdv-refactor-repair-20260612`: `dirty`.
+- `C:/tmp/mdv-virtual-ram-deploy`: `dirty`.
+- `C:/Users/Nitro/Documents/Codex/2026-10-02/task/ml-local-preview`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-phone-memory-filter-20260801`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-price-followup-20260716`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-product-search-specialist-20260725`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-remove-generic-freight-example-20260718`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/sale-message-order-number-20260716`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mdv-perf-main`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-admin-app`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-displays-pix`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-sales-push-20260728`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/autoresponder-integrate`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/autoresponder-reformulation`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/meta-smartphones-sem-preco-20260825`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/new-model-regressions`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/pdp-model-shortcut-publish`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/pdv-sale-repair-publish`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-autoresponder-editable`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-family-page-jump`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-receipt-private-payment-20260613`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-sales-summary-20260613`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-whatsapp-order`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/repair-refactor-product-build`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/signed-warranty-synology`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/system-backup-admin-20260613`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/tiktok-bulk-release-20260727`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/tiktok-shop-foundation`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-n8n-context-handoff-fix`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-publish-novo-bot`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-status-contacts-fix`: `dirty`.
 
 ## Release anterior
 
