@@ -25,6 +25,8 @@ function loadComponent(file, showPreview = false) {
     if (name.includes('ImageZoomModal')) return { ImageZoomModal: () => null };
     if (name.includes('bannerService')) return { bannerService: {} };
     if (name.includes('uploadService')) return { uploadService: {} };
+    if (name.includes('companySettingsService')) return { companySettingsService: {} };
+    if (name.includes('bannerWhatsAppLink')) return { parseBannerWhatsAppLink: () => null, getBannerWhatsAppLink: () => '' };
     throw new Error('Import inesperado: ' + name);
   } });
   return exports;

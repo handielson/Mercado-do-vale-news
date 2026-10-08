@@ -1,3 +1,17 @@
+# v1.2.571-banner-whatsapp
+
+Data: 2026-10-07. Branch: main. Tag: v1.2.571-banner-whatsapp.
+Release VPS: /var/www/mdv-site/releases/20261008-011734-banner-whatsapp
+Status: preparada para publicacao.
+
+Formulario do banner oferece WhatsApp, numero da loja editavel, mensagem do cliente e link automatico. Telefone vem de company-settings; link e salvo no contrato externo existente, sem novo schema. Links wa.me/api.whatsapp.com recuperam numero e texto ao editar. Atalho para Quero um celular no boleto. Cliente precisa enviar a mensagem. Sem envio de WhatsApp, alteracao do bot ou deploy da API.
+
+Testes de link com DDD 55, pais, mensagem com acentos/emoji/quebra de linha, rejeicao de numero invalido, parser de URL e corpo real do salvamento. Regressao de nome interno e imagens/links. Build com trava Supabase aprovado. Avisos conhecidos de fetchPriority no render React e Browserslist antigo nao bloqueiam validacao. Previa local isolada confirmou atualizacao automatica do link; nenhum banner real salvo.
+
+Quatro arquivos preexistentes de impressao Shopee preservados fora do escopo.
+
+## Release anterior
+
 # v1.2.570-banner-nome-interno
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.570-banner-nome-interno.

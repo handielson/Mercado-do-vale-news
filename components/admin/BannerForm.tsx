@@ -1,7 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, Users, Eye, EyeOff } from 'lucide-react';
 import type { CatalogBanner } from '@/types/catalog';
 import { uploadService } from '@/services/uploadService';
+import { companySettingsService } from '@/services/companySettingsService';
+import { getBannerWhatsAppLink, parseBannerWhatsAppLink } from '@/utils/bannerWhatsAppLink';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -16,6 +18,7 @@ const LINK_OPTIONS = [
     { value: 'category', label: '📁 Categoria' },
     { value: 'product', label: '📦 Produto' },
     { value: 'external', label: '🔗 URL Externa' },
+    { value: 'whatsapp', label: '💬 WhatsApp' },
 ] as const;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -30,6 +33,7 @@ interface BannerFormProps {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'mercado_do_vale', onSave, onClose }) => {
+    const whatsappLink = parseBannerWhatsAppLink(banner?.link_target || banner?.link_url);
     // Bug fix: start_date e end_date armazenados como string diretamente
     // (sem dupla conversão via new Date())
     const [formData, setFormData] = useState({
@@ -38,7 +42,9 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'me
         subtitle: banner?.subtitle ?? '',
         image_url: banner?.image_url ?? '',
         background_color: banner?.background_color ?? '#020617',
-        link_type: (banner?.link_type ?? 'none') as 'none' | 'product' | 'category' | 'external',
+        link_type: (whatsappLink ? 'whatsapp' : banner?.link_type ?? 'none') as 'none' | 'product' | 'category' | 'external' | 'whatsapp',
+        whatsapp_phone: whatsappLink?.phone ?? '',
+        whatsapp_message: whatsappLink?.message ?? '',
         // Bug fix: unificar link_target e link_value (campo canônico = link_target)
         link_target: banner?.link_target ?? banner?.link_url ?? '',
         is_active: banner?.is_active ?? true,
@@ -58,6 +64,18 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'me
     const [isSaving, setIsSaving] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const generatedWhatsAppLink = getBannerWhatsAppLink(formData.whatsapp_phone, formData.whatsapp_message);
+
+    useEffect(() => {
+        if (formData.link_type !== 'whatsapp' || formData.whatsapp_phone) return;
+        let cancelled = false;
+        companySettingsService.get().then(settings => {
+            if (!cancelled && settings?.phone) {
+                setFormData(p => p.whatsapp_phone ? p : { ...p, whatsapp_phone: settings.phone! });
+            }
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [formData.link_type]);
 
     // ── Upload ──────────────────────────────────────────────────────────────
 
@@ -99,6 +117,10 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'me
         e.preventDefault();
         if (!formData.title.trim()) { alert('Por favor, preencha o nome do banner'); return; }
         if (!formData.image_url.trim()) { alert('Por favor, adicione uma imagem'); return; }
+        if (formData.link_type === 'whatsapp' && !generatedWhatsAppLink) {
+            alert('Informe um WhatsApp brasileiro com DDD e a mensagem do cliente.');
+            return;
+        }
 
         setIsSaving(true);
         try {
@@ -109,8 +131,8 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'me
                 subtitle: formData.subtitle.trim() || undefined,
                 image_url: formData.image_url,
                 background_color: formData.background_color,
-                link_type: formData.link_type,
-                link_target: formData.link_target.trim() || undefined,
+                link_type: formData.link_type === 'whatsapp' ? 'external' : formData.link_type,
+                link_target: formData.link_type === 'whatsapp' ? generatedWhatsAppLink : formData.link_target.trim() || undefined,
                 is_active: formData.is_active,
                 display_order: formData.display_order,
                 target_audience: formData.target_audience,
@@ -367,7 +389,40 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'me
                                 </label>
                             ))}
                         </div>
-                        {formData.link_type !== 'none' && (
+                        {formData.link_type === 'whatsapp' && (
+                            <div className="space-y-3 rounded-lg border border-green-200 bg-green-50 p-4">
+                                <div>
+                                    <label htmlFor="banner-whatsapp-phone" className="block text-sm font-medium text-gray-700 mb-1">WhatsApp de destino</label>
+                                    <input id="banner-whatsapp-phone" type="tel" required
+                                        value={formData.whatsapp_phone}
+                                        onChange={e => setFormData(p => ({ ...p, whatsapp_phone: e.target.value }))}
+                                        placeholder="(87) 98803-2612"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+                                    <p className="mt-1 text-xs text-gray-600">Preenchido com o telefone da loja. Você pode trocar o número; inclua o DDD.</p>
+                                </div>
+                                <div>
+                                    <label htmlFor="banner-whatsapp-message" className="block text-sm font-medium text-gray-700 mb-1">Mensagem do cliente</label>
+                                    <textarea id="banner-whatsapp-message" required rows={3}
+                                        value={formData.whatsapp_message}
+                                        onChange={e => setFormData(p => ({ ...p, whatsapp_message: e.target.value }))}
+                                        placeholder="Quero um celular no boleto"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+                                    <button type="button" className="mt-1 text-sm text-green-700 underline"
+                                        onClick={() => setFormData(p => ({ ...p, whatsapp_message: 'Quero um celular no boleto' }))}>
+                                        Usar mensagem para celular no boleto
+                                    </button>
+                                </div>
+                                <label htmlFor="banner-whatsapp-link" className="block text-xs font-medium text-gray-600">Link gerado automaticamente</label>
+                                <input id="banner-whatsapp-link" readOnly value={generatedWhatsAppLink}
+                                    placeholder="Preencha o número e a mensagem acima"
+                                    className="w-full px-3 py-2 border border-green-200 rounded-lg bg-white text-sm" />
+                                {!generatedWhatsAppLink && formData.whatsapp_phone && formData.whatsapp_message && (
+                                    <p role="alert" className="text-sm text-red-600">Confira o número: informe DDD + telefone ou +55 + DDD + telefone.</p>
+                                )}
+                                <p className="text-xs text-gray-600">O banner abre a conversa com esta mensagem pronta. O cliente precisa tocar em Enviar; o atendimento começa após o envio.</p>
+                            </div>
+                        )}
+                        {formData.link_type !== 'none' && formData.link_type !== 'whatsapp' && (
                             <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">
                                     {formData.link_type === 'category' ? 'Slug da Categoria (ex: smartphones)' :
