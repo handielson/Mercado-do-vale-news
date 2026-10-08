@@ -2,7 +2,9 @@
 
 Data: 2026-10-08. Branch: main. Tag: v1.2.577-estoque-familia-ver-todos.
 Release VPS: /var/www/mdv-site/releases/20261008-131559-estoque-familia-ver-todos
-Status: pronta para publicacao; validacao publica pendente.
+Status: publicada e validada em producao.
+
+Codigo d3469c06 e tag enviados a origin/main. API seletiva reiniciada; preflight posterior sem diferencas e /status HTTP 200, mysql.ok=true. Backup: /var/www/mdv-api/backups/stock-restoration-family-1791465710388. Site ativo com VERSION correta. Catalogo renderiza e link Ver todos abre Smartphones; nenhum erro de console nessa verificacao. Nenhum cadastro/estoque real alterado. Limpeza obrigatoria aplicada: zero candidatos/removidos, 34 bloqueados (25 dirty, nove not_merged_into_origin_main), preservados. Relacao completa em .local/publish-v577-cleanup.json e auditoria anterior abaixo; mesmos worktrees. Main sincronizada e quatro arquivos Shopee preexistentes preservados. Avisos conhecidos: Browserslist e helper de credenciais Git antigo, sem impedir publicacao.
 
 Devolucao numerica por local grava saldos, movimentos e totais na mesma transacao. Repeticao retorna somente a quantidade faltante, inclusive em historicos parciais. Envio ao Bling considera a quantidade efetivamente retornada nesta tentativa. Chamadas externas permanecem fora da transacao local.
 
