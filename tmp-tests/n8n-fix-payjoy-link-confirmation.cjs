@@ -62,17 +62,17 @@ function replaceOnce(text, search, replacement, label) {
 
 function patchResolver(code) {
   let next = String(code || '');
-  if (next.includes(`${MARKER}:resolver`)) return next;
+  if (next.includes(`${MARKER}:resolver`)) return patchAnalysisConfirmation(next);
   const previous = `const payjoyExplicitV1 = /\\b(?:payjoy|boleto|financiamento de celular)\\b/.test(payjoyCurrentV1);\nconst payjoyOutcomeV1 = /\\b(?:aprovad[oa]|reprovad[oa]|nao aprovou|deu negado|nao consegui|nao passei|fui negad[oa])\\b/.test(payjoyCurrentV1);\nconst payjoyHumanV1 = /\\b(?:atendente|humano|vendedor|pessoa da equipe)\\b/.test(payjoyCurrentV1);\nconst deterministicPayjoyV1 = !payjoyHumanV1 && (payjoyExplicitV1 || (payjoyContextV1 && payjoyOutcomeV1))\n  ? { acao: 'responder_politica_pagamento', intencao: 'payjoy', confianca: 1, motivo: 'Pergunta ou resultado da analise PayJoy.' }\n  : null;`;
   const replacement = `// ${MARKER}:resolver\nconst payjoyExplicitV1 = /\\b(?:payjoy|boletos?|financiamento de celular)\\b/.test(payjoyCurrentV1);\nconst payjoyOutcomeV1 = /\\b(?:aprovad[oa]|reprovad[oa]|nao aprovou|deu negado|nao consegui|nao passei|fui negad[oa])\\b/.test(payjoyCurrentV1);\nconst payjoyHumanV1 = /\\b(?:atendente|humano|vendedor|pessoa da equipe)\\b/.test(payjoyCurrentV1);\nconst payjoyShortAffirmativeV1 = /^(?:sim|quero|pode|pode sim|manda|envia|claro|ok|beleza|por favor)$/.test(payjoyCurrentV1);\nconst payjoyExplicitLinkReplyV1 = /\\b(?:quero|pode|manda|mande|envia|envie|receber)\\b.{0,35}\\blink\\b|\\blink\\b.{0,35}\\b(?:quero|manda|envia|receber)\\b/.test(payjoyCurrentV1);\nconst payjoyLinkConfirmationV1 = payjoyContextV1 && payjoyStateV1?.status === 'awaiting_link_confirmation'\n  && (payjoyShortAffirmativeV1 || payjoyExplicitLinkReplyV1);\nconst deterministicPayjoyV1 = !payjoyHumanV1 && (payjoyExplicitV1 || payjoyLinkConfirmationV1 || (payjoyContextV1 && payjoyOutcomeV1))\n  ? { acao: 'responder_politica_pagamento', intencao: 'payjoy', confianca: 1, motivo: payjoyLinkConfirmationV1 ? 'Cliente confirmou o envio do link PayJoy.' : 'Pergunta ou resultado da analise PayJoy.' }\n  : null;`;
   next = replaceOnce(next, previous, replacement, 'PayJoy resolver context');
   new Function('$json', '$', '$getWorkflowStaticData', next);
-  return next;
+  return patchAnalysisConfirmation(next);
 }
 
 function patchPayment(code) {
   let next = String(code || '');
-  if (next.includes(`${MARKER}:payment`)) return next;
+  if (next.includes(`${MARKER}:payment`)) return patchAnalysisConfirmation(next);
   next = replaceOnce(
     next,
     "const payjoyMention = /\\b(?:payjoy|boleto|financiamento(?: no boleto)?)\\b/.test(normalized);",
@@ -110,7 +110,16 @@ function patchPayment(code) {
     'generic payment offer memory',
   );
   new Function('$json', '$', '$getWorkflowStaticData', next);
-  return next;
+  return patchAnalysisConfirmation(next);
+}
+
+function patchAnalysisConfirmation(code) {
+  const marker = 'payjoy-analysis-confirmation-v2';
+  if (code.includes(marker)) return code;
+  // Amplia a confirmação existente; a condição de contexto continua obrigatória.
+  const previous = '/^(?:sim|quero|pode|pode sim|manda|envia|claro|ok|beleza|por favor)$/';
+  const replacement = '/^(?:sim|quero|pode|pode sim|manda|envia|claro|ok|beleza|por favor|(?:fazer|quero(?: fazer)?|vou fazer|pode fazer|vamos fazer|iniciar|quero iniciar) (?:[ao] |uma |essa )?analise(?: de credito)?)[.!?]*$/';
+  return replaceOnce(code, previous, replacement, marker) + `\n// ${marker}\n`;
 }
 
 function patchWorkflow(input) {
@@ -179,7 +188,21 @@ function validate(workflow) {
   const unrelatedStatic = { salesPostList: staticData.salesPostList, payjoyByJid: {} };
   const unrelatedYes = executeResolver(resolverCode, unrelatedStatic, 'Sim', 'selecionar_item_lista');
   assert.notEqual(unrelatedYes.conversationIntent, 'payjoy');
-  return { pluralBoletoRecognized: true, confirmationRemembered: true, shortYesSendsOfficialLink: true, explicitLinkRequestSendsOfficialLink: true, unrelatedYesPreserved: true };
+  for (const phrase of ['Fazer o análise', 'Fazer a análise', 'Quero fazer a análise', 'Quero análise', 'Vamos fazer a análise de crédito', 'Pode fazer a análise!']) {
+    const pending = { payjoyByJid: { [remoteJid]: { status: 'awaiting_link_confirmation', updatedAt: Date.now() } } };
+    const route = executeResolver(resolverCode, pending, phrase, 'perguntar_esclarecimento');
+    assert.equal(route.conversationAction, 'responder_politica_pagamento', phrase);
+    const reply = executePayment(paymentCode, pending, route);
+    assert.match(reply.output, /https:\/\/app\.payjoy\.com/, phrase);
+    assert.equal(reply.payjoyFollowupKind, 'analysis_check');
+    assert.equal(pending.payjoyByJid[remoteJid].status, 'awaiting_result');
+  }
+  for (const phrase of ['Não quero fazer a análise', 'Quero falar com atendente', 'Quanto custa a análise?']) {
+    const pending = { payjoyByJid: { [remoteJid]: { status: 'awaiting_link_confirmation', updatedAt: Date.now() } } };
+    assert.notEqual(executeResolver(resolverCode, pending, phrase, 'perguntar_esclarecimento').conversationIntent, 'payjoy', phrase);
+  }
+  assert.notEqual(executeResolver(resolverCode, { payjoyByJid: {} }, 'Fazer a análise', 'perguntar_esclarecimento').conversationIntent, 'payjoy');
+  return { pluralBoletoRecognized: true, confirmationRemembered: true, shortYesSendsOfficialLink: true, explicitLinkRequestSendsOfficialLink: true, unrelatedYesPreserved: true, analysisConfirmationSendsLink: true, negativesAndUnrelatedContextPreserved: true };
 }
 
 async function main() {
@@ -193,6 +216,9 @@ async function main() {
     const row = JSON.parse(raw.trim());
     const workflow = { nodes: JSON.parse(Buffer.from(row.nodesHex, 'hex').toString('utf8')), connections: JSON.parse(Buffer.from(row.connectionsHex, 'hex').toString('utf8')) };
     const updated = patchWorkflow(workflow);
+    assert.deepEqual(updated.connections, workflow.connections, 'connections must remain unchanged');
+    const changedNodes = workflow.nodes.filter((node, index) => JSON.stringify(node) !== JSON.stringify(updated.nodes[index])).map(node => node.name);
+    assert.ok(changedNodes.every(name => [RESOLVER_NODE, PAYMENT_NODE].includes(name)), 'only PayJoy confirmation nodes may change');
     const validation = validate(updated);
     assert.deepEqual(patchWorkflow(updated).nodes, updated.nodes, 'patch must be idempotent');
     const changed = JSON.stringify(updated.nodes) !== JSON.stringify(workflow.nodes);
@@ -209,6 +235,7 @@ async function main() {
     fs.writeFileSync(backupPath, JSON.stringify({ workflowId: WORKFLOW_ID, activeVersionId: row.activeVersionId, ...workflow }, null, 2), { flag: 'wx' });
 
     await run(connection, 'docker service scale n8n_n8n-runner=0 >/dev/null');
+    stopped = true;
     await waitService(connection, 'n8n_n8n-runner', 0);
     await run(connection, 'docker service scale n8n_n8n=0 >/dev/null');
     await waitService(connection, 'n8n_n8n', 0);
@@ -219,6 +246,8 @@ UPDATE workflow_history SET nodes=${dollar(JSON.stringify(updated.nodes), 'histo
 COMMIT;
 COPY (SELECT json_build_object('entityHistoryEqual',we.nodes::jsonb=wh.nodes::jsonb,'payjoyLinkConfirmation',EXISTS(SELECT 1 FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->>'name'=${quote(PAYMENT_NODE)} AND node->'parameters'->>'jsCode' LIKE '%${MARKER}%') AND EXISTS(SELECT 1 FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->>'name'=${quote(RESOLVER_NODE)} AND node->'parameters'->>'jsCode' LIKE '%${MARKER}%'))::text FROM workflow_entity we JOIN workflow_history wh ON wh.\"workflowId\"=we.id AND wh.\"versionId\"=we.\"activeVersionId\" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
     const verification = JSON.parse((await psql(connection, database, sql)).trim());
+    assert.equal(verification.entityHistoryEqual, true);
+    assert.equal(verification.payjoyLinkConfirmation, true);
     await run(connection, 'docker service scale n8n_n8n=1 >/dev/null');
     await waitService(connection, 'n8n_n8n', 1);
     await run(connection, 'docker service scale n8n_n8n-runner=1 >/dev/null');
