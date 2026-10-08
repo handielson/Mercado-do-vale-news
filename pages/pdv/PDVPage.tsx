@@ -1092,6 +1092,9 @@ export default function PDVPage() {
             // A confirmação textual já foi aguardada dentro de createSale, preservando a ordem no WhatsApp.
             updateFinalizeStep('receipt', 'saving', 'Gerando termo de garantia para WhatsApp');
             try {
+                if (sale.finalization_status === 'needs_review') {
+                    throw new Error('Envio automatico do termo bloqueado: revise as pendencias da venda.');
+                }
                 const warrantyData = await buildWarrantyTermData(sale, selectedCustomer, cartItems);
                 if (warrantyData) {
                     setWarrantyContents(warrantyData.contents);

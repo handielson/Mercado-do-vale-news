@@ -44,4 +44,10 @@ Testes sintéticos em tmp-tests/serialized-sale-transaction.test.cjs cobrem comm
 
 Teste `node --test tmp-tests/products-section-filters.test.cjs` executa o handler real de cada entrypoint via HTTP Fastify, com banco simulado: IDs ausentes, duplicados, combinação de filtros, limites exatos em centavos, zero, paginação após filtro, status/pais e entrada maliciosa vinculada como parâmetro. Confere também a proteção de custo do item 1. Três testes HTTP passaram junto com os cinco testes de privacidade, regressões de busca e normalização monetária. Sintaxe dos entrypoints validada. Publicação deste item ainda não solicitada; produção não alterada nesta etapa. Quatro arquivos preexistentes Shopee preservados.
 
-Itens 2 e 3 publicados em v1.2.573-filtros-venda-imei (b2388b28). API e site validados, filtros por ambos os transportes e PDV sem erros. Transacoes verificadas com falhas/concorrrencia sinteticas; em producao apenas leitura e rejeicao de corpo vazio, sem venda real. Item 4 segue pendente para estoque numerico.
+Itens 2 e 3 publicados em v1.2.573-filtros-venda-imei (b2388b28). API e site validados, filtros por ambos os transportes e PDV sem erros. Transacoes verificadas com falhas/concorrrencia sinteticas; em producao apenas leitura e rejeicao de corpo vazio, sem venda real.
+
+## Item 4 — confirmacao WhatsApp depois da baixa local
+
+Implementado localmente, aguardando publicacao. A fonte dos saldos continua sendo o MySQL; services/saleService.ts coordena a persistencia dos itens e a baixa por prioridade nos depositos. A chamada de confirmacao WhatsApp so inicia depois destas etapas. Falha de itens ou baixa bloqueia a chamada, preserva needs_review e registra inventory_not_finalized no log. Falha no envio apos baixa bem-sucedida permanece aviso, sem repetir estoque. O PDV tambem bloqueia o envio automatico do termo de garantia quando a venda retorna needs_review, evitando mensagem parcial em carrinho misto. Fluxos de entrega e envio manual seguem os contratos existentes.
+
+Protecao: tmp-tests/pdv-whatsapp-inventory-sequencing.test.cjs executa o service real com transporte simulado: baixa pendente, venda numerica/mista, falha na baixa, falha na persistencia, erro de WhatsApp, venda so com unidade serializada e produto sem controle de estoque. Nenhum envio, venda ou estoque real durante a validacao.

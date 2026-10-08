@@ -681,11 +681,9 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         // Insert sale items (persiste serialized_unit_id pra rastreio do IMEI)
 
         let saleItemsPersisted = false;
-        let saleWhatsAppNotification: Promise<any> | null = null;
         try {
             if (!hasSerializedUnits) await vpsClient.post('/table-data/sale_items/bulk', saleItems);
             saleItemsPersisted = true;
-            saleWhatsAppNotification = vpsClient.post('/whatsapp/automation/sale-completed', { sale_id: sale.id });
             if (
                 (deliveryPersonCustomerId || saleInput.delivery_person_id || saleInput.delivery_type === 'store_delivery')
                 && saleInput.delivery_total
@@ -814,8 +812,12 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             }
         }
 
-        if (saleWhatsAppNotification) {
+        // Confirmar somente depois da persistencia dos itens e de todas as baixas locais.
+        const inventoryFinalized = saleItemsPersisted
+            && !finalizationIssues.some(issue => issue.step === 'stock_decrement');
+        if (inventoryFinalized) {
             try {
+                const saleWhatsAppNotification = vpsClient.post('/whatsapp/automation/sale-completed', { sale_id: sale.id });
                 const notification = await saleWhatsAppNotification;
                 if (!['sent', 'deferred', 'already_sent'].includes(notification?.status)) {
                     recordFinalizationWarning(
@@ -831,6 +833,12 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
                     normalizeFinalizationError(whatsappError, 'sale_whatsapp')
                 );
             }
+        } else {
+            recordFinalizationWarning(
+                'sale_whatsapp',
+                'Confirmacao do WhatsApp bloqueada: a gravacao dos itens ou a baixa de estoque precisa de revisao.',
+                { reason: 'inventory_not_finalized' }
+            );
         }
 
         const finalization_status = finalizationIssues.length > 0 ? 'needs_review' : 'success';

@@ -1,36 +1,28 @@
 {
-  "version": "v1.2.573-filtros-venda-imei",
+  "version": "v1.2.574-whatsapp-pos-estoque",
   "date": "2026-10-07",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.573-filtros-venda-imei",
-  "release_vps": "/var/www/mdv-site/releases/20261008-024439-filtros-venda-imei",
+  "tag": "v1.2.574-whatsapp-pos-estoque",
+  "release_vps": "/var/www/mdv-site/releases/20261008-025831-whatsapp-pos-estoque",
   "release_print3d_vps": null,
-  "summary": "Filtros do catalogo e finalizacao atomica de vendas com IMEI.",
+  "summary": "Confirmacao WhatsApp aguarda persistencia dos itens e baixa local de estoque.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "server.js",
-    "vps_server.js",
-    "vps_server.cjs",
     "services/saleService.ts",
-    "services/serializedSaleFinalization.cjs",
-    "deploy-vps-server-only.cjs",
-    "scripts/deploy-catalog-sale-atomic.cjs",
-    "tmp-tests/products-section-filters.test.cjs",
-    "tmp-tests/serialized-sale-transaction.test.cjs",
-    "tmp-tests/pdv-serialized-finalization-static.test.mjs",
-    "tmp-tests/deploy-catalog-sale-atomic.test.cjs",
+    "pages/pdv/PDVPage.tsx",
+    "tmp-tests/pdv-whatsapp-inventory-sequencing.test.cjs",
     "docs/operacional/2026-10-07-revisao-falhas-sistema.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-07-v1.2.573-filtros-venda-imei.md"
+    "docs/versoes/2026-10-07-v1.2.574-whatsapp-pos-estoque.md"
   ],
   "validations": [
-    "36 testes HTTP, filtros, privacidade, transacao e deploy seletivo; regressao PDV e moeda",
-    "Sintaxe, build e trava Supabase; tabelas de producao InnoDB",
-    "Validacao publica apos deploy, sem vendas ou alteracoes de estoque reais"
+    "17 testes de sequenciamento e transacao; regressoes PDV, estoque e termo WhatsApp",
+    "Build e trava contra runtime Supabase",
+    "Conferencia publica de VERSION, home e PDV apos deploy"
   ]
 }
