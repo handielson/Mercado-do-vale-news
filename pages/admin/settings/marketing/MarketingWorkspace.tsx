@@ -14,23 +14,23 @@ export default function MarketingWorkspace({ activeTab, onNavigate, children }: 
         <div><p className="text-xs font-bold uppercase tracking-widest text-violet-600">Mercado do Vale</p><h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900">Marketing</h1></div>
         <p className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-500">Criar → Planejar → Agendar → Revisar</p>
       </div>
-      <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <aside className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-6">
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <label className="block text-xs font-bold text-slate-500 lg:hidden">Área de Marketing
             <select aria-label="Área de Marketing" value={activeTab} onChange={event => onNavigate(event.target.value as MarketingTab)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900">
               {groups.map(group => <optgroup key={group} label={group}>{MARKETING_SECTIONS.filter(section => section.group === group).map(section => <option key={section.id} value={section.id}>{section.label}</option>)}</optgroup>)}
             </select>
           </label>
-          <nav aria-label="Ferramentas de Marketing" className="hidden space-y-4 lg:block">
-            {groups.map(group => <div key={group}>
+          <nav aria-label="Ferramentas de Marketing" className="hidden flex-wrap items-start gap-x-5 gap-y-3 lg:flex">
+            {groups.map(group => <div key={group} className="min-w-0">
               <p className="mb-1 px-3 text-[10px] font-black uppercase tracking-widest text-slate-400">{group}</p>
-              <div className="space-y-1">{MARKETING_SECTIONS.filter(section => section.group === group).map(section => {
+              <div className="flex flex-wrap gap-1">{MARKETING_SECTIONS.filter(section => section.group === group).map(section => {
                 const Icon = icons[section.id];
-                return <button type="button" key={section.id} aria-current={activeTab === section.id ? 'page' : undefined} onClick={() => onNavigate(section.id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 ${activeTab === section.id ? 'bg-violet-50 text-violet-800 ring-1 ring-violet-100' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}><Icon className="h-4 w-4 shrink-0" />{section.label}</button>;
+                return <button type="button" key={section.id} aria-current={activeTab === section.id ? 'page' : undefined} onClick={() => onNavigate(section.id)} className={`inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 ${activeTab === section.id ? 'bg-violet-50 text-violet-800 ring-1 ring-violet-100' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}><Icon className="h-4 w-4 shrink-0" />{section.label}</button>;
               })}</div>
             </div>)}
           </nav>
-        </aside>
+        </div>
         <main className="min-w-0" aria-label={current.title}>
           <div className="mb-5"><p className="text-xs font-semibold text-slate-400">Marketing / {current.group}</p><h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">{current.title}</h2><p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">{current.description}</p></div>
           {activeTab === 'overview' ? <div className="space-y-6">

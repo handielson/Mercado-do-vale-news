@@ -17,6 +17,10 @@ assert.match(page, /setActiveTab\('instagram'\)/);
 assert.match(workspace, /onNavigate\(section.id\)/);
 assert.match(workspace, /aria-current=/);
 assert.match(workspace, /<optgroup/);
+// A navegação deve preceder o conteúdo e liberar sua largura no desktop.
+assert.ok(workspace.indexOf('<nav aria-label="Ferramentas de Marketing"') < workspace.indexOf('<main '));
+assert.match(workspace, /aria-label="Ferramentas de Marketing" className="hidden flex-wrap[^"\n]*lg:flex"/);
+assert.doesNotMatch(workspace, /<aside|lg:grid-cols-\[220px|lg:sticky/);
 assert.match(page, /activeTab === 'instagram'/);
 assert.match(page, /activeTab === 'facebook'[\s\S]*?<FacebookMarketplaceSchedulerPanel/);
 assert.match(page, /activeTab === 'whatsapp'[\s\S]*?<WhatsAppStatusCampaignPanel/);
