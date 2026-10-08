@@ -2,9 +2,11 @@
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.572-protecao-precos.
 Release VPS: /var/www/mdv-site/releases/20261008-021538-protecao-precos
-Status: pronta para publicacao; validacao publica pendente.
+Status: publicada e validada em producao.
 
 Consultas publicas de produtos removem custo e precos comerciais. Administrador autenticado conserva custo; contas comerciais autenticadas conservam revenda/atacado. Chave de transporte nao concede perfil comercial. Respostas privadas nao entram no cache anonimo; catalogo acompanha troca de sessao. API publicada seletivamente com backup, sem alteracoes de valores ou estoque. Detalhes em docs/versoes/2026-10-07-v1.2.572-protecao-precos.md.
+
+Codigo f4917c0b e tag enviados a origin/main. API seletiva publicada com backup /var/www/mdv-api/backups/product-read-privacy-1791425875510 e reinicio mdv-api. Status HTTP 200 e mysql.ok=true. Lista, ID e slug anonimos, tanto API direta quanto proxy, omitem campos privados e enviam no-store; administrador autenticado conserva custo e precos comerciais. Site HTTP 200, VERSION exata, catalogo e ficha administrativa renderizados sem erros de console. Evidencia .local/protecao-precos-publicado.png. Auditoria/aplicacao de limpeza: zero remocoes, 34 worktrees bloqueadas preservadas (25 dirty, 9 not_merged_into_origin_main), lista no registro da versao. Main sincronizado, quatro arquivos Shopee preexistentes preservados. Deploy oficial agora inclui o modulo de privacidade e modo seletivo com backup; skill nao precisou de alteracao.
 
 ## Release anterior
 
