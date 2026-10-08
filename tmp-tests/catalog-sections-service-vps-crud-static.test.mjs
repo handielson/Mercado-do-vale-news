@@ -11,3 +11,26 @@ assert.doesNotMatch(source, /\.from\('catalog_sections'\)|supabase\.from\('catal
 assert.doesNotMatch(source, /supabase\.auth\.getUser/, 'catalog sections service must not depend on Supabase auth for createSection user_id');
 
 console.log('catalog sections VPS CRUD static checks passed');
+
+// Exercita o corpo real da criacao, isolando transporte e sessao. Se a assinatura
+// TypeScript mudar, atualizar esta extracao junto com a refatoracao.
+const createBody = source.split('async createSection(sectionData: CreateSectionData): Promise<CatalogSection> {')[1]?.split('\n    /**')[0];
+assert.ok(createBody, 'metodo de criacao deve existir');
+const body = createBody.trim().replace(/}\s*,?$/, '').replace('vpsClient.post<any>', 'vpsClient.post');
+const runCreate = new Function('getCurrentAuthUserId', 'vpsClient', 'stripUndefined', 'normalizeSection',
+    `return async function(sectionData) { ${body} }`);
+let sent;
+let cacheCleared = false;
+const create = runCreate(async () => 'operator-id', { post: async (path, payload) => { sent = { path, payload }; return { id: 'section', ...payload }; } },
+    payload => Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)), value => value);
+const result = await create.call({ clearCache() { cacheCleared = true; } }, { title: 'Categoria teste', section_type: 'custom', user_id: 'outro', filter_categories: ['categoria'], subtitle: undefined });
+assert.equal(sent.payload.user_id, 'operator-id', 'responsavel vem da sessao atual, nunca do formulario');
+assert.deepEqual(sent.payload.filter_categories, ['categoria']);
+assert.equal(sent.payload.subtitle, undefined);
+assert.equal(result.id, 'section');
+assert.equal(cacheCleared, true);
+let postedWithoutSession = false;
+const expired = runCreate(async () => null, { post: async () => { postedWithoutSession = true; } }, value => value, value => value);
+await assert.rejects(expired.call({ clearCache() {} }, {}), /sessão expirou/);
+assert.equal(postedWithoutSession, false, 'sem sessao nao envia insert incompleto');
+console.log('catalog section creation uses current operator and blocks missing sessions');

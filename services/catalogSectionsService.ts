@@ -5,6 +5,7 @@ import { normalizeProduct } from '@/services/productNormalizer';
 import { buildVpsUrl } from '@/services/vpsProxyBase';
 import { vpsApiService } from '@/services/vpsApiService';
 import { vpsClient } from '@/services/vpsClient';
+import { getCurrentAuthUserId } from '@/services/authSession';
 import { colorService } from '@/services/colors';
 import { modelColorImagesService } from '@/services/model-color-images';
 
@@ -189,9 +190,11 @@ class CatalogSectionsService {
      */
     async createSection(sectionData: CreateSectionData): Promise<CatalogSection> {
         try {
+            const userId = await getCurrentAuthUserId();
+            if (!userId) throw new Error('Sua sessão expirou. Entre novamente para salvar a seção.');
             const data = await vpsClient.post<any>(
                 '/table-data/catalog_sections',
-                stripUndefined(sectionData as unknown as Record<string, unknown>)
+                stripUndefined({ ...sectionData, user_id: userId })
             );
 
             this.clearCache();

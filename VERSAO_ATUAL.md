@@ -1,4 +1,16 @@
-# v1.2.567-venda-payjoy-informativo
+# v1.2.568-secoes-responsavel
+
+Data: 2026-10-07. Branch: main. Tag: v1.2.568-secoes-responsavel.
+Release VPS: /var/www/mdv-site/releases/20261008-003037-secoes-responsavel
+Status: preparada; publicacao pendente.
+
+Corrige ER_NO_DEFAULT_FOR_FIELD ao criar secao: o service envia user_id da sessao VPS atual. O formulario nao define o responsavel; sessao ausente impede o POST e orienta novo login. Sem schema, migration ou mudanca da API.
+
+Validacoes: teste do corpo real da criacao com transporte simulado, incluindo responsavel, filtros, cache e sessao ausente; regressoes de categorias e carregamento; build com trava Supabase. Publicacao somente do site. Quatro arquivos preexistentes de impressao Shopee preservados fora do commit.
+
+Arquivos: services/catalogSectionsService.ts, tmp-tests/catalog-sections-service-vps-crud-static.test.mjs, public/VERSION.json, VERSAO_ATUAL.md, docs/versoes/2026-10-07-v1.2.568-secoes-responsavel.md.
+
+## Release anterior: v1.2.567-venda-payjoy-informativo
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.567-venda-payjoy-informativo.
 Release VPS: /var/www/mdv-site/releases/20261007-194449-venda-payjoy-informativo
