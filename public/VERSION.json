@@ -1,39 +1,25 @@
 {
-  "version": "v1.2.579-seo-soft-404",
+  "version": "v1.2.580-photo-intake-price-layout",
   "date": "2026-10-08",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.579-seo-soft-404",
-  "release_vps": "/var/www/mdv-site/releases/20261008-181902-seo-soft-404",
+  "tag": "v1.2.580-photo-intake-price-layout",
+  "release_vps": "/var/www/mdv-site/releases/20261008-190557-photo-intake-price-layout",
   "release_print3d_vps": null,
-  "summary": "URLs antigas com redirecionamentos e status 404/410; rotas validas preservadas.",
+  "summary": "Campos de compra e venda legíveis na conferência por foto, com colunas ajustadas à largura do painel.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "deploy-vps-server-only.cjs",
-    "infra/nginx/mdv-site-production.conf",
-    "infra/nginx/mdv-site-staging.conf",
-    "package.json",
-    "pages/catalog/catalogPagination.js",
-    "pages/catalog/index.tsx",
-    "scripts/sync-nginx-spa-routes.cjs",
-    "scripts/deploy-seo-soft-404.cjs",
-    "server.js",
-    "services/legacyCatalogSeo.cjs",
-    "tmp-tests/legacy-category-nginx-seo-static.test.mjs",
-    "tmp-tests/seo-soft-404.test.cjs",
-    "vps_server.cjs",
-    "vps_server.js",
-    "docs/operacional/2026-10-08-seo-soft-404.md",
+    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-08-v1.2.579-seo-soft-404.md"
+    "docs/versoes/2026-10-08-v1.2.580-photo-intake-price-layout.md"
   ],
   "validations": [
-    "Regressoes SEO/Nginx, redirecionamentos, paginacao e publicacao seletiva.",
-    "Sintaxe dos entrypoints, build com trava Supabase e nginx -t isolado.",
-    "Preflight remoto; validacao publica apos API, frontend e Nginx."
+    "Regressões existentes do cadastro de smartphones por foto.",
+    "Build com validação de rotas e ausência de runtime Supabase.",
+    "Validação pública da versão e da tela após publicação."
   ]
 }

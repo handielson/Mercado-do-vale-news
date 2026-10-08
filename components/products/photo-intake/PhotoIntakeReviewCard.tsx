@@ -342,11 +342,11 @@ export function PhotoIntakeReviewCard({
               {priceReference?.divergent && <p role="alert" className="mt-1 text-sm text-red-700">Preços divergentes. Revise em Configurações → Modelos → Preços por configuração antes de concluir.</p>}
               {priceReferenceError && <p role="alert" className="text-red-700">Falha ao consultar o preço do grupo. Recarregue a página.</p>}
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <CurrencyInput label="Compra" value={draft.price_cost || 0} onChange={updateCost} />
-              <CurrencyInput label="Varejo" disabled={groupPriceLocked} value={draft.price_retail || 0} onChange={value => setDraft(current => ({ ...current, price_retail: value }))} />
-              <CurrencyInput label="Revenda" disabled={groupPriceLocked} value={draft.price_reseller || 0} onChange={value => setDraft(current => ({ ...current, price_reseller: value }))} />
-              <CurrencyInput label="Atacado" disabled={groupPriceLocked} value={draft.price_wholesale || 0} onChange={value => setDraft(current => ({ ...current, price_wholesale: value }))} />
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-4">
+              <CurrencyInput label="Compra" className="h-12 text-base tabular-nums" value={draft.price_cost || 0} onChange={updateCost} />
+              <CurrencyInput label="Varejo" className="h-12 text-base tabular-nums" disabled={groupPriceLocked} value={draft.price_retail || 0} onChange={value => setDraft(current => ({ ...current, price_retail: value }))} />
+              <CurrencyInput label="Revenda" className="h-12 text-base tabular-nums" disabled={groupPriceLocked} value={draft.price_reseller || 0} onChange={value => setDraft(current => ({ ...current, price_reseller: value }))} />
+              <CurrencyInput label="Atacado" className="h-12 text-base tabular-nums" disabled={groupPriceLocked} value={draft.price_wholesale || 0} onChange={value => setDraft(current => ({ ...current, price_wholesale: value }))} />
             </div>
             {matchingGroupCount > 1 && (
               <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300 bg-white/80 p-3">
