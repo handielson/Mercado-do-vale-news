@@ -2,7 +2,7 @@
 
 Data: 2026-10-08. Branch: main. Tag: v1.2.579-seo-soft-404.
 Release VPS: /var/www/mdv-site/releases/20261008-181902-seo-soft-404
-Status: preparada para publicacao.
+Status: publicada; cache antigo do Cloudflare pendente de limpeza ou expiracao.
 
 Rotas validas derivadas de routes/index.tsx para Nginx; desconhecidas
 retornam 404. WordPress removido e feeds retornam 410. Categorias antigas
@@ -17,7 +17,7 @@ visibilidade, precos e estoque mantidos.
 API seletiva com backup e preservacao de personalizacoes remotas.
 Frontend completo e Nginx publicados separadamente. Testes focados,
 sintaxe, build, preflight remoto e nginx -t isolado aprovados.
-Validacao publica e auditoria final registradas apos publicacao.
+Validacao publica: 200 nas rotas reais, 404 em caminhos invalidos, 301 em categorias/produtos existentes e 410 nos removidos. Busca 5G indexavel e pagina 999 vazia noindex confirmadas no navegador. API mysql.ok=true. Cloudflare ainda serve HTML antigo 200 em uma URL WordPress; purge recusado com 401. Auditoria preservou 34 worktrees auxiliares (dirty ou not_merged_into_origin_main). Codigo b72e2183 e correcao Nginx 2a26a1cd em origin/main. Tag adicional de recuperacao: v1.2.579-seo-soft-404-validado.
 Quatro arquivos Shopee preexistentes fora do escopo.
 
 Arquivos:
