@@ -2,13 +2,15 @@
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.571-banner-whatsapp.
 Release VPS: /var/www/mdv-site/releases/20261008-011734-banner-whatsapp
-Status: preparada para publicacao.
+Status: publicada e validada em producao.
 
 Formulario do banner oferece WhatsApp, numero da loja editavel, mensagem do cliente e link automatico. Telefone vem de company-settings; link e salvo no contrato externo existente, sem novo schema. Links wa.me/api.whatsapp.com recuperam numero e texto ao editar. Atalho para Quero um celular no boleto. Cliente precisa enviar a mensagem. Sem envio de WhatsApp, alteracao do bot ou deploy da API.
 
 Testes de link com DDD 55, pais, mensagem com acentos/emoji/quebra de linha, rejeicao de numero invalido, parser de URL e corpo real do salvamento. Regressao de nome interno e imagens/links. Build com trava Supabase aprovado. Avisos conhecidos de fetchPriority no render React e Browserslist antigo nao bloqueiam validacao. Previa local isolada confirmou atualizacao automatica do link; nenhum banner real salvo.
 
 Quatro arquivos preexistentes de impressao Shopee preservados fora do escopo.
+
+Codigo f170670e e tag enviados a origin/main. Deploy oficial confirmou release ativa; home HTTP 200, VERSION exata. Navegador autenticado confirmou recuperacao do link existente no Banner Payjoy, WhatsApp selecionado, numero e mensagem corretos. Novo Banner carregou telefone do cadastro da empresa; atalho gerou URL com a mensagem esperada. Formulario cancelado, nenhum banner gravado e nenhuma mensagem enviada. Console sem erros. Evidencia: .local/banner-whatsapp-publicado.png. API sem deploy/restart. Auditoria/aplicacao segura: zero remocoes, 34 worktrees bloqueadas preservadas; lista abaixo. Main sincronizado; quatro arquivos preexistentes Shopee fora do escopo. Sem atualizacao da skill por nao haver nova licao operacional.
 
 ## Release anterior
 
