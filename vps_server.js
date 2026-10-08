@@ -26388,6 +26388,29 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
 });
 
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
+  // Valores monetarios deste contrato sao inteiros em centavos.
+  const priceBounds = {};
+  for (const key of ['min_price', 'max_price']) {
+    if (req.query[key] === undefined) continue;
+    const raw = String(req.query[key]).trim();
+    const value = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < 0) {
+      return reply.code(400).send({ error: key + ' deve ser um inteiro nao negativo em centavos.' });
+    }
+    priceBounds[key] = value;
+  }
+  if (priceBounds.min_price !== undefined && priceBounds.max_price !== undefined
+    && priceBounds.min_price > priceBounds.max_price) {
+    return reply.code(400).send({ error: 'min_price nao pode ser maior que max_price.' });
+  }
+  let selectedIds;
+  if (req.query.in_ids !== undefined) {
+    selectedIds = [...new Set(String(req.query.in_ids).split(',').map(id => id.trim()).filter(Boolean))];
+    if (selectedIds.length > 2000 || selectedIds.some(id => id.length > 128)) {
+      return reply.code(400).send({ error: 'in_ids excede o limite de IDs permitido.' });
+    }
+    if (!selectedIds.length) return [];
+  }
   const limit  = Math.min(parseInt(req.query.limit)  || 500, 2000);
   const offset = parseInt(req.query.offset) || 0;
   const category = req.query.category;
@@ -26449,6 +26472,18 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
 
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
   const params = [];
+  if (selectedIds) {
+    sql += ` AND id IN (${selectedIds.map(() => '?').join(',')})`;
+    params.push(...selectedIds);
+  }
+  if (priceBounds.min_price !== undefined) {
+    sql += ' AND price_retail >= ?';
+    params.push(priceBounds.min_price);
+  }
+  if (priceBounds.max_price !== undefined) {
+    sql += ' AND price_retail <= ?';
+    params.push(priceBounds.max_price);
+  }
 
   if (status && status !== 'all') { sql += ' AND status = ?'; params.push(status); }
   else if (!status && !search)    { sql += ' AND status = ?'; params.push('active'); }
@@ -26964,8 +26999,8 @@ async function getStockLocationRow(productId, depositId, locationId, lock = fals
   return rows?.[0] || null;
 }
 
-async function upsertStockLocationBalance({ companyId, productId, depositId, locationId, quantity, reservedQuantity = 0 }) {
-  await pool.query(
+async function upsertStockLocationBalance({ companyId, productId, depositId, locationId, quantity, reservedQuantity = 0, db = pool }) {
+  await db.query(
     `INSERT INTO product_stock_locations
       (id, company_id, product_id, deposit_id, location_id, quantity, reserved_quantity)
      VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -26975,7 +27010,8 @@ async function upsertStockLocationBalance({ companyId, productId, depositId, loc
        updated_at = CURRENT_TIMESTAMP`,
     [crypto.randomUUID(), companyId, productId, depositId, locationId, quantity, reservedQuantity]
   );
-  return getStockLocationRow(productId, depositId, locationId);
+  const [rows] = await db.query('SELECT * FROM product_stock_locations WHERE product_id = ? AND deposit_id = ? AND location_id = ?', [productId, depositId, locationId]);
+  return rows?.[0] || null;
 }
 
 function mapStockDeposit(row) {
@@ -30062,6 +30098,27 @@ async function reconcilePurchaseCoinsVps({ apply = false, limit = 500 } = {}) {
 // PURCHASE_CASHBACK_CORE_END
 
 // INSERT individual
+fastify.post('/sales/finalize-serialized', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  let result;
+  try {
+    result = await require('./services/serializedSaleFinalization.cjs').finalizeSerializedSale({
+      pool, sale: req.body?.sale, items: req.body?.items, syncProductStock,
+    });
+  } catch (error) {
+    if (!error.statusCode) throw error;
+    return reply.code(error.statusCode).send({ error: 'serialized_sale_finalization', message: error.message });
+  }
+  // Efeitos externos so podem comecar depois do commit.
+  if (!result.replay) {
+    await ensurePurchaseCoinsForSaleVps(result.sale.id, { apply: true }).catch(error => {
+      console.error('[cashback] Falha apos finalizacao serializada:', error.message);
+    });
+    void Promise.all([notifyTelegramPdvSaleVps(result.sale.id), recordMobilePdvSaleVps(result.sale.id)])
+      .catch(error => console.error('[sales] Falha na notificacao apos commit:', error.message));
+  }
+  return result.sale;
+});
+
 fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, reply) => {
   const { name } = req.params;
   if (!isValidTable(name)) return reply.code(400).send({ error: 'Invalid table name' });
@@ -42149,14 +42206,14 @@ async function runMigrations() {
   await ensureDefaultAdminAccount();
 }
 
-async function syncSerializedProductStockFromUnits(productId) {
+async function syncSerializedProductStockFromUnits(productId, db = pool) {
   if (!productId) return null;
-  const [[product]] = await pool.query('SELECT id, company_id FROM products WHERE id = ? LIMIT 1', [productId]);
+  const [[product]] = await db.query('SELECT id, company_id FROM products WHERE id = ? LIMIT 1', [productId]);
   if (!product) return null;
 
   const companyId = product.company_id || await getDefaultStockCompanyId();
   const fallback = await ensureDefaultStockLocation(companyId);
-  const [unitRows] = await pool.query(
+  const [unitRows] = await db.query(
     `SELECT
        COALESCE(deposit_id, ?) AS deposit_id,
        COALESCE(location_id, ?) AS location_id,
@@ -42169,7 +42226,7 @@ async function syncSerializedProductStockFromUnits(productId) {
     [fallback.depositId, fallback.locationId, productId, fallback.depositId, fallback.locationId]
   );
 
-  await pool.query('DELETE FROM product_stock_locations WHERE product_id = ?', [productId]);
+  await db.query('DELETE FROM product_stock_locations WHERE product_id = ?', [productId]);
   for (const row of unitRows || []) {
     const quantity = Math.max(0, Math.trunc(Number(row.physical_quantity || 0)));
     if (quantity <= 0) continue;
@@ -42180,17 +42237,18 @@ async function syncSerializedProductStockFromUnits(productId) {
       locationId: row.location_id,
       quantity,
       reservedQuantity: Math.max(0, Math.trunc(Number(row.reserved_quantity || 0))),
+      db,
     });
   }
 
   const available = (unitRows || []).reduce((sum, row) => sum + Math.max(0, Math.trunc(Number(row.available_quantity || 0))), 0);
-  await pool.query('UPDATE products SET stock_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [available, productId]);
+  await db.query('UPDATE products SET stock_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [available, productId]);
   return available;
 }
 
 // Recalcula products.stock_quantity a partir das unidades serializadas disponiveis.
-async function syncProductStock(productId) {
-  return syncSerializedProductStockFromUnits(productId);
+async function syncProductStock(productId, db = pool) {
+  return syncSerializedProductStockFromUnits(productId, db);
 }
 
 // ─── Recibos Avulsos ────────────────────────────────────────────────────────

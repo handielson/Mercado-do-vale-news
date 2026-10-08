@@ -1,38 +1,36 @@
 {
-  "version": "v1.2.572-protecao-precos",
+  "version": "v1.2.573-filtros-venda-imei",
   "date": "2026-10-07",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.572-protecao-precos",
-  "release_vps": "/var/www/mdv-site/releases/20261008-021538-protecao-precos",
+  "tag": "v1.2.573-filtros-venda-imei",
+  "release_vps": "/var/www/mdv-site/releases/20261008-024439-filtros-venda-imei",
   "release_print3d_vps": null,
-  "summary": "Protege custo e precos comerciais nas consultas publicas de produtos.",
+  "summary": "Filtros do catalogo e finalizacao atomica de vendas com IMEI.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/catalog/CatalogSection.tsx",
-    "services/productReadPrivacy.cjs",
-    "services/vpsApiService.ts",
-    "services/catalogService.ts",
-    "services/catalogSectionsService.ts",
     "server.js",
     "vps_server.js",
     "vps_server.cjs",
+    "services/saleService.ts",
+    "services/serializedSaleFinalization.cjs",
     "deploy-vps-server-only.cjs",
-    "scripts/deploy-product-read-privacy.cjs",
-    "tmp-tests/product-read-privacy.test.cjs",
-    "tmp-tests/deploy-product-read-privacy.test.cjs",
+    "scripts/deploy-catalog-sale-atomic.cjs",
+    "tmp-tests/products-section-filters.test.cjs",
+    "tmp-tests/serialized-sale-transaction.test.cjs",
+    "tmp-tests/pdv-serialized-finalization-static.test.mjs",
+    "tmp-tests/deploy-catalog-sale-atomic.test.cjs",
     "docs/operacional/2026-10-07-revisao-falhas-sistema.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-07-v1.2.572-protecao-precos.md"
+    "docs/versoes/2026-10-07-v1.2.573-filtros-venda-imei.md"
   ],
   "validations": [
-    "Privacidade HTTP por perfil e transporte; isolamento de cache",
-    "Deploy seletivo idempotente; rotas de ofertas e regressoes do catalogo",
-    "Sintaxe, build e trava Supabase",
-    "Conferencia publica da API, site e versao apos deploy"
+    "36 testes HTTP, filtros, privacidade, transacao e deploy seletivo; regressao PDV e moeda",
+    "Sintaxe, build e trava Supabase; tabelas de producao InnoDB",
+    "Validacao publica apos deploy, sem vendas ou alteracoes de estoque reais"
   ]
 }

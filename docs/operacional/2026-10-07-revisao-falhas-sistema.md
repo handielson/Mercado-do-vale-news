@@ -5,8 +5,8 @@ Revisão em 07/10/2026. Não é auditoria integral. As consultas de produção f
 | # | Prioridade | Problema | Estado |
 |---|---|---|---|
 | 1 | Alta | API pública expõe custo e preços comerciais sem autenticação | Publicado e validado — v1.2.572-protecao-precos |
-| 2 | Alta | Filtros `in_ids` e `min_price` das seções ignorados pela API | Pendente |
-| 3 | Alta | Venda e baixa de IMEIs não são uma operação atômica | Pendente |
+| 2 | Alta | Filtros `in_ids` e `min_price` das seções ignorados pela API | Corrigido e testado localmente; publicação pendente |
+| 3 | Alta | Venda e baixa de IMEIs não são uma operação atômica | Corrigido e testado localmente; publicação pendente |
 | 4 | Alta | Confirmação de WhatsApp iniciada antes da baixa dos aparelhos | Pendente |
 | 5 | Média | Categoria filtrada após buscar amostra limitada de produtos | Pendente |
 | 6 | Média | Recentes, novidades e mais vendidos não agrupam famílias | Pendente |
@@ -27,3 +27,19 @@ Fonte dos valores: MySQL, sem alteração de preço ou estoque. Fonte da autoriz
 Testes: `node --test tmp-tests/product-read-privacy.test.cjs`. Exercitam HTTP Fastify com dados sintéticos, visitante, token inválido, varejo, comercial, administrador, chave interna, custos aninhados, datas e troca de sessão no cache. Não acessam banco/WhatsApp real.
 
 Validação local: cinco testes de privacidade e 17 testes de rotas de ofertas passaram, além das regressões de configuração pública de seções, responsável no CRUD, categorias, normalização de tipos de conta, nome público e preço da variação. Teste do deploy seletivo e regressão de baixa por local do PDV passaram. Sintaxe dos três entrypoints e módulo validada. Build de produção e trava contra runtime Supabase passaram. Produção: mysql.ok=true, home HTTP 200, VERSION correspondente e navegador com catálogo/ficha administrativa sem erros de console. Nenhum preço ou estoque alterado.
+
+## Item 2 — filtros de produtos na consulta
+
+Fonte de verdade: campos `products.id` e `products.price_retail` no MySQL. Consumidor: `catalogSectionsService.getProductsForSection`, que envia `in_ids`, `min_price` e `max_price` à rota `/products`. Valores são inteiros em centavos, conforme contrato interno; R$ 19,90 é `1990`. Não se usa o campo legado `price` nem se altera valor cadastrado.
+
+Os três entrypoints agora aplicam IDs e limites inclusivos de preço antes de ORDER BY, LIMIT e OFFSET, com parâmetros SQL. IDs são deduplicados; uma lista vazia retorna vazia, sem ampliar a consulta. Limites inválidos, negativos, fracionários, não finitos ou invertidos retornam HTTP 400 antes de consultar o banco. Mantidos filtros existentes de status, pais, categoria e pesquisa. Produtos fixados continuam seguindo a ordem definida no consumidor; limites de preço da busca dinâmica não mudam a regra existente de produtos fixados.
+
+## Item 3 — venda e baixa de unidades no mesmo commit
+
+Fonte: MySQL, tabelas sales, sale_items, units, products e product_stock_locations. Nova operação autenticada POST /sales/finalize-serialized nos três entrypoints utiliza services/serializedSaleFinalization.cjs. O PDV envia venda e itens juntos quando há uma unidade serializada. A transação trava produtos/unidades em ordem estável, confere vínculo com o SKU, disponibilidade e quantidade unitária, grava venda/itens, marca todos os aparelhos vendidos e recalcula seus saldos na mesma conexão. Falha desfaz o conjunto. Reenvio idêntico com mesmo ID de venda não duplica itens ou baixa; ID com dados divergentes é rejeitado.
+
+services/saleService.ts não faz mais baixas/liberações individuais após gravar venda. Retorno de erro da operação impede seguir para notificações e demais etapas. Cashback e avisos de venda da nova rota começam após commit. A confirmação WhatsApp das vendas com IMEI passa a começar depois da baixa destes aparelhos. Item 4 permanece pendente para garantir ordenação em relação a produtos sem IMEI: a baixa numérica em vendas mistas e o fluxo de venda sem unidades seguem o contrato anterior, com falhas registradas para conferência. Não foram alterados cálculo de preço, pagamento externo, cancelamento, Bling ou mensagens.
+
+Testes sintéticos em tmp-tests/serialized-sale-transaction.test.cjs cobrem commit, repetição, falha no segundo item, segundo aparelho e saldo, concorrência simulada, unidade oculta, SKU incorreto, duplicidade e quantidade inválida, uso da conexão transacional no saldo, cliente real rejeitando a operação e rotas HTTP sem notificações antes do commit. Regressões de finalização serializada, baixa por local, log e termo WhatsApp passaram; build e sintaxe passaram. Teste legado sale-stock-restore-by-location-static.test.mjs indisponível: depende de supabase/migrations/20260509000001_multi_deposit_stock.sql, removida anteriormente. Não se restaura Supabase para executá-lo. Não houve teste mutante em MySQL real nem publicação. Itens 2 e 3 e quatro arquivos Shopee preexistentes preservados no Git; sem commit/push/deploy nesta etapa.
+
+Teste `node --test tmp-tests/products-section-filters.test.cjs` executa o handler real de cada entrypoint via HTTP Fastify, com banco simulado: IDs ausentes, duplicados, combinação de filtros, limites exatos em centavos, zero, paginação após filtro, status/pais e entrada maliciosa vinculada como parâmetro. Confere também a proteção de custo do item 1. Três testes HTTP passaram junto com os cinco testes de privacidade, regressões de busca e normalização monetária. Sintaxe dos entrypoints validada. Publicação deste item ainda não solicitada; produção não alterada nesta etapa. Quatro arquivos preexistentes Shopee preservados.

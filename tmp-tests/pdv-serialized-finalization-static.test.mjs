@@ -24,8 +24,8 @@ assert.match(
 
 assert.match(
   saleService,
-  /unitService\.markAsSold\(unitId,\s*undefined,\s*sale\.id\)/,
-  'saleService must mark the selected serialized unit as sold with the sale id',
+  /hasSerializedUnits \? '\/sales\/finalize-serialized'/,
+  'saleService must persist sale and selected units through atomic API',
 );
 
 assert.match(
@@ -34,10 +34,10 @@ assert.match(
   'serialized items must be excluded from generic product stock decrement',
 );
 
-assert.match(
+assert.doesNotMatch(
   saleService,
-  /recordFinalizationIssue\('serialized_units'/,
-  'serialized unit write-off failures must be recorded as finalization issues',
+  /unitService\.markAsSold\(/,
+  'serialized unit write-off must not occur in separate client requests',
 );
 
 console.log('pdv serialized finalization static checks passed');

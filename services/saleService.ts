@@ -669,20 +669,21 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             finalization_error_summary: saleInput.finalization_error_summary || null,
         };
 
-        // Insert sale
+        // Venda com IMEI: venda, itens e unidades sao gravados no mesmo commit.
+        const hasSerializedUnits = saleInput.items.some(item => item.serialized_unit?.unitId);
+        const saleItems = saleInput.items.map(item => serializeSaleItemRowForTable(item, saleId));
         const sale = normalizeSaleRow(await vpsClient.post<Sale>(
-            '/table-data/sales',
-            serializeSaleRowForTable(saleData)
+            hasSerializedUnits ? '/sales/finalize-serialized' : '/table-data/sales',
+            hasSerializedUnits ? { sale: serializeSaleRowForTable(saleData), items: saleItems } : serializeSaleRowForTable(saleData)
         ));
         if (!sale) throw new Error('Failed to create sale');
 
         // Insert sale items (persiste serialized_unit_id pra rastreio do IMEI)
-        const saleItems = saleInput.items.map(item => serializeSaleItemRowForTable(item, sale.id));
 
         let saleItemsPersisted = false;
         let saleWhatsAppNotification: Promise<any> | null = null;
         try {
-            await vpsClient.post('/table-data/sale_items/bulk', saleItems);
+            if (!hasSerializedUnits) await vpsClient.post('/table-data/sale_items/bulk', saleItems);
             saleItemsPersisted = true;
             saleWhatsAppNotification = vpsClient.post('/whatsapp/automation/sale-completed', { sale_id: sale.id });
             if (
@@ -696,26 +697,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             recordFinalizationIssue('sale_items', itemsError);
         }
 
-        const serializedItems = saleItemsPersisted
-            ? saleInput.items.filter(i => (i as any).serialized_unit?.unitId)
-            : [];
-        const markedUnitIds: string[] = [];
-        try {
-            for (const item of serializedItems) {
-                const unitId = (item as any).serialized_unit.unitId;
-                await unitService.markAsSold(unitId, undefined, sale.id);
-                markedUnitIds.push(unitId);
-            }
-        } catch (err) {
-            for (const unitId of markedUnitIds) {
-                try {
-                    await unitService.release(unitId);
-                } catch (releaseError) {
-                    console.error(`[saleService] Falha ao liberar unit ${unitId} apos erro na venda ${sale.id}:`, releaseError);
-                }
-            }
-            recordFinalizationIssue('serialized_units', err);
-        }
+        // Nenhuma baixa/liberacao individual aqui: a API ja confirmou todas as unidades.
 
         try {
             await createCustomerDebtForAPrazoSale(saleInput, sale);

@@ -18112,6 +18112,29 @@ function comboStockSql(productAlias = 'products') {
 }
 
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
+  // Valores monetarios deste contrato sao inteiros em centavos.
+  const priceBounds = {};
+  for (const key of ['min_price', 'max_price']) {
+    if (req.query[key] === undefined) continue;
+    const raw = String(req.query[key]).trim();
+    const value = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < 0) {
+      return reply.code(400).send({ error: key + ' deve ser um inteiro nao negativo em centavos.' });
+    }
+    priceBounds[key] = value;
+  }
+  if (priceBounds.min_price !== undefined && priceBounds.max_price !== undefined
+    && priceBounds.min_price > priceBounds.max_price) {
+    return reply.code(400).send({ error: 'min_price nao pode ser maior que max_price.' });
+  }
+  let selectedIds;
+  if (req.query.in_ids !== undefined) {
+    selectedIds = [...new Set(String(req.query.in_ids).split(',').map(id => id.trim()).filter(Boolean))];
+    if (selectedIds.length > 2000 || selectedIds.some(id => id.length > 128)) {
+      return reply.code(400).send({ error: 'in_ids excede o limite de IDs permitido.' });
+    }
+    if (!selectedIds.length) return [];
+  }
   const limit  = Math.min(parseInt(req.query.limit)  || 500, 2000);
   const offset = parseInt(req.query.offset) || 0;
   const category = req.query.category;
@@ -18163,6 +18186,18 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
 
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
   const params = [];
+  if (selectedIds) {
+    sql += ` AND id IN (${selectedIds.map(() => '?').join(',')})`;
+    params.push(...selectedIds);
+  }
+  if (priceBounds.min_price !== undefined) {
+    sql += ' AND price_retail >= ?';
+    params.push(priceBounds.min_price);
+  }
+  if (priceBounds.max_price !== undefined) {
+    sql += ' AND price_retail <= ?';
+    params.push(priceBounds.max_price);
+  }
 
   if (status && status !== 'all') { sql += ' AND status = ?'; params.push(status); }
   else if (!status && !search)    { sql += ' AND status = ?'; params.push('active'); }
@@ -20931,6 +20966,30 @@ function isValidTable(name) {
 }
 
 // INSERT individual
+fastify.post('/sales/finalize-serialized', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  let result;
+  try {
+    result = await require('./services/serializedSaleFinalization.cjs').finalizeSerializedSale({
+      pool, sale: req.body?.sale, items: req.body?.items, syncProductStock,
+    });
+  } catch (error) {
+    if (!error.statusCode) throw error;
+    return reply.code(error.statusCode).send({ error: 'serialized_sale_finalization', message: error.message });
+  }
+  // Efeitos externos so podem comecar depois do commit.
+  if (!result.replay) {
+    if (typeof ensurePurchaseCoinsForSaleVps === 'function') await ensurePurchaseCoinsForSaleVps(result.sale.id, { apply: true }).catch(error => {
+      console.error('[cashback] Falha apos finalizacao serializada:', error.message);
+    });
+    void Promise.all([
+      typeof notifyTelegramPdvSaleVps === 'function' ? notifyTelegramPdvSaleVps(result.sale.id) : null,
+      typeof recordMobilePdvSaleVps === 'function' ? recordMobilePdvSaleVps(result.sale.id) : null,
+    ])
+      .catch(error => console.error('[sales] Falha na notificacao apos commit:', error.message));
+  }
+  return result.sale;
+});
+
 fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, reply) => {
   const { name } = req.params;
   if (!isValidTable(name)) return reply.code(400).send({ error: 'Invalid table name' });
@@ -24204,16 +24263,16 @@ async function runMigrations() {
 }
 
 // Recalcula products.stock_quantity = COUNT(units WHERE status='available') para o produto.
-async function syncProductStock(productId) {
+async function syncProductStock(productId, db = pool) {
   if (!productId) return null;
-  await pool.query(
+  await db.query(
     `UPDATE products SET stock_quantity = (
        SELECT COUNT(*) FROM units WHERE product_id = ? AND status = 'available'
      ), updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
     [productId, productId]
   );
-  const [rows] = await pool.query('SELECT stock_quantity FROM products WHERE id = ? LIMIT 1', [productId]);
+  const [rows] = await db.query('SELECT stock_quantity FROM products WHERE id = ? LIMIT 1', [productId]);
   return rows?.[0]?.stock_quantity ?? null;
 }
 
