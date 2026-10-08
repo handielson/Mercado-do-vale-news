@@ -1,4 +1,14 @@
-# v1.2.568-secoes-responsavel
+# v1.2.569-secoes-publicas
+
+Data: 2026-10-07. Branch: main. Tag: v1.2.569-secoes-publicas.
+Release VPS: /var/www/mdv-site/releases/20261008-004437-secoes-publicas
+Status: preparada; publicacao pendente.
+
+Home le as secoes habilitadas do cadastro do painel via projecao publica sem user_id, respeitando ordem e filtros. Corrige Smartphones ausente porque a vitrine usava tres secoes fixas. Lista vazia respeitada; fallback padrao somente em falha.
+
+Testes comportamentais de leitura e rota, acesso publico somente GET, patch seletivo idempotente, regressoes da area, sintaxe e build aprovados. Deploy do site e API seletivo; sem migration ou dados comerciais alterados. Detalhes e arquivos em docs/versoes/2026-10-07-v1.2.569-secoes-publicas.md. Quatro arquivos preexistentes Shopee fora do escopo.
+
+## Release anterior: v1.2.568-secoes-responsavel
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.568-secoes-responsavel.
 Release VPS: /var/www/mdv-site/releases/20261008-003037-secoes-responsavel

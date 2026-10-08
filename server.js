@@ -2209,6 +2209,7 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
     pathname === '/brands' ||
     pathname === '/catalog-settings' ||
     pathname === '/catalog/metadata' ||
+    pathname === '/catalog/sections' ||
     pathname === '/categories' ||
     pathname === '/check-video' ||
     pathname === '/field-presets' ||
@@ -21054,6 +21055,19 @@ fastify.get('/schema/table/:name', { preHandler: requireSyncKey }, async (req, r
   return columns.map(c => ({ field: c.Field, type: c.Type, null: c.Null, key: c.Key, default: c.Default }));
 });
 // ─── Catalog Settings ──────────────────────────────────────────────────────
+// A vitrine lê a mesma configuração do painel, sem expor o responsável.
+fastify.get('/catalog/sections', async (req, reply) => {
+  const [rows] = await pool.query(
+    `SELECT id, section_type, title, subtitle, is_enabled, display_order,
+      max_products, layout_style, show_view_all, view_all_url,
+      filter_categories, filter_brands, filter_min_price, filter_max_price,
+      filter_tags, pinned_product_ids, sort_by, sort_direction, updated_at
+     FROM catalog_sections WHERE is_enabled = 1 ORDER BY display_order ASC, id ASC`
+  );
+  reply.header('Cache-Control', 'no-store');
+  return rows;
+});
+
 fastify.get('/catalog-settings', async (req, reply) => {
   const [rows] = await pool.query('SELECT * FROM catalog_settings LIMIT 1');
   reply.header('Cache-Control', 'public, max-age=900, s-maxage=1800');

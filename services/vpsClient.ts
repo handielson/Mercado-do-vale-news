@@ -30,6 +30,7 @@ function isPublicReadPath(path: string): boolean {
         path.startsWith('/brands') ||
         path.startsWith('/catalog-settings') ||
         path.startsWith('/catalog/metadata') ||
+        path.startsWith('/catalog/sections') ||
         path.startsWith('/categories') ||
         path.startsWith('/payment-fees') ||
         path.startsWith('/products') ||

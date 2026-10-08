@@ -12,6 +12,7 @@ const PUBLIC_READ_EXACT_PATHS = new Set([
   '/brands',
   '/catalog-settings',
   '/catalog/metadata',
+  '/catalog/sections',
   '/categories',
   '/check-video',
   '/field-presets',

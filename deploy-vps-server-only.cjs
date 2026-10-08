@@ -514,6 +514,14 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--catalog-sections-only') || process.argv.includes('--catalog-sections-check')) {
+    await require('./scripts/deploy-catalog-sections.cjs').deployCatalogSections({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--catalog-sections-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--system-status-only') || process.argv.includes('--system-status-check')) {
     await require('./scripts/deploy-system-status.cjs').deploySystemStatus({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

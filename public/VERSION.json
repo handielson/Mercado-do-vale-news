@@ -1,26 +1,33 @@
 {
-  "version": "v1.2.568-secoes-responsavel",
+  "version": "v1.2.569-secoes-publicas",
   "date": "2026-10-07",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.568-secoes-responsavel",
-  "release_vps": "/var/www/mdv-site/releases/20261008-003037-secoes-responsavel",
+  "tag": "v1.2.569-secoes-publicas",
+  "release_vps": "/var/www/mdv-site/releases/20261008-004437-secoes-publicas",
   "release_print3d_vps": null,
-  "summary": "Salvamento das secoes inclui o usuario logado e bloqueia sessao ausente.",
+  "summary": "Pagina inicial usa secoes cadastradas no painel, respeitando filtros e ordem.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
     "services/catalogSectionsService.ts",
-    "tmp-tests/catalog-sections-service-vps-crud-static.test.mjs",
+    "services/vpsClient.ts",
+    "services/vpsTransport.js",
+    "server.js",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-catalog-sections.cjs",
+    "tmp-tests/catalog-sections-public-config.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-07-v1.2.568-secoes-responsavel.md"
+    "docs/versoes/2026-10-07-v1.2.569-secoes-publicas.md"
   ],
   "validations": [
-    "Criacao envia usuario atual, preserva filtros e invalida cache",
-    "Sessao ausente bloqueia POST incompleto",
+    "Secoes publicas respeitam configuracao, ordem e lista vazia",
+    "Rota somente leitura sem user_id; deploy seletivo idempotente",
     "Regressoes de categorias e carregamento das secoes",
     "Build e trava Supabase; validacao publica apos deploy"
   ]

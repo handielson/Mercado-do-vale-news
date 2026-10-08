@@ -162,7 +162,13 @@ class CatalogSectionsService {
      */
     async getActiveSections(userId?: string): Promise<CatalogSection[]> {
         if (!userId) {
-            return buildDefaultPublicSections();
+            try {
+                const rows = await vpsClient.get<any[]>('/catalog/sections');
+                return sortSections(rows.map(normalizeSection).filter(section => section.is_enabled));
+            } catch (error) {
+                console.error('Erro ao buscar seções públicas:', error);
+                return buildDefaultPublicSections();
+            }
         }
 
         const sections = await this.getSections(userId);
