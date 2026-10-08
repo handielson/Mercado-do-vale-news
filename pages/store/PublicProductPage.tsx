@@ -355,11 +355,9 @@ export const PublicProductPage: React.FC = () => {
                 const { vpsApiService } = await import('@/services/vpsApiService');
 
                 // 1. Busca Direta do Produto na VPS (com 1 retry para evitar falsos positivos por latência)
-                if (isUuid) {
-                    data = await vpsApiService.getProductById(slug, true);
-                } else {
-                    data = await vpsApiService.getProductBySlug(slug);
-                }
+                // A rota publica resolve pais para filhos, inclusive quando recebe UUID.
+                // A consulta interna por ID deve permanecer exclusiva do painel.
+                data = await vpsApiService.getProductBySlug(slug);
 
 
                 // Fallback: se by-slug ainda não encontrou, tentar busca por search
@@ -392,6 +390,12 @@ export const PublicProductPage: React.FC = () => {
                 // Navega imediatamente pra URL do filho (replace=true para nao poluir historico).
                 if (data?.is_parent_redirect && data?.redirect_to_slug) {
                     navigate(`/produto/${data.redirect_to_slug}`, { replace: true });
+                    return;
+                }
+
+                if (Number(data?.is_parent) === 1 || data?.is_parent === true) {
+                    toast.error('Nenhuma variação pública disponível');
+                    navigate('/');
                     return;
                 }
 
@@ -864,7 +868,10 @@ export const PublicProductPage: React.FC = () => {
     };
 
     // Monta o grupo completo de variacoes e evita desaparecimento ao trocar variante
-    const allVariants = [product as CatalogProduct, ...siblings];
+    const allVariants = [product as CatalogProduct, ...siblings].filter(item =>
+        Number(item.is_parent) !== 1 && !item.hide_from_catalog &&
+        item.status !== 'inactive' && item.status !== 'Inativo'
+    );
     const variantsById = new Map<string, CatalogProduct>();
     allVariants.forEach((item) => {
         if (item?.id) variantsById.set(String(item.id), item);

@@ -14120,20 +14120,25 @@ async function loadSeoProductBySlug(slug) {
   // publica, assim como a API da pagina, antes de declarar o link indisponivel.
   if (!rows.length) {
     const [parents] = await pool.query(
-      `SELECT id FROM products
-       WHERE (id = ? OR slug = ?) AND is_parent = 1
+      `SELECT id, slug, sku, specs FROM products
+       WHERE (id = ? OR slug = ? OR ? LIKE CONCAT(slug, '-%')) AND is_parent = 1
          AND (status IN ('active', 'Ativo') OR status IS NULL)
          AND (exclude_from_seo = 0 OR exclude_from_seo IS NULL)
-       ORDER BY id ASC LIMIT 1`,
-      [slug, slug]
+         AND (hide_from_catalog = 0 OR hide_from_catalog IS NULL)
+       ORDER BY id ASC LIMIT 200`,
+      [slug, slug, slug]
     );
-    if (parents.length) {
+    const parent = parents.find(p => String(p.id) === slug || p.slug === slug ||
+      getPublicProductDisambiguatedRouteTargetVps({ ...p, specs: typeof p.specs === 'string' ? JSON.parse(p.specs) : p.specs }).toLowerCase() === slug.toLowerCase());
+    if (parent) {
       [rows] = await pool.query(
         `${select}
          WHERE parent_id = ? ${filter}
+           AND (hide_from_catalog = 0 OR hide_from_catalog IS NULL)
+           AND (offer_type IS NULL OR offer_visibility IS NULL OR offer_visibility != 'hidden')
          ORDER BY (CASE WHEN track_inventory = 0 OR ${comboStockSql('products')} > 0 THEN 0 ELSE 1 END), name ASC, id ASC
          LIMIT 1`,
-        [parents[0].id]
+        [parent.id]
       );
       if (rows.length) {
         const [routePeers] = rows[0].slug ? await pool.query(
@@ -26608,13 +26613,15 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
        FROM products
        WHERE ? LIKE CONCAT(slug, '-%')
          AND status = 'active'
-         AND (is_parent = 0 OR is_parent IS NULL)
        ORDER BY updated_at DESC
        LIMIT 200`,
       [slugParam]
     );
     const matchedRoute = routeCandidates.find((product) => (
-      getPublicProductVariantRouteTargetVps(product, routeCandidates).toLowerCase() === slugParam.toLowerCase()
+      getPublicProductVariantRouteTargetVps(product, routeCandidates).toLowerCase() === slugParam.toLowerCase() ||
+      (Number(product.is_parent) === 1 && getPublicProductDisambiguatedRouteTargetVps({ ...product,
+        specs: typeof product.specs === 'string' ? JSON.parse(product.specs) : product.specs
+      }).toLowerCase() === slugParam.toLowerCase())
     ));
     if (matchedRoute) rows = [matchedRoute];
   }
@@ -26626,6 +26633,10 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   // O pai eh transparente pro cliente - URL eh redirecionada pelo frontend pra um filho real.
   // Ordena por estoque (preferindo com estoque) e nome.
   if (Number(r.is_parent) === 1) {
+    if (r.hide_from_catalog || (r.status && !['active', 'Ativo'].includes(r.status))) {
+      reply.code(404);
+      return { error: 'No available variants for this parent' };
+    }
     const [variantRows] = await pool.query(
       `SELECT *, ${productFamilyNameSelectSql('products')},
         ${modelBlueprintSelectSql('products')},
@@ -26634,12 +26645,14 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
        WHERE parent_id = ?
          AND status = 'active'
          AND id != ?
-         AND slug IS NOT NULL AND slug != ''
+         AND (is_parent = 0 OR is_parent IS NULL)
+         AND (hide_from_catalog = 0 OR hide_from_catalog IS NULL)
+         AND (offer_type IS NULL OR offer_visibility IS NULL OR offer_visibility != 'hidden')
        ORDER BY (CASE WHEN (track_inventory = 0 OR stock_quantity > 0) THEN 0 ELSE 1 END), name ASC
        LIMIT 1`,
       [r.id, r.id]
     );
-    if (variantRows.length > 0 && variantRows[0].slug) {
+    if (variantRows.length > 0) {
       const variant = variantRows[0];
 
       // Alguns agrupadores antigos e suas variacoes compartilham o mesmo slug.
@@ -26658,7 +26671,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 
       return {
         is_parent_redirect: true,
-        redirect_to_slug: variant.slug,
+        redirect_to_slug: variant.id,
       };
     }
     // Pai sem filhos disponiveis - retorna 404

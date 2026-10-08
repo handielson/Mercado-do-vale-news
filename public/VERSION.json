@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.586-parent-public-link",
+  "version": "v1.2.587-public-family-variation",
   "date": "2026-10-08",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.586-parent-public-link",
-  "release_vps": "/var/www/mdv-site/releases/20261008-224025-parent-public-link",
+  "tag": "v1.2.587-public-family-variation",
+  "release_vps": "/var/www/mdv-site/releases/20261008-234548-public-family-variation",
   "release_print3d_vps": null,
-  "summary": "Links publicos de todos os pais resolvem uma variacao elegivel da familia antes de responder indisponivel.",
+  "summary": "Pai permanece interno: pagina publica resolve uma variacao por UUID ou slug e exclui agregadores das opcoes de compra.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -15,15 +15,15 @@
     "server.js",
     "vps_server.js",
     "vps_server.cjs",
-    "deploy-vps-server-only.cjs",
+    "pages/store/PublicProductPage.tsx",
     "scripts/deploy-parent-public-link.cjs",
     "tmp-tests/seo-parent-family.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-08-v1.2.586-parent-public-link.md"
+    "docs/versoes/2026-10-08-v1.2.587-public-family-variation.md"
   ],
   "validations": [
-    "10 testes para familias, disponibilidade, rotas e deploy seletivo.",
+    "14 testes para familias, disponibilidade, rotas, pagina publica e deploy seletivo.",
     "Rotas publicas, SEO Fastify, estoque PDV e sintaxe.",
     "Build e validacao publica da URL reportada, API e MySQL."
   ]

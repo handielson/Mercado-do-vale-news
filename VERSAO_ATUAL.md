@@ -1,3 +1,14 @@
+# v1.2.587-public-family-variation
+
+Data: 08/10/2026. Branch: main. Tag: v1.2.587-public-family-variation.
+Release: /var/www/mdv-site/releases/20261008-234548-public-family-variation.
+
+Pagina publica usa o resolvedor publico para UUIDs e slugs; o pai e excluido antes do agrupamento de variacoes e nunca renderiza preco zero como opcao Padrao. Links antigos do pai com SKU tambem resolvem um filho publico. Filhos ocultos/inativos nao sao escolhidos. Painel continua acessando o pai por ID interno; nenhum dado comercial foi alterado.
+
+14 testes focados, rotas publicas, SEO Fastify e estoque PDV passaram. Deploy seletivo preserva codigo remoto; publicacao e validacao final em andamento. Quatro arquivos preexistentes Shopee preservados fora do escopo.
+
+## Registro anterior
+
 # v1.2.586-parent-public-link
 
 Data: 08/10/2026. Branch: main. Tag: v1.2.586-parent-public-link. Release: /var/www/mdv-site/releases/20261008-224025-parent-public-link.
