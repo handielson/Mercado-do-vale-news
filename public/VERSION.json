@@ -1,25 +1,47 @@
 {
-  "version": "v1.2.580-photo-intake-price-layout",
+  "version": "v1.2.581-catalog-title-upload",
   "date": "2026-10-08",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.580-photo-intake-price-layout",
-  "release_vps": "/var/www/mdv-site/releases/20261008-190557-photo-intake-price-layout",
+  "tag": "v1.2.581-catalog-title-upload",
+  "release_vps": "/var/www/mdv-site/releases/20261008-200544-catalog-title-upload",
   "release_print3d_vps": null,
-  "summary": "Campos de compra e venda legíveis na conferência por foto, com colunas ajustadas à largura do painel.",
+  "summary": "Complemento opcional do título no site, exclusivo do pai, e correção de resposta vazia no upload de Stories.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
+    "components/catalog/ModernProductCard.tsx",
+    "components/catalog/ProductCard.tsx",
+    "components/products/CatalogTitleEditor.tsx",
+    "components/products/ProductCard.tsx",
+    "components/products/ProductList.tsx",
+    "pages/store/PublicProductPage.tsx",
+    "services/catalogTitle.js",
+    "services/catalogTitleServer.cjs",
+    "services/productNormalizer.ts",
+    "services/products.ts",
+    "services/vpsApiService.ts",
+    "types/product.ts",
+    "server.js",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-catalog-title-upload.cjs",
+    "tmp-tests/catalog-title.test.mjs",
+    "tmp-tests/catalog-title-deploy.test.cjs",
+    "tmp-tests/synology-upload-response.test.cjs",
+    "docs/operacional/2026-10-08-complemento-titulo-catalogo.md",
+    "docs/operacional/2026-10-08-stories-upload-resposta-vazia.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-08-v1.2.580-photo-intake-price-layout.md"
+    "docs/versoes/2026-10-08-v1.2.581-catalog-title-upload.md"
   ],
   "validations": [
-    "Regressões existentes do cadastro de smartphones por foto.",
-    "Build com validação de rotas e ausência de runtime Supabase.",
-    "Validação pública da versão e da tela após publicação."
+    "Testes do complemento, deploy seletivo e resposta de upload.",
+    "Regressões de marketing, Stories, breadcrumb, garantia e estoque.",
+    "Sintaxe das entradas da API e build sem runtime Supabase.",
+    "Validação pública do site, versão, API e projeção do complemento."
   ]
 }

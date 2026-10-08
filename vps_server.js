@@ -39288,6 +39288,8 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrCustomer }, async
       console.error(`[synology] Background upload error: ${fileName}`, err.message);
     }
   });
+  // Keep the async handler pending until response hooks finish serializing the upload receipt.
+  return reply;
 });
 
 // DELETE /synology/file?folder=imagens&name=arquivo.jpg

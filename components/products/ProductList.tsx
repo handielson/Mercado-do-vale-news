@@ -6,6 +6,7 @@ import { Product } from '../../types/product';
 import type { TikTokShopProductLink } from '../../services/tiktokShopService';
 import type { ProductFamilyGroup } from './ProductFamilyList';
 import { ProductCard } from './ProductCard';
+import { CatalogTitleEditor } from './CatalogTitleEditor';
 import { getProductVariationSpecs } from '../../services/modelProductAggregator.js';
 
 interface ProductListProps {
@@ -62,6 +63,7 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
             <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-slate-900">{group.parent?.name || group.representative.name}</p>
                 <p className="text-xs text-violet-700">{variants.length} {variants.length === 1 ? 'variação' : 'variações'} no mesmo produto</p>
+                {group.parent && <CatalogTitleEditor product={group.parent} />}
             </div>
             {group.parent && onEditProduct && <button type="button" onClick={() => onEditProduct(group.parent!)}
                 className="shrink-0 rounded border border-violet-200 px-2 py-1 text-xs font-semibold text-violet-800 hover:bg-violet-100">Editar família</button>}

@@ -10,6 +10,7 @@ import { getModelImageWithCache } from '../../services/modelImageCache';
 import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
 import { ProductQuickTagsModal } from './ProductQuickTagsModal';
+import { CatalogTitleEditor } from './CatalogTitleEditor';
 import { ProductPublicationChannels } from './ProductPublicationChannels';
 import { getAuthSessionToken } from '../../services/authSession';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
@@ -1675,6 +1676,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                             </a>
                         </h3>
                         {familyVariants || <>
+                            <CatalogTitleEditor product={product} />
                             {/* Specs: cor + memória/RAM */}
                             <p className="font-mono text-xs text-slate-500 mt-0.5">
                                 {[

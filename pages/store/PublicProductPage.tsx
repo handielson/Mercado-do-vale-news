@@ -34,6 +34,7 @@ import { modelColorImagesService } from '@/services/model-color-images';
 import { colorService } from '@/services/colors';
 import { buildProductVideoPlaylist, isMp4VideoUrl, isSafeProductVideoSibling, orderProductVideoSiblings, resolveProductVideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
+import { getCatalogTitle } from '../../services/catalogTitle.js';
 import { getPublicProductDisambiguatedRouteTarget, getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
 import { buildCategoryBreadcrumb } from './categoryBreadcrumb.js';
 import { customFieldsService } from '@/services/custom-fields';
@@ -803,6 +804,7 @@ export const PublicProductPage: React.FC = () => {
 
     const publicProductName = getPublicProductName(product);
     const publicProductTitle = product.parent_id && product.parent_name ? publicProductName : toTitleCase(publicProductName);
+    const catalogDisplayTitle = getCatalogTitle(publicProductTitle, product);
     const title = `${publicProductTitle} | Mercado do Vale`;
     const description = product.meta_description || resolvedDescription || `Compre ${publicProductName} no Mercado do Vale.`;
 
@@ -1415,7 +1417,7 @@ export const PublicProductPage: React.FC = () => {
                     <div className="space-y-6">
                         <div>
                             <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
-                                {publicProductTitle}
+                                {catalogDisplayTitle}
                             </h1>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-slate-500">
                                 <span>

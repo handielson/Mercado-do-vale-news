@@ -136,6 +136,8 @@ export interface Product {
     // Variações Pai-Filho (sistema nativo)
     parent_id?: string;        // UUID do produto pai (null = produto pai ou independente)
     is_parent?: boolean | number;  // Se true/1, eh produto pai (agregador de variantes, nao vendavel)
+    catalog_title_complement?: string | null;
+    parent_catalog_title_complement?: string | null;
 
     // Product Combos (Bundles)
     is_combo?: boolean;        // Se true, é um pacote agrupador de SKUs filhos

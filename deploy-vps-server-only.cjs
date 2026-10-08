@@ -515,6 +515,14 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--catalog-title-upload-only') || process.argv.includes('--catalog-title-upload-check')) {
+    await require('./scripts/deploy-catalog-title-upload.cjs').deployCatalogTitleUpload({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--catalog-title-upload-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--model-specs-only') || process.argv.includes('--model-specs-check')) {
     await require('./scripts/deploy-model-specs.cjs').deployModelSpecs({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

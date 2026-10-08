@@ -25342,7 +25342,11 @@ function modelBlueprintSelectSql(productAlias = 'products') {
 function productFamilyNameSelectSql(productAlias = 'products') {
   return `(SELECT family_parent.name FROM products family_parent
     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
-    LIMIT 1) AS parent_name`;
+    LIMIT 1) AS parent_name,
+    ${productAlias}.catalog_title_complement,
+    (SELECT family_parent.catalog_title_complement FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_catalog_title_complement`;
 }
 
 function parseJsonCell(value, fallback) {
@@ -28902,6 +28906,8 @@ fastify.patch('/products/name', { preHandler: requireSyncKey }, async (req, repl
   return { ok: true, affectedRows: result.affectedRows };
 });
 
+
+require('./services/catalogTitleServer.cjs').registerCatalogTitleRoutes(fastify, { pool, requireSyncKeyOrAdmin });
 
 fastify.patch('/products/:id/seo', { preHandler: requireSyncKey }, async (req, reply) => {
   const { exclude_from_seo } = req.body;
@@ -39237,6 +39243,8 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrCustomer }, async
       console.error(`[synology] Background upload error: ${fileName}`, err.message);
     }
   });
+  // Keep the async handler pending until response hooks finish serializing the upload receipt.
+  return reply;
 });
 
 // DELETE /synology/file?folder=imagens&name=arquivo.jpg
@@ -40002,6 +40010,7 @@ async function runMigrations() {
   await addColumnIfMissing('company_settings', 'tiktok_granted_scopes', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('products', 'exclude_from_seo', "TINYINT(1) DEFAULT 0");
   await addColumnIfMissing('products', 'hide_from_catalog', "TINYINT(1) DEFAULT 0");
+  await addColumnIfMissing('products', 'catalog_title_complement', "VARCHAR(120) NULL");
   await addColumnIfMissing('products', 'meta_title', "VARCHAR(255) NULL");
   await addColumnIfMissing('products', 'meta_description', "TEXT NULL");
   await addColumnIfMissing('products', 'keywords', "TEXT NULL");

@@ -59,6 +59,8 @@ export interface NormalizedProduct {
   model_id?: string;
   parent_id?: string | null;
   parent_name?: string | null;
+  catalog_title_complement?: string | null;
+  parent_catalog_title_complement?: string | null;
 
   // Conteúdo
   description?: string;
@@ -202,6 +204,8 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
     model_id: p.model_id,
     parent_id: p.parent_id ?? null,
     parent_name: typeof p.parent_name === 'string' ? p.parent_name.trim() : null,
+    catalog_title_complement: typeof p.catalog_title_complement === 'string' ? p.catalog_title_complement : null,
+    parent_catalog_title_complement: typeof p.parent_catalog_title_complement === 'string' ? p.parent_catalog_title_complement : null,
     description: p.description,
     specs: p.model_specs_authoritative ? resolveSmartphoneSpecs(p.specs, p.model_template_values) : (p.specs ?? {}),
     custom_fields: p.model_specs_authoritative ? stripModelTechnicalCustomFields(p.custom_fields, p.model_template_values, p.specs) : (p.custom_fields ?? {}),

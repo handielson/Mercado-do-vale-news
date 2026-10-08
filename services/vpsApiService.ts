@@ -853,6 +853,12 @@ class VpsApiService {
     return this.writeSafe('PATCH', `/products/${id}/seo`, { exclude_from_seo });
   }
 
+  async updateProductCatalogTitle(id: string, complement: string): Promise<boolean> {
+    const ok = await this.writeSafe('PATCH', `/products/${id}/catalog-title`, { complement });
+    if (ok) this.invalidateProductCache();
+    return ok;
+  }
+
   async updateProductCatalogVisibility(id: string, hide_from_catalog: boolean): Promise<boolean> {
     this.cache.delete(`/products/${id}`);
     this.invalidateProductCache();

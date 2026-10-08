@@ -41,6 +41,8 @@ function transformFromDB(row: any): Product {
         category_id: row.category_id,
         brand: row.brand,
         name: row.name,
+        catalog_title_complement: row.catalog_title_complement || null,
+        parent_catalog_title_complement: row.parent_catalog_title_complement || null,
         sku: row.sku,
         description: row.description,
         eans: row.alternative_eans?.length ? row.alternative_eans : (row.ean ? [row.ean] : []),
