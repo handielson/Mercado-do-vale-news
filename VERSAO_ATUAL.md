@@ -2,11 +2,16 @@
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.569-secoes-publicas.
 Release VPS: /var/www/mdv-site/releases/20261008-004437-secoes-publicas
-Status: preparada; publicacao pendente.
+Status: publicada e validada em producao.
 
 Home le as secoes habilitadas do cadastro do painel via projecao publica sem user_id, respeitando ordem e filtros. Corrige Smartphones ausente porque a vitrine usava tres secoes fixas. Lista vazia respeitada; fallback padrao somente em falha.
 
 Testes comportamentais de leitura e rota, acesso publico somente GET, patch seletivo idempotente, regressoes da area, sintaxe e build aprovados. Deploy do site e API seletivo; sem migration ou dados comerciais alterados. Detalhes e arquivos em docs/versoes/2026-10-07-v1.2.569-secoes-publicas.md. Quatro arquivos preexistentes Shopee fora do escopo.
+
+
+Codigo ef6b5960 e tag enviados a origin/main. API publicada seletivamente com backup /var/www/mdv-api/backups/catalog-sections-1791420338538; mdv-api reiniciada e mysql.ok=true. Rota publica via proxy retornou Smartphones primeiro, filtro da categoria e limite 10. Site ativo na release registrada; home HTTP 200 e VERSION correspondente. Navegador sem login confirmou Smartphones antes de Mais Recentes, com dez cards de celulares. Evidencia: .local/secoes-smartphones-publicado.png. Logs nao fatais de fetchSafe GET sem detalhes observados durante carregamento; nao impediram renderizacao da secao. Nenhuma secao, produto, preco ou estoque alterado na validacao.
+
+Auditoria/aplicacao segura: zero candidatos/remocoes, 34 worktrees bloqueadas preservadas. Main sincronizado; quatro arquivos preexistentes Shopee preservados. Sem atualizacao da skill por nao haver nova licao de publicacao.
 
 ## Release anterior: v1.2.568-secoes-responsavel
 
