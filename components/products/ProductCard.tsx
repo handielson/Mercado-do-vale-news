@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef , type ReactNode } from 'react';
+import React, { useId, useState, useEffect, useRef , type ReactNode } from 'react';
 import { Barcode, ChevronDown, ChevronUp, Copy, Edit, Eye, EyeOff, ImagePlus, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
@@ -35,6 +35,7 @@ import type { ProductStockLocation } from '../../types/stock-location';
 interface ProductCardProps {
     product: Product;
     familyVariants?: ReactNode;
+    forceDetailsExpanded?: boolean;
     onEdit?: (product: Product) => void;
     onDelete?: (product: Product) => void;
     selectionMode?: boolean;
@@ -347,7 +348,10 @@ const pollSynologyUploadStatus = async (uploadId: string, token: string | undefi
  * ProductCard Component
  * Displays product information in a card format with image, prices, and status
  */
-export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariants, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariants, forceDetailsExpanded = false, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
+    const [detailsExpanded, setDetailsExpanded] = useState(false);
+    const detailsId = useId();
+    const showDetails = detailsExpanded || forceDetailsExpanded;
     const equivalentProductIds = product.equivalent_product_ids?.length
         ? product.equivalent_product_ids
         : [product.id];
@@ -1206,7 +1210,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
     return (
         <div
             className={cn(
-                "rounded-xl border overflow-hidden transition-all duration-200",
+                "self-start rounded-xl border overflow-hidden transition-all duration-200",
                 isParentProduct ? "bg-blue-50/60" : "bg-white",
                 selectionMode
                     ? isSelected
@@ -1675,8 +1679,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                                 {product.name}
                             </a>
                         </h3>
-                        {familyVariants || <>
-                            <CatalogTitleEditor product={product} />
+                        {!familyVariants && <>
                             {/* Specs: cor + memória/RAM */}
                             <p className="font-mono text-xs text-slate-500 mt-0.5">
                                 {[
@@ -1685,11 +1688,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                                     product.specs?.ram ? `${product.specs.ram} RAM` : undefined,
                                 ].filter(Boolean).join(' · ')}
                             </p>
-                            {/* SKU sempre visível */}
-                            {product.sku && (
-                                <p className="font-mono text-[10px] text-slate-400 mt-0.5">SKU: {product.sku}</p>
-                            )}
                         </>}
+                        {/* SKU sempre visível, inclusive no card do pai. */}
+                        {product.sku && <p className="font-mono text-[10px] text-slate-400 mt-0.5">SKU: {product.sku}</p>}
+                    </div>
+                </div>
+                <button type="button" aria-expanded={showDetails} aria-controls={detailsId} disabled={forceDetailsExpanded}
+                    onClick={(event) => { event.stopPropagation(); setDetailsExpanded(value => !value); }}
+                    className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-blue-400">
+                    {showDetails ? 'Recolher detalhes' : 'Expandir detalhes'}
+                    <ChevronDown size={16} className={showDetails ? 'rotate-180' : ''} />
+                </button>
+                <div id={detailsId} hidden={!showDetails} className="space-y-3">
+                    <div className="min-w-0">
+                        <CatalogTitleEditor product={product} />
+                        {familyVariants}
                         {/* Badge Pai / Variação */}
                         <ProductPublicationChannels product={product} shopeeLinked={shopeeVisualState.isSynced} shopeeStoreCodes={shopeeVisualState.storeCodes} tiktokStatus={hasTikTokLink ? currentTikTokStatus : ''} onShopee={handleOpenShopeeModal} onTikTok={() => setIsTikTokModalOpen(true)} />
                         {!familyVariants && product.parent_id ? (
@@ -1865,7 +1878,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                             <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
                         </button>
                     </div>
-                </div>
 
                 {videoUpload.phase !== 'idle' && (
                     <div
@@ -1980,6 +1992,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                         <p className="text-[10px] text-slate-500 uppercase font-semibold">Atacado</p>
                         <p className="text-sm font-semibold text-slate-700">{formatPrice(product.price_wholesale)}</p>
                     </div>
+                </div>
                 </div>
             </div>
 

@@ -1,27 +1,28 @@
 {
-  "version": "v1.2.583-family-card-compact",
+  "version": "v1.2.584-product-card-details",
   "date": "2026-10-08",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.583-family-card-compact",
-  "release_vps": "/var/www/mdv-site/releases/20261008-202919-family-card-compact",
+  "tag": "v1.2.584-product-card-details",
+  "release_vps": "/var/www/mdv-site/releases/20261008-203832-product-card-details",
   "release_print3d_vps": null,
-  "summary": "Cards administrativos representam o pai e iniciam compactos, com seta para expandir detalhes e variacoes.",
+  "summary": "Foto, miniaturas, atalhos, nome e SKU visiveis em todos os cards; expansao somente dos detalhes abaixo do SKU.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
+    "components/products/ProductCard.tsx",
     "components/products/ProductList.tsx",
     "tmp-tests/product-family-card-render.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-08-v1.2.583-family-card-compact.md"
+    "docs/versoes/2026-10-08-v1.2.584-product-card-details.md"
   ],
   "validations": [
-    "Renderizacao compacta, identidade do pai, selecao dos filhos e familia orfa.",
-    "Agrupamento de familias e complemento do titulo.",
+    "Renderizacao do pai e ponto de corte comum a todos os cards.",
+    "Agrupamento, imagens, video e locais de estoque.",
     "Build sem runtime Supabase.",
-    "Homepage, VERSION.json e expandir/recolher no painel em producao."
+    "Site, VERSION.json e expandir/recolher em familia e produto simples."
   ]
 }

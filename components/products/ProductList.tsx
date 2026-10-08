@@ -1,12 +1,11 @@
 
-import React, { useId, useState } from 'react';
-import { ChevronDown, Copy, Package } from 'lucide-react';
+import React, { useState } from 'react';
+import { Copy, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import type { TikTokShopProductLink } from '../../services/tiktokShopService';
 import type { ProductFamilyGroup } from './ProductFamilyList';
 import { ProductCard } from './ProductCard';
-import { CatalogTitleEditor } from './CatalogTitleEditor';
 import { getProductVariationSpecs } from '../../services/modelProductAggregator.js';
 
 interface ProductListProps {
@@ -32,9 +31,6 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
 }) {
     const variants = group.familyProducts.filter(product => String(product.id) !== String(group.parent?.id));
     const familyProduct = group.parent || group.representative;
-    const [expanded, setExpanded] = useState(false);
-    const detailsId = useId();
-    const showDetails = expanded || selectionMode;
     const [selectedId, setSelectedId] = useState(variants[0]?.id || group.representative.id);
     const selected = variants.find(product => product.id === selectedId) || variants[0] || group.representative;
     const label = (product: Product) => {
@@ -63,33 +59,14 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
     };
 
     return <div className="self-start overflow-hidden rounded-xl border border-violet-200 bg-white shadow-sm">
-        <div className="flex items-start gap-3 bg-violet-50 px-3 py-3">
-            {familyProduct.images?.[0] ? <img src={familyProduct.images[0]} alt="" className="h-14 w-14 shrink-0 rounded-lg bg-white object-contain" />
-                : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-white text-violet-400"><Package size={24} /></div>}
-            <div className="min-w-0">
-                <button type="button" onClick={() => onEditProduct?.(familyProduct)} disabled={!onEditProduct}
-                    className="text-left text-sm font-semibold text-slate-900 hover:underline disabled:no-underline">{familyProduct.name}</button>
-                <p className="break-all text-[11px] text-slate-500">{group.parent ? `Pai: ${group.parent.sku || 'Sem SKU'}` : 'Família sem pai vinculado'}</p>
-                <p className="text-xs text-violet-700">{variants.length} {variants.length === 1 ? 'variação' : 'variações'} no mesmo produto</p>
-                <p className="text-xs text-slate-600">Estoque da família: {group.totalStock} un.</p>
-                {group.parent && <CatalogTitleEditor product={group.parent} />}
-            </div>
-        </div>
-        <div className="flex items-center justify-between gap-2 border-t border-violet-100 px-3 py-2">
-            {group.parent && onEditProduct && <button type="button" onClick={() => onEditProduct(group.parent!)}
-                className="rounded border border-violet-200 px-2 py-1 text-xs font-semibold text-violet-800 hover:bg-violet-50">Editar família</button>}
-            <button type="button" aria-expanded={showDetails} aria-controls={detailsId}
-                onClick={() => setExpanded(value => !value)} disabled={selectionMode}
-                className="ml-auto inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-violet-800 hover:bg-violet-50 focus-visible:ring-2 focus-visible:ring-violet-400">
-                {showDetails ? 'Recolher' : 'Expandir'} <ChevronDown size={16} className={`transition-transform ${showDetails ? 'rotate-180' : ''}`} />
-            </button>
-        </div>
-        {showDetails && <div id={detailsId}>
         <ProductCard key={familyProduct.id} product={familyProduct}
             onEdit={onEditProduct}
             onDelete={onDeleteProduct}
+            forceDetailsExpanded={selectionMode}
             tiktokProductLink={tiktokProductLinks[familyProduct.id] || null}
             familyVariants={<div className="mt-2 space-y-2 rounded-lg border border-violet-200 bg-violet-50/40 p-2" aria-label="SKUs da família">
+                <p className="text-xs font-semibold text-violet-700">{variants.length} variações · Estoque da família: {group.totalStock} un.</p>
+                {!group.parent && <p className="text-xs text-amber-700">Família sem pai vinculado</p>}
                 {group.parent?.sku && <button type="button" onClick={(event) => { event.stopPropagation(); void copySku(group.parent!.sku); }}
                     title={`Copiar SKU do pai: ${group.parent.sku}`} aria-label={`Copiar SKU do pai ${group.parent.sku}`}
                     className="inline-flex items-center gap-1 rounded px-1 font-mono text-[11px] text-violet-800 hover:bg-violet-100 hover:underline">
@@ -118,7 +95,6 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
                     Editar somente {label(selected)}{hasMemory && ` · ${[getProductVariationSpecs(selected).ram, getProductVariationSpecs(selected).storage].filter(Boolean).join(' / ')}`}
                 </button>}
             </div>} />
-        </div>}
     </div>;
 }
 

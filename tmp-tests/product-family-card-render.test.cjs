@@ -25,23 +25,35 @@ const group = { key: 'family', isFamily: true, parent, representative: child, fa
 function render(extra = {}) {
   return renderToStaticMarkup(React.createElement(mod.exports.ProductList, { products: [parent, child], groups: [group], isLoading: false, onEditProduct() {}, ...extra }));
 }
-test('família inicia compacta com nome, SKU e estoque do pai, sem montar card do filho', () => {
+test('família mantém o card completo do pai, sem substituir pela variação', () => {
   const html = render();
   assert.match(html, /Nome oficial do pai/);
   assert.match(html, /Pai: PAI/);
   assert.match(html, /Estoque da família: 3 un/);
-  assert.match(html, /aria-expanded="false"/);
-  assert.doesNotMatch(html, /data-product=|filho.jpg|Nome diferente do filho/);
+  assert.match(html, /data-product="parent"/);
+  assert.doesNotMatch(html, /data-product="child"|filho.jpg|Nome diferente do filho/);
 });
 test('detalhes usam o pai e mantêm seleção e edição explícitas dos filhos', () => {
   const html = render({ selectionMode: true, selectedIds: new Set(['child']), onToggleSelect() {} });
-  assert.match(html, /aria-expanded="true"/);
   assert.match(html, /data-product="parent"/);
   assert.doesNotMatch(html, /data-product="child"/);
   assert.match(html, /Selecionar SKU FILHO/);
   assert.match(html, /checked=""/);
   assert.match(html, /Editar somente Preto/);
   assert.match(html, /8GB RAM/);
+});
+test('todos os cards preservam mídia, atalhos, nome e SKU antes da expansão', () => {
+  const card = fs.readFileSync('components/products/ProductCard.tsx', 'utf8');
+  const cutoff = card.indexOf('<div id={detailsId} hidden={!showDetails}');
+  assert.ok(cutoff > card.indexOf('SKU: {product.sku}'));
+  assert.ok(cutoff > card.indexOf('title="Copiar nome"'));
+  assert.ok(cutoff > card.indexOf('alt={product.name}'));
+  assert.ok(cutoff < card.indexOf('<ProductPublicationChannels'));
+  assert.ok(cutoff < card.indexOf('{familyVariants}', cutoff));
+  assert.match(card, /useState\(false\)/);
+  assert.match(card, /aria-expanded={showDetails}/);
+  assert.match(card, /setDetailsExpanded\(value => !value\)/);
+  assert.doesNotMatch(source, /showDetails &&|h-14 w-14/);
 });
 test('família órfã informa que falta vincular pai', () => {
   const html = render({ groups: [{ ...group, parent: null, familyProducts: [child] }] });
