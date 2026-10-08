@@ -48,4 +48,8 @@ const baseline = local.replace(routeBlock, '').replace("    pathname === '/catal
 const patched = patchCatalogSections(baseline, local);
 assert.equal(patched, local + '\n// unrelated remote edit\n');
 assert.equal(patchCatalogSections(patched, local), patched);
+const previousBlock = routeBlock.slice(0, routeBlock.indexOf('// Salva a ordem completa em uma transação;'));
+const previousRelease = local.replace(routeBlock, previousBlock) + '\n// unrelated remote edit\n';
+assert.equal(patchCatalogSections(previousRelease, local), local + '\n// unrelated remote edit\n');
+assert.throws(() => patchCatalogSections(previousRelease.replace('FROM catalog_sections WHERE', 'FROM other_sections WHERE'), local), /Remote catalog route differs/);
 assert.throws(() => patchCatalogSections(baseline.replace("fastify.get('/catalog-settings'", "fastify.get('/renamed'"), local), /Ambiguous/);

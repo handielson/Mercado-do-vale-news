@@ -10,8 +10,8 @@ Revisão em 07/10/2026. Não é auditoria integral. As consultas de produção f
 | 4 | Alta | Confirmação de WhatsApp iniciada antes da baixa dos aparelhos | Publicado — v1.2.574-whatsapp-pos-estoque |
 | 5 | Média | Categoria filtrada após buscar amostra limitada de produtos | Publicado — v1.2.575-secoes-categorias-familias |
 | 6 | Média | Recentes, novidades e mais vendidos não agrupam famílias | Publicado — v1.2.575-secoes-categorias-familias |
-| 7 | Média | Reordenação das seções com gravações independentes | Pendente |
-| 8 | Média | Fallback de produtos em cache sem conferir validade | Pendente |
+| 7 | Média | Reordenação das seções com gravações independentes | Corrigido e validado localmente — publicação pendente |
+| 8 | Média | Fallback de produtos em cache sem conferir validade | Corrigido e validado localmente — publicação pendente |
 
 ## Item 1 — proteção de preços na resposta
 
@@ -63,3 +63,19 @@ Teste existente de expansao ampliado para executar o service real com 300 produt
 Em 08/10/2026, CatalogSectionComponent passou a usar groupProductsByVariants em todas as secoes, removendo a excecao para recent/new/bestsellers. Fonte da identidade: productGroupingCore, com parent_id e parent_name quando existe pai cadastrado, e os fallbacks existentes para produtos independentes. Mantido agrupador canonico, sem nova regra de nome ou alteracao de cadastros. Cada familia ocupa um card e mantem as memorias, cores e precos das variacoes disponiveis retornadas pela consulta. Limite de cards aplicado depois de agrupar; ordem das familias segue a primeira variacao na ordenacao recebida. Busca usa a mesma amostra das demais secoes agrupadas, ate 200 produtos; nao e uma consulta ilimitada de todos os filhos do catalogo.
 
 Protecao em tmp-tests/catalog-sections-family-grouping.test.mjs executa o agrupador real e o calculo de cards da secao. Valida os tres tipos, limite de familias, produtos independentes, nome do pai, memorias, cores, precos individuais e exclusao de inativos/sem estoque. Regressoes de categoria do item 5, nome de familia, modelos genericos, carregamento e build passaram. Itens 5 e 6 publicados em v1.2.575-secoes-categorias-familias (07f699af), com homepage validada sem erros de console. Nenhum dado real alterado.
+
+## Item 7 — ordem completa das secoes em uma transacao
+
+Em 08/10/2026, a fonte da ordem continua sendo catalog_sections.display_order no MySQL. O service envia uma unica chamada POST /catalog/sections/reorder. Os tres entrypoints protegem a rota com requireSyncKeyOrAdmin, bloqueiam as linhas em ordem de ID (FOR UPDATE), conferem o conjunto completo de IDs e atualizam todos os display_order na mesma conexao/transacao. Falha desfaz as atualizacoes. IDs duplicados ou invalidos retornam 400; lista alterada por criacao/exclusao retorna 409 antes de escrever. A ordenacao continua global, como getSections sem userId e a vitrine existentes; nenhum escopo novo por usuario.
+
+SectionsTab bloqueia cliques de reordenacao simultaneos, restaura a lista anterior e avisa/recarrega quando o salvamento falha. Cache so e invalidado depois do sucesso. O helper de deploy seletivo aceita ampliar a versao anterior conhecida do bloco de secoes, preservando outras alteracoes remotas e rejeitando blocos divergentes.
+
+Cinco testes em tmp-tests/catalog-sections-reorder.test.cjs executam os handlers reais via Fastify com transacoes simuladas e os metodos reais do service/painel: falhas em cada posicao, rollback, commit, liberacao da conexao, validacao de IDs, controle de acesso, chamada unica, cache e cliques concorrentes. Regressoes de configuracao publica, deploy seletivo, CRUD, categorias e familias passaram, assim como sintaxe dos tres entrypoints e build. Publicacao pendente; nenhum dado real ou ordem de producao alterados. Arquivos preexistentes Shopee preservados.
+
+## Item 8 — validade do cache de produtos e aviso de falha
+
+Em 08/10/2026, services/catalogSectionsService.ts centralizou a leitura do cache de produtos das secoes: carregamento normal e fallback passam pelo mesmo limite existente de cinco minutos, sem renovar timestamp ao reutilizar dados. Arrays invalidos, timestamp ausente/nao numerico/nao finito, data futura e idade igual ou maior ao limite sao rejeitados. Cache persistente continua restrito ao visitante sem token; leitores autenticados nao reutilizam precos publicos. Fonte de precos/estoque permanece /products da VPS/MySQL; localStorage e apenas uma copia temporaria.
+
+Sem cache valido, a falha e propagada para CatalogSectionComponent em vez de retornar [] e ocultar silenciosamente a secao. A tela limpa produtos anteriores, mostra aviso e botao Tentar novamente, que consulta a API ignorando o cache inicial. Se essa consulta falha mas ainda existe cache valido, exibe os dados com aviso de que precos/disponibilidade podem ter mudado. Sucesso limpa o aviso; uma consulta bem-sucedida sem produtos continua ocultando a secao vazia. Resultados de requisicoes anteriores nao substituem o estado atual apos troca de usuario/secao ou nova tentativa.
+
+Quatro testes em tmp-tests/catalog-sections-cache-validity.test.cjs executam o service real com relogio/localStorage/transporte simulados e o carregamento real do componente: limite exato, cache invalido/futuro, nao renovacao da idade, isolamento autenticado, renovacao apos sucesso, aviso de fallback, limpeza de dados/avisos e resultado cancelado. Junto com categoria, familias, carregamento e item 7, passaram 12 testes e o build com verificacao de ausencia de Supabase no runtime. Publicacao pendente; nenhum preco, estoque ou dado de producao alterado.

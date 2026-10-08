@@ -1,3 +1,15 @@
+# v1.2.576-secoes-ordem-cache
+
+Data: 2026-10-08. Branch: main. Tag: v1.2.576-secoes-ordem-cache.
+Release VPS: /var/www/mdv-site/releases/20261008-032018-secoes-ordem-cache
+Status: preparada; validacao publica pendente.
+
+Itens 7 e 8: ordem completa das secoes em uma transacao MySQL, com validacao de IDs e bloqueio de cliques simultaneos. Falha desfaz a gravacao; painel avisa e recarrega. Cache publico de produtos valido por menos de cinco minutos, inclusive no fallback, sem renovar a idade. Sem dados validos, secao mostra aviso e Tentar novamente; reutilizacao apos falha exibe aviso de precos/disponibilidade possivelmente alterados. Leitores autenticados nao reutilizam cache publico.
+
+Quinze testes aprovados com handlers/service/componente reais e dependencias simuladas: rollback em cada posicao, commit, IDs, acesso, cliques concorrentes, cache vencido/invalido/futuro, autenticacao, retry, categorias, familias, CRUD e regressao PDV. Sintaxe dos tres entrypoints e build. API publicada seletivamente pelo helper catalog-sections; frontend completo em nova release. Sem migration, reordenacao real, venda, estoque ou envio WhatsApp durante validacao. Quatro arquivos Shopee preexistentes preservados.
+
+## Release anterior
+
 # v1.2.575-secoes-categorias-familias
 
 Data: 2026-10-08. Branch: main. Tag: v1.2.575-secoes-categorias-familias.

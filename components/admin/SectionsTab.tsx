@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, GripVertical, Edit2, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
 import { catalogSectionsService } from '@/services/catalogSectionsService';
 import { vpsApiService } from '@/services/vpsApiService';
@@ -8,6 +8,8 @@ import { SECTION_PRESETS, SECTION_TYPE_LABELS } from '@/types/catalogSections';
 export function SectionsTab() {
     const [sections, setSections] = useState<CatalogSection[]>([]);
     const [loading, setLoading] = useState(true);
+    const [reordering, setReordering] = useState(false);
+    const reorderPending = useRef(false);
     const [showForm, setShowForm] = useState(false);
     const [editingSection, setEditingSection] = useState<CatalogSection | null>(null);
 
@@ -88,7 +90,9 @@ export function SectionsTab() {
     };
 
     const handleMoveUp = async (index: number) => {
-        if (index === 0) return;
+        if (index === 0 || reorderPending.current) return;
+        reorderPending.current = true;
+        setReordering(true);
 
         const newSections = [...sections];
         [newSections[index - 1], newSections[index]] = [newSections[index], newSections[index - 1]];
@@ -105,12 +109,19 @@ export function SectionsTab() {
             await catalogSectionsService.reorderSections(updates.map(s => s.id));
         } catch (error) {
             console.error('Erro ao reordenar:', error);
+            setSections(sections);
+            alert('Não foi possível salvar a ordem das seções. A lista será recarregada.');
             await loadSections(); // Reverter em caso de erro
+        } finally {
+            reorderPending.current = false;
+            setReordering(false);
         }
     };
 
     const handleMoveDown = async (index: number) => {
-        if (index === sections.length - 1) return;
+        if (index === sections.length - 1 || reorderPending.current) return;
+        reorderPending.current = true;
+        setReordering(true);
 
         const newSections = [...sections];
         [newSections[index], newSections[index + 1]] = [newSections[index + 1], newSections[index]];
@@ -127,7 +138,12 @@ export function SectionsTab() {
             await catalogSectionsService.reorderSections(updates.map(s => s.id));
         } catch (error) {
             console.error('Erro ao reordenar:', error);
+            setSections(sections);
+            alert('Não foi possível salvar a ordem das seções. A lista será recarregada.');
             await loadSections(); // Reverter em caso de erro
+        } finally {
+            reorderPending.current = false;
+            setReordering(false);
         }
     };
 
@@ -171,8 +187,8 @@ export function SectionsTab() {
                             <div className="flex flex-col gap-1">
                                 <button
                                     onClick={() => handleMoveUp(index)}
-                                    disabled={index === 0}
-                                    className={`p-1 rounded transition-colors ${index === 0
+                                    disabled={reordering || index === 0}
+                                    className={`p-1 rounded transition-colors ${reordering || index === 0
                                         ? 'text-gray-300 cursor-not-allowed'
                                         : 'text-gray-600 hover:bg-gray-100'
                                         }`}
@@ -182,8 +198,8 @@ export function SectionsTab() {
                                 </button>
                                 <button
                                     onClick={() => handleMoveDown(index)}
-                                    disabled={index === sections.length - 1}
-                                    className={`p-1 rounded transition-colors ${index === sections.length - 1
+                                    disabled={reordering || index === sections.length - 1}
+                                    className={`p-1 rounded transition-colors ${reordering || index === sections.length - 1
                                         ? 'text-gray-300 cursor-not-allowed'
                                         : 'text-gray-600 hover:bg-gray-100'
                                         }`}

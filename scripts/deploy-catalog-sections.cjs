@@ -12,7 +12,17 @@ function patchCatalogSections(source, local) {
   if (!block.startsWith(ROUTE_START) || !block.includes("fastify.get('/catalog/sections'")) throw new Error('Missing local route');
   let updated = normalized;
   if (updated.includes("fastify.get('/catalog/sections'")) {
-    if (!updated.includes(block)) throw new Error('Remote catalog route differs');
+    if (!updated.includes(block)) {
+      const reorderMarker = '// Salva a ordem completa em uma transação;';
+      const reorderStart = block.indexOf(reorderMarker);
+      const previousBlock = reorderStart < 0 ? '' : block.slice(0, reorderStart);
+      // Só amplia a versão anterior conhecida; não substitui alterações remotas.
+      if (!previousBlock || updated.split(previousBlock + ANCHOR).length !== 2
+        || updated.includes("fastify.post('/catalog/sections/reorder'")) {
+        throw new Error('Remote catalog route differs');
+      }
+      updated = updated.replace(previousBlock + ANCHOR, block + ANCHOR);
+    }
   } else {
     if (updated.split(ANCHOR).length !== 2) throw new Error('Ambiguous catalog settings anchor');
     updated = updated.replace(ANCHOR, block + ANCHOR);

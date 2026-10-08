@@ -120,7 +120,7 @@ class CatalogSectionsService {
         ? AbortSignal.timeout(PUBLIC_STOREFRONT_TIMEOUT_MS)
         : undefined;
 
-    private readCachedProducts(cacheKey: string): CatalogProduct[] | null {
+    private readCachedProducts(cacheKey: string): { data: CatalogProduct[]; timestamp: number } | null {
         const storage = this.getStorage();
         if (!storage) return null;
 
@@ -128,7 +128,13 @@ class CatalogSectionsService {
             const cachedStr = storage.getItem(cacheKey);
             if (!cachedStr) return null;
             const cached = JSON.parse(cachedStr);
-            return Array.isArray(cached?.data) ? cached.data : null;
+            const age = Date.now() - cached?.timestamp;
+            if (!Array.isArray(cached?.data) || typeof cached.timestamp !== 'number'
+                || !Number.isFinite(cached.timestamp) || age < 0 || age >= this.cacheDuration) {
+                storage.removeItem(cacheKey);
+                return null;
+            }
+            return cached;
         } catch {
             return null;
         }
@@ -249,12 +255,7 @@ class CatalogSectionsService {
      */
     async reorderSections(sectionIds: string[]): Promise<void> {
         try {
-            await Promise.all(sectionIds.map((id, index) =>
-                vpsClient.patch(
-                    `/table-data/catalog_sections/${encodeURIComponent(id)}?pk=id`,
-                    { display_order: index }
-                )
-            ));
+            await vpsClient.post('/catalog/sections/reorder', { section_ids: sectionIds });
             this.clearCache();
         } catch (error) {
             console.error('Erro ao reordenar seções:', error);
@@ -267,27 +268,14 @@ class CatalogSectionsService {
     /**
      * Buscar produtos para uma seção específica
      */
-    async getProductsForSection(section: CatalogSection, bypassCache: boolean = false): Promise<CatalogProduct[]> {
+    async getProductsForSection(section: CatalogSection, bypassCache: boolean = false, onFallback?: () => void): Promise<CatalogProduct[]> {
         bypassCache = bypassCache || Boolean(vpsAuthService.getStoredToken());
         const cacheKey = `${this.CACHE_KEY_PREFIX}${section.id}`;
 
-        // 1. SWR: Return from LocalStorage immediately for fast paints (unless bypassed)
+        // Cache local só pode representar dados públicos dentro da validade de cinco minutos.
         if (!bypassCache) {
-            const storage = this.getStorage();
-            if (storage) {
-                try {
-                    const cachedStr = storage.getItem(cacheKey);
-                    if (cachedStr) {
-                        const cached = JSON.parse(cachedStr);
-                        if (Date.now() - cached.timestamp < this.cacheDuration) {
-                            console.log(`⚡ [catalogSectionsService] Serving section ${section.title} from persistent cache`);
-                            return cached.data;
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Failed to parse section products cache', e);
-                }
-            }
+            const cached = this.readCachedProducts(cacheKey);
+            if (cached) return cached.data;
         }
 
         try {
@@ -467,7 +455,12 @@ class CatalogSectionsService {
             return products;
         } catch (error) {
             console.error('Erro ao buscar produtos da seção:', error);
-            return this.readCachedProducts(cacheKey) || [];
+            const cached = this.readCachedProducts(cacheKey);
+            if (cached) {
+                onFallback?.();
+                return cached.data;
+            }
+            throw error;
         }
     }
 

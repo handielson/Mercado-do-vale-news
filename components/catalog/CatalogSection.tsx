@@ -25,6 +25,8 @@ interface CatalogSectionProps {
 export function CatalogSectionComponent({ section, onFavorite, onShare, favorites = new Set(), mobileView = 'grid' }: CatalogSectionProps) {
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadWarning, setLoadWarning] = useState<string | null>(null);
+    const [retryCount, setRetryCount] = useState(0);
     const [colorHexMap, setColorHexMap] = useState<Record<string, string>>({});
     const { customer } = useVpsAuth();
     const showSubtitle = Boolean(section.subtitle)
@@ -40,16 +42,23 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
             setColorHexMap(map);
         }).catch(() => {}); // silencia erro — fallback para COLOR_MAP
         return () => { current = false; };
-    }, [section.id, customer?.id, customer?.customer_type]);
+    }, [section.id, customer?.id, customer?.customer_type, retryCount]);
 
     const loadProducts = async (isCurrent: () => boolean) => {
         try {
             setLoading(true);
-            const bypassCache = customer?.customer_type === 'ADMIN';
-            const data = await catalogSectionsService.getProductsForSection(section, bypassCache);
+            setLoadWarning(null);
+            const bypassCache = customer?.customer_type === 'ADMIN' || retryCount > 0;
+            const data = await catalogSectionsService.getProductsForSection(section, bypassCache, () => {
+                if (isCurrent()) setLoadWarning('Não foi possível atualizar os produtos. Exibindo dados dos últimos cinco minutos; preços e disponibilidade podem ter mudado.');
+            });
             if (isCurrent()) setProducts(data);
         } catch (error) {
             console.error('Erro ao carregar produtos da seção:', error);
+            if (isCurrent()) {
+                setProducts([]);
+                setLoadWarning('Não foi possível carregar os produtos desta seção. Tente novamente.');
+            }
         } finally {
             if (isCurrent()) setLoading(false);
         }
@@ -88,7 +97,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
         );
     }
 
-    if (products.length === 0) {
+    if (products.length === 0 && !loadWarning) {
         return null; // Não mostrar seção vazia
     }
 
@@ -112,6 +121,15 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                     </Link>
                 )}
             </div>
+
+            {loadWarning && (
+                <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <p>{loadWarning}</p>
+                    <button type="button" onClick={() => setRetryCount(count => count + 1)} className="shrink-0 rounded-md px-3 py-2 font-medium underline hover:bg-amber-100">
+                        Tentar novamente
+                    </button>
+                </div>
+            )}
 
             {/* Grid/Carousel/Lista de Produtos */}
             {section.layout_style === 'grid' && mobileView === 'list' && (

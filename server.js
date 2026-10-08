@@ -21132,6 +21132,36 @@ fastify.get('/catalog/sections', async (req, reply) => {
   return rows;
 });
 
+// Salva a ordem completa em uma transação; se a lista mudou, o painel deve recarregar.
+fastify.post('/catalog/sections/reorder', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const ids = req.body?.section_ids;
+  if (!Array.isArray(ids) || ids.length > 1000
+    || ids.some(id => typeof id !== 'string' || !id.trim() || id.length > 64)
+    || new Set(ids).size !== ids.length) {
+    return reply.code(400).send({ error: 'Informe uma lista de IDs de seções únicos.' });
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT id FROM catalog_sections ORDER BY id FOR UPDATE');
+    const currentIds = new Set(rows.map(row => String(row.id)));
+    if (rows.length !== ids.length || ids.some(id => !currentIds.has(id))) {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'A lista de seções mudou. Recarregue antes de reordenar.' });
+    }
+    for (let index = 0; index < ids.length; index++) {
+      await connection.query('UPDATE catalog_sections SET display_order = ? WHERE id = ?', [index, ids[index]]);
+    }
+    await connection.commit();
+    return { success: true };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+});
+
 fastify.get('/catalog-settings', async (req, reply) => {
   const [rows] = await pool.query('SELECT * FROM catalog_settings LIMIT 1');
   reply.header('Cache-Control', 'public, max-age=900, s-maxage=1800');
