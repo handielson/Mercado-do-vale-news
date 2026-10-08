@@ -2,7 +2,7 @@
 
 Data: 2026-10-08. Branch: main. Tag: v1.2.582-marketing-menu-topo.
 Release VPS: /var/www/mdv-site/releases/20261008-202059-marketing-menu-topo
-Status: pronta para publicacao.
+Status: publicada e validada.
 
 Menu interno de Marketing no topo, agrupado por Inicio, Criar, Planejar,
 Agendar e Revisar. Conteudo ocupa toda a largura; seletor mantido no celular.
@@ -11,3 +11,49 @@ Mesmas abas e callbacks de navegacao. Nenhuma alteracao em dados ou API.
 Protecao regressiva atualizada no teste existente da navegacao.
 Validacoes: navegacao, calendario, Stories e build.
 Publicacao somente do site. Quatro arquivos Shopee preexistentes preservados.
+
+Publicada e validada em producao.
+Commit de codigo: 9263cb73. Tag enviada a origin; main sincronizada.
+Site: HTTP 200 e VERSION.json confere. Painel autenticado renderizou o menu
+acima do conteudo, Instagram ativo e nenhuma mensagem de erro no console.
+Testes de navegacao, calendario e 13 verificacoes de Stories passaram; build aprovado.
+API nao alterada nem reiniciada. Skill publish-vps seguida sem modificacoes.
+Warnings conhecidos de Browserslist/CRLF e credential helper nao impediram build/push.
+Auditoria e limpeza segura: 0 removidos, 34 bloqueados preservados.
+Quatro arquivos Shopee preexistentes permanecem fora do escopo.
+
+Worktrees bloqueados:
+- C:/tmp/mdv-model-fix-clean: dirty
+- C:/tmp/mdv-phone-filter: dirty
+- C:/tmp/mdv-publish-surgical-20260612-b: dirty
+- C:/tmp/mdv-refactor-repair-20260612: dirty
+- C:/tmp/mdv-virtual-ram-deploy: dirty
+- C:/Users/Nitro/Documents/Codex/2026-10-02/task/ml-local-preview: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-phone-memory-filter-20260801: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-price-followup-20260716: not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-product-search-specialist-20260725: not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-remove-generic-freight-example-20260718: not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/sale-message-order-number-20260716: not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mdv-perf-main: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-admin-app: not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-displays-pix: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-sales-push-20260728: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/autoresponder-integrate: not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/autoresponder-reformulation: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/meta-smartphones-sem-preco-20260825: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/new-model-regressions: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/pdp-model-shortcut-publish: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/pdv-sale-repair-publish: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-autoresponder-editable: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-family-page-jump: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-receipt-private-payment-20260613: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-sales-summary-20260613: not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-whatsapp-order: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/repair-refactor-product-build: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/signed-warranty-synology: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/system-backup-admin-20260613: not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/tiktok-bulk-release-20260727: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/tiktok-shop-foundation: not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-n8n-context-handoff-fix: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-publish-novo-bot: dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-status-contacts-fix: dirty
