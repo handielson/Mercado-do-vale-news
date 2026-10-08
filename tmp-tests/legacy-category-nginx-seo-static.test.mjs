@@ -42,7 +42,7 @@ for (const relativePath of CONFIGS) {
   assert.ok(productTrailingSlashRuleIndex < productSeoRuleIndex, `${relativePath} must normalize product URLs before proxying SEO HTML`);
   assert.match(
     config,
-    /location \^~ \/categoria-produtos\/ \{\s*proxy_pass http:\/\/127\.0\.0\.1:4000\/api\/seo-legacy-category;\s*proxy_set_header X-Original-URI \$request_uri;/,
+    /location \^~ \/categoria-produtos\/ \{\s*proxy_pass http:\/\/127\.0\.0\.1:4000\/api\/seo-legacy-category\$is_args\$args;\s*proxy_set_header X-Original-URI \$request_uri;/,
     `${relativePath} must resolve legacy categories from the current category registry`
   );
   assert.match(

@@ -65,6 +65,9 @@ test('SPA whitelist follows every active route and rejects paths from the covera
     assert.ok(config.indexOf('/api/seo-produto?slug=$1') < config.indexOf('# BEGIN GENERATED SPA ROUTES'));
     assert.match(config, /location \^~ \/wp-includes\/ \{\s*return 410;/);
     assert.match(config, /slug=\$1&legacy=1/);
+    // With a literal proxy_pass URI in a prefix location, Nginx appends the
+    // category suffix. A variable URI targets the exact Fastify route.
+    assert.ok(config.includes('/api/seo-legacy-category$is_args$args;'));
     assert.ok(Math.max(...config.split('\n').map(line => Buffer.byteLength(line))) < 4096);
   }
 });
