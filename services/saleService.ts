@@ -78,40 +78,42 @@ const restoreSaleStockForItems = async (
 const releaseSaleSerializedUnits = async (
     saleId: string,
     items: SaleStockRestoreItem[] | null | undefined
-): Promise<Set<string>> => {
+): Promise<Map<string, number>> => {
     const unitToProduct = new Map<string, string>();
     for (const item of items || []) {
         const unitId = String(item.serialized_unit_id || item.serialized_unit?.unitId || '').trim();
         const productId = String(item.product_id || '').trim();
         if (unitId && productId) unitToProduct.set(unitId, productId);
     }
-    if (unitToProduct.size === 0) return new Set();
+    if (unitToProduct.size === 0) return new Map();
 
     const units = await unitService.listByIds([...unitToProduct.keys()]);
-    const releasedProductIds = new Set<string>();
+    const releasedQuantities = new Map<string, number>();
     for (const unit of units) {
         if (String(unit.sale_id || '') !== saleId) continue;
         if (![UnitStatus.SOLD, UnitStatus.RESERVED].includes(unit.status)) continue;
         await unitService.release(unit.id);
         const productId = unitToProduct.get(unit.id);
-        if (productId) releasedProductIds.add(productId);
+        if (productId) releasedQuantities.set(productId, (releasedQuantities.get(productId) || 0) + 1);
     }
-    return releasedProductIds;
+    return releasedQuantities;
 };
 
 const syncReturnedSaleStockToBling = async (
     items: SaleStockRestoreItem[] | null | undefined,
-    returnedProductIds: Set<string>,
+    returnedQuantities: Map<string, number>,
     notes: string
 ): Promise<void> => {
+    const remaining = new Map(returnedQuantities);
     for (const item of items || []) {
         const productId = String(item.product_id || '').trim();
-        const quantity = Number(item.quantity) || 0;
-        if (!productId || quantity <= 0 || !returnedProductIds.has(productId)) continue;
+        const quantity = Math.min(Number(item.quantity) || 0, remaining.get(productId) || 0);
+        if (!productId || quantity <= 0) continue;
         await syncStockToBling(productId, quantity, notes, {
             operation: 'E',
             comboSelections: item.combo_selections || item.comboSelections || undefined,
         });
+        remaining.set(productId, (remaining.get(productId) || 0) - quantity);
     }
 };
 
@@ -121,12 +123,16 @@ const restoreCancelledSaleInventory = async (
     reason: string
 ): Promise<void> => {
     const restored = await restoreSaleStockForItems(saleId, items, reason);
-    const returnedProductIds = new Set(
-        restored.map((row) => String(row.product_id || '')).filter(Boolean)
-    );
-    const releasedProductIds = await releaseSaleSerializedUnits(saleId, items);
-    for (const productId of releasedProductIds) returnedProductIds.add(productId);
-    await syncReturnedSaleStockToBling(items, returnedProductIds, reason);
+    const returnedQuantities = new Map<string, number>();
+    for (const row of restored) {
+        const productId = String(row.product_id || '').trim();
+        if (productId) returnedQuantities.set(productId, (returnedQuantities.get(productId) || 0) + row.quantity_restored);
+    }
+    const releasedQuantities = await releaseSaleSerializedUnits(saleId, items);
+    for (const [productId, quantity] of releasedQuantities) {
+        returnedQuantities.set(productId, (returnedQuantities.get(productId) || 0) + quantity);
+    }
+    await syncReturnedSaleStockToBling(items, returnedQuantities, reason);
 };
 
 interface TableDataResponse<T> {

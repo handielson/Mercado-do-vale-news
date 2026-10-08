@@ -1,35 +1,41 @@
 {
-  "version": "v1.2.576-secoes-ordem-cache",
+  "version": "v1.2.577-estoque-familia-ver-todos",
   "date": "2026-10-08",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.576-secoes-ordem-cache",
-  "release_vps": "/var/www/mdv-site/releases/20261008-032018-secoes-ordem-cache",
+  "tag": "v1.2.577-estoque-familia-ver-todos",
+  "release_vps": "/var/www/mdv-site/releases/20261008-131559-estoque-familia-ver-todos",
   "release_print3d_vps": null,
-  "summary": "Ordem transacional das secoes e validade do cache do catalogo.",
+  "summary": "Devolucao atomica, familia local no cadastro por foto e Ver todos em Smartphones.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/admin/SectionsTab.tsx",
     "components/catalog/CatalogSection.tsx",
-    "services/catalogSectionsService.ts",
+    "services/saleService.ts",
+    "services/stockMovementRestoration.cjs",
+    "services/smartphoneModelFamily.cjs",
     "server.js",
     "vps_server.js",
     "vps_server.cjs",
-    "scripts/deploy-catalog-sections.cjs",
-    "tmp-tests/catalog-sections-public-config.test.mjs",
-    "tmp-tests/catalog-sections-cache-validity.test.cjs",
-    "tmp-tests/catalog-sections-reorder.test.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-product-read-privacy.cjs",
+    "scripts/deploy-stock-restoration-family.cjs",
+    "tmp-tests/stock-movement-restoration.test.cjs",
+    "tmp-tests/sale-return-quantity.test.mjs",
+    "tmp-tests/smartphone-model-family.test.cjs",
+    "tmp-tests/catalog-sections-family-grouping.test.mjs",
+    "tmp-tests/deploy-stock-restoration-family.test.cjs",
+    "tmp-tests/deploy-catalog-sale-atomic.test.cjs",
     "docs/operacional/2026-10-07-revisao-falhas-sistema.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-08-v1.2.576-secoes-ordem-cache.md"
+    "docs/versoes/2026-10-08-v1.2.577-estoque-familia-ver-todos.md"
   ],
   "validations": [
-    "15 testes: transacao, falhas, IDs, concorrencia no painel, cache, categorias, familias, configuracao publica e PDV.",
-    "Sintaxe dos tres entrypoints; build com trava Supabase.",
-    "Preflight seletivo da API; validacao publica apos deploy."
+    "44 testes focados e cinco verificacoes adicionais do cadastro por foto.",
+    "Sintaxe dos tres entrypoints, modulos e publicadores; build com trava Supabase.",
+    "Preflight seletivo remoto aprovado; validacao publica apos deploy."
   ]
 }

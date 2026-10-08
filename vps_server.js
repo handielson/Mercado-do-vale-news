@@ -26956,13 +26956,13 @@ async function backfillProductStockLocations() {
   }
 }
 
-async function syncProductStockFromLocations(productId) {
-  const [[row]] = await pool.query(
+async function syncProductStockFromLocations(productId, db = pool) {
+  const [[row]] = await db.query(
     'SELECT COALESCE(SUM(quantity), 0) AS quantity FROM product_stock_locations WHERE product_id = ?',
     [productId]
   );
   const quantity = stockNumber(row?.quantity);
-  await pool.query('UPDATE products SET stock_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [quantity, productId]);
+  await db.query('UPDATE products SET stock_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [quantity, productId]);
   return quantity;
 }
 
@@ -26989,8 +26989,8 @@ async function reconcileProductStockLocationsToTotal(productId, targetQuantity, 
   });
 }
 
-async function getStockLocationRow(productId, depositId, locationId, lock = false) {
-  const [rows] = await pool.query(
+async function getStockLocationRow(productId, depositId, locationId, lock = false, db = pool) {
+  const [rows] = await db.query(
     `SELECT * FROM product_stock_locations
      WHERE product_id = ? AND deposit_id = ? AND location_id = ?
      ${lock ? 'FOR UPDATE' : ''}`,
@@ -27519,8 +27519,8 @@ fastify.post('/stock-locations/transfers', { preHandler: requireSyncKeyOrAdmin }
   }
 });
 
-async function insertStockMovement(row) {
-  await pool.query(
+async function insertStockMovement(row, db = pool) {
+  await db.query(
     `INSERT INTO stock_location_movements
       (id, company_id, product_id, from_deposit_id, from_location_id, to_deposit_id, to_location_id, quantity,
        movement_type, reason, reference_type, reference_id, previous_from_quantity, new_from_quantity,
@@ -28141,49 +28141,10 @@ fastify.post('/orders/:orderId/payments/mercado-pago/refund', { preHandler: requ
 });
 
 async function restoreStockFromMovements(referenceType, restoreReferenceType, referenceId, reason, notes) {
-  const [existing] = await pool.query(
-    'SELECT id FROM stock_location_movements WHERE reference_type = ? AND reference_id = ? AND movement_type = ? LIMIT 1',
-    [restoreReferenceType, referenceId, 'cancel']
-  );
-  if (existing?.length) return [];
-  const [movements] = await pool.query(
-    `SELECT * FROM stock_location_movements
-     WHERE reference_type = ? AND reference_id = ? AND movement_type = 'sale'
-     ORDER BY created_at ASC`,
-    [referenceType, referenceId]
-  );
-  const result = [];
-  for (const movement of movements || []) {
-    const current = await getStockLocationRow(movement.product_id, movement.from_deposit_id, movement.from_location_id, false);
-    const previous = stockNumber(current?.quantity);
-    const quantity = stockNumber(movement.quantity);
-    const next = previous + quantity;
-    await upsertStockLocationBalance({
-      companyId: movement.company_id || current?.company_id || await getDefaultStockCompanyId(),
-      productId: movement.product_id,
-      depositId: movement.from_deposit_id,
-      locationId: movement.from_location_id,
-      quantity: next,
-      reservedQuantity: stockNumber(current?.reserved_quantity),
-    });
-    await insertStockMovement({
-      company_id: movement.company_id || current?.company_id || await getDefaultStockCompanyId(),
-      product_id: movement.product_id,
-      to_deposit_id: movement.from_deposit_id,
-      to_location_id: movement.from_location_id,
-      quantity,
-      movement_type: 'cancel',
-      reason,
-      reference_type: restoreReferenceType,
-      reference_id: referenceId,
-      previous_to_quantity: previous,
-      new_to_quantity: next,
-      notes,
-    });
-    await syncProductStockFromLocations(movement.product_id);
-    result.push({ [`${referenceType}_movement_id`]: movement.id, product_id: movement.product_id, deposit_id: movement.from_deposit_id, location_id: movement.from_location_id, quantity_restored: quantity, previous_quantity: previous, new_quantity: next });
-  }
-  return result;
+  return require('./services/stockMovementRestoration.cjs').restoreStockMovements(pool, {
+    referenceType, restoreReferenceType, referenceId, reason, notes,
+  }, { getStockLocationRow, upsertStockLocationBalance, insertStockMovement,
+    syncProductStockFromLocations, getDefaultStockCompanyId });
 }
 
 fastify.post('/stock-locations/sale-restores', { preHandler: requireSyncKey }, async (req) => {

@@ -49,3 +49,14 @@ for (const section_type of ['recent', 'new', 'bestsellers', 'custom', 'featured'
   }
 }
 console.log('Sections group families before card limits; parent name, prices, memory, colors and ranking preserved.');
+// O link deriva do filtro real da seção, nunca de category_id (campo inexistente).
+const linkStart = source.indexOf('const categoryId =');
+const linkEnd = source.indexOf('    useEffect', linkStart);
+assert.ok(linkStart >= 0 && linkEnd > linkStart);
+const destination = section => vm.runInNewContext(source.slice(linkStart, linkEnd) + '\nviewAllUrl;', { section, encodeURIComponent });
+assert.equal(destination({ filter_categories: ['cat'] }), '/?categoria=cat');
+assert.equal(destination({ filter_categories: ['cat'], view_all_url: '/produtos/destaques' }), '/produtos/destaques');
+assert.equal(destination({ filter_categories: ['cat', 'other'] }), undefined);
+assert.equal(destination({}), undefined);
+assert.match(source, /section.show_view_all && viewAllUrl/);
+assert.match(source, /reloadDocument=\{!section.view_all_url\}/);

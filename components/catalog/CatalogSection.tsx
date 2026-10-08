@@ -31,6 +31,8 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
     const { customer } = useVpsAuth();
     const showSubtitle = Boolean(section.subtitle)
         && !['recent', 'featured', 'bestsellers'].includes(section.section_type);
+    const categoryId = section.filter_categories?.length === 1 ? section.filter_categories[0] : undefined;
+    const viewAllUrl = section.view_all_url || (categoryId ? `/?categoria=${encodeURIComponent(categoryId)}` : undefined);
 
     useEffect(() => {
         let current = true;
@@ -86,7 +88,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                         <div className="h-7 bg-slate-200 rounded w-40" />
                         {showSubtitle && <div className="h-4 bg-slate-100 rounded w-64 max-w-full mt-2" />}
                     </div>
-                    {section.show_view_all && <div className="h-5 bg-slate-100 rounded w-16 animate-pulse" />}
+                    {section.show_view_all && viewAllUrl && <div className="h-5 bg-slate-100 rounded w-16 animate-pulse" />}
                 </div>
                 <div className="grid gap-2 sm:gap-4 md:gap-6 grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {Array.from({ length: Math.min(section.max_products || 8, 8) }).map((_, i) => (
@@ -111,9 +113,10 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                         <p className="text-gray-600 mt-1">{section.subtitle}</p>
                     )}
                 </div>
-                {(section.show_view_all && (section.view_all_url || section.category_id)) && (
+                {section.show_view_all && viewAllUrl && (
                     <Link
-                        to={section.view_all_url || `/?categoria=${section.category_id}`}
+                        to={viewAllUrl}
+                        reloadDocument={!section.view_all_url}
                         className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700"
                     >
                         Ver todos

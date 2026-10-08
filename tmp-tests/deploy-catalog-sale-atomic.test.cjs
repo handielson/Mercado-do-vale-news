@@ -8,7 +8,12 @@ test('selective deployment is idempotent, preserves unrelated code and refuses d
   const next = fs.readFileSync('vps_server.cjs', 'utf8').replace(/\r\n/g, '\n');
   const remote = '// preserved remote customization\n' + base;
   const result = patch(remote, base, next);
-  assert.equal(result, '// preserved remote customization\n' + next);
+  assert.ok(result.startsWith('// preserved remote customization\n'));
+  assert.ok(result.includes("fastify.post('/sales/finalize-serialized',"));
+  // Esse publicador nao deve carregar mudancas posteriores de devolucao de estoque.
+  const restore = source => source.slice(source.indexOf('async function restoreStockFromMovements('),
+    source.indexOf("fastify.post('/stock-locations/sale-restores'"));
+  assert.equal(restore(result), restore(base));
   assert.equal(patch(result, base, next), result);
   assert.throws(() => patch(remote.replace('async function upsertStockLocationBalance(', 'async function upsertStockLocationBalance(/* drift */ '), base, next), /Remote drift/);
 });

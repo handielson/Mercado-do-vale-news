@@ -26,6 +26,7 @@ async function ensureSmartphoneModelFamily(connection, { modelId, companyId, def
   if (!children.length || (productId && !children.some(row => row.id === productId))) throw conflict('Nenhuma variação compatível com este modelo e empresa.');
   const parentIds = [...new Set(children.map(row => row.parent_id).filter(Boolean))];
   const candidates = new Map(peers.filter(row => Number(row.is_parent) === 1).map(row => [row.id, row]));
+  const importedParentIds = new Set();
   // Reutilizar tambem pai importado do Bling, mesmo se ainda estiver sem model_id.
   for (const blingId of [...new Set(children.map(row => row.bling_parent_id).filter(Boolean))]) {
     const [imported] = await connection.query(`SELECT id,model_id,company_id,parent_id,is_parent,is_print3d,is_combo,offer_type,sku
@@ -33,16 +34,35 @@ async function ensureSmartphoneModelFamily(connection, { modelId, companyId, def
     for (const row of imported.filter(parent => scope(parent.company_id, defaultCompanyId) === company)) {
       if (row.model_id && row.model_id !== modelId) throw conflict('O pai do Bling pertence a outro modelo. Confira os vínculos.');
       candidates.set(row.id, row);
+      importedParentIds.add(row.id);
     }
   }
   for (const id of parentIds) {
     if (candidates.has(id)) continue;
     const [[parent]] = await connection.query(`SELECT id,model_id,company_id,parent_id,is_parent,is_print3d,is_combo,offer_type,sku
       FROM products WHERE id=? FOR UPDATE`, [id]);
+    // Pai legado sem empresa só pode ser recuperado a partir dos filhos já vinculados.
+    const legacyCompany = parent && !parent.company_id && !defaultCompanyId;
     if (!parent || Number(parent.is_parent) !== 1 || parent.parent_id || Number(parent.is_print3d)
-      || Number(parent.is_combo) || parent.offer_type || scope(parent.company_id, defaultCompanyId) !== company
+      || Number(parent.is_combo) || parent.offer_type || (!legacyCompany && scope(parent.company_id, defaultCompanyId) !== company)
       || (parent.model_id && parent.model_id !== modelId)) throw conflict('Uma variação está vinculada a outro pai. Confira a família antes de continuar.');
+    if (legacyCompany) {
+      const [linked] = await connection.query('SELECT id,model_id,company_id FROM products WHERE parent_id=? ORDER BY id FOR UPDATE', [id]);
+      if (!linked.length || linked.some(row => row.model_id !== modelId || scope(row.company_id, defaultCompanyId) !== company)) {
+        throw conflict('O pai sem empresa possui filhos incompatíveis. Confira a família antes de continuar.');
+      }
+    }
     candidates.set(id, parent);
+  }
+  // O pai local já escolhido pelos filhos é a família comercial. Pais do Bling
+  // apenas referenciados externamente não concorrem com ele nem são reparentados.
+  if (parentIds.length === 1 && candidates.has(parentIds[0])) {
+    for (const id of importedParentIds) {
+      if (id === parentIds[0]) continue;
+      const [linked] = await connection.query('SELECT id,model_id,company_id FROM products WHERE parent_id=? ORDER BY id FOR UPDATE', [id]);
+      if (linked.length) throw conflict('Há filhos vinculados a mais de um pai. Confira a família antes de continuar.');
+      candidates.delete(id);
+    }
   }
   if (candidates.size > 1) throw conflict('Este modelo possui mais de um pai. Confira os vínculos antes de continuar.');
   const existing = [...candidates.values()][0];
@@ -71,6 +91,9 @@ async function ensureSmartphoneModelFamily(connection, { modelId, companyId, def
       VALUES (?,?,?,?,?,?,?,1,NULL,0,0,0,NULL,0,0,'active','[]',?,?)`,
     [parentId, parent.name, sku, modelId, company, parent.category_id, parent.brand, JSON.stringify(specs), parent.slug]);
     else if (!existing.model_id) await connection.query('UPDATE products SET model_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?', [modelId, parentId]);
+    if (existing && !existing.company_id && !defaultCompanyId) {
+      await connection.query('UPDATE products SET company_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND company_id IS NULL', [company, parentId]);
+    }
     for (const child of unlinked) await connection.query("UPDATE products SET parent_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND (parent_id IS NULL OR parent_id='')", [parentId, child.id]);
   }
   return { parent_id: parentId, created: !existing, linked_count: unlinked.length, revision, parent,

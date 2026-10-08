@@ -87,6 +87,7 @@ const print3dRecipeRuntimePaths = [
   'services/saleStockReconciliation.cjs',
   'services/orderStockReservation.cjs',
   'services/manualStockMovement.cjs',
+  'services/stockMovementRestoration.cjs',
   'services/externalStockReconciliation.cjs',
   'services/print3dRecipeFilesServer.cjs',
   'utils/print3dRecipeDraft.mjs',
@@ -514,6 +515,14 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--stock-restoration-family-only') || process.argv.includes('--stock-restoration-family-check')) {
+    await require('./scripts/deploy-stock-restoration-family.cjs').deployStockRestorationFamily({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--stock-restoration-family-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--catalog-sale-atomic-only') || process.argv.includes('--catalog-sale-atomic-check')) {
     await require('./scripts/deploy-catalog-sale-atomic.cjs').deployCatalogSaleAtomic({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

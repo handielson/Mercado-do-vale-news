@@ -81,3 +81,30 @@ Sem cache valido, a falha e propagada para CatalogSectionComponent em vez de ret
 Quatro testes em tmp-tests/catalog-sections-cache-validity.test.cjs executam o service real com relogio/localStorage/transporte simulados e o carregamento real do componente: limite exato, cache invalido/futuro, nao renovacao da idade, isolamento autenticado, renovacao apos sucesso, aviso de fallback, limpeza de dados/avisos e resultado cancelado. Junto com categoria, familias, carregamento e item 7, passaram 12 testes e o build com verificacao de ausencia de Supabase no runtime. Publicacao pendente; nenhum preco, estoque ou dado de producao alterado.
 
 Itens 7 e 8 publicados em v1.2.576-secoes-ordem-cache (aee295dc), API seletiva e site validados. Quinze testes passaram; teste publico somente leitura/rejeicao de corpo invalido, sem alterar a ordem real. Main sincronizada e arquivos Shopee preexistentes preservados.
+
+## Segunda revisao — 08/10/2026
+
+Nova fila identificada por execucao do codigo real com dependencias simuladas, sem mutacoes externas:
+
+1. Devolucao de estoque parcial bloqueava nova tentativa ao encontrar qualquer movimento de cancelamento. Corrigido localmente; publicacao pendente.
+2. Criacao de venda ainda chama sincronizacao Bling quando a baixa local falha. Pendente.
+3. Persistencia da venda numerica e dos seus itens permanece separada. Pendente.
+4. Cache do catalogService principal pode reutilizar dados antigos sem limite de idade. Pendente; correcao anterior foi das secoes.
+5. Publico-alvo do banner e removido antes da API e nao persistido nela. Pendente.
+6. Reordenacao de banners grava linhas separadamente e pode deixar ordem parcial. Pendente.
+
+### Item 1 — devolucao atomica por movimentos
+
+Fonte da devolucao: stock_location_movements na VPS/MySQL, com destinos derivados dos locais da baixa original. services/stockMovementRestoration.cjs centraliza a regra consumida pelos tres entrypoints. A transacao bloqueia a venda/pedido e os produtos, compara quantidades ja devolvidas por produto/local e grava somente o restante. Saldos, movimentos e totais dos produtos usam a mesma conexao; qualquer falha desfaz o conjunto. Repeticao concluida nao grava de novo. Uma devolucao antiga parcial pode ser retomada explicitamente, sem recomecar as quantidades ja registradas. Historico contraditorio bloqueia a operacao para conferencia. Nao foi executada recuperacao automatica de dados reais.
+
+saleService.ts envia ao Bling apenas a quantidade devolvida nesta tentativa, distribuida pelas linhas da venda; aparelhos liberados sao contados por unidade efetivamente devolvida. Chamadas externas, status da venda e liberacao de aparelhos continuam fora da transacao dos movimentos numericos. Esta correcao nao implementa entrega duravel de sincronizacoes externas.
+
+Validacao: 16 testes do escritor transacional, quatro testes comportamentais do consumidor e quatro regressoes existentes, totalizando 24 aprovados. Inclui falhas em saldos, movimentos, totais e commit, rollback/repeticao, concorrencia simulada, historico parcial e quantidade enviada ao Bling. Build, sintaxe dos entrypoints/modulo/deployer e git diff --check aprovados. Dois testes legados de devolucao por local nao executaram por dependerem de supabase/migrations/20260509000001_multi_deposit_stock.sql, anteriormente removida; nao se reintroduziu Supabase. Nao houve teste mutante em MySQL real, envio ao Bling, commit, push ou publicacao. Alteracoes Shopee preexistentes preservadas.
+
+### Correcao adicional — conflito de familia no pre-cadastro Poco X8 Pro
+
+Leitura da API em 08/10/2026 confirmou pre-cadastro 848e8a38-6d7e-494a-893b-b9ca040cca3b pendente (Branco, 8GB/256GB), modelo 438dc426-f126-4577-984b-1fab0d4c616c. Filhos apontam para PX8PRO-PAI, cujo company_id esta nulo. A consulta companies retorna tabela inexistente; o resolvedor de empresa default portanto nao fornece fallback. Ha tambem pais importados PX85G8256 e PX85G12512 no mesmo modelo. Fonte comercial: products.parent_id; bling_parent_id e referencia externa, nao outra autoridade para escolher pai local.
+
+smartphoneModelFamily.cjs agora aceita recuperar empresa do pai legado ja vinculado somente apos bloquear e conferir todos os seus filhos (mesmo modelo e empresa). Reutiliza o unico pai apontado pelos filhos; ignora candidatos importados referenciados por bling_parent_id apenas quando eles nao possuem filhos locais. Preserva pais concorrentes sem prova de referencia Bling como conflito. Nao move filhos com pai existente, nao exclui pais importados e nao modifica identificadores Bling. Empresa do pai e gravada dentro da transacao da finalizacao, sem alterar custos/precos/estoque nesta regra. Dry-run nao grava nada.
+
+Quinze testes de familia e cinco verificacoes existentes de cadastro por foto passaram, incluindo legado sem empresa/default, referencias externas, bloqueios multiempresa/modelo/pai e consulta sem escrita. Sintaxe e diff aprovados. Correcao local pendente de publicacao; pre-cadastro nao finalizado nesta etapa e nenhum cadastro/estoque real alterado. Correcao de devolucao do item 1 e arquivos Shopee preexistentes preservados.

@@ -1,4 +1,16 @@
-# v1.2.576-secoes-ordem-cache
+# v1.2.577-estoque-familia-ver-todos
+
+Data: 2026-10-08. Branch: main. Tag: v1.2.577-estoque-familia-ver-todos.
+Release VPS: /var/www/mdv-site/releases/20261008-131559-estoque-familia-ver-todos
+Status: pronta para publicacao; validacao publica pendente.
+
+Devolucao numerica por local grava saldos, movimentos e totais na mesma transacao. Repeticao retorna somente a quantidade faltante, inclusive em historicos parciais. Envio ao Bling considera a quantidade efetivamente retornada nesta tentativa. Chamadas externas permanecem fora da transacao local.
+
+Cadastro por foto reconhece o pai comercial escolhido pelos filhos, recupera empresa de pai legado somente apos conferir todos os filhos e preserva referencias externas Bling sem filhos locais. Familias ambiguas ou compartilhadas com outra empresa/modelo continuam bloqueadas. Smartphones mostra Ver todos usando a categoria configurada na secao.
+
+44 testes focados, cinco verificacoes adicionais de cadastro por foto, sintaxe e build. Preflight remoto seletivo aprovado. API publicada por funcoes/modulos com comparacao de baseline, backup, rechecagem e rollback; site publicado completo. Sem migration, finalizacao do pre-cadastro, cancelamento, venda ou alteracao real de estoque durante validacao. Quatro arquivos preexistentes Shopee fora do escopo.
+
+## Historico anterior — v1.2.576-secoes-ordem-cache
 
 Data: 2026-10-08. Branch: main. Tag: v1.2.576-secoes-ordem-cache.
 Release VPS: /var/www/mdv-site/releases/20261008-032018-secoes-ordem-cache

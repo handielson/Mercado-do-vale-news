@@ -21,19 +21,22 @@ function patchProductReadPrivacy(source) {
   updated = updated.slice(0, start) + block + updated.slice(end);
   return source.includes('\r\n') ? updated.replace(/\n/g, '\r\n') : updated;
 }
-async function deployProductReadPrivacy({ appDir, apiProc, root, read, write, exec, checkOnly = false }) {
+async function deployProductReadPrivacy({ appDir, apiProc, root, read, write, exec, checkOnly = false,
+  files = [...ENTRIES, MODULE], patchFile, backupPrefix = 'product-read-privacy' }) {
   if (appDir !== '/var/www/mdv-api' || apiProc.name !== 'mdv-api'
     || !ENTRIES.some(file => apiProc.pm2_env?.pm_exec_path === `${appDir}/${file}`)) throw new Error('Unexpected API target');
   const changes = [];
-  for (const file of [...ENTRIES, MODULE]) {
+  if (!/^[a-z0-9-]+$/.test(backupPrefix)) throw new Error('Invalid backup prefix');
+  for (const file of files) {
     const original = await read(`${appDir}/${file}`);
     if (!original && ENTRIES.includes(file)) throw new Error(`Missing entry ${file}`);
-    const updated = file === MODULE ? fs.readFileSync(path.join(root, file), 'utf8') : patchProductReadPrivacy(original);
+    const updated = patchFile ? patchFile(original, file)
+      : file === MODULE ? fs.readFileSync(path.join(root, file), 'utf8') : patchProductReadPrivacy(original);
     if (original !== updated) changes.push({ file, original, updated });
   }
   console.log(JSON.stringify({ checkOnly, files: changes.map(change => change.file) }));
   if (checkOnly || !changes.length) return;
-  const backup = `${appDir}/backups/product-read-privacy-${Date.now()}`;
+  const backup = `${appDir}/backups/${backupPrefix}-${Date.now()}`;
   await exec(`mkdir -p ${backup}/services ${appDir}/services`);
   for (const change of changes) {
     if (await read(`${appDir}/${change.file}`) !== change.original) throw new Error('Remote changed during preflight');

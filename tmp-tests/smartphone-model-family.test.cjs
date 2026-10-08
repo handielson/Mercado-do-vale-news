@@ -20,6 +20,7 @@ function database(rows=[child('a'),child('b')],patch={}) {
       if(sql.includes('FROM products WHERE bling_id='))return [structuredClone(state.rows.filter(r=>r.bling_id===args[0]&&r.is_parent===1))];
       if(sql.includes('FROM products WHERE id='))return [structuredClone(state.rows.filter(r=>r.id===args[0]))];
       if(sql.includes('FROM products WHERE sku='))return [state.rows.filter(r=>r.sku===args[0]).map(r=>({id:r.id}))];
+      if(sql.includes('FROM products WHERE parent_id='))return [structuredClone(state.rows.filter(r=>r.parent_id===args[0]))];
       if(sql.startsWith('INSERT INTO products')){
         state.writes++;state.rows.push({id:args[0],name:args[1],sku:args[2],model_id:args[3],company_id:args[4],is_parent:1,parent_id:null,price_retail:0,stock_quantity:0,specs:JSON.parse(args[7])});return [{affectedRows:1}];
       }
@@ -29,6 +30,7 @@ function database(rows=[child('a'),child('b')],patch={}) {
         state.rows.find(r=>r.id===args[1]).parent_id=args[0];return [{affectedRows:1}];
       }
       if(sql.startsWith('UPDATE products SET model_id=')){state.writes++;state.rows.find(r=>r.id===args[1]).model_id=args[0];return [{affectedRows:1}];}
+      if(sql.startsWith('UPDATE products SET company_id=')){state.writes++;state.rows.find(r=>r.id===args[1]).company_id=args[0];return [{affectedRows:1}];}
       throw Error('Unexpected SQL '+sql);
     };
     try{return await ensureSmartphoneModelFamily({query},{...opts,...options});}
@@ -57,6 +59,31 @@ test('reutiliza pai do Bling sem modelo e preserva vinculos externos',async()=>{
   const db=database([child('pai',{is_parent:1,model_id:null,bling_id:'10'}),child('a',{bling_parent_id:'10',bling_id:'11'})]);
   const r=await db.transaction();assert.equal(r.parent_id,'pai');assert.equal(db.state.rows[0].model_id,'m');
   assert.equal(db.state.rows[1].bling_id,'11');assert.equal(db.state.rows[1].bling_parent_id,'10');
+});
+test('pai comercial legado prevalece sobre referencias Bling sem filhos locais',async()=>{
+  const db=database([child('local',{is_parent:1,company_id:null}),child('bling1',{is_parent:1,bling_id:'10'}),
+    child('bling2',{is_parent:1,bling_id:'20'}),child('a',{parent_id:'local',bling_parent_id:'10'}),
+    child('b',{parent_id:'local',bling_parent_id:'20'}),child('novo')]);
+  const before=structuredClone(db.state.rows);
+  const plan=await db.transaction({defaultCompanyId:null,dryRun:true,productId:'novo'});
+  assert.equal(plan.parent_id,'local');assert.equal(db.state.writes,0);
+  const result=await db.transaction({defaultCompanyId:null,productId:'novo'});
+  assert.equal(result.parent_id,'local');assert.equal(result.created,false);
+  assert.equal(db.state.rows[0].company_id,'c');assert.equal(db.state.rows[5].parent_id,'local');
+  assert.deepEqual(db.state.rows.slice(1,5),before.slice(1,5));
+});
+test('pai legado compartilhado com outra empresa ou modelo continua bloqueado',async()=>{
+  for(const patch of [{company_id:'other'},{model_id:'other'}]){
+    const db=database([child('local',{is_parent:1,company_id:null}),child('a',{parent_id:'local'}),child('b',{parent_id:'local',...patch})]);
+    await assert.rejects(db.transaction({defaultCompanyId:null}),e=>e.statusCode===409);assert.equal(db.state.writes,0);
+  }
+});
+test('pais Bling com filhos locais e pais locais concorrentes nao sao ignorados',async()=>{
+  for(const rows of [
+    [child('local',{is_parent:1}),child('bling',{is_parent:1,bling_id:'10'}),child('a',{parent_id:'local',bling_parent_id:'10'}),child('b',{parent_id:'bling'})],
+    [child('local',{is_parent:1}),child('outro',{is_parent:1}),child('a',{parent_id:'local'})]]) {
+    const db=database(rows);await assert.rejects(db.transaction(),e=>e.statusCode===409);assert.equal(db.state.writes,0);
+  }
 });
 test('outra empresa e produtos combo nao entram na familia',async()=>{
   const db=database([child('a'),child('outro',{company_id:'other'}),child('kit',{is_combo:1})]);
