@@ -431,7 +431,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     }, [selectedModelName]);
 
     // Apply model template when model is selected (skip in edit mode to avoid overwriting existing data)
-    useModelTemplate(selectedModel, setValue, !!initialData);
+    useModelTemplate(selectedModel, setValue, !!initialData, getValues, categoryConfig?.__category_name);
 
     // Auto-load default images when model + color are selected
     const selectedColor = watch('specs.color');

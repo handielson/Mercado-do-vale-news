@@ -1200,6 +1200,18 @@ function CatalogContent() {
                         )}
                     </>
                 )}
+                {hasActiveSearch && !isPaginatedCatalogMode && hasMore && (
+                    <div className="flex justify-center mt-8">
+                        <button
+                            type="button"
+                            onClick={loadMore}
+                            disabled={loading || fetching}
+                            className="px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+                        >
+                            {loading || fetching ? 'Carregando...' : 'Carregar mais resultados'}
+                        </button>
+                    </div>
+                )}
             </div>
             </main>
 

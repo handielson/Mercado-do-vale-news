@@ -3,6 +3,7 @@ import { UseFormSetValue } from 'react-hook-form';
 import { Model } from '../../../types/model';
 import { UNIQUE_FIELDS } from '../../../config/product-fields';
 import { toast } from 'sonner';
+import { isSmartphoneModel, resolveSmartphoneSpecs } from '../../../services/smartphoneModelSpecs.mjs';
 
 /**
  * Hook para preencher formulário automaticamente com valores do template do modelo
@@ -15,11 +16,17 @@ import { toast } from 'sonner';
 export function useModelTemplate(
     selectedModel: Model | undefined,
     setValue: UseFormSetValue<any>,
-    skipApply = false
+    skipApply = false,
+    getValues?: (field: string) => any,
+    categoryName?: string
 ) {
     useEffect(() => {
         if (!selectedModel) return;
-        // Em modo de edição, não sobrescrever os dados do produto
+        const smartphone = isSmartphoneModel({ category_name: categoryName });
+        if (smartphone && getValues) {
+            setValue('specs', resolveSmartphoneSpecs(getValues('specs'), selectedModel.template_values));
+        }
+        // Editing preserves prices, fiscal data and variation-specific values.
         if (skipApply) return;
 
         // Use async IIFE to handle async operations
@@ -69,6 +76,7 @@ export function useModelTemplate(
             if (selectedModel.template_values && Object.keys(selectedModel.template_values).length > 0) {
                 Object.entries(selectedModel.template_values).forEach(([key, value]) => {
                     if (key === 'bling_family') return;
+                    if (smartphone && !key.startsWith('price_') && key !== 'weight_kg' && !key.startsWith('dimensions.')) return;
                     // Pular campos únicos
                     if (UNIQUE_FIELDS.includes(key)) {
                         console.log(`⏭️ Skipping unique field: ${key}`);
@@ -117,5 +125,5 @@ export function useModelTemplate(
             // Show summary log
             console.log(`✅ useModelTemplate completed: ${fieldsFilledCount} total fields filled`);
         })();
-    }, [selectedModel, setValue, skipApply]);
+    }, [selectedModel, setValue, skipApply, getValues, categoryName]);
 }

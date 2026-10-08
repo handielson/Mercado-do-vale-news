@@ -1012,6 +1012,8 @@ async function getVpsBearerAuthContext(request) {
   }
 }
 
+require('./services/smartphoneModelSpecsBoundary.cjs').registerSmartphoneModelSpecsBoundary(fastify, { db: pool });
+
 require('./services/productReadPrivacy.cjs').registerProductReadPrivacy(fastify, {
   getAuth: getVpsBearerAuthContext,
 });
@@ -18113,7 +18115,8 @@ async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
      LIMIT ${safeLimit} OFFSET ${safeOffset}`,
     [Number.isFinite(numericTagId) ? numericTagId : tagId, String(tagId)]
   );
-  return rows;
+  const { applyModelSpecsToProducts } = await import('./services/smartphoneModelSpecs.mjs');
+  return applyModelSpecsToProducts(pool, rows);
 }
 
 async function findAutoresponderAvailableCategories(limit = 12) {
@@ -18152,7 +18155,8 @@ async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset
      LIMIT ${safeLimit} OFFSET ${safeOffset}`,
     [categoryId]
   );
-  return rows;
+  const { applyModelSpecsToProducts } = await import('./services/smartphoneModelSpecs.mjs');
+  return applyModelSpecsToProducts(pool, rows);
 }
 
 async function countAutoresponderProductsByCategory(categoryId) {
@@ -18191,7 +18195,8 @@ async function findAutoresponderProductsByCategoryBudget(categoryId, budgetCents
      LIMIT ${safeLimit} OFFSET ${safeOffset}`,
     [categoryId, safeBudget]
   );
-  return rows;
+  const { applyModelSpecsToProducts } = await import('./services/smartphoneModelSpecs.mjs');
+  return applyModelSpecsToProducts(pool, rows);
 }
 
 async function countAutoresponderProductsByCategoryBudget(categoryId, budgetCents) {
@@ -19340,7 +19345,8 @@ async function findAutoresponderProductById(productId) {
      LIMIT 1`,
     [productId]
   );
-  return rows[0] || null;
+  const { applyModelSpecsToProducts } = await import('./services/smartphoneModelSpecs.mjs');
+  return (await applyModelSpecsToProducts(pool, rows))[0] || null;
 }
 
 function formatAutoresponderProductDescriptionLine(product) {
@@ -19362,7 +19368,8 @@ async function findAutoresponderProductVariations(product) {
      ORDER BY price_retail ASC, name ASC`,
     [product.model_id]
   );
-  return rows.length > 0 ? rows : [product];
+  const { applyModelSpecsToProducts } = await import('./services/smartphoneModelSpecs.mjs');
+  return applyModelSpecsToProducts(pool, rows.length > 0 ? rows : [product]);
 }
 
 function formatAutoresponderProductVariationsBlock(variations) {
@@ -19602,7 +19609,7 @@ function extractAutoresponderProductSearchTokens(message) {
     .slice(0, 6))];
 }
 
-function buildAutoresponderProductSearchScoreSql(tokens) {
+function buildAutoresponderProductSearchScoreSql(tokens, searchColumns = { specs: 'CAST(specs AS CHAR)', customFields: 'CAST(custom_fields AS CHAR)' }) {
   const parts = [];
   const params = [];
   for (const token of Array.isArray(tokens) ? tokens : []) {
@@ -19613,8 +19620,8 @@ function buildAutoresponderProductSearchScoreSql(tokens) {
       WHEN LOWER(COALESCE(name, '')) LIKE ? THEN 60
       WHEN LOWER(COALESCE(name, '')) LIKE ? THEN 45
       WHEN LOWER(COALESCE(brand, '')) LIKE ? THEN 30
-      WHEN LOWER(COALESCE(CAST(specs AS CHAR), '')) LIKE ? THEN 20
-      WHEN LOWER(COALESCE(CAST(custom_fields AS CHAR), '')) LIKE ? THEN 15
+      WHEN LOWER(COALESCE(${searchColumns.specs}, '')) LIKE ? THEN 20
+      WHEN LOWER(COALESCE(${searchColumns.customFields}, '')) LIKE ? THEN 15
       ELSE 0
     END`);
     params.push(
@@ -19635,20 +19642,24 @@ function buildAutoresponderProductSearchScoreSql(tokens) {
 async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) {
   const safeTokens = Array.isArray(tokens) ? tokens.slice(0, 6) : [];
   if (safeTokens.length === 0) return [];
+  const { smartphoneCatalogSearchSql } = await import('./services/smartphoneModelSpecs.mjs');
+  const searchColumns = smartphoneCatalogSearchSql();
+  const networkQuery = safeTokens.length === 1 && /^[45]g$/.test(normalizeAutoresponderText(safeTokens[0]).trim())
+    ? normalizeAutoresponderText(safeTokens[0]).trim().toUpperCase() : null;
 
   const safeLimit = getAutoresponderProductQueryLimit(limit);
   const safeOffset = Math.max(Number(offset) || 0, 0);
-  const clauses = safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
+  const clauses = networkQuery ? [searchColumns.network(networkQuery)] : safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
     OR LOWER(COALESCE(sku, '')) LIKE ?
     OR LOWER(COALESCE(brand, '')) LIKE ?
-    OR LOWER(COALESCE(CAST(specs AS CHAR), '')) LIKE ?
-    OR LOWER(COALESCE(CAST(custom_fields AS CHAR), '')) LIKE ?)`);
+    OR LOWER(COALESCE(${searchColumns.specs}, '')) LIKE ?
+    OR LOWER(COALESCE(${searchColumns.customFields}, '')) LIKE ?)`);
   const whereParams = [];
-  for (const token of safeTokens) {
+  for (const token of networkQuery ? [] : safeTokens) {
     const like = `%${normalizeAutoresponderText(token).trim()}%`;
     whereParams.push(like, like, like, like, like);
   }
-  const score = buildAutoresponderProductSearchScoreSql(safeTokens);
+  const score = buildAutoresponderProductSearchScoreSql(safeTokens, searchColumns);
 
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
@@ -19667,20 +19678,25 @@ async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) 
      LIMIT ${safeLimit} OFFSET ${safeOffset}`,
     [...score.params, ...whereParams]
   );
-  return rows;
+  const { applyModelSpecsToProducts } = await import('./services/smartphoneModelSpecs.mjs');
+  return applyModelSpecsToProducts(pool, rows);
 }
 
 async function countAutoresponderProductsByTokens(tokens) {
   const safeTokens = Array.isArray(tokens) ? tokens.slice(0, 6) : [];
   if (safeTokens.length === 0) return 0;
+  const { smartphoneCatalogSearchSql } = await import('./services/smartphoneModelSpecs.mjs');
+  const searchColumns = smartphoneCatalogSearchSql();
+  const networkQuery = safeTokens.length === 1 && /^[45]g$/.test(normalizeAutoresponderText(safeTokens[0]).trim())
+    ? normalizeAutoresponderText(safeTokens[0]).trim().toUpperCase() : null;
 
-  const clauses = safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
+  const clauses = networkQuery ? [searchColumns.network(networkQuery)] : safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
     OR LOWER(COALESCE(sku, '')) LIKE ?
     OR LOWER(COALESCE(brand, '')) LIKE ?
-    OR LOWER(COALESCE(CAST(specs AS CHAR), '')) LIKE ?
-    OR LOWER(COALESCE(CAST(custom_fields AS CHAR), '')) LIKE ?)`);
+    OR LOWER(COALESCE(${searchColumns.specs}, '')) LIKE ?
+    OR LOWER(COALESCE(${searchColumns.customFields}, '')) LIKE ?)`);
   const params = [];
-  for (const token of safeTokens) {
+  for (const token of networkQuery ? [] : safeTokens) {
     const like = `%${normalizeAutoresponderText(token).trim()}%`;
     params.push(like, like, like, like, like);
   }

@@ -3,6 +3,21 @@
 const crypto = require('crypto');
 const core = require('./smartphonePriceGroupsCore.cjs');
 const schemaPromises = new WeakMap();
+const modelSpecsSanitized = Symbol('modelSpecsSanitized');
+async function sanitizeModelSpecifications(product, model, existing = null) {
+  if (!core.isSmartphoneCategory(model?.category_name) || Number(product.is_print3d) === 1 || Number(product.is_combo) === 1 || product.offer_type) return product;
+  const { stripModelOwnedSpecs, stripModelTechnicalCustomFields } = await import('./smartphoneModelSpecs.mjs');
+  const template = core.object(model.template_values);
+  // Financial metadata comes from locked DB state; a client cannot move its group.
+  const reference = stripModelOwnedSpecs(existing ? existing.specs : {}, template);
+  const mergedSpecs = { ...core.object(existing?.specs), ...core.object(product.specs) };
+  delete mergedSpecs._price_group_network;
+  const specs = stripModelOwnedSpecs(mergedSpecs, undefined, false);
+  specs._price_group_network = reference._price_group_network;
+  return { ...product, specs,
+    custom_fields: stripModelTechnicalCustomFields({ ...core.object(existing?.custom_fields), ...core.object(product.custom_fields) }, template, mergedSpecs),
+    [modelSpecsSanitized]: true };
+}
 function conflict(message) { return Object.assign(new Error(message), { statusCode: 409 }); }
 function ensureSmartphonePriceGroupsSchema(pool) {
   if (!schemaPromises.has(pool)) {
@@ -102,7 +117,8 @@ async function withSmartphonePriceWrite(pool, incoming, write, { transactional =
       current = rows[0];
       if (!current || current.model_id !== existing.model_id) throw conflict('Produto alterado por outra operação. Recarregue e tente novamente.');
     }
-    const result = await inheritSmartphonePrices(connection, { ...current, ...incoming, model_id: candidate.model_id }, lockedModel, current);
+    const prepared = await sanitizeModelSpecifications({ ...current, ...incoming, model_id: candidate.model_id }, lockedModel, current);
+    const result = await inheritSmartphonePrices(connection, prepared, lockedModel, current);
     const output = await write(connection, result.product);
     await connection.commit();
     return output;
@@ -202,7 +218,7 @@ async function patchProductWithGroupPrices(pool, id, payload) {
   const safePayload = { ...(payload || {}) };
   delete safePayload.sku;
   return withSmartphonePriceWrite(pool, { ...safePayload, id }, async (db, controlled) => {
-    const keys = [...new Set([...Object.keys(safePayload).filter(k => k !== 'id'), ...core.SALE_FIELDS.filter(f => controlled[f] !== undefined)])];
+    const keys = [...new Set([...Object.keys(safePayload).filter(k => k !== 'id'), ...core.SALE_FIELDS.filter(f => controlled[f] !== undefined), ...(controlled[modelSpecsSanitized] ? ['specs', 'custom_fields'] : [])])];
     if (!keys.length) return;
     if (keys.some(k => !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k))) throw new Error('Campo inválido');
     await db.query(`UPDATE products SET ${keys.map(k => `\`${k}\`=?`).join(',')} WHERE id=?`,
@@ -240,8 +256,10 @@ async function insertProductRecordsWithGroupPrices(pool, records, upsert = false
         }
         item.incoming.sku = existing.sku;
       }
-      const inherited = await inheritSmartphonePrices(connection, { ...existing, ...item.incoming, model_id: item.modelId }, models.get(item.modelId), existing);
-      const payload = { ...item.incoming, ...(inherited.controlled ? Object.fromEntries(core.SALE_FIELDS.map(f => [f, inherited.product[f]])) : {}) };
+      const prepared = await sanitizeModelSpecifications({ ...existing, ...item.incoming, model_id: item.modelId }, models.get(item.modelId), existing);
+      const inherited = await inheritSmartphonePrices(connection, prepared, models.get(item.modelId), existing);
+      const payload = { ...item.incoming, ...(inherited.controlled ? Object.fromEntries(core.SALE_FIELDS.map(f => [f, inherited.product[f]])) : {}),
+        ...(prepared[modelSpecsSanitized] ? { specs: inherited.product.specs, custom_fields: inherited.product.custom_fields } : {}) };
       const keys = Object.keys(payload).filter(k => payload[k] !== undefined);
       if (keys.some(k => !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k))) throw new Error('Campo inválido');
       const updates = keys.filter(k => k !== 'id' && k !== conflictColumn && (!existing || k !== 'sku')).map(k => `\`${k}\`=VALUES(\`${k}\`)`).join(',');

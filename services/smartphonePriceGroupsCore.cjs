@@ -24,7 +24,8 @@ function configuration(product, model = {}) {
   if (!ram || !storage) return null;
   const value = {
     company_id: product.company_id || model.company_id || null, model_id: String(product.model_id), ram, storage,
-    version: text(spec('version', 'versao')), network: text(spec('rede_operadora', 'network', 'rede')),
+    version: text(spec('version', 'versao')), network: text(Object.prototype.hasOwnProperty.call(specs, '_price_group_network')
+      ? specs._price_group_network : spec('rede_operadora', 'network', 'rede')),
     condition: text(spec('condition', 'condicao') || product.condition || 'new'),
   };
   return { ...value, id: crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex') };

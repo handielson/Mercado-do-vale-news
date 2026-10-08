@@ -7,14 +7,14 @@ import { catalogConfigService } from '@/services/catalogConfigService';
 import { buildVpsUrl, getVpsSyncHeaders } from '@/services/vpsProxyBase';
 import { vpsClient } from '@/services/vpsClient';
 import type { CatalogSettings } from '@/types/catalogSettings';
-import { filterBySelectedCategories } from './catalogFiltering';
+import { filterBySelectedCategories, getCatalogNetworkQuery, getSmartphoneCategoryIds, matchesCatalogNetwork, applyCatalogSearchFilters } from './catalogFiltering';
 import { colorService } from './colors';
 import { modelColorImagesService } from './model-color-images';
 
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 30 * 1000; // 30 segundos (evita cache obsoleto prolongado na UI)
-const CACHE_KEY_PREFIX = '@mv:catalog:v9:';
+const CACHE_KEY_PREFIX = '@mv:catalog:v10:';
 
 // Helper to safely access localStorage (prevents SSR errors)
 const getStorage = () => typeof window !== 'undefined' && !vpsAuthService.getStoredToken() ? window.localStorage : null;
@@ -64,25 +64,50 @@ export const catalogService = {
                     const settings = await catalogConfigService.getSettings();
                     let mapped = removeHiddenCatalogProducts(removeHiddenOffers(byEan.map(normalizeProduct))) as unknown as CatalogProduct[];
                     mapped = catalogConfigService.applyVisibilityRules(mapped, settings) as unknown as CatalogProduct[];
+                    mapped = applyCatalogSearchFilters(mapped, filters, settings.new_product_days);
+                    if (filters?.favoritesOnly) {
+                        const favorites = filters.customerId ? await catalogService.getUserFavorites(filters.customerId) : [];
+                        mapped = mapped.filter(p => favorites.includes(p.id));
+                    }
                     return { products: mapped, total: mapped.length, hasMore: false };
                 }
                 return { products: [], total: 0, hasMore: false };
             }
 
             // Busca por texto → VPS server-side search (sem limite de 1000)
-            const [vpsRaw, vpsCats, settings] = await Promise.all([
-                vpsApiService.getProducts({
-                    search: searchTerm,
-                    category: filters?.categories?.join(',') || undefined,
-                    status: 'active',
-                    limit: 500,
-                    noCache: true,
-                }),
+            const network = getCatalogNetworkQuery(searchTerm);
+            const [vpsCats, settings] = await Promise.all([
                 vpsApiService.getCategories(),
                 settingsOverride ? Promise.resolve(settingsOverride) : catalogConfigService.getSettings(),
             ]);
+            const phoneCategories = network ? getSmartphoneCategoryIds(vpsCats || []) : [];
+            const selectedPhoneCategories = phoneCategories.filter(id => !filters?.categories?.length || filters.categories.includes(id));
+            if (network && !selectedPhoneCategories.length) return { products: [], total: 0, hasMore: false };
+            if (filters?.favoritesOnly && !filters.customerId) return { products: [], total: 0, hasMore: false };
 
-            if (!vpsRaw) return { products: [], total: 0, hasMore: false };
+            // Buscar todos os lotes antes de filtrar/paginar evita perder produtos
+            // depois da 500ª posição ou dar hasMore=false em um lote filtrado.
+            const vpsRaw: any[] = [];
+            const seenIds = new Set<string>();
+            for (let offset = 0; ; offset += 500) {
+                const batch = await vpsApiService.getProducts({
+                    search: network ? undefined : searchTerm,
+                    category: filters?.categories?.join(',') || (network ? selectedPhoneCategories.join(',') : undefined),
+                    status: 'active', limit: 500, offset, noCache: true,
+                    compact: true, includeModelSpecs: Boolean(network),
+                    favoritesOnly: filters?.favoritesOnly, customerId: filters?.customerId,
+                });
+                if (!batch) throw new Error('Não foi possível carregar todos os resultados da busca. Tente novamente.');
+                let added = 0;
+                for (const product of batch) {
+                    if (seenIds.has(product.id)) continue;
+                    seenIds.add(product.id);
+                    vpsRaw.push(product);
+                    added++;
+                }
+                if (batch.length < 500) break;
+                if (!added) throw new Error('Não foi possível carregar o próximo lote da busca. Tente novamente.');
+            }
 
             const catSlugMap = new Map<string, string>(
                 (vpsCats || []).map((c: any) => [c.id, c.slug])
@@ -94,11 +119,26 @@ export const catalogService = {
             })) as unknown as CatalogProduct[];
 
             result = catalogConfigService.applyVisibilityRules(result as any, settings) as unknown as CatalogProduct[];
-            result = filterBySelectedCategories(result, filters?.categories);
+            if (network) result = result.filter(p => selectedPhoneCategories.includes(p.category_id || '') && matchesCatalogNetwork(p, network));
+            result = applyCatalogSearchFilters(result, filters, settings.new_product_days);
 
             const from = (page - 1) * pageSize;
             const paginated = result.slice(from, from + pageSize);
-            return { products: paginated, total: result.length, hasMore: paginated.length === pageSize };
+            // O contrato compacto evita baixar base64 de todos os resultados.
+            // Recupera mídia completa apenas dos produtos da página que precisam.
+            const withoutMedia = paginated.filter(p => !p.images?.length && !p.image_url);
+            if (withoutMedia.length) {
+                const fullRows = await vpsApiService.getProductsByIds(withoutMedia.map(p => p.id)) || [];
+                const mediaById = new Map(fullRows.map(p => [p.id, normalizeProduct(p)]));
+                for (const product of paginated) {
+                    const media = mediaById.get(product.id);
+                    if (media) {
+                        product.images = media.images;
+                        product.image_url = media.image_url;
+                    }
+                }
+            }
+            return { products: paginated, total: result.length, hasMore: from + pageSize < result.length };
         }
 
         // Helper para salvar no cache

@@ -19,6 +19,7 @@
 import { toBrowserSafeMediaUrl } from '@/utils/media-url';
 import type { CatalogProduct } from '@/types/catalog';
 import { ProductStatus } from '@/utils/field-standards';
+import { resolveSmartphoneSpecs, stripModelTechnicalCustomFields } from './smartphoneModelSpecs.mjs';
 
 export interface NormalizedProduct {
   id: string;
@@ -202,8 +203,8 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
     parent_id: p.parent_id ?? null,
     parent_name: typeof p.parent_name === 'string' ? p.parent_name.trim() : null,
     description: p.description,
-    specs: p.specs ?? {},
-    custom_fields: p.custom_fields ?? {},
+    specs: p.model_specs_authoritative ? resolveSmartphoneSpecs(p.specs, p.model_template_values) : (p.specs ?? {}),
+    custom_fields: p.model_specs_authoritative ? stripModelTechnicalCustomFields(p.custom_fields, p.model_template_values, p.specs) : (p.custom_fields ?? {}),
     bling_id: p.bling_id,
     bling_parent_id: p.bling_parent_id,
   };

@@ -173,7 +173,7 @@ function screenScore(product) {
   const specs = combinedSpecs(product);
   const type = normalizeText([specs.tipo_de_display, specs.tipo_de_tela, specs.display, specs.display_type, specs.screen_type].filter(Boolean).join(' '));
   const resolution = normalizeText([specs.resolucao_tela, specs.display_resolution, specs.screen_resolution].filter(Boolean).join(' '));
-  const refreshRate = firstNumber(specs.fps_do_display, specs.celular_fps_display, specs.refresh_rate, specs.screen_refresh_rate);
+  const refreshRate = firstNumber(specs.celular_fps_display, specs.fps_do_display, specs.refresh_rate, specs.screen_refresh_rate);
   let score = 0;
   if (/amoled|oled/.test(type)) score += 2;
   if (refreshRate >= 90) score += 1;

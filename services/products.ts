@@ -13,6 +13,7 @@ import { markLocalNameManaged } from './blingNameSyncPolicy.js';
 import { isLocalCatalogPreviewRuntime } from './localCatalogPreview';
 import { mercadoLivreService } from './mercadoLivreService';
 import { toast } from 'sonner';
+import { isSmartphoneModel, stripModelOwnedSpecs } from './smartphoneModelSpecs.mjs';
 
 /**
  * PRODUCT SERVICE — VPS MySQL (fonte exclusiva de verdade)
@@ -371,6 +372,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
 
     const isSerializedCategory = !input.is_print3d && await isSerializedProductCategory(category_id);
+    const specsModel = { ...modelData, category_name: (await categoryService.getById(modelData.category_id || category_id))?.name };
 
     // SKU uniqueness check — busca exata na VPS (fonte da verdade)
     // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
@@ -430,7 +432,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
         description: input.description || null,
         ean: input.eans?.[0] || null,
         alternative_eans: input.eans || [],
-        specs: { ...(modelData.template_values || {}), ...(input.specs || {}) },
+        specs: !input.is_print3d && isSmartphoneModel(specsModel) ? stripModelOwnedSpecs(input.specs) : { ...(modelData.template_values || {}), ...(input.specs || {}) },
         price_cost: input.price_cost,
         price_retail: input.price_retail,
         price_reseller: input.price_reseller,
@@ -565,7 +567,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
         description: input.description || null,
         ean: input.eans?.[0] || null,
         alternative_eans: input.eans || [],
-        specs: { ...(modelData?.template_values || {}), ...(input.specs || {}) },
+        specs: !input.is_print3d && isSmartphoneModel({ category_name: (await categoryService.getById(modelData?.category_id || category_id))?.name }) ? stripModelOwnedSpecs(input.specs) : { ...(modelData?.template_values || {}), ...(input.specs || {}) },
         price_cost: input.price_cost,
         price_retail: input.price_retail,
         price_reseller: input.price_reseller,

@@ -515,6 +515,14 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--model-specs-only') || process.argv.includes('--model-specs-check')) {
+    await require('./scripts/deploy-model-specs.cjs').deployModelSpecs({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--model-specs-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--stock-restoration-family-only') || process.argv.includes('--stock-restoration-family-check')) {
     await require('./scripts/deploy-stock-restoration-family.cjs').deployStockRestorationFamily({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

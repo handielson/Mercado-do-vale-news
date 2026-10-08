@@ -76,7 +76,7 @@ async function ensureSmartphoneModelFamily(connection, { modelId, companyId, def
     const [[occupied]] = await connection.query('SELECT id FROM products WHERE sku=? LIMIT 1 FOR UPDATE', [sku]);
     if (occupied) throw conflict('O SKU reservado para o pai já está em uso. Confira o cadastro.');
   }
-  const specs = { ...object(model.template_values) };
+  const specs = {};
   for (const key of ['ram', 'ram_fisica', 'physical_ram', 'memoria_ram', 'memoria_ram_fisica', 'memory_ram', 'storage',
     'armazenamento', 'memoria', 'capacity', 'color', 'cor', 'colour', 'color_id', 'imei1', 'imei2', 'imei_1', 'imei_2', 'serial', 'bling_family', 'slug']) delete specs[key];
   const parent = { id: parentId, name: String(model.name).trim(), sku, model_id: modelId, company_id: company,

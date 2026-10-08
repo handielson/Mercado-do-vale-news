@@ -220,6 +220,7 @@ const NON_TEMPLATE_CATEGORY_KEYS = new Set([
     'meta_description',
     'meta_title',
     'model',
+    'mercado_livre',
     'name',
     'slug',
     'tags_venda',
@@ -1161,7 +1162,10 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         const loadFieldChoiceOptions = async () => {
             const nextOptions: Record<string, TableOption[]> = {};
 
-            customFields.forEach((field) => {
+            // Category fallback lists (such as versao) use the same canonical
+            // tables as registered fields and must also load their choices.
+            const choiceFields = [...customFields, ...buildCategoryFallbackFields(categoryConfig, customFields)];
+            choiceFields.forEach((field) => {
                 if (field.field_type === 'select' && Array.isArray(field.options)) {
                     nextOptions[field.key] = normalizeChoiceOptions(field.options
                         .filter(Boolean)
@@ -1169,7 +1173,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 }
             });
 
-            const relationFields = customFields.filter(field => field.field_type === 'table_relation' && field.table_config);
+            const relationFields = choiceFields.filter(field => field.field_type === 'table_relation' && field.table_config);
             await Promise.all(relationFields.map(async (field) => {
                 try {
                     const options = await tableDataService.loadOptions(
@@ -1198,7 +1202,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         return () => {
             cancelled = true;
         };
-    }, [customFields]);
+    }, [customFields, categoryConfig]);
 
     useEffect(() => {
         if (model) {

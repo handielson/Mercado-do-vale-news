@@ -492,7 +492,9 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     const intake = await loadIntake(request.params.id);
     if (!intake) return reply.code(404).send({ error: 'Pré-cadastro não encontrado' });
     if (intake.status === PHOTO_INTAKE_STATUS.COMPLETED) return toPublicIntake(intake);
-    await pool.query('UPDATE smartphone_photo_intakes SET status=?, error_message=NULL WHERE id=?', [PHOTO_INTAKE_STATUS.ANALYZING, intake.id]);
+    if (intake.status === PHOTO_INTAKE_STATUS.CANCELLED) return reply.code(409).send({ error: 'Este registro foi excluído da fila' });
+    const [claimed] = await pool.query("UPDATE smartphone_photo_intakes SET status=?, error_message=NULL WHERE id=? AND status NOT IN ('cancelled','completed','analyzing')", [PHOTO_INTAKE_STATUS.ANALYZING, intake.id]);
+    if (!claimed.affectedRows) return reply.code(409).send({ error: 'A leitura já está em andamento ou o registro saiu da fila' });
     try { return await analyzeIntake(intake); }
     catch (error) {
       await pool.query('UPDATE smartphone_photo_intakes SET status=?, retry_count=retry_count+1, error_message=? WHERE id=?',
@@ -501,9 +503,34 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     }
   });
 
+  // Remove only the queue entry. Keep provenance/photo references and all commercial records.
+  fastify.delete('/smartphone-photo-intakes/:id', { preHandler: requireSyncKey }, async (request, reply) => {
+    await ensureSchema();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query('SELECT * FROM smartphone_photo_intakes WHERE id=? FOR UPDATE', [request.params.id]);
+      const intake = rows[0];
+      if (!intake) { await connection.rollback(); return reply.code(404).send({ error: 'Pré-cadastro não encontrado' }); }
+      if (intake.status === PHOTO_INTAKE_STATUS.ANALYZING) {
+        await connection.rollback();
+        return reply.code(409).send({ error: 'Aguarde a leitura da foto terminar antes de excluir da fila' });
+      }
+      if (intake.status !== PHOTO_INTAKE_STATUS.CANCELLED) {
+        await connection.query('UPDATE smartphone_photo_intakes SET status=? WHERE id=?', [PHOTO_INTAKE_STATUS.CANCELLED, intake.id]);
+      }
+      await connection.commit();
+      return { id: intake.id, removed_from_queue: true, commercial_records_preserved: true };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally { connection.release(); }
+  });
+
   fastify.get('/smartphone-photo-intakes', { preHandler: requireSyncKey }, async (request) => {
     await ensureSchema();
     const conditions = []; const params = [];
+    if (request.query?.status !== 'cancelled') conditions.push("status <> 'cancelled'");
     if (request.query?.status && request.query.status !== 'all') { conditions.push('status = ?'); params.push(request.query.status); }
     if (request.query?.company_id) { conditions.push('company_id = ?'); params.push(request.query.company_id); }
     const [rows] = await pool.query(`SELECT * FROM smartphone_photo_intakes ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT 500`, params);
@@ -533,6 +560,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     await ensureSchema();
     const intake = await loadIntake(request.params.id);
     if (!intake) return reply.code(404).send({ error: 'Pré-cadastro não encontrado' });
+    if (['cancelled', 'completed'].includes(intake.status)) return reply.code(409).send({ error: 'Selecione um registro pendente da fila' });
     const body = { ...(request.body || {}) };
     if ('matched_model_id' in body && body.matched_model_id) {
       const [modelRows] = await pool.query('SELECT id,brand_id,name FROM models WHERE id=? AND active=1 LIMIT 1', [body.matched_model_id]);
@@ -624,7 +652,8 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       pricesConfirmed: Boolean(body.prices_confirmed ?? intake.prices_confirmed),
     });
     sets.push('status=?'); values.push(status); values.push(intake.id);
-    await pool.query(`UPDATE smartphone_photo_intakes SET ${sets.join(', ')} WHERE id=?`, values);
+    const [updated] = await pool.query(`UPDATE smartphone_photo_intakes SET ${sets.join(', ')} WHERE id=? AND status NOT IN ('cancelled','completed')`, values);
+    if (!updated.affectedRows) return reply.code(409).send({ error: 'O registro saiu da fila durante a conferência' });
     return toPublicIntake(await loadIntake(intake.id));
   });
 
@@ -632,6 +661,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     await ensureSchema();
     const intake = await loadIntake(request.params.id);
     if (!intake) return reply.code(404).send({ error: 'Pré-cadastro não encontrado' });
+    if (['cancelled', 'completed'].includes(intake.status)) return reply.code(409).send({ error: 'Selecione um registro pendente da fila' });
     if (!intake.matched_model_id || !intake.matched_color_id || !intake.detected_ram || !intake.detected_storage) {
       return reply.code(409).send({ error: 'Confirme modelo, RAM, armazenamento e cor antes de agrupar' });
     }
@@ -656,9 +686,9 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
           FOR UPDATE`,
         [intake.company_id || null, intake.matched_model_id, intake.matched_color_id, normalizedRam, normalizedStorage]
       );
-      if (groupRows.length === 0) {
+      if (!groupRows.some(row => row.id === intake.id)) {
         await connection.rollback();
-        return reply.code(409).send({ error: 'Nenhum aparelho disponível neste grupo' });
+        return reply.code(409).send({ error: 'O aparelho selecionado saiu da fila ou mudou de grupo' });
       }
       for (const row of groupRows) {
         const hasConfirmedCost = Number(row.id === intake.id ? prices.price_cost : row.price_cost) > 0;
@@ -725,6 +755,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     await ensureSchema();
     const intake = await loadIntake(request.params.id);
     if (!intake) return reply.code(404).send({ error: 'Pré-cadastro não encontrado' });
+    if (['cancelled', 'completed'].includes(intake.status)) return reply.code(409).send({ error: 'Selecione um registro pendente da fila' });
     if (!intake.matched_brand_id) return reply.code(409).send({ error: 'Confirme a marca primeiro' });
     const [rows] = await pool.query(
       `SELECT * FROM smartphone_brand_price_margins WHERE brand_id=? AND active=1
@@ -735,7 +766,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     const prices = calculateBrandPrices(request.body?.price_cost, rows[0]);
     await pool.query(
       `UPDATE smartphone_photo_intakes SET price_cost=?,price_retail=?,price_reseller=?,price_wholesale=?,prices_confirmed=0,
-       status=? WHERE id=?`,
+       status=? WHERE id=? AND status NOT IN ('cancelled','completed')`,
       [prices.price_cost, prices.price_retail, prices.price_reseller, prices.price_wholesale,
         PHOTO_INTAKE_STATUS.WAITING_PRICE_CONFIRMATION, intake.id]
     );
@@ -799,6 +830,10 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       const [intakeRows] = await connection.query('SELECT * FROM smartphone_photo_intakes WHERE id=? FOR UPDATE', [request.params.id]);
       const intake = parseIntakeRow(intakeRows[0]);
       if (!intake) { await connection.rollback(); return reply.code(404).send({ error: 'Pré-cadastro não encontrado' }); }
+      if (intake.status === PHOTO_INTAKE_STATUS.CANCELLED) {
+        await connection.rollback();
+        return reply.code(409).send({ error: 'Este registro foi excluído da fila' });
+      }
       if (intake.status === PHOTO_INTAKE_STATUS.COMPLETED && intake.unit_id) {
         await connection.commit();
         return { intake: toPublicIntake(intake), product_id: intake.matched_product_id, unit_id: intake.unit_id, idempotent: true };
@@ -890,8 +925,9 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
           return reply.code(409).send({ error: 'Este SKU já está em uso. Informe outro SKU ou vincule o produto existente.' });
         } else {
           productId = crypto.randomUUID();
+          const { stripModelOwnedSpecs } = await import('./smartphoneModelSpecs.mjs');
           const specs = {
-            ...template,
+            _price_group_network: stripModelOwnedSpecs({}, template)._price_group_network,
             color: intake.detected_color || undefined,
             color_id: intake.matched_color_id || undefined,
             ram: intake.detected_ram || undefined,

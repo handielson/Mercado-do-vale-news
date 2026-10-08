@@ -191,3 +191,26 @@ test('group update does not touch another memory, network or company', async t =
   assert.equal((await f.save(g, { ...sale, price_retail: 115000 })).statusCode, 200);
   assert.deepEqual(f.state().products.map(p => p.price_retail), [115000, 115000, 113200, 113200, 113200]);
 });
+test('product patch removes technical copies, rejects financial metadata tampering and retains operational custom fields', async t => {
+  const original = phone('LEGACY', { specs: { ram: '8GB', storage: '256GB', color: 'Verde', rede_operadora: '5G', nfc: 'Sim' },
+    custom_fields: { featured: true, inherit_parent_cost: true, provider_flag: 'keep', rede_operadora: '5G' } });
+  const f = fixture(t, { products: [original] });
+  const before = core.configuration(original, model).id;
+  await patchProductWithGroupPrices(f.pool, original.id, { specs: { ram: '8GB', storage: '256GB', rede_operadora: '4G', _price_group_network: '4G' }, custom_fields: { rede_operadora: '5G' } });
+  const saved = f.state().products[0];
+  const specs = core.object(saved.specs), custom = core.object(saved.custom_fields);
+  assert.equal(specs.rede_operadora, undefined); assert.equal(specs.nfc, undefined);
+  assert.equal(specs._price_group_network, '5G'); assert.equal(specs.color, 'Verde');
+  assert.equal(core.configuration(saved, model).id, before);
+  assert.deepEqual(custom, { featured: true, inherit_parent_cost: true, provider_flag: 'keep' });
+  assert.equal(saved.stock_quantity, original.stock_quantity); assert.equal(saved.price_cost, original.price_cost);
+  assert.equal(saved.price_retail, original.price_retail);
+});
+test('new smartphone writes use model-confirmed financial discriminator and do not persist technical template copies', async t => {
+  const f = fixture(t, { products: [] });
+  let saved;
+  await withSmartphonePriceWrite(f.pool, phone('NEW', { specs: { ram: '8GB', storage: '256GB', rede_operadora: '5G', _price_group_network: '5G', nfc: 'Sim' } }), async (_db, product) => { saved = product; });
+  assert.equal(saved.specs.rede_operadora, undefined); assert.equal(saved.specs.nfc, undefined);
+  assert.equal(saved.specs._price_group_network, '4G');
+  assert.equal(core.configuration(saved, model).network, '4g');
+});

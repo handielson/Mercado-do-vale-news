@@ -400,7 +400,7 @@ class VpsApiService {
   }
 
 
-  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; noCache?: boolean; preferProxy?: boolean; proxyOnly?: boolean; parent_id?: string; sku?: string; ean?: string; model_id?: string; bling_id?: string; favoritesOnly?: boolean; customerId?: string }): Promise<any[] | null> {
+  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; includeModelSpecs?: boolean; noCache?: boolean; preferProxy?: boolean; proxyOnly?: boolean; parent_id?: string; sku?: string; ean?: string; model_id?: string; bling_id?: string; favoritesOnly?: boolean; customerId?: string }): Promise<any[] | null> {
     const qs = new URLSearchParams();
     if (params?.category)  qs.set('category',  params.category);
     if (params?.status)    qs.set('status',     params.status);
@@ -408,6 +408,7 @@ class VpsApiService {
     if (params?.offset)    qs.set('offset',     String(params.offset));
     if (params?.search)    qs.set('search',     params.search);
     if (params?.compact)   qs.set('compact',    'true');
+    if (params?.includeModelSpecs) qs.set('include_model_specs', 'true');
     if (params?.parent_id) qs.set('parent_id',  params.parent_id);
     if (params?.sku)       qs.set('sku',         params.sku);
     if (params?.ean)       qs.set('ean',         params.ean);

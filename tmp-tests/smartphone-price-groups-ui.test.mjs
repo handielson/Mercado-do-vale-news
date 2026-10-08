@@ -43,6 +43,7 @@ try {
   try { await page.getByText('R15C8256A · Azul', { exact: true }).waitFor(); }
   catch (error) { console.log(JSON.stringify({ errors, body: (await page.locator('body').innerText()).slice(0, 1500) })); throw error; }
   assert.equal(await page.getByRole('textbox').count(), 3, 'cost must not have a bulk editor');
+  assert.equal(await page.locator('section strong').first().innerText(), '8GB · 256GB · global', 'historical financial network must not appear as a model characteristic');
   await page.getByText('Só divergências', { exact: false }).click();
   await page.getByText('Nenhum grupo divergente.').waitFor();
   await page.getByText('Só divergências', { exact: false }).click();

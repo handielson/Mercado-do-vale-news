@@ -43,7 +43,9 @@ test('cria pai uma vez e vincula cores/memorias preservando dados dos filhos',as
   const db=database();const before=structuredClone(db.state.rows);const r=await db.transaction({productId:'a'});
   assert.equal(r.created,true);assert.equal(r.linked_count,2);
   const parent=db.state.rows.find(p=>p.is_parent);assert.equal(parent.name,model.name);assert.equal(parent.stock_quantity,0);
-  assert.equal(parent.specs.nfc,'Sim');assert.equal(parent.specs.ram,undefined);assert.equal(parent.specs.color,undefined);
+  assert.equal(parent.specs.nfc,undefined);assert.equal(parent.specs.ram,undefined);assert.equal(parent.specs.color,undefined);
+  const {applySmartphoneModelSpecs}=await import('../services/smartphoneModelSpecs.mjs');
+  assert.equal(applySmartphoneModelSpecs(parent,model).specs.nfc,'Sim');
   for(const original of before)assert.deepEqual(db.state.rows.find(p=>p.id===original.id),{...original,parent_id:parent.id});
   const second=await db.transaction();assert.equal(second.created,false);assert.equal(second.linked_count,0);assert.equal(db.state.rows.length,3);
 });

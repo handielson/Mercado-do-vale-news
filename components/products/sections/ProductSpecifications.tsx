@@ -13,6 +13,7 @@ import { getCategoryDynamicSpecFields, getPrint3dDefaultSpecFields } from './cat
 import { TableRelationField } from '../../fields/TableRelationField';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { shouldAddSerializedFieldToBatchOnEnter } from '../serializedBatch.js';
+import { isVariationSpec, modelTechnicalSpecs } from '../../../services/smartphoneModelSpecs.mjs';
 
 interface ProductSpecificationsProps {
     categoryConfig: CategoryConfig | null;
@@ -468,7 +469,7 @@ export function ProductSpecifications({
                 )}
 
                 {/* VERSÃO */}
-                {shouldShowBaseSpecField('version') && !templateValues?.['version'] && (
+                {shouldShowBaseSpecField('version') && (isSmartphoneCategory || !templateValues?.['version']) && (
                     <div className="space-y-1 min-w-0">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             Versão {getBaseSpecRequirement('version') === 'required' && <span className="text-red-500">*</span>}
@@ -517,7 +518,7 @@ export function ProductSpecifications({
                 {isPrint3d && getPrint3dDefaultSpecFields(categoryConfig, customFields, templateValues)
                     .map(({ key, requirement }) => renderGenericField(key, requirement as FieldRequirement))}
                 {getCategoryDynamicSpecFields(categoryConfig, templateValues)
-                    .filter(({ key, requirement }) => !isSpecialField(key) && shouldRenderField(key, requirement as any))
+                    .filter(({ key, requirement }) => (!isSmartphoneCategory || isVariationSpec(key)) && !isSpecialField(key) && shouldRenderField(key, requirement as any))
                     .map(({ key, requirement }) => renderGenericField(key, requirement as any))
                 }
 
@@ -529,7 +530,7 @@ export function ProductSpecifications({
                         ?.filter((customField) => {
                             // Exclude UNIQUE_FIELDS that are already rendered above
                             // These fields appear in the batch entry grid
-                            return !BASE_SPEC_FIELD_KEYS.has(normalizeSpecFieldKey(customField.key));
+                            return (!isSmartphoneCategory || isVariationSpec(customField.key)) && !BASE_SPEC_FIELD_KEYS.has(normalizeSpecFieldKey(customField.key));
                         })
                         .map((customField) => {
                             if (customField.requirement === 'off') return null;
@@ -632,6 +633,21 @@ export function ProductSpecifications({
                             );
                         }))}
             </div>
+            {isSmartphoneCategory && (
+                <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-4">
+                    <h4 className="text-sm font-semibold text-blue-900">Características do modelo</h4>
+                    <p className="mt-1 text-xs text-blue-700">Estas informações vêm do cadastro do modelo. Altere o modelo para atualizar todas as variações.</p>
+                    <dl className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {Object.entries(modelTechnicalSpecs(templateValues)).map(([key, value]) => (
+                            <div key={key}>
+                                <dt className="text-xs text-slate-500">{customFields?.find(field => normalizeSpecFieldKey(field.key) === key)?.name || FIELD_METADATA[key]?.label || key.replace(/_/g, ' ')}</dt>
+                                <dd className="text-sm text-slate-800">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd>
+                            </div>
+                        ))}
+                    </dl>
+                    {!Object.keys(modelTechnicalSpecs(templateValues)).length && <p className="mt-3 text-sm text-slate-500">O modelo ainda não possui características técnicas preenchidas.</p>}
+                </div>
+            )}
         </div>
     );
 }

@@ -45,6 +45,10 @@ async function getById(id: string): Promise<SmartphonePhotoIntake> {
   return extractIntake(await vpsClient.get<IntakeResponse>(`/smartphone-photo-intakes/${encodeURIComponent(id)}`));
 }
 
+async function removeFromQueue(id: string): Promise<void> {
+  await vpsClient.delete(`/smartphone-photo-intakes/${encodeURIComponent(id)}`);
+}
+
 async function analyze(id: string): Promise<SmartphonePhotoIntake> {
   return extractIntake(await vpsClient.post<IntakeResponse>(
     `/smartphone-photo-intakes/${encodeURIComponent(id)}/analyze`,
@@ -128,6 +132,7 @@ export const smartphonePhotoIntakeService = {
   upload,
   list,
   getById,
+  removeFromQueue,
   analyze,
   retry,
   update,

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Save, Sparkles } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Save, Sparkles, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CurrencyInput } from '../../ui/CurrencyInput';
 import { ProtectedIntakePhoto } from './ProtectedIntakePhoto';
@@ -28,6 +28,7 @@ interface PhotoIntakeReviewCardProps {
   onRetry: () => Promise<void>;
   onRefreshColors: () => Promise<void>;
   onFinalize: (sku?: string) => Promise<void>;
+  onRemoveFromQueue: () => Promise<void>;
 }
 
 const TEXT_FIELDS: Array<{ key: keyof SmartphonePhotoIntakeUpdate; label: string; mono?: boolean }> = [
@@ -78,7 +79,10 @@ export function PhotoIntakeReviewCard({
   onRetry,
   onRefreshColors,
   onFinalize,
+  onRemoveFromQueue,
 }: PhotoIntakeReviewCardProps) {
+  const [confirmRemoval, setConfirmRemoval] = useState(false);
+  useEffect(() => { setConfirmRemoval(false); }, [intake.id]);
   const [draft, setDraft] = useState<SmartphonePhotoIntakeUpdate>(() => buildDraft(intake));
   const [selectedModelId, setSelectedModelId] = useState(intake.matched_model_id || '');
   const [sku, setSku] = useState('');
@@ -156,7 +160,7 @@ export function PhotoIntakeReviewCard({
     && !loadingPriceReference && !priceReferenceError && !priceReference?.divergent;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <section className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Conferência do aparelho</p>
@@ -169,9 +173,22 @@ export function PhotoIntakeReviewCard({
         </span>
       </div>
 
-      <div className="grid gap-6 p-5 xl:grid-cols-[minmax(260px,0.8fr)_minmax(420px,1.2fr)]">
-        <div className="space-y-4">
+      <div className="grid gap-6 p-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <div className="min-w-0 max-w-xl space-y-4 xl:max-w-none">
           <ProtectedIntakePhoto intakeId={intake.id} />
+          <div className="rounded-xl border border-slate-200 p-3">
+            {confirmRemoval ? (
+              <>
+                <p className="text-xs text-slate-600">Excluir somente este registro da fila? O produto, o aparelho, as vendas e o estoque continuam cadastrados. Os demais aparelhos do grupo serão mantidos.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" disabled={busy} onClick={() => void onRemoveFromQueue()} className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Confirmar exclusão da fila</button>
+                  <button type="button" disabled={busy} onClick={() => setConfirmRemoval(false)} className="rounded-lg border px-3 py-2 text-xs">Cancelar</button>
+                </div>
+              </>
+            ) : (
+              <button type="button" disabled={busy || intake.status === 'analyzing'} onClick={() => setConfirmRemoval(true)} className="inline-flex items-center gap-2 text-xs font-semibold text-red-700 disabled:opacity-50"><Trash2 size={14} />Excluir registro da fila</button>
+            )}
+          </div>
           <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
             Esta etiqueta é carregada por uma rota autenticada e não fica exposta como imagem pública.
           </div>
@@ -215,31 +232,31 @@ export function PhotoIntakeReviewCard({
           </button>
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <div>
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h3 className="font-bold text-slate-800">Dados identificados</h3>
               <button
                 type="button"
                 onClick={() => void onUpdate(draft)}
                 disabled={busy}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
                 <Save size={14} /> Salvar conferência
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
               {TEXT_FIELDS.map(field => (
-                <label key={field.key} className="block">
+                <label key={field.key} className="block min-w-0">
                   <span className="mb-1 block text-xs font-medium text-slate-500">{field.label}</span>
                   <input
                     value={String(draft[field.key] ?? '')}
                     onChange={event => setDraft(current => ({ ...current, [field.key]: event.target.value, review_confirmed: false }))}
-                    className={`h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 ${field.mono ? 'font-mono' : ''}`}
+                    className={`h-10 min-w-0 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 ${field.mono ? 'font-mono' : ''}`}
                   />
                 </label>
               ))}
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-xs font-medium text-slate-500">Cor do sistema</span>
                 <select
                   value={String(draft.matched_color_id || '')}
@@ -252,7 +269,7 @@ export function PhotoIntakeReviewCard({
                       review_confirmed: false,
                     }));
                   }}
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  className="h-10 min-w-0 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                 >
                   <option value="">
                     {draft.detected_color ? `Mapear cor identificada: ${draft.detected_color}` : 'Selecione uma cor'}

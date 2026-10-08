@@ -71,7 +71,7 @@ export function SmartphonePhotoIntakePage() {
 
   const loadQueue = useCallback(async () => {
     const rows = await smartphonePhotoIntakeService.list();
-    const sortedRows = sortPhotoIntakeQueue(rows);
+    const sortedRows = sortPhotoIntakeQueue(rows).filter(item => item.status !== 'cancelled');
     setItems(sortedRows);
     setSelectedId(current => current || sortedRows[0]?.id || null);
   }, []);
@@ -200,6 +200,19 @@ export function SmartphonePhotoIntakePage() {
       () => smartphonePhotoIntakeService.update(selected.id, input),
       input.prices_confirmed ? 'Preços confirmados.' : 'Conferência salva.',
     );
+  };
+
+  const removeSelectedFromQueue = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    try {
+      await smartphonePhotoIntakeService.removeFromQueue(selected.id);
+      setSelectedId(null);
+      await loadQueue();
+      toast.success('Registro excluído da fila. Produto, aparelho e estoque foram preservados.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível excluir o registro da fila.');
+    } finally { setBusy(false); }
   };
 
   const confirmSelectedPrices = async (input: SmartphonePhotoIntakePriceConfirmation, applyToGroup: boolean) => {
@@ -376,6 +389,7 @@ export function SmartphonePhotoIntakePage() {
                   )}
                   onRefreshColors={refreshColors}
                   onFinalize={finalizeSelected}
+                  onRemoveFromQueue={removeSelectedFromQueue}
                 />
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center text-sm text-slate-500">
