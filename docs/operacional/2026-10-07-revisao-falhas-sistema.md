@@ -8,8 +8,8 @@ Revisão em 07/10/2026. Não é auditoria integral. As consultas de produção f
 | 2 | Alta | Filtros `in_ids` e `min_price` das seções ignorados pela API | Publicado — v1.2.573-filtros-venda-imei |
 | 3 | Alta | Venda e baixa de IMEIs não são uma operação atômica | Publicado — v1.2.573-filtros-venda-imei |
 | 4 | Alta | Confirmação de WhatsApp iniciada antes da baixa dos aparelhos | Publicado — v1.2.574-whatsapp-pos-estoque |
-| 5 | Média | Categoria filtrada após buscar amostra limitada de produtos | Corrigido e testado localmente; publicação pendente |
-| 6 | Média | Recentes, novidades e mais vendidos não agrupam famílias | Corrigido e testado localmente; publicação pendente |
+| 5 | Média | Categoria filtrada após buscar amostra limitada de produtos | Publicado — v1.2.575-secoes-categorias-familias |
+| 6 | Média | Recentes, novidades e mais vendidos não agrupam famílias | Publicado — v1.2.575-secoes-categorias-familias |
 | 7 | Média | Reordenação das seções com gravações independentes | Pendente |
 | 8 | Média | Fallback de produtos em cache sem conferir validade | Pendente |
 
@@ -62,4 +62,4 @@ Teste existente de expansao ampliado para executar o service real com 300 produt
 
 Em 08/10/2026, CatalogSectionComponent passou a usar groupProductsByVariants em todas as secoes, removendo a excecao para recent/new/bestsellers. Fonte da identidade: productGroupingCore, com parent_id e parent_name quando existe pai cadastrado, e os fallbacks existentes para produtos independentes. Mantido agrupador canonico, sem nova regra de nome ou alteracao de cadastros. Cada familia ocupa um card e mantem as memorias, cores e precos das variacoes disponiveis retornadas pela consulta. Limite de cards aplicado depois de agrupar; ordem das familias segue a primeira variacao na ordenacao recebida. Busca usa a mesma amostra das demais secoes agrupadas, ate 200 produtos; nao e uma consulta ilimitada de todos os filhos do catalogo.
 
-Protecao em tmp-tests/catalog-sections-family-grouping.test.mjs executa o agrupador real e o calculo de cards da secao. Valida os tres tipos, limite de familias, produtos independentes, nome do pai, memorias, cores, precos individuais e exclusao de inativos/sem estoque. Regressoes de categoria do item 5, nome de familia, modelos genericos, carregamento e build passaram. Itens 5 e 6 aguardam publicacao. Nenhum dado real alterado.
+Protecao em tmp-tests/catalog-sections-family-grouping.test.mjs executa o agrupador real e o calculo de cards da secao. Valida os tres tipos, limite de familias, produtos independentes, nome do pai, memorias, cores, precos individuais e exclusao de inativos/sem estoque. Regressoes de categoria do item 5, nome de familia, modelos genericos, carregamento e build passaram. Itens 5 e 6 publicados em v1.2.575-secoes-categorias-familias (07f699af), com homepage validada sem erros de console. Nenhum dado real alterado.

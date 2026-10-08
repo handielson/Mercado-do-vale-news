@@ -2,11 +2,49 @@
 
 Data: 2026-10-08. Branch: main. Tag: v1.2.575-secoes-categorias-familias.
 Release VPS: /var/www/mdv-site/releases/20261008-030814-secoes-categorias-familias
-Status: preparada; aguardando deploy e validacao publica.
+Status: publicada e validada em producao.
 
 Itens 5 e 6: secoes enviam category com selecionadas e subcategorias diretas antes da consulta limitada; produtos fixados mantem prioridade. Todas as secoes usam agrupador canonico por familia: nome do pai, memorias, cores e precos preservados; limite conta cards depois do agrupamento. Amostra ate 200 produtos, mesmas regras das demais secoes agrupadas, sem promessa de todos os filhos fora da amostra. Cache de produtos de secoes v8 invalida amostras anteriores.
 
 Testes comportamentais com service/agrupador reais e dados sinteticos, incluindo 300 produtos alheios antes da categoria, limite de familias e preservacao das variacoes. Oito testes HTTP de filtros e privacidade aprovados; regressoes de nome, modelo generico, configuracao publica/CRUD e carregamento. Sintaxe, build e trava Supabase. Apenas site; sem API/restart ou alteracao de dados comerciais. Quatro arquivos Shopee preexistentes preservados.
+
+Codigo 07f699af e tag enviados a origin/main. Release ativa; home HTTP 200 e VERSION correta. Navegador autenticado confirmou secao Smartphones com memorias/cores e Mais Recentes com card Suporte Flange reunindo Cinza/Preto. Console sem erros. Evidencia .local/secoes-familias-publicado.png. API nao publicada nem reiniciada. Nenhum cadastro ou estoque alterado. Aviso conhecido Browserslist antigo. Skill sem alteracao.
+
+Limpeza: 0 remocoes; 34 worktrees bloqueadas preservadas. Main sincronizado, quatro arquivos Shopee preexistentes fora do escopo.
+- `C:/tmp/mdv-model-fix-clean`: `dirty`.
+- `C:/tmp/mdv-phone-filter`: `dirty`.
+- `C:/tmp/mdv-publish-surgical-20260612-b`: `dirty`.
+- `C:/tmp/mdv-refactor-repair-20260612`: `dirty`.
+- `C:/tmp/mdv-virtual-ram-deploy`: `dirty`.
+- `C:/Users/Nitro/Documents/Codex/2026-10-02/task/ml-local-preview`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-phone-memory-filter-20260801`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-price-followup-20260716`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-product-search-specialist-20260725`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-remove-generic-freight-example-20260718`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/sale-message-order-number-20260716`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mdv-perf-main`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-admin-app`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-displays-pix`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-sales-push-20260728`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/autoresponder-integrate`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/autoresponder-reformulation`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/meta-smartphones-sem-preco-20260825`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/new-model-regressions`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/pdp-model-shortcut-publish`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/pdv-sale-repair-publish`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-autoresponder-editable`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-family-page-jump`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-receipt-private-payment-20260613`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-sales-summary-20260613`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-whatsapp-order`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/repair-refactor-product-build`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/signed-warranty-synology`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/system-backup-admin-20260613`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/tiktok-bulk-release-20260727`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/tiktok-shop-foundation`: `not_merged_into_origin_main`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-n8n-context-handoff-fix`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-publish-novo-bot`: `dirty`.
+- `C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-status-contacts-fix`: `dirty`.
 
 ## Release anterior
 
