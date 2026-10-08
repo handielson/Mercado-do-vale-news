@@ -10,8 +10,8 @@ Revisão em 07/10/2026. Não é auditoria integral. As consultas de produção f
 | 4 | Alta | Confirmação de WhatsApp iniciada antes da baixa dos aparelhos | Publicado — v1.2.574-whatsapp-pos-estoque |
 | 5 | Média | Categoria filtrada após buscar amostra limitada de produtos | Publicado — v1.2.575-secoes-categorias-familias |
 | 6 | Média | Recentes, novidades e mais vendidos não agrupam famílias | Publicado — v1.2.575-secoes-categorias-familias |
-| 7 | Média | Reordenação das seções com gravações independentes | Corrigido e validado localmente — publicação pendente |
-| 8 | Média | Fallback de produtos em cache sem conferir validade | Corrigido e validado localmente — publicação pendente |
+| 7 | Média | Reordenação das seções com gravações independentes | Publicado — v1.2.576-secoes-ordem-cache |
+| 8 | Média | Fallback de produtos em cache sem conferir validade | Publicado — v1.2.576-secoes-ordem-cache |
 
 ## Item 1 — proteção de preços na resposta
 
@@ -79,3 +79,5 @@ Em 08/10/2026, services/catalogSectionsService.ts centralizou a leitura do cache
 Sem cache valido, a falha e propagada para CatalogSectionComponent em vez de retornar [] e ocultar silenciosamente a secao. A tela limpa produtos anteriores, mostra aviso e botao Tentar novamente, que consulta a API ignorando o cache inicial. Se essa consulta falha mas ainda existe cache valido, exibe os dados com aviso de que precos/disponibilidade podem ter mudado. Sucesso limpa o aviso; uma consulta bem-sucedida sem produtos continua ocultando a secao vazia. Resultados de requisicoes anteriores nao substituem o estado atual apos troca de usuario/secao ou nova tentativa.
 
 Quatro testes em tmp-tests/catalog-sections-cache-validity.test.cjs executam o service real com relogio/localStorage/transporte simulados e o carregamento real do componente: limite exato, cache invalido/futuro, nao renovacao da idade, isolamento autenticado, renovacao apos sucesso, aviso de fallback, limpeza de dados/avisos e resultado cancelado. Junto com categoria, familias, carregamento e item 7, passaram 12 testes e o build com verificacao de ausencia de Supabase no runtime. Publicacao pendente; nenhum preco, estoque ou dado de producao alterado.
+
+Itens 7 e 8 publicados em v1.2.576-secoes-ordem-cache (aee295dc), API seletiva e site validados. Quinze testes passaram; teste publico somente leitura/rejeicao de corpo invalido, sem alterar a ordem real. Main sincronizada e arquivos Shopee preexistentes preservados.
