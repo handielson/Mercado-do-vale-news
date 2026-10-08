@@ -97,7 +97,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'me
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.title.trim()) { alert('Por favor, preencha o título'); return; }
+        if (!formData.title.trim()) { alert('Por favor, preencha o nome do banner'); return; }
         if (!formData.image_url.trim()) { alert('Por favor, adicione uma imagem'); return; }
 
         setIsSaving(true);
@@ -172,15 +172,13 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'me
                                 >
                                     <img
                                         src={imagePreview}
-                                        alt="Preview"
+                                        alt={formData.title || 'Prévia do banner'}
                                         className="w-full h-full object-contain"
                                         style={{ backgroundColor: formData.background_color }}
                                     />
+                                    {formData.subtitle.trim() && (
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
                                         <div className="absolute bottom-0 left-0 right-0 p-6">
-                                            <h2 className="text-white text-2xl font-bold drop-shadow-lg">
-                                                {formData.title || 'Título do banner'}
-                                            </h2>
                                             {formData.subtitle && (
                                                 <p className="text-white/90 text-base drop-shadow-lg mt-1">
                                                     {formData.subtitle}
@@ -188,6 +186,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'me
                                             )}
                                         </div>
                                     </div>
+                                    )}
                                     <div className="absolute top-3 right-3 px-2 py-1 rounded-full bg-black/30 text-white text-xs font-semibold">
                                         1 / 1
                                     </div>
@@ -283,7 +282,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'me
 
                     {/* Title */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Título *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Nome do banner (uso interno) *</label>
                         <input
                             type="text"
                             value={formData.title}
@@ -292,12 +291,13 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, storefront = 'me
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             required
                         />
+                        <p className="mt-2 text-xs text-gray-500">Identifica o banner no painel. Não aparece sobre a imagem no site.</p>
                     </div>
 
                     {/* Subtitle */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Subtítulo <span className="text-gray-400 font-normal">(opcional)</span>
+                            Texto sobre a imagem <span className="text-gray-400 font-normal">(opcional)</span>
                         </label>
                         <input
                             type="text"

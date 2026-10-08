@@ -1,3 +1,17 @@
+# v1.2.570-banner-nome-interno
+
+Data: 2026-10-07. Branch: main. Tag: v1.2.570-banner-nome-interno.
+Release VPS: /var/www/mdv-site/releases/20261008-010747-banner-nome-interno
+Status: preparada para publicacao.
+
+O nome obrigatorio identifica o banner no painel e continua como texto alternativo da imagem. Nao aparece sobre a arte, nem gera gradiente escuro. Previa segue a mesma regra. Texto sobre a imagem continua opcional. Links e dados dos banners preservados; somente frontend, sem deploy da API.
+
+Validacoes: render real do formulario e carrossel, imagem sem titulo/gradiente quando texto opcional vazio; texto escolhido preservado. Regressoes de links, imagem responsiva e cor de fundo. Build com trava Supabase. Aviso preexistente de fetchPriority no render SSR React; nao bloqueia testes.
+
+Quatro arquivos preexistentes de impressao Shopee fora do escopo.
+
+## Release anterior
+
 # v1.2.569-secoes-publicas
 
 Data: 2026-10-07. Branch: main. Tag: v1.2.569-secoes-publicas.

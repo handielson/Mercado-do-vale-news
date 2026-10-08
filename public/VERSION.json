@@ -1,34 +1,28 @@
 {
-  "version": "v1.2.569-secoes-publicas",
+  "version": "v1.2.570-banner-nome-interno",
   "date": "2026-10-07",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.569-secoes-publicas",
-  "release_vps": "/var/www/mdv-site/releases/20261008-004437-secoes-publicas",
+  "tag": "v1.2.570-banner-nome-interno",
+  "release_vps": "/var/www/mdv-site/releases/20261008-010747-banner-nome-interno",
   "release_print3d_vps": null,
-  "summary": "Pagina inicial usa secoes cadastradas no painel, respeitando filtros e ordem.",
+  "summary": "Nome do banner identifica no painel sem sobrepor a arte.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "services/catalogSectionsService.ts",
-    "services/vpsClient.ts",
-    "services/vpsTransport.js",
-    "server.js",
-    "vps_server.js",
-    "vps_server.cjs",
-    "deploy-vps-server-only.cjs",
-    "scripts/deploy-catalog-sections.cjs",
-    "tmp-tests/catalog-sections-public-config.test.mjs",
+    "components/admin/BannerForm.tsx",
+    "components/catalog/BannerCarousel.tsx",
+    "tmp-tests/banner-internal-name.test.cjs",
+    "tmp-tests/banner-storefront-browser.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-07-v1.2.569-secoes-publicas.md"
+    "docs/versoes/2026-10-07-v1.2.570-banner-nome-interno.md"
   ],
   "validations": [
-    "Secoes publicas respeitam configuracao, ordem e lista vazia",
-    "Rota somente leitura sem user_id; deploy seletivo idempotente",
-    "Regressoes de categorias e carregamento das secoes",
-    "Build e trava Supabase; validacao publica apos deploy"
+    "Render dos componentes reais: nome interno, imagem limpa e texto opcional",
+    "Regressoes de links, ajuste da imagem e cor de fundo",
+    "Build com trava Supabase; versao e vitrine publica apos deploy"
   ]
 }
