@@ -42,8 +42,8 @@ for (const relativePath of CONFIGS) {
   assert.ok(productTrailingSlashRuleIndex < productSeoRuleIndex, `${relativePath} must normalize product URLs before proxying SEO HTML`);
   assert.match(
     config,
-    /location \^~ \/categoria-produtos\/ \{[\s\S]*return 301 https:\/\/www\.mercadodovale\.com\.br\/produtos;\s*}/,
-    `${relativePath} must permanently redirect legacy category URLs to the catalog`
+    /location \^~ \/categoria-produtos\/ \{\s*proxy_pass http:\/\/127\.0\.0\.1:4000\/api\/seo-legacy-category;\s*proxy_set_header X-Original-URI \$request_uri;/,
+    `${relativePath} must resolve legacy categories from the current category registry`
   );
   assert.match(
     config,

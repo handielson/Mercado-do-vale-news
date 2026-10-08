@@ -539,6 +539,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--seo-soft-404-only') || process.argv.includes('--seo-soft-404-check')) {
+    await require('./scripts/deploy-seo-soft-404.cjs').deploySeoSoft404({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--seo-soft-404-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--product-read-privacy-only') || process.argv.includes('--product-read-privacy-check')) {
     await require('./scripts/deploy-product-read-privacy.cjs').deployProductReadPrivacy({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
@@ -792,6 +800,7 @@ async function main() {
   await upload(path.join(__dirname, 'services/customerPhoneVerificationServer.cjs'), remotePathJoin(appDir, 'services/customerPhoneVerificationServer.cjs'));
   await upload(path.join(__dirname, autoresponderCatalogPreferencesPath), remotePathJoin(appDir, autoresponderCatalogPreferencesPath));
   console.log(`Uploaded ${autoresponderCatalogPreferencesPath}`);
+  await upload(path.join(__dirname, 'services/legacyCatalogSeo.cjs'), remotePathJoin(appDir, 'services/legacyCatalogSeo.cjs'));
   await uploadSmartphonePhotoIntakeFiles(appDir);
   await uploadMercadoLivreFiles(appDir);
   await exec(`mkdir -p ${appDir}/services ${appDir}/utils`);

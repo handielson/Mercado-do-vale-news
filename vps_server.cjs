@@ -14305,6 +14305,8 @@ function removeExistingSeoHeadTags(html) {
     .replace(/<meta[^>]*name=["']twitter:[^"']+["'][^>]*>/gi, '');
 }
 
+require('./services/legacyCatalogSeo.cjs').registerLegacyCatalogSeo(fastify, { pool });
+
 fastify.get('/api/seo-produto', async (request, reply) => {
   const slug = String(request.query?.slug || '').trim();
   if (!slug) {
@@ -14324,6 +14326,11 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     }
 
     const baseUrl = buildSeoBaseUrl(request);
+    if (String(request.query?.legacy || '') === '1') {
+      const routeTarget = product.seo_route_target || product.slug || slug;
+      return reply.header('Cache-Control', 'no-store').code(301)
+        .header('Location', `${baseUrl}/produto/${encodeURIComponent(routeTarget)}`).send();
+    }
     const publicImages = await loadSeoProductImages(product, baseUrl);
     const keywords = normalizeSeoKeywords(product.keywords || product.seo_keywords);
     const title = product.meta_title || `${product.name} | Mercado do Vale`;

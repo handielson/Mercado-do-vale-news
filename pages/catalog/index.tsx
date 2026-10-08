@@ -39,6 +39,7 @@ import {
     getCatalogPaginationPathname,
     needsCatalogPageData,
     normalizeCatalogPage,
+    isCatalogPageOutOfRange,
     shouldRestoreCatalogState,
 } from './catalogPagination.js';
 import { mergeCategoryDisplayCounts } from './catalogCategoryCounts.js';
@@ -456,6 +457,15 @@ function CatalogContent() {
     }, [currentPage, lastPageForNavigation]);
     const showPagination = isPaginatedCatalogMode && (hasPreviousPage || hasNextPage || paginationPages.length > 1);
     const isCatalogGridLoading = (loading && productGroups.length === 0) || needsMoreGroupsForPage;
+    const catalogPageOutOfRange = isCatalogPageOutOfRange({
+        page: currentPage,
+        itemCount: visibleGroups.length,
+        loading,
+        fetching,
+        hasMore,
+        error,
+        paginated: isPaginatedCatalogMode,
+    });
     const isAllProductsListing = !filters.categories.length && !hasActiveSearch;
     const showDesktopCategoryNav = !hasActiveSearch;
     const paginationPathname = getCatalogPaginationPathname({
@@ -565,6 +575,7 @@ function CatalogContent() {
             <Helmet>
                 <title>{catalogSeo.title}</title>
                 <meta name="description" content={catalogSeo.description} />
+                <meta name="robots" content={catalogPageOutOfRange ? 'noindex, follow' : 'index, follow'} />
                 <link rel="canonical" href={catalogSeo.canonical} />
                 <meta property="og:title" content={catalogSeo.ogTitle} />
                 <meta property="og:description" content={catalogSeo.ogDescription} />

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev-local.cjs",
-    "prebuild": "node scripts/assert-no-supabase-runtime.cjs",
+    "prebuild": "node scripts/assert-no-supabase-runtime.cjs && node scripts/sync-nginx-spa-routes.cjs --check",
     "build": "vite build",
     "test:company-fiscal": "node --test tmp-tests/company-fiscal.test.cjs tmp-tests/fiscal-certificate-vault.test.cjs tmp-tests/fiscal-csc-vault.test.cjs tmp-tests/danfe-nfce.test.cjs tmp-tests/fiscal-nfce-numbering.test.cjs tmp-tests/fiscal-nfce-access-key.test.cjs tmp-tests/fiscal-nfce-schema.test.cjs tmp-tests/fiscal-nfce-draft.test.cjs tmp-tests/fiscal-nfce-signing.test.cjs tmp-tests/fiscal-nfce-authorization.test.cjs tmp-tests/fiscal-nfce-persistence.test.cjs tmp-tests/fiscal-nfce-transmission.test.cjs tmp-tests/fiscal-nfce-routes.test.cjs tmp-tests/fiscal-nfce-sale-preflight.test.cjs tmp-tests/fiscal-nfce-sale-preparation.test.cjs tmp-tests/fiscal-nfce-danfe-read.test.cjs tmp-tests/bling-fiscal-tax-reference.test.cjs tmp-tests/company-data-separation-static.test.mjs tmp-tests/fiscal-tax-validation.test.cjs",
     "test:system-backup-admin": "node tmp-tests/system-backup-admin-static.test.mjs && node --test tmp-tests/system-backup-policy.test.cjs",

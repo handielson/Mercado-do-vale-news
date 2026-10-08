@@ -20,6 +20,13 @@ export function getCatalogPageSlice(items, page, pageSize) {
   };
 }
 
+// Wait for all raw batches: several variations can become a single card.
+// API failures and loading states must not mark valid pages as absent.
+export function isCatalogPageOutOfRange({ page, itemCount, loading, fetching, hasMore, error, paginated }) {
+  return paginated && normalizeCatalogPage(page) > 1 && itemCount === 0
+    && !loading && !fetching && !hasMore && !error;
+}
+
 export function buildCatalogPageHref({ pathname = '/', searchParams, page }) {
   const params = new URLSearchParams(searchParams);
   const normalizedPage = normalizeCatalogPage(page);
