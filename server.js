@@ -20657,16 +20657,19 @@ fastify.delete('/images/file', { preHandler: requireSyncKey }, async (req, reply
 });
 
 // ─── Company Settings ──────────────────────────────────────────────────────
+const { companySettingsReadSql, selectBotCompanySettings } = require('./services/companySettingsBotView.cjs');
 fastify.get('/company-settings', { preHandler: requireSyncKey }, async (req, reply) => {
-  const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
+  const [rows] = await pool.query(companySettingsReadSql(req.query?.view));
   reply.header('Cache-Control', 'no-store');
-  return redactTikTokShopSecretsFromCompanySettingsVps(rows[0] || null);
+  const settings = redactTikTokShopSecretsFromCompanySettingsVps(rows[0] || null);
+  return req.query?.view === 'bot' ? selectBotCompanySettings(settings) : settings;
 });
 
 fastify.get('/public/company-settings', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
-  const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
+  const [rows] = await pool.query(companySettingsReadSql(req.query?.view));
   reply.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
-  return sanitizePublicCompanySettings(rows[0] || null);
+  const settings = sanitizePublicCompanySettings(rows[0] || null);
+  return req.query?.view === 'bot' ? selectBotCompanySettings(settings) : settings;
 });
 
 // ─── Company Settings (PATCH) ─────────────────────────────────────────────

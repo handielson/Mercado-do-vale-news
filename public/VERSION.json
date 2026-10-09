@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.591-bling-refresh-safe",
+  "version": "v1.2.592-n8n-memoria",
   "date": "2026-10-09",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.591-bling-refresh-safe",
-  "release_vps": "/var/www/mdv-site/releases/20261009-193318-bling-refresh-safe",
+  "tag": "v1.2.592-n8n-memoria",
+  "release_vps": "/var/www/mdv-site/releases/20261009-201153-n8n-memoria",
   "release_print3d_vps": null,
-  "summary": "Renovacao Bling na API interrompe falhas sem reutilizar token antigo; validacao antes de salvar.",
+  "summary": "Bot consulta configuracoes sem imagens ou templates; heap n8n ampliado para 6 GB com backup e reinicio protegido.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -16,18 +16,18 @@
     "vps_server.js",
     "vps_server.cjs",
     "deploy-vps-server-only.cjs",
-    "scripts/deploy-bling-refresh-safe.cjs",
-    "package.json",
-    "tmp-tests/bling-vps-refresh-failure.test.cjs",
-    "tmp-tests/seo-parent-family.test.cjs",
-    "tmp-tests/vps-bling-oauth-fastify-static.test.mjs",
+    "services/companySettingsBotView.cjs",
+    "scripts/deploy-company-settings-bot.cjs",
+    "scripts/n8n-memory-recovery.cjs",
+    "tmp-tests/company-settings-bot-view.test.cjs",
+    "tmp-tests/n8n-memory-recovery.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-09-v1.2.591-bling-refresh-safe.md"
+    "docs/versoes/2026-10-09-v1.2.592-n8n-memoria.md"
   ],
   "validations": [
-    "122 testes de regressao; 43 contratos de renovacao/deploy.",
-    "Sintaxe API, OAuth, estoque e detalhe de produto.",
-    "Build, deploy seletivo com backup e verificacao publica."
+    "Rotas reais: SQL projetado, dados de atendimento preservados, sanitizacao publica e contrato legado.",
+    "Patch n8n idempotente, quatro consultas, flags de heap e guardas de rollback.",
+    "Schema real, sintaxe, build, dry-run, backups, deploy seletivo e validacao publicada."
   ]
 }

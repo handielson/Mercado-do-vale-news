@@ -579,6 +579,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--company-settings-bot-only') || process.argv.includes('--company-settings-bot-check')) {
+    await require('./scripts/deploy-company-settings-bot.cjs').deployCompanySettingsBot({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--company-settings-bot-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--bling-refresh-safe-only') || process.argv.includes('--bling-refresh-safe-check')) {
     await require('./scripts/deploy-bling-refresh-safe.cjs').deployBlingRefreshSafe({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

@@ -1,4 +1,14 @@
-# v1.2.591-bling-refresh-safe
+# v1.2.592-n8n-memoria
+
+Data: 09/10/2026. Branch: main. Tag: v1.2.592-n8n-memoria.
+Release: /var/www/mdv-site/releases/20261009-201153-n8n-memoria.
+Status: preparada para publicacao.
+
+Rotas company-settings existentes recebem modo optativo view=bot com projecao SQL de horarios, endereco e Pix; nao leem imagens/templates/credenciais de integracao nesse modo. Modo padrao continua igual e sanitizacao publica permanece obrigatoria. Quatro chamadas do workflow ativo passam ao modo enxuto; conexoes, conversas e politicas preservadas. Heap do processo principal n8n passa de aproximadamente 4 GB para 6 GB mantendo os outros argumentos e limite de concorrencia 10/pool 10.
+
+Teste de rotas com midia grande reproduz carga desnecessaria no handler anterior; teste de projecao, campos e public sanitization, patch idempotente, schema MySQL real, sintaxe e build. Aplicacao protegida por backups, zero execucoes pendentes e rollback seletivo. Detalhes em docs/versoes/2026-10-09-v1.2.592-n8n-memoria.md. Quatro arquivos Shopee preexistentes fora do escopo.
+
+## Release anterior: v1.2.591-bling-refresh-safe
 
 Data: 09/10/2026. Branch: main. Tag: v1.2.591-bling-refresh-safe.
 Release: /var/www/mdv-site/releases/20261009-193318-bling-refresh-safe.
