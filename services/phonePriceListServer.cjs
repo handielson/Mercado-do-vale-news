@@ -68,7 +68,7 @@ function buildPriceListGroups(rows, requestedGroups, brands = DEFAULT_BRANDS, pr
   const groups = new Map();
   for (const product of eligible) {
     const brand = resolveBrand(product);
-    if (!brands.includes(brand)) continue;
+    if (brands && !brands.some(selected => normalize(selected) === normalize(brand))) continue;
     const identity = productIdentity(product);
     const modelId = String(product.model_id || '').trim();
     // Registered model + physical memory is the commercial configuration;
@@ -90,8 +90,10 @@ function validateSelection(body = {}) {
   const layout = body.layout ?? (priceMode === 'cash' ? 'cards' : 'list');
   if (!['none', 'cash', 'card'].includes(priceMode)) throw failure('Selecione sem preço, à vista ou cartão.');
   if (!['cards', 'list'].includes(layout) || (layout === 'cards' && priceMode !== 'cash')) throw failure('Tipo de layout inválido.');
-  const brands = body.brands ?? DEFAULT_BRANDS;
-  if (!Array.isArray(brands) || !brands.length || brands.some((b) => !DEFAULT_BRANDS.includes(b))) throw failure('Selecione Xiaomi, POCO ou realme.');
+  if (body.brandMode !== undefined && !['all', 'selected'].includes(body.brandMode)) throw failure('Seleção de marcas inválida.');
+  const brands = body.brandMode === 'all' ? null : (body.brands ?? DEFAULT_BRANDS);
+  if (brands !== null && (!Array.isArray(brands) || !brands.length || brands.length > 200
+    || brands.some(b => typeof b !== 'string' || !b.trim() || b.length > 100))) throw failure('Selecione ao menos uma marca válida.');
   const groups = body.groups;
   if (groups !== undefined && priceMode !== 'cash') throw failure('Seleção do bot exige preço à vista.');
   if (groups !== undefined) {
@@ -109,7 +111,8 @@ function validateSelection(body = {}) {
     }
     if (ids.size > 2000) throw failure('A lista excede 2000 produtos.');
   }
-  return { brands: [...new Set(brands)], groups, priceMode, layout };
+  return { brands: brands === null ? null : [...new Set(brands.map(b => b.trim()))], groups, priceMode, layout,
+    ...(body.brandMode !== undefined ? { brandMode: body.brandMode } : {}) };
 }
 
 async function readPublicImage(value) {
@@ -155,6 +158,8 @@ function createPhonePriceListGenerator(dependencies) {
       LEFT JOIN categories c ON c.id=p.category_id LEFT JOIN brands b ON b.id=p.brand
       LEFT JOIN models m ON m.id=p.model_id
       WHERE p.status='active' ${ids ? 'AND p.id IN (?)' : ''} ORDER BY p.name,p.id`, ids ? [ids] : []);
+    const availableBrands = [...new Set(rows.filter(p => isEligible(p, selection.priceMode !== 'none')).map(resolveBrand))]
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
     const groups = buildPriceListGroups(rows, selection.groups, selection.brands, selection.priceMode);
     if (selection.priceMode === 'card' && groups.length) {
       if (!dependencies.calculateCardInstallment) throw failure('Cálculo de cartão indisponível.', 503);
@@ -165,7 +170,7 @@ function createPhonePriceListGenerator(dependencies) {
         if (!group.cardPlan) throw failure('Cadastre as taxas presenciais de cartão para gerar esta tabela.', 409);
       }
     }
-    if (!groups.length) return { ok: true, items: [], productCount: 0, generatedAt: new Date().toISOString(), warnings: ['Nenhum celular disponível para as marcas selecionadas.'] };
+    if (!groups.length) return { ok: true, items: [], availableBrands, productCount: 0, generatedAt: new Date().toISOString(), warnings: ['Nenhum celular disponível para as marcas selecionadas.'] };
     const [[company]] = await pool.query('SELECT phone,logo,watermark_url,social_website FROM company_settings LIMIT 1');
     if (!company?.phone) throw failure('Cadastre o WhatsApp oficial nos dados da empresa.', 409);
     const generatedAt = new Date();
@@ -230,7 +235,7 @@ function createPhonePriceListGenerator(dependencies) {
             caption: '',
             offsetSeconds: items.length * 10 });
         }
-        return { ok: true, items, generatedAt: generatedAt.toISOString(), productCount: groups.length, warnings };
+        return { ok: true, items, availableBrands, generatedAt: generatedAt.toISOString(), productCount: groups.length, warnings };
       } finally { activeJobs -= 1; }
     })();
     inFlight.set(requestKey, job);

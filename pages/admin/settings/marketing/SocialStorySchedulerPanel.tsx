@@ -13,6 +13,7 @@ import {
   type SocialStoryDraftItem,
   type SocialStorySchedule,
   type PhonePriceListBrand,
+  type PhonePriceListBrandMode,
   type PhonePriceListMode,
   type PhonePriceListLayout,
   type PhonePriceListPreview,
@@ -76,7 +77,9 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
   const isTables = purpose === 'tables';
   const [showTableSchedule, setShowTableSchedule] = useState(false);
   const [mode, setMode] = useState<'catalog' | 'standalone' | 'whatsapp_campaign' | 'phone_price_list'>(isTables ? 'phone_price_list' : 'catalog');
-  const [phoneBrands, setPhoneBrands] = useState<PhonePriceListBrand[]>(['Xiaomi', 'POCO', 'realme']);
+  const [phoneBrands, setPhoneBrands] = useState<PhonePriceListBrand[]>([]);
+  const [phoneBrandMode, setPhoneBrandMode] = useState<PhonePriceListBrandMode>('all');
+  const [availablePhoneBrands, setAvailablePhoneBrands] = useState<PhonePriceListBrand[]>([]);
   const [phonePriceMode, setPhonePriceMode] = useState<PhonePriceListMode>('cash');
   const [phoneLayout, setPhoneLayout] = useState<PhonePriceListLayout>('cards');
   const [phonePreview, setPhonePreview] = useState<PhonePriceListPreview | null>(null);
@@ -136,17 +139,18 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
   };
 
   const previewPhonePriceList = async () => {
-    if (busy || !phoneBrands.length) return;
+    if (busy || (phoneBrandMode === 'selected' && !phoneBrands.length)) return;
     const requestId = ++previewRequestRef.current;
     setBusy(true);
     setItems([]);
     setPhonePreview(null);
     try {
-      const preview = await socialStoryScheduleService.previewPhonePriceList(phoneBrands, phonePriceMode, phoneLayout);
+      const preview = await socialStoryScheduleService.previewPhonePriceList(phoneBrands, phonePriceMode, phoneLayout, phoneBrandMode);
       if (requestId !== previewRequestRef.current) return;
       unavailableMediaRef.current.clear();
       setItems(preview.items);
       setPhonePreview(preview);
+      setAvailablePhoneBrands(preview.availableBrands || []);
       if (!preview.items.length) toast.info('Nenhum celular disponível para as marcas selecionadas.');
       else toast.success(`${preview.items.length} arte(s) gerada(s) com ${preview.productCount} configuração(ões).`);
     } catch (error) {
@@ -155,12 +159,12 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
   };
 
   useEffect(() => {
-    if (mode !== 'phone_price_list' || !phoneBrands.length) return;
+    if (mode !== 'phone_price_list' || (phoneBrandMode === 'selected' && !phoneBrands.length)) return;
     const timer = window.setTimeout(() => { void previewPhonePriceList(); }, 400);
     return () => window.clearTimeout(timer);
   // The selected brands are the source of this automatic preview.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, phoneBrands, phonePriceMode, phoneLayout]);
+  }, [mode, phoneBrands, phoneBrandMode, phonePriceMode, phoneLayout]);
 
   useEffect(() => {
     if (mode !== 'catalog') return;
@@ -281,7 +285,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
     setBusy(true);
     try {
       const currentItems = mode === 'phone_price_list'
-        ? (await socialStoryScheduleService.previewPhonePriceList(phoneBrands, phonePriceMode, phoneLayout)).items
+        ? (await socialStoryScheduleService.previewPhonePriceList(phoneBrands, phonePriceMode, phoneLayout, phoneBrandMode)).items
         : items;
       if (!currentItems.length) throw new Error('Nenhum celular disponível para as marcas selecionadas.');
       const scheduledDates = schedulePlan.entries.flatMap(({ instant }) => instant ? [instant.toISOString()] : []);
@@ -291,7 +295,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
         scheduledAt: scheduledDates[0], scheduledDates, destinations,
         includePrice: mode === 'whatsapp_campaign' ? includePrice : undefined,
         items: mode !== 'whatsapp_campaign' ? currentItems : undefined,
-        phonePriceList: mode === 'phone_price_list' ? { brands: phoneBrands, priceMode: phonePriceMode, layout: phoneLayout } : undefined,
+        phonePriceList: mode === 'phone_price_list' ? { brandMode: phoneBrandMode, brands: phoneBrands, priceMode: phonePriceMode, layout: phoneLayout } : undefined,
       });
       toast.success(`1 aprovação criada para ${result.dayCount} dia(s), com ${result.itemCount} Stories.`);
       setItems([]);
@@ -343,7 +347,7 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
           <h2 className="text-lg font-black text-slate-900 flex items-center gap-2"><CalendarClock className="w-5 h-5 text-violet-600" /> {isTables ? 'Gerador de tabelas' : 'Agendamento de Stories'}</h2>
           <p className="text-sm text-slate-500 mt-1">{isTables ? 'Escolha os fabricantes e o tipo de tabela. Confira a prévia e abra a arte para baixar.' : 'Escolha a mídia, os dias e se o lote será enviado ao WhatsApp, Instagram ou aos dois.'}</p>
         </div>
-        <button type="button" disabled={isTables && (busy || !phoneBrands.length)} onClick={() => void (isTables ? previewPhonePriceList() : load())} className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 p-2 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-50" title={isTables ? 'Atualizar tabelas com os preços e o estoque atuais' : 'Atualizar'}><RefreshCw className={`w-4 h-4 ${(isTables ? busy : loading) ? 'animate-spin' : ''}`} />{isTables && <span className="hidden sm:inline">Atualizar tabelas</span>}</button>
+        <button type="button" disabled={isTables && (busy || (phoneBrandMode === 'selected' && !phoneBrands.length))} onClick={() => void (isTables ? previewPhonePriceList() : load())} className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 p-2 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-50" title={isTables ? 'Atualizar tabelas com os preços e o estoque atuais' : 'Atualizar'}><RefreshCw className={`w-4 h-4 ${(isTables ? busy : loading) ? 'animate-spin' : ''}`} />{isTables && <span className="hidden sm:inline">Atualizar tabelas</span>}</button>
       </div>
 
       <div className={`p-5 grid gap-6 ${isTables ? '' : 'xl:grid-cols-[1.15fr_.85fr]'}`}>
@@ -389,8 +393,21 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
                 </select>
               </label>
               {phonePriceMode === 'card' && <p className="text-xs text-slate-600">Parcelas e valor total calculados com as taxas presenciais cadastradas, em até 12x.</p>}
-              <div className="flex flex-wrap gap-2">
-                {(['Xiaomi', 'POCO', 'realme'] as PhonePriceListBrand[]).map((brand) => (
+              <label className="block text-xs font-bold text-slate-600">Marcas
+                <select disabled={busy} value={phoneBrandMode} onChange={(event) => {
+                  previewRequestRef.current += 1;
+                  setPhoneBrandMode(event.target.value as PhonePriceListBrandMode);
+                  if (!phoneBrands.length) setPhoneBrands(availablePhoneBrands);
+                  setItems([]);
+                  setPhonePreview(null);
+                }} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:opacity-50">
+                  <option value="all">Todas as marcas (automático)</option>
+                  <option value="selected">Marcas específicas</option>
+                </select>
+              </label>
+              {phoneBrandMode === 'all' && <p className="text-xs text-slate-600">Inclui automaticamente novas marcas com celulares disponíveis, também nas próximas datas agendadas.</p>}
+              {phoneBrandMode === 'selected' && <div className="flex flex-wrap gap-2">
+                {[...new Set([...availablePhoneBrands, ...phoneBrands])].map((brand) => (
                   <button key={brand} type="button" disabled={busy} aria-pressed={phoneBrands.includes(brand)} onClick={() => {
                     previewRequestRef.current += 1;
                     setPhoneBrands((current) => current.includes(brand) ? current.filter((item) => item !== brand) : [...current, brand]);
@@ -398,7 +415,8 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
                     setPhonePreview(null);
                   }} className={`rounded-lg border px-4 py-2 text-sm font-bold disabled:opacity-50 ${phoneBrands.includes(brand) ? 'border-violet-400 bg-violet-100 text-violet-800' : 'border-slate-200 bg-white text-slate-500'}`}>{brand}</button>
                 ))}
-              </div>
+              </div>}
+              {phoneBrandMode === 'selected' && !phoneBrands.length && <p className="text-xs text-amber-800">Selecione ao menos uma marca.</p>}
               <p className="text-xs text-slate-600">A prévia usa os preços e o estoque atuais. Em cada horário agendado, a tabela será gerada novamente antes do envio ao Instagram e ao WhatsApp, respeitando as marcas, o formato e o tipo de preço escolhidos. Aparelhos ocultos ou sem estoque ficam de fora; a quantidade de páginas pode mudar.</p>
               {busy && <p className="flex items-center gap-2 text-xs font-bold text-violet-700"><Loader2 className="h-4 w-4 animate-spin" /> Atualizando lista automaticamente...</p>}
               {phonePreview && <div className="space-y-1 text-xs text-slate-600" role="status">

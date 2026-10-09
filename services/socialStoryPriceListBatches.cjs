@@ -7,8 +7,8 @@ const sqlDate = (date) => date.toISOString().slice(0, 19).replace('T', ' ');
 function priceListRecipe(input) {
   if (!input) return null;
   if (input.groups) throw Object.assign(new Error('O agendamento de tabelas usa marcas, formato e tipo de preço.'), { statusCode: 400 });
-  const { brands, priceMode, layout } = validateSelection(input);
-  return { brands, priceMode, layout };
+  const { brands, priceMode, layout, brandMode } = validateSelection(input);
+  return { brands, priceMode, layout, ...(brandMode !== undefined ? { brandMode } : {}) };
 }
 
 async function ensurePriceListBatchTable(pool) {

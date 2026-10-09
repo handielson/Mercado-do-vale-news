@@ -20,6 +20,22 @@ const phone = (overrides = {}) => ({ id: 'a', name: 'POCO X7 Preto', brand: 'Xia
   specs: { ram: '8+8GB', storage: '256GB', color: 'Preto' }, price_retail: 159900, stock_quantity: 2,
   status: 'active', hide_from_catalog: 0, is_parent: 0, is_combo: 0, ...overrides });
 
+test('all brands includes Oukitel and future brands while selected and legacy recipes stay restricted', () => {
+  const rows = [phone(), phone({ id: 'o', name: 'C17 Plus', brand_name: 'Oukitel', brand: 'brand-id' }),
+    phone({ id: 'n', name: 'New phone', brand_name: 'Nova marca', brand: 'new-id' }),
+    phone({ id: 'hidden', name: 'Hidden phone', brand_name: 'Hidden', hide_from_catalog: 1 }),
+    phone({ id: 'gone', name: 'Sold phone', brand_name: 'Gone', stock_quantity: 0 })];
+  const all = validateSelection({ brandMode: 'all', brands: [], layout: 'list' });
+  assert.equal(all.brands, null);
+  assert.deepEqual(buildPriceListGroups(rows, undefined, all.brands).map(g => g.brand).sort(), ['Nova marca', 'Oukitel', 'POCO']);
+  assert.equal(buildPriceListGroups(rows).length, 1);
+  assert.deepEqual(buildPriceListGroups(rows, undefined, ['oukitel']).map(g => g.brand), ['Oukitel']);
+  assert.deepEqual(validateSelection({ brandMode: 'selected', brands: [' Oukitel '] }).brands, ['Oukitel']);
+  for (const input of [{ brandMode: 'invalid' }, { brands: [null] }, { brands: [' '] }, { brands: ['a'.repeat(101)] }]) {
+    assert.throws(() => validateSelection(input), { statusCode: 400 });
+  }
+});
+
 test('separates POCO from Xiaomi, physical RAM, groups colors at official maximum cents', () => {
   const groups = buildPriceListGroups([phone(), phone({ id: 'b', name: 'POCO X7 Azul', specs: { ram: '8GB', storage: '256GB', color: 'Azul' }, price_retail: 169900 })]);
   assert.equal(groups.length, 1);
@@ -161,6 +177,14 @@ test('authenticated preview returns real PNG pages, reuses cache and refreshes c
   assert.equal((await app.inject({ method: 'POST', url: '/admin/marketing/phone-price-list/preview', payload: {} })).statusCode, 401);
   const first = await request(); assert.equal(first.statusCode, 200, first.body);
   const data = first.json(); assert.equal(data.items.length, 2); assert.equal(data.productCount, 7);
+  assert.deepEqual(data.availableBrands, ['POCO']);
+  rows.push(phone({ id: 'oukitel', name: 'C17 Plus', brand_name: 'Oukitel', brand: 'brand-id', images: [] }));
+  const all = await request({ brandMode: 'all', layout: 'list', brands: [] });
+  assert.equal(all.statusCode, 200, all.body);
+  assert.equal(all.json().productCount, 8);
+  assert.deepEqual(all.json().availableBrands, ['Oukitel', 'POCO']);
+  assert.ok(all.json().items.some(item => item.label.includes('Oukitel')));
+  rows = rows.filter(p => p.id !== 'oukitel');
   const file = path.join(directory, 'phone-price-lists', data.items[0].mediaUrl.split('/').pop());
   const meta = await sharp(await fs.readFile(file)).metadata();
   assert.equal(meta.width, 1080); assert.equal(meta.height, 1920);

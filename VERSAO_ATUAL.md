@@ -1,3 +1,19 @@
+# v1.2.593-phone-brands-dynamic
+
+Data: 09/10/2026. Branch: main. Tag: v1.2.593-phone-brands-dynamic.
+Release: /var/www/mdv-site/releases/20261009-203847-phone-brands-dynamic.
+Status: preparada para publicacao.
+
+Gerador passa a oferecer Todas as marcas (automatico) e Marcas especificas a partir dos celulares elegiveis consultados na mesma fonte de estoque/precos. Receita automatica e preservada nas futuras geracoes; receitas legadas continuam especificas ate reparo explicito. Ocultos, pais, combos, vendidos e acessorios continuam excluidos. Bot com selecao explicita e calculos de preco permanecem compativeis.
+
+Reparo autorizado: somente 22 ocorrencias futuras ainda nao geradas/iniciadas nos dois agendamentos conferidos; altera apenas recipe, com backup restrito, transacao e releitura. Horarios, canais e itens ja enviados preservados. Dry-run executado.
+
+Validacao: 33 testes passaram e 1 opcional ignorado; guardas do calendario e sintaxe dos tres servidores passaram. Deploy API seletivo --dynamic-price-tables-only preserva personalizacoes remotas e recusa divergencia da baseline.
+
+Quatro arquivos Shopee preexistentes fora do escopo.
+
+## Historico
+
 # v1.2.592-n8n-memoria
 
 Data: 09/10/2026. Branch: main. Tag: v1.2.592-n8n-memoria.

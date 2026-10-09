@@ -2,9 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { refreshNextPriceListBatch, priceListRecipe } = require('../services/socialStoryPriceListBatches.cjs');
 
-function fixture({ empty = false, started = 0, index = 1 } = {}) {
+function fixture({ empty = false, started = 0, index = 1, recipe } = {}) {
   const calls = [];
   const batch = { schedule_id: 'schedule', batch_index: index, scheduled_iso: '2030-01-03T11:00:00Z', recipe: JSON.stringify({ brands: ['POCO'], layout: 'list', priceMode: 'card' }), delay_seconds: 15, destinations: '["instagram","whatsapp"]' };
+  if (recipe) batch.recipe = JSON.stringify(recipe);
   const connection = {
     beginTransaction: async () => calls.push(['begin']),
     commit: async () => calls.push(['commit']),
@@ -84,6 +85,21 @@ test('each new day regenerates and rejects invalid or partial selections', async
     await refreshNextPriceListBatch(pool, { generatePhonePriceList: async () => ({ items: pages(++count) }) });
   }
   assert.equal(count, 2);
-  assert.throws(() => priceListRecipe({ brands: ['Other'] }));
+  assert.deepEqual(priceListRecipe({ brands: ['Oukitel'] }).brands, ['Oukitel']);
+  assert.throws(() => priceListRecipe({ brandMode: 'selected', brands: [] }));
   assert.throws(() => priceListRecipe({ groups: [] }));
+});
+
+test('automatic recipe survives storage and regeneration for future dates without freezing brands', async () => {
+  const recipe = priceListRecipe({ brandMode: 'all', brands: [], priceMode: 'cash', layout: 'list' });
+  assert.equal(recipe.brands, null);
+  for (const index of [1, 2]) {
+    const { pool, calls } = fixture({ index, recipe });
+    const result = await refreshNextPriceListBatch(pool, { generatePhonePriceList: async input => {
+      assert.deepEqual(input, recipe);
+      return { items: pages(index + 1) };
+    } });
+    assert.equal(result.itemCount, index + 1);
+    assert.equal(calls.filter(([sql]) => sql.includes('INSERT INTO social_story_deliveries')).length, (index + 1) * 2);
+  }
 });
