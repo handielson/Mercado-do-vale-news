@@ -2,7 +2,7 @@
 
 Data: 09/10/2026. Branch: main. Tag: v1.2.593-phone-brands-dynamic.
 Release: /var/www/mdv-site/releases/20261009-203847-phone-brands-dynamic.
-Status: preparada para publicacao.
+Status: publicada e validada em producao.
 
 Gerador passa a oferecer Todas as marcas (automatico) e Marcas especificas a partir dos celulares elegiveis consultados na mesma fonte de estoque/precos. Receita automatica e preservada nas futuras geracoes; receitas legadas continuam especificas ate reparo explicito. Ocultos, pais, combos, vendidos e acessorios continuam excluidos. Bot com selecao explicita e calculos de preco permanecem compativeis.
 
@@ -11,6 +11,12 @@ Reparo autorizado: somente 22 ocorrencias futuras ainda nao geradas/iniciadas no
 Validacao: 33 testes passaram e 1 opcional ignorado; guardas do calendario e sintaxe dos tres servidores passaram. Deploy API seletivo --dynamic-price-tables-only preserva personalizacoes remotas e recusa divergencia da baseline.
 
 Quatro arquivos Shopee preexistentes fora do escopo.
+
+Publicacao concluida: commit b3ac4c17 e tag enviados a main. API seletiva reiniciada e online; /status HTTP 200/mysql.ok=true. Site e VERSION.json HTTP 200. Preview autenticado real: 24 configuracoes, quatro marcas e quatro tabelas, incluindo Oukitel. Chrome apos reload sem cache renderizou catalogo real, complemento e Ver todos, sem erros de console.
+
+22 ocorrencias futuras nos dois agendamentos conferidos foram alteradas transacionalmente para Todas as marcas. Releitura validada por ocorrencia; segunda execucao em dry-run encontrou zero legadas restantes. Nenhuma publicacao reenviada. Backup receitas: /var/www/mdv-api/backups/phone-brands-recipes-1791578537569.json. Backup API: /var/www/mdv-api/backups/phone-price-list-1791578481069.
+
+Auditoria apply: 0 removidos; 34 bloqueados preservados.
 
 ## Historico
 
