@@ -5,6 +5,8 @@ Release: /var/www/mdv-site/releases/20261009-193318-bling-refresh-safe.
 
 Renovacao da API nao devolve token antigo apos falha HTTP/configuracao ou resposta invalida. Credenciais preservadas em erro; novo token usado apenas apos salvar. Deploy seletivo altera somente refreshBlingStoredAccessTokenVps e preserva outras customizacoes remotas.
 
+Publicacao concluida: 413a0156 e tag enviados a main. 122 testes passaram; build e sintaxe API validados. API publicada seletivamente com backup e restart; status ok=true/mysql.ok=true. Site e VERSION.json HTTP 200. Handler remoto corresponde ao local e rejeita 503 simulado. Chrome confirmou catalogo real/complemento/Ver todos; 401 limitado a auth/me sem sessao. Sem renovacao real forcada. Auditoria apply: 0 removidos, 34 bloqueados preservados, listados na nota da versao. Quatro arquivos Shopee preexistentes preservados.
+
 ## Historico
 
 # v1.2.590-operational-failures
