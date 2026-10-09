@@ -1,32 +1,33 @@
 {
-  "version": "v1.2.589-system-regressions",
+  "version": "v1.2.590-operational-failures",
   "date": "2026-10-09",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.589-system-regressions",
-  "release_vps": "/var/www/mdv-site/releases/20261009-183823-system-regressions",
+  "tag": "v1.2.590-operational-failures",
+  "release_vps": "/var/www/mdv-site/releases/20261009-185649-operational-failures",
   "release_print3d_vps": null,
-  "summary": "Visibilidade correta no painel, renovacao segura do Bling, links de produto exatos e sincronizacao do complemento com lista/cache.",
+  "summary": "Falha segura no estoque do PDV, confirmacao por foto condicionada ao salvamento e campanhas WhatsApp sem corte em 200 registros.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "hooks/useProducts.ts",
-    "services/blingService.ts",
-    "services/catalogTitle.js",
-    "services/vpsApiService.ts",
-    "pages/store/PublicProductPage.tsx",
+    "components/pdv/ProductSearchSection.tsx",
+    "services/pdvSerializedInventory.ts",
+    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
+    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
+    "services/whatsappStatusCampaignService.ts",
     "package.json",
-    "tmp-tests/system-regression-contracts.test.mjs",
-    "tmp-tests/bling-invalid-refresh-disconnect-static.test.mjs",
+    "tmp-tests/operational-failure-contracts.test.mjs",
+    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
+    "tmp-tests/pdv-serialized-inventory-ui-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-09-v1.2.589-system-regressions.md"
+    "docs/versoes/2026-10-09-v1.2.590-operational-failures.md"
   ],
   "validations": [
-    "Suite test:regressions com simulacoes sem rede ou banco real.",
-    "Paginacao e busca serializada administrativa; contratos de renovacao Bling.",
-    "Build com trava contra runtime Supabase; validacao publica apos deploy."
+    "79 testes test:regressions incluindo 11 contratos de falha.",
+    "Suites de cadastro por foto, familias, grupos de preco, pagamentos e estoque serializado.",
+    "Build com trava Supabase e verificacao publica apos deploy."
   ]
 }

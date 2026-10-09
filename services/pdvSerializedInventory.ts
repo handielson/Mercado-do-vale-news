@@ -181,7 +181,7 @@ export async function buildPdvSearchCards(
 
     for (const product of products) {
         const units = product.track_inventory
-            ? await deps.listUnitsByProduct(product.id).catch(() => [])
+            ? await deps.listUnitsByProduct(product.id)
             : [];
         const availableUnits = units.filter(isAvailableUnit);
 

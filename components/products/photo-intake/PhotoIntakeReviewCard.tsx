@@ -22,10 +22,10 @@ interface PhotoIntakeReviewCardProps {
   margin?: SmartphoneBrandPriceMargin | null;
   busy?: boolean;
   matchingGroupCount?: number;
-  onUpdate: (input: SmartphonePhotoIntakeUpdate) => Promise<void>;
+  onUpdate: (input: SmartphonePhotoIntakeUpdate) => Promise<boolean>;
   onConfirmPrices: (input: SmartphonePhotoIntakePriceConfirmation, applyToGroup: boolean) => Promise<void>;
-  onAttachModel: (modelId: string) => Promise<void>;
-  onRetry: () => Promise<void>;
+  onAttachModel: (modelId: string) => Promise<boolean>;
+  onRetry: () => Promise<boolean>;
   onRefreshColors: () => Promise<void>;
   onFinalize: (sku?: string) => Promise<void>;
   onRemoveFromQueue: () => Promise<void>;
@@ -138,7 +138,8 @@ export function PhotoIntakeReviewCard({
     // Persistir as correções feitas no formulário antes de confirmar preços.
     // Sem isso, uma cor/modelo recém-mapeado permanecia apenas no estado local
     // e o endpoint de confirmação do grupo não conseguia localizar o aparelho.
-    await onUpdate({ ...draft, prices_confirmed: false });
+    const saved = await onUpdate({ ...draft, prices_confirmed: false });
+    if (!saved) return;
     await onConfirmPrices({
       price_cost: Number(draft.price_cost || 0),
       price_retail: Number(draft.price_retail || 0),

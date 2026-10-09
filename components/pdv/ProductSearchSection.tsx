@@ -245,6 +245,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
             }
         } catch (error) {
             console.error('Erro ao buscar produtos:', error);
+            setSearchCards([]);
             toast.error('Erro ao buscar produtos');
         } finally {
             setIsSearching(false);

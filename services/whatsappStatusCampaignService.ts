@@ -177,10 +177,16 @@ function normalizeTraceEvent(event: WhatsAppStatusTraceEvent): WhatsAppStatusTra
 
 export const whatsappStatusCampaignService = {
   async list(): Promise<WhatsAppStatusCampaign[]> {
-    const data = await vpsClient.get<TableDataResponse<WhatsAppStatusCampaign>>(
-      '/table-data/whatsapp_status_campaigns?limit=200&offset=0',
-    );
-    return extractRows(data).map(normalizeCampaign);
+    const campaigns: WhatsAppStatusCampaign[] = [];
+    const limit = 200;
+    for (let offset = 0; ; offset += limit) {
+      const data = await vpsClient.get<TableDataResponse<WhatsAppStatusCampaign>>(
+        `/table-data/whatsapp_status_campaigns?limit=${limit}&offset=${offset}`,
+      );
+      const rows = extractRows(data);
+      campaigns.push(...rows.map(normalizeCampaign));
+      if (rows.length < limit) return campaigns;
+    }
   },
 
   async create(input: WhatsAppStatusCampaignInput): Promise<WhatsAppStatusCampaign> {

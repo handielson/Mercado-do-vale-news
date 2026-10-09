@@ -187,16 +187,18 @@ export function SmartphonePhotoIntakePage() {
       const updated = await operation();
       upsertItem(updated);
       toast.success(successMessage);
+      return true;
     } catch (error: any) {
       toast.error(error?.message || 'Não foi possível concluir a operação.');
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
   const updateSelected = async (input: SmartphonePhotoIntakeUpdate) => {
-    if (!selected) return;
-    await runMutation(
+    if (!selected) return false;
+    return runMutation(
       () => smartphonePhotoIntakeService.update(selected.id, input),
       input.prices_confirmed ? 'Preços confirmados.' : 'Conferência salva.',
     );

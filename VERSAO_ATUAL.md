@@ -1,3 +1,12 @@
+# v1.2.590-operational-failures
+
+Data: 09/10/2026. Branch: main. Tag: v1.2.590-operational-failures.
+Release: /var/www/mdv-site/releases/20261009-185649-operational-failures.
+
+PDV propaga falhas de consulta das unidades e limpa resultados anteriores. Confirmacao por foto exige salvamento bem-sucedido. Lista de campanhas WhatsApp carrega todas as paginas de 200 registros. Somente frontend; nenhum dado comercial alterado. Testes de falha reproduzidos antes da correcao e passando depois.
+
+## Historico
+
 # v1.2.589-system-regressions
 
 Data: 09/10/2026. Branch: main. Tag: v1.2.589-system-regressions.

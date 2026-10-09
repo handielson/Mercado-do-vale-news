@@ -62,8 +62,8 @@ assert.match(
 
 assert.match(
   receiptPreview,
-  /calculateTotalPaid\(payments\)/,
-  'PDV receipt preview must use the shared payment total including credit fees',
+  /calculatePaymentSummary\(total, payments\)/,
+  'PDV receipt preview must use the shared payment summary including credit fees',
 );
 
 assert.doesNotMatch(
