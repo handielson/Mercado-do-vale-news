@@ -5,6 +5,8 @@ Release: /var/www/mdv-site/releases/20261009-185649-operational-failures.
 
 PDV propaga falhas de consulta das unidades e limpa resultados anteriores. Confirmacao por foto exige salvamento bem-sucedido. Lista de campanhas WhatsApp carrega todas as paginas de 200 registros. Somente frontend; nenhum dado comercial alterado. Testes de falha reproduzidos antes da correcao e passando depois.
 
+Publicacao concluida: fd7240bf e tag enviados a main; 79 testes centrais, suites de familias, precos, pagamentos e estoque passaram. Build sem runtime Supabase. Site e versao HTTP 200, API saudavel sem restart. Chrome confirmou PDV/busca, cadastro por foto, marketing, complemento e Ver todos; console sem erros. Bling confirmou leitura bem-sucedida, sem renovacao forcada. Auditoria apply: 0 removidos, 34 bloqueados preservados; caminhos/reasons na nota da versao. Quatro arquivos Shopee preexistentes preservados.
+
 ## Historico
 
 # v1.2.589-system-regressions
