@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { TARGETS, patchWorkflow, assertPatchScope, heapOptions, validateMemory, casSql } = require('../scripts/n8n-memory-recovery.cjs');
+const { TARGETS, patchWorkflow, assertPatchScope, heapOptions, validateMemory, casSql, serviceReplicas } = require('../scripts/n8n-memory-recovery.cjs');
 
 const original = {
   nodes: Object.entries(TARGETS).map(([name, [kind, url]], i) => ({
@@ -54,6 +54,11 @@ assert.throws(() => heapOptions('--max-old-space-size=oops'), /Unsupported/);
 assert.deepEqual(validateMemory('MemTotal: 16777216 kB\nMemAvailable: 3145728 kB'), { totalMiB: 16384, availableMiB: 3072 });
 assert.throws(() => validateMemory('MemTotal: 8000000 kB\nMemAvailable: 4000000 kB'), /Host memory/);
 assert.throws(() => validateMemory('MemTotal: 16777216 kB\nMemAvailable: 1048576 kB'), /MemAvailable/);
+const siblingServices = 'n8n_n8n 0/0\r\nn8n_n8n-db 1/1\r\nn8n_n8n-runner 1/1\r\n';
+assert.notEqual(siblingServices.trim(), 'n8n_n8n 0/0', 'Previous whole-output check reproduces the false wait');
+assert.equal(serviceReplicas(siblingServices, 'n8n_n8n'), 'n8n_n8n 0/0');
+assert.equal(serviceReplicas(siblingServices, 'n8n_n8n-runner'), 'n8n_n8n-runner 1/1');
+assert.equal(serviceReplicas('n8n_n8n-db 1/1\nn8n_n8n-runner 1/1', 'n8n_n8n'), undefined);
 const sql = casSql({ workflow: original }, original.nodes, first.workflow.nodes);
 assert.match(sql, /BEGIN;/);
 assert.match(sql, /FOR UPDATE/);

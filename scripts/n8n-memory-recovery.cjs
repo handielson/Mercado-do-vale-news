@@ -135,10 +135,14 @@ async function assertNoRunning(conn, db) {
   assert.equal(count, 0, 'New/running executions exist; wait for them to finish normally');
 }
 
+function serviceReplicas(output, service) {
+  return String(output).trim().split(/\r?\n/).find((line) => line.split(' ')[0] === service);
+}
+
 async function waitService(conn, service, replicas, timeoutMs = 180_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const current = (await run(conn, `docker service ls --filter name=${quote(service)} --format '{{.Name}} {{.Replicas}}'`)).trim();
+    const current = serviceReplicas(await run(conn, `docker service ls --filter name=${quote(service)} --format '{{.Name}} {{.Replicas}}'`), service);
     if (current === `${service} ${replicas}/${replicas}`) return;
     await sleep(2500);
   }
@@ -146,7 +150,7 @@ async function waitService(conn, service, replicas, timeoutMs = 180_000) {
 }
 
 async function scale(conn, service, replicas) {
-  await run(conn, `docker service scale ${service}=${replicas} >/dev/null`);
+  await run(conn, `docker service scale --detach=true ${service}=${replicas} >/dev/null`);
   await waitService(conn, service, replicas);
 }
 
@@ -310,5 +314,5 @@ async function main() {
   } finally { conn.end(); }
 }
 
-module.exports = { TARGETS, HEAP_MB, patchWorkflow, assertPatchScope, heapOptions, validateMemory, casSql };
+module.exports = { TARGETS, HEAP_MB, patchWorkflow, assertPatchScope, heapOptions, validateMemory, casSql, serviceReplicas };
 if (require.main === module) main().catch(() => { console.error('Memory recovery preflight failed; sensitive output omitted'); process.exitCode = 1; });
