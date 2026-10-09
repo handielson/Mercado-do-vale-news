@@ -1,3 +1,14 @@
+# v1.2.588-admin-title-complement
+
+Data: 08/10/2026. Branch: main. Tag: v1.2.588-admin-title-complement.
+Release: /var/www/mdv-site/releases/20261009-000947-admin-title-complement.
+
+O hook administrativo descartava catalog_title_complement e parent_catalog_title_complement recebidos da API. Ambos agora sao preservados nos cards. Texto salvo no pai continua a fonte de verdade; nenhum dado foi regravado. API, consulta publica, precos e documentos permanecem intactos.
+
+Testes do complemento, paginacao, busca serializada e cards de familia passaram. Build e publicacao pelo script oficial. Validacao final e limpeza em andamento. Quatro arquivos preexistentes Shopee preservados.
+
+## Historico
+
 # v1.2.587-public-family-variation
 
 Data: 08/10/2026. Branch: main. Tag: v1.2.587-public-family-variation.

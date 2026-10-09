@@ -1,12 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { getCatalogTitle } from '../services/catalogTitle.js';
 import { getCatalogFamilyName, generateCatalogGroupKey } from '../services/productGroupingCore.js';
 
 const require = createRequire(import.meta.url);
 const Fastify = require('fastify');
 const { registerCatalogTitleRoutes } = require('../services/catalogTitleServer.cjs');
+
+test('admin VPS reload preserves saved complement on parent and inherited complement on child', () => {
+    const ts = require('typescript');
+    const source = readFileSync('hooks/useProducts.ts', 'utf8');
+    const ast = ts.createSourceFile('useProducts.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const mapper = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'mapVpsProduct');
+    assert.ok(mapper, 'Admin mapper must exist');
+    const js = ts.transpileModule(mapper.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const context = { ProductStatus: { ACTIVE: 'active' } };
+    vm.runInNewContext(js, context);
+    const parentRow = { id: 'parent', name: 'C17 Plus', is_parent: 1, catalog_title_complement: 'Sabor iPhone' };
+    const childRow = { id: 'child', name: 'C17 Plus Laranja', parent_id: 'parent', parent_catalog_title_complement: 'Sabor iPhone' };
+    const parent = context.mapVpsProduct(parentRow);
+    const child = context.mapVpsProduct(childRow);
+    assert.equal(parent.catalog_title_complement, 'Sabor iPhone');
+    assert.equal(child.parent_catalog_title_complement, 'Sabor iPhone');
+    assert.equal(getCatalogTitle(parent.name, parent), 'C17 Plus · Sabor iPhone');
+    assert.equal(parent.name, parentRow.name);
+    assert.equal(context.mapVpsProduct({ ...parentRow, catalog_title_complement: '' }).catalog_title_complement, '');
+    assert.equal(context.mapVpsProduct({ id: 'plain' }).catalog_title_complement, null);
+});
 
 test('all variations use only the parent complement without changing identity', () => {
     for (const color of ['Laranja', 'Prata']) {
