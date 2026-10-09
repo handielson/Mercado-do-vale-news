@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { TARGETS, patchWorkflow, assertPatchScope, heapOptions, validateMemory, casSql } = require('../scripts/n8n-memory-recovery.cjs');
 
 const original = {
@@ -38,6 +40,8 @@ const codeDrift = structuredClone(original); codeDrift.nodes[2].parameters.jsCod
 assert.throws(() => patchWorkflow(codeDrift), /count drift/);
 const methodDrift = structuredClone(original); methodDrift.nodes[0].parameters.method = 'POST';
 assert.throws(() => patchWorkflow(methodDrift), /method drift/);
+const syntaxDrift = structuredClone(original); syntaxDrift.nodes[2].parameters.jsCode += '\nconst = ;';
+assert.throws(() => patchWorkflow(syntaxDrift), /Code syntax drift/);
 
 assert.equal(heapOptions(), '--max-old-space-size=6144');
 assert.equal(heapOptions('--enable-source-maps --max-old-space-size=2048'), '--enable-source-maps --max-old-space-size=6144');
@@ -58,4 +62,12 @@ assert.match(sql, /History CAS guard failed/);
 assert.doesNotMatch(sql, /SET[^;]*(staticData|connections|activeVersionId|versionId)\s*=/);
 assert.doesNotMatch(sql, /(UPDATE|DELETE FROM) execution_entity/);
 assert.match(sql, /COMMIT;/);
+const source = fs.readFileSync(path.join(__dirname, '../scripts/n8n-memory-recovery.cjs'), 'utf8');
+const applySequence = source.slice(source.indexOf('stopped = true;'), source.indexOf('workflowMayHaveChanged = true;'));
+assert.ok(applySequence.indexOf('scale(conn, MAIN, 0)') < applySequence.indexOf('scale(conn, RUNNER, 0)'), 'Main must stop before runner');
+assert.ok(applySequence.indexOf('scale(conn, RUNNER, 0)') < applySequence.indexOf('snapshot = await readSnapshot'), 'Authoritative snapshot must follow graceful shutdown');
+assert.match(applySequence, /assertNoRunning\(conn, db\)/, 'Recheck global execution guard after shutdown');
+assert.match(source, /if \(workflowMayHaveChanged && snapshot && patched\)/, 'Rollback must not mutate a workflow before the forward CAS');
+assert.match(source, /--env-rm NODE_OPTIONS/, 'Only the requested environment variable is removed');
+assert.doesNotMatch(source, /execute_workflow|retry_execution|UPDATE execution_entity|DELETE FROM execution_entity/);
 console.log('n8n memory recovery checks passed: four URL consumers, idempotence, scope/CAS, retained flags and memory guards');

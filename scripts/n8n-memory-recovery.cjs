@@ -7,6 +7,7 @@ const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const MAIN = 'n8n_n8n';
 const RUNNER = 'n8n_n8n-runner';
 const HEAP_MB = 6144;
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const TARGETS = {
   'Vendas - Buscar Configuracoes Loja': ['http', 'https://api.xiaomipetrolina.com.br/company-settings'],
   'Loja - Buscar Dados Empresa': ['http', 'https://api.xiaomipetrolina.com.br/public/company-settings'],
@@ -40,6 +41,8 @@ function patchWorkflow(workflow) {
       assert.equal(count, 1, `Code URL count drift: ${name}`);
       let updated = code;
       for (let i = 0; i < before.length; i++) updated = updated.replace(before[i], after[i]);
+      try { new AsyncFunction('$json', '$', '$input', '$getWorkflowStaticData', '$env', '$execution', 'helpers', updated); }
+      catch { throw new Error(`Code syntax drift: ${name}`); }
       if (updated !== code) { node.parameters.jsCode = updated; changed.push(name); }
     }
   }
@@ -205,8 +208,10 @@ async function updateNodeOptions(conn, value) {
 
 async function probeBotSettings(conn) {
   // Runs only GETs using the same existing secret as the HTTP node; no workflow execution.
-  const probe = `const fs=require('node:fs');const p=JSON.parse(fs.readFileSync('/dev/stdin','utf8'));const env=p[0].Spec.TaskTemplate.ContainerSpec.Env||[];const sync=env.find(v=>v.startsWith('SYNC_SECRET='));if(!sync)process.exit(1);const forbidden=['logo','favicon','watermark','receipt_logo_url','receipt_watermark'];(async()=>{const results=[];for(const path of ['/company-settings?view=bot','/public/company-settings?view=bot']){const r=await fetch('https://api.xiaomipetrolina.com.br'+path,{headers:{'x-sync-key':sync.slice(12)},signal:AbortSignal.timeout(15000)});const text=await r.text();if(r.status!==200)throw Error('settings HTTP '+r.status);const v=JSON.parse(text);if(!v||typeof v!=='object'||Array.isArray(v)||forbidden.some(k=>Object.prototype.hasOwnProperty.call(v,k)))throw Error('bot projection unavailable');if(Buffer.byteLength(text)>65536)throw Error('bot projection too large');if(!Object.prototype.hasOwnProperty.call(v,'business_hours'))throw Error('bot hours missing');results.push({path,status:r.status,bytes:Buffer.byteLength(text)})}console.log(JSON.stringify(results))})().catch(()=>process.exit(1));`;
-  const raw = await run(conn, `docker service inspect ${MAIN} | node -e ${quote(probe)}`);
+  const container = (await run(conn, "docker ps --filter name=n8n_n8n.1 --format '{{.Names}}' | head -n 1")).trim();
+  assert.ok(container, 'Running n8n main container is required for the read-only settings probe');
+  const probe = `const fs=require('node:fs');const p=JSON.parse(fs.readFileSync('/dev/stdin','utf8'));const env=p[0].Config.Env||[];const sync=env.find(v=>v.startsWith('SYNC_SECRET='));if(!sync)process.exit(1);const forbidden=['logo','favicon','watermark','receipt_logo_url','receipt_watermark'];(async()=>{const results=[];for(const path of ['/company-settings?view=bot','/public/company-settings?view=bot']){const r=await fetch('https://api.xiaomipetrolina.com.br'+path,{headers:{'x-sync-key':sync.slice(12)},signal:AbortSignal.timeout(15000)});const text=await r.text();if(r.status!==200)throw Error('settings HTTP '+r.status);const v=JSON.parse(text);if(!v||typeof v!=='object'||Array.isArray(v)||forbidden.some(k=>Object.prototype.hasOwnProperty.call(v,k)))throw Error('bot projection unavailable');if(Buffer.byteLength(text)>65536)throw Error('bot projection too large');if(!Object.prototype.hasOwnProperty.call(v,'business_hours'))throw Error('bot hours missing');results.push({path,status:r.status,bytes:Buffer.byteLength(text)})}console.log(JSON.stringify(results))})().catch(()=>process.exit(1));`;
+  const raw = await run(conn, `docker inspect ${quote(container)} | node -e ${quote(probe)}`);
   return JSON.parse(raw.trim());
 }
 
