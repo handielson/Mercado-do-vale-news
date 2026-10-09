@@ -369,15 +369,14 @@ export const PublicProductPage: React.FC = () => {
 
                         for (const term of searchTerms) {
                             searchResults = await vpsApiService.getProducts({ search: term, status: 'active', limit: 5 });
-                            if (searchResults && searchResults.length > 0) break;
-                        }
-
-                        if (searchResults && searchResults.length > 0) {
-                            // Prioriza match exato de slug, depois sku, depois primeiro resultado
-                            const exactMatch = searchResults.find(p =>
+                            // Busca aproximada não comprova a identidade de um link.
+                            const exactMatches = (searchResults || []).filter(p =>
                                 p.slug === slug || p.sku?.toLowerCase() === slug.toLowerCase()
                             );
-                            data = exactMatch || searchResults[0];
+                            if (exactMatches.length > 0) {
+                                data = exactMatches.length === 1 ? exactMatches[0] : null;
+                                break;
+                            }
                         }
                     } catch (e) {
                          // Ignorar erros de rede na VPS

@@ -5,6 +5,7 @@
  */
 
 import { buildAuthHeaders } from './authSession';
+import { CATALOG_TITLE_UPDATED_EVENT } from './catalogTitle.js';
 import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 import type { ShippingPriceRange, ShippingPriceRangeInput, ShippingZone, ShippingZoneInput } from '../types/shipping';
 
@@ -855,7 +856,12 @@ class VpsApiService {
 
   async updateProductCatalogTitle(id: string, complement: string): Promise<boolean> {
     const ok = await this.writeSafe('PATCH', `/products/${id}/catalog-title`, { complement });
-    if (ok) this.invalidateProductCache();
+    if (ok) {
+      this.invalidateProductCache();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(CATALOG_TITLE_UPDATED_EVENT, { detail: { id, complement: complement.trim() } }));
+      }
+    }
     return ok;
   }
 

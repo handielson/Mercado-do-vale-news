@@ -1,3 +1,12 @@
+# v1.2.589-system-regressions
+
+Data: 09/10/2026. Branch: main. Tag: v1.2.589-system-regressions.
+Release prevista: /var/www/mdv-site/releases/20261009-183823-system-regressions.
+
+Painel preserva hide_from_catalog; falhas temporarias do Bling preservam credenciais e nunca devolvem token vencido; fallback de URLs exige identificacao exata e unica; complemento salvo atualiza pai, filhos e cache administrativo, inclusive com consulta antiga em andamento. Suite npm.cmd run test:regressions centraliza as protecoes. API e dados comerciais nao fazem parte do deploy. Publicacao e auditoria final pendentes.
+
+## Historico
+
 # v1.2.588-admin-title-complement
 
 Data: 08/10/2026. Branch: main. Tag: v1.2.588-admin-title-complement.

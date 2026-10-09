@@ -18,8 +18,8 @@ assert.match(
 
 assert.match(
   service,
-  /if\s*\(!res\.ok\)\s*\{[\s\S]*clearStoredBlingConnection\(\)/,
-  'refreshToken must clear the stale Bling connection when the refresh token is rejected',
+  /if\s*\(\(res.status === 400 \|\| res.status === 401\) && confirmedRejection\)\s*\{\s*await clearStoredBlingConnection\(\)/,
+  'refreshToken must clear credentials only after a confirmed authentication rejection, never on a temporary HTTP failure',
 );
 
 assert.match(

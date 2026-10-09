@@ -1,26 +1,32 @@
 {
-  "version": "v1.2.588-admin-title-complement",
-  "date": "2026-10-08",
+  "version": "v1.2.589-system-regressions",
+  "date": "2026-10-09",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.588-admin-title-complement",
-  "release_vps": "/var/www/mdv-site/releases/20261009-000947-admin-title-complement",
+  "tag": "v1.2.589-system-regressions",
+  "release_vps": "/var/www/mdv-site/releases/20261009-183823-system-regressions",
   "release_print3d_vps": null,
-  "summary": "Carregamento administrativo preserva o complemento do titulo salvo no pai e herdado pelos filhos.",
+  "summary": "Visibilidade correta no painel, renovacao segura do Bling, links de produto exatos e sincronizacao do complemento com lista/cache.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
     "hooks/useProducts.ts",
-    "tmp-tests/catalog-title.test.mjs",
+    "services/blingService.ts",
+    "services/catalogTitle.js",
+    "services/vpsApiService.ts",
+    "pages/store/PublicProductPage.tsx",
+    "package.json",
+    "tmp-tests/system-regression-contracts.test.mjs",
+    "tmp-tests/bling-invalid-refresh-disconnect-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-08-v1.2.588-admin-title-complement.md"
+    "docs/versoes/2026-10-09-v1.2.589-system-regressions.md"
   ],
   "validations": [
-    "5 testes do complemento incluindo mapeamento real do carregamento administrativo.",
-    "Paginacao VPS, busca serializada e 4 testes dos cards de familia.",
-    "Build sem runtime Supabase e validacao do painel publicado."
+    "Suite test:regressions com simulacoes sem rede ou banco real.",
+    "Paginacao e busca serializada administrativa; contratos de renovacao Bling.",
+    "Build com trava contra runtime Supabase; validacao publica apos deploy."
   ]
 }

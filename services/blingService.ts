@@ -483,11 +483,10 @@ export async function getValidToken(options: { forceRefresh?: boolean } = {}): P
         const expiresAt = new Date(data.bling_token_expires_at).getTime();
         const now = Date.now() + 5 * 60 * 1000; // 5 min buffer
         if (expiresAt <= now && data.bling_refresh_token) {
-            try {
-                return await refreshToken(data as BlingTokenData);
-            } catch (err) {
-                console.warn('[bling] refresh token failed, keeping current access token', err);
-            }
+            return refreshToken(data as BlingTokenData);
+        }
+        if (expiresAt <= Date.now()) {
+            throw new Error('Token do Bling expirado. Reconecte manualmente.');
         }
     }
 
@@ -508,11 +507,21 @@ async function refreshToken(tokenData: BlingTokenData): Promise<string> {
     });
 
     if (!res.ok) {
-        await clearStoredBlingConnection();
-        throw new Error('Erro ao renovar token do Bling. Reconecte manualmente.');
+        const payload = await res.json().catch(() => ({}));
+        const code = payload.error?.type || payload.error || payload.code;
+        const confirmedRejection = ['invalid_grant', 'invalid_token'].includes(code)
+            || /\b(?:invalid_grant|invalid_token)\b|refresh token (?:is |has been )?(?:invalid|expired|revoked)\b/i.test(String(payload.debug?.rawMessage || ''));
+        if ((res.status === 400 || res.status === 401) && confirmedRejection) {
+            await clearStoredBlingConnection();
+            throw new Error('Erro ao renovar token do Bling. Reconecte manualmente.');
+        }
+        throw new Error(`Renovação do Bling indisponível (HTTP ${res.status}). Tente novamente mais tarde.`);
     }
 
     const tokens = await res.json();
+    if (typeof tokens.access_token !== 'string' || !tokens.access_token.trim()) {
+        throw new Error('Resposta inválida na renovação do Bling. Tente novamente mais tarde.');
+    }
     const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
 
     await companySettingsService.update({
@@ -534,7 +543,7 @@ async function clearStoredBlingConnection(): Promise<void> {
 
 export function isBlingReconnectRequired(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error || '');
-    return message.includes('Erro ao renovar token do Bling') || message.includes('Bling não está conectado');
+    return message.includes('Erro ao renovar token do Bling') || message.includes('Bling não está conectado') || message.includes('Token do Bling expirado');
 }
 
 // ------- Bling API calls -------

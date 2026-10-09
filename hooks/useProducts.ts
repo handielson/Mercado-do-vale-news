@@ -12,6 +12,7 @@ import { filterAdminProducts, mergeProductsById } from './adminProductFilters';
 import { mercadoLivreService } from '../services/mercadoLivreService';
 import { tiktokShopService, TIKTOK_PRODUCT_LINKS_UPDATED_EVENT } from '../services/tiktokShopService';
 import { productStorefrontOffersService } from '../services/productStorefrontOffers';
+import { CATALOG_TITLE_UPDATED_EVENT, applyCatalogTitleUpdate } from '../services/catalogTitle.js';
 
 /** Converte resposta do VPS MySQL para o tipo Product */
 function mapVpsProduct(row: any): Product {
@@ -65,6 +66,7 @@ function mapVpsProduct(row: any): Product {
         slug: row.slug || undefined,
         origin: row.origin || undefined,
         exclude_from_seo: Boolean(row.exclude_from_seo),
+        hide_from_catalog: Number(row.hide_from_catalog) === 1,
         created: row.created_at,
         updated: row.updated_at,
     };
@@ -163,6 +165,14 @@ async function fetchAllAdminVpsProducts(): Promise<any[] | null> {
  */
 export const useProducts = () => {
     const searchRequestSeq = useRef(0);
+    const titleRevision = useRef(0);
+    const titleChanges = useRef(new Map<string, { complement: string; revision: number }>());
+    const applyRecentTitles = useCallback((items: Product[], since: number) => {
+        for (const [id, change] of titleChanges.current) {
+            if (change.revision > since) items = applyCatalogTitleUpdate(items, id, change.complement);
+        }
+        return items;
+    }, []);
     const cached = loadFromCache();
     const [products, setProducts] = useState<Product[]>(cached || []);
     const [filteredProducts, setFilteredProducts] = useState<Product[]>(cached || []);
@@ -171,6 +181,21 @@ export const useProducts = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [cacheAge, setCacheAge] = useState<string | null>(getCacheAge);
+    useEffect(() => {
+        const update = (event: Event) => {
+            const { id, complement } = (event as CustomEvent).detail || {};
+            if (typeof id !== 'string' || typeof complement !== 'string') return;
+            titleChanges.current.set(id, { complement, revision: ++titleRevision.current });
+            setProducts(current => {
+                const updated = applyCatalogTitleUpdate(current, id, complement);
+                saveToCache(updated);
+                return updated;
+            });
+            setCacheAge('agora');
+        };
+        window.addEventListener(CATALOG_TITLE_UPDATED_EVENT, update);
+        return () => window.removeEventListener(CATALOG_TITLE_UPDATED_EVENT, update);
+    }, []);
     const [filters, setFilters] = useState<ProductFiltersState>({
         salesChannel: 'all', channelStatus: 'all',
         shopeeStore: 'all',
@@ -227,6 +252,7 @@ export const useProducts = () => {
      * mode='refresh'    → mostra isRefreshing (botão de atualizar clicado)
      */
     const fetchProducts = useCallback(async (mode: 'spinner' | 'background' | 'refresh' = 'spinner') => {
+        const since = titleRevision.current;
         try {
             if (mode === 'spinner') setIsLoading(true);
             if (mode === 'refresh') setIsRefreshing(true);
@@ -243,6 +269,7 @@ export const useProducts = () => {
                 data = await productService.list();
             }
 
+            data = applyRecentTitles(data, since);
             setProducts(data);
             setFilteredProducts(data);
             saveToCache(data);
@@ -260,7 +287,7 @@ export const useProducts = () => {
             setIsLoading(false);
             setIsRefreshing(false);
         }
-    }, []);
+    }, [applyRecentTitles]);
 
     /**
      * Apply client-side filters
@@ -326,6 +353,7 @@ export const useProducts = () => {
         if (term.length < 2) return;
 
         const requestId = ++searchRequestSeq.current;
+        const since = titleRevision.current;
         const looksLikeSku = /^[a-z0-9._-]+$/i.test(term);
 
         Promise.all([
@@ -368,7 +396,7 @@ export const useProducts = () => {
                 if (remoteProducts.length === 0) return;
 
                 setProducts(current => {
-                    const merged = mergeProductsById(current, remoteProducts);
+                    const merged = mergeProductsById(current, applyRecentTitles(remoteProducts, since));
                     saveToCache(merged);
                     return merged;
                 });
