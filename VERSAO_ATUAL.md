@@ -1,3 +1,12 @@
+# v1.2.591-bling-refresh-safe
+
+Data: 09/10/2026. Branch: main. Tag: v1.2.591-bling-refresh-safe.
+Release: /var/www/mdv-site/releases/20261009-193318-bling-refresh-safe.
+
+Renovacao da API nao devolve token antigo apos falha HTTP/configuracao ou resposta invalida. Credenciais preservadas em erro; novo token usado apenas apos salvar. Deploy seletivo altera somente refreshBlingStoredAccessTokenVps e preserva outras customizacoes remotas.
+
+## Historico
+
 # v1.2.590-operational-failures
 
 Data: 09/10/2026. Branch: main. Tag: v1.2.590-operational-failures.

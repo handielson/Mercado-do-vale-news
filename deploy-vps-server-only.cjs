@@ -579,6 +579,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--bling-refresh-safe-only') || process.argv.includes('--bling-refresh-safe-check')) {
+    await require('./scripts/deploy-bling-refresh-safe.cjs').deployBlingRefreshSafe({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--bling-refresh-safe-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--bling-connection-health-only') || process.argv.includes('--bling-connection-health-check')) {
     await require('./scripts/deploy-bling-connection-health.cjs').deployBlingConnectionHealth({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

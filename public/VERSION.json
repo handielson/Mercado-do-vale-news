@@ -1,33 +1,33 @@
 {
-  "version": "v1.2.590-operational-failures",
+  "version": "v1.2.591-bling-refresh-safe",
   "date": "2026-10-09",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.590-operational-failures",
-  "release_vps": "/var/www/mdv-site/releases/20261009-185649-operational-failures",
+  "tag": "v1.2.591-bling-refresh-safe",
+  "release_vps": "/var/www/mdv-site/releases/20261009-193318-bling-refresh-safe",
   "release_print3d_vps": null,
-  "summary": "Falha segura no estoque do PDV, confirmacao por foto condicionada ao salvamento e campanhas WhatsApp sem corte em 200 registros.",
+  "summary": "Renovacao Bling na API interrompe falhas sem reutilizar token antigo; validacao antes de salvar.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/pdv/ProductSearchSection.tsx",
-    "services/pdvSerializedInventory.ts",
-    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
-    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
-    "services/whatsappStatusCampaignService.ts",
+    "server.js",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-bling-refresh-safe.cjs",
     "package.json",
-    "tmp-tests/operational-failure-contracts.test.mjs",
-    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
-    "tmp-tests/pdv-serialized-inventory-ui-static.test.mjs",
+    "tmp-tests/bling-vps-refresh-failure.test.cjs",
+    "tmp-tests/seo-parent-family.test.cjs",
+    "tmp-tests/vps-bling-oauth-fastify-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-09-v1.2.590-operational-failures.md"
+    "docs/versoes/2026-10-09-v1.2.591-bling-refresh-safe.md"
   ],
   "validations": [
-    "79 testes test:regressions incluindo 11 contratos de falha.",
-    "Suites de cadastro por foto, familias, grupos de preco, pagamentos e estoque serializado.",
-    "Build com trava Supabase e verificacao publica apos deploy."
+    "122 testes de regressao; 43 contratos de renovacao/deploy.",
+    "Sintaxe API, OAuth, estoque e detalhe de produto.",
+    "Build, deploy seletivo com backup e verificacao publica."
   ]
 }

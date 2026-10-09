@@ -8,7 +8,12 @@ test('selective deployment preserves unrelated remote code and rejects SEO drift
     const before = require('node:child_process').execFileSync('git', ['show', BASELINE + ':' + file], { encoding: 'utf8', maxBuffer: 15e6 });
     const after = fs.readFileSync(file, 'utf8');
     const updated = patchEntry('// remote customization\n' + before, before, after);
-    assert.equal(updated.replace(/\r\n/g, '\n'), '// remote customization\n' + after.replace(/\r\n/g, '\n'));
+    const normalize = text => text.replace(/\r\n/g, '\n');
+    const targetBlocks = /  \/\/ O pai representa a familia:[\s\S]*?(?=  if \(!rows.length\) \{\n    const \[routeCandidates\])|fastify\.get\('\/products\/by-slug\/:slug',[\s\S]*?\n\}\);/g;
+    assert.deepEqual(normalize(updated).match(targetBlocks), normalize(after).match(targetBlocks));
+    // A selective SEO deploy must preserve every unrelated block, including
+    // subsequent Bling corrections that are deployed by their own release.
+    assert.equal(normalize(updated).replace(targetBlocks, ''), '// remote customization\n' + normalize(before).replace(targetBlocks, ''));
     assert.equal(patchEntry(updated, before, after), updated);
     assert.throws(() => patchEntry(before.replace('SELECT id FROM products', 'SELECT id AS drift FROM products'), before, after));
     const rich = require('node:child_process').execFileSync('git', ['show', BASELINE + ':vps_server.cjs'], { encoding: 'utf8', maxBuffer: 15e6 });

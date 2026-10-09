@@ -5969,7 +5969,9 @@ async function fetchLooseBlingProductSearchVps(base, headers, search, debug) {
 
 async function refreshBlingStoredAccessTokenVps(settings) {
   if (!settings?.bling_refresh_token || !settings?.bling_client_id || !settings?.bling_client_secret) {
-    return settings?.bling_access_token || '';
+    const error = new Error('Não foi possível renovar a conexão do Bling. Reconecte manualmente.');
+    error.statusCode = 409;
+    throw error;
   }
 
   const params = new URLSearchParams();
@@ -5977,14 +5979,26 @@ async function refreshBlingStoredAccessTokenVps(settings) {
   params.set('refresh_token', settings.bling_refresh_token);
   const { response, data } = await requestBlingToken(params, settings.bling_client_id, settings.bling_client_secret);
 
-  if (!response.ok || !data?.access_token) {
-    return settings.bling_access_token || '';
+  if (!response.ok) {
+    // Preserve credentials on provider failures; never reuse the old token.
+    const error = new Error('Renovação do Bling indisponível. Tente novamente mais tarde.');
+    error.statusCode = 503;
+    throw error;
+  }
+  const expiresIn = Number(data?.expires_in ?? 3600);
+  const expiresAt = Date.now() + expiresIn * 1000;
+  if (typeof data?.access_token !== 'string' || !data.access_token.trim()
+    || !Number.isFinite(expiresIn) || expiresIn <= 0 || !Number.isFinite(expiresAt)
+    || Number.isNaN(new Date(expiresAt).getTime())) {
+    const error = new Error('Resposta inválida na renovação do Bling. Tente novamente mais tarde.');
+    error.statusCode = 503;
+    throw error;
   }
 
   await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, {
     bling_access_token: data.access_token,
     bling_refresh_token: data.refresh_token || settings.bling_refresh_token,
-    bling_token_expires_at: new Date(Date.now() + Number(data.expires_in || 3600) * 1000).toISOString(),
+    bling_token_expires_at: new Date(expiresAt).toISOString(),
   });
 
   return data.access_token;

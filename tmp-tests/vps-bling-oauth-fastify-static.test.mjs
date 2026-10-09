@@ -11,7 +11,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /resource === 'oauth-callback' \|\| query\?\.code/, `${file} must route oauth-callback and code query to the callback handler`);
   assert.match(source, /\/admin\/settings\/bling\?error=missing_code/, `${file} must redirect missing OAuth code safely`);
   assert.match(source, /select=id,bling_client_id,bling_client_secret,bling_callback_url/, `${file} must load Bling OAuth credentials from company_settings`);
-  assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/oauth\/token/, `${file} must call the Bling token endpoint`);
+  assert.match(source, /https:\/\/api\.bling\.com\.br\/Api\/v3\/oauth\/token/, `${file} must call the current Bling token endpoint`);
   assert.match(source, /grant_type', 'authorization_code'/, `${file} must exchange OAuth authorization codes`);
   assert.match(source, /bling_access_token[\s\S]*bling_refresh_token[\s\S]*bling_token_expires_at/, `${file} must persist Bling tokens`);
   assert.match(source, /resource === 'exchange'/, `${file} must support the exchange resource`);
