@@ -5,7 +5,7 @@ Release: /var/www/mdv-site/releases/20261009-000947-admin-title-complement.
 
 O hook administrativo descartava catalog_title_complement e parent_catalog_title_complement recebidos da API. Ambos agora sao preservados nos cards. Texto salvo no pai continua a fonte de verdade; nenhum dado foi regravado. API, consulta publica, precos e documentos permanecem intactos.
 
-Testes do complemento, paginacao, busca serializada e cards de familia passaram. Build e publicacao pelo script oficial. Validacao final e limpeza em andamento. Quatro arquivos preexistentes Shopee preservados.
+Testes do complemento, paginacao, busca serializada e cards de familia passaram. Build e publicacao pelo script oficial concluidos. Chrome confirmou Sabor iPhone no campo do C17 Plus apos reload e console sem erros. Commit baa22fd0 e tag enviados a main. API nao reiniciada. Auditoria: 0 removidos, 34 bloqueados (25 dirty, 9 not_merged_into_origin_main), caminhos registrados na nota da versao. Quatro arquivos preexistentes Shopee preservados.
 
 ## Historico
 
