@@ -2,11 +2,13 @@
 
 Data: 09/10/2026. Branch: main. Tag: v1.2.592-n8n-memoria.
 Release: /var/www/mdv-site/releases/20261009-201153-n8n-memoria.
-Status: preparada para publicacao.
+Status: publicada e validada em producao.
 
 Rotas company-settings existentes recebem modo optativo view=bot com projecao SQL de horarios, endereco e Pix; nao leem imagens/templates/credenciais de integracao nesse modo. Modo padrao continua igual e sanitizacao publica permanece obrigatoria. Quatro chamadas do workflow ativo passam ao modo enxuto; conexoes, conversas e politicas preservadas. Heap do processo principal n8n passa de aproximadamente 4 GB para 6 GB mantendo os outros argumentos e limite de concorrencia 10/pool 10.
 
-Teste de rotas com midia grande reproduz carga desnecessaria no handler anterior; teste de projecao, campos e public sanitization, patch idempotente, schema MySQL real, sintaxe e build. Aplicacao protegida por backups, zero execucoes pendentes e rollback seletivo. Detalhes em docs/versoes/2026-10-09-v1.2.592-n8n-memoria.md. Quatro arquivos Shopee preexistentes fora do escopo.
+Publicacao concluida: b2632b14, 7f9dfcd0 e 4c740f6f enviados a main, com tag da versao e tag de guardas. Site e VERSION.json HTTP 200; API seletiva reiniciada, status ok=true/mysql.ok=true. Respostas reais privadas/publicas caem de 690552/346014 bytes para 1366/1396 bytes, com valores projetados iguais e auth 401 preservada. Quatro consultas do fluxo ativo atualizadas; main/runner 1/1, health/readiness 200, heap efetivo 6240 MiB. Seis execucoes naturais bem-sucedidas e zero erros fatais de memoria no intervalo inicial de 17:25:35 a 17:27:53. Causa exata do crescimento de memoria ainda nao isolada; validacao curta nao comprova estabilidade prolongada.
+
+Testes de rotas, patch/CAS, replicas exatas, configuracoes de retirada e estoque, sintaxe, schema real e build passaram. Backups restritos com checksums validados; nenhuma conversa reexecutada. Primeira tentativa encontrou espera falsa por nomes semelhantes de servicos; bot restaurado antes da reaplicacao, sem escrita de workflow naquela tentativa. Auditoria apply preservou 34 worktrees bloqueados e removeu zero; quatro arquivos Shopee preexistentes fora do escopo. Runbooks n8n/publicacao atualizados e validados. Detalhes e todos os caminhos em docs/versoes/2026-10-09-v1.2.592-n8n-memoria.md.
 
 ## Release anterior: v1.2.591-bling-refresh-safe
 
