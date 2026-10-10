@@ -2,9 +2,9 @@
 
 Data: 10/10/2026. Branch: main. Tag: v1.2.598-atalho-categoria.
 Release: /var/www/mdv-site/releases/20261010-233645-atalho-categoria.
-Status: pronta para publicação; validação pública pendente.
+Status: publicada e validada em produção. Commit da release: 9332d9ec.
 
-Atalho + de categoria abre a página completa Nova Categoria em outra aba, preservando o produto em preenchimento. Removido o cadastro rápido antigo com formulário aninhado. Atualizar lista ignora cache; hierarquia e IDs preservados. Sem alterações de API ou dados comerciais. Sete testes focados aprovados; build e validação pública a executar.
+Atalho + de categoria abre a página completa Nova Categoria em outra aba, preservando o produto em preenchimento. Removido o cadastro rápido antigo com formulário aninhado. Atualizar lista ignora cache; hierarquia e IDs preservados. Sete testes e build aprovados, homepage HTTP 200 e VERSION.json correto. Navegador confirmou clique, nova aba, nome/categoria preservados e ausência de erros de console. API não reiniciada; status saudável/mysql.ok=true. Nenhum produto ou categoria salvo. Quatro arquivos Shopee preexistentes fora da release. Auditoria: zero removidos, 34 bloqueados preservados (lista no registro desta versão).
 
 ## Histórico
 
