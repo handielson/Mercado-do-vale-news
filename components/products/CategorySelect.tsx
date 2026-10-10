@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, X, RefreshCw } from 'lucide-react';
 import { Category, CategoryConfig, FieldRequirement } from '../../types/category';
 import { categoryService } from '../../services/categories';
+import { buildCategorySelectGroups } from '../../utils/categorySelectTree';
 
 interface CategorySelectProps {
     value: string;
@@ -20,6 +21,7 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
     error
 }) => {
     const [categories, setCategories] = useState<Category[]>([]);
+    const categoryGroups = useMemo(() => buildCategorySelectGroups(categories), [categories]);
     const [isLoading, setIsLoading] = useState(false);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [newCategoryName, setNewCategoryName] = useState('');
@@ -100,16 +102,21 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
         <div className="space-y-2 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
                 <select
+                    aria-label="Categoria do produto"
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     disabled={isLoading}
                     className="min-w-0 w-full flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
                 >
                     <option value="">Selecione uma categoria</option>
-                    {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                            {cat.name}
-                        </option>
+                    {categoryGroups.map((group) => (
+                        <optgroup key={group.id} label={group.name}>
+                            {group.options.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                    {option.depth ? `${'　'.repeat(option.depth)}↳ ${option.path}` : `${option.path} (categoria)`}
+                                </option>
+                            ))}
+                        </optgroup>
                     ))}
                 </select>
 

@@ -1,3 +1,15 @@
+# v1.2.595-categorias-hierarquia
+
+Data: 10/10/2026. Branch: main. Tag: v1.2.595-categorias-hierarquia.
+Release: /var/www/mdv-site/releases/20261010-231129-categorias-hierarquia.
+Status: pronta para publicação.
+
+Seletor de categoria no cadastro de produtos mostra grupos de categorias e subcategorias com caminho completo. A hierarquia vem de parent_id da API, sem alterar categorias, vínculos ou SKUs. Ordem cadastrada preservada. Relações legadas inválidas não escondem opções.
+
+Validações: cinco testes de hierarquia, seis testes da entrada Produto 3D e build. Deploy apenas do painel, sem reiniciar API. Mudanças Shopee preexistentes fora do escopo.
+
+## Histórico
+
 # v1.2.594-produto-3d-entry
 
 Data: 10/10/2026. Branch: main. Tag: v1.2.594-produto-3d-entry.

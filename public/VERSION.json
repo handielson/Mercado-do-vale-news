@@ -1,30 +1,27 @@
 {
-  "version": "v1.2.594-produto-3d-entry",
+  "version": "v1.2.595-categorias-hierarquia",
   "date": "2026-10-10",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.594-produto-3d-entry",
-  "release_vps": "/var/www/mdv-site/releases/20261010-230200-v12594-produto-3d-entry",
+  "tag": "v1.2.595-categorias-hierarquia",
+  "release_vps": "/var/www/mdv-site/releases/20261010-231129-categorias-hierarquia",
   "release_print3d_vps": null,
-  "summary": "Botao Produto 3D para novo cadastro central ou inclusao de SKU existente, com continuidade para ficha e arquivos.",
+  "summary": "Seletor de categoria do produto agrupado por categoria e subcategoria, preservando IDs e ordem cadastrada.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/products/Print3dProductEntry.tsx",
-    "components/products/ProductForm.tsx",
-    "pages/admin/products/ProductListPage.tsx",
-    "pages/admin/products/ProductFormPage.tsx",
-    "pages/admin/products/ProductDetailPage.tsx",
-    "tmp-tests/print3d-product-entry.test.cjs",
+    "components/products/CategorySelect.tsx",
+    "utils/categorySelectTree.ts",
+    "tmp-tests/product-category-select-tree.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-10-v1.2.594-produto-3d-entry.md"
+    "docs/versoes/2026-10-10-v1.2.595-categorias-hierarquia.md"
   ],
   "validations": [
-    "Seis testes do fluxo Produto 3D passaram.",
-    "Sintaxe dos tres servidores e build aprovados.",
-    "Deploy do painel e validacao publica da versao e dos dois caminhos."
+    "Cinco testes de hierarquia e seis testes da entrada Produto 3D.",
+    "Build com trava contra runtime Supabase.",
+    "Validacao publica e de navegador prevista apos o deploy."
   ]
 }
