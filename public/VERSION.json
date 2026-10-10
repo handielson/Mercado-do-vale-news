@@ -1,37 +1,26 @@
 {
-  "version": "v1.2.597-materiais-3d",
+  "version": "v1.2.598-atalho-categoria",
   "date": "2026-10-10",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.597-materiais-3d",
-  "release_vps": "/var/www/mdv-site/releases/20261010-232931-materiais-3d",
+  "tag": "v1.2.598-atalho-categoria",
+  "release_vps": "/var/www/mdv-site/releases/20261010-233645-atalho-categoria",
   "release_print3d_vps": null,
-  "summary": "Cadastro compartilhado de materiais 3D, seletor com 15 materiais conhecidos e cadastro de novos materiais sem alterar produtos existentes.",
+  "summary": "Atalho de nova categoria abre o cadastro completo em outra aba, preservando o produto e recarregando categorias sem cache.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/products/sections/ProductSpecifications.tsx",
-    "components/products/selectors/MaterialSelect.tsx",
-    "services/print3dMaterials.ts",
-    "services/print3dMaterialsServer.cjs",
-    "vps_server.js",
-    "vps_server.cjs",
-    "deploy-vps-server-only.cjs",
-    "scripts/deploy-print3d-materials.cjs",
-    "tmp-tests/print3d-materials.test.cjs",
-    "tmp-tests/print3d-material-select.test.cjs",
-    "tmp-tests/print3d-materials-deploy.test.cjs",
-    "tmp-tests/print3d-product-specifications-render.test.cjs",
+    "components/products/CategorySelect.tsx",
+    "tmp-tests/product-category-shortcut.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-10-v1.2.596-materiais-3d.md",
-    "docs/versoes/2026-10-10-v1.2.597-materiais-3d.md"
+    "docs/versoes/2026-10-10-v1.2.598-atalho-categoria.md"
   ],
   "validations": [
-    "17 testes de materiais, interface, coexistencia com producao e deploy seletivo.",
+    "7 testes de atalho e hierarquia de categorias.",
     "Build com trava contra runtime Supabase.",
-    "Validacao publica e de navegador prevista apos o deploy."
+    "Validacao publica e de navegador prevista apos deploy."
   ]
 }

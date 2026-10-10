@@ -1,3 +1,13 @@
+# v1.2.598-atalho-categoria
+
+Data: 10/10/2026. Branch: main. Tag: v1.2.598-atalho-categoria.
+Release: /var/www/mdv-site/releases/20261010-233645-atalho-categoria.
+Status: pronta para publicação; validação pública pendente.
+
+Atalho + de categoria abre a página completa Nova Categoria em outra aba, preservando o produto em preenchimento. Removido o cadastro rápido antigo com formulário aninhado. Atualizar lista ignora cache; hierarquia e IDs preservados. Sem alterações de API ou dados comerciais. Sete testes focados aprovados; build e validação pública a executar.
+
+## Histórico
+
 # v1.2.597-materiais-3d
 
 Data: 10/10/2026. Branch: main. Tag: v1.2.597-materiais-3d.
