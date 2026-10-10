@@ -36,7 +36,7 @@ test('prévia local usa descrição do pai e só grava na API central após apro
   t.after(async () => { await app.close(); await fs.rm(directory, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${app.server.address().port}`;
 
-  const save = await fetch(`${base}/products/${childId}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ description: '<p>Rascunho da variante</p>', price_retail: 2090 }) });
+  const save = await fetch(`${base}/products/${childId}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ description: '<p>Rascunho da variante</p>', price_retail: 2090, dimensions: { height_cm: 3.5, width_cm: 2, depth_cm: 1.2 }, weight_kg: 0.012 }) });
   assert.equal(save.status, 200);
   const changedSku = await fetch(`${base}/products/${childId}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sku: 'SKU-ALTERADO' }) });
   assert.equal(changedSku.status, 409);
@@ -50,6 +50,9 @@ test('prévia local usa descrição do pai e só grava na API central após apro
   assert.match(catalog[0].description, /Descrição do pai/);
   assert.match(catalog[0].description, /Item da embalagem/);
   assert.equal(catalog[0].price_retail, 2090);
+  assert.deepEqual(catalog[0].dimensions, { height_cm: 3.5, width_cm: 2, depth_cm: 1.2 });
+  assert.equal(catalog[0].weight_kg, 0.012);
+  assert.deepEqual(upstreamWrites, [], 'medidas do preview também permanecem locais até aprovação');
 
   const forbidden = await fetch(`${base}/admin/local-preview/drafts/${childId}/approve`, { method: 'POST' });
   assert.equal(forbidden.status, 403);

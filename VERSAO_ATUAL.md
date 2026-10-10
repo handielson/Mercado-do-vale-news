@@ -1,3 +1,14 @@
+# v1.2.599-medidas-3d-mm
+
+Data: 10/10/2026. Branch: main. Tag: v1.2.599-medidas-3d-mm.
+Release MDV: /var/www/mdv-site/releases/20261010-235533-medidas-3d-mm.
+Release 3DMV: /var/www/print3d-site/releases/20261010-235533-medidas-3d-mm.
+Status: preparada para publicação.
+
+Altura, largura e profundidade em mm na aba Características e nos anúncios dos dois sites. Um único conjunto de medidas: dimensions em cm no contrato interno, convertido na interface; peso em kg. API pública envia as medidas existentes, sem duplicar campos ou alterar descrição do pai. Preview conserva rascunhos locais até aprovação. 40 testes aprovados; builds, publicação seletiva da API e validação pública previstos. Quatro arquivos Shopee preexistentes fora do escopo.
+
+## Histórico
+
 # v1.2.598-atalho-categoria
 
 Data: 10/10/2026. Branch: main. Tag: v1.2.598-atalho-categoria.

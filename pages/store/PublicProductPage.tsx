@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { print3dPublicMeasurementSpecs } from '@/utils/print3dMeasurements.js';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers, Pencil, FileImage, ChevronRight } from 'lucide-react';
@@ -2039,7 +2040,7 @@ export const PublicProductPage: React.FC = () => {
                         )}
 
                         {/* Especificações Técnicas */}
-                        {product.specs && Object.keys(product.specs).length > 0 && (
+                        {Object.keys((product as any).is_print3d ? print3dPublicMeasurementSpecs(product) : product.specs || {}).length > 0 && (
                             <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
                                 <h3 className="text-lg font-semibold text-slate-900 mb-5 pb-3 border-b border-slate-100">
                                     Especificações
@@ -2067,6 +2068,7 @@ export const PublicProductPage: React.FC = () => {
                                             battery_health: 'Saúde da Bateria', battery_mah: 'Bateria (mAh)',
                                             display: 'Display (pol)',
                                             peso_g: 'Peso (g)',
+                                            piece_measurements: 'Medidas do produto',
                                             // Dimensões na exibição pública
                                             'dimensions.width_cm': 'Largura (cm)',
                                             'dimensions.height_cm': 'Altura (cm)',
@@ -2170,8 +2172,8 @@ export const PublicProductPage: React.FC = () => {
                                             }
                                         ];
 
-                                        const specs = product.specs as Record<string, unknown>;
-                                        const publicSpecs: Record<string, unknown> = { ...specs };
+                                        const specs = (product.specs || {}) as Record<string, unknown>;
+                                        const publicSpecs: Record<string, unknown> = (product as any).is_print3d ? print3dPublicMeasurementSpecs(product) : { ...specs };
                                         const publicSpecLabels: Record<string, string> = { ...customFieldNames };
                                         HIDDEN_KEYS.add('battery_health');
                                         const shopeeAttributeDefaults = specs.shopee_attribute_defaults && typeof specs.shopee_attribute_defaults === 'object' && !Array.isArray(specs.shopee_attribute_defaults)

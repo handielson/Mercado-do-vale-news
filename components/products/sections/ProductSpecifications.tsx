@@ -15,6 +15,7 @@ import { TableRelationField } from '../../fields/TableRelationField';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { shouldAddSerializedFieldToBatchOnEnter } from '../serializedBatch.js';
 import { isVariationSpec, modelTechnicalSpecs } from '../../../services/smartphoneModelSpecs.mjs';
+import { PRINT3D_MEASUREMENT_FIELDS, formatPrint3dMeasurements, print3dMeasurementDisplayValue, print3dMeasurementStoredValue } from '../../../utils/print3dMeasurements.js';
 
 interface ProductSpecificationsProps {
     categoryConfig: CategoryConfig | null;
@@ -215,6 +216,7 @@ export function ProductSpecifications({
      * Used for fields that don't require special components
      */
     const renderGenericField = (key: string, requirement: FieldRequirement) => {
+        if (isPrint3d && ['size', 'tamanho'].includes(normalizeSpecFieldKey(key).toLowerCase())) return null;
         const metadata = FIELD_METADATA[key];
         if (!metadata) return null;
 
@@ -535,6 +537,7 @@ export function ProductSpecifications({
                 ) : (
                     customFields
                         ?.filter((customField) => {
+                            if (isPrint3d && ['size', 'tamanho', ...PRINT3D_MEASUREMENT_FIELDS.map(field => field.key)].includes(normalizeSpecFieldKey(customField.key).toLowerCase())) return false;
                             // Exclude UNIQUE_FIELDS that are already rendered above
                             // These fields appear in the batch entry grid
                             return (!isSmartphoneCategory || isVariationSpec(customField.key)) && !BASE_SPEC_FIELD_KEYS.has(normalizeSpecFieldKey(customField.key));
@@ -648,6 +651,26 @@ export function ProductSpecifications({
                             );
                         }))}
             </div>
+            {isPrint3d && (
+                <section className="mt-5 rounded-lg border border-violet-100 bg-violet-50/40 p-4">
+                    <h4 className="text-sm font-semibold text-slate-900">Medidas do produto</h4>
+                    <p className="mt-1 text-xs text-slate-600">Informe as dimensões em milímetros e o peso em quilogramas. Este é o único conjunto de medidas do cadastro, reunido automaticamente no anúncio.</p>
+                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {PRINT3D_MEASUREMENT_FIELDS.map(({ key, label, unit, max }) => (
+                            <div key={key}>
+                                <label htmlFor={`field-${key}`} className="mb-1 block text-sm font-medium text-slate-700">{label} ({unit})</label>
+                                <input id={`field-${key}`} type="number" min="0" step="0.001" max={max} inputMode="decimal"
+                                    value={print3dMeasurementDisplayValue(key, watch(key as any))}
+                                    onChange={event => setValue(key as any, print3dMeasurementStoredValue(key, event.target.value), { shouldDirty: true, shouldValidate: true })}
+                                    className="w-full rounded-md border border-slate-300 bg-white p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                                {(key === 'weight_kg' ? errors.weight_kg : (errors.dimensions as any)?.[key.split('.')[1]])?.message && <p className="mt-1 text-xs text-red-600">{String((key === 'weight_kg' ? errors.weight_kg : (errors.dimensions as any)?.[key.split('.')[1]])?.message)}</p>}
+                            </div>
+                        ))}
+                    </div>
+                    <p className="mt-4 text-sm text-slate-700"><span className="font-medium">Como aparecerá no anúncio: </span>{formatPrint3dMeasurements({ dimensions: watch('dimensions'), weight_kg: watch('weight_kg') }) || 'Preencha as medidas para visualizar.'}</p>
+                    {(watch('specs.size') || watch('specs.tamanho')) && <p className="mt-2 text-xs text-slate-500">Tamanho antigo preservado: {String(watch('specs.size') || watch('specs.tamanho'))}. No anúncio, as medidas preenchidas terão prioridade.</p>}
+                </section>
+            )}
             {isSmartphoneCategory && (
                 <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-4">
                     <h4 className="text-sm font-semibold text-blue-900">Características do modelo</h4>

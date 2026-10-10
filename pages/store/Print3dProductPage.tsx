@@ -24,8 +24,10 @@ import {
 } from '@/utils/print3dStorefront';
 import { syncDocumentSeo } from '@/utils/documentSeo';
 import { sanitizeCatalogHtml } from '@/utils/sanitizeCatalogHtml';
+import { print3dPublicMeasurementSpecs } from '@/utils/print3dMeasurements.js';
 
 const SPEC_LABELS: Record<string, string> = {
+  piece_measurements: 'Medidas do produto',
   material: 'Material', color: 'Cor', cor: 'Cor', size: 'Tamanho', tamanho: 'Tamanho',
   finish: 'Acabamento', acabamento: 'Acabamento', weight_kg: 'Peso',
   'dimensions.height_cm': 'Altura', 'dimensions.width_cm': 'Largura', 'dimensions.depth_cm': 'Profundidade',
@@ -118,8 +120,9 @@ export default function Print3dProductPage() {
   const descriptionHtml = sanitizeCatalogHtml(product?.description) || '<p>Peça produzida por impressão 3D com atenção aos detalhes.</p>';
   const description = new DOMParser().parseFromString(descriptionHtml, 'text/html').body.textContent?.trim()
     || 'Peça produzida por impressão 3D com atenção aos detalhes.';
-  const specifications = useMemo(() => Object.entries(product?.specs || {})
+  const specifications = useMemo(() => Object.entries(print3dPublicMeasurementSpecs(product || {}))
     .filter(([key, value]) => !key.startsWith('_') && !HIDDEN_SPECS.has(key) && (typeof value === 'string' || typeof value === 'number') && String(value).trim())
+    .sort(([a], [b]) => a === 'piece_measurements' ? -1 : b === 'piece_measurements' ? 1 : 0)
     .slice(0, 12), [product]);
 
   useEffect(() => {

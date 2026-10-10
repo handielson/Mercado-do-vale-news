@@ -9,7 +9,7 @@ const compactImageColumns = `CASE WHEN p.images IS NOT NULL AND JSON_LENGTH(p.im
   CASE WHEN p.image_url LIKE 'http%' THEN p.image_url ELSE NULL END AS image_url`;
 
 function productColumns(compact, storefront) { return `p.id, p.sku, p.ean, p.alternative_eans, p.model_id, p.parent_id, p.category_id, p.brand, p.name, p.description,
-  p.slug, p.status, p.is_parent, p.is_print3d, p.stock_quantity, p.track_inventory,
+  p.slug, p.status, p.is_parent, p.is_print3d, p.stock_quantity, p.track_inventory, p.dimensions, p.weight_kg,
   ${storefront === 'loja_3d' ? `LEAST(GREATEST(COALESCE(p.stock_quantity, 0), 0),
     COALESCE((SELECT SUM(GREATEST(0, psl.quantity - psl.reserved_quantity))
       FROM product_stock_locations psl WHERE psl.product_id = p.id), GREATEST(COALESCE(p.stock_quantity, 0), 0))) AS available_stock,` : ''}
@@ -67,6 +67,7 @@ function publicProduct(row, storefront) {
     images: parseJson(row.images, []),
     alternative_eans: parseJson(row.alternative_eans, []),
     specs: parseJson(row.specs, {}),
+    dimensions: parseJson(row.dimensions, {}),
     custom_fields: parseJson(row.custom_fields, {}),
     model_template_values: parseJson(row.model_template_values, {}),
   }, offer);
