@@ -2,9 +2,11 @@
 
 Data: 10/10/2026. Branch: main. Tag: v1.2.597-materiais-3d.
 Release: /var/www/mdv-site/releases/20261010-232931-materiais-3d.
-Status: pronta para publicação; validação pública pendente.
+Status: publicada e validada em produção. Commit da release: a1647a47.
 
 Cadastro compartilhado de 15 tipos de material e novas inclusões no campo Material. Nova rota /admin/print3d/material-types separada da rota existente /admin/print3d/materials (estoque de filamentos). Teste registra ambos os módulos Fastify juntos para impedir duplicidade de rota. Nenhum produto, SKU, preço ou estoque alterado.
+
+24 testes aprovados (17 focados + 7 de produção existente), build sem runtime Supabase, homepage HTTP 200 e VERSION.json correto. API seletiva reiniciada; /status ok=true/mysql.ok=true e rota sem sessão retorna 401. Chrome confirmou 15 opções, seleção PLA e modal Novo material sem erros de console; nenhum produto ou material de teste salvo. Backup API: /var/www/mdv-api/backups/print3d-materials-1791675025682. Main sincronizada; quatro arquivos Shopee preexistentes preservados. Auditoria: zero removidos, 34 worktrees bloqueados preservados. Skill publish-vps atualizada com a lição de conflitos entre registradores de rota e validada.
 
 ## Histórico
 
