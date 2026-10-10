@@ -33,11 +33,11 @@ function registerPrint3dMaterialRoutes(app, { pool, requireAdminBearerToken }) {
     reply.header('Cache-Control', 'no-store');
     return requireAdminBearerToken(req, reply);
   };
-  app.get('/admin/print3d/materials', { preHandler: admin }, async () => {
+  app.get('/admin/print3d/material-types', { preHandler: admin }, async () => {
     const [rows] = await pool.query('SELECT value_json FROM admin_preferences WHERE preference_key=? LIMIT 1', [PREFERENCE_KEY]);
     return { materials: materialCatalog(rows[0]?.value_json) };
   });
-  app.post('/admin/print3d/materials', { preHandler: admin }, async (req, reply) => {
+  app.post('/admin/print3d/material-types', { preHandler: admin }, async (req, reply) => {
     const name = normalizeMaterialName(req.body?.name);
     if (!name) return reply.code(400).send({ error: 'Informe um material válido com até 80 caracteres.' });
     const connection = await pool.getConnection();

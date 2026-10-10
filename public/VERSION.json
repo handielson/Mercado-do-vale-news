@@ -1,10 +1,10 @@
 {
-  "version": "v1.2.596-materiais-3d",
+  "version": "v1.2.597-materiais-3d",
   "date": "2026-10-10",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.596-materiais-3d",
-  "release_vps": "/var/www/mdv-site/releases/20261010-232309-materiais-3d",
+  "tag": "v1.2.597-materiais-3d",
+  "release_vps": "/var/www/mdv-site/releases/20261010-232931-materiais-3d",
   "release_print3d_vps": null,
   "summary": "Cadastro compartilhado de materiais 3D, seletor com 15 materiais conhecidos e cadastro de novos materiais sem alterar produtos existentes.",
   "gestao_mdv_android": {
@@ -26,10 +26,11 @@
     "tmp-tests/print3d-product-specifications-render.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-10-v1.2.596-materiais-3d.md"
+    "docs/versoes/2026-10-10-v1.2.596-materiais-3d.md",
+    "docs/versoes/2026-10-10-v1.2.597-materiais-3d.md"
   ],
   "validations": [
-    "16 testes de materiais, interface, renderizacao 3D e deploy seletivo.",
+    "17 testes de materiais, interface, coexistencia com producao e deploy seletivo.",
     "Build com trava contra runtime Supabase.",
     "Validacao publica e de navegador prevista apos o deploy."
   ]

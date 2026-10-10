@@ -1,8 +1,18 @@
+# v1.2.597-materiais-3d
+
+Data: 10/10/2026. Branch: main. Tag: v1.2.597-materiais-3d.
+Release: /var/www/mdv-site/releases/20261010-232931-materiais-3d.
+Status: pronta para publicação; validação pública pendente.
+
+Cadastro compartilhado de 15 tipos de material e novas inclusões no campo Material. Nova rota /admin/print3d/material-types separada da rota existente /admin/print3d/materials (estoque de filamentos). Teste registra ambos os módulos Fastify juntos para impedir duplicidade de rota. Nenhum produto, SKU, preço ou estoque alterado.
+
+## Histórico
+
 # v1.2.596-materiais-3d
 
 Data: 10/10/2026. Branch: main. Tag: v1.2.596-materiais-3d.
 Release: /var/www/mdv-site/releases/20261010-232309-materiais-3d.
-Status: pronta para publicação; validação pública pendente.
+Status: substituída pela v1.2.597; API restaurada do backup após detectar conflito de rota.
 
 Material nos produtos 3D passa a ser selecionável, com 15 tipos conhecidos e cadastro compartilhado de novos materiais. Fonte de verdade: API/MySQL em admin_preferences; valores legados preservados. Sem migration, alteração de SKU, estoque, preços ou produtos reais. API seletiva com backup, verificações de sintaxe e preservação de código remoto.
 

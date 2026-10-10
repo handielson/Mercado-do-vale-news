@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const Fastify = require('fastify');
 const fs = require('node:fs');
 const { registerPrint3dMaterialRoutes, normalizeMaterialName, materialCatalog } = require('../services/print3dMaterialsServer.cjs');
+const { registerPrint3dProductionRoutes } = require('../services/print3dProductionServer.cjs');
 
 async function fixture(saved = null) {
   const app = Fastify();
@@ -26,9 +27,21 @@ async function fixture(saved = null) {
   } }, requireAdminBearerToken: async (req, reply) => {
     if (req.headers.authorization !== 'Bearer admin') return reply.code(401).send({ error: 'admin required' });
   } });
+  registerPrint3dProductionRoutes(app, { pool: {}, enabled: false, getCustomer: async () => null,
+    getBearerAuthContext: async req => req.headers.authorization === 'Bearer admin' ? { isAdmin: true, userId: 'admin' } : null });
   await app.ready();
-  return { app, state, call: (method, payload, auth = true) => app.inject({ method, url: '/admin/print3d/materials', payload, headers: auth ? { authorization: 'Bearer admin' } : {} }) };
+  return { app, state, call: (method, payload, auth = true) => app.inject({ method, url: '/admin/print3d/material-types', payload, headers: auth ? { authorization: 'Bearer admin' } : {} }) };
 }
+
+test('material types coexist with production stock routes and frontend uses the types endpoint', async t => {
+  const { app, call } = await fixture(); t.after(() => app.close());
+  assert.equal((await app.inject({ url: '/admin/print3d/materials', headers: { authorization: 'Bearer admin' } })).statusCode, 503);
+  assert.equal((await call('GET')).statusCode, 200);
+  assert.ok((await call('GET')).json().materials.every(value => typeof value === 'string'));
+  const client = fs.readFileSync(require.resolve('../services/print3dMaterials.ts'), 'utf8');
+  assert.equal((client.match(/\/admin\/print3d\/material-types/g) || []).length, 2);
+  assert.ok(!client.includes("'/admin/print3d/materials'"));
+});
 
 test('known materials and saved names are returned without GET writes', async t => {
   const { app, state, call } = await fixture(JSON.stringify(['PETG', 'Material teste'])); t.after(() => app.close());

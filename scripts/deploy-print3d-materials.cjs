@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const { deployProductReadPrivacy } = require('./deploy-product-read-privacy.cjs');
 const ENTRIES = ['server.js', 'vps_server.js', 'vps_server.cjs'];
 const MODULE = 'services/print3dMaterialsServer.cjs';
@@ -19,10 +20,13 @@ function patchEntry(source) {
 }
 async function deployPrint3dMaterials(options) {
   const moduleSource = fs.readFileSync(path.join(options.root, MODULE), 'utf8');
+  // Only this reviewed initial release may be replaced during route-conflict recovery.
+  const previous = execFileSync('git', ['show', '81ccd875:services/print3dMaterialsServer.cjs'], { cwd: options.root, encoding: 'utf8' });
   await deployProductReadPrivacy({ ...options, files: [MODULE, ...ENTRIES], backupPrefix: 'print3d-materials',
     patchFile(source, file) {
       if (file !== MODULE) return patchEntry(source);
-      if (source && source.replace(/\r\n/g, '\n') !== moduleSource.replace(/\r\n/g, '\n')) {
+      if (source && source.replace(/\r\n/g, '\n') !== moduleSource.replace(/\r\n/g, '\n')
+        && source.replace(/\r\n/g, '\n') !== previous.replace(/\r\n/g, '\n')) {
         throw new Error('Remote materials module differs; refusing overwrite');
       }
       return moduleSource;
