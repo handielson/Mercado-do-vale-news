@@ -2,11 +2,11 @@
 
 Data: 10/10/2026. Branch: main. Tag: v1.2.594-produto-3d-entry.
 Release: /var/www/mdv-site/releases/20261010-230200-v12594-produto-3d-entry.
-Status: pronta para publicação.
+Status: publicada e validada em produção. Commit da release: 81e7b318.
 
 Botão Produto 3D na lista central abre novo cadastro já marcado ou pesquisa o SKU existente para conferência. O cadastro central continua responsável pelo SKU. Após salvar uma variante vendável, o operador segue para ficha e arquivos; produtos pai seguem para suas variações. No localhost, a edição existente mantém o rascunho local.
 
-Validação: seis testes de fluxo; sintaxe dos servidores; build sem runtime Supabase. Publicação somente do painel, sem reinício da API ou alteração de produtos reais.
+Validação: seis testes de fluxo; sintaxe dos servidores; build sem runtime Supabase; homepage HTTP 200 e VERSION.json correto; API saudável com mysql.ok=true. Navegador confirmou cadastro novo com impressão 3D marcada e abertura do SKU SFKU3XMVB sem mudar seu identificador. Publicação somente do painel, sem reinício da API ou alteração de produtos reais. Auditoria: zero worktrees removidos, 34 bloqueados preservados (lista no registro desta versão). Alterações Shopee preexistentes preservadas fora da release.
 
 ## Histórico
 
