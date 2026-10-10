@@ -1,3 +1,15 @@
+# v1.2.594-produto-3d-entry
+
+Data: 10/10/2026. Branch: main. Tag: v1.2.594-produto-3d-entry.
+Release: /var/www/mdv-site/releases/20261010-230200-v12594-produto-3d-entry.
+Status: pronta para publicação.
+
+Botão Produto 3D na lista central abre novo cadastro já marcado ou pesquisa o SKU existente para conferência. O cadastro central continua responsável pelo SKU. Após salvar uma variante vendável, o operador segue para ficha e arquivos; produtos pai seguem para suas variações. No localhost, a edição existente mantém o rascunho local.
+
+Validação: seis testes de fluxo; sintaxe dos servidores; build sem runtime Supabase. Publicação somente do painel, sem reinício da API ou alteração de produtos reais.
+
+## Histórico
+
 # v1.2.593-phone-brands-dynamic
 
 Data: 09/10/2026. Branch: main. Tag: v1.2.593-phone-brands-dynamic.

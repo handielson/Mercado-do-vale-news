@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowLeft, ExternalLink, MapPin, Package, Plus, Tags } from 'lucide-react';
 import { Product, ProductInput } from '../../../types/product';
@@ -15,6 +15,7 @@ import { UnitList } from '../../../components/units/UnitList';
 import { UnitForm } from '../../../components/units/UnitForm';
 import { InmetroWidget } from '../../../components/admin/InmetroWidget';
 import { getFamilyChildState } from '../../../services/productClonePrefill.js';
+import { isLocalCatalogPreviewRuntime } from '../../../services/localCatalogPreview';
 
 type TabType = 'product' | 'family' | 'inventory' | 'extras';
 
@@ -103,6 +104,8 @@ const ProductTagPicker: React.FC<ProductTagPickerProps> = ({
 export const ProductDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
+    const print3dEntry = new URLSearchParams(location.search).get('print3d') === '1';
 
     const [activeTab, setActiveTab] = useState<TabType>('product');
     useEffect(() => { setActiveTab('product'); }, [id]);
@@ -111,6 +114,7 @@ export const ProductDetailPage: React.FC = () => {
         window.requestAnimationFrame(() => document.getElementById('product-tab-menu')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     };
     const [product, setProduct] = useState<Product | undefined>();
+    const formProduct = useMemo(() => product && print3dEntry ? { ...product, is_print3d: true } : product, [product, print3dEntry]);
     const [units, setUnits] = useState<Unit[]>([]);
     const [stats, setStats] = useState({ total: 0, available: 0, reserved: 0, sold: 0, rma: 0 });
 
@@ -189,13 +193,24 @@ export const ProductDetailPage: React.FC = () => {
 
         try {
             setIsSaving(true);
-            await productService.update(id, data);
+            const savedProduct = await productService.update(id, data);
+            if (print3dEntry && isLocalCatalogPreviewRuntime()) {
+                setProduct(savedProduct);
+                toast.success('Rascunho 3D salvo na prévia local.');
+                return savedProduct;
+            }
             toast.success('Produto atualizado com sucesso!');
+            if (print3dEntry && savedProduct.is_print3d && !Number(savedProduct.is_parent)) {
+                navigate(`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(savedProduct.id)}#ficha-producao-3d`);
+                return savedProduct;
+            }
             if (Number(product?.is_parent) === 1) await fetchProduct();
             else navigate('/admin/products');
+            return savedProduct;
         } catch (error) {
             console.error('Error updating product:', error);
             toast.error('Erro ao atualizar produto');
+            throw error;
         } finally {
             setIsSaving(false);
         }
@@ -397,7 +412,8 @@ export const ProductDetailPage: React.FC = () => {
                 {/* Tab Content */}
                 <div className="w-full min-w-0 space-y-6">
                     <div className={activeTab === 'product' ? '' : 'hidden'}>
-                        <ProductForm key={product.id} initialData={product} onSubmit={handleProductSubmit} onCancel={handleCancel} isLoading={isSaving} />
+                        {print3dEntry && <p className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">Incluir na 3DMV: a opção de impressão 3D está marcada para conferência. Salve para continuar usando o SKU {product.sku}.</p>}
+                        <ProductForm key={`${product.id}-${print3dEntry}`} initialData={formProduct} onSubmit={handleProductSubmit} onCancel={handleCancel} isLoading={isSaving} />
                     </div>
                     {Number(product.is_parent) === 1 && <div className={activeTab === 'family' ? '' : 'hidden'}><ProductFamilyInheritance parent={product} /></div>}
                     {activeTab === 'extras' && (

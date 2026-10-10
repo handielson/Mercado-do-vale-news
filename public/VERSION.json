@@ -1,32 +1,30 @@
 {
-  "version": "v1.2.593-phone-brands-dynamic",
-  "date": "2026-10-09",
+  "version": "v1.2.594-produto-3d-entry",
+  "date": "2026-10-10",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.593-phone-brands-dynamic",
-  "release_vps": "/var/www/mdv-site/releases/20261009-203847-phone-brands-dynamic",
+  "tag": "v1.2.594-produto-3d-entry",
+  "release_vps": "/var/www/mdv-site/releases/20261010-230200-v12594-produto-3d-entry",
   "release_print3d_vps": null,
-  "summary": "Tabelas com todas as marcas automaticamente ou selecao especifica; datas pendentes adaptadas sem reenviar publicacoes.",
+  "summary": "Botao Produto 3D para novo cadastro central ou inclusao de SKU existente, com continuidade para ficha e arquivos.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "pages/admin/settings/marketing/SocialStorySchedulerPanel.tsx",
-    "services/phonePriceListServer.cjs",
-    "services/socialStoryPriceListBatches.cjs",
-    "services/socialStoryScheduleService.ts",
-    "scripts/enable-dynamic-phone-brands.cjs",
-    "tmp-tests/dynamic-phone-brands-repair.test.cjs",
-    "tmp-tests/phone-price-list-server.test.cjs",
-    "tmp-tests/social-story-price-list-batches.test.cjs",
+    "components/products/Print3dProductEntry.tsx",
+    "components/products/ProductForm.tsx",
+    "pages/admin/products/ProductListPage.tsx",
+    "pages/admin/products/ProductFormPage.tsx",
+    "pages/admin/products/ProductDetailPage.tsx",
+    "tmp-tests/print3d-product-entry.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-09-v1.2.593-phone-brands-dynamic.md"
+    "docs/versoes/2026-10-10-v1.2.594-produto-3d-entry.md"
   ],
   "validations": [
-    "33 testes passaram; 1 teste de workflow opcional ignorado.",
-    "Guardas do calendario e sintaxe dos tres servidores passaram.",
-    "Build, deploy seletivo, preview real e adaptacao transacional das datas pendentes."
+    "Seis testes do fluxo Produto 3D passaram.",
+    "Sintaxe dos tres servidores e build aprovados.",
+    "Deploy do painel e validacao publica da versao e dos dois caminhos."
   ]
 }

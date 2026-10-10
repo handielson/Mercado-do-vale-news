@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store, Camera, LayoutGrid, ListTree } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
+import { Print3dProductEntry } from '../../../components/products/Print3dProductEntry';
 import { ProductList } from '../../../components/products/ProductList';
 import { ProductFamilyList, type ProductFamilyGroup } from '../../../components/products/ProductFamilyList';
 import { Product } from '../../../types/product';
@@ -383,14 +384,14 @@ export const ProductListPage: React.FC = () => {
             {/* Header */}
             <div className="space-y-3">
                 {/* Linha 1: Título + ações principais */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-900">Produtos</h1>
                         <p className="text-sm text-slate-500 mt-1">
                             Gerencie o catálogo de produtos do sistema
                         </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         {/* Selection mode toggle */}
                         <button
                             onClick={() => selectionMode ? handleExitSelection() : setSelectionMode(true)}
@@ -428,6 +429,8 @@ export const ProductListPage: React.FC = () => {
                             <Store className="h-4 w-4" />
                             Sites e preços
                         </button>
+
+                        <Print3dProductEntry />
 
                         {/* Novo Produto — ação principal em destaque */}
                         <button

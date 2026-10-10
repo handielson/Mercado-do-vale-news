@@ -57,6 +57,7 @@ import { UnitStatus } from '../../utils/field-standards';
 
 interface ProductFormProps {
     initialData?: Product;
+    defaultIsPrint3d?: boolean;
     onSubmit: (data: ProductInput) => Promise<Product | void>;
     onCancel: () => void;
     onBatchComplete?: (savedProduct?: Product) => void;
@@ -75,7 +76,7 @@ const DEFAULT_PRODUCT_VERSION = 'Global';
 const DEFAULT_BATTERY_HEALTH = '100';
 type FormSection = 'basic' | 'specs' | 'media' | 'channels' | 'commercial' | 'fiscal';
 
-export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, isLoading }: ProductFormProps) {
+export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, onCancel, onBatchComplete, isLoading }: ProductFormProps) {
     const [activeSection, setActiveSection] = useState<FormSection>(() => window.location.hash === '#fiscal' ? 'fiscal' : window.location.hash === '#commercial' ? 'commercial' : 'basic');
     const [activeSalesChannel, setActiveSalesChannel] = useState<ProductSalesChannel>('mercado-livre');
     const selectSection = (section: FormSection) => {
@@ -296,7 +297,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             stock_quantity: 0,
             is_parent: false,
             product_format: initialData?.is_parent ? 'parent' : initialData?.parent_id ? 'variation' : 'simple',
-            is_print3d: false,
+            is_print3d: defaultIsPrint3d,
             print3d_preorder_enabled: false,
             print3d_preorder_limit: null,
             warranty_type: 'brand', // Default to brand warranty

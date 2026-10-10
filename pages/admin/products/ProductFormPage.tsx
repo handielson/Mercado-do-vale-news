@@ -72,6 +72,7 @@ export const ProductFormPage: React.FC = () => {
     const [draftRevision, setDraftRevision] = useState(0);
 
     const isEditMode = id && id !== 'new';
+    const print3dEntry = new URLSearchParams(location.search).get('print3d') === '1';
 
     // Get EAN from navigation state if provided
     const eanFromState = (location.state as any)?.ean;
@@ -82,12 +83,15 @@ export const ProductFormPage: React.FC = () => {
         if (isEditMode) {
             fetchProduct();
         } else if (cloneProductFromState) {
-            setProduct(buildProductClonePrefill(cloneProductFromState) as unknown as Product);
+            const prefill = buildProductClonePrefill(cloneProductFromState);
+            setProduct({ ...prefill, ...(print3dEntry ? { is_print3d: true } : {}) } as unknown as Product);
         } else if (eanFromState) {
             // Pre-fill EAN for new product
-            setProduct({ ean: eanFromState } as unknown as Product);
+            setProduct({ ean: eanFromState, ...(print3dEntry ? { is_print3d: true } : {}) } as unknown as Product);
+        } else {
+            setProduct(undefined);
         }
-    }, [id, eanFromState, cloneProductFromState]);
+    }, [id, eanFromState, cloneProductFromState, print3dEntry]);
 
     // Update document title
     useEffect(() => {
@@ -96,13 +100,13 @@ export const ProductFormPage: React.FC = () => {
         } else if (isEditMode) {
             document.title = 'Editar Produto | Mercado do Vale';
         } else {
-            document.title = 'Novo Produto | Mercado do Vale';
+            document.title = print3dEntry ? 'Novo Produto 3D | Mercado do Vale' : 'Novo Produto | Mercado do Vale';
         }
 
         return () => {
             document.title = 'Mercado do Vale - Produtos';
         };
-    }, [product?.name, isEditMode]);
+    }, [product?.name, isEditMode, print3dEntry]);
 
     const fetchProduct = async () => {
         if (!id) return;
@@ -110,7 +114,7 @@ export const ProductFormPage: React.FC = () => {
         try {
             setIsFetching(true);
             const data = await productService.getById(id);
-            setProduct(data);
+            setProduct(print3dEntry ? { ...data, is_print3d: true } : data);
         } catch (error) {
             console.error('Error fetching product:', error);
             toast.error('Erro ao carregar produto');
@@ -155,6 +159,10 @@ export const ProductFormPage: React.FC = () => {
             return;
         }
         if (savedProduct?.is_print3d && savedProduct.id) {
+            if (savedProduct.is_parent) {
+                navigate(`/admin/products/${savedProduct.id}`);
+                return;
+            }
             navigate(`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(savedProduct.id)}#ficha-producao-3d`);
             return;
         }
@@ -189,7 +197,7 @@ export const ProductFormPage: React.FC = () => {
                 </button>
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900">
-                        {isEditMode ? 'Editar Produto' : 'Novo Produto'}
+                        {print3dEntry ? (isEditMode ? 'Incluir produto na 3DMV' : 'Novo Produto 3D') : (isEditMode ? 'Editar Produto' : 'Novo Produto')}
                     </h1>
                     <p className="text-sm text-slate-500 mt-1">
                         {isEditMode
@@ -198,6 +206,8 @@ export const ProductFormPage: React.FC = () => {
                     </p>
                 </div>
             </div>
+
+            {print3dEntry && <p className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">A opção de impressão 3D já está marcada. Confira o cadastro e salve para continuar. Produtos vendáveis seguem para a ficha e os arquivos; produtos pai organizam as variações.</p>}
 
             {isEditMode && product?.id && product.sku && (
                 <ProductWorkspaceNav productId={product.id} sku={product.sku} active="product" />
@@ -211,7 +221,9 @@ export const ProductFormPage: React.FC = () => {
                 }} />
             )}
             <ProductForm
+                key={`${id || 'new'}-${print3dEntry}`}
                 initialData={product}
+                defaultIsPrint3d={print3dEntry}
                 onSubmit={handleSubmit}
                 onCancel={handleCancel}
                 onBatchComplete={handleBatchComplete}
