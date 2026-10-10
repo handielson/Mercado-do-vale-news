@@ -47,6 +47,7 @@ const tiktokShopAutomationPaths = [
   'services/tiktokShopPrintServer.cjs',
 ];
 const print3dRecipeRuntimePaths = [
+  'services/print3dMaterialsServer.cjs',
   'services/print3dProductOffer.cjs',
   'services/productDeadlineRequest.cjs',
   'services/productDeadlineRequestsServer.cjs',
@@ -515,6 +516,14 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--print3d-materials-only') || process.argv.includes('--print3d-materials-check')) {
+    await require('./scripts/deploy-print3d-materials.cjs').deployPrint3dMaterials({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--print3d-materials-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--catalog-title-upload-only') || process.argv.includes('--catalog-title-upload-check')) {
     await require('./scripts/deploy-catalog-title-upload.cjs').deployCatalogTitleUpload({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

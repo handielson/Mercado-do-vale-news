@@ -4,6 +4,7 @@ import { ProductInput } from '../../../types/product';
 import { CategoryConfig, FieldRequirement } from '../../../types/category';
 import { IMEIInput } from '../../ui/IMEIInput';
 import { ColorSelect } from '../selectors/ColorSelect';
+import { MaterialSelect } from '../selectors/MaterialSelect';
 import { CapacitySelect } from '../selectors/CapacitySelect';
 import { VersionSelect } from '../selectors/VersionSelect';
 import { CheckCircle2, Package, RefreshCw, Loader2 } from 'lucide-react';
@@ -219,6 +220,12 @@ export function ProductSpecifications({
 
         const isRequired = requirement === 'required';
         const fieldKey = `specs.${key}` as any;
+
+        if (isPrint3d && normalizeSpecFieldKey(key).toLowerCase() === 'material') {
+            return <MaterialSelect key={key} value={String(watch(fieldKey) || '')}
+                onChange={value => setValue(fieldKey, value, { shouldDirty: true, shouldValidate: true })}
+                label={metadata.label} required={isRequired} error={(errors?.specs?.[key] as any)?.message} />;
+        }
 
         // Text input
         if (metadata.type === 'text' || metadata.type === 'number') {
@@ -534,6 +541,14 @@ export function ProductSpecifications({
                         })
                         .map((customField) => {
                             if (customField.requirement === 'off') return null;
+
+                            if (isPrint3d && normalizeSpecFieldKey(customField.key).toLowerCase() === 'material') {
+                                const fieldKey = `specs.${customField.key}` as any;
+                                return <MaterialSelect key={customField.id} value={String(watch(fieldKey) || '')}
+                                    onChange={value => setValue(fieldKey, value, { shouldDirty: true, shouldValidate: true })}
+                                    label={customField.name || 'Material'} required={customField.requirement === 'required'}
+                                    error={(errors?.specs?.[customField.key] as any)?.message} />;
+                            }
 
                             return (
                                 <div key={customField.id} className="space-y-1 min-w-0">

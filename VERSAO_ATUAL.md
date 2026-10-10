@@ -1,3 +1,15 @@
+# v1.2.596-materiais-3d
+
+Data: 10/10/2026. Branch: main. Tag: v1.2.596-materiais-3d.
+Release: /var/www/mdv-site/releases/20261010-232309-materiais-3d.
+Status: pronta para publicação; validação pública pendente.
+
+Material nos produtos 3D passa a ser selecionável, com 15 tipos conhecidos e cadastro compartilhado de novos materiais. Fonte de verdade: API/MySQL em admin_preferences; valores legados preservados. Sem migration, alteração de SKU, estoque, preços ou produtos reais. API seletiva com backup, verificações de sintaxe e preservação de código remoto.
+
+Validações: 16 testes focados; sintaxe dos servidores e preflight seletivo aprovados. Alterações Shopee preexistentes fora da release.
+
+## Histórico
+
 # v1.2.595-categorias-hierarquia
 
 Data: 10/10/2026. Branch: main. Tag: v1.2.595-categorias-hierarquia.
