@@ -2,7 +2,7 @@
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.606-variacoes-ultima-etapa.
 Release MDV: /var/www/mdv-site/releases/20261011-204442-variacoes-ultima-etapa.
-Status: preparada para publicacao.
+Status: publicada e validada em produção. Commit da release: a922f922.
 
 Variações como última aba, depois do cadastro completo do pai e dos dados fiscais. Fotos, descrição e canais do pai vêm antes. Os arquivos de produção dos filhos ficam junto das variações. O botão Salvar família e variações mantém o salvamento conjunto existente, sem exigir cadastro prévio do pai. Produtos simples e filhos avulsos mantêm suas abas de produção, estoque e preços.
 
@@ -10,7 +10,7 @@ Seletor de cores dos produtos filtrável, com amostra antes do nome tanto na lis
 
 Publicação exclusiva do painel/site MDV. API, dados comerciais e site 3DMV permanecem na release anterior. Seis arquivos preexistentes de Shopee/documentação/fixture ficam fora do escopo.
 
-Validações: 45 testes focados aprovados, incluindo navegação do pai com/sem 3D, filhos avulsos, salvamento/retry da família, amostras de cores, teclado e atualização. Build e validações finais registrados após publicação.
+Validações: 45 testes focados aprovados, incluindo navegação do pai com/sem 3D, filhos avulsos, salvamento/retry da família, amostras de cores, teclado e atualização. 45 testes e build aprovados, com guardas de Supabase e do editor alcançável. Site e cadastro HTTP 200, VERSION.json correspondente à release, API saudável com mysql.ok=true sem reinício. Chrome autenticado confirmou a última aba e as amostras reais das cores, sem salvar produtos ou arquivos e sem erros de console. Aviso preexistente de contexto da empresa usa o ID padrão VPS. Browserslist desatualizado é aviso do build. Main sincronizada; seis alterações preexistentes fora do escopo preservadas. Auditoria: zero resíduos removidos e 34 worktrees bloqueadas preservadas, listadas na nota desta versão. Nenhuma mudança na skill foi necessária.
 
 Arquivos da entrega:
 - components/products/ProductForm.tsx
