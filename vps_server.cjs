@@ -28441,7 +28441,8 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
         continue;
       }
 
-      await withSmartphonePriceWrite(pool, p, async (priceDb, controlledProduct) => {
+      await require('./services/productSku.cjs').withProductSku(pool, p, async (skuDb) => {
+      await withSmartphonePriceWrite(skuDb, p, async (priceDb, controlledProduct) => {
       Object.assign(p, controlledProduct);
       const [upsertResult] = await priceDb.query(
         `INSERT INTO products (
@@ -28562,6 +28563,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
         );
       }
       }, { transactional: true });
+      });
       results.upserted++;
       results.resolved.push({ requested_id: requestedId, id: p.id, bling_id: p.bling_id || null, matched_existing: matchedExisting });
     } catch (err) {

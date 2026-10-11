@@ -1,34 +1,35 @@
 {
-  "version": "v1.2.599-medidas-3d-mm",
+  "version": "v1.2.600-sku-nome-automatico",
   "date": "2026-10-10",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.599-medidas-3d-mm",
-  "release_vps": "/var/www/mdv-site/releases/20261010-235533-medidas-3d-mm",
-  "release_print3d_vps": "/var/www/print3d-site/releases/20261010-235533-medidas-3d-mm",
-  "summary": "Medidas unicas do produto 3D em mm no cadastro e nos dois sites, com conversao interna para cm e peso em kg.",
+  "tag": "v1.2.600-sku-nome-automatico",
+  "release_vps": "/var/www/mdv-site/releases/20261010-211100-sku-nome-automatico",
+  "release_print3d_vps": "/var/www/print3d-site/releases/20261010-211100-sku-nome-automatico",
+  "summary": "SKU automatico com quatro letras e quatro numeros, incluido no nome ao salvar novos produtos; SKUs existentes preservados.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/products/sections/ProductSpecifications.tsx",
-    "utils/print3dMeasurements.js",
-    "pages/store/Print3dProductPage.tsx",
-    "pages/store/PublicProductPage.tsx",
-    "services/productStorefrontOffer.cjs",
-    "services/productStorefrontOffersServer.cjs",
-    "tmp-tests/print3d-measurements.test.cjs",
-    "tmp-tests/print3d-product-specifications-render.test.cjs",
-    "tmp-tests/print3d-product-service-roundtrip.test.cjs",
+    "components/products/ProductForm.tsx",
+    "components/products/sections/ProductBasicInfo.tsx",
+    "services/productSku.cjs",
+    "services/localCatalogPreviewServer.cjs",
+    "vps_server.cjs",
+    "vps_server.js",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-product-auto-sku.cjs",
+    "tmp-tests/product-auto-sku.test.cjs",
+    "tmp-tests/deploy-product-auto-sku.test.cjs",
     "tmp-tests/local-catalog-preview.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-10-v1.2.599-medidas-3d-mm.md"
+    "docs/versoes/2026-10-10-v1.2.600-sku-nome-automatico.md"
   ],
   "validations": [
-    "40 testes de medidas, cadastro, preview, API publica e frete.",
-    "Build com trava contra runtime Supabase.",
-    "Validacao dos dois sites e da API prevista apos deploy."
+    "44 testes de SKU, concorrencia, preview, cadastro 3D e grupos de preco; guardas Bling/PDV.",
+    "Sintaxe dos servidores e preflight remoto seletivo aprovados.",
+    "Builds dos dois sites e validacao publica previstos antes de concluir."
   ]
 }

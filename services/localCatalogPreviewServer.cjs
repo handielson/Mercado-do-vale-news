@@ -4,6 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { resolveStorefrontDescription } = require('./productStorefrontOffer.cjs');
+const { productSkuPrefix, assignAutomaticProductSku } = require('./productSku.cjs');
 
 const PRODUCT_ID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const productPath = new RegExp(`^/products/(${PRODUCT_ID})$`, 'i');
@@ -150,6 +151,13 @@ function createLocalCatalogPreviewServer({
     res.end(JSON.stringify(payload));
   }
 
+  let skuWriteQueue = Promise.resolve();
+  function serializeSkuWrite(work) {
+    const pending = skuWriteQueue.then(work);
+    skuWriteQueue = pending.catch(() => {});
+    return pending;
+  }
+
   async function remote(pathnameWithSearch, method = 'GET', body) {
     const response = await fetchImpl(new URL(pathnameWithSearch, origin), {
       method,
@@ -212,7 +220,8 @@ function createLocalCatalogPreviewServer({
     const approved = [];
     if (productDraft) {
       if (productDraft.local_only) {
-        await remote('/products/batch', 'POST', [{ id: productId, ...productDraft.patch }]);
+        const result = await remote('/products/batch', 'POST', [{ id: productId, ...productDraft.patch }]);
+        if (result.errors?.length) throw Object.assign(new Error(result.errors[0].error || 'Falha ao aprovar o produto.'), { statusCode: 409 });
       } else {
         await remote(`/products/${encodeURIComponent(productId)}`, 'PUT', productDraft.patch);
       }
@@ -272,6 +281,7 @@ function createLocalCatalogPreviewServer({
       }
 
       if (method === 'POST' && pathname === '/products/batch') {
+        return await serializeSkuWrite(async () => {
         const rows = await readBody(req);
         if (!Array.isArray(rows) || rows.length === 0) {
           return send(res, 400, { error: 'Informe pelo menos um produto para a prÃ©via local.' });
@@ -285,6 +295,20 @@ function createLocalCatalogPreviewServer({
             return send(res, 400, { error: 'Cada produto local precisa de um ID UUID vÃ¡lido.' });
           }
           const patch = copyAllowed(row, LOCAL_PRODUCT_FIELDS);
+          const previous = drafts.products[productId];
+          if (previous) {
+            patch.sku = previous.patch?.sku ?? null;
+          } else if (!String(patch.sku || '').trim()) {
+            const prefix = productSkuPrefix(patch.name);
+            const skus = Object.values(drafts.products).map(draft => draft.patch?.sku);
+            for (let offset = 0; ; offset += 500) {
+              const centralRows = await remote(`/products?search=${prefix}&status=all&limit=500&offset=${offset}`);
+              if (!Array.isArray(centralRows)) throw new Error('Não foi possível consultar os SKUs centrais.');
+              skus.push(...centralRows.map(product => product.sku));
+              if (centralRows.length < 500) break;
+            }
+            assignAutomaticProductSku(patch, skus);
+          }
           drafts.products[productId] = {
             patch: { ...(drafts.products[productId]?.patch || {}), ...patch },
             local_only: true,
@@ -295,6 +319,7 @@ function createLocalCatalogPreviewServer({
         }
         await store.write(drafts);
         return send(res, 200, { ok: true, preview: true, upserted: rows.length, errors: [], resolved });
+        });
       }
 
       if (method === 'PUT' && productMatch) {

@@ -564,6 +564,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--product-auto-sku-only') || process.argv.includes('--product-auto-sku-check')) {
+    await require('./scripts/deploy-product-auto-sku.cjs').deployProductAutoSku({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--product-auto-sku-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--product-read-privacy-only') || process.argv.includes('--product-read-privacy-check')) {
     await require('./scripts/deploy-product-read-privacy.cjs').deployProductReadPrivacy({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

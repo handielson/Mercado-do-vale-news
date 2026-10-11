@@ -16,6 +16,44 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 }
 
+test('SKU automático local considera catálogo e rascunhos concorrentes, sem escrever na produção', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-preview-sku-'));
+  const writes = [];
+  const app = createLocalCatalogPreviewServer({ port: 0, syncKey: 'test', draftFile: path.join(directory, 'drafts.json'),
+    fetchImpl: async (url, options = {}) => {
+      if (options.method === 'POST') {
+        writes.push(JSON.parse(options.body));
+        return json({ upserted: 0, errors: [{ error: 'SKU já está em uso' }] });
+      }
+      if (new URL(url).pathname === '/products') return json([{ id: parentId, sku: 'CHAV0009' }]);
+      return json({ error: 'not found' }, 404);
+    },
+  });
+  await app.start();
+  t.after(async () => { await app.close(); await fs.rm(directory, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const ids = [localOnlyId, '11111111-2222-4333-8444-555555555556'];
+  const responses = await Promise.all(ids.map(id => fetch(`${base}/products/batch`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify([{ id, name: 'Chaveiro personalizado', sku: '' }]),
+  })));
+  for (const response of responses) assert.equal(response.status, 200);
+  const products = await Promise.all(ids.map(async id => (await fetch(`${base}/products/${id}`)).json()));
+  assert.deepEqual(products.map(product => product.sku).sort(), ['CHAV0010', 'CHAV0011']);
+  for (const product of products) assert.equal(product.name, `Chaveiro personalizado - ${product.sku}`);
+  assert.equal(writes.length, 0);
+  const rename = await fetch(`${base}/products/${ids[0]}`, {
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Vaso decorativo' }),
+  });
+  assert.equal(rename.status, 200);
+  assert.equal((await (await fetch(`${base}/products/${ids[0]}`)).json()).sku, products[0].sku);
+  const approval = await fetch(`${base}/admin/local-preview/drafts/${ids[0]}/approve`, { method: 'POST', headers: { 'x-sync-key': 'test' } });
+  assert.equal(approval.status, 409);
+  assert.equal(writes[0][0].sku, products[0].sku);
+  assert.equal(writes[0][0].name, 'Vaso decorativo', 'aprovação preserva a edição manual posterior do nome');
+  assert.equal((await (await fetch(`${base}/products/${ids[0]}`)).json()).sku, products[0].sku, 'aprovação recusada mantém rascunho e SKU');
+});
+
 test('prévia local usa descrição do pai e só grava na API central após aprovação explícita', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-preview-'));
   const upstreamWrites = [];

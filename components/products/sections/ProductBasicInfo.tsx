@@ -368,7 +368,7 @@ export function ProductBasicInfo({
                         <p className="text-xs text-slate-500">
                             {initialData?.id
                                 ? 'SKU definido pelo sistema. Depois do cadastro, ele não pode ser alterado.'
-                                : 'Informe o SKU do sistema ou deixe vazio para gerar no primeiro cadastro.'}
+                                : 'Informe o SKU do sistema ou deixe vazio: 4 letras do nome + 4 números, gerados ao salvar.'}
                         </p>
                     </div>
 
@@ -552,14 +552,7 @@ export function ProductBasicInfo({
                                                         setParentSearch('');
                                                         setValue('parent_id', p.id, { shouldValidate: true, shouldDirty: true });
                                                         setValue('is_parent', false, { shouldValidate: true, shouldDirty: true });
-                                                        // Sugere SKU filho se o campo estiver vazio
-                                                        const currentSku = watch('sku');
-                                                        if (!currentSku?.trim() && p.sku) {
-                                                            const colorPart = watch('specs.color')
-                                                                ? `-${watch('specs.color').substring(0, 3).toUpperCase()}`
-                                                                : '-VAR';
-                                                            setValue('sku', `${p.sku}${colorPart}`);
-                                                        }
+                                                        // Cada filho recebe seu próprio SKU no backend, sem derivá-lo do pai.
                                                     }}
                                                 >
                                                     <span className="font-mono text-xs text-slate-400 w-32 shrink-0 truncate">{p.sku || '—'}</span>

@@ -1,3 +1,14 @@
+# v1.2.600-sku-nome-automatico
+
+Data: 10/10/2026. Branch: main. Tag: v1.2.600-sku-nome-automatico.
+Release MDV: /var/www/mdv-site/releases/20261010-211100-sku-nome-automatico.
+Release 3DMV: /var/www/print3d-site/releases/20261010-211100-sku-nome-automatico.
+Status: preparada; deploy e validação pública pendentes.
+
+SKU automático para novos cadastros com campo vazio: quatro letras reconhecíveis e quatro números sequenciais por prefixo. Nome persistido em texto simples, por exemplo Vaso decorativo - VASO0003. Reserva de SKU na mesma conexão da transação; SKUs existentes e manuais preservados. Preview consulta o catálogo e os rascunhos locais, sem publicar ao salvar; aprovação recusada mantém o rascunho. Deploy API seletivo com backup, preservando drift remoto. 44 testes e guardas Bling/PDV aprovados. Quatro arquivos Shopee preexistentes fora do escopo.
+
+## Histórico
+
 # v1.2.599-medidas-3d-mm
 
 Data: 10/10/2026. Branch: main. Tag: v1.2.599-medidas-3d-mm.
