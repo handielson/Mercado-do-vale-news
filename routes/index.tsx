@@ -137,6 +137,7 @@ const ModelProductAggregatorPage = lazy(() => import('../pages/admin/products/Mo
 const ProductCombosPage = lazy(() => import('../pages/admin/products/ProductCombosPage').then(module => ({ default: module.ProductCombosPage })));
 const ProductImageBankPage = lazy(() => import('../pages/admin/products/ProductImageBankPage').then(module => ({ default: module.ProductImageBankPage })));
 const Print3dCostPage = lazy(() => import('../pages/admin/products/Print3dCostPage').then(module => ({ default: module.Print3dCostPage })));
+const Print3dFilamentsPage = lazy(() => import('../pages/admin/products/Print3dFilamentsPage').then(module => ({ default: module.Print3dFilamentsPage })));
 const ProductDeadlineRequestsPage = lazy(() => import('../pages/admin/products/ProductDeadlineRequestsPage'));
 const ProductStorefrontOffersPage = lazy(() => import('../pages/admin/products/ProductStorefrontOffersPage'));
 const InventoryPage = lazy(() => import('../pages/admin/inventory/InventoryPage').then(module => ({ default: module.InventoryPage })));
@@ -355,6 +356,10 @@ export const router = createBrowserRouter([
   {
     path: "/admin/loja-3d/calculadora",
     element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dCostPage /></AdminLayout></ProtectedRoute>
+  },
+  {
+    path: "/admin/loja-3d/filamentos",
+    element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dFilamentsPage /></AdminLayout></ProtectedRoute>
   },
   {
     path: "/admin/loja-3d/catalogo",

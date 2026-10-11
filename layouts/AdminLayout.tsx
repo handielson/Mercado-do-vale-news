@@ -118,6 +118,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/loja-3d/solicitacoes', icon: <MessageCircle size={18} />, label: 'Solicitações 3D', keywords: 'encomenda quantidade prazo consulta whatsapp' },
         { to: '/admin/loja-3d/producao', icon: <Printer size={18} />, label: 'Produção 3D', keywords: 'ordens fila progresso lotes aprovadas rejeitadas' },
         { to: '/admin/loja-3d/calculadora', icon: <Printer size={18} />, label: 'Produtos e arquivos 3D', keywords: 'filamento impressao custo energia insumos arquivos ficha makerworld stl 3mf gcode' },
+        { to: '/admin/loja-3d/filamentos', icon: <Boxes size={18} />, label: 'Filamentos e estoque', keywords: 'marca material cor rolo custo kg gramas entrada ajuste saldo historico' },
         { to: '/admin/loja-3d/catalogo', icon: <Store size={18} />, label: 'Catálogo e preços 3D', keywords: 'produtos publicar visibilidade oferta' },
         { to: '/admin/loja-3d/banners', icon: <Image size={18} />, label: 'Banners 3D', keywords: 'imagens carrossel' },
         { to: '/admin/loja-3d/configuracoes', icon: <Wrench size={18} />, label: 'Configurações 3DMV', keywords: 'manutencao abrir fechar site mensagem' },

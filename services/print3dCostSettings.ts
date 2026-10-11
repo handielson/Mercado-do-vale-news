@@ -8,6 +8,10 @@ export type Print3dFilament = {
   color: string;
   spoolGrams: number;
   spoolCostCents: number;
+  brand?: string;
+  material?: string;
+  costPerKgCents?: number;
+  active?: boolean;
 };
 
 export type Print3dSupply = {

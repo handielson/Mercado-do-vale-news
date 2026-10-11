@@ -62,6 +62,9 @@ function getVpsPathname(path) {
 function isLocalCatalogPreviewPath(path, method = 'GET') {
   const pathname = getVpsPathname(path);
   const normalizedMethod = normalizeVpsMethod(method);
+  if (pathname === '/admin/preferences/print3d.cost.v1' && ['GET','PATCH'].includes(normalizedMethod)) return true;
+  if ((['/admin/print3d/filaments','/admin/print3d/filaments/status','/admin/print3d/filaments/stock'].includes(pathname) && normalizedMethod === 'GET') ||
+      (['/admin/print3d/filaments','/admin/print3d/filaments/movements','/admin/print3d/filaments/approve'].includes(pathname) && normalizedMethod === 'POST')) return true;
   const productId = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
   if (pathname === '/products/batch' && normalizedMethod === 'POST') return true;
   if (new RegExp(`^/products/${productId}$`, 'i').test(pathname) && ['GET', 'PUT'].includes(normalizedMethod)) return true;

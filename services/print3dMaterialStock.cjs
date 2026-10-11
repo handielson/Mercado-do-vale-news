@@ -23,7 +23,7 @@ async function receivePrint3dFilament(pool, { body, actorId }) {
     const value = preferences[0]?.value_json;
     const settings = typeof value === 'string' ? JSON.parse(value) : value;
     const filament = settings?.filaments?.find(item => item?.id === filamentId);
-    if (!filament?.name?.trim() || !filament?.color?.trim()) fail(409, 'Cadastre este filamento e sua cor na calculadora antes da entrada física.');
+    if (!filament?.name?.trim() || !filament?.color?.trim() || filament.active === false) fail(409, 'Cadastre este filamento ativo e sua cor na calculadora antes da entrada física.');
     // Create the zero-balance row first so two first receipts for the same
     // filament serialize on the primary key rather than racing on a missing row.
     await connection.query('INSERT INTO print3d_filament_stock (filament_id,name_snapshot,color_snapshot,quantity_grams) VALUES (?,?,?,0) ON DUPLICATE KEY UPDATE filament_id=filament_id',

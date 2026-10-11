@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { resolveStorefrontDescription } = require('./productStorefrontOffer.cjs');
 const { productSkuPrefix, assignAutomaticProductSku } = require('./productSku.cjs');
+const { isLocalFilamentPath, createLocalFilamentPreview } = require('./localPrint3dFilaments.cjs');
 
 const PRODUCT_ID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const productPath = new RegExp(`^/products/(${PRODUCT_ID})$`, 'i');
@@ -36,6 +37,7 @@ function normalizePath(raw) {
 function isLocalCatalogPreviewPath(rawPath, method = 'GET') {
   const { pathname } = normalizePath(rawPath);
   const normalizedMethod = String(method || 'GET').toUpperCase();
+  if (isLocalFilamentPath(rawPath, normalizedMethod)) return true;
   if (pathname === '/products/batch' && normalizedMethod === 'POST') return true;
   if (productPath.test(pathname) && ['GET', 'PUT'].includes(normalizedMethod)) return true;
   if (storefrontOffersPath.test(pathname) && normalizedMethod === 'GET') return true;
@@ -158,6 +160,8 @@ function createLocalCatalogPreviewServer({
     return pending;
   }
 
+  const filamentPreview = createLocalFilamentPreview({ store, serialize:serializeSkuWrite, fetchImpl, origin, syncKey });
+
   async function remote(pathnameWithSearch, method = 'GET', body) {
     const response = await fetchImpl(new URL(pathnameWithSearch, origin), {
       method,
@@ -241,6 +245,11 @@ function createLocalCatalogPreviewServer({
     const { pathname, search, searchParams } = normalizePath(req.url);
     const method = String(req.method || 'GET').toUpperCase();
     try {
+      if (isLocalFilamentPath(req.url, method)) {
+        await filamentPreview.ready();
+        filamentPreview.server.emit('request', req, res);
+        return;
+      }
       const productMatch = pathname.match(productPath);
       const offersMatch = pathname.match(storefrontOffersPath);
       const offerMatch = pathname.match(storefrontOfferPath);

@@ -516,6 +516,16 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--print3d-filaments-only') || process.argv.includes('--print3d-filaments-check')) {
+    await require('./scripts/deploy-print3d-filaments.cjs').deployPrint3dFilaments({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--print3d-filaments-check'),
+      migrate: process.argv.includes('--apply-filament-migration-054'),
+      enableStock: process.argv.includes('--enable-filament-stock'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--print3d-materials-only') || process.argv.includes('--print3d-materials-check')) {
     await require('./scripts/deploy-print3d-materials.cjs').deployPrint3dMaterials({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

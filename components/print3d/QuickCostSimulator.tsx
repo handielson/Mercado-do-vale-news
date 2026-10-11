@@ -21,7 +21,7 @@ export function QuickCostSimulator({ settings }: { settings: Print3dCostSettings
   const rates = { ...settings, ...overrides };
   const editRate = (patch: Partial<Print3dCostSettings>) => setOverrides(current => ({ ...current, ...patch }));
   const duration = Number(hours) * 60 + Number(minutes);
-  const filament = settings.filaments.find(item => item.id === filamentId);
+  const filament = settings.filaments.find(item => item.id === filamentId && item.active !== false);
   let result: ReturnType<typeof calculatePrint3dCost> | null = null;
   let warning = '';
   if (grams !== '') {
@@ -53,7 +53,7 @@ export function QuickCostSimulator({ settings }: { settings: Print3dCostSettings
     <div><h2 id="quick-cost-title" className="text-lg font-semibold text-violet-950">Simulação rápida · produto avulso</h2>
       <p className="mt-1 text-sm text-slate-600">Informe os gramas para calcular na hora. Não exige produto, SKU ou JSON; não salva ficha nem movimenta estoque.</p></div>
     <div className="grid gap-4 md:grid-cols-2">
-      <label className="text-sm">Filamento da simulação<select className={field} value={filamentId} onChange={event => setFilamentId(event.target.value)}><option value="">Informar preço do rolo manualmente</option>{settings.filaments.map(item => <option key={item.id} value={item.id}>{item.name} · {item.color}</option>)}</select></label>
+      <label className="text-sm">Filamento da simulação<select className={field} value={filamentId} onChange={event => setFilamentId(event.target.value)}><option value="">Informar preço do rolo manualmente</option>{settings.filaments.filter(item => item.active !== false).map(item => <option key={item.id} value={item.id}>{item.name} · {item.color}</option>)}</select></label>
       <label className="text-sm">Material gasto no lote (g)<input className={field} type="number" min="0" step="any" placeholder="Ex.: 50" value={grams} onChange={event => setGrams(event.target.value)} /></label>
       {!filamentId && <><CurrencyInput label="Preço do rolo na simulação" value={spoolCostCents} onChange={setSpoolCostCents} /><label className="text-sm">Peso do rolo na simulação (g)<input className={field} type="number" min="0" step="any" value={spoolGrams} onChange={event => setSpoolGrams(event.target.value)} /></label></>}
       <label className="text-sm">Quantidade de peças na simulação<input className={field} type="number" min="1" step="1" value={pieces} onChange={event => setPieces(event.target.value)} /></label>

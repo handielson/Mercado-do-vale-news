@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
 import { ProductWorkspaceNav } from '../../../components/products/ProductWorkspaceNav';
 import { QuickCostSimulator } from '../../../components/print3d/QuickCostSimulator';
+import { isLocalCatalogPreviewRuntime } from '../../../services/localCatalogPreview';
 import {
   emptyPrint3dCostSettings,
   print3dCostSettingsService,
@@ -41,12 +42,14 @@ const money = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'curren
 const newId = () => crypto.randomUUID();
 
 export function Print3dCostPage() {
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const selectedProductId = searchParams.get('product_id')?.trim() || '';
   const [settings, setSettings] = useState<Print3dCostSettings>(emptyPrint3dCostSettings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
+  const [refreshingFilaments, setRefreshingFilaments] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [fileName, setFileName] = useState('');
@@ -96,7 +99,8 @@ export function Print3dCostPage() {
       .then((data) => {
         if (!mounted) return;
         setSettings(data);
-        if (data.filaments[0]) setFilamentUses([{ filamentId: data.filaments[0].id, consumedGrams: 0 }]);
+        const first = data.filaments.find(f => f.active !== false);
+        if (first) setFilamentUses([{ filamentId: first.id, consumedGrams: 0 }]);
       })
       .catch(() => { if (mounted) setError('Não foi possível carregar os custos cadastrados.'); })
       .finally(() => { if (mounted) setLoading(false); });
@@ -188,9 +192,9 @@ export function Print3dCostPage() {
     try {
       await print3dCostSettingsService.save(settings);
       setSettingsDirty(false);
-      setNotice('Custos salvos no sistema.');
-    } catch {
-      setError('Não foi possível salvar os custos. Confira a conexão e tente novamente.');
+      setNotice(isLocalCatalogPreviewRuntime() ? 'Tarifas salvas somente no rascunho local. Abra Filamentos e estoque para aprovar o envio à API central.' : 'Custos salvos no sistema.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível salvar os custos. Confira a conexão e tente novamente.');
     } finally {
       setSaving(false);
     }
@@ -212,7 +216,7 @@ export function Print3dCostPage() {
       }
       const filaments = filamentUses.map((item) => {
         const source = settings.filaments.find((filament) => filament.id === item.filamentId);
-        if (!source) throw new Error('Um filamento selecionado não está mais no cadastro.');
+        if (!source || source.active === false) throw new Error('Um filamento selecionado está inativo ou não está mais no cadastro.');
         return { consumedGrams: item.consumedGrams, spoolGrams: source.spoolGrams, spoolCostCents: source.spoolCostCents };
       });
       const supplies = supplyUses.map((item) => {
@@ -231,6 +235,22 @@ export function Print3dCostPage() {
     } catch (cause) {
       setResult(null);
       setError(cause instanceof Error ? cause.message : 'Não foi possível calcular.');
+    }
+  };
+
+  const refreshFilaments = async () => {
+    setRefreshingFilaments(true);
+    setError('');
+    try {
+      const latest = await print3dCostSettingsService.get();
+      // Keep unsaved tariffs and supplies; this button refreshes the catalog only.
+      setSettings(current => ({ ...current, filaments:latest.filaments }));
+      setResult(null);
+      setNotice('Lista de filamentos atualizada.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar os filamentos.');
+    } finally {
+      setRefreshingFilaments(false);
     }
   };
 
@@ -497,6 +517,8 @@ export function Print3dCostPage() {
     }
   };
 
+  // Keep old bookmarked registration links working after separating the page.
+  if (location.hash === '#filamentos') return <Navigate to="/admin/loja-3d/filamentos" replace />;
   if (loading) return <div className="p-6 text-slate-600">Carregando custos de impressão 3D...</div>;
   const selectedRecipe = savedRecipes.find((item) => item.id === selectedRecipeId);
 
@@ -526,15 +548,12 @@ export function Print3dCostPage() {
       <p className="text-xs text-slate-600">Referências iniciais editáveis: máquina R$ 1,00/h e mão de obra R$ 20,00/h. São hipóteses de simulação, não índices oficiais. Valores já salvos, inclusive zero, são preservados. A máquina cobre desgaste/manutenção; energia é calculada separadamente. Mão de obra usa apenas os minutos de trabalho manual.</p>
       <button type="button" className="text-sm text-violet-700 underline" onClick={() => editSettings({ machineCentsPerHour: 100, laborCentsPerHour: 2000 })}>Usar referências iniciais de máquina e mão de obra</button>
       <p className="text-xs text-slate-600">Embalagem é multiplicada pelas peças do lote e incluída nos insumos da ficha. Não cadastre a mesma embalagem novamente em outros insumos. Caixa de envio coletiva pode ser lançada em outros insumos pela quantidade usada no lote. Informe sua alíquota efetiva; zero significa sem provisão de imposto.</p>
-      <div className="space-y-3">
-        <div className="flex items-center justify-between"><h3 className="font-semibold">Filamentos</h3><button className="rounded-lg border px-3 py-1 text-sm" onClick={() => editSettings({ filaments: [...settings.filaments, { id: newId(), name: '', color: '', spoolGrams: 1000, spoolCostCents: 0 }] })}>Adicionar filamento</button></div>
-        {settings.filaments.map((item) => <div className="grid gap-2 rounded-lg border p-3 md:grid-cols-[2fr_1fr_1fr_1.5fr_auto]" key={item.id}>
-          <input aria-label="Nome do filamento" placeholder="Material e marca" className={numberClass} value={item.name} onChange={(e) => editSettings({ filaments: settings.filaments.map((current) => current.id === item.id ? { ...current, name: e.target.value } : current) })} />
-          <input aria-label="Cor do filamento" placeholder="Cor" className={numberClass} value={item.color} onChange={(e) => editSettings({ filaments: settings.filaments.map((current) => current.id === item.id ? { ...current, color: e.target.value } : current) })} />
-          <input aria-label="Peso do rolo em gramas" title="Peso do rolo em gramas" className={numberClass} type="number" min="0" step="any" value={item.spoolGrams} onChange={(e) => editSettings({ filaments: settings.filaments.map((current) => current.id === item.id ? { ...current, spoolGrams: Number(e.target.value) } : current) })} />
-          <CurrencyInput label="Preço do rolo" value={item.spoolCostCents} onChange={(value) => editSettings({ filaments: settings.filaments.map((current) => current.id === item.id ? { ...current, spoolCostCents: value } : current) })} />
-          <button className="text-sm text-red-700" onClick={() => editSettings({ filaments: settings.filaments.filter((current) => current.id !== item.id) })}>Remover</button>
-        </div>)}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm">
+        <p>{settings.filaments.filter(f => f.active !== false).length} filamento(s) ativo(s). Cadastro, custo por kg e estoque ficam na página própria.</p>
+        <div className="flex flex-wrap gap-3">
+          <Link to="/admin/loja-3d/filamentos" className="font-semibold text-violet-800 underline">Abrir Filamentos e estoque</Link>
+          <button type="button" disabled={refreshingFilaments} className="text-violet-800 underline disabled:opacity-50" onClick={() => void refreshFilaments()}>{refreshingFilaments ? 'Atualizando filamentos...' : 'Atualizar lista de filamentos'}</button>
+        </div>
       </div>
       <div className="space-y-3">
         <div className="flex items-center justify-between"><h3 className="font-semibold">Outros insumos</h3><button className="rounded-lg border px-3 py-1 text-sm" onClick={() => editSettings({ supplies: [...settings.supplies, { id: newId(), name: '', unitLabel:'un', unitCostCents: 0 }] })}>Adicionar insumo</button></div>
@@ -573,9 +592,9 @@ export function Print3dCostPage() {
         <label className="text-sm md:col-span-2">Observações de produção<textarea className={`${numberClass} min-h-24`} maxLength={1000} value={productionNotes} onChange={(e) => { setProductionNotes(e.target.value); setResult(null); }} placeholder="Montagem, orientação, acabamento, cuidados e conferências." /></label>
       </div>
       <div className="space-y-2">
-        <div className="flex items-center justify-between"><h3 className="font-semibold">Consumo por filamento</h3><button className="rounded-lg border px-3 py-1 text-sm" onClick={() => editFilamentUses([...filamentUses, { filamentId: settings.filaments[0]?.id ?? '', consumedGrams: 0 }])}>Adicionar cor/material</button></div>
+        <div className="flex items-center justify-between"><h3 className="font-semibold">Consumo por filamento</h3><button className="rounded-lg border px-3 py-1 text-sm" onClick={() => editFilamentUses([...filamentUses, { filamentId: settings.filaments.find(f => f.active !== false)?.id ?? '', consumedGrams: 0 }])}>Adicionar cor/material</button></div>
         {filamentUses.map((item, index) => <div className="grid gap-2 md:grid-cols-[2fr_1fr_auto]" key={index}>
-          <select aria-label={`Filamento ${index + 1}`} className={numberClass} value={item.filamentId} onChange={(e) => editFilamentUses(filamentUses.map((current, i) => i === index ? { ...current, filamentId: e.target.value } : current))}><option value="">Selecione</option>{settings.filaments.map((filament) => <option key={filament.id} value={filament.id}>{filament.name} · {filament.color}</option>)}</select>
+          <select aria-label={`Filamento ${index + 1}`} className={numberClass} value={item.filamentId} onChange={(e) => editFilamentUses(filamentUses.map((current, i) => i === index ? { ...current, filamentId: e.target.value } : current))}><option value="">Selecione</option>{settings.filaments.filter(f => f.active !== false).map((filament) => <option key={filament.id} value={filament.id}>{filament.name} · {filament.color}</option>)}</select>
           <input aria-label={`Gramas do filamento ${index + 1}`} className={numberClass} type="number" min="0" step="any" value={item.consumedGrams} onChange={(e) => editFilamentUses(filamentUses.map((current, i) => i === index ? { ...current, consumedGrams: Number(e.target.value) } : current))} />
           <button className="text-sm text-red-700" onClick={() => editFilamentUses(filamentUses.filter((_, i) => i !== index))}>Remover</button>
         </div>)}

@@ -2004,6 +2004,10 @@ fastify.get('/admin/navigation-log', { preHandler: requireSyncKeyOrAdmin }, asyn
 // ─── Helpers ───────────────────────────────────────────────────────────────
 require('./services/print3dMaterialsServer.cjs').registerPrint3dMaterialRoutes(fastify, { pool, requireAdminBearerToken });
 
+const filamentCatalogRoutes = require('./services/print3dFilamentsServer.cjs').registerPrint3dFilamentRoutes(fastify, {
+  pool, getBearerAuthContext:getVpsBearerAuthContext, stockEnabled:process.env.MDV_PRINT3D_FILAMENT_STOCK_ENABLED === '1',
+});
+
 fastify.get('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const key = normalizeAdminPreferenceKey(req.params?.key);
   if (!key) return reply.code(400).send({ error: 'Invalid preference key' });
@@ -2024,6 +2028,13 @@ fastify.get('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, as
 fastify.patch('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const key = normalizeAdminPreferenceKey(req.params?.key);
   if (!key) return reply.code(400).send({ error: 'Invalid preference key' });
+
+  if (key === 'print3d.cost.v1') {
+    await filamentCatalogRoutes.admin(req, reply);
+    if (reply.sent) return;
+    try { return await filamentCatalogRoutes.saveCosts(req.body); }
+    catch (error) { return reply.code(error.statusCode || 500).send({ error:error.statusCode ? error.message : 'Não foi possível salvar os custos.' }); }
+  }
 
   const valueJson = normalizeAdminPreferenceValue(req.body?.value);
   if (!valueJson) return reply.code(400).send({ error: 'Invalid preference value' });

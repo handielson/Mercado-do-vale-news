@@ -1,3 +1,15 @@
+# v1.2.601-filamentos-estoque
+
+Data: 11/10/2026. Branch: main. Tag: v1.2.601-filamentos-estoque.
+Release MDV: /var/www/mdv-site/releases/20261011-120000-filamentos-estoque.
+Status: preparada; concluir somente após deploy e validação pública.
+
+Página própria Filamentos e estoque: marca/material/cor compartilhados, custo por kg, entrada com quantidade em kg, data e canal de compra; controles compactos −/+, cores sempre visíveis, baixa Usado e Desativar retirando o saldo. Resumo agrupado por material + cor entre marcas. Ledger preservado e reenvios idempotentes. Rascunhos locais só são enviados por aprovação explícita.
+
+Migração 054 aditiva autorizada com backup e conferência de integridade. Flag MDV_PRINT3D_FILAMENT_STOCK_ENABLED independente; módulo completo de produção 3D permanece desligado. Publicação seletiva da API e build isolado, sem incluir as mudanças preexistentes de produtos, placas e Shopee.
+
+## Histórico
+
 # v1.2.600-sku-nome-automatico
 
 Data: 10/10/2026. Branch: main. Tag: v1.2.600-sku-nome-automatico.
