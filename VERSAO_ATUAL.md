@@ -2,7 +2,7 @@
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.610-custo-final-unidade.
 Release MDV: /var/www/mdv-site/releases/20261011-232624-custo-final-unidade.
-Status: pronta para publicar.
+Status: publicada e validada. Commit: 184122f1.
 
 Resumo do cadastro 3D apresenta um unico campo destacado: Custo final por unidade. Usa minimumUnitSaleCents do calculador canonico, incluindo filamento, energia, maquina, mao de obra, insumos, custos fixos e imposto informado, rateados pelos produtos completos. Trata-se do minimo para cobrir custos e imposto, sem margem de lucro; o imposto e estimado sobre esse minimo. Nao altera preco de venda nem o custo de producao gravado no produto.
 
@@ -18,6 +18,54 @@ Arquivos da entrega:
 - public/VERSION.json
 - VERSAO_ATUAL.md
 - docs/versoes/2026-10-11-v1.2.610-custo-final-unidade.md
+
+## Fechamento da publicacao
+
+Publicado e validado em 11/10/2026. Commit de codigo: 184122f1. Tag v1.2.610-custo-final-unidade enviada ao origin; main sincronizada. Site ativo: /var/www/mdv-site/releases/20261011-232624-custo-final-unidade. API e site 3DMV nao publicados nem reiniciados.
+
+20 testes focados aprovados antes da publicacao; build versionado e build oficial do deploy aprovados. Guardas de runtime sem Supabase e rotas aprovadas; nenhum rastro de Supabase no bundle. Home e novo cadastro HTTP 200; VERSION.json confere versao e release. API /status saudavel, mysql.ok=true.
+
+Navegador autenticado confirmou o rascunho existente Mini Esqueleto, com tarifa R$ 1,00/kWh ja salva pelo operador: custo final R$ 0,54 por unidade para 24 produtos, incluindo imposto informado de 6%. Detalhamento confirmou R$ 11,96 de producao, R$ 0,77 de imposto e R$ 12,73 de lote. Remover a tarifa apenas no formulario temporario mostrou Aguardando energia; valor original restaurado e tela fechada sem salvar. Nao foram alterados registros, arquivos ou tarifas no banco. Evidencia: .local/publish-610-final-unit-cost.png.
+
+Sem erro fatal de console; aviso preexistente de companyContext usa ID padrao VPS. Avisos de Browserslist e tempos de plugins nao impediram build. Helper de credenciais Git nao impediu push. Skill publish-vps seguida sem alterar seus arquivos. Logs temporarios removidos ao concluir; evidencia de producao e previa local mantidas.
+
+Preexistentes preservados fora do commit: docs/print3d-production.md, scripts/shopee-auto-print.cjs, docs/operacional/2026-10-07-shopee-glaucia-impressao-lenovo.md, scripts/prepare-shopee-personal-account-update.cjs, tmp-tests/fixtures/print3d-plate-ui.stl e tmp-tests/shopee-personal-account-update.test.cjs.
+
+Auditoria e limpeza obrigatorias: 0 candidatos, 0 removidos; 34 worktrees bloqueadas preservadas:
+- C:/tmp/mdv-model-fix-clean — dirty
+- C:/tmp/mdv-phone-filter — dirty
+- C:/tmp/mdv-publish-surgical-20260612-b — dirty
+- C:/tmp/mdv-refactor-repair-20260612 — dirty
+- C:/tmp/mdv-virtual-ram-deploy — dirty
+- C:/Users/Nitro/Documents/Codex/2026-10-02/task/ml-local-preview — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-phone-memory-filter-20260801 — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-price-followup-20260716 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-product-search-specialist-20260725 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-remove-generic-freight-example-20260718 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/sale-message-order-number-20260716 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mdv-perf-main — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-admin-app — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-displays-pix — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-sales-push-20260728 — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/autoresponder-integrate — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/autoresponder-reformulation — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/meta-smartphones-sem-preco-20260825 — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/new-model-regressions — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/pdp-model-shortcut-publish — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/pdv-sale-repair-publish — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-autoresponder-editable — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-family-page-jump — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-receipt-private-payment-20260613 — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-sales-summary-20260613 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-whatsapp-order — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/repair-refactor-product-build — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/signed-warranty-synology — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/system-backup-admin-20260613 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/tiktok-bulk-release-20260727 — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/tiktok-shop-foundation — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-n8n-context-handoff-fix — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-publish-novo-bot — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-status-contacts-fix — dirty
 
 ## Historico anterior
 
