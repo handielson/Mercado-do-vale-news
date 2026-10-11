@@ -19,6 +19,7 @@
 import { toBrowserSafeMediaUrl } from '@/utils/media-url';
 import type { CatalogProduct } from '@/types/catalog';
 import { ProductStatus } from '@/utils/field-standards';
+import { productImageList } from './productFamilyImages.js';
 import { resolveSmartphoneSpecs, stripModelTechnicalCustomFields } from './smartphoneModelSpecs.mjs';
 
 export interface NormalizedProduct {
@@ -59,6 +60,8 @@ export interface NormalizedProduct {
   model_id?: string;
   parent_id?: string | null;
   parent_name?: string | null;
+  parent_images?: string[];
+  parent_image_url?: string | null;
   catalog_title_complement?: string | null;
   parent_catalog_title_complement?: string | null;
 
@@ -204,6 +207,8 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
     model_id: p.model_id,
     parent_id: p.parent_id ?? null,
     parent_name: typeof p.parent_name === 'string' ? p.parent_name.trim() : null,
+    parent_images: productImageList(p.parent_images, p.parent_image_url).map(toBrowserSafeMediaUrl),
+    parent_image_url: p.parent_image_url ? toBrowserSafeMediaUrl(p.parent_image_url) : null,
     catalog_title_complement: typeof p.catalog_title_complement === 'string' ? p.catalog_title_complement : null,
     parent_catalog_title_complement: typeof p.parent_catalog_title_complement === 'string' ? p.parent_catalog_title_complement : null,
     description: p.description,

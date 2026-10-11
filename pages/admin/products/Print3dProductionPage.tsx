@@ -9,13 +9,13 @@ function PinnedFilePanel({job}:{job:ProductionJob}) {
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const file=job.primary_file;
-  async function download() {
-    if (!file || busy) return;
+  async function download(selected = file) {
+    if (!selected || busy || job.plate_error) return;
     setBusy(true);setError('');
     try {
-      const blob=await print3dRecipeFilesService.download(file.id);
+      const blob=await print3dRecipeFilesService.download(selected.id);
       const url=URL.createObjectURL(blob);
-      const link=document.createElement('a');link.href=url;link.download=file.original_name;
+      const link=document.createElement('a');link.href=url;link.download=selected.original_name;
       document.body.appendChild(link);link.click();link.remove();
       window.setTimeout(()=>URL.revokeObjectURL(url),60000);
     } catch (cause) { setError(cause instanceof Error?cause.message:'Não foi possível baixar o arquivo da ordem.'); }
@@ -28,9 +28,13 @@ function PinnedFilePanel({job}:{job:ProductionJob}) {
       <p className="mt-1 text-violet-900">{file.kind==='gcode'?'G-code pronto para o perfil indicado':file.kind==='project'?'Projeto para preparar na impressora':'Modelo para fatiar'}{file.printer_profile?` · ${file.printer_profile}`:''}</p>
       {job.recipe_summary && Number.isFinite(job.recipe_summary.pieces_per_batch) && Number.isFinite(job.recipe_summary.material_gramas) && Number.isFinite(job.recipe_summary.tempo_impressao_minutos) && <p className="mt-1 text-violet-900">Ficha por lote: {job.recipe_summary.pieces_per_batch} peça(s), {job.recipe_summary.material_gramas.toLocaleString('pt-BR')} g e {job.recipe_summary.tempo_impressao_minutos.toLocaleString('pt-BR')} min de impressão.</p>}
       <p className="mt-1 font-mono text-xs text-violet-700">SHA-256: {file.sha256}</p>
-      <button type="button" disabled={busy} onClick={()=>void download()} className="mt-3 rounded-lg bg-[var(--print3d-accent)] px-4 py-2 font-medium text-white disabled:opacity-50">{busy?'Baixando…':'Baixar arquivo desta ordem'}</button>
+      {!job.plates && <button type="button" disabled={busy || Boolean(job.plate_error)} onClick={()=>void download()} className="mt-3 rounded-lg bg-[var(--print3d-accent)] px-4 py-2 font-medium text-white disabled:opacity-50">{busy?'Baixando…':'Baixar arquivo desta ordem'}</button>}
+      {job.plates?.map(plate => <div key={plate.id} className="mt-3 rounded-lg border border-violet-200 bg-white p-3"><h4 className="font-semibold">{plate.name} · {plate.printMinutes} min</h4><p>{plate.filaments.map(line => `${job.filaments?.find(f => f.id === line.id)?.name || line.id}: ${line.consumedGrams} g`).join(' · ')}</p><p className="whitespace-pre-wrap">{plate.notes}</p>{plate.files.map(plateFile => <button key={plateFile.id} type="button" disabled={busy} onClick={()=>void download({ ...plateFile, revision:file.revision, kind:plateFile.kind as typeof file.kind, printer_profile:plateFile.printer_profile || null })} className="mr-3 mt-2 text-blue-700 underline">Baixar {plateFile.original_name}</button>)}</div>)}
+      {job.recipe_source_url && <a href={job.recipe_source_url} target="_blank" rel="noreferrer" className="mt-3 inline-block text-blue-700 underline">Página de origem desta revisão</a>}
+      {job.production_notes && <p className="mt-2 whitespace-pre-wrap">{job.production_notes}</p>}
     </>}
     {error && <p role="alert" className="mt-2 text-red-800">{error}</p>}
+    {job.plate_error && <p role="alert" className="mt-2 text-red-800">Não imprimir: {job.plate_error}</p>}
   </section>;
 }
 

@@ -24,8 +24,22 @@ function nextProductSku(name, existingSkus) {
   return prefix + String(sequence + 1).padStart(4, '0');
 }
 
-function assignAutomaticProductSku(product, existingSkus) {
-  const sku = nextProductSku(product.name, existingSkus);
+function nextVariationSku(parentSku, existingSkus) {
+  const base = String(parentSku || '').trim();
+  if (!base) throw new Error('Salve o SKU do pai antes das variações.');
+  let sequence = 0;
+  for (const sku of existingSkus) {
+    const text = String(sku || '').trim();
+    if (text.toUpperCase().startsWith((base + '-').toUpperCase())) {
+      const suffix = text.slice(base.length + 1);
+      if (/^\d+$/.test(suffix)) sequence = Math.max(sequence, Number(suffix));
+    }
+  }
+  return `${base}-${String(sequence + 1).padStart(2, '0')}`;
+}
+
+function assignAutomaticProductSku(product, existingSkus, parentSku) {
+  const sku = parentSku ? nextVariationSku(parentSku, existingSkus) : nextProductSku(product.name, existingSkus);
   product.sku = sku;
   // Nome e SKU são persistidos juntos, como texto simples, somente no cadastro automático.
   const name = String(product.name || '').trim();
@@ -46,11 +60,17 @@ async function withProductSku(pool, product, write) {
     if (registered.length) {
       product.sku = registered[0].sku;
     } else if (!String(product.sku || '').trim()) {
-      const prefix = productSkuPrefix(product.name);
+      let parentSku;
+      if (product.parent_id) {
+        const [parents] = await connection.query('SELECT sku FROM products WHERE id=? LIMIT 1', [product.parent_id]);
+        parentSku = parents[0]?.sku;
+        if (!parentSku) throw new Error('O pai precisa ter um SKU salvo antes das variações.');
+      }
+      const prefix = parentSku ? parentSku + '-' : productSkuPrefix(product.name);
       const [rows] = await connection.query('SELECT sku FROM products WHERE sku LIKE ?', [prefix + '%']);
-      assignAutomaticProductSku(product, rows.map(row => row.sku));
+      assignAutomaticProductSku(product, rows.map(row => row.sku), parentSku);
     }
-    if (!registered.length && /^[A-Z]{4}\d{4}$/i.test(String(product.sku || '').trim())) {
+    if (!registered.length && (product.parent_id || /^[A-Z]{4}\d{4}$/i.test(String(product.sku || '').trim()))) {
       const [conflicts] = await connection.query('SELECT id FROM products WHERE sku=? LIMIT 1', [product.sku]);
       if (conflicts.length) throw new Error(`SKU ${product.sku} já está em uso. O cadastro não foi gravado; o SKU não será alterado automaticamente.`);
     }
@@ -73,4 +93,4 @@ async function withProductSku(pool, product, write) {
   }
 }
 
-module.exports = { productSkuPrefix, nextProductSku, assignAutomaticProductSku, withProductSku };
+module.exports = { productSkuPrefix, nextProductSku, nextVariationSku, assignAutomaticProductSku, withProductSku };

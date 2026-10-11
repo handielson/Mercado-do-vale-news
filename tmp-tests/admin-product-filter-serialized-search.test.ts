@@ -53,3 +53,8 @@ assert.deepEqual(
 );
 
 console.log('admin product filter serialized search ok');
+
+const categories = ['3d', 'key', 'mini', 'phone'].map(category_id => ({ ...serializedProduct, id: category_id, model_id: '', sku: category_id, specs: {}, category_id }));
+assert.deepEqual(filterAdminProducts(categories, { ...baseFilters, categoryId: '3d', categoryIds: ['3d', 'key', 'mini'] }).map(p => p.id).sort(), ['3d', 'key', 'mini']);
+assert.deepEqual(filterAdminProducts(categories, { ...baseFilters, categoryId: 'key' }).map(p => p.id), ['key']);
+assert.equal(filterAdminProducts(categories, { ...baseFilters, categoryIds: ['3d'] }).length, 4, 'all categories ignores stale subtree');

@@ -9,6 +9,7 @@ export function specObject(value) {
 }
 export function isVariationSpec(key) { return VARIATION_KEYS.has(normalizeKey(key)); }
 function isOperationalSpec(key) {
+  if (key === 'unit' || key === 'production') return true;
   return key.startsWith('_') || OPERATIONAL_KEYS.has(key) || /^(price_|dimensions\.|shopee_|bling_|tiktok_|ml_|warranty_|image|video_|blueprint_|catalog_|is_|hide_)/.test(key);
 }
 const PHONE_TECH_KEYS = new Set(['rede_operadora', 'network', 'rede', 'nfc', 'tem_nfc', 'celular_nfc', 'chipset', 'processador', 'battery_mah', 'bateria', 'display', 'tipo_de_display', 'fps_do_display', 'celular_fps_display', 'antutu', 'celular_biometria', 'tipo_bluetooth_celular', 'cam_principal_mpx', 'cam_selfie_mpx', 'carregamento', 'celular_tipo_de_protecao_de_tela', 'resistencia', 'resolucao_video_celular', 'celular_slot_para_cartao', 'wifi_celulares']);

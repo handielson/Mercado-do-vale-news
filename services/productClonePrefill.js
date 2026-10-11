@@ -90,6 +90,20 @@ export function getProductCloneState(product = {}) {
   };
 }
 
+export function buildProductVariationPrefill(parent = {}) {
+  const prefill = buildProductClonePrefill(parent);
+  prefill.parent_id = parent.id;
+  prefill.is_parent = false;
+  prefill.product_format = 'variation';
+  prefill.sku = '';
+  prefill.track_inventory = true;
+  prefill.stock_quantity = 0;
+  prefill.print3d_preorder_enabled = Boolean(parent.is_print3d);
+  if (parent.sku && prefill.name?.endsWith(` - ${parent.sku}`)) prefill.name = prefill.name.slice(0, -(` - ${parent.sku}`).length);
+  for (const field of ['bling_id', 'bling_parent_id', 'shopee_item_id', 'slug', 'video_url', 'marketing_video_url', 'marketing_background_url', 'marketing_background_no_price_url']) delete prefill[field];
+  return prefill;
+}
+
 export function buildFamilyChildPrefill(parent = {}) {
   if (!parent?.id) throw new Error('A família precisa estar salva antes de adicionar uma variação.');
 

@@ -6,6 +6,7 @@ const path = require('node:path');
 const { resolveStorefrontDescription } = require('./productStorefrontOffer.cjs');
 const { productSkuPrefix, assignAutomaticProductSku } = require('./productSku.cjs');
 const { isLocalFilamentPath, createLocalFilamentPreview } = require('./localPrint3dFilaments.cjs');
+const { createLocalPrint3dRecipePreview, isLocalPrint3dRecipePath } = require('./localPrint3dRecipePreview.cjs');
 
 const PRODUCT_ID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const productPath = new RegExp(`^/products/(${PRODUCT_ID})$`, 'i');
@@ -35,10 +36,13 @@ function normalizePath(raw) {
 }
 
 function isLocalCatalogPreviewPath(rawPath, method = 'GET') {
-  const { pathname } = normalizePath(rawPath);
+  const { pathname, searchParams } = normalizePath(rawPath);
   const normalizedMethod = String(method || 'GET').toUpperCase();
   if (isLocalFilamentPath(rawPath, normalizedMethod)) return true;
+  if (isLocalPrint3dRecipePath(rawPath, normalizedMethod)) return true;
+  if (pathname === '/admin/preferences/products.sales-units.v1' && ['GET', 'PATCH'].includes(normalizedMethod)) return true;
   if (pathname === '/products/batch' && normalizedMethod === 'POST') return true;
+  if (pathname === '/products' && searchParams.has('parent_id') && normalizedMethod === 'GET') return true;
   if (productPath.test(pathname) && ['GET', 'PUT'].includes(normalizedMethod)) return true;
   if (storefrontOffersPath.test(pathname) && normalizedMethod === 'GET') return true;
   if (storefrontOfferPath.test(pathname) && normalizedMethod === 'PUT') return true;
@@ -206,6 +210,8 @@ function createLocalCatalogPreviewServer({
       product = applyDraftOffer(product, drafts.offers?.[row.id]?.loja_3d);
       if (!productIsVisibleIn3d(product)) continue;
       const parent = await loadParent(product.parent_id, drafts, parentCache);
+      product = { ...product, parent_images: parent?.images || [], parent_image_url: parent?.image_url || null,
+        parent_name: parent?.name || product.parent_name, parent_sku: parent?.sku || product.parent_sku };
       product.description = resolveStorefrontDescription({
         ...product,
         parent_description: parent?.description,
@@ -215,12 +221,35 @@ function createLocalCatalogPreviewServer({
     return result;
   }
 
-  async function approve(productId) {
+  const privatePreview = createLocalPrint3dRecipePreview({
+    store, serialize:serializeSkuWrite, assetRoot:path.join(path.dirname(draftFile), 'print3d-assets'),
+    getProduct:async id => {
+      const drafts = await store.read();
+      const entry = drafts.products?.[id];
+      return entry?.local_only ? { id, ...entry.patch } : mergeProduct(await remote(`/products/${id}`), entry);
+    },
+    remoteRequest:async (url, options = {}) => {
+      const response = await fetchImpl(new URL(url, origin), {
+        method:options.method || 'GET',
+        headers:{ ...(syncKey ? { 'x-sync-key':syncKey } : {}), ...options.headers, ...(options.json === undefined ? {} : { 'Content-Type':'application/json' }) },
+        body:options.json === undefined ? options.body : JSON.stringify(options.json), signal:AbortSignal.timeout(60_000),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw Object.assign(new Error(data.error || `API central respondeu ${response.status}.`), { statusCode:response.status });
+      }
+      return options.binary ? Buffer.from(await response.arrayBuffer()) : response.json();
+    },
+  });
+
+  async function approve(productId, authorization) {
     if (!syncKey) throw Object.assign(new Error('A chave de sincronização local não está configurada; aprovação bloqueada.'), { statusCode: 503 });
     const drafts = await store.read();
     const productDraft = drafts.products?.[productId];
     const offerDrafts = drafts.offers?.[productId] || {};
-    if (!productDraft && Object.keys(offerDrafts).length === 0) return { ok: true, approved: 0 };
+    const recipeDrafts = Object.values(drafts.print3dRecipes || {}).filter(r => r.draft.productId === productId);
+    if (!productDraft && Object.keys(offerDrafts).length === 0 && !recipeDrafts.length) return { ok: true, approved: 0 };
+    await privatePreview.preflight(drafts, productId, authorization);
     const approved = [];
     if (productDraft) {
       if (productDraft.local_only) {
@@ -235,6 +264,8 @@ function createLocalCatalogPreviewServer({
       await remote(`/admin/products/${encodeURIComponent(productId)}/storefront-offers/${encodeURIComponent(storefront)}`, 'PUT', draft.offer);
       approved.push(`oferta:${storefront}`);
     }
+    const publishedRecipes = await privatePreview.publish(drafts, productId, authorization);
+    if (publishedRecipes) approved.push(`fichas-3d:${publishedRecipes}`);
     delete drafts.products[productId];
     delete drafts.offers[productId];
     await store.write(drafts);
@@ -250,19 +281,44 @@ function createLocalCatalogPreviewServer({
         filamentPreview.server.emit('request', req, res);
         return;
       }
+      if (isLocalPrint3dRecipePath(req.url, method)) {
+        await privatePreview.app.ready();
+        privatePreview.app.server.emit('request', req, res);
+        return;
+      }
       const productMatch = pathname.match(productPath);
       const offersMatch = pathname.match(storefrontOffersPath);
       const offerMatch = pathname.match(storefrontOfferPath);
       const catalogProductMatch = pathname.match(storefrontProductPath);
       const approvalMatch = pathname.match(previewApprovalPath);
 
+      // Unit options follow the local draft boundary; never PATCH the central API.
+      if (pathname === '/admin/preferences/products.sales-units.v1' && ['GET', 'PATCH'].includes(method)) {
+        return await serializeSkuWrite(async () => {
+          const drafts = await store.read();
+          const key = 'products.sales-units.v1';
+          const base = await remote(pathname);
+          if (base.value != null && !Array.isArray(base.value)) throw new Error('Cadastro central de unidades inválido.');
+          if (method === 'PATCH') {
+            const body = await readBody(req);
+            if (!Array.isArray(body.value) || body.value.length > 500
+                || body.value.some(value => typeof value !== 'string' || !value.trim() || value.length > 20 || /[<>\u0000-\u001f\u007f]/u.test(value)))
+              return send(res, 400, { error: 'Cadastro de unidades inválido.' });
+            drafts.preferences ||= {};
+            drafts.preferences[key] = [...new Set([...(drafts.preferences[key] || []), ...body.value])];
+            await store.write(drafts);
+          }
+          return send(res, 200, { key, value: [...new Set([...(base.value || []), ...(drafts.preferences?.[key] || [])])] });
+        });
+      }
+
       if (method === 'GET' && pathname === '/admin/local-preview/drafts') {
         const drafts = await store.read();
         const requestedId = searchParams.get('product_id');
-        const ids = new Set([...Object.keys(drafts.products), ...Object.keys(drafts.offers)]);
+        const ids = new Set([...Object.keys(drafts.products), ...Object.keys(drafts.offers), ...Object.values(drafts.print3dRecipes || {}).map(r => r.draft.productId)]);
         const summaries = [...ids].filter(id => !requestedId || id === requestedId).map(id => ({
           product_id: id,
-          fields: Object.keys(drafts.products[id]?.patch || {}),
+          fields: [...Object.keys(drafts.products[id]?.patch || {}), ...(Object.values(drafts.print3dRecipes || {}).some(r => r.draft.productId === id) ? ['ficha e arquivos 3D'] : [])],
           storefronts: Object.keys(drafts.offers[id] || {}),
           updated_at: drafts.products[id]?.updated_at || Object.values(drafts.offers[id] || {})[0]?.updated_at || null,
         }));
@@ -271,7 +327,20 @@ function createLocalCatalogPreviewServer({
 
       if (method === 'POST' && approvalMatch) {
         if (req.headers['x-sync-key'] !== syncKey) return send(res, 403, { error: 'Aprovação local não autorizada.' });
-        return send(res, 200, await approve(approvalMatch[1]));
+        return await serializeSkuWrite(async () => send(res, 200, await approve(approvalMatch[1], req.headers.authorization)));
+      }
+
+      if (method === 'GET' && pathname === '/products' && searchParams.has('parent_id')) {
+        const parentId = searchParams.get('parent_id');
+        if (!productIdPattern.test(parentId)) return send(res, 400, { error: 'Família inválida.' });
+        const drafts = await store.read();
+        const base = drafts.products[parentId]?.local_only ? [] : await remote(`${pathname}${search}`);
+        if (!Array.isArray(base)) throw new Error('Resposta inválida ao consultar os filhos.');
+        const byId = new Map(base.map(row => [row.id, mergeProduct(row, drafts.products[row.id])]));
+        for (const [id, draft] of Object.entries(drafts.products)) {
+          if (draft.local_only && draft.patch?.parent_id === parentId) byId.set(id, { id, ...draft.patch });
+        }
+        return send(res, 200, [...byId.values()].filter(row => row.parent_id === parentId));
       }
 
       if (method === 'GET' && productMatch) {
@@ -308,7 +377,9 @@ function createLocalCatalogPreviewServer({
           if (previous) {
             patch.sku = previous.patch?.sku ?? null;
           } else if (!String(patch.sku || '').trim()) {
-            const prefix = productSkuPrefix(patch.name);
+            const parent = patch.parent_id ? await loadParent(patch.parent_id, drafts, new Map()) : null;
+            if (patch.parent_id && !parent?.sku) throw new Error('O pai precisa ter um SKU salvo antes das variações.');
+            const prefix = parent?.sku ? parent.sku + '-' : productSkuPrefix(patch.name);
             const skus = Object.values(drafts.products).map(draft => draft.patch?.sku);
             for (let offset = 0; ; offset += 500) {
               const centralRows = await remote(`/products?search=${prefix}&status=all&limit=500&offset=${offset}`);
@@ -316,7 +387,7 @@ function createLocalCatalogPreviewServer({
               skus.push(...centralRows.map(product => product.sku));
               if (centralRows.length < 500) break;
             }
-            assignAutomaticProductSku(patch, skus);
+            assignAutomaticProductSku(patch, skus, parent?.sku);
           }
           drafts.products[productId] = {
             patch: { ...(drafts.products[productId]?.patch || {}), ...patch },

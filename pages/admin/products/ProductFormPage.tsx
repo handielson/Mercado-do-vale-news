@@ -146,8 +146,8 @@ export const ProductFormPage: React.FC = () => {
             }
         } catch (error) {
             console.error('Error saving product:', error);
-            const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar produto';
-            toast.error(errorMessage);
+            // O formulário mantém os dados e apresenta a falha, sem anunciar sucesso.
+            throw error;
         } finally {
             setIsLoading(false);
         }
@@ -155,6 +155,7 @@ export const ProductFormPage: React.FC = () => {
 
     const handleBatchComplete = (savedProduct?: Product) => {
         if (isLocalCatalogPreviewRuntime()) {
+            setDraftRevision(current => current + 1);
             if (savedProduct?.id && !isEditMode) navigate(`/admin/products/${savedProduct.id}`);
             return;
         }

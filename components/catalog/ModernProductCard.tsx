@@ -29,6 +29,7 @@ import {
 } from './modernProductCardState.js';
 import { getCatalogFamilyName } from '@/services/productGroupingCore.js';
 import { getCatalogTitle } from '@/services/catalogTitle.js';
+import { resolveProductFamilyImages } from '@/services/productFamilyImages.js';
 
 // Utility to determine if a color is dark enough to need white text
 const isDarkColor = (colorHex: string) => {
@@ -258,6 +259,9 @@ export function ModernProductCard({
 
     // Get primary image — uses currentProduct (selected variant/color) not the representative product
     const getImageUrl = () => {
+        const family = productGroup?.variants.flatMap(variant => variant.products) || [product, ...relatedProducts];
+        const familyImage = resolveProductFamilyImages(currentProduct, family, userInteractedWithColor && currentColorIndex >= 0)[0];
+        if (familyImage) return familyImage;
         const productToUse = selectCatalogCardImageProduct({
             product,
             currentProduct,
@@ -360,6 +364,8 @@ export function ModernProductCard({
         return variants.colors.map(color => {
             // Find product with this color in the selected variant
             const colorProduct = selectedVariant.products.find(p => p.specs?.color === color.name);
+            const colorImage = resolveProductFamilyImages(colorProduct, selectedVariant.products, true)[0];
+            if (colorImage) return getCacheBustedUrl(colorImage, colorProduct?.updated || colorProduct?.created);
             if (colorProduct && Array.isArray(colorProduct.images) && colorProduct.images.length > 0) {
                 const imgUrl = typeof colorProduct.images[0] === 'string' ? colorProduct.images[0] : imageUrl;
                 return getCacheBustedUrl(imgUrl, colorProduct.updated || colorProduct.created);
@@ -373,6 +379,7 @@ export function ModernProductCard({
 
     const handlePrevImage = (e: React.MouseEvent) => {
         e.stopPropagation();
+        setUserInteractedWithColor(true);
         if (currentColorIndex === -1) {
             // If no color selected, default to first or last
             setCurrentColorIndex(colorImages.length - 1);
@@ -383,6 +390,7 @@ export function ModernProductCard({
 
     const handleNextImage = (e: React.MouseEvent) => {
         e.stopPropagation();
+        setUserInteractedWithColor(true);
         if (currentColorIndex === -1) {
             setCurrentColorIndex(0);
             return;
@@ -397,7 +405,7 @@ export function ModernProductCard({
     };
 
     // Use default image if no color selected, otherwise use color's image
-    const currentImage = currentColorIndex === -1
+    const currentImage = !userInteractedWithColor || currentColorIndex === -1
         ? imageUrl
         : (colorImages[currentColorIndex] || imageUrl);
     const activeImageUrl = displayImageUrl || currentImage;

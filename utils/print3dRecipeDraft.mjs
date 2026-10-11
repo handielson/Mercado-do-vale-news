@@ -1,4 +1,5 @@
 import { calculatePrint3dCost } from './print3dCost.mjs';
+import { normalizePrint3dPlates } from './print3dPlatePlan.mjs';
 
 /**
  * Portable draft for a future product-linked, immutable production revision.
@@ -114,6 +115,7 @@ export function buildPrint3dRecipeDraft(input) {
   if (costFields.some((field) => recomputed[field] !== costSnapshot[field])) {
     throw new TypeError('A memória de cálculo não corresponde aos parâmetros da ficha.');
   }
+  const plates = normalizePrint3dPlates(input.plates, filaments, { printMinutes });
   return {
     schema: 'mercado-do-vale.print3d-recipe-draft.v1',
     status: 'rascunho',
@@ -136,6 +138,7 @@ export function buildPrint3dRecipeDraft(input) {
     supplies,
     rateSnapshot,
     costSnapshot,
+    ...(plates ? { plates } : {}),
   };
 }
 
@@ -162,5 +165,6 @@ export function validatePrint3dRecipeDraft(draft) {
     supplies: draft.supplies,
     rates: draft.rateSnapshot,
     cost: draft.costSnapshot,
+    plates: draft.plates,
   });
 }

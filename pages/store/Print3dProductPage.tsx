@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, Clock3, Menu, Package, Play, Share2, ShoppingBag } from 'lucide-react';
 import { productStorefrontOffersService } from '@/services/productStorefrontOffers';
 import { normalizeCatalogProduct } from '@/services/productNormalizer';
+import { resolveProductFamilyImages } from '@/services/productFamilyImages.js';
 import { formatPrice } from '@/services/installmentCalculator';
 import { readCheckoutCart, saveCheckoutCart } from '@/services/print3dCheckoutClient';
 import { print3dVariantLabel } from '@/utils/print3dVariantLabel.js';
@@ -114,9 +115,7 @@ export default function Print3dProductPage() {
   const requestedVariant = params.get('variante');
   const product = useMemo(() => variants.find(item => item.sku === requestedVariant || item.id === requestedVariant)
     || routeProduct, [variants, routeProduct, requestedVariant]);
-  const images = useMemo(() => product
-    ? [...new Set([...(product.images || []), product.image_url].filter((value): value is string => Boolean(value)))]
-    : [], [product]);
+  const images = useMemo(() => resolveProductFamilyImages(product, variants, Boolean(requestedVariant)), [product, variants, requestedVariant]);
   const descriptionHtml = sanitizeCatalogHtml(product?.description) || '<p>Peça produzida por impressão 3D com atenção aos detalhes.</p>';
   const description = new DOMParser().parseFromString(descriptionHtml, 'text/html').body.textContent?.trim()
     || 'Peça produzida por impressão 3D com atenção aos detalhes.';
@@ -131,7 +130,7 @@ export default function Print3dProductPage() {
     if (slug !== canonicalTarget) navigate(print3dProductPath(product, demo, variants, true), { replace: true });
     setSelectedImage(0);
     setQuantity(1);
-  }, [product?.id, slug, demo, navigate, variants]);
+  }, [product?.id, requestedVariant, slug, demo, navigate, variants]);
 
   useEffect(() => {
     if (!products.length || demo) return;

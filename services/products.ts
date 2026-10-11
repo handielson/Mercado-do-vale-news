@@ -351,6 +351,7 @@ async function listByCategory(categoryId: string, limit = 120): Promise<Product[
 
 async function listChildren(parentId: string): Promise<Product[]> {
     const data = await vpsApiService.getProductsByParentId(parentId);
+    if (!data) throw new Error('Não foi possível carregar as variações.');
     return (data || []).map(transformFromDB);
 }
 
@@ -360,21 +361,22 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
     const id = crypto.randomUUID();
 
     // Validate model_id
-    if (!input.model_id || input.model_id.trim() === '') {
+    const modelId = input.model_id?.trim() || null;
+    if (!modelId && !input.is_print3d) {
         throw new Error('Model ID é obrigatório. Por favor, escaneie um EAN ou selecione um modelo.');
     }
 
-    const modelData = await modelService.getById(input.model_id);
-    if (!modelData) throw new Error('Failed to fetch model: Modelo nao encontrado na VPS');
+    const modelData = modelId ? await modelService.getById(modelId) : null;
+    if (modelId && !modelData) throw new Error('Failed to fetch model: Modelo nao encontrado na VPS');
 
     const brand = await resolveModelBrandName(modelData, input.brand);
     // Respeita override manual de categoria no formulário.
-    const category_id = input.category_id || modelData.category_id;
-    const dimensions = input.dimensions || modelData.template_values?.dimensions;
-    const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
+    const category_id = input.category_id || modelData?.category_id;
+    const dimensions = input.dimensions || modelData?.template_values?.dimensions;
+    const weight_kg = input.weight_kg || modelData?.template_values?.weight_kg;
 
     const isSerializedCategory = !input.is_print3d && await isSerializedProductCategory(category_id);
-    const specsModel = { ...modelData, category_name: (await categoryService.getById(modelData.category_id || category_id))?.name };
+    const specsModel = { ...modelData, category_name: (await categoryService.getById(modelData?.category_id || category_id))?.name };
 
     // SKU uniqueness check — busca exata na VPS (fonte da verdade)
     // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
@@ -407,7 +409,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
     }
 
     let finalVideoUrl = input.video_url || null;
-    if (!finalVideoUrl && modelData.template_values?.has_video && input.sku) {
+    if (!finalVideoUrl && modelData?.template_values?.has_video && input.sku) {
         try {
             const { companySettingsService } = await import('./companySettingsService');
             const settings = await companySettingsService.get() as any;
@@ -424,7 +426,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
     const payload: any = {
         id,
         company_id: companyId,
-        model_id: input.model_id,
+        model_id: modelId,
         parent_id: input.parent_id || null,
         is_parent: input.is_parent ? 1 : 0,
         brand,
@@ -434,7 +436,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
         description: input.description || null,
         ean: input.eans?.[0] || null,
         alternative_eans: input.eans || [],
-        specs: !input.is_print3d && isSmartphoneModel(specsModel) ? stripModelOwnedSpecs(input.specs) : { ...(modelData.template_values || {}), ...(input.specs || {}) },
+        specs: !input.is_print3d && isSmartphoneModel(specsModel) ? stripModelOwnedSpecs(input.specs) : { ...(modelData?.template_values || {}), ...(input.specs || {}) },
         price_cost: input.price_cost,
         price_retail: input.price_retail,
         price_reseller: input.price_reseller,

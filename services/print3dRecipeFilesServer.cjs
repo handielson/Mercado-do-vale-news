@@ -126,7 +126,11 @@ function registerPrint3dRecipeFileRoutes(app, {
         const { parsePrint3dSummary } = await import('../utils/print3dImport.mjs');
         summary = parsePrint3dSummary(buffer.toString('utf8'));
       } catch (error) { return reply.code(400).send({ error:error.message }); }
-      if (summary.materialGrams !== draft.printSummary.material_gramas || summary.printMinutes !== draft.printSummary.tempo_impressao_minutos) {
+      const plate = draft.plates?.find(p => p.id === req.query?.plateId);
+      if (req.query?.plateId && !plate) return reply.code(400).send({ error:'Placa não pertence à revisão.' });
+      const expectedGrams = plate ? plate.filaments.reduce((sum, f) => sum + f.consumedGrams, 0) : draft.printSummary.material_gramas;
+      const expectedMinutes = plate ? plate.printMinutes : draft.printSummary.tempo_impressao_minutos;
+      if (Math.abs(summary.materialGrams - expectedGrams) > 0.001 || Math.abs(summary.printMinutes - expectedMinutes) > 0.001) {
         return reply.code(409).send({ error:'Material ou tempo do JSON diverge da ficha salva.' });
       }
     }
@@ -228,4 +232,4 @@ function registerPrint3dRecipeFileRoutes(app, {
   });
 }
 
-module.exports = { registerPrint3dRecipeFileRoutes,isPrivatePrint3dRoot };
+module.exports = { registerPrint3dRecipeFileRoutes,isPrivatePrint3dRoot, MAX_BYTES, EXTENSIONS };

@@ -16,10 +16,14 @@ function load(sourcePath, dependencies = {}) {
 }
 const filtering = load('services/catalogFiltering.ts');
 const modelSpecs = load('services/smartphoneModelSpecs.mjs');
+const familyImages = load('services/productFamilyImages.js', {
+    './productGroupingCore.js': load('services/productGroupingCore.js'),
+});
 const normalizer = load('services/productNormalizer.ts', {
     '@/utils/media-url': { toBrowserSafeMediaUrl: url => url },
     '@/utils/field-standards': { ProductStatus: { ACTIVE: 'active', INACTIVE: 'inactive' } },
     './smartphoneModelSpecs.mjs': modelSpecs,
+    './productFamilyImages.js': familyImages,
 });
 const defaults = load('types/catalogSettings.ts');
 const categories = [{ id: 'phones', name: 'Smartphones', slug: 'smartphones' }, { id: 'cases', name: 'Capinhas', slug: 'capinhas' }];

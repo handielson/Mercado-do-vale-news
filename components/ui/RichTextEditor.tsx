@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-type RichTextEditorProps = { value: string; onChange: (value: string) => void; placeholder?: string };
+type RichTextEditorProps = { value: string; onChange: (value: string) => void; placeholder?: string; disabled?: boolean };
 
 function cleanEditorHtml(value: string) {
   if (typeof window === 'undefined') return value;
@@ -15,7 +15,7 @@ function cleanEditorHtml(value: string) {
   return parsed.body.innerHTML;
 }
 
-export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, placeholder, disabled = false }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<'visual' | 'html'>('visual');
   useEffect(() => {
@@ -45,7 +45,7 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
         <button type="button" onClick={() => setMode('html')} className={`rounded px-2 py-1 ${mode === 'html' ? 'bg-violet-100 font-semibold text-violet-800' : 'text-slate-500'}`}>HTML</button>
       </div>
     </div>
-    {mode === 'visual' ? <div ref={editorRef} contentEditable suppressContentEditableWarning onInput={emit} data-placeholder={placeholder}
+    {mode === 'visual' ? <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning onInput={emit} data-placeholder={placeholder}
       className="min-h-56 max-h-[32rem] overflow-auto px-3 py-3 text-sm leading-6 outline-none empty:before:pointer-events-none empty:before:text-slate-400 empty:before:content-[attr(data-placeholder)] [&_h2]:mb-3 [&_h2]:mt-4 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:list-decimal [&_p]:my-2 [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_ul]:list-disc" />
       : <textarea value={value} onChange={event => onChange(event.target.value)} className="min-h-56 w-full resize-y p-3 font-mono text-xs outline-none" placeholder={placeholder} />}
   </div>;

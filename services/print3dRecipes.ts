@@ -3,7 +3,7 @@ import { buildPrint3dRecipeDraft } from '../utils/print3dRecipeDraft.mjs';
 
 export type Print3dRecipeDraft = ReturnType<typeof buildPrint3dRecipeDraft>;
 export type Print3dRecipeSaveResult = { id: string; revision: string; saved: boolean; sha256: string };
-export type Print3dRecipeSummary = { id: string; revision: string; sku_snapshot: string; draft_sha256: string; created_at: string; input_source: 'json' | 'manual'; source_url?: string | null };
+export type Print3dRecipeSummary = { id: string; revision: string; sku_snapshot: string; draft_sha256: string; created_at: string; input_source: 'json' | 'manual'; source_url?: string | null; preview?:boolean };
 export type Print3dActiveRecipe = {
   product_id: string;
   recipe_id: string;
@@ -18,7 +18,7 @@ export type Print3dActiveRecipe = {
 };
 
 export const print3dRecipesService = {
-  status: () => vpsClient.get<{ enabled: boolean }>('/admin/print3d/status'),
+  status: () => vpsClient.get<{ enabled: boolean; platePlans?:boolean }>('/admin/print3d/status'),
   save: (draft: Print3dRecipeDraft) => vpsClient.post<Print3dRecipeSaveResult>(
     `/admin/print3d/products/${encodeURIComponent(draft.productId)}/recipes`, draft
   ),
@@ -30,6 +30,9 @@ export const print3dRecipesService = {
   ),
   active: (productId: string) => vpsClient.get<{ activeRecipe: Print3dActiveRecipe | null }>(
     `/admin/print3d/products/${encodeURIComponent(productId)}/active-recipe`
+  ),
+  discardLocalDraft: (productId:string, revision:string) => vpsClient.delete<{ discarded:boolean }>(
+    `/admin/print3d/products/${encodeURIComponent(productId)}/recipes/${encodeURIComponent(revision)}`
   ),
   selectActive: (productId: string, recipeId: string, primaryFileId: string) => vpsClient.post<{
     changed: boolean; activeRecipe: Print3dActiveRecipe;

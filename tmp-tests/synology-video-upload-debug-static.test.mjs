@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const card = readFileSync('components/products/ProductCard.tsx', 'utf8');
+const uploader = readFileSync('services/productVideoUpload.ts', 'utf8');
 const servers = ['vps_server.js', 'vps_server.cjs'].map((file) => ({
   file,
   source: readFileSync(file, 'utf8'),
@@ -40,7 +41,7 @@ for (const { file, source } of servers) {
 
   assert.match(
     source,
-    /const uploadPath = `\/webapi\/entry\.cgi\?_sid=\$\{encodeURIComponent\(sid\)\}`/,
+    /const uploadPath = `\/webapi\/entry\.cgi\?_sid=\$\{encodeURIComponent\((?:sid|currentSid)\)\}`/,
     `${file} should pass the Synology SID in the upload endpoint query string`
   );
 
@@ -70,9 +71,9 @@ for (const { file, source } of servers) {
 }
 
 assert.match(
-  card,
+  uploader,
   /class SynologyUploadError extends Error/,
-  'ProductCard should preserve upload debug through thrown errors'
+  'Shared product uploader should preserve upload debug through thrown errors'
 );
 
 assert.match(

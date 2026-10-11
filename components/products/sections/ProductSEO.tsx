@@ -6,6 +6,7 @@ import { ExternalLink, RefreshCw } from 'lucide-react';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
 
 interface ProductSEOProps {
+    inheritDescription?: boolean;
     watch: UseFormWatch<ProductInput>;
     setValue: UseFormSetValue<ProductInput>;
     errors: any;
@@ -103,7 +104,8 @@ const generateKeywords = (
 export const ProductSEO: React.FC<ProductSEOProps> = ({
     watch,
     setValue,
-    errors
+    errors,
+    inheritDescription = false
 }) => {
     const description = watch('description') || '';
     const metaTitle = watch('meta_title') || '';
@@ -349,11 +351,11 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     Descrição do produto *
                     <span className="ml-2 text-xs text-slate-400 font-mono">description</span>
                 </label>
-                <RichTextEditor
+                {inheritDescription ? <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">A descrição é herdada da família nos dois sites. Edite o texto HTML no produto pai; não há uma cópia independente nesta variação.</p> : <RichTextEditor
                     value={description}
                     onChange={(value) => setValue('description', value)}
                     placeholder="Descreva o produto, compatibilidade, características e conteúdo da embalagem"
-                />
+                />}
                 <p className="mt-2 text-xs text-gray-500">
                     Use o modo Visual para organizar títulos e listas. O modo HTML permite editar o código quando necessário.
                 </p>

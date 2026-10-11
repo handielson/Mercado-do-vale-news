@@ -29,7 +29,7 @@ assert.match(
 
 assert.match(
   source,
-  /spawnSync\('tar'[\s\S]*shell:\s*false/,
+  /spawnSync\(resolveTarBinary\(\), \['-czf', archivePath, '-C', DIST_DIR, '\.'\], \{[^}]*shell:\s*false/,
   'deploy deve chamar tar sem shell para preservar caminhos com espaco no Windows'
 );
 

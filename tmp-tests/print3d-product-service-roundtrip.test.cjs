@@ -24,6 +24,16 @@ function fixture(){
  return {service:context.exports.productService,rows,bulk};
 }
 const input=(sku,price,specs={})=>({model_id:'local-model',name:'Peça de teste',sku,brand:'Local',is_print3d:true,track_inventory:true,stock_quantity:3,status:'active',price_cost:100,price_retail:price,price_reseller:price,price_wholesale:price,specs});
+
+test('Mini Esqueleto parent and child can be saved without a separate model; other products still require one',async()=>{
+ const f=fixture();
+ const parent=await f.service.create({...input('',0,{material:'PLA'}),name:'Mini Esqueleto',model_id:'',category_id:'3d-key',is_parent:true});
+ assert.equal(parent.model_id,null); assert.equal(parent.is_parent,true); assert.equal(parent.specs.material,'PLA');
+ const child=await f.service.create({...input('MINI0002',1500),model_id:'',category_id:'3d-key',parent_id:parent.id});
+ assert.equal(child.parent_id,parent.id); assert.equal(child.model_id,null); assert.equal(child.print3d_preorder_enabled,true);
+ assert.equal(f.bulk.length,0);
+ await assert.rejects(f.service.create({...input('',1500),model_id:'',is_print3d:false}),/Model ID é obrigatório/);
+});
 test('3D create/read/update preserves dimensions of variation and never synchronizes sibling prices',async()=>{
  const f=fixture();const small=await f.service.create(input('3D-P',2500,{color:'Preto'}));
  const large=await f.service.create(input('3D-G',3500,{material:'PETG',size:'Grande',finish:'Brilhante',color:'Preto'}));

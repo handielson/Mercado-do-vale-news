@@ -26,11 +26,11 @@ export const print3dRecipeFilesService = {
     verified: boolean;
     files: Array<Pick<Print3dRecipeFile, 'id' | 'kind' | 'original_name' | 'byte_size' | 'sha256'> & { valid: boolean }>;
   }>(`/admin/print3d/recipes/${encodeURIComponent(recipeId)}/files/integrity`),
-  upload: (recipeId: string, kind: Print3dFileKind, file: File, printerProfile = '') => {
+  upload: (recipeId: string, kind: Print3dFileKind, file: File, printerProfile = '', plateId = '') => {
     const form = new FormData();
     form.append('file', file);
     return vpsClient.upload<{ file: Print3dRecipeFile; saved: boolean }>(
-      `/admin/print3d/recipes/${encodeURIComponent(recipeId)}/files?kind=${encodeURIComponent(kind)}${kind === 'gcode' ? `&printerProfile=${encodeURIComponent(printerProfile)}` : ''}`, form
+      `/admin/print3d/recipes/${encodeURIComponent(recipeId)}/files?kind=${encodeURIComponent(kind)}${kind === 'gcode' ? `&printerProfile=${encodeURIComponent(printerProfile)}` : ''}${plateId ? `&plateId=${encodeURIComponent(plateId)}` : ''}`, form
     );
   },
   async download(fileId: string): Promise<Blob> {

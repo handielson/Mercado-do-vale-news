@@ -26,6 +26,7 @@ import { toTitleCase } from '@/utils/stringFormatters';
 import { shippingService } from '@/services/shippingService';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
 import { normalizeProduct } from '@/services/productNormalizer';
+import { productImageList, resolveProductFamilyImages } from '@/services/productFamilyImages.js';
 import { trackViewItem } from '@/utils/analytics';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogSettings } from '@/types/catalogSettings';
@@ -58,6 +59,11 @@ export const PublicProductPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState<string>('');
     const [siblings, setSiblings] = useState<CatalogProduct[]>([]);
+    const [variationImageSelected, setVariationImageSelected] = useState(false);
+    const galleryImages = useMemo(() => resolveProductFamilyImages(product, siblings, variationImageSelected), [product, siblings, variationImageSelected]);
+    useEffect(() => {
+        if (selectedImage !== 'VIDEO' && selectedImage !== 'MOSAIC' && !galleryImages.includes(selectedImage)) setSelectedImage(galleryImages[0] || '');
+    }, [galleryImages, selectedImage]);
     const [videoSiblings, setVideoSiblings] = useState<CatalogProduct[]>([]);
     const [relatedProducts, setRelatedProducts] = useState<CatalogProduct[]>([]);
     const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
@@ -117,6 +123,8 @@ export const PublicProductPage: React.FC = () => {
     const currentVideoUrl = productVideoPlaylist[videoPlaylistIndex] || effectiveVideoUrl;
     const formatDisplayPrice = (value: number) => value.toFixed(2).replace('.', ',');
     const resolveModelColorImagesForProduct = async (productLike: any): Promise<string[]> => {
+        const ownImages = productImageList(productLike?.images, productLike?.image_url);
+        if (ownImages.length) return ownImages;
         const modelId = productLike?.model_id;
         const specs = productLike?.specs || {};
         const colorName = String(specs.color || specs.cor || '').trim();
@@ -426,6 +434,7 @@ export const PublicProductPage: React.FC = () => {
                     return;
                 }
 
+                if (Object.hasOwn(data, 'catalog_description')) data.description = data.catalog_description;
                 // Busca marca/descrição do modelo pela VPS como fallback quando o produto não envia.
                 // Modelo guarda uma descrição padrão herdada por todos os produtos do mesmo modelo.
                 // Trata descrições obviamente inválidas ('0', '<p>0</p>', muito curtas) como
@@ -544,6 +553,7 @@ export const PublicProductPage: React.FC = () => {
                     : formattedProduct;
 
                 setSelectedVariantId(String(data.id));
+                setVariationImageSelected(false);
                 setProduct(displayProduct as unknown as CatalogProduct);
                 criticalProductLoaded = true;
                 trackViewItem(displayProduct);
@@ -552,7 +562,7 @@ export const PublicProductPage: React.FC = () => {
                 if (data.is_combo && data.tags?.includes('mosaic_combo') && displayProduct.images.length > 1) {
                     setSelectedImage('MOSAIC');
                 } else if (displayProduct.images.length > 0) {
-                    setSelectedImage(resolvedImages[0] || displayProduct.images[0]);
+                    setSelectedImage(resolveProductFamilyImages(displayProduct)[0] || '');
                 }
 
                 // Release the critical product view before secondary sections finish.
@@ -1129,6 +1139,7 @@ export const PublicProductPage: React.FC = () => {
         const resolvedImages = await resolveModelColorImagesForProduct(sib);
         const mergedVariant = {
             ...sib,
+            parent_images: sib.parent_images || (sib.parent_id && sib.parent_id === product.parent_id ? product.parent_images : []),
             parent_name: sib.parent_name || (sib.parent_id && sib.parent_id === product.parent_id ? product.parent_name : null),
             images: resolvedImages.length > 0 ? resolvedImages : sib.images,
             image_url: resolvedImages[0] || (sib as any).image_url,
@@ -1147,10 +1158,9 @@ export const PublicProductPage: React.FC = () => {
         } as CatalogProduct;
 
         setSelectedVariantId(String(sib.id));
+        setVariationImageSelected(true);
         setProduct(mergedVariant);
-        if (mergedVariant.images && mergedVariant.images.length > 0) {
-            setSelectedImage(resolvedImages[0] || mergedVariant.images[0]);
-        }
+        setSelectedImage(resolveProductFamilyImages(mergedVariant, siblings, true)[0] || '');
 
         // Atualiza a URL na barra do navegador (sem triggerar novo fetch)
         const newUrl = `/produto/${getPublicProductVariantRouteTarget(sib, variantPool)}`;
@@ -1267,7 +1277,7 @@ export const PublicProductPage: React.FC = () => {
                 <meta property="og:site_name" content="Mercado do Vale" />
                 <meta property="og:title" content={title} />
                 <meta property="og:description" content={description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 200)} />
-                <meta property="og:image" content={product.images?.[0] || 'https://www.mercadodovale.com.br/og-cover.jpg'} />
+                <meta property="og:image" content={galleryImages[0] || 'https://www.mercadodovale.com.br/og-cover.jpg'} />
                 <meta property="og:url" content={publicProductUrl} />
                 <meta property="og:locale" content="pt_BR" />
 
@@ -1275,7 +1285,7 @@ export const PublicProductPage: React.FC = () => {
                 <meta name="twitter:card" content="summary_large_image" />
                 <meta name="twitter:title" content={title} />
                 <meta name="twitter:description" content={description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 200)} />
-                <meta name="twitter:image" content={product.images?.[0] || 'https://www.mercadodovale.com.br/og-cover.jpg'} />
+                <meta name="twitter:image" content={galleryImages[0] || 'https://www.mercadodovale.com.br/og-cover.jpg'} />
 
                 {product.exclude_from_seo && (
                     <meta name="robots" content="noindex, nofollow" />
@@ -1379,7 +1389,7 @@ export const PublicProductPage: React.FC = () => {
                                 <div className="text-slate-400 font-medium">Sem imagem</div>
                             )}
                         </div>
-                        {((product.images && product.images.length > 1) || effectiveVideoUrl || (Boolean(product.is_combo) && product.tags?.includes('mosaic_combo'))) && (
+                        {((galleryImages.length > 1) || effectiveVideoUrl || (Boolean(product.is_combo) && product.tags?.includes('mosaic_combo'))) && (
                             <div className="flex gap-3 overflow-x-auto pb-2">
                                 {effectiveVideoUrl && (
                                     <button
@@ -1407,7 +1417,7 @@ export const PublicProductPage: React.FC = () => {
                                         </div>
                                     </button>
                                 )}
-                                {product.images?.map((img, idx) => (
+                                {galleryImages.map((img, idx) => (
                                     <button
                                         key={idx}
                                         onClick={() => setSelectedImage(img)}

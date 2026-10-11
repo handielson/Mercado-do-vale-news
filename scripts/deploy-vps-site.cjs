@@ -74,6 +74,12 @@ function walkFiles(dir, files = []) {
 }
 
 function assertBuiltBundleSafety() {
+  if (DEPLOY_VARIANT === 'main') {
+    require('./assert-family-registration-release.cjs').assertFamilyRegistrationRelease(file => {
+      const fullPath = path.join(DIST_DIR, file);
+      return fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : undefined;
+    });
+  }
   const assetsDir = path.join(DIST_DIR, 'assets');
   const jsFiles = walkFiles(assetsDir).filter((file) => file.endsWith('.js'));
   const offenders = jsFiles.filter((file) =>

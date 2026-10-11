@@ -1,4 +1,5 @@
 'use strict';
+const { resolveStorefrontDescription } = require('./productStorefrontOffer.cjs');
 
 // One response boundary for the public product routes, including nested combos.
 function isProductRead(request) {
@@ -12,10 +13,17 @@ function filterProductPrices(value, access) {
   if (Array.isArray(value)) return value.map(item => filterProductPrices(item, access));
   if (!value || typeof value !== 'object') return value;
   if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) return value;
-  return Object.fromEntries(Object.entries(value)
+  const projected = Object.fromEntries(Object.entries(value)
     .filter(([key]) => access.isAdmin || !['price_cost', 'cost_price', 'unit_cost', 'purchase_price'].includes(key))
     .filter(([key]) => access.isCommercial || !['price_reseller', 'price_wholesale'].includes(key))
     .map(([key, item]) => [key, filterProductPrices(item, access)]));
+  // Keep the editor's stored description intact. Public product consumers use
+  // the same backend-resolved value as both storefront offer routes.
+  if (value.id && Object.hasOwn(value, 'parent_description')) {
+    projected.catalog_description = resolveStorefrontDescription(value);
+    delete projected.parent_description;
+  }
+  return projected;
 }
 
 function registerProductReadPrivacy(fastify, { getAuth }) {

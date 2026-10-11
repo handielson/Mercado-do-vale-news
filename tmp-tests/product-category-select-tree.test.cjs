@@ -10,9 +10,23 @@ const context = { exports: {}, Map, Set };
 vm.runInNewContext(ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
 }).outputText, context);
-const { buildCategorySelectGroups } = context.exports;
+const { buildCategorySelectGroups, categorySubtreeIds } = context.exports;
 const cat = (id, name, parent_id = null, sort_order = 0) => ({ id, name, parent_id, sort_order });
 const plain = value => JSON.parse(JSON.stringify(value));
+
+test('subtree includes descendants but not other categories, and handles cycles', () => {
+    const categories = [cat('3d','3D'), cat('key','Chaveiros','3d'), cat('mini','Mini','key'), cat('phones','Celulares'), cat('other','Chaveiros','phones')];
+    assert.deepEqual(plain(categorySubtreeIds(categories,'3d')).sort(), ['3d','key','mini']);
+    assert.deepEqual(plain(categorySubtreeIds(categories,'key')).sort(), ['key','mini']);
+    assert.deepEqual(plain(categorySubtreeIds([cat('a','A','b'),cat('b','B','a')],'a')).sort(), ['a','b']);
+});
+
+test('list filter reuses canonical hierarchy and forwards subtree IDs', () => {
+    const component = fs.readFileSync(path.join(root,'components/products/ProductFilters.tsx'),'utf8');
+    assert.match(component, /buildCategorySelectGroups\(categoryOptions\)/);
+    assert.match(component, /<optgroup[^>]*label=\{group.name\}/);
+    assert.match(component, /categorySubtreeIds\(categoryOptions, event.target.value\)/);
+});
 
 test('groups children under their real parent even when API returns children first', () => {
     const groups = plain(buildCategorySelectGroups([

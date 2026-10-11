@@ -36,7 +36,7 @@ export const print3dAvailability = (product: Print3dStoreProduct) => print3dAvai
     ? Number(product.production_days) > 0 ? `${product.production_days} dias úteis estimados` : 'Prazo a combinar'
     : 'Indisponível';
 
-export const print3dGroupKey = (product: Print3dStoreProduct) => String(product.model_id || '').trim() || product.id;
+export const print3dGroupKey = (product: Print3dStoreProduct) => product.parent_id ? `family:${product.parent_id}` : String(product.model_id || '').trim() || product.id;
 
 export const print3dMatchesQuery = (product: Print3dStoreProduct, query: string) =>
   `${product.name} ${product.sku} ${print3dVariantLabel(product)}`.toLocaleLowerCase('pt-BR').includes(query);

@@ -74,6 +74,17 @@ function registerPrint3dActiveRecipeRoutes(app, {
         return reply.code(409).send({ error: 'Escolha um modelo, projeto ou G-code desta revisão como arquivo principal.' });
       }
       const recipeDraft = typeof recipe.draft_json === 'string' ? JSON.parse(recipe.draft_json) : recipe.draft_json;
+      if (recipeDraft.plates) {
+        const [plateFiles] = await connection.query('SELECT id,kind,sha256,byte_size,printer_profile,original_name FROM print3d_recipe_files WHERE recipe_id=?', [recipeId]);
+        try {
+          const { resolvePrint3dPlateFiles } = await import('../utils/print3dPlatePlan.mjs');
+          resolvePrint3dPlateFiles(recipeDraft, plateFiles, { requirePrintable:true });
+          if (!recipeDraft.plates.some(p => p.files.some(f => plateFiles.some(actual => actual.id === primaryFileId && actual.sha256 === f.sha256 && actual.kind === f.kind)))) throw new Error('Arquivo principal não consta nas placas desta revisão.');
+        } catch (error) {
+          await connection.rollback();
+          return reply.code(409).send({ error:error.message });
+        }
+      }
       const manualSummary = recipeDraft?.printSummary?.source === 'manual';
       if (!manualSummary) {
         const [summaries] = await connection.query(

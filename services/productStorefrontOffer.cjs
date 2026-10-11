@@ -16,6 +16,9 @@ function optionalText(value, field, maxLength) {
 }
 
 function resolveStorefrontDescription(product) {
+  let specs = product?.specs;
+  if (typeof specs === 'string') { try { specs = JSON.parse(specs); } catch { specs = {}; } }
+  if (specs?._inherit_parent_description === false) return product?.description || null;
   const parentDescription = typeof product?.parent_description === 'string'
     ? product.parent_description.trim()
     : '';
@@ -67,6 +70,8 @@ function projectStorefrontProduct(product, offer) {
     parent_sku: product.parent_sku || null,
     parent_name: product.parent_name || null,
     parent_slug: product.parent_slug || null,
+    parent_images: product.parent_images || [],
+    parent_image_url: product.parent_image_url || null,
     category_id: product.category_id,
     category_name: product.category_name,
     category_slug: product.category_slug,

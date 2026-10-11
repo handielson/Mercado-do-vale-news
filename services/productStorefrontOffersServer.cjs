@@ -21,6 +21,8 @@ function productColumns(compact, storefront) { return `p.id, p.sku, p.ean, p.alt
   (SELECT pp.name FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_name,
   (SELECT pp.slug FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_slug,
   (SELECT pp.description FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_description,
+  (SELECT ${compact ? "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(pp.images, '$[0]')) LIKE 'http%' THEN JSON_ARRAY(JSON_UNQUOTE(JSON_EXTRACT(pp.images, '$[0]'))) ELSE JSON_ARRAY() END" : 'pp.images'} FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_images,
+  (SELECT ${compact ? "CASE WHEN pp.image_url LIKE 'http%' THEN pp.image_url ELSE NULL END" : 'pp.image_url'} FROM products pp WHERE pp.id = p.parent_id LIMIT 1) AS parent_image_url,
   (SELECT m.blueprint_image_url FROM models m WHERE m.id = p.model_id LIMIT 1) AS blueprint_image_url,
   p.production_days, p.print3d_preorder_enabled,
   p.price_retail AS legacy_price_retail, p.price_promo AS legacy_price_promo`; }
@@ -65,6 +67,7 @@ function publicProduct(row, storefront) {
   return projectStorefrontProduct({
     ...row,
     images: parseJson(row.images, []),
+    parent_images: parseJson(row.parent_images, []),
     alternative_eans: parseJson(row.alternative_eans, []),
     specs: parseJson(row.specs, {}),
     dimensions: parseJson(row.dimensions, {}),

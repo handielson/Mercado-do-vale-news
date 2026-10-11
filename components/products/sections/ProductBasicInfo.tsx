@@ -12,6 +12,8 @@ import { versionService } from '../../../services/versions-vps';
 import { FIELD_DICTIONARY } from '../../../config/field-dictionary';
 import { productService } from '../../../services/products';
 import { Product } from '../../../types/product';
+import { vpsApiService } from '../../../services/vpsApiService';
+import { productSkuPrefix, nextProductSku } from '@mdv/product-sku';
 
 // Tradução de chaves técnicas do template_values para labels em português
 const TEMPLATE_LABELS: Record<string, string> = {
@@ -52,11 +54,12 @@ function getTemplateLabel(key: string): string {
 }
 
 interface ProductBasicInfoProps {
+    variationDraftMode?: boolean;
     watch: UseFormWatch<ProductInput>;
     setValue: UseFormSetValue<ProductInput>;
     control: Control<ProductInput>;
     errors: FieldErrors<ProductInput>;
-    initialData?: ProductInput | null;
+    initialData?: (ProductInput & { id?: string }) | null;
     onModelSelected?: (model: Model | null) => void;
     blingId?: number;
     blingParentId?: number;
@@ -145,13 +148,47 @@ export function ProductBasicInfo({
     blingParentId,
     blingParentProduct,
     isAutoLinkingBling,
-    blingLookupError
+    blingLookupError,
+    variationDraftMode = false
 }: ProductBasicInfoProps) {
     const [selectedModel, setSelectedModel] = useState<Model | null>(null);
     const [isLoadingModel, setIsLoadingModel] = useState(false);
     const [brandName, setBrandName] = useState<string>('');
     const [resolvedTemplateValues, setResolvedTemplateValues] = useState<Record<string, string>>({});
     const [allProducts, setAllProducts] = useState<Product[]>([]);
+    const [skuPreview, setSkuPreview] = useState('');
+    const [skuPreviewState, setSkuPreviewState] = useState('');
+    const typedName = watch('name') || '';
+    const typedSku = watch('sku') || '';
+    useEffect(() => {
+        let cancelled = false;
+        setSkuPreview('');
+        setSkuPreviewState('');
+        if (initialData?.id || typedSku.trim() || !typedName.trim()) return;
+        let prefix: string;
+        try { prefix = productSkuPrefix(typedName); }
+        catch { setSkuPreviewState('Digite letras no nome para visualizar o SKU.'); return; }
+        setSkuPreviewState('Consultando próximo SKU...');
+        const timer = setTimeout(async () => {
+            try {
+                const skus: string[] = [];
+                for (let offset = 0; ; offset += 500) {
+                    if (cancelled) return;
+                    const rows = await vpsApiService.getProducts({ search: prefix, status: 'all', compact: true, limit: 500, offset, noCache: true });
+                    if (!rows) throw new Error('Consulta indisponível');
+                    skus.push(...rows.map(row => row.sku));
+                    if (rows.length < 500) break;
+                }
+                if (!cancelled) {
+                    setSkuPreview(nextProductSku(typedName, skus));
+                    setSkuPreviewState('Prévia: o número definitivo é reservado ao salvar.');
+                }
+            } catch {
+                if (!cancelled) setSkuPreviewState('Prévia indisponível. O SKU será gerado com segurança ao salvar.');
+            }
+        }, 300);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [typedName, typedSku, initialData?.id]);
     const [parentSearch, setParentSearch] = useState('');
     const [selectedParent, setSelectedParent] = useState<Product | null>(null);
     const [productFormat, setProductFormat] = useState<'simple' | 'parent' | 'variation'>(
@@ -363,13 +400,17 @@ export function ProductBasicInfo({
                             className={`w-full rounded-md border p-2 text-sm outline-none ${initialData?.id
                                 ? 'border-slate-200 bg-slate-100 font-mono text-slate-600 cursor-not-allowed'
                                 : 'border-slate-300 focus:ring-2 focus:ring-blue-500'}`}
-                            placeholder="Será gerado automaticamente se deixado vazio"
+                            placeholder={skuPreview || 'Será gerado automaticamente se deixado vazio'}
                         />
                         <p className="text-xs text-slate-500">
                             {initialData?.id
                                 ? 'SKU definido pelo sistema. Depois do cadastro, ele não pode ser alterado.'
                                 : 'Informe o SKU do sistema ou deixe vazio: 4 letras do nome + 4 números, gerados ao salvar.'}
                         </p>
+                        {!initialData?.id && !typedSku.trim() && skuPreviewState && <div aria-live="polite" className="rounded-md bg-blue-50 p-2 text-xs text-blue-800">
+                            {skuPreview && <p>SKU previsto: <strong>{skuPreview}</strong><br />Nome ao salvar: {typedName.trim()} - {skuPreview}</p>}
+                            <p>{skuPreviewState}</p>
+                        </div>}
                     </div>
 
                     <div className="space-y-1">
@@ -398,7 +439,7 @@ export function ProductBasicInfo({
                     {/* Model Selection */}
                     <div className="space-y-1">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Modelo
+                            Modelo {watch('is_print3d') && <span className="text-xs text-slate-500">(opcional para 3D)</span>}
                             <span className="ml-2 text-xs text-slate-400 font-mono">products.model</span>
                         </label>
                         <ModelSelect
@@ -462,14 +503,14 @@ export function ProductBasicInfo({
                         )}
                     </div>
 
-                    <div className="space-y-2 md:col-span-2">
+                    <div className={`space-y-2 md:col-span-2 ${variationDraftMode ? 'hidden' : ''}`}>
                         <label className="block text-sm font-medium text-slate-700">
                             Formato do produto
                         </label>
                         <div className="grid gap-2 sm:grid-cols-3">
                             {([
                                 ['simple', 'Produto simples', 'Vendido sozinho, sem variações.'],
-                                ['parent', 'Família de variações', 'Agrupa os SKUs filhos e não possui estoque próprio.'],
+                                ['parent', 'Com variações', 'Cadastre a família e os filhos na mesma tela.'],
                                 ['variation', 'Variação vendável', 'SKU com estoque, preço e produção próprios.'],
                             ] as const).map(([value, title, description]) => (
                                 <button

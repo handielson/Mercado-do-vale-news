@@ -230,7 +230,8 @@ export function filterAdminProducts(products: Product[], filters: ProductFilters
     }
 
     if (filters.categoryId && filters.categoryId !== 'all') {
-        filtered = filtered.filter(product => product.category_id === filters.categoryId);
+        const categoryIds = new Set([filters.categoryId, ...(filters.categoryIds || [])]);
+        filtered = filtered.filter(product => Boolean(product.category_id && categoryIds.has(product.category_id)));
     }
 
     if (filters.shopeeStatus === 'synced') {

@@ -13,7 +13,8 @@ import { ProductQuickTagsModal } from './ProductQuickTagsModal';
 import { CatalogTitleEditor } from './CatalogTitleEditor';
 import { ProductPublicationChannels } from './ProductPublicationChannels';
 import { getAuthSessionToken } from '../../services/authSession';
-import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
+import { buildVpsUrl } from '../../services/vpsProxyBase';
+import { uploadVideoWithProgress, pollSynologyUploadStatus } from '../../services/productVideoUpload';
 import { vpsApiService } from '../../services/vpsApiService';
 import { shopeeProductService } from '../../services/shopeeProducts';
 import {
@@ -112,16 +113,8 @@ const VIDEO_CONFIRMATION_RETRY_DELAYS_MS = [0, 2000, 3000, 5000, 8000, 12000, 15
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-const readJsonSafe = <T,>(text: string): T | null => {
-    if (!text) return null;
-    try {
-        return JSON.parse(text) as T;
-    } catch {
-        return null;
-    }
-};
 
-const getUploadErrorMessage = (payload: SynologyUploadResponse | SynologyUploadStatus | null, fallback: string) => {
+const getUploadErrorMessage = (payload: { error?: string | null; detail?: string | null } | null, fallback: string) => {
     const detail = payload?.detail ? ` (${payload.detail})` : '';
     return `${payload?.error || fallback}${detail}`;
 };
@@ -142,15 +135,6 @@ const waitForSynologyVideoConfirmation = async (
     return null;
 };
 
-class SynologyUploadError extends Error {
-    debug?: unknown;
-
-    constructor(message: string, debug?: unknown) {
-        super(message);
-        this.name = 'SynologyUploadError';
-        this.debug = debug;
-    }
-}
 
 const buildVideoUploadDebugText = (debug: unknown) => {
     if (!debug) return '';
@@ -281,67 +265,6 @@ const getUnitIdentifierChips = (units: Awaited<ReturnType<typeof unitService.lis
         });
 };
 
-const uploadVideoWithProgress = (
-    formData: FormData,
-    token: string | undefined,
-    onProgress: (progress: number) => void,
-) => new Promise<SynologyUploadResponse>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    // Video files go directly to the VPS upload endpoint to avoid proxy limits.
-    xhr.open('POST', `${VPS_DIRECT_BASE_URL}/synology/upload?folder=videos`);
-
-    const headers = getVpsSyncHeaders();
-    Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-
-    xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        const progress = Math.max(1, Math.min(90, Math.round((event.loaded / event.total) * 90)));
-        onProgress(progress);
-    };
-
-    xhr.onerror = () => reject(new Error('Falha de rede ao enviar o video para a VPS'));
-    xhr.ontimeout = () => reject(new Error('Tempo esgotado ao enviar o video para a VPS'));
-    xhr.onload = () => {
-        const payload = readJsonSafe<SynologyUploadResponse>(xhr.responseText);
-        if (xhr.status < 200 || xhr.status >= 300) {
-            reject(new SynologyUploadError(getUploadErrorMessage(payload, `Erro HTTP ${xhr.status} no upload para a VPS`), payload?.debug));
-            return;
-        }
-        resolve(payload || { ok: true });
-    };
-
-    xhr.send(formData);
-});
-
-const pollSynologyUploadStatus = async (uploadId: string, token: string | undefined) => {
-    const headers = {
-        ...getVpsSyncHeaders(),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        Accept: 'application/json',
-    };
-
-    for (let attempt = 0; attempt < 90; attempt += 1) {
-        const res = await fetch(buildVpsUrl(`/synology/upload-status?id=${encodeURIComponent(uploadId)}`, { method: 'GET' }), {
-            method: 'GET',
-            headers,
-            cache: 'no-store',
-        });
-        const status = await res.json().catch(() => null) as SynologyUploadStatus | null;
-
-        if (!res.ok) {
-            throw new SynologyUploadError(getUploadErrorMessage(status, 'Nao foi possivel consultar o status do upload'), status?.debug);
-        }
-        if (status?.status === 'success') return status;
-        if (status?.status === 'error') {
-            throw new SynologyUploadError(getUploadErrorMessage(status, 'Falha ao gravar video no Synology'), status.debug);
-        }
-
-        await wait(1500);
-    }
-
-    throw new Error('O Synology ainda nao confirmou o upload depois de 135 segundos');
-};
 
 
 /**

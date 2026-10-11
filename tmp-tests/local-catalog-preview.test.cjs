@@ -16,6 +16,54 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 }
 
+test('foto do pai muda somente a prévia e mantém fotos próprias e produtos antigos', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-preview-family-cover-'));
+  const child = { id: childId, parent_id: parentId, name:'Filho', sku:'SKU-01', status:'active', storefront:'loja_3d', is_print3d:1, price_retail:1000, images:['child.jpg'] };
+  const parent = { id:parentId, name:'Pai', sku:'SKU', is_parent:true, images:[] };
+  const calls = [];
+  const app = createLocalCatalogPreviewServer({ port:0, draftFile:path.join(directory,'drafts.json'), fetchImpl:async(url, options) => {
+    calls.push(options.method || 'GET');
+    return json(new URL(url).pathname === '/products/'+parentId ? parent : [child]);
+  }});
+  await app.start(); t.after(async()=>{await app.close();await fs.rm(directory,{recursive:true,force:true});});
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const get = async()=> (await(await fetch(base+'/storefronts/loja_3d/products')).json())[0];
+  assert.deepEqual((await get()).parent_images, []);
+  const response = await fetch(base+'/products/'+parentId,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({images:['all-colors.jpg']})});
+  assert.equal(response.status,200);
+  const updated = await get(); assert.deepEqual(updated.parent_images,['all-colors.jpg']); assert.deepEqual(updated.images,['child.jpg']);
+  assert.deepEqual(parent.images,[]); assert.ok(calls.every(method=>method==='GET'));
+});
+
+test('SKU das variações no preview usa o SKU definitivo do pai sem escrever na API central', async t=>{
+  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'mdv-preview-child-sku-'));
+  const app=createLocalCatalogPreviewServer({port:0,draftFile:path.join(directory,'drafts.json'),fetchImpl:async(url,options)=>{assert.ok(!options.method || options.method==='GET');return json([]);}});
+  await app.start();t.after(async()=>{await app.close();await fs.rm(directory,{recursive:true,force:true});});
+  const base=`http://127.0.0.1:${app.server.address().port}`;
+  const response=await fetch(base+'/products/batch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify([{id:localOnlyId,name:'Mini',sku:'MINI0001',is_parent:true},{id:childId,name:'Branco',parent_id:localOnlyId,sku:''}])});
+  assert.equal(response.status,200);
+  const child=await(await fetch(base+'/products/'+childId)).json();assert.equal(child.sku,'MINI0001-01');
+});
+
+test('família local recarrega seus filhos sem escrever ou consultar um pai inexistente na produção', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-preview-family-'));
+  const calls = [];
+  const app = createLocalCatalogPreviewServer({ port: 0, draftFile: path.join(directory, 'drafts.json'), fetchImpl: async (url, options) => {
+    calls.push(options.method || 'GET'); return json([]);
+  }});
+  await app.start();
+  t.after(async () => { await app.close(); await fs.rm(directory, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const response = await fetch(`${base}/products/batch`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify([
+    {id:localOnlyId,name:'Pai',sku:'PAI00001',is_parent:true},
+    {id:childId,name:'Filho',sku:'FILH0001',parent_id:localOnlyId,specs:{condition:'used'}}
+  ])});
+  assert.equal(response.status,200);
+  const children = await (await fetch(`${base}/products?parent_id=${localOnlyId}&status=all`)).json();
+  assert.equal(children.length,1); assert.equal(children[0].id,childId); assert.equal(children[0].specs.condition,'used');
+  assert.deepEqual(calls,[]);
+});
+
 test('SKU automático local considera catálogo e rascunhos concorrentes, sem escrever na produção', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-preview-sku-'));
   const writes = [];

@@ -13,19 +13,20 @@ const ids = {
 const url = `/admin/print3d/products/${ids.product}/active-recipe`;
 const headers = { authorization: 'Bearer admin' };
 
-async function fixture({ enabled = true, sku = 'CHAVEIRO-01', fileKind = 'gcode', hasJson = true, fileRecipeId = ids.recipe, inputSource = 'json' } = {}) {
+async function fixture({ enabled = true, sku = 'CHAVEIRO-01', fileKind = 'gcode', hasJson = true, fileRecipeId = ids.recipe, inputSource = 'json', plates, plateFiles = [] } = {}) {
   const app = Fastify();
   const state = { active: null, commits: 0, rollbacks: 0, released: 0, writes: 0 };
   const query = async (sql, params) => {
     if (sql.includes('FROM products WHERE id=? FOR UPDATE')) return [[{ id: ids.product, sku, is_parent: 0 }]];
     if (sql.includes('FROM print3d_recipe_revisions WHERE id=? AND product_id=?')) {
-      return [[{ id: ids.recipe, revision: 'r1', sku_snapshot: 'CHAVEIRO-01', draft_json:JSON.stringify({ printSummary:{ source:inputSource } }) }].filter(() => params[0] === ids.recipe && params[1] === ids.product)];
+      return [[{ id: ids.recipe, revision: 'r1', sku_snapshot: 'CHAVEIRO-01', draft_json:JSON.stringify({ printSummary:{ source:inputSource }, ...(plates ? { plates } : {}) }) }].filter(() => params[0] === ids.recipe && params[1] === ids.product)];
     }
     if (sql.includes('FROM print3d_recipe_files WHERE id=? AND recipe_id=?')) {
       return [[{ id: ids.file, kind: fileKind, original_name: 'chaveiro.gcode', printer_profile: 'PLA 0.4' }]
         .filter(() => params[0] === ids.file && params[1] === fileRecipeId)];
     }
     if (sql.includes("kind='print-json'")) return [[hasJson ? { id: ids.json } : null].filter(Boolean)];
+    if (sql.startsWith('SELECT id,kind,sha256,byte_size,printer_profile,original_name FROM print3d_recipe_files WHERE recipe_id=?')) return [plateFiles];
     if (sql.includes('FROM print3d_active_recipes WHERE product_id=?')) return [[state.active].filter(Boolean)];
     if (sql.startsWith('INSERT INTO print3d_active_recipes')) {
       state.active = { product_id: params[0], recipe_id: params[1], primary_file_id: params[2], selected_by: params[3] };
@@ -100,4 +101,15 @@ test('consultas de receita ativa são independentes da collation dos IDs', () =>
   const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'services', 'print3dActiveRecipeServer.cjs'), 'utf8');
   assert.match(source, /BINARY r\.id=BINARY a\.recipe_id/);
   assert.match(source, /BINARY f\.id=BINARY a\.primary_file_id/);
+});
+test('revisão multiplaca só ativa quando todas as placas têm arquivos imprimíveis e hashes corretos', async t => {
+  const refs = [1,2,3].map(n => ({ kind:'project', sha256:String(n).repeat(64), byte_size:100, original_name:`plate${n}.3mf` }));
+  const plates = refs.map((ref,i) => ({ id:`p${i}`, name:`Placa ${i+1}`, files:[ref] }));
+  const plateFiles = refs.map((ref,i) => ({ ...ref, id:i ? `other${i}` : ids.file, printer_profile:null }));
+  for (const candidate of [plateFiles.slice(0,2), plateFiles.map((f,i) => i === 1 ? { ...f, sha256:'0'.repeat(64) } : f), plateFiles]) {
+    const { app, state } = await fixture({ inputSource:'manual', fileKind:'project', plates, plateFiles:candidate }); t.after(() => app.close());
+    const response = await app.inject({ method:'POST', url, headers, payload:{ recipeId:ids.recipe, primaryFileId:ids.file } });
+    assert.equal(response.statusCode, candidate === plateFiles ? 200 : 409, response.body);
+    assert.equal(state.writes, candidate === plateFiles ? 1 : 0);
+  }
 });

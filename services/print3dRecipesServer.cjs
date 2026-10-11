@@ -30,7 +30,7 @@ function registerPrint3dRecipeRoutes(app, { pool, getBearerAuthContext, enabled 
     return rows[0] || null;
   };
 
-  app.get('/admin/print3d/status', { preHandler: admin }, async () => ({ enabled }));
+  app.get('/admin/print3d/status', { preHandler: admin }, async () => ({ enabled, platePlans:true }));
 
   app.get('/admin/print3d/products/:productId/recipes', { preHandler: admin }, async (req, reply) => {
     if (!available(reply)) return;

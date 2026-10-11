@@ -65,6 +65,13 @@ function isLocalCatalogPreviewPath(path, method = 'GET') {
   if (pathname === '/admin/preferences/print3d.cost.v1' && ['GET','PATCH'].includes(normalizedMethod)) return true;
   if ((['/admin/print3d/filaments','/admin/print3d/filaments/status','/admin/print3d/filaments/stock'].includes(pathname) && normalizedMethod === 'GET') ||
       (['/admin/print3d/filaments','/admin/print3d/filaments/movements','/admin/print3d/filaments/approve'].includes(pathname) && normalizedMethod === 'POST')) return true;
+  // Recipes/files and the allowlisted filament drafts above only. Never redirect
+  // payments, sellable product stock or production job mutations to this preview.
+  if ((normalizedMethod === 'GET' && ['/admin/print3d/status', '/admin/print3d/files/status'].includes(pathname))
+    || (/^\/admin\/print3d\/products\/[0-9a-f-]{36}\/recipes(?:\/[A-Za-z0-9._-]+)?$/i.test(pathname) && ['GET', 'POST', 'DELETE'].includes(normalizedMethod))
+    || (/^\/admin\/print3d\/recipes\/[0-9a-f-]{36}\/files(?:\/integrity)?$/i.test(pathname) && ['GET', 'POST'].includes(normalizedMethod))
+    || (/^\/admin\/print3d\/files\/[0-9a-f-]{36}\/download$/i.test(pathname) && normalizedMethod === 'GET')) return true;
+  if (pathname === '/admin/preferences/products.sales-units.v1' && ['GET', 'PATCH'].includes(normalizedMethod)) return true;
   const productId = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
   if (pathname === '/products/batch' && normalizedMethod === 'POST') return true;
   if (new RegExp(`^/products/${productId}$`, 'i').test(pathname) && ['GET', 'PUT'].includes(normalizedMethod)) return true;

@@ -12,6 +12,22 @@ interface CategorySelectGroup {
     options: CategorySelectOption[];
 }
 
+/** Filtering uses real IDs/relationships, never category names or display paths. */
+export function categorySubtreeIds(categories: Pick<Category, 'id' | 'parent_id'>[], rootId: string): string[] {
+    const ids = new Set<string>([rootId]);
+    const pending = [rootId];
+    while (pending.length) {
+        const parentId = pending.pop();
+        for (const category of categories) {
+            if (category.parent_id === parentId && !ids.has(category.id)) {
+                ids.add(category.id);
+                pending.push(category.id);
+            }
+        }
+    }
+    return [...ids];
+}
+
 /** Presentation only: category IDs and parent relationships remain owned by the VPS. */
 export function buildCategorySelectGroups(
     categories: Pick<Category, 'id' | 'name' | 'parent_id' | 'sort_order'>[]

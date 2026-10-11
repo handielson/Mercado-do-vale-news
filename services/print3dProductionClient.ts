@@ -15,6 +15,8 @@ export type ProductionJob = {
   rejected_quantity?: number; material_consumed_grams?: number; reserved_for_order_quantity: number; dispatched_quantity?: number;
   status: ProductionStatus; history: ProductionEvent[]; filaments?: ProductionFilament[]; supplies?: ProductionSupply[];
   primary_file?: PinnedProductionFile | null; recipe_summary?: {pieces_per_batch:number;material_gramas:number;tempo_impressao_minutos:number}|null;
+  plates?:Array<{ id:string; name:string; notes:string; printMinutes:number; filaments:Array<{ id:string; consumedGrams:number }>; files:Array<{ id:string; kind:string; original_name:string; printer_profile?:string|null; sha256:string; byte_size:number }> }>;
+  plate_error?:string; recipe_source_url?:string|null; production_notes?:string;
 };
 export type ProductionProgress = { idempotency_key: string; approved_quantity: number; rejected_quantity: number; material_consumed_grams: number; filaments: { filament_id: string; consumed_grams: number }[]; supplies: { supply_id:string;consumed_quantity:number }[]; note: string };
 export const print3dProductionClient = {

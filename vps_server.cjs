@@ -2003,7 +2003,6 @@ fastify.get('/admin/navigation-log', { preHandler: requireSyncKeyOrAdmin }, asyn
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 require('./services/print3dMaterialsServer.cjs').registerPrint3dMaterialRoutes(fastify, { pool, requireAdminBearerToken });
-
 const filamentCatalogRoutes = require('./services/print3dFilamentsServer.cjs').registerPrint3dFilamentRoutes(fastify, {
   pool, getBearerAuthContext:getVpsBearerAuthContext, stockEnabled:process.env.MDV_PRINT3D_FILAMENT_STOCK_ENABLED === '1',
 });
@@ -25406,10 +25405,16 @@ function modelBlueprintSelectSql(productAlias = 'products') {
     (SELECT m.blueprint_generated_at FROM models m WHERE m.id = ${productAlias}.model_id LIMIT 1) AS blueprint_generated_at`;
 }
 
-function productFamilyNameSelectSql(productAlias = 'products') {
+function productFamilyNameSelectSql(productAlias = 'products', compact = false) {
   return `(SELECT family_parent.name FROM products family_parent
     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
     LIMIT 1) AS parent_name,
+    (SELECT ${compact ? "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(family_parent.images, '$[0]')) LIKE 'http%' THEN JSON_ARRAY(JSON_UNQUOTE(JSON_EXTRACT(family_parent.images, '$[0]'))) ELSE JSON_ARRAY() END" : 'family_parent.images'} FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_images,
+    (SELECT ${compact ? 'NULL' : 'family_parent.description'} FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_description,
     ${productAlias}.catalog_title_complement,
     (SELECT family_parent.catalog_title_complement FROM products family_parent
      WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
@@ -26420,7 +26425,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        ${imgCol},
        status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        ${modelBlueprintSelectSql('products')},
-       ${productFamilyNameSelectSql('products')},
+       ${productFamilyNameSelectSql('products', true)},
        ${modelSpecsCol}
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,

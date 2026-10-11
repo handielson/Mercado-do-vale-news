@@ -3,6 +3,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { nextProductSku, withProductSku } = require('../services/productSku.cjs');
 
+test('SKU automático do filho complementa o SKU do pai com reserva concorrente', async () => {
+  const pool=mockPool();pool.rows.set('parent',{id:'parent',sku:'SFKU3XMV'});
+  const children=Array.from({length:5},(_,i)=>({id:'child'+i,parent_id:'parent',name:'Cor '+i,sku:''}));
+  await Promise.all(children.map(child=>withProductSku(pool,child,async()=>pool.rows.set(child.id,{...child}))));
+  assert.deepEqual(children.map(child=>child.sku),['SFKU3XMV-01','SFKU3XMV-02','SFKU3XMV-03','SFKU3XMV-04','SFKU3XMV-05']);
+  await withProductSku(pool,{id:'child0',parent_id:'parent',name:'Mudou',sku:'OUTRO'},async()=>{});
+  assert.equal(pool.rows.get('child0').sku,'SFKU3XMV-01');
+});
+
 test('quatro letras reconhecíveis, acentos, números e sequência por prefixo', () => {
   assert.equal(nextProductSku('Suporte para LNB', []), 'SLNB0001');
   assert.equal(nextProductSku('Chaveiro personalizado', ['CHAV0001', 'chav0002', 'SFKU3XMV', 'VASO9999']), 'CHAV0003');

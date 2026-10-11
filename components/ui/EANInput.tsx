@@ -165,24 +165,24 @@ export const EANInput: React.FC<EANInputProps> = ({
             </div>
 
             {eans.length < maxEANs && (
-                <div className="flex items-center gap-6 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                     <button
                         type="button"
                         onClick={handleAddEAN}
-                        className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                        className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-blue-100 px-2 py-1.5 text-xs text-blue-600 hover:bg-blue-50 font-medium"
                     >
                         <Plus size={16} />
-                        Adicionar outro código de barras
+                        Adicionar EAN
                     </button>
                     {(eans.some(e => e === '' || e.length !== 13) || eans.length > 0) && (
                         <button
                             type="button"
                             onClick={handleGenerateEAN}
-                            className="flex items-center gap-1.5 text-sm text-emerald-600 hover:text-emerald-700 font-medium px-2 py-0.5 rounded-md hover:bg-emerald-50 transition-colors"
+                            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border border-emerald-100 text-xs text-emerald-600 font-medium px-2 py-1.5 rounded-md hover:bg-emerald-50 transition-colors"
                             title="Gerar (ou substituir) código EAN-13 Brasil (789...)"
                         >
                             <Wand2 size={16} />
-                            Gerar Novo EAN (BR)
+                            Gerar EAN (BR)
                         </button>
                     )}
                 </div>

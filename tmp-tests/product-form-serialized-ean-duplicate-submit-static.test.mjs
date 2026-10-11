@@ -10,7 +10,7 @@ assert(
 );
 
 assert(
-  /disabled=\{isLoading \|\| isCompressing \|\| blocksSubmitForDuplicateEAN\}/.test(source),
+  /disabled=\{isSavingOperation \|\| isCompressing \|\| blocksSubmitForDuplicateEAN\}/.test(source),
   'Submit button must use the serialized-aware duplicate EAN blocker',
 );
 

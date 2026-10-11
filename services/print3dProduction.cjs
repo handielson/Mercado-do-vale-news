@@ -61,6 +61,12 @@ function projectJob(row, events = [], outputs = [], admin = false, recipe = {}, 
     job.supplies = recipe.supplies || [];
     job.recipe_summary = recipe.summary || null;
     job.primary_file = pinnedFile;
+    if (recipe.plates && pinnedFile && recipe.productId === row.product_id && recipe.sku === row.sku) {
+      job.plates = recipe.plates;
+      job.recipe_source_url = recipe.sourceUrl || null;
+      job.production_notes = recipe.notes || '';
+    }
+    if (recipe.plateError) job.plate_error = recipe.plateError;
     job.dispatched_quantity = outputs
       .filter(output => output.status === 'dispatched')
       .reduce((total, output) => total + Number(output.quantity || 0), 0);
@@ -72,15 +78,23 @@ async function readRecipeFilaments(connection, recipeIds) {
   if (!recipeIds.length) return new Map();
   const ids = [...new Set(recipeIds)];
   const [rows] = await connection.query(`SELECT id,draft_json FROM print3d_recipe_revisions WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
-  return new Map(rows.map(row => {
+  return new Map(await Promise.all(rows.map(async row => {
     const draft = typeof row.draft_json === 'string' ? JSON.parse(row.draft_json) : row.draft_json;
     const filaments = Array.isArray(draft?.filaments) ? draft.filaments.map(item => ({ id:item.id,name:item.name,color:item.color,estimated_grams_per_batch:Number(item.consumedGrams) })) : [];
     const supplies = Array.isArray(draft?.supplies) ? draft.supplies.map(item => ({ id:item.id,name:item.name,
       unit_label:item.unitLabel || 'un',estimated_quantity_per_batch:Number(item.quantity) })) : [];
-    return [row.id,{ productId:draft?.productId, sku:draft?.sku, filaments,supplies,
+    let platePlan = {};
+    if (draft?.plates) {
+      try {
+        const [files] = await connection.query('SELECT id,kind,original_name,printer_profile,sha256,byte_size FROM print3d_recipe_files WHERE recipe_id=?', [row.id]);
+        const { resolvePrint3dPlateFiles } = await import('../utils/print3dPlatePlan.mjs');
+        platePlan = { plates:resolvePrint3dPlateFiles(draft, files, { requirePrintable:true }), sourceUrl:draft.sourceUrl, notes:draft.productionDetails?.notes };
+      } catch (error) { platePlan = { plateError:error.message }; }
+    }
+    return [row.id,{ productId:draft?.productId, sku:draft?.sku, filaments,supplies, ...platePlan,
       summary:{pieces_per_batch:Number(draft?.piecesPerBatch),material_gramas:Number(draft?.printSummary?.material_gramas),
         tempo_impressao_minutos:Number(draft?.printSummary?.tempo_impressao_minutos)} }];
-  }));
+  })));
 }
 async function readPinnedFiles(connection,jobs) {
   if (!jobs.length) return new Map();

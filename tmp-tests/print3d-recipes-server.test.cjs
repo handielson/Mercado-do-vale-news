@@ -49,7 +49,7 @@ async function fixture(enabled = true) {
 test('somente admin consulta fichas privadas; flag desligada evita acesso à tabela', async t => {
   const off = await fixture(false); t.after(() => off.app.close());
   assert.equal((await off.app.inject({ method: 'GET', url: '/admin/print3d/status' })).statusCode, 401);
-  assert.deepEqual((await off.app.inject({ method: 'GET', url: '/admin/print3d/status', headers })).json(), { enabled: false });
+  assert.deepEqual((await off.app.inject({ method: 'GET', url: '/admin/print3d/status', headers })).json(), { enabled: false, platePlans:true });
   assert.equal((await off.app.inject({ method: 'GET', url, headers })).statusCode, 503);
   const on = await fixture(); t.after(() => on.app.close());
   assert.equal((await on.app.inject({ method: 'GET', url })).statusCode, 401);

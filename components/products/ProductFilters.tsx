@@ -1,9 +1,11 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, Store, X } from 'lucide-react';
 import { ProductStatus } from '../../utils/field-standards';
 import { brandService } from '../../services/brands';
 import { categoryService } from '../../services/categories';
+import type { Category } from '../../types/category';
+import { buildCategorySelectGroups, categorySubtreeIds } from '../../utils/categorySelectTree';
 
 export interface ProductFiltersState {
     salesChannel?: 'all' | 'shopee' | 'tiktok' | 'mercado_livre' | 'loja_3d' | 'mercado_do_vale' | 'bling';
@@ -16,6 +18,7 @@ export interface ProductFiltersState {
     parentVisibility: 'hide_parents' | 'show_all' | 'only_parents';
     brand: string;        // 'all' ou nome exato da marca
     categoryId: string;   // 'all' ou UUID da categoria
+    categoryIds?: string[];
     shopeeStatus: 'all' | 'synced' | 'not_synced';
     videoStatus: 'all' | 'with_video' | 'without_video';
 }
@@ -47,7 +50,8 @@ const INITIAL_FILTERS: ProductFiltersState = {
 export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, showParentVisibility = true }) => {
     const [filters, setFilters] = useState<ProductFiltersState>(INITIAL_FILTERS);
     const [brandOptions, setBrandOptions] = useState<string[]>([]);
-    const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
+    const [categoryOptions, setCategoryOptions] = useState<Category[]>([]);
+    const categoryGroups = useMemo(() => buildCategorySelectGroups(categoryOptions), [categoryOptions]);
 
     useEffect(() => {
         let cancelled = false;
@@ -62,11 +66,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
         categoryService.list()
             .then(cats => {
                 if (cancelled) return;
-                const opts = (cats || [])
-                    .map(c => ({ id: c.id, name: c.name }))
-                    .filter(c => c.id && c.name)
-                    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
-                setCategoryOptions(opts);
+                setCategoryOptions((cats || []).filter(c => c.id && c.name));
             })
             .catch(err => console.warn('[ProductFilters] falha ao carregar categorias', err));
         return () => { cancelled = true; };
@@ -156,9 +156,13 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
 
                 <label className={cardClass}>
                     <span className={labelClass}>Categoria</span>
-                    <select aria-label="Categoria" value={filters.categoryId} onChange={(event) => applyChange({ categoryId: event.target.value })} className={controlClass}>
+                    <select aria-label="Categoria" value={filters.categoryId} onChange={(event) => applyChange({ categoryId: event.target.value, categoryIds: event.target.value === 'all' ? undefined : categorySubtreeIds(categoryOptions, event.target.value) })} className={controlClass}>
                         <option value="all">Todas</option>
-                        {categoryOptions.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
+                        {categoryGroups.map(group => <optgroup key={group.id} label={group.name}>
+                            {group.options.map(option => <option key={option.id} value={option.id}>
+                                {option.depth ? `${'　'.repeat(option.depth)}↳ ${option.path}` : `${option.path} (inclui subcategorias)`}
+                            </option>)}
+                        </optgroup>)}
                     </select>
                 </label>
 

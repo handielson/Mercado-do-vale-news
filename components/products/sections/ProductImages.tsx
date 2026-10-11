@@ -3,6 +3,7 @@ import { Loader2, X, Upload, GripVertical } from 'lucide-react';
 import { getCacheBustedUrl } from '../../../utils/cache-buster';
 
 interface ProductImagesProps {
+    compact?: boolean;
     imagePreviews: string[];
     isCompressing: boolean;
     handleImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -17,6 +18,7 @@ interface ProductImagesProps {
 const MAX_IMAGES = 5;
 
 export function ProductImages({
+    compact = false,
     imagePreviews,
     isCompressing,
     handleImageUpload,
@@ -62,9 +64,9 @@ export function ProductImages({
     };
 
     return (
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className={compact ? 'bg-white space-y-2' : 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4'}>
             <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-800">Imagens do Produto</h3>
+                <h3 className="font-semibold text-slate-800">{compact ? 'Fotos da variação' : 'Imagens do Produto'}</h3>
                 <span className="text-sm text-slate-600">
                     {imagePreviews.length} / {MAX_IMAGES} imagens
                 </span>
@@ -106,7 +108,7 @@ export function ProductImages({
                 </div>
             )}
 
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
+            <div className={compact ? 'grid grid-cols-[repeat(auto-fill,80px)] gap-3' : 'grid grid-cols-3 md:grid-cols-5 gap-4'}>
                 {imagePreviews.map((src, index) => (
                     <div
                         key={index}
@@ -191,7 +193,7 @@ export function ProductImages({
             </div>
 
             {imagePreviews.length === 0 && (
-                <p className="text-sm text-slate-500 text-center py-4">
+                <p className={compact ? 'text-xs text-slate-500' : 'text-sm text-slate-500 text-center py-4'}>
                     Nenhuma imagem adicionada. Clique no botão acima para fazer upload.
                 </p>
             )}
