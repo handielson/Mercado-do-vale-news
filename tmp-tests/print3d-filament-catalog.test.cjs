@@ -7,6 +7,25 @@ const { mergeCosts, registerPrint3dFilamentRoutes } = require('../services/print
 const references = { brands:['Bambu Lab','Sunlu'], materials:['PLA','PETG'], colors:['Branco','Preto'] };
 const filament = (extra = {}) => ({ id:'pla-white', brand:'Bambu Lab', material:'PLA', color:'Branco', costPerKgCents:10000, active:true, ...extra });
 const movement = (extra = {}) => ({ filament_id:'pla-white', idempotency_key:randomUUID(), reason:'receipt', note:'Compra', quantity_grams:1000, expected_grams:0, ...extra });
+test('degradê valida 2-3 cores cadastradas, persiste composição e impede alterar identidade ou duplicar', () => {
+  const refs={...references,colors:[...references.colors,'Azul']};
+  const input=filament({colorMode:'gradient',colorNames:['preto','branco'],color:'Texto que não é fonte de verdade'});
+  const items=upsertFilament([],input,refs);
+  assert.equal(items[0].color,'Degradê: Branco / Preto');
+  assert.deepEqual(items[0].colorNames,['Branco','Preto']);
+  assert.equal(items[0].colorMode,'gradient');
+  assert.throws(()=>upsertFilament(items,{...input,id:'other',colorNames:['Branco','Preto']},refs),{statusCode:409});
+  assert.throws(()=>upsertFilament(items,{...input,colorNames:['Branco','Azul']},refs),{statusCode:409});
+  assert.throws(()=>upsertFilament(items,{...input,colorMode:'single',colorNames:undefined,color:'Branco'},refs),{statusCode:409});
+  for (const names of [[],['Branco'],['Branco','Preto','Azul','Outra'],['Branco','branco'],['Branco','Errada']]) assert.throws(()=>upsertFilament([],{...input,colorNames:names},refs),{statusCode:400});
+  assert.throws(()=>upsertFilament([],{...input,colorMode:'unknown'},refs),{statusCode:400});
+  const triple=upsertFilament([],{...input,colorNames:['Preto','Azul','Branco']},refs)[0];
+  assert.deepEqual(triple.colorNames,['Azul','Branco','Preto']);
+  assert.equal(triple.spoolCostCents,10000);assert.equal(triple.spoolGrams,1000);
+  // Deactivated component colors remain usable for an existing saved filament.
+  const updated=upsertFilament(items,{...items[0],costPerKgCents:12000},{...refs,colors:[]})[0];
+  assert.deepEqual(updated.colorNames,items[0].colorNames);assert.equal(updated.id,items[0].id);
+});
 test('cadastro normaliza kg, mantém IDs, recusa erro de digitação e combinação duplicada', () => {
   const items = upsertFilament([], filament({brand:' bambu lab ',material:'pla',color:'branco'}), references);
   assert.equal(items[0].spoolGrams,1000); assert.equal(items[0].spoolCostCents,10000); assert.equal(items[0].name,'PLA · Bambu Lab');
@@ -64,6 +83,23 @@ function database() {
   };
   return { data, pool:{query,async getConnection(){let snapshot,unlock;return {query,async beginTransaction(){const before=queue;queue=new Promise(resolve=>{unlock=resolve;});await before;snapshot=structuredClone(data);},async commit(){},async rollback(){Object.assign(data,snapshot);},release(){unlock();}};}} };
 }
+
+test('API salva e relê degradê com entrada única e preserva as cores ao editar custo', async t => {
+  const {pool,data}=database();const app=require('fastify')();t.after(()=>app.close());
+  registerPrint3dFilamentRoutes(app,{pool,getBearerAuthContext:async()=>({isAdmin:true,userId:'operator'}),stockEnabled:true});
+  const status=(await app.inject('/admin/print3d/filaments/status')).json();
+  assert(status.colorModes.includes('gradient'));
+  const input=filament({colorMode:'gradient',colorNames:['Preto','Branco']});
+  const receipt=movement({quantity_grams:2000});
+  const saved=await app.inject({method:'POST',url:'/admin/print3d/filaments',payload:{version:version([]),filament:input,receipt}});
+  assert.equal(saved.statusCode,200);
+  const catalog=(await app.inject('/admin/print3d/filaments')).json();
+  assert.deepEqual(catalog.filaments[0].colorNames,['Branco','Preto']);
+  assert.equal(data.stock[input.id].quantity_grams,2000);assert.equal(data.movements.length,1);
+  const edited=await app.inject({method:'POST',url:'/admin/print3d/filaments',payload:{version:catalog.version,filament:{...catalog.filaments[0],costPerKgCents:12000}}});
+  assert.equal(edited.statusCode,200);assert.equal(edited.json().filaments[0].color,'Degradê: Branco / Preto');
+  assert.equal(data.stock[input.id].quantity_grams,2000);assert.equal(data.movements.length,1);
+});
 test('API autenticada aprova catálogo + estoque atomicamente, recupera falha e não duplica no retry', async t => {
   const {pool,data}=database();const app=require('fastify')();t.after(()=>app.close());
   registerPrint3dFilamentRoutes(app,{pool,getBearerAuthContext:async req=>req.headers.authorization==='Bearer admin' ? {isAdmin:true,userId:'operator'} : null,stockEnabled:true});

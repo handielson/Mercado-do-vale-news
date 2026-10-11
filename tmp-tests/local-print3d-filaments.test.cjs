@@ -1,6 +1,33 @@
 'use strict';
 const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs/promises');const path=require('node:path');const os=require('node:os');const {randomUUID}=require('node:crypto');
 const {createLocalCatalogPreviewServer,isLocalCatalogPreviewPath}=require('../services/localCatalogPreviewServer.cjs');
+test('rascunho salva degradê e só permite aprovação quando a API central suporta as cores combinadas', async t => {
+  const app=require('fastify')();t.after(()=>app.close());
+  const {registerLocalFilaments}=require('../services/localPrint3dFilaments.cjs');
+  let state={};let supported=false;const remoteWrites=[];
+  const requestRemote=async(route,auth,options={})=>{
+    if(options.method==='POST')remoteWrites.push(route);
+    if(route==='/admin/preferences/print3d.cost.v1')return{value:{filaments:[]}};
+    if(route==='/brands')return[{name:'Sunlu',active:1}];
+    if(route==='/table-data/colors?limit=200&offset=0')return{rows:[{name:'Azul',active:1},{name:'Preto',active:1},{name:'Branco',active:1}]};
+    if(route==='/admin/print3d/material-types')return{materials:['PLA']};
+    if(route==='/admin/print3d/filaments/status')return{approval:true,stockEnabled:true,...(supported?{colorModes:['single','gradient']}:{})};
+    if(route==='/admin/print3d/filaments/approve')return{approved:true};
+    throw Error('Unexpected route '+route);
+  };
+  registerLocalFilaments({app,store:{read:async()=>structuredClone(state),write:async next=>{state=next;}},serialize:work=>work(),requestRemote});
+  const empty=(await app.inject('/admin/print3d/filaments')).json();
+  const input={id:'gradient',brand:'Sunlu',material:'PLA',colorMode:'gradient',colorNames:['Preto','Branco','Azul'],costPerKgCents:9000};
+  const saved=await app.inject({method:'POST',url:'/admin/print3d/filaments',payload:{version:empty.version,filament:input}});
+  assert.equal(saved.statusCode,200);
+  assert.deepEqual(state.filamentDraft.filaments[0].colorNames,['Azul','Branco','Preto']);assert.deepEqual(remoteWrites,[]);
+  const blocked=await app.inject({method:'POST',url:'/admin/print3d/filaments/approve',payload:{}});
+  assert.equal(blocked.statusCode,503);assert.match(blocked.json().message || blocked.json().error,/degradê/);assert.deepEqual(remoteWrites,[]);
+  assert(state.filamentDraft);
+  supported=true;
+  assert.equal((await app.inject({method:'POST',url:'/admin/print3d/filaments/approve',payload:{}})).statusCode,200);
+  assert.deepEqual(remoteWrites,['/admin/print3d/filaments/approve']);assert.equal(state.filamentDraft,undefined);
+});
 test('cadastro, custos e movimentos locais não escrevem na API central; aprovação exige capacidade publicada',async t=>{
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'mdv-filaments-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));const writes=[];
   const settings={filaments:[],supplies:[],printerWatts:100,energyCentsPerKwh:100,machineCentsPerHour:100,laborCentsPerHour:2000,packagingCentsPerPiece:0,taxPercent:0};

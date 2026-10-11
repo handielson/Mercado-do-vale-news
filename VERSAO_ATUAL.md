@@ -296,3 +296,13 @@ Bloqueados preservados:
 - C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-n8n-context-handoff-fix — dirty
 - C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-publish-novo-bot — dirty
 - C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-status-contacts-fix — dirty
+# v1.2.602-filamentos-degrade
+
+Data: 11/10/2026. Branch: main. Tag: v1.2.602-filamentos-degrade.
+Release: /var/www/mdv-site/releases/20261011-153123-filamentos-degrade.
+Status: preparada; publicacao e validacao final pendentes.
+
+Marca digitavel/filtrante e degrade de duas ou tres cores registradas lado a lado. Custo e estoque pertencem a combinacao completa; registros antigos preservados. Deploy seletivo de dois modulos da API antes do painel. Nenhum novo schema, ativacao da producao 3D ou aprovacao de rascunhos. Alteracoes preexistentes de produtos permanecem fora do escopo.
+
+Detalhes: docs/versoes/2026-10-11-v1.2.602-filamentos-degrade.md.
+

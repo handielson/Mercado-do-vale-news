@@ -1,5 +1,15 @@
 const test=require('node:test'), assert=require('node:assert/strict'),fs=require('node:fs');
-const {patchEntry,schemaPlan,HOOK,COST,remotePrepare}=require('../scripts/deploy-print3d-filaments.cjs');
+const {patchEntry,patchModule,schemaPlan,HOOK,COST,remotePrepare}=require('../scripts/deploy-print3d-filaments.cjs');
+test('module update accepts reviewed deployed baseline, is idempotent and rejects unknown drift',()=>{
+  const file='services/print3dFilaments.cjs',old='// reviewed\n',next='// gradient\n';
+  assert.equal(patchModule(old,file,next,old),next);
+  assert.equal(patchModule(old.replace(/\n/g,'\r\n'),file,next,old),next);
+  assert.equal(patchModule(next,file,next,old),next);
+  assert.equal(patchModule('',file,next,old),next);
+  assert.throws(()=>patchModule(old+'// remote change\n',file,next,old),/Remote module differs/);
+  assert.throws(()=>patchModule('// legacy stock\n',file,next,old,'// legacy stock\n'),/Remote module differs/);
+  assert.equal(patchModule('// legacy stock\n','services/print3dMaterialStock.cjs',next,old,'// legacy stock\n'),next);
+});
 test('selective deployment preserves remote drift and is idempotent',()=>{
   const source="// unrelated remote custom code\nfastify.get('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {\n});\nfastify.patch('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {\n  const valueJson = normalizeAdminPreferenceValue(req.body?.value);\n});\n";
   const result=patchEntry(source); assert.equal(patchEntry(result),result);

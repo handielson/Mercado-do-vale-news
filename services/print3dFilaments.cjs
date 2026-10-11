@@ -13,29 +13,43 @@ function normalizeFilament(input, references, previous) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail(400, 'Cadastro de filamento inválido.');
   const id = String(input.id || '');
   if (!FILAMENT_ID.test(id)) fail(400, 'Identificador de filamento inválido.');
-  const choose = (field, list) => {
-    if (typeof input[field] !== 'string' || input[field].length > (field === 'color' ? 120 : 191) || /[\u0000-\u001f\u007f]/.test(input[field])) fail(400, 'Marca, material ou cor inválida.');
-    const found = list.find(name => key(name) === key(input[field])) ||
-      (previous?.[field] && key(previous[field]) === key(input[field]) ? previous[field] : undefined);
+  const choose = (field, list, value = input[field], oldValue = previous?.[field]) => {
+    if (typeof value !== 'string' || value.length > (field === 'color' ? 120 : 191) || /[\u0000-\u001f\u007f]/.test(value)) fail(400, 'Marca, material ou cor inválida.');
+    const found = list.find(name => key(name) === key(value)) ||
+      (oldValue && key(oldValue) === key(value) ? oldValue : undefined);
     if (!found) fail(400, `Selecione ${field === 'brand' ? 'uma marca' : field === 'material' ? 'um material' : 'uma cor'} cadastrada.`);
     return found;
   };
   const brand = choose('brand', references.brands);
   const material = choose('material', references.materials);
-  const color = choose('color', references.colors);
+  const colorMode = input.colorMode === undefined ? (previous?.colorMode || 'single') : input.colorMode;
+  if (!['single','gradient'].includes(colorMode)) fail(400, 'Tipo de cor inválido.');
+  let colorNames;
+  let color;
+  if (colorMode === 'gradient') {
+    const names = input.colorNames === undefined ? previous?.colorNames : input.colorNames;
+    if (!Array.isArray(names) || names.length < 2 || names.length > 3) fail(400, 'O degradê deve ter duas ou três cores cadastradas.');
+    colorNames = names.map(name => choose('color', references.colors, name, previous?.colorNames?.find(old => key(old) === key(name)))).sort((a,b) => key(a).localeCompare(key(b),'pt-BR'));
+    if (new Set(colorNames.map(key)).size !== colorNames.length) fail(400, 'Escolha cores diferentes para o degradê.');
+    color = `Degradê: ${colorNames.join(' / ')}`;
+    if (color.length > 120) fail(400, 'As cores combinadas devem ter até 120 caracteres.');
+  } else {
+    if (input.colorNames !== undefined && (!Array.isArray(input.colorNames) || input.colorNames.length)) fail(400, 'Uma cor simples não pode conter uma combinação de cores.');
+    color = choose('color', references.colors);
+  }
   if (`${material} · ${brand}`.length > 191) fail(400, 'Marca e material combinados devem ter até 191 caracteres.');
   if (!Number.isSafeInteger(input.costPerKgCents) || input.costPerKgCents <= 0 || input.costPerKgCents > 100000000) fail(400, 'Informe um custo por kg válido em centavos.');
   // Stable IDs are consumed by immutable recipes and the physical stock ledger.
-  if (previous && (key(previous.color) !== key(color) || (previous.brand && key(previous.brand) !== key(brand)) || (previous.material && key(previous.material) !== key(material))))
+  if (previous && (key(previous.color) !== key(color) || (previous.colorMode || 'single') !== colorMode || (previous.brand && key(previous.brand) !== key(brand)) || (previous.material && key(previous.material) !== key(material))))
     fail(409, 'Marca, material e cor de um filamento salvo não mudam. Cadastre outra combinação para não misturar o estoque.');
   if (input.active !== undefined && typeof input.active !== 'boolean') fail(400, 'Status inválido.');
-  return { id, brand, material, color, name:`${material} · ${brand}`, costPerKgCents:input.costPerKgCents,
+  return { id, brand, material, color, ...(colorMode === 'gradient' ? {colorMode,colorNames} : {}), name:`${material} · ${brand}`, costPerKgCents:input.costPerKgCents,
     spoolGrams:1000, spoolCostCents:input.costPerKgCents, active:input.active !== false };
 }
 function upsertFilament(items, input, references) {
   const previous = items.find(item => item.id === input.id);
   const item = normalizeFilament(input, references, previous);
-  if (items.some(other => other.id !== item.id && key(other.brand) === key(item.brand) && key(other.material) === key(item.material) && key(other.color) === key(item.color)))
+  if (items.some(other => other.id !== item.id && key(other.brand) === key(item.brand) && key(other.material) === key(item.material) && key(other.color) === key(item.color) && (other.colorMode || 'single') === (item.colorMode || 'single')))
     fail(409, 'Esta combinação de marca, material e cor já existe. Edite o cadastro existente.');
   if (!previous && items.length >= 2000) fail(400, 'Limite de filamentos atingido.');
   return previous ? items.map(other => other.id === item.id ? item : other) : [...items, item];

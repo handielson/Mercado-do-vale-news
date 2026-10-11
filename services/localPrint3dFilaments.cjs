@@ -133,6 +133,7 @@ function registerLocalFilaments({ app, store, serialize, requestRemote }) {
     try { capability = await requestRemote('/admin/print3d/filaments/status', req.headers.authorization); }
     catch (error) { if (error.statusCode === 404) fail(503, 'A atualização de filamentos ainda precisa ser publicada na API central. O rascunho local foi preservado.'); throw error; }
     if (!capability.approval || (draft.movements.length && !capability.stockEnabled)) fail(503, 'Publique a atualização e aprove a migração 054 antes de enviar estoque à produção.');
+    if (draft.filaments.some(f => f.colorMode === 'gradient') && !capability.colorModes?.includes('gradient')) fail(503, 'Publique o suporte a filamentos degradê na API central antes de aprovar. O rascunho local foi preservado.');
     const withoutFilaments = value => { const { filaments, ...rest } = value || {}; return rest; };
     if (draft.costs && JSON.stringify(withoutFilaments(base)) !== JSON.stringify(withoutFilaments(draft.base_costs)) && JSON.stringify(withoutFilaments(base)) !== JSON.stringify(withoutFilaments(draft.costs))) fail(409, 'As tarifas centrais mudaram. Reconcilie antes de aprovar.');
     await requestRemote('/admin/print3d/filaments/approve', req.headers.authorization, { method:'POST', json:{ base_version:draft.base_version, filaments:draft.filaments, movements:draft.movements } });

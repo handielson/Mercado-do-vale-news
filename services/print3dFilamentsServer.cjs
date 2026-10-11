@@ -62,9 +62,9 @@ function registerPrint3dFilamentRoutes(app, { pool, getBearerAuthContext, stockE
     catch (error) { req.log?.error({ err:error }, 'filament-catalog'); return reply.code(error.statusCode || 500).send({ error:error.statusCode ? error.message : 'Não foi possível acessar o cadastro de filamentos.' }); }
   };
   const capabilities = async () => {
-    if (!stockEnabled) return { enabled:true, stockEnabled:false, approval:true };
+    if (!stockEnabled) return { enabled:true, stockEnabled:false, approval:true, colorModes:['single','gradient'] };
     const [columns] = await pool.query("SHOW COLUMNS FROM print3d_filament_movements LIKE 'note'");
-    return { enabled:true, stockEnabled:columns.length > 0, approval:true };
+    return { enabled:true, stockEnabled:columns.length > 0, approval:true, colorModes:['single','gradient'] };
   };
   app.get('/admin/print3d/filaments/status', { preHandler:admin }, run(capabilities));
   app.get('/admin/print3d/filaments', { preHandler:admin }, run(async () => {

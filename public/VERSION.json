@@ -1,50 +1,36 @@
 {
-  "version": "v1.2.601-filamentos-estoque",
+  "version": "v1.2.602-filamentos-degrade",
   "date": "2026-10-11",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.601-filamentos-estoque",
-  "release_vps": "/var/www/mdv-site/releases/20261011-120000-filamentos-estoque",
+  "tag": "v1.2.602-filamentos-degrade",
+  "release_vps": "/var/www/mdv-site/releases/20261011-153123-filamentos-degrade",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261010-211100-sku-nome-automatico",
-  "summary": "Filamentos e estoque em pagina propria, entradas em kg com data e canal, baixas e resumo por material/cor. Estoque habilitado independentemente da producao 3D.",
+  "summary": "Marca digitavel e filtrante; filamentos degrade de duas ou tres cores em linha, com identidade, custo e estoque da combinacao completa.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
     "components/print3d/FilamentCatalog.tsx",
-    "components/print3d/QuickCostSimulator.tsx",
-    "pages/admin/products/Print3dFilamentsPage.tsx",
-    "pages/admin/products/Print3dCostPage.tsx",
-    "layouts/AdminLayout.tsx",
-    "routes/index.tsx",
     "services/print3dCostSettings.ts",
-    "services/print3dFilaments.ts",
     "services/print3dFilaments.cjs",
     "services/print3dFilamentsServer.cjs",
-    "services/print3dMaterialStock.cjs",
     "services/localPrint3dFilaments.cjs",
-    "services/localCatalogPreviewServer.cjs",
-    "services/vpsTransport.js",
     "utils/print3dFilamentInventory.mjs",
-    "utils/print3dPurchaseChannel.mjs",
-    "migrations/054_print3d_filament_adjustments.sql",
-    "infra/nginx/mdv-site-production.conf",
-    "infra/nginx/mdv-site-staging.conf",
-    "vps_server.cjs",
-    "deploy-vps-server-only.cjs",
-    "scripts/deploy-print3d-filaments.cjs",
-    "tmp-tests/deploy-print3d-filaments.test.cjs",
     "tmp-tests/print3d-filament-catalog.test.cjs",
     "tmp-tests/local-print3d-filaments.test.cjs",
     "tmp-tests/print3d-filament-page.test.mjs",
+    "components/ui/SearchableSelect.tsx",
+    "scripts/deploy-print3d-filaments.cjs",
+    "tmp-tests/deploy-print3d-filaments.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-11-v1.2.601-filamentos-estoque.md"
+    "docs/versoes/2026-10-11-v1.2.602-filamentos-degrade.md"
   ],
   "validations": [
-    "26 testes focados de filamentos, custos, preview e deploy seletivo aprovados.",
-    "Sintaxe dos servidores e preflight remoto aprovados; migration 054 e flag independente autorizadas.",
-    "Build isolado e validacao da release publica obrigatorios antes de concluir."
+    "Regressoes de catalogo, preview, custos, saldo e deploy seletivo.",
+    "Preflight remoto: schema completo, estoque ativo e producao completa desativada; somente dois modulos da API mudam.",
+    "Build isolado e validacao publica obrigatorios antes de concluir; nenhum rascunho aprovado ou registro comercial alterado."
   ]
 }

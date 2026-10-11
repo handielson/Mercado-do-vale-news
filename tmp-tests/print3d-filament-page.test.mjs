@@ -3,9 +3,32 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createRequire } from 'node:module';
 import { FILAMENT_PURCHASE_CHANNELS, filamentPurchaseNote } from '../utils/print3dPurchaseChannel.mjs';
-import { groupFilamentStock, filamentEntryDate } from '../utils/print3dFilamentInventory.mjs';
+import { groupFilamentStock, filamentEntryDate, filamentColorStyle } from '../utils/print3dFilamentInventory.mjs';
 const { applyStock } = createRequire(import.meta.url)('../services/print3dFilaments.cjs');
 const read = file => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+
+test('marca do filamento permite digitar e filtrar apenas as opções cadastradas', () => {
+  const ui = read('components/print3d/FilamentCatalog.tsx');
+  assert.match(ui, /<SearchableSelect key=\{editing.id\} id="filament-brand"/);
+  assert.match(ui, /options=\{catalog.references.brands\}/);
+  assert.match(ui, /disabled=\{Boolean\(existing\?\.brand\)\}/);
+  assert.match(ui, /Atualizar marcas/);
+  const select = read('components/ui/SearchableSelect.tsx');
+  assert.match(select, /role="combobox"/);
+  assert.match(select, /role="listbox"/);
+  assert.match(select, /onChange\(options.find/);
+  assert.match(select, /onBlur=\{close\}/);
+  for (const key of ['ArrowDown', 'ArrowUp', 'Enter', 'Escape']) assert.ok(select.includes(`'${key}'`));
+  const expression = select.match(/const normalize = \(text: string\) => (.*);/)[1];
+  const normalize = new Function('text', `return ${expression}`);
+  const options = ['Print Pulse', 'Bambu Lab', 'Marca Árvore'];
+  const filter = text => options.filter(option => normalize(option).includes(normalize(text)));
+  assert.deepEqual(filter('PRINT'), ['Print Pulse']);
+  assert.deepEqual(filter(' lab '), ['Bambu Lab']);
+  assert.deepEqual(filter('arvore'), ['Marca Árvore']);
+  assert.deepEqual(filter(''), options);
+  assert.deepEqual(filter('marca inexistente'), []);
+});
 
 test('canal da compra é opcional, seletivo e preservado na referência do movimento', () => {
   assert.ok(FILAMENT_PURCHASE_CHANNELS.includes('Shopee'));
@@ -77,10 +100,34 @@ test('resumo soma material + cor entre marcas, sem misturar tipos ou inventar sa
   assert.equal(filamentEntryDate({reason:'adjustment',created_at:'2026-10-11T14:00:00Z'}),'');
   const ui=read('components/print3d/FilamentCatalog.tsx');
   assert.match(ui,/flex w-44 max-w-full/);assert.doesNotMatch(ui,/Mostrar cores|showColors|setShowColors/);assert.match(ui,/color_hex/);assert.match(ui,/Estoque por tipo de filamento e cor/);
-  assert.match(ui,/Amostra da cor/);assert.equal((ui.match(/colorPreview\(group.color\)|colorPreview\(f.color\)|colorPreview\(editing.color\)/g) || []).length,3);
+  assert.match(ui,/Amostra da cor/);assert.equal((ui.match(/colorPreview\(group.color, group.colorNames\)|colorPreview\(f.color, f.colorNames\)|colorPreview\(editing.color, editing.colorNames\)/g) || []).length,3);
   assert.match(ui,/<option value="used">Usado/);assert.match(ui,/<option value="deactivate">Desativar/);
   assert.doesNotMatch(ui,/Ajuste manual|Quantidade a adicionar \/ ajustar/);
   assert.match(ui,/entry_date:entryDate/);assert.match(ui,/entry_date:movementDate/);
+});
+
+test('degradê tem duas ou três cores e amostra combinada, sem somar ao estoque de cor simples', () => {
+  const ui = read('components/print3d/FilamentCatalog.tsx');
+  assert.match(ui, /Degradê \/ troca de cor \(2 ou 3 cores\)/);
+  assert.match(ui, /Adicionar terceira cor/);
+  assert.match(ui, /Remover terceira cor/);
+  assert.match(ui, /data-testid="filament-gradient-colors" className="grid items-end gap-3 md:grid-cols-3"/);
+  assert.ok(ui.indexOf('data-testid="filament-gradient-colors"') > ui.indexOf('</select></label>\n      </div>'));
+  assert.match(ui, /disabled=\{Boolean\(existing\)\} value=\{editing.colorMode/);
+  const colors = {Azul:'#0000ff',Vermelho:'#ff0000',Preto:'#000'};
+  const resolve = name => colors[name];
+  assert.deepEqual(filamentColorStyle('Preto',undefined,resolve), {backgroundColor:'#000'});
+  assert.deepEqual(filamentColorStyle('Degradê', ['Azul','Vermelho'],resolve), {background:'linear-gradient(90deg, #0000ff, #ff0000)'});
+  assert.deepEqual(filamentColorStyle('Degradê', ['Azul','Vermelho','Preto'],resolve), {background:'linear-gradient(90deg, #0000ff, #ff0000, #000)'});
+  assert.equal(filamentColorStyle('Degradê',['Azul','Desconhecida'],resolve),undefined);
+  assert.equal(filamentColorStyle('Preto',undefined,()=> 'url(https://invalid)'),undefined);
+  const items=[{id:'a',brand:'A',material:'PLA',color:'Preto'}, {id:'b',brand:'A',material:'PLA',color:'Degradê: Azul / Preto',colorMode:'gradient',colorNames:['Azul','Preto']}, {id:'c',brand:'B',material:'PLA',color:'Degradê: Azul / Preto',colorMode:'gradient',colorNames:['Azul','Preto']}];
+  const grouped = groupFilamentStock(items,{enabled:true,balances:items.map((f,i)=>({filament_id:f.id,quantity_grams:(i+1)*1000}))});
+  assert.equal(grouped.length,2);
+  assert.equal(grouped.find(g=>g.color==='Preto').quantity_grams,1000);
+  const gradient = grouped.find(g=>g.colorNames);
+  assert.equal(gradient.quantity_grams,5000);
+  assert.deepEqual(gradient.colorNames,['Azul','Preto']);
 });
 
 test('controle de kg usa menos, campo central editável e mais, sem setas nativas', () => {

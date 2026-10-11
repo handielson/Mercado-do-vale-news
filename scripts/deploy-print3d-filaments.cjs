@@ -6,6 +6,14 @@ const { deployProductReadPrivacy } = require('./deploy-product-read-privacy.cjs'
 const { waitForHealth } = require('./deploy-print3d.cjs');
 const ENTRIES = ['server.js','vps_server.js','vps_server.cjs'];
 const MODULES = ['services/print3dFilaments.cjs','services/print3dFilamentsServer.cjs','services/print3dMaterialStock.cjs'];
+// Reviewed deployed release: updates must not overwrite unknown remote changes.
+const BASELINE = '9307703f';
+function patchModule(source, file, updated, baseline, oldStock) {
+  const normal = value => (value || '').replace(/\r\n/g,'\n');
+  const allowed = [updated, baseline, ...(file === MODULES[2] ? [oldStock] : [])];
+  if (source && !allowed.some(value => normal(source) === normal(value))) throw Error('Remote module differs: '+file);
+  return updated;
+}
 const FLAG = 'MDV_PRINT3D_FILAMENT_STOCK_ENABLED';
 const HOOK = "const filamentCatalogRoutes = require('./services/print3dFilamentsServer.cjs').registerPrint3dFilamentRoutes(fastify, {\n  pool, getBearerAuthContext:getVpsBearerAuthContext, stockEnabled:process.env.MDV_PRINT3D_FILAMENT_STOCK_ENABLED === '1',\n});\n\n";
 const GET = "fastify.get('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {";
@@ -89,12 +97,11 @@ async function deployPrint3dFilaments(options) {
   const {appDir,apiProc,root,exec,read,checkOnly=false,migrate=false,enableStock=false}=options;
   if(appDir!=='/var/www/mdv-api' || apiProc.name!=='mdv-api' || !ENTRIES.some(f=>apiProc.pm2_env.pm_exec_path===appDir+'/'+f)) throw Error('Unexpected target');
   const sources = Object.fromEntries(MODULES.map(f=>[f,fs.readFileSync(path.join(root,f),'utf8')]));
+  const baselines = Object.fromEntries(MODULES.map(f=>[f,execFileSync('git',['show',`${BASELINE}:${f}`],{cwd:root,encoding:'utf8'})]));
   const oldStock = execFileSync('git',['show','983242af:services/print3dMaterialStock.cjs'],{cwd:root,encoding:'utf8'});
   const patchFile = (source,file) => {
     if(ENTRIES.includes(file)) return patchEntry(source);
-    const normal = s=>(s||'').replace(/\r\n/g,'\n');
-    if(source && normal(source)!==normal(sources[file]) && !(file===MODULES[2] && normal(source)===normal(oldStock))) throw Error('Remote module differs: '+file);
-    return sources[file];
+    return patchModule(source,file,sources[file],baselines[file],oldStock);
   };
   const deployment = {...options,files:[...MODULES,...ENTRIES],backupPrefix:'print3d-filaments-code',patchFile};
   await deployProductReadPrivacy({...deployment,checkOnly:true});
@@ -119,4 +126,4 @@ async function deployPrint3dFilaments(options) {
     throw error;
   }
 }
-module.exports={patchEntry,schemaPlan,remotePrepare,deployPrint3dFilaments,HOOK,COST};
+module.exports={patchEntry,patchModule,schemaPlan,remotePrepare,deployPrint3dFilaments,HOOK,COST};

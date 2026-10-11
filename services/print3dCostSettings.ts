@@ -6,6 +6,8 @@ export type Print3dFilament = {
   id: string;
   name: string;
   color: string;
+  colorMode?: 'single' | 'gradient';
+  colorNames?: string[];
   spoolGrams: number;
   spoolCostCents: number;
   brand?: string;
