@@ -2,11 +2,13 @@
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.602-filamentos-degrade.
 Release: /var/www/mdv-site/releases/20261011-153123-filamentos-degrade.
-Status: preparada; publicacao e validacao final pendentes.
+Status: publicada e validada. Commit/tag da release: 073abe71 / v1.2.602-filamentos-degrade.
 
 Marca digitavel/filtrante e degrade de duas ou tres cores registradas lado a lado. Custo e estoque pertencem a combinacao completa; registros antigos preservados. Deploy seletivo de dois modulos da API antes do painel. Nenhum novo schema, ativacao da producao 3D ou aprovacao de rascunhos. Alteracoes preexistentes de produtos permanecem fora do escopo.
 
 Detalhes: docs/versoes/2026-10-11-v1.2.602-filamentos-degrade.md.
+
+36 testes e build isolado aprovados. API seletiva reiniciada, mysql.ok=true, estoque e movimentos intactos (hash conferido), sem migration ou aprovacao de rascunhos. Home/painel HTTP 200 e VERSION.json correspondente. Chrome autenticado confirmou marca filtrante, tres cores na mesma linha e amostra degrade, sem salvar teste e sem erros. Worktree temporaria desregistrada e junction removida; exclusao dos residuos fisicos bloqueada pela politica do ambiente. 34 antigas bloqueadas preservadas. Main sincronizada; alteracoes preexistentes fora do escopo.
 
 ## Historico
 
