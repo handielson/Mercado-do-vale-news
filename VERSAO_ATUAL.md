@@ -1,3 +1,29 @@
+# v1.2.606-variacoes-ultima-etapa
+
+Data: 11/10/2026. Branch: main. Tag: v1.2.606-variacoes-ultima-etapa.
+Release MDV: /var/www/mdv-site/releases/20261011-204442-variacoes-ultima-etapa.
+Status: preparada para publicacao.
+
+Variações como última aba, depois do cadastro completo do pai e dos dados fiscais. Fotos, descrição e canais do pai vêm antes. Os arquivos de produção dos filhos ficam junto das variações. O botão Salvar família e variações mantém o salvamento conjunto existente, sem exigir cadastro prévio do pai. Produtos simples e filhos avulsos mantêm suas abas de produção, estoque e preços.
+
+Seletor de cores dos produtos filtrável, com amostra antes do nome tanto na lista como na seleção. RGB personalizado e quadriculado das cores translúcidas preservados. O campo continua gravando o nome cadastrado; atualização com falha mantém a lista anterior e permite nova tentativa. Clique no campo ainda focado reabre as opções.
+
+Publicação exclusiva do painel/site MDV. API, dados comerciais e site 3DMV permanecem na release anterior. Seis arquivos preexistentes de Shopee/documentação/fixture ficam fora do escopo.
+
+Validações: 45 testes focados aprovados, incluindo navegação do pai com/sem 3D, filhos avulsos, salvamento/retry da família, amostras de cores, teclado e atualização. Build e validações finais registrados após publicação.
+
+Arquivos da entrega:
+- components/products/ProductForm.tsx
+- components/products/selectors/ColorSelect.tsx
+- components/ui/SearchableSelect.tsx
+- tmp-tests/filament-color-select.test.mjs
+- tmp-tests/product-create-feedback.test.cjs
+- public/VERSION.json
+- VERSAO_ATUAL.md
+- docs/versoes/2026-10-11-v1.2.606-variacoes-ultima-etapa.md
+
+## Histórico
+
 # v1.2.605-cadastro-variacoes
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.605-cadastro-variacoes.

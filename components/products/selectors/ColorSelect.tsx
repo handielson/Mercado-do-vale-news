@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { colorService } from '../../../services/colors';
 import { Color } from '../../../types/color';
 import { colorSampleStyle } from '../../../utils/colorAppearance.mjs';
+import { SearchableSelect } from '../../ui/SearchableSelect';
 
 interface ColorSelectProps {
     value: string;
@@ -26,6 +27,7 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
     onChange,
     error
 }) => {
+    const fieldId = useId();
     const [colors, setColors] = useState<Color[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [loadError, setLoadError] = useState('');
@@ -55,31 +57,22 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
     return (
         <div className="space-y-2">
             <div className="flex items-center gap-2 min-w-0">
-                <div className="min-w-0 flex-1 relative">
-                    <select
+                <div className="min-w-0 flex-1">
+                    <label htmlFor={fieldId} className="sr-only">Cor</label>
+                    <SearchableSelect
+                        id={fieldId}
                         value={value}
-                        onChange={(e) => onChange(e.target.value)}
+                        onChange={onChange}
+                        options={colors.map(color => color.name)}
                         disabled={isLoading}
+                        placeholder="Selecione uma cor"
                         className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
-                    >
-                        <option value="">Selecione uma cor</option>
-                        {colors.map((color) => (
-                            <option key={color.id} value={color.name}>
-                                {color.name}
-                            </option>
-                        ))}
-                    </select>
-
-                    {/* Color preview dot */}
-                    {value && getColorHex(value) && (
-                        <div className="absolute right-10 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                            <div
-                                className="w-4 h-4 rounded-full border border-slate-300"
-                                style={colorSampleStyle(value, getColorHex(value))}
-                                title={value}
-                            />
-                        </div>
-                    )}
+                        renderLeading={name => <span
+                            className="block h-5 w-5 shrink-0 rounded border border-slate-300"
+                            style={colorSampleStyle(name, getColorHex(name))}
+                            title={name}
+                        />}
+                    />
                 </div>
 
                 <button

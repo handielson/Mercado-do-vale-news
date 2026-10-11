@@ -84,7 +84,7 @@ type ProductSaveResult = Product & {
 
 const DEFAULT_PRODUCT_VERSION = 'Global';
 const DEFAULT_BATTERY_HEALTH = '100';
-type FormSection = 'basic' | 'specs' | 'media' | 'channels' | 'commercial' | 'production' | 'fiscal';
+type FormSection = 'basic' | 'specs' | 'media' | 'channels' | 'commercial' | 'production' | 'fiscal' | 'variations';
 
 export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, onCancel, onBatchComplete, isLoading, variationDraftMode = false }: ProductFormProps) {
     const [familyRows, setFamilyRows] = useState<FamilyRow[]>([]);
@@ -340,7 +340,9 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
     const isVendablePrint3d = isPrint3d && !isParentProduct;
     useEffect(() => {
         if (isParentProduct && activeSection === 'commercial') setActiveSection('basic');
-    }, [isParentProduct, activeSection]);
+        if (isParentProduct && !variationDraftMode && activeSection === 'production') setActiveSection('variations');
+        if ((!isParentProduct || variationDraftMode) && activeSection === 'variations') setActiveSection('basic');
+    }, [isParentProduct, activeSection, variationDraftMode]);
     useEffect(() => {
         if (!isPrint3d) return;
         setValue('print3d_preorder_enabled', isVendablePrint3d, { shouldValidate: true });
@@ -1958,9 +1960,10 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                     ['specs', 'Características'],
                     ['media', 'Fotos e descrição'],
                     ['channels', 'Canais de venda'],
-                    ...(isPrint3d ? [['production', 'Arquivos e produção 3D'] as const] : []),
+                    ...(isPrint3d && !isParentProduct ? [['production', 'Arquivos e produção 3D'] as const] : []),
                     ...(!isParentProduct ? [['commercial', 'Estoque e preços'] as const] : []),
                     ['fiscal', 'Fiscal e garantia'],
+                    ...(!variationDraftMode && isParentProduct ? [['variations', 'Variações'] as const] : []),
                 ] as const).map(([section, label]) => <button key={section} type="button" aria-current={activeSection === section ? 'page' : undefined}
                     onClick={() => selectSection(section)}
                     className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold ${activeSection === section ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}
@@ -2004,10 +2007,6 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                 blingLookupError={blingLookupError}
                 variationDraftMode={variationDraftMode}
             />
-            {!variationDraftMode && isParentProduct && <>
-                {familyLoadError && <p role="alert" className="text-red-700">{familyLoadError}</p>}
-                <ProductFamilyEditor parent={{ ...getValues(), images: imagePreviews }} rows={familyRows} onChange={setFamilyRows} onBusyChange={setFamilyMediaBusy} disabled={Boolean(isSavingOperation || familyLoading || familyLoadError)} />
-            </>}
             </div>
 
             {/* 1. TIPO DE PRODUTO */}
@@ -2536,7 +2535,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                 </label>
                 {watch('is_print3d') && <div className="space-y-3 rounded-lg border border-violet-200 bg-white p-4">
                     <p className="text-xs text-slate-600">A quantidade pronta fica no estoque central acima. Encomenda é uma demanda de fabricação, não saldo negativo.</p>
-                    <button type="button" onClick={() => selectSection('production')} className="text-sm font-semibold text-violet-800 underline">Ver arquivos e produção 3D</button>
+                    <button type="button" onClick={() => selectSection(isParentProduct ? 'variations' : 'production')} className="text-sm font-semibold text-violet-800 underline">Ver arquivos e produção 3D</button>
                     <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
                         <strong>Política padrão da linha 3D</strong>
                         <p className="mt-1">{isParentProduct
@@ -2549,12 +2548,18 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                 </div>}
             </div>
 
-            {isPrint3d && <section className={activeSection === 'production' ? 'rounded-xl border border-violet-200 bg-violet-50 p-5 space-y-3' : 'hidden'}>
+            {!variationDraftMode && isParentProduct && <div id="product-variations-section" className={activeSection === 'variations' ? 'space-y-4 scroll-mt-20' : 'hidden'}>
+                <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Última etapa: confira primeiro o cadastro completo do pai nas abas anteriores. Depois adicione as variações e seus dados próprios. O pai e os filhos serão salvos juntos em Salvar família e variações.</p>
+                {familyLoadError && <p role="alert" className="text-red-700">{familyLoadError}</p>}
+                <ProductFamilyEditor parent={{ ...getValues(), images: imagePreviews }} rows={familyRows} onChange={setFamilyRows} onBusyChange={setFamilyMediaBusy} disabled={Boolean(isSavingOperation || familyLoading || familyLoadError)} />
+            </div>}
+
+            {isPrint3d && <section className={activeSection === (isParentProduct ? 'variations' : 'production') ? 'rounded-xl border border-violet-200 bg-violet-50 p-5 space-y-3' : 'hidden'}>
                 <h3 className="font-semibold text-violet-900">Arquivos e produção 3D</h3>
                 <p className="text-sm text-violet-800">STL, 3MF, G-code, JSON e instruções ficam privados na ficha de produção. O link do MakerWorld ou de outro site é opcional.</p>
                 {isParentProduct ? <>
                     <p className="text-sm text-violet-900">O pai organiza a família e a descrição compartilhada. Os arquivos de impressão são anexados às revisões dos filhos vendáveis, pois material, tamanho e configuração de impressão podem variar.</p>
-                    {!familyRows.length ? <p className="text-sm">Inclua as variações em Dados básicos. Depois selecione aqui cada filho para preencher suas placas e arquivos, antes de salvar a família.</p> : <>
+                    {!familyRows.length ? <p className="text-sm">Adicione as variações acima. Depois selecione aqui cada filho para preencher suas placas e arquivos, antes de salvar a família.</p> : <>
                         <label className="block text-sm font-medium">Produção de qual variação?<select className="mt-1 w-full rounded-lg border bg-white p-2" value={familyRows.some(r => r.key === productionRowKey) ? productionRowKey : familyRows[0].key} onChange={e => setProductionRowKey(e.target.value)}>{familyRows.map(row => <option key={row.key} value={row.key}>{row.data.name} — {row.data.sku || 'SKU confirmado ao salvar'}{productionSetups[row.key] ? ' (nova ficha preenchida)' : ''}</option>)}</select></label>
                         {(() => { const row = familyRows.find(r => r.key === productionRowKey) || familyRows[0]; return <>
                             {row.data.id && <Link to={`/admin/products/${row.data.id}#production`} target="_blank" className="inline-block text-sm font-semibold text-violet-800 underline">Abrir cadastro, revisões e aprovação desta variação</Link>}
@@ -2586,6 +2591,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                 <button type="button" onClick={onCancel} disabled={isSavingOperation} className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50">
                     Cancelar
                 </button>
+                {!variationDraftMode && isParentProduct && activeSection !== 'variations' && <button type="button" onClick={() => selectSection('variations')} disabled={isSavingOperation} className="rounded-md border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50">Continuar para variações</button>}
                 <button
                     type="submit"
                     disabled={isSavingOperation || isCompressing || blocksSubmitForDuplicateEAN}

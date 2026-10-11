@@ -7,6 +7,7 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { filamentColorStyle } from '../utils/print3dFilamentInventory.mjs';
+import { colorSampleStyle } from '../utils/colorAppearance.mjs';
 
 function harness(props) {
   const values = []; let cursor = 0;
@@ -99,4 +100,77 @@ test('cor simples e as três cores do degradê usam a mesma lista e amostra, sem
   assert.match(ui, /catalog\?\.references.color_hex\?\.\[color\] \|\| getColorHex\(color\)/);
   assert.match(ui, /save\(editing, catalog.version, receipt\)/);
   assert.doesNotMatch(ui, /<select id="filament-color"/);
+});
+
+async function productColorHarness(service, props = {}) {
+  const values = []; let cursor = 0; let mounted = false;
+  const effects = []; const changes = [];
+  const SearchableSelect = () => null;
+  const context = { exports: {}, console: { error() {} }, require: name => {
+    if (name === 'react') return { ...React,
+      useId: () => 'product-color',
+      useEffect: effect => { if (!mounted) effects.push(effect); },
+      useState(initial) {
+        const index = cursor++;
+        if (!(index in values)) values[index] = initial;
+        return [values[index], next => { values[index] = typeof next === 'function' ? next(values[index]) : next; }];
+      },
+    };
+    if (name === 'react/jsx-runtime') return jsxRuntime;
+    if (name === 'lucide-react') return { Plus: () => null, RefreshCw: () => null };
+    if (name.endsWith('/services/colors')) return { colorService: service };
+    if (name.endsWith('/colorAppearance.mjs')) return { colorSampleStyle };
+    if (name.endsWith('/SearchableSelect')) return { SearchableSelect };
+    throw Error(name);
+  }};
+  runInNewContext(ts.transpileModule(readFileSync('components/products/selectors/ColorSelect.tsx', 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true }
+  }).outputText, context);
+  const render = () => { cursor = 0; return context.exports.ColorSelect({ value: '', onChange: value => changes.push(value), ...props }); };
+  render(); mounted = true; effects.forEach(effect => effect());
+  await new Promise(resolve => setImmediate(resolve));
+  return { render, changes, selector: () => nodes(render(), SearchableSelect)[0] };
+}
+
+test('variações mostram amostras do cadastro no menu e selecionam o nome, sem trocar por UUID', async () => {
+  const colors = [
+    { id: 'solid-id', name: 'Roxo', hex_code: '#987654' },
+    { id: 'translucent-id', name: 'Dourado Translúcido', hex_code: '#123456' },
+  ];
+  const product = await productColorHarness({ listActive: async () => colors, getColorHex: () => '#000000' });
+  const props = product.selector().props;
+  assert.deepEqual(Array.from(props.options), colors.map(color => color.name));
+  const dropdown = harness(props);
+  nodes(dropdown.render(), 'input')[0].props.onFocus();
+  const tree = dropdown.render();
+  const html = renderToStaticMarkup(tree);
+  assert.match(html, /background-color:#987654/);
+  assert.match(html, /#1234568c/);
+  assert.match(html, /conic-gradient/);
+  nodes(tree, 'button')[1].props.onClick();
+  assert.deepEqual(product.changes, ['Dourado Translúcido']);
+  assert.equal(nodes(dropdown.render(), 'ul').length, 0);
+  nodes(dropdown.render(), 'input')[0].props.onClick();
+  assert.equal(nodes(dropdown.render(), 'button').length, 2, 'Clicking the still-focused field must reopen all registered colors');
+  const selected = await productColorHarness({ listActive: async () => colors, getColorHex: () => '#000000' }, { value: 'Roxo' });
+  assert.match(renderToStaticMarkup(harness(selected.selector().props).render()), /background-color:#987654/);
+});
+
+test('atualizar cores mantém seleção e lista anterior quando consulta falha, e permite nova tentativa', async () => {
+  let fail = true;
+  const service = { listActive: async () => [{ id: 'solid-id', name: 'Roxo', hex_code: '#987654' }], getColorHex: () => '#000000',
+    refreshActive: async () => { if (fail) throw Error('offline'); return [{ id: 'new-id', name: 'Azul', hex_code: '#123456' }]; } };
+  const product = await productColorHarness(service, { value: 'Roxo' });
+  const refresh = () => nodes(product.render(), 'button').find(button => button.props.title === 'Atualizar lista de cores');
+  refresh().props.onClick();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(Array.from(product.selector().props.options), ['Roxo']);
+  assert.equal(product.selector().props.value, 'Roxo');
+  assert.equal(product.changes.length, 0);
+  assert.match(renderToStaticMarkup(product.render()), /role="alert"/);
+  fail = false; refresh().props.onClick();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(Array.from(product.selector().props.options), ['Azul']);
+  assert.equal(product.selector().props.value, 'Roxo', 'Existing value remains intact after refresh');
+  assert.doesNotMatch(renderToStaticMarkup(product.render()), /role="alert"/);
 });

@@ -22,7 +22,7 @@ test('SKU preview uses backend generator, stays separate from submitted SKU, and
  const effect=basic.slice(basic.indexOf('const typedName'),basic.indexOf('const [parentSearch'));
  assert(!effect.includes("setValue('sku'"));
  assert.match(form,/\['production', 'Arquivos e produção 3D'\]/);
- assert.match(form,/!variationDraftMode && isParentProduct && <>[\s\S]*?<ProductFamilyEditor/);
+ assert.match(form,/!variationDraftMode && isParentProduct && <div id="product-variations-section"[\s\S]*?<ProductFamilyEditor/);
  assert.match(fs.readFileSync('components/products/familyRegistration.js','utf8'),/buildProductVariationPrefill\(parent\)/);
 });
 test('child prefill inherits parent content, but never its SKU or marketplace identity', async()=>{
@@ -32,4 +32,23 @@ test('child prefill inherits parent content, but never its SKU or marketplace id
  assert.equal(child.id,undefined);assert.equal(child.parent_id,'parent');assert.equal(child.sku,'');assert.equal(child.name,'Mini Esqueleto');assert.equal(child.is_parent,false);assert.equal(child.description,parent.description);assert.equal(child.stock_quantity,0);
  assert.equal(child.bling_id,undefined);assert.equal(child.shopee_item_id,undefined);assert.equal(child.slug,undefined);
  assert.deepEqual(child.images,parent.images);assert.equal(parent.is_parent,true);
+});
+test('parent variations are the last stage, while standalone children retain production and prices',()=>{
+ const nav=form.slice(form.indexOf('<nav id='),form.indexOf('</nav>'));
+ const start=nav.indexOf('{([')+2,end=nav.indexOf('] as const).map')+1;
+ assert(start>1 && end>start);
+ const expression=nav.slice(start,end);
+ const sections=(isParentProduct,isPrint3d,variationDraftMode=false)=>{
+  const ctx={exports:{},isParentProduct,isPrint3d,variationDraftMode};
+  vm.runInNewContext(ts.transpileModule('exports.sections='+expression,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,ctx);
+  return Array.from(ctx.exports.sections,section=>section[0]);
+ };
+ for(const print3d of [true,false]) assert.deepEqual(sections(true,print3d),['basic','specs','media','channels','fiscal','variations']);
+ assert.deepEqual(sections(false,true),['basic','specs','media','channels','production','commercial','fiscal']);
+ assert(!sections(false,true,true).includes('variations'));
+ const basic=form.slice(form.indexOf('id="product-basic-section"'),form.indexOf('{/* 1. TIPO DE PRODUTO */}'));
+ assert(!basic.includes('<ProductFamilyEditor'));
+ assert.match(form,/id="product-variations-section" className=\{activeSection === 'variations'/);
+ assert.match(form,/activeSection === \(isParentProduct \? 'variations' : 'production'\)/);
+ assert.match(form,/type="button" onClick=\{\(\) => selectSection\('variations'\)\}/);
 });

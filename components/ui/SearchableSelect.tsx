@@ -31,6 +31,7 @@ export function SearchableSelect({ id, value, options, onChange, disabled = fals
       disabled={disabled} value={query} placeholder={placeholder}
       className={`${className || 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm'} ${renderLeading ? 'pl-10' : ''}`}
       onFocus={() => { setQuery(''); setOpen(true); setActive(-1); }}
+      onClick={() => { if (!open) { setQuery(''); setOpen(true); setActive(-1); } }}
       onBlur={close}
       onChange={event => {
         const text = event.target.value;
