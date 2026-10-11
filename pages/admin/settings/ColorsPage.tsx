@@ -4,6 +4,7 @@ import { Palette, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Color } from '../../../types/color';
 import { colorService } from '../../../services/colors';
 import { ColorModal } from '../../../components/settings/ColorModal';
+import { colorSampleStyle } from '../../../utils/colorAppearance.mjs';
 
 /**
  * Colors Management Page
@@ -130,7 +131,7 @@ export function ColorsPage() {
                                         {color.hex_code ? (
                                             <div
                                                 className="w-8 h-8 rounded-lg border-2 border-slate-300 shadow-sm"
-                                                style={{ backgroundColor: color.hex_code }}
+                                                style={colorSampleStyle(color.name, color.hex_code)}
                                                 title={color.hex_code}
                                             />
                                         ) : (

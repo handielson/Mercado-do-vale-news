@@ -2,6 +2,7 @@
 import { Color, ColorInput } from '../types/color';
 import { vpsClient } from './vpsClient';
 import { getCompanyId } from './companyContext';
+import { translucentPresetHex } from '../utils/colorAppearance.mjs';
 
 /**
  * COLOR SERVICE - VPS Implementation
@@ -139,8 +140,13 @@ function generateSlug(name: string): string {
 let listCache: { data: Color[]; expiresAt: number } | null = null;
 let listInFlight: Promise<Color[]> | null = null;
 const LIST_TTL_MS = 5 * 60 * 1000;
+let listGeneration = 0;
 
-function clearListCache() { listCache = null; }
+function clearListCache() {
+    listGeneration += 1;
+    listCache = null;
+    listInFlight = null;
+}
 
 type ColorRow = {
     id: string;
@@ -208,17 +214,19 @@ async function list(): Promise<Color[]> {
     if (listCache && Date.now() < listCache.expiresAt) return listCache.data;
     if (listInFlight) return listInFlight;
 
-    listInFlight = (async () => {
+    const generation = listGeneration;
+    const pending = (async () => {
         try {
             const result = sortColors((await loadColorRows()).map(normalizeColor));
-            listCache = { data: result, expiresAt: Date.now() + LIST_TTL_MS };
+            if (generation === listGeneration) listCache = { data: result, expiresAt: Date.now() + LIST_TTL_MS };
             return result;
         } finally {
-            listInFlight = null;
+            if (generation === listGeneration) listInFlight = null;
         }
     })();
 
-    return listInFlight;
+    listInFlight = pending;
+    return pending;
 }
 
 /**
@@ -237,7 +245,7 @@ async function create(input: ColorInput): Promise<Color> {
     const slug = generateSlug(input.name);
 
     // Auto-detect hex_code from COLOR_MAP if not provided
-    const hex_code = input.hex_code || COLOR_MAP[input.name] || '#000000';
+    const hex_code = input.hex_code || getColorHex(input.name) || '#000000';
 
     const data = await vpsClient.post<ColorRow>('/table-data/colors', {
         company_id: companyId,
@@ -296,6 +304,8 @@ async function refreshActive(): Promise<Color[]> {
  */
 export function getColorHex(colorName: string): string | undefined {
     if (!colorName) return undefined;
+    const translucentHex = translucentPresetHex(colorName);
+    if (translucentHex) return translucentHex;
     // Exact match first
     if (COLOR_MAP[colorName]) return COLOR_MAP[colorName];
     

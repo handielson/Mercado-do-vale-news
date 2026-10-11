@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
-import { colorService, COLOR_MAP } from '../../../services/colors';
+import { colorService } from '../../../services/colors';
 import { Color } from '../../../types/color';
+import { colorSampleStyle } from '../../../utils/colorAppearance.mjs';
 
 interface ColorSelectProps {
     value: string;
@@ -13,7 +14,7 @@ interface ColorSelectProps {
 /**
  * ColorSelect Component
  * Select with redirect to color management page
- * 
+ *
  * ANTIGRAVITY PROTOCOL:
  * - Uses VPS-based colorService (online, multi-tenant)
  * - Shows only active colors
@@ -27,25 +28,28 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
 }) => {
     const [colors, setColors] = useState<Color[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
         loadColors();
     }, []);
 
-    const loadColors = async () => {
+    const loadColors = async (forceRefresh = false) => {
         try {
             setIsLoading(true);
-            const data = await colorService.listActive(); // Fetches fresh data from VPS
+            setLoadError('');
+            const data = await (forceRefresh ? colorService.refreshActive() : colorService.listActive());
             setColors(data);
         } catch (error) {
             console.error('Error loading colors:', error);
+            setLoadError('Não foi possível atualizar as cores. A lista anterior foi mantida; tente novamente.');
         } finally {
             setIsLoading(false);
         }
     };
 
     const getColorHex = (colorName: string): string | undefined => {
-        return colorService.getColorHex(colorName);
+        return colors.find(color => color.name === colorName)?.hex_code || colorService.getColorHex(colorName);
     };
 
     return (
@@ -71,7 +75,7 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
                         <div className="absolute right-10 top-1/2 -translate-y-1/2 flex items-center gap-2">
                             <div
                                 className="w-4 h-4 rounded-full border border-slate-300"
-                                style={{ backgroundColor: getColorHex(value) }}
+                                style={colorSampleStyle(value, getColorHex(value))}
                                 title={value}
                             />
                         </div>
@@ -80,7 +84,7 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
 
                 <button
                     type="button"
-                    onClick={loadColors}
+                    onClick={() => void loadColors(true)}
                     disabled={isLoading}
                     className="shrink-0 p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center disabled:opacity-50"
                     title="Atualizar lista de cores"
@@ -102,6 +106,7 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
             {error && (
                 <p className="text-xs text-red-600">{error}</p>
             )}
+            {loadError && <p role="alert" className="text-xs text-red-600">{loadError}</p>}
         </div>
     );
 };

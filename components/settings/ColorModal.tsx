@@ -4,6 +4,7 @@ import { X, Search } from 'lucide-react';
 import { Color, ColorInput } from '../../types/color';
 import { colorService } from '../../services/colors';
 import { applyFieldFormat, getFieldDefinition } from '../../config/field-dictionary';
+import { TRANSLUCENT_COLOR_PALETTE, colorSampleStyle, isTranslucentColor } from '../../utils/colorAppearance.mjs';
 
 interface ColorModalProps {
     isOpen: boolean;
@@ -115,6 +116,7 @@ const COLOR_PALETTE: { name: string; hex: string }[] = [
     { name: 'Caramel', hex: '#C68642' },
     { name: 'Cacau', hex: '#5C3D2E' },
     { name: 'Canela', hex: '#D2691E' },
+    ...TRANSLUCENT_COLOR_PALETTE,
 ];
 
 export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave, color }) => {
@@ -124,6 +126,7 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [search, setSearch] = useState('');
+    const [paletteKind, setPaletteKind] = useState<'all' | 'translucent'>('all');
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -138,16 +141,18 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
         }
         setError('');
         setSearch('');
+        setPaletteKind('all');
     }, [color, isOpen]);
 
     // Filtra paleta por pesquisa
     const filteredColors = useMemo(() => {
-        if (!search.trim()) return [];
+        if (!search.trim() && paletteKind === 'all') return [];
         const q = search.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         return COLOR_PALETTE.filter(c =>
+            (paletteKind !== 'translucent' || isTranslucentColor(c.name)) &&
             c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(q)
         ).slice(0, 24);
-    }, [search]);
+    }, [search, paletteKind]);
 
     const handleSave = async () => {
         if (!name.trim()) { setError('Nome da cor é obrigatório'); return; }
@@ -173,6 +178,7 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
         setName(c.name);
         setHexCode(c.hex);
         setSearch('');
+        setPaletteKind('all');
     };
 
     const currentHex = hexCode;
@@ -197,12 +203,17 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
 
                     {/* Busca de cor por nome */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                        <div className="flex gap-2 mb-3" aria-label="Tipo de cor na paleta">
+                            <button type="button" aria-pressed={paletteKind === 'all'} onClick={() => setPaletteKind('all')} className={`px-3 py-1.5 rounded-lg text-sm border ${paletteKind === 'all' ? 'bg-blue-50 border-blue-400 text-blue-700' : 'border-slate-200'}`}>Todas</button>
+                            <button type="button" aria-pressed={paletteKind === 'translucent'} onClick={() => setPaletteKind('translucent')} className={`px-3 py-1.5 rounded-lg text-sm border ${paletteKind === 'translucent' ? 'bg-blue-50 border-blue-400 text-blue-700' : 'border-slate-200'}`}>Translúcidas</button>
+                        </div>
+                        <label htmlFor="color-palette-search" className="block text-sm font-medium text-slate-700 mb-2">
                             🔍 Buscar Cor na Paleta
                         </label>
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                             <input
+                                id="color-palette-search"
                                 type="text"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
@@ -214,7 +225,7 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
                         {/* Resultados da busca */}
                         {filteredColors.length > 0 && (
                             <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                                <p className="text-xs text-slate-500 mb-2">{filteredColors.length} cor(es) encontrada(s) — clique para selecionar:</p>
+                                <p className="text-xs text-slate-500 mb-2">{filteredColors.length} sugestão(ões) — selecione e cadastre para disponibilizar no sistema:</p>
                                 <div className="flex flex-wrap gap-2">
                                     {filteredColors.map((c) => (
                                         <button
@@ -226,7 +237,7 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
                                         >
                                             <div
                                                 className="w-4 h-4 rounded-full border border-slate-300 shrink-0"
-                                                style={{ backgroundColor: c.hex }}
+                                                style={colorSampleStyle(c.name, c.hex)}
                                             />
                                             {c.name}
                                             <span className="text-slate-400 font-mono">{c.hex}</span>
@@ -248,7 +259,7 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
                         <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                             <div
                                 className="w-12 h-12 rounded-xl border-2 border-white shadow-md shrink-0"
-                                style={{ backgroundColor: currentHex }}
+                                style={colorSampleStyle(name, currentHex)}
                             />
                             <div>
                                 <p className="font-semibold text-slate-800 text-sm">{name || 'Cor selecionada'}</p>
@@ -256,13 +267,15 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
                             </div>
                         </div>
                     )}
+                    {isTranslucentColor(name) && <p className="text-xs text-slate-500">A amostra quadriculada indica translucidez. O hexadecimal define a cor base; a aparência real varia por marca e impressão. Para outro tom, personalize o nome e a cor abaixo, mantendo “Translúcido” no nome.</p>}
 
                     {/* Name Input */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                        <label htmlFor="color-name" className="block text-sm font-medium text-slate-700 mb-2">
                             Nome da Cor <span className="text-red-500">*</span>
                         </label>
                         <input
+                            id="color-name"
                             ref={inputRef}
                             type="text"
                             value={name}
@@ -284,11 +297,12 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
 
                     {/* Hex Code Input */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                        <label htmlFor="color-hex" className="block text-sm font-medium text-slate-700 mb-2">
                             Código Hexadecimal
                         </label>
                         <div className="flex items-center gap-2">
                             <input
+                                id="color-hex"
                                 type="text"
                                 value={hexCode}
                                 onChange={(e) => setHexCode(e.target.value)}

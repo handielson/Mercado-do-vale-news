@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 import { colorService } from '../../../services/colors';
 import { Color } from '../../../types/color';
+import { colorSampleStyle } from '../../../utils/colorAppearance.mjs';
 
 interface ColorSmartSelectProps {
     value: string; // color_id
@@ -133,7 +134,7 @@ export function ColorSmartSelect({ value, onChange, error }: ColorSmartSelectPro
                 {selectedColor && (
                     <div
                         className="absolute right-10 top-1/2 -translate-y-1/2 w-6 h-6 rounded border border-slate-300"
-                        style={{ backgroundColor: selectedColor.hex_code }}
+                        style={colorSampleStyle(selectedColor.name, selectedColor.hex_code)}
                         title={selectedColor.hex_code}
                     />
                 )}
@@ -175,7 +176,7 @@ export function ColorSmartSelect({ value, onChange, error }: ColorSmartSelectPro
                             >
                                 <div
                                     className="w-5 h-5 rounded border border-slate-300 flex-shrink-0"
-                                    style={{ backgroundColor: color.hex_code }}
+                                    style={colorSampleStyle(color.name, color.hex_code)}
                                 />
                                 <span className="text-sm text-slate-900">{color.name}</span>
                                 <span className="text-xs text-slate-500 ml-auto">{color.hex_code}</span>

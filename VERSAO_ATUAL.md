@@ -1,3 +1,15 @@
+# v1.2.603-cores-translucidas
+
+Data: 11/10/2026. Branch: main. Tag: v1.2.603-cores-translucidas.
+Release: /var/www/mdv-site/releases/20261011-160009-cores-translucidas.
+Status: preparada para publicacao; verificacao de producao pendente.
+
+13 sugestoes de cores translucidas na paleta compartilhada, com amostra quadriculada. Hexadecimal do cadastro tem prioridade; tons personalizados e registros antigos preservados. Azul e Azul Translucido continuam identidades distintas no estoque. Sugestoes exigem cadastro explicito e nao geram registros automaticamente. Atualizacao de cores ignora cache antigo sem apagar a lista em caso de falha.
+
+Publicacao exclusiva do painel/site MDV, sem API, migration, aprovacao de rascunhos ou gravacao comercial. Build isolado para nao incluir os outros trabalhos locais. Detalhes: docs/versoes/2026-10-11-v1.2.603-cores-translucidas.md.
+
+## Historico
+
 # v1.2.602-filamentos-degrade
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.602-filamentos-degrade.

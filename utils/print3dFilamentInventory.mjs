@@ -1,4 +1,5 @@
 // Derived display only: balances/ledger remain the source of truth.
+import { combinedColorSampleStyle } from './colorAppearance.mjs';
 export function groupFilamentStock(items, stock) {
   const groups = new Map();
   const balances = new Map((stock?.balances || []).map(b => [b.filament_id, Number(b.quantity_grams)]));
@@ -21,6 +22,5 @@ export function filamentEntryDate(movement) {
 export function filamentColorStyle(color, colorNames, resolveHex) {
   const names = colorNames?.length ? colorNames : [color];
   const hexes = names.map(resolveHex);
-  if (!hexes.length || hexes.some(hex => typeof hex !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(hex))) return undefined;
-  return hexes.length > 1 ? {background:`linear-gradient(90deg, ${hexes.join(', ')})`} : {backgroundColor:hexes[0]};
+  return combinedColorSampleStyle(names, hexes);
 }

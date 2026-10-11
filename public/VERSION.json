@@ -1,36 +1,33 @@
 {
-  "version": "v1.2.602-filamentos-degrade",
+  "version": "v1.2.603-cores-translucidas",
   "date": "2026-10-11",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.602-filamentos-degrade",
-  "release_vps": "/var/www/mdv-site/releases/20261011-153123-filamentos-degrade",
+  "tag": "v1.2.603-cores-translucidas",
+  "release_vps": "/var/www/mdv-site/releases/20261011-160009-cores-translucidas",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261010-211100-sku-nome-automatico",
-  "summary": "Marca digitavel e filtrante; filamentos degrade de duas ou tres cores em linha, com identidade, custo e estoque da combinacao completa.",
+  "summary": "Paleta com 13 sugestoes translucidas, amostras quadriculadas e tons personalizados preservados; cores solidas e translucidas permanecem separadas no estoque.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/print3d/FilamentCatalog.tsx",
-    "services/print3dCostSettings.ts",
-    "services/print3dFilaments.cjs",
-    "services/print3dFilamentsServer.cjs",
-    "services/localPrint3dFilaments.cjs",
+    "components/products/selectors/ColorSelect.tsx",
+    "components/products/selectors/ColorSmartSelect.tsx",
+    "components/settings/ColorModal.tsx",
+    "pages/admin/settings/ColorsPage.tsx",
+    "services/colors.ts",
+    "utils/colorAppearance.mjs",
     "utils/print3dFilamentInventory.mjs",
-    "tmp-tests/print3d-filament-catalog.test.cjs",
-    "tmp-tests/local-print3d-filaments.test.cjs",
-    "tmp-tests/print3d-filament-page.test.mjs",
-    "components/ui/SearchableSelect.tsx",
-    "scripts/deploy-print3d-filaments.cjs",
-    "tmp-tests/deploy-print3d-filaments.test.cjs",
+    "tmp-tests/colors-refresh.test.cjs",
+    "tmp-tests/translucent-colors.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-11-v1.2.602-filamentos-degrade.md"
+    "docs/versoes/2026-10-11-v1.2.603-cores-translucidas.md"
   ],
   "validations": [
-    "Regressoes de catalogo, preview, custos, saldo e deploy seletivo.",
-    "Preflight remoto: schema completo, estoque ativo e producao completa desativada; somente dois modulos da API mudam.",
-    "Build isolado e validacao publica obrigatorios antes de concluir; nenhum rascunho aprovado ou registro comercial alterado."
+    "28 testes de cores, cache, amostras, catalogo/API de filamentos e estoque.",
+    "Build e deploy do commit isolado, com trava contra runtime Supabase.",
+    "Validacao publica e Chrome autenticado sem salvar fixtures; API, banco, rascunhos e site publico 3DMV preservados."
   ]
 }
