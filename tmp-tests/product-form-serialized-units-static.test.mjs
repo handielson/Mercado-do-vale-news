@@ -41,9 +41,10 @@ assert.match(
 
 assert.match(
   form,
-  /if \(!initialData && singleSerializedIdentity\) \{[\s\S]*await unitService\.create\(\{[\s\S]*product_id: savedProduct\.id[\s\S]*serial_number: singleSerializedSpecs\?\.serial[\s\S]*status: UnitStatus\.AVAILABLE/s,
+  /if \(isNewRegistration && singleSerializedIdentity\) \{[\s\S]*await unitService\.create\(\{[\s\S]*product_id: savedProduct\.id[\s\S]*serial_number: singleSerializedSpecs\?\.serial[\s\S]*status: UnitStatus\.AVAILABLE/s,
   'ProductForm single-product save must create an available unit for the extracted serial/IMEI',
 );
+assert.match(form, /const isNewRegistration = !initialData \|\| Boolean\(initialDraft && !initialData.id\);/, 'Resumed drafts without a product ID remain new registrations and must create their serialized unit');
 
 assert.doesNotMatch(
   form,

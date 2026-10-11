@@ -59,18 +59,25 @@ import { UnitStatus } from '../../utils/field-standards';
 import { productService } from '../../services/products';
 import { productUnitCondition, saveFamilyRegistration } from './familyRegistration.js';
 import { uploadProductVideo, validateProductVideo } from '../../services/productVideoUpload';
-import { ProductFamilyEditor, type FamilyRow } from './ProductFamilyEditor';
+import { ProductFamilyEditor, type FamilyRow, type FamilyEditorDraft } from './ProductFamilyEditor';
+import type { ProductFormSnapshot } from '../../services/productFormDrafts';
+import { productFormDraftsService } from '../../services/productFormDrafts';
 import { isLocalCatalogPreviewRuntime } from '../../services/localCatalogPreview';
 import { Print3dRegistrationEditor } from './Print3dRegistrationEditor';
-import { assertPrint3dRegistrationAvailable, preparePrint3dRegistration, savePrint3dRegistration, type Print3dSetup } from '../../services/print3dRegistration';
+import { assertPrint3dRegistrationAvailable, preparePrint3dRegistration, savePrint3dRegistration, copyPrint3dSetup, print3dSetupParameters, withPrint3dCost, type Print3dSetup } from '../../services/print3dRegistration';
 
 interface ProductFormProps {
+    initialProductionSetup?: Print3dSetup;
+    parentProductionSetup?: Print3dSetup;
+    onProductionSetupChange?: (setup:Print3dSetup | undefined) => void;
+    initialDraft?: ProductFormSnapshot;
+    onSaveDraft?: (snapshot: ProductFormSnapshot) => Promise<void>;
     variationDraftMode?: boolean;
     initialData?: Product;
     defaultIsPrint3d?: boolean;
     onSubmit: (data: ProductInput) => Promise<Product | void>;
     onCancel: () => void;
-    onBatchComplete?: (savedProduct?: Product) => void;
+    onBatchComplete?: (savedProduct?: Product, snapshot?: ProductFormSnapshot) => void | Promise<void>;
     isLoading?: boolean;
 }
 
@@ -84,20 +91,28 @@ type ProductSaveResult = Product & {
 
 const DEFAULT_PRODUCT_VERSION = 'Global';
 const DEFAULT_BATTERY_HEALTH = '100';
-type FormSection = 'basic' | 'specs' | 'media' | 'channels' | 'commercial' | 'production' | 'fiscal' | 'variations';
+type FormSection = 'basic' | 'specs' | 'media' | 'channels' | 'commercial' | 'files' | 'production' | 'fiscal' | 'variations';
 
-export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, onCancel, onBatchComplete, isLoading, variationDraftMode = false }: ProductFormProps) {
-    const [familyRows, setFamilyRows] = useState<FamilyRow[]>([]);
-    const [productionSetups, setProductionSetups] = useState<Record<string, Print3dSetup | undefined>>({});
-    const [productionRowKey, setProductionRowKey] = useState('');
+export function ProductForm({ initialData, initialDraft, onSaveDraft, initialProductionSetup, parentProductionSetup, onProductionSetupChange, defaultIsPrint3d = false, onSubmit, onCancel, onBatchComplete, isLoading, variationDraftMode = false }: ProductFormProps) {
+    const isNewRegistration = !initialData || Boolean(initialDraft && !initialData.id);
+    const [savingDraft, setSavingDraft] = useState(false);
+    const savingDraftRef = useRef(false);
+    const familyEditorDraftRef = useRef<(() => FamilyEditorDraft) | undefined>(undefined);
+    const registrationCompletedRef = useRef<{ savedProductId?: string } | undefined>(initialDraft?.completion);
+    const [familyRows, setFamilyRows] = useState<FamilyRow[]>(initialDraft?.familyRows || []);
+    const [productionSetups, setProductionSetups] = useState<Record<string, Print3dSetup | undefined>>(initialDraft?.productionSetups || { single:initialProductionSetup });
+    const [productionRowKey, setProductionRowKey] = useState(initialDraft?.productionRowKey || '');
     const [productionSavedVersion, setProductionSavedVersion] = useState(0);
-    const singleSaveCheckpoint = useRef<Product | undefined>(initialData?.id ? initialData : undefined);
+    const [parentTemplateLoading, setParentTemplateLoading] = useState(false);
+    const [parentTemplateError, setParentTemplateError] = useState('');
+    const [copyingParent, setCopyingParent] = useState(false);
+    const singleSaveCheckpoint = useRef<Product | undefined>(initialDraft?.singleSaveCheckpoint || (initialData?.id ? initialData : undefined));
     const [familyMediaBusy, setFamilyMediaBusy] = useState(false);
     const [familyLoadError, setFamilyLoadError] = useState('');
     const [familyLoading, setFamilyLoading] = useState(false);
-    const familyCheckpoint = useRef<any>({ parent: initialData?.id ? initialData : null, children: {} });
+    const familyCheckpoint = useRef<any>(initialDraft?.familyCheckpoint || { parent: initialData?.id ? initialData : null, children: {} });
     useEffect(() => {
-        if (!initialData?.id || !initialData.is_parent || variationDraftMode) return;
+        if (initialDraft || !initialData?.id || !initialData.is_parent || variationDraftMode) return;
         let active = true;
         setFamilyLoading(true);
         productService.listChildren(initialData.id).then(children => {
@@ -106,8 +121,8 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
             .finally(() => { if (active) setFamilyLoading(false); });
         return () => { active = false; };
     }, [initialData?.id, variationDraftMode]);
-    const [activeSection, setActiveSection] = useState<FormSection>(() => window.location.hash === '#production' ? 'production' : window.location.hash === '#fiscal' ? 'fiscal' : window.location.hash === '#commercial' ? 'commercial' : 'basic');
-    const [activeSalesChannel, setActiveSalesChannel] = useState<ProductSalesChannel>('mercado-livre');
+    const [activeSection, setActiveSection] = useState<FormSection>(() => initialDraft?.activeSection as FormSection || (window.location.hash === '#production' ? 'production' : window.location.hash === '#fiscal' ? 'fiscal' : window.location.hash === '#commercial' ? 'commercial' : 'basic'));
+    const [activeSalesChannel, setActiveSalesChannel] = useState<ProductSalesChannel>(initialDraft?.activeSalesChannel as ProductSalesChannel || 'mercado-livre');
     const selectSection = (section: FormSection) => {
         setActiveSection(section);
         window.requestAnimationFrame(() => document.getElementById(variationDraftMode ? 'variation-form-sections' : 'product-form-sections')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
@@ -132,7 +147,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
     const [categoryConfig, setCategoryConfig] = useState<CategoryConfig | null>(null);
 
     // Estado para rastrear se o nome foi editado manualmente
-    const [nameManuallyEdited, setNameManuallyEdited] = useState(false);
+    const [nameManuallyEdited, setNameManuallyEdited] = useState(initialDraft?.nameManuallyEdited || false);
 
     const showVariationPriceAdjustmentToast = (savedProduct: Product | void) => {
         const adjustment = (savedProduct as ProductSaveResult | undefined)?.priceAdjustment;
@@ -166,7 +181,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
         images?: string[];
         imageUploadId?: string;
     }
-    const [serialList, setSerialList] = useState<BatchItem[]>([]);
+    const [serialList, setSerialList] = useState<BatchItem[]>(initialDraft?.serialList || []);
     const [batchImageUploadingId, setBatchImageUploadingId] = useState<string | null>(null);
     const [batchBlingLinkingId, setBatchBlingLinkingId] = useState<string | null>(null);
 
@@ -339,10 +354,53 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
     const isParentProduct = Boolean(watch('is_parent'));
     const isVendablePrint3d = isPrint3d && !isParentProduct;
     useEffect(() => {
-        if (isParentProduct && activeSection === 'commercial') setActiveSection('basic');
-        if (isParentProduct && !variationDraftMode && activeSection === 'production') setActiveSection('variations');
+        if (isParentProduct && !isPrint3d && activeSection === 'commercial') setActiveSection('basic');
+        if (!isPrint3d && ['files','production'].includes(activeSection)) setActiveSection('basic');
         if ((!isParentProduct || variationDraftMode) && activeSection === 'variations') setActiveSection('basic');
-    }, [isParentProduct, activeSection, variationDraftMode]);
+    }, [isParentProduct, isPrint3d, activeSection, variationDraftMode]);
+    useEffect(() => {
+        if (!isPrint3d || !isParentProduct || !initialData?.id || initialDraft || variationDraftMode) return;
+        let active = true; setParentTemplateLoading(true); setParentTemplateError('');
+        productFormDraftsService.getParentTemplate(initialData.id).then(setup => { if (active && setup) setProductionSetups(current => ({ ...current, parent:setup })); })
+            .catch(() => { if (active) setParentTemplateError('Não foi possível carregar a base de impressão do pai. Reabra o cadastro antes de salvar.'); })
+            .finally(() => { if (active) setParentTemplateLoading(false); });
+        return () => { active = false; };
+    }, [isPrint3d, isParentProduct, initialData?.id, initialDraft, variationDraftMode]);
+    let calculatedPrintCost: number | undefined;
+    const currentCostValue = watch('price_cost');
+    let printCostError = '';
+    const currentPrintSetup = productionSetups[isParentProduct ? 'parent' : 'single'];
+    if (isPrint3d && currentPrintSetup) {
+        try { calculatedPrintCost = print3dSetupParameters(currentPrintSetup).cost.unitCents; }
+        catch (error) { printCostError = error instanceof Error ? error.message : 'Complete os parâmetros de impressão.'; }
+    }
+    useEffect(() => {
+        if (!isPrint3d) return;
+        setFamilyRows(current => {
+            let changed = false;
+            const next = current.map(row => {
+                const setup = productionSetups[row.key]; if (!setup) return row;
+                try {
+                    const data = withPrint3dCost(row.data, setup);
+                    if (data.price_cost === row.data.price_cost && row.data.custom_fields?.inherit_parent_cost === false) return row;
+                    changed = true; return { ...row, data };
+                } catch { return row; }
+            });
+            return changed ? next : current;
+        });
+    }, [isPrint3d, productionSetups, familyRows]);
+    const copyParentProduction = async (key:string) => {
+        if (productionSetups[key] && !window.confirm('Substituir os arquivos e parâmetros desta variação por uma cópia do pai?')) return;
+        setCopyingParent(true);
+        try {
+            const base = productionSetups.parent || parentProductionSetup || (initialData?.parent_id ? await productFormDraftsService.getParentTemplate(initialData.parent_id) : undefined);
+            if (!base) { toast.warning('Preencha os arquivos e parâmetros do pai primeiro.'); return; }
+            const copy = copyPrint3dSetup(base);
+            setProductionSetups(current => ({ ...current, [key]:copy }));
+            toast.success('Base do pai copiada. Confira filamento, cor, consumo e preço desta variação.');
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Não foi possível copiar do pai.'); }
+        finally { setCopyingParent(false); }
+    };
     useEffect(() => {
         if (!isPrint3d) return;
         setValue('print3d_preorder_enabled', isVendablePrint3d, { shouldValidate: true });
@@ -387,6 +445,14 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
         }
     }, [initialData, reset]);
 
+    // Apply after reset so reopening a draft cannot restore an outdated cost
+    // over the cost calculated from its saved plates.
+    useEffect(() => {
+        if (calculatedPrintCost === undefined) return;
+        if (getValues('price_cost') !== calculatedPrintCost) setValue('price_cost', calculatedPrintCost, { shouldDirty:true, shouldValidate:true });
+        if (!isParentProduct && getValues('custom_fields.inherit_parent_cost') !== false) setValue('custom_fields.inherit_parent_cost', false, { shouldDirty:true });
+    }, [initialData, calculatedPrintCost, currentCostValue, isParentProduct, getValues, setValue]);
+
     // EAN auto-fill hook (DEPOIS do useForm)
     const {
         isSearchingEAN,
@@ -400,7 +466,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
     const selectedBrand = watch('brand');
     const [selectedBrandId, setSelectedBrandId] = useState<string>('');
     const currentSerializedIdentity = hasSerializedIdentity(watch('specs') || {});
-    const isSerializedStockCalculated = serialList.length > 0 || (currentSerializedIdentity && !initialData);
+    const isSerializedStockCalculated = serialList.length > 0 || (currentSerializedIdentity && isNewRegistration);
     const blocksSubmitForDuplicateEAN = isDuplicateEAN && !isSerializedStockCalculated;
 
     useEffect(() => {
@@ -409,10 +475,10 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
             return;
         }
 
-        if (currentSerializedIdentity && !initialData) {
+        if (currentSerializedIdentity && isNewRegistration) {
             setValue('stock_quantity', 1, { shouldValidate: true });
         }
-    }, [serialList.length, currentSerializedIdentity, initialData, setValue]);
+    }, [serialList.length, currentSerializedIdentity, isNewRegistration, setValue]);
 
     // Warranty states
     const [brandWarrantyDays, setBrandWarrantyDays] = useState<number | null>(null);
@@ -467,7 +533,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
 
     // Auto-load default images when model + color are selected
     const selectedColor = watch('specs.color');
-    const [useCustomImages, setUseCustomImages] = useState(!!initialData?.images?.length);
+    const [useCustomImages, setUseCustomImages] = useState(initialDraft?.useCustomImages ?? !!initialData?.images?.length);
 
     useEffect(() => {
         const loadDefaultImages = async () => {
@@ -1401,6 +1467,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
     const handleFormSubmit = handleSubmit(
         async (data) => {
             if (familyMediaBusy) { toast.warning('Aguarde o envio das fotos das variações antes de salvar.'); return; }
+            if (parentTemplateLoading || copyingParent || parentTemplateError) { toast.warning(parentTemplateError || 'Aguarde a recuperação da base de impressão.'); return; }
             if (saveInFlightRef.current) return;
             const totalToSave = Math.max(1, serialList.length || 1);
             saveInFlightRef.current = true;
@@ -1408,6 +1475,11 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
             setSaveProgress({ current: 0, total: totalToSave, message: 'Preparando cadastro...' });
 
             try {
+            if (registrationCompletedRef.current) {
+                await onBatchComplete?.(familyCheckpoint.current.parent || singleSaveCheckpoint.current, captureDraftSnapshot());
+                registrationCompletedRef.current = undefined;
+                return;
+            }
             console.log('🔍 [ProductForm] Form data received:', data);
             console.log('  - model_id:', data.model_id);
             console.log('  - brand:', data.brand);
@@ -1473,17 +1545,23 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
 
             if (variationDraftMode) {
                 if (initialData?.id) mergedData.sku = initialData.sku;
+                const setup = mergedData.is_print3d ? productionSetups.single : undefined;
+                if (setup) mergedData = withPrint3dCost(mergedData, setup);
                 await onSubmit(mergedData);
+                onProductionSetupChange?.(setup);
                 return;
             }
             if (!isParent && familyRows.length > 0) throw new Error('Esta tela tem variações configuradas. Volte ao formato Com variações para salvar a família ou remova os rascunhos antes de mudar o formato.');
+            const baseSetup = mergedData.is_print3d ? productionSetups[isParent ? 'parent' : 'single'] : undefined;
+            if (baseSetup) mergedData = withPrint3dCost(mergedData, baseSetup);
+            const rowsToSave = familyRows.map(row => mergedData.is_print3d && productionSetups[row.key] ? { ...row, data:withPrint3dCost(row.data, productionSetups[row.key]!) } : row);
             if (isParent && familyRows.length > 0) {
                 if (familyLoading || familyLoadError) throw new Error(familyLoadError || 'Aguarde o carregamento dos filhos.');
                 if (isLocalCatalogPreviewRuntime() && familyRows.some(row => !row.data.id && hasSerializedIdentity(row.data.specs || {}))) {
                     throw new Error('A prévia local de famílias ainda não grava unidades com IMEI/serial. Nenhum produto foi salvo. Cadastre a unidade física pelo fluxo de estoque após aprovação.');
                 }
                 if (initialData?.id && !familyCheckpoint.current.parent) familyCheckpoint.current.parent = initialData;
-                const saved = await saveFamilyRegistration(mergedData, familyRows, familyCheckpoint.current, {
+                const saved = await saveFamilyRegistration(mergedData, rowsToSave, familyCheckpoint.current, {
                     validateProduction: async (row: FamilyRow) => {
                         const setup = productionSetups[row.key];
                         if (setup && mergedData.is_print3d) {
@@ -1508,7 +1586,9 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                 setProductionSetups({});
                 setProductionSavedVersion(current => current + 1);
                 toast.success('Família e variações salvas.');
-                onBatchComplete?.(saved);
+                registrationCompletedRef.current = { savedProductId: saved?.id };
+                await onBatchComplete?.(saved, captureDraftSnapshot());
+                registrationCompletedRef.current = undefined;
                 return;
             }
             if (isParent && (familyLoading || familyLoadError)) throw new Error(familyLoadError || 'Aguarde o carregamento dos filhos.');
@@ -1755,7 +1835,9 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                 });
                 toast.success(`${groupedBatch.length} produto(s) e ${serialList.length} unidade(s) cadastrados com sucesso!`);
                 setSerialList([]);
-                onBatchComplete?.();
+                registrationCompletedRef.current = {};
+                await onBatchComplete?.(undefined, captureDraftSnapshot());
+                registrationCompletedRef.current = undefined;
             } else {
                 setSaveProgress({ current: 0, total: 1, message: 'Verificando duplicidades...' });
                 // Produto único — verificar serial/IMEI do campo se preenchido
@@ -1787,7 +1869,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                     }
                     : null;
 
-                if (!initialData && singleSerializedIdentity) {
+                if (isNewRegistration && singleSerializedIdentity) {
                     mergedData.specs = { ...(mergedData.specs || {}) };
                     delete mergedData.specs.serial;
                     delete mergedData.specs.imei1;
@@ -1812,7 +1894,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                     setProductionSavedVersion(current => current + 1);
                 }
                 showVariationPriceAdjustmentToast(savedProduct);
-                if (!initialData && singleSerializedIdentity) {
+                if (isNewRegistration && singleSerializedIdentity) {
                     if (!savedProduct?.id) {
                         throw new Error('Produto salvo sem ID. Cadastro da unidade cancelado.');
                     }
@@ -1828,10 +1910,12 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                     });
                 }
                 setSaveProgress({ current: 1, total: 1, message: 'Produto salvo.' });
-                if (!initialData) {
+                if (isNewRegistration) {
                     toast.success('Produto cadastrado com sucesso!');
                 }
-                onBatchComplete?.(savedProduct || undefined);
+                registrationCompletedRef.current = { savedProductId: savedProduct?.id };
+                await onBatchComplete?.(savedProduct || undefined, captureDraftSnapshot());
+                registrationCompletedRef.current = undefined;
             }
 
             // 2. Calcular preço médio se for novo produto com variação
@@ -1871,6 +1955,10 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                     }));
                 }
                 toast.error(error instanceof Error ? error.message : 'Erro ao salvar produto. Os dados foram mantidos.');
+                if (onSaveDraft && (registrationCompletedRef.current || familyCheckpoint.current.parent?.id || singleSaveCheckpoint.current?.id)) {
+                    try { await onSaveDraft(captureDraftSnapshot()); }
+                    catch { toast.warning('Não foi possível atualizar o rascunho com os itens confirmados. Mantenha esta tela aberta para continuar.'); }
+                }
             } finally {
                 saveInFlightRef.current = false;
                 setIsSavingForm(false);
@@ -1949,19 +2037,39 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
 
     const hasValidationErrors = Object.keys(errors).length > 0;
     const validationErrorList = hasValidationErrors ? extractValidationErrors(errors) : [];
-    const isSavingOperation = isLoading || isSavingForm;
+    const isSavingOperation = isLoading || isSavingForm || savingDraft || parentTemplateLoading || copyingParent;
     const saveProgressPercent = getProductSaveProgressPercent(saveProgress);
 
+    function captureDraftSnapshot(): ProductFormSnapshot {
+        return { schemaVersion: 1, data: { ...getValues(), images: imagePreviews, bling_id: blingId, bling_parent_id: blingParentId, shopee_item_id: shopeeItemId }, activeSection, activeSalesChannel,
+            familyRows, familyEditor: familyEditorDraftRef.current?.(), productionSetups, productionRowKey, serialList, useCustomImages, nameManuallyEdited,
+            familyCheckpoint: familyCheckpoint.current, singleSaveCheckpoint: singleSaveCheckpoint.current, completion: registrationCompletedRef.current };
+    }
+
+    const saveDraft = async () => {
+        if (!onSaveDraft || savingDraftRef.current || isSavingOperation) return;
+        if (parentTemplateError) { toast.warning(parentTemplateError); return; }
+        if (familyMediaBusy || isCompressing || familyLoading || batchImageUploadingId || marketingUploadKind) {
+            toast.warning('Aguarde o envio dos arquivos antes de salvar o rascunho.'); return;
+        }
+        savingDraftRef.current = true; setSavingDraft(true);
+        try {
+            await onSaveDraft(captureDraftSnapshot());
+            toast.success('Rascunho salvo no sistema. Você pode continuar em qualquer computador.');
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Não foi possível salvar o rascunho. Seus dados continuam nesta tela.'); }
+        finally { savingDraftRef.current = false; setSavingDraft(false); }
+    };
+
     return (
-        <form onSubmit={event => { event.stopPropagation(); void handleFormSubmit(event); }} className="space-y-6 pb-20">
+        <form onSubmit={event => { event.stopPropagation(); if (!savingDraftRef.current) void handleFormSubmit(event); }} className="space-y-6 pb-20">
             <nav id={variationDraftMode ? 'variation-form-sections' : 'product-form-sections'} aria-label="Seções do cadastro" className="sticky top-0 z-20 flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur scroll-mt-4">
                 {([
                     ['basic', 'Dados básicos'],
                     ['specs', 'Características'],
                     ['media', 'Fotos e descrição'],
                     ['channels', 'Canais de venda'],
-                    ...(isPrint3d && !isParentProduct ? [['production', 'Arquivos e produção 3D'] as const] : []),
-                    ...(!isParentProduct ? [['commercial', 'Estoque e preços'] as const] : []),
+                    ...(isPrint3d ? [['files', 'Arquivos e URL'] as const, ['production', 'Parâmetros e placas'] as const] : []),
+                    ...(!isParentProduct || isPrint3d ? [['commercial', isPrint3d ? 'Preços' : 'Estoque e preços'] as const] : []),
                     ['fiscal', 'Fiscal e garantia'],
                     ...(!variationDraftMode && isParentProduct ? [['variations', 'Variações'] as const] : []),
                 ] as const).map(([section, label]) => <button key={section} type="button" aria-current={activeSection === section ? 'page' : undefined}
@@ -1987,7 +2095,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
 
             {/* 0. SCANNER EAN + MODELO + DADOS DO TEMPLATE */}
             <div id="product-basic-section" className={activeSection === 'basic' ? 'scroll-mt-20' : 'hidden'}>
-            {isParentProduct && <section className="mb-4 rounded-xl border border-slate-200 bg-white p-6" aria-label="Custo da família">
+            {isParentProduct && !isPrint3d && <section className="mb-4 rounded-xl border border-slate-200 bg-white p-6" aria-label="Custo da família">
                 <label className="block text-sm font-semibold text-slate-800 mb-2">Preço de custo da família</label>
                 <p className="text-sm text-slate-500 mb-3">Valor de compra por unidade. Ao salvar, as variações marcadas para herdar acompanham esse custo automaticamente. Configure a herança na aba Variações.</p>
                 <div className="max-w-xs"><CurrencyInput value={watch('price_cost') || 0} onChange={(value) => setValue('price_cost', value, { shouldDirty: true, shouldValidate: true })} /></div>
@@ -2047,14 +2155,14 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                 setValue={setValue}
                 errors={errors}
                 onRefresh={loadCategoryConfig}
-                onAddToBatchList={!initialData ? handleAddToBatchList : undefined}
+                onAddToBatchList={isNewRegistration ? handleAddToBatchList : undefined}
                 templateValues={selectedModel?.template_values}
                 currentProductId={initialData?.id}
             />
             </div>
 
             {/* BOTÃO ADICIONAR À LISTA + LISTA DE CADASTRO EM MASSA */}
-            {!initialData && !isParentProduct && !variationDraftMode && (
+            {isNewRegistration && !isParentProduct && !variationDraftMode && (
                 <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-sm space-y-3">
                     <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                         <ListOrdered size={18} className="text-blue-600" />
@@ -2366,7 +2474,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
 
             {/* 5. CONTROLE DE ESTOQUE */}
             {!watch('is_virtual') && (
-            <div id="product-stock-section" className={activeSection === 'commercial' ? 'scroll-mt-20 bg-white p-6 rounded-xl border border-slate-200 shadow-sm' : 'hidden'}>
+            <div id="product-stock-section" className={activeSection === 'commercial' && !isParentProduct ? 'scroll-mt-20 bg-white p-6 rounded-xl border border-slate-200 shadow-sm' : 'hidden'}>
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <Package size={18} className="text-blue-600" />
                     Controle de Estoque
@@ -2423,11 +2531,13 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
 
             {/* 6. PRECIFICAÇÃO */}
             <div id="product-pricing-section" className={activeSection === 'commercial' ? 'scroll-mt-20' : 'hidden'}>
-                <ProductPricing watch={watch} setValue={setValue} errors={errors} modelId={watch('model_id') || undefined} costInherited={Boolean(initialData?.parent_id && initialData.custom_fields?.inherit_parent_cost === true)} />
+                {isPrint3d && <p className="mb-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">{isParentProduct ? 'Estes preços são a base da família. Cada variação pode herdar o preço de venda ou informar seu próprio valor.' : 'O custo vem do total das placas dividido pelos produtos completos do lote. O preço de venda é definido por você.'}</p>}
+                {printCostError && <p role="alert" className="mb-3 text-sm text-amber-800">Custo ainda não calculado: {printCostError}. Complete a aba Parâmetros e placas antes de salvar.</p>}
+                <ProductPricing watch={watch} setValue={setValue} errors={errors} modelId={watch('model_id') || undefined} calculatedCost={calculatedPrintCost} costInherited={Boolean(initialData?.parent_id && initialData.custom_fields?.inherit_parent_cost === true)} />
             </div>
 
             {/* 6.5 KITS E DESCONTOS POR VOLUME */}
-            <div className={activeSection === 'commercial' ? '' : 'hidden'}>
+            <div className={activeSection === 'commercial' && !isParentProduct ? '' : 'hidden'}>
             <ProductKitsSection
                 control={control}
                 register={register}
@@ -2551,24 +2661,34 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
             {!variationDraftMode && isParentProduct && <div id="product-variations-section" className={activeSection === 'variations' ? 'space-y-4 scroll-mt-20' : 'hidden'}>
                 <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Última etapa: confira primeiro o cadastro completo do pai nas abas anteriores. Depois adicione as variações e seus dados próprios. O pai e os filhos serão salvos juntos em Salvar família e variações.</p>
                 {familyLoadError && <p role="alert" className="text-red-700">{familyLoadError}</p>}
-                <ProductFamilyEditor parent={{ ...getValues(), images: imagePreviews }} rows={familyRows} onChange={setFamilyRows} onBusyChange={setFamilyMediaBusy} disabled={Boolean(isSavingOperation || familyLoading || familyLoadError)} />
+                <ProductFamilyEditor initialDraft={initialDraft?.familyEditor} captureDraftRef={familyEditorDraftRef} productionSetups={productionSetups} onProductionChange={(key,setup) => setProductionSetups(current => ({ ...current, [key]:setup }))} parent={{ ...getValues(), images: imagePreviews }} rows={familyRows} onChange={setFamilyRows} onBusyChange={setFamilyMediaBusy} disabled={Boolean(isSavingOperation || familyLoading || familyLoadError)} />
             </div>}
 
-            {isPrint3d && <section className={activeSection === (isParentProduct ? 'variations' : 'production') ? 'rounded-xl border border-violet-200 bg-violet-50 p-5 space-y-3' : 'hidden'}>
+            {isPrint3d && <section className={['files','production'].includes(activeSection) ? 'rounded-xl border border-violet-200 bg-violet-50 p-5 space-y-3' : 'hidden'}>
+                <h3 className="font-semibold text-violet-900">{activeSection === 'files' ? 'Arquivos e URL' : 'Parâmetros e placas'}</h3>
+                <p className="text-sm text-violet-800">{isParentProduct ? 'Prepare uma base no pai. Na última etapa, cada variação pode copiar esta base ou receber arquivos e parâmetros próprios.' : 'Anexe os arquivos por placa e preencha o consumo, o tempo e a quantidade de produtos completos para calcular o custo.'}</p>
+                {parentTemplateLoading && <p className="text-sm">Carregando base do pai...</p>}
+                {parentTemplateError && <p role="alert" className="text-red-700">{parentTemplateError}</p>}
+                {(initialData?.parent_id || parentProductionSetup) && <button type="button" disabled={Boolean(isSavingOperation)} onClick={() => void copyParentProduction('single')} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700">Copiar arquivos e parâmetros do pai</button>}
+                <Print3dRegistrationEditor key={`${isParentProduct ? 'parent' : 'single'}:${productionSavedVersion}`} template={isParentProduct} view={activeSection === 'files' ? 'files' : 'parameters'} productId={isParentProduct ? undefined : initialData?.id} value={currentPrintSetup} onChange={setup => setProductionSetups(current => ({ ...current, [isParentProduct ? 'parent' : 'single']:setup }))} disabled={Boolean(isSavingOperation || parentTemplateError)} />
+                {initialData?.id && !isParentProduct && <Link to={`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(initialData.id)}#ficha-producao-3d`} className="inline-flex text-sm font-semibold text-violet-800 underline">Revisões salvas e seleção para produção</Link>}
+            </section>}
+            {isPrint3d && isParentProduct && <section className={activeSection === 'variations' ? 'rounded-xl border border-violet-200 bg-violet-50 p-5 space-y-3' : 'hidden'}>
                 <h3 className="font-semibold text-violet-900">Arquivos e produção 3D</h3>
                 <p className="text-sm text-violet-800">STL, 3MF, G-code, JSON e instruções ficam privados na ficha de produção. O link do MakerWorld ou de outro site é opcional.</p>
-                {isParentProduct ? <>
+                <>
                     <p className="text-sm text-violet-900">O pai organiza a família e a descrição compartilhada. Os arquivos de impressão são anexados às revisões dos filhos vendáveis, pois material, tamanho e configuração de impressão podem variar.</p>
                     {!familyRows.length ? <p className="text-sm">Adicione as variações acima. Depois selecione aqui cada filho para preencher suas placas e arquivos, antes de salvar a família.</p> : <>
                         <label className="block text-sm font-medium">Produção de qual variação?<select className="mt-1 w-full rounded-lg border bg-white p-2" value={familyRows.some(r => r.key === productionRowKey) ? productionRowKey : familyRows[0].key} onChange={e => setProductionRowKey(e.target.value)}>{familyRows.map(row => <option key={row.key} value={row.key}>{row.data.name} — {row.data.sku || 'SKU confirmado ao salvar'}{productionSetups[row.key] ? ' (nova ficha preenchida)' : ''}</option>)}</select></label>
                         {(() => { const row = familyRows.find(r => r.key === productionRowKey) || familyRows[0]; return <>
+                            <button type="button" disabled={Boolean(isSavingOperation || !productionSetups.parent)} onClick={() => void copyParentProduction(row.key)} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700">Copiar arquivos e parâmetros do pai</button>
+                            {productionSetups[row.key] && <p className="text-sm">Custo próprio: {(() => { try { return new Intl.NumberFormat('pt-BR', {style:'currency',currency:'BRL'}).format(print3dSetupParameters(productionSetups[row.key]!).cost.unitCents / 100); } catch { return 'Complete os parâmetros'; } })()}. Confira o preço de venda em Editar detalhes da variação.</p>}
                             {row.data.id && <Link to={`/admin/products/${row.data.id}#production`} target="_blank" className="inline-block text-sm font-semibold text-violet-800 underline">Abrir cadastro, revisões e aprovação desta variação</Link>}
                             {row.data.id && isLocalCatalogPreviewRuntime() && <p className="text-xs text-violet-800">Aprove primeiro o pai e depois cada variação em seu cadastro. Aprovar o pai não envia os arquivos dos filhos.</p>}
                             <Print3dRegistrationEditor key={`${row.key}:${productionSavedVersion}`} productId={row.data.id} value={productionSetups[row.key]} onChange={setup => setProductionSetups(current => ({ ...current, [row.key]:setup }))} disabled={Boolean(isSavingOperation)} />
                         </>; })()}
                     </>}
-                </> : <Print3dRegistrationEditor key={`single:${productionSavedVersion}`} productId={initialData?.id} value={productionSetups.single} onChange={setup => setProductionSetups(current => ({ ...current, single:setup }))} disabled={Boolean(isSavingOperation)} />}
-                {initialData?.id && !isParentProduct && <Link to={`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(initialData.id)}#ficha-producao-3d`} className="inline-flex text-sm font-semibold text-violet-800 underline">Revisões salvas e seleção para produção</Link>}
+                </>
             </section>}
             <div className="sticky bottom-0 z-20 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
                 {isSavingOperation && (
@@ -2591,6 +2711,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                 <button type="button" onClick={onCancel} disabled={isSavingOperation} className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50">
                     Cancelar
                 </button>
+                {!variationDraftMode && onSaveDraft && <button type="button" onClick={() => void saveDraft()} disabled={Boolean(isSavingOperation || familyMediaBusy || isCompressing || familyLoading)} className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50">{savingDraft ? 'Salvando rascunho...' : 'Salvar rascunho'}</button>}
                 {!variationDraftMode && isParentProduct && activeSection !== 'variations' && <button type="button" onClick={() => selectSection('variations')} disabled={isSavingOperation} className="rounded-md border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50">Continuar para variações</button>}
                 <button
                     type="submit"
@@ -2602,7 +2723,7 @@ export function ProductForm({ initialData, defaultIsPrint3d = false, onSubmit, o
                 >
                     <span className="inline-flex items-center gap-2">
                         {isSavingOperation && <Loader2 size={16} className="animate-spin" />}
-                        {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : variationDraftMode ? 'Confirmar detalhes no rascunho' : isParentProduct ? 'Salvar família e variações' : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
+                        {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : registrationCompletedRef.current ? 'Finalizar rascunho' : variationDraftMode ? 'Confirmar detalhes no rascunho' : isParentProduct ? 'Salvar família e variações' : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
                     </span>
                 </button>
                 </div>

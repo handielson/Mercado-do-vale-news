@@ -1,28 +1,48 @@
 {
-  "version": "v1.2.606-variacoes-ultima-etapa",
+  "version": "v1.2.607-rascunhos-placas-precos",
   "date": "2026-10-11",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.606-variacoes-ultima-etapa",
-  "release_vps": "/var/www/mdv-site/releases/20261011-204442-variacoes-ultima-etapa",
+  "tag": "v1.2.607-rascunhos-placas-precos",
+  "release_vps": "/var/www/mdv-site/releases/20261011-214056-rascunhos-placas-precos",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Variacoes na ultima etapa do cadastro, salvamento conjunto da familia e amostras visuais filtraveis das cores nos produtos.",
+  "summary": "Rascunhos compartilhados de anuncios; arquivos e URL, parametros por placa e precos no cadastro 3D, com copia independente do pai.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
+    "components/products/Print3dRegistrationEditor.tsx",
+    "components/products/ProductFamilyEditor.tsx",
     "components/products/ProductForm.tsx",
-    "components/products/selectors/ColorSelect.tsx",
-    "components/ui/SearchableSelect.tsx",
-    "tmp-tests/filament-color-select.test.mjs",
+    "components/products/sections/ProductPricing.tsx",
+    "deploy-vps-server-only.cjs",
+    "docs/operacional/rascunhos-cadastro-produtos.md",
+    "docs/print3d-production.md",
+    "infra/nginx/mdv-site-production.conf",
+    "infra/nginx/mdv-site-staging.conf",
+    "layouts/AdminLayout.tsx",
+    "pages/admin/products/ProductDraftsPage.tsx",
+    "pages/admin/products/ProductFormPage.tsx",
+    "pages/admin/products/ProductListPage.tsx",
+    "routes/index.tsx",
+    "scripts/deploy-product-registration.cjs",
+    "services/print3dRegistration.ts",
+    "services/productFormDrafts.ts",
+    "services/productFormDraftsServer.cjs",
+    "tmp-tests/deploy-product-registration.test.cjs",
+    "tmp-tests/family-registration.test.mjs",
+    "tmp-tests/print3d-registration.test.mjs",
     "tmp-tests/product-create-feedback.test.cjs",
+    "tmp-tests/product-form-drafts.test.cjs",
+    "tmp-tests/product-form-serialized-units-static.test.mjs",
+    "vps_server.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-11-v1.2.606-variacoes-ultima-etapa.md"
+    "docs/versoes/2026-10-11-v1.2.607-rascunhos-placas-precos.md"
   ],
   "validations": [
-    "45 testes de cores, cadastro de familia, producao 3D e ordem das abas aprovados.",
-    "Build com guardas de runtime e editor alcancavel; validacao publica apos deploy na nota da versao."
+    "37 testes focados e suite money aprovados.",
+    "Preflight seletivo da API, sintaxe dos servidores e build; validacao publica registrada na nota da versao."
   ]
 }

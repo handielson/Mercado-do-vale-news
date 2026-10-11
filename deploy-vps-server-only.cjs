@@ -47,6 +47,7 @@ const tiktokShopAutomationPaths = [
   'services/tiktokShopPrintServer.cjs',
 ];
 const print3dRecipeRuntimePaths = [
+  'services/productFormDraftsServer.cjs',
   'services/print3dMaterialsServer.cjs',
   'services/print3dProductOffer.cjs',
   'services/productDeadlineRequest.cjs',
@@ -516,6 +517,14 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--product-drafts-only') || process.argv.includes('--product-drafts-check')) {
+    await require('./scripts/deploy-product-registration.cjs').deployProductDrafts({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--product-drafts-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--product-registration-only') || process.argv.includes('--product-registration-check')) {
     await require('./scripts/deploy-product-registration.cjs').deployProductRegistration({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

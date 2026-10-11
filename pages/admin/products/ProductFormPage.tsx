@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowLeft, CheckCircle2, ExternalLink } from 'lucide-react';
 import { ProductForm } from '../../../components/products/ProductForm';
@@ -9,6 +9,7 @@ import { Product, ProductInput } from '../../../types/product';
 import { productService } from '../../../services/products';
 import { buildProductClonePrefill } from '../../../services/productClonePrefill.js';
 import { isLocalCatalogPreviewRuntime, localCatalogPreviewService, type LocalCatalogDraft } from '../../../services/localCatalogPreview';
+import { productFormDraftsService, type ProductFormDraft, type ProductFormSnapshot } from '../../../services/productFormDrafts';
 
 function LocalPreviewApproval({ productId, revision, onApproved }: { productId: string; revision: number; onApproved: () => void }) {
     const [draft, setDraft] = useState<LocalCatalogDraft | null>(null);
@@ -70,8 +71,14 @@ export const ProductFormPage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isFetching, setIsFetching] = useState(false);
     const [draftRevision, setDraftRevision] = useState(0);
+    const [savedDraft, setSavedDraft] = useState<ProductFormDraft | null>(null);
+    const [loadedDraft, setLoadedDraft] = useState<ProductFormDraft | null>(null);
+    const [draftError, setDraftError] = useState('');
+    const draftMeta = useRef<{ id: string; revision: number } | null>(null);
+    const resumeDraftId = new URLSearchParams(location.search).get('draft');
 
-    const isEditMode = id && id !== 'new';
+    const editingProductId = (id && id !== 'new' ? id : undefined) || loadedDraft?.snapshot.data.id;
+    const isEditMode = Boolean(editingProductId);
     const print3dEntry = new URLSearchParams(location.search).get('print3d') === '1';
 
     // Get EAN from navigation state if provided
@@ -80,7 +87,19 @@ export const ProductFormPage: React.FC = () => {
 
     // Fetch product data if editing
     useEffect(() => {
-        if (isEditMode) {
+        setLoadedDraft(null); setSavedDraft(null); draftMeta.current = null;
+        if (resumeDraftId) {
+            let active = true;
+            setIsFetching(true); setDraftError(''); setLoadedDraft(null);
+            productFormDraftsService.get(resumeDraftId).then(draft => {
+                if (!active) return;
+                if (draft.status !== 'pending') throw new Error('Este rascunho já foi concluído ou arquivado.');
+                draftMeta.current = { id: draft.id, revision: draft.revision };
+                setLoadedDraft(draft); setSavedDraft(draft); setProduct(draft.snapshot.data as Product);
+            }).catch(error => { if (active) setDraftError(error instanceof Error ? error.message : 'Não foi possível abrir o rascunho.'); })
+                .finally(() => { if (active) setIsFetching(false); });
+            return () => { active = false; };
+        } else if (id && id !== 'new') {
             fetchProduct();
         } else if (cloneProductFromState) {
             const prefill = buildProductClonePrefill(cloneProductFromState);
@@ -91,7 +110,7 @@ export const ProductFormPage: React.FC = () => {
         } else {
             setProduct(undefined);
         }
-    }, [id, eanFromState, cloneProductFromState, print3dEntry]);
+    }, [id, eanFromState, cloneProductFromState, print3dEntry, resumeDraftId]);
 
     // Update document title
     useEffect(() => {
@@ -128,9 +147,9 @@ export const ProductFormPage: React.FC = () => {
         try {
             setIsLoading(true);
 
-            if (isEditMode && id) {
+            if (isEditMode && editingProductId) {
                 // Update existing product
-                const savedProduct = await productService.update(id, data);
+                const savedProduct = await productService.update(editingProductId, data);
                 if (isLocalCatalogPreviewRuntime()) {
                     setProduct(savedProduct as Product);
                     setDraftRevision((current) => current + 1);
@@ -153,7 +172,23 @@ export const ProductFormPage: React.FC = () => {
         }
     };
 
-    const handleBatchComplete = (savedProduct?: Product) => {
+    const handleSaveDraft = async (snapshot: ProductFormSnapshot) => {
+        draftMeta.current ||= { id: crypto.randomUUID(), revision: 0 };
+        const draft = await productFormDraftsService.save(draftMeta.current.id, draftMeta.current.revision, snapshot);
+        draftMeta.current = { id: draft.id, revision: draft.revision }; setSavedDraft(draft);
+    };
+
+    const handleBatchComplete = async (savedProduct?: Product, snapshot?: ProductFormSnapshot) => {
+        // The parent's private template stays available for future variations,
+        // using the same authenticated draft/file storage, outside the catalog.
+        if (!draftMeta.current && savedProduct?.is_parent && savedProduct.is_print3d && snapshot) await handleSaveDraft(snapshot);
+        if (draftMeta.current) {
+            // Persist confirmed IDs before closing the draft, so an interrupted
+            // final step can be retried without recreating confirmed products.
+            if (snapshot) await handleSaveDraft(snapshot);
+            await productFormDraftsService.setStatus(draftMeta.current.id, draftMeta.current.revision, 'completed', savedProduct?.id);
+            draftMeta.current = null;
+        }
         if (isLocalCatalogPreviewRuntime()) {
             setDraftRevision(current => current + 1);
             if (savedProduct?.id && !isEditMode) navigate(`/admin/products/${savedProduct.id}`);
@@ -185,6 +220,8 @@ export const ProductFormPage: React.FC = () => {
             </div>
         );
     }
+    if (resumeDraftId && (!loadedDraft || draftError)) return <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-6"><p>{draftError || 'Carregando rascunho...'}</p><Link className="mt-3 inline-block text-blue-700 underline" to="/admin/products/drafts">Voltar aos rascunhos</Link></div>;
+    if (loadedDraft?.snapshot.completion) return <div className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50 p-6"><h1 className="text-xl font-bold">Cadastro já concluído</h1><p>Os produtos deste rascunho já foram salvos. Falta apenas retirar o rascunho da lista de pendentes.</p><button disabled={isLoading} className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50" onClick={async () => { setIsLoading(true); try { await productFormDraftsService.setStatus(loadedDraft.id, loadedDraft.revision, 'completed', loadedDraft.snapshot.completion?.savedProductId); navigate('/admin/products/drafts'); } catch (error) { toast.error(error instanceof Error ? error.message : 'Não foi possível finalizar o rascunho.'); } finally { setIsLoading(false); } }}>Finalizar rascunho</button><Link className="ml-3 text-blue-700 underline" to="/admin/products/drafts">Voltar à lista</Link></div>;
 
     return (
         <div className="space-y-6">
@@ -209,6 +246,7 @@ export const ProductFormPage: React.FC = () => {
             </div>
 
             {print3dEntry && <p className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">A opção de impressão 3D já está marcada. Confira o cadastro e salve para continuar. Produtos vendáveis seguem para a ficha e os arquivos; produtos pai organizam as variações.</p>}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p>{savedDraft ? `Rascunho salvo em ${new Date(savedDraft.updated_at).toLocaleString('pt-BR')}. Salve novamente para guardar as próximas alterações.` : 'Cadastro incompleto? Salve como rascunho para continuar depois, sem disponibilizar o anúncio para venda.'}</p><Link to="/admin/products/drafts" className="font-semibold text-blue-700 underline">Rascunhos de anúncios</Link></div>
 
             {isEditMode && product?.id && product.sku && (
                 <ProductWorkspaceNav productId={product.id} sku={product.sku} active="product" />
@@ -222,8 +260,10 @@ export const ProductFormPage: React.FC = () => {
                 }} />
             )}
             <ProductForm
-                key={`${id || 'new'}-${print3dEntry}`}
+                key={`${id || 'new'}-${print3dEntry}-${resumeDraftId || ''}`}
                 initialData={product}
+                initialDraft={loadedDraft?.snapshot}
+                onSaveDraft={handleSaveDraft}
                 defaultIsPrint3d={print3dEntry}
                 onSubmit={handleSubmit}
                 onCancel={handleCancel}

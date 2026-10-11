@@ -431,6 +431,7 @@ export const ProductListPage: React.FC = () => {
                         </button>
 
                         <Print3dProductEntry />
+                        <button onClick={() => navigate('/admin/products/drafts')} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">Rascunhos de anúncios</button>
 
                         {/* Novo Produto — ação principal em destaque */}
                         <button

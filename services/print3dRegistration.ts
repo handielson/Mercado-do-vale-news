@@ -3,6 +3,7 @@ import { buildPrint3dRecipeDraft } from '../utils/print3dRecipeDraft.mjs';
 import { print3dRecipesService } from './print3dRecipes';
 import { print3dRecipeFilesService, type Print3dFileKind } from './print3dRecipeFiles';
 import type { Print3dCostSettings } from './print3dCostSettings';
+import type { ProductInput } from '../types/product';
 
 export type PlateFile = { kind: Print3dFileKind; file?: File; existing?: { id:string; kind:Print3dFileKind; sha256:string; byte_size:number; original_name:string } };
 export type PlateSetup = { id:string; name:string; hours:number; minutes:number; notes:string; filaments:Array<{ id:string; grams:number }>; files:PlateFile[] };
@@ -13,6 +14,11 @@ export type Print3dSetup = {
 };
 export const newPrint3dPlate = (): PlateSetup => ({ id:crypto.randomUUID(), name:'', hours:0, minutes:0, notes:'', filaments:[{ id:'', grams:0 }], files:[] });
 export const newPrint3dSetup = (settings:Print3dCostSettings): Print3dSetup => ({ revision:`r${Date.now()}`, sourceUrl:'', printer:'', profile:'', pieces:1, laborMinutes:0, includesWaste:true, notes:'', plates:[newPrint3dPlate()], settings, supplies:[] });
+// Copies share immutable File bytes, but never share editable lists or settings.
+export function copyPrint3dSetup(setup:Print3dSetup):Print3dSetup {
+  return { ...setup, revision:`r${crypto.randomUUID()}`, settings:{ ...setup.settings, filaments:setup.settings.filaments.map(f => ({ ...f })), supplies:setup.settings.supplies.map(s => ({ ...s })) },
+    supplies:setup.supplies.map(s => ({ ...s })), plates:setup.plates.map(plate => ({ ...plate, id:crypto.randomUUID(), filaments:plate.filaments.map(f => ({ ...f })), files:plate.files.map(entry => ({ ...entry, ...(entry.existing ? { existing:{ ...entry.existing } } : {}) })) })) };
+}
 export async function assertPrint3dRegistrationAvailable() {
   const status = await print3dRecipesService.status();
   if (!status.enabled || status.platePlans !== true) throw new Error('Fichas com placas ainda não estão disponíveis nesta API. Nenhum parâmetro foi gravado.');
@@ -48,6 +54,10 @@ export function print3dSetupParameters(setup:Print3dSetup) {
   const printMinutes = setup.plates.reduce((sum, p) => sum + p.hours * 60 + p.minutes, 0);
   const cost = calculatePrint3dCost({ pieces:setup.pieces, printMinutes, laborMinutes:setup.laborMinutes, ...setup.settings, filaments, supplies });
   return { filaments, supplies, printMinutes, cost, materialGrams:filaments.reduce((sum, f) => sum + f.consumedGrams, 0) };
+}
+export function withPrint3dCost(data:ProductInput, setup:Print3dSetup):ProductInput {
+  return { ...data, price_cost:print3dSetupParameters(setup).cost.unitCents,
+    ...(!data.is_parent ? { custom_fields:{ ...data.custom_fields, inherit_parent_cost:false } } : {}) };
 }
 export async function preparePrint3dRegistration(setup:Print3dSetup, product:{ id:string; name:string; sku:string }) {
   if (!setup.profile.trim() || setup.profile.length > 120) throw new Error('Informe o perfil de impressão (até 120 caracteres).');

@@ -110,6 +110,29 @@ async function remoteRecipeState({ activate = false }, schemaSource, flagSource)
 }
 const quote = value => "'"+String(value).replace(/'/g,"'\\''")+"'";
 const command = source => `cd /var/www/mdv-api && node -e ${quote("eval(Buffer.from('"+Buffer.from(source).toString('base64')+"','base64').toString())")}`;
+function patchDraftEntry(source) {
+  let value = normal(source);
+  const hook = "require('./services/productFormDraftsServer.cjs').registerProductFormDraftRoutes(fastify, { pool, requireAdminBearerToken });";
+  const anchor = "require('./services/print3dMaterialsServer.cjs').registerPrint3dMaterialRoutes(fastify, { pool, requireAdminBearerToken });";
+  if (value.includes('registerProductFormDraftRoutes')) {
+    if (value.split(hook).length !== 2 || value.split('registerProductFormDraftRoutes').length !== 2) throw Error('Draft hook differs');
+  } else {
+    if (value.split(anchor).length !== 2) throw Error('Missing/ambiguous draft anchor');
+    value = value.replace(anchor,anchor+'\n'+hook);
+  }
+  return source.includes('\r\n') ? value.replace(/\n/g,'\r\n') : value;
+}
+async function deployProductDrafts(options) {
+  const module = 'services/productFormDraftsServer.cjs';
+  const updated = fs.readFileSync(path.join(options.root,module),'utf8');
+  await deployProductReadPrivacy({...options,files:[module,...ENTRIES],backupPrefix:'product-form-drafts',patchFile(source,file) {
+    return file === module ? patchModule(source,updated,'') : patchDraftEntry(source);
+  },exec:async cmd => {
+    const out = await options.exec(cmd);
+    if (cmd === 'pm2 restart mdv-api') await options.exec(command(`(${waitForHealth.toString()})().then(r=>console.log(JSON.stringify(r))).catch(e=>{console.error(e.message);process.exit(1)})`));
+    return out;
+  }});
+}
 async function deployProductRegistration(options) {
   const { root, exec, checkOnly = false, enableRecipes = false } = options;
   if (!checkOnly && !enableRecipes) throw Error('Explicit --enable-print3d-recipes required');
@@ -140,4 +163,4 @@ async function deployProductRegistration(options) {
     throw error;
   }
 }
-module.exports = {patchModule,patchEntry,schemaReady,setRecipeFlag,remoteRecipeState,deployProductRegistration,MODULES};
+module.exports = {patchModule,patchEntry,patchDraftEntry,deployProductDrafts,schemaReady,setRecipeFlag,remoteRecipeState,deployProductRegistration,MODULES};

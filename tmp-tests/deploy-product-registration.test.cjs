@@ -1,7 +1,23 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { patchModule, patchEntry, schemaReady, setRecipeFlag, MODULES } = require('../scripts/deploy-product-registration.cjs');
+const { patchModule, patchEntry, patchDraftEntry, schemaReady, setRecipeFlag, MODULES } = require('../scripts/deploy-product-registration.cjs');
+
+test('draft publisher adds only its authenticated hook and preserves remote integrations', () => {
+  const source = fs.readFileSync('vps_server.cjs','utf8');
+  const hook = "require('./services/productFormDraftsServer.cjs').registerProductFormDraftRoutes(fastify, { pool, requireAdminBearerToken });\n";
+  const before = source.replace(/\r\n/g,'\n').replace(hook,'');
+  assert.equal(patchDraftEntry(before), source.replace(/\r\n/g,'\n'));
+  assert.equal(patchDraftEntry(patchDraftEntry(before)), patchDraftEntry(before));
+  const crlf = before.replace(/\n/g,'\r\n');
+  assert.equal(patchDraftEntry(crlf), patchDraftEntry(before).replace(/\n/g,'\r\n'));
+  assert.throws(() => patchDraftEntry('unknown entry'), /anchor/);
+  assert.throws(() => patchDraftEntry(before + '\nregisterProductFormDraftRoutes'), /differs/);
+  const deploy = fs.readFileSync('scripts/deploy-product-registration.cjs','utf8');
+  const drafts = deploy.slice(deploy.indexOf('async function deployProductDrafts('),deploy.indexOf('async function deployProductRegistration('));
+  assert.match(drafts,/files:\[module,\.\.\.ENTRIES\]/);
+  assert.doesNotMatch(drafts,/activate|setRecipeFlag|migration|uploadPrivate/);
+});
 test('registration publisher rejects unknown drift; accepts only reviewed baseline or its release', () => {
   assert.equal(patchModule('old\r\n', 'new\n', 'old\n'), 'new\n');
   assert.equal(patchModule('new\n', 'new\n', 'old\n'), 'new\n');

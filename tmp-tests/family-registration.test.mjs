@@ -125,7 +125,7 @@ test('main and batch use the selected condition; draft capture never saves produ
   assert.equal(productUnitCondition({condition:'USADO'}),'used');assert.equal(productUnitCondition({condition:'open_box'}),'open_box');
   const form=fs.readFileSync('components/products/ProductForm.tsx','utf8');
   assert.match(form,/condition: productUnitCondition\(unitItem.specs\)/);assert.match(form,/condition: productUnitCondition\(mergedData.specs\)/);
-  assert.match(form,/if \(variationDraftMode\) \{[\s\S]*?await onSubmit\(mergedData\);\s*return;/);
+  assert.match(form,/if \(variationDraftMode\) \{[\s\S]*?await onSubmit\(mergedData\);\s*onProductionSetupChange\?\.\(setup\);\s*return;/);
   assert.match(form,/event.stopPropagation\(\)/);
   const specs = stripModelOwnedSpecs({ condition:'used', unit:'UN', production:'third_party', chipset:'model owned' });
   assert.equal(specs.condition,'used'); assert.equal(specs.unit,'UN'); assert.equal(specs.production,'third_party'); assert.equal(specs.chipset,undefined);

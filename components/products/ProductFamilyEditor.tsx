@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import type { Print3dSetup } from '../../services/print3dRegistration';
 import { createPortal } from 'react-dom';
 import { ProductForm } from './ProductForm';
 import { Product, ProductInput } from '../../types/product';
@@ -11,19 +12,29 @@ import { VariationListing } from './VariationListing';
 import { nextVariationSku } from '@mdv/product-sku';
 
 export type FamilyRow = { key: string; data: ProductInput & { id?: string }; inheritImages: boolean; videoFile?: File | null };
+export type FamilyEditorDraft = {
+    adding: boolean; attributes: Array<{ key: string; value: string }>; variationSku: string; variationEans: string[];
+    media: { images: string[]; inheritImages: boolean; videoUrl: string; inheritVideo: boolean; listing: Partial<ProductInput>; videoFile: File | null };
+    draftKey: string;
+};
 
-export function ProductFamilyEditor({ parent, rows, onChange, disabled, onBusyChange }: {
+export function ProductFamilyEditor({ parent, rows, onChange, disabled, onBusyChange, initialDraft, captureDraftRef, productionSetups, onProductionChange }: {
     parent: ProductInput; rows: FamilyRow[]; onChange: (rows: FamilyRow[]) => void; disabled: boolean;
     onBusyChange?: (busy: boolean) => void;
+    initialDraft?: FamilyEditorDraft;
+    captureDraftRef?: React.MutableRefObject<(() => FamilyEditorDraft) | undefined>;
+    productionSetups?: Record<string,Print3dSetup | undefined>;
+    onProductionChange?: (key:string, setup:Print3dSetup | undefined) => void;
 }) {
     const [editing, setEditing] = useState<FamilyRow | null>(null);
-    const [adding, setAdding] = useState(false);
-    const [attributes, setAttributes] = useState([{ key: 'color', value: '' }]);
+    const [adding, setAdding] = useState(initialDraft?.adding || false);
+    const [attributes, setAttributes] = useState(initialDraft?.attributes || [{ key: 'color', value: '' }]);
     const [attributeError, setAttributeError] = useState('');
-    const [variationSku, setVariationSku] = useState('');
-    const [variationEans, setVariationEans] = useState<string[]>([]);
-    const [media, setMedia] = useState({ images: [] as string[], inheritImages: true, videoUrl: '', inheritVideo: false, listing: {} as Partial<ProductInput>, videoFile: null as File | null });
-    const [draftKey, setDraftKey] = useState('');
+    const [variationSku, setVariationSku] = useState(initialDraft?.variationSku || '');
+    const [variationEans, setVariationEans] = useState<string[]>(initialDraft?.variationEans || []);
+    const [media, setMedia] = useState(initialDraft?.media || { images: [] as string[], inheritImages: true, videoUrl: '', inheritVideo: false, listing: {} as Partial<ProductInput>, videoFile: null as File | null });
+    const [draftKey, setDraftKey] = useState(initialDraft?.draftKey || '');
+    if (captureDraftRef) captureDraftRef.current = () => ({ adding, attributes, variationSku, variationEans, media, draftKey });
     const [busyKeys, setBusyKeys] = useState<string[]>([]);
     const busy = busyKeys.length > 0;
     useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
@@ -121,6 +132,8 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, onBusyCh
                 <div className="mb-4 flex justify-between"><h2 className="text-xl font-bold">Detalhes da variação</h2><button type="button" onClick={() => setEditing(null)} aria-label="Fechar detalhes">Fechar</button></div>
                 <p className="mb-4 text-sm">Alterações ficam no rascunho até salvar a família. Edite SKU, fotos, características, preços, estoque e garantia nas abas abaixo.</p>
                 <ProductForm key={editing.key} variationDraftMode initialData={{ ...editing.data, images: editing.inheritImages ? parent.images : editing.data.images } as Product}
+                    initialProductionSetup={productionSetups?.[editing.key]} parentProductionSetup={productionSetups?.parent}
+                    onProductionSetupChange={setup => onProductionChange?.(editing.key,setup)}
                     onCancel={() => setEditing(null)} onSubmit={async data => {
                         const imagesChanged = JSON.stringify(data.images || []) !== JSON.stringify(parent.images || []);
                         const next = { ...editing, inheritImages: editing.inheritImages && !imagesChanged, data: { ...data, id: editing.data.id } };

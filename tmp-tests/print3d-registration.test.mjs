@@ -28,6 +28,20 @@ const setup = () => ({ revision:'r1', sourceUrl:'https://makerworld.com/pt/model
   plates:[10,20,30].map((grams,i) => ({ id:`plate-${i+1}`, name:`Placa ${i+1}`, hours:i+1, minutes:0, notes:'', filaments:[{ id:'petg', grams }], files:[{ kind:'model', file:new File([`solid plate ${i}`],`plate-${i+1}.stl`) }] })),
 });
 const product = { id:'11111111-1111-4111-8111-111111111111', name:'Mini Branco - MINI0001-02', sku:'MINI0001-02' };
+test('cópia do pai é independente e seu custo por produto não altera o preço de venda', () => {
+  const api = service(), parent = setup();
+  const child = api.copyPrint3dSetup(parent), sibling = api.copyPrint3dSetup(parent);
+  assert.notEqual(child.revision,parent.revision); assert.notEqual(child.plates[0].id,parent.plates[0].id);
+  assert.equal(child.plates[0].files[0].file,parent.plates[0].files[0].file);
+  child.plates[0].filaments[0].grams = 100;
+  child.settings.filaments[0].spoolCostCents = 20000;
+  assert.equal(parent.plates[0].filaments[0].grams,10); assert.equal(sibling.settings.filaments[0].spoolCostCents,10000);
+  const priced = api.withPrint3dCost({ price_cost:9999, price_retail:2500, price_reseller:2000, custom_fields:{ inherit_parent_cost:true } }, parent);
+  assert.equal(priced.price_cost,156); assert.equal(priced.price_retail,2500); assert.equal(priced.price_reseller,2000);
+  assert.equal(priced.custom_fields.inherit_parent_cost,false);
+  const incomplete = setup(); incomplete.pieces = 0;
+  assert.throws(() => api.withPrint3dCost({price_cost:10},incomplete),/maior que zero/);
+});
 test('salva revisão canônica com SKU definitivo e envia cada arquivo para a sua placa privada', async () => {
   const api = service();
   await api.savePrint3dRegistration(setup(), product);

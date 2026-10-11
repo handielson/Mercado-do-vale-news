@@ -21,7 +21,8 @@ test('SKU preview uses backend generator, stays separate from submitted SKU, and
  assert.match(basic,/setSkuPreview\(nextProductSku\(typedName, skus\)\)/);
  const effect=basic.slice(basic.indexOf('const typedName'),basic.indexOf('const [parentSearch'));
  assert(!effect.includes("setValue('sku'"));
- assert.match(form,/\['production', 'Arquivos e produção 3D'\]/);
+ assert.match(form,/\['files', 'Arquivos e URL'\]/);
+ assert.match(form,/\['production', 'Parâmetros e placas'\]/);
  assert.match(form,/!variationDraftMode && isParentProduct && <div id="product-variations-section"[\s\S]*?<ProductFamilyEditor/);
  assert.match(fs.readFileSync('components/products/familyRegistration.js','utf8'),/buildProductVariationPrefill\(parent\)/);
 });
@@ -43,12 +44,13 @@ test('parent variations are the last stage, while standalone children retain pro
   vm.runInNewContext(ts.transpileModule('exports.sections='+expression,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,ctx);
   return Array.from(ctx.exports.sections,section=>section[0]);
  };
- for(const print3d of [true,false]) assert.deepEqual(sections(true,print3d),['basic','specs','media','channels','fiscal','variations']);
- assert.deepEqual(sections(false,true),['basic','specs','media','channels','production','commercial','fiscal']);
+ assert.deepEqual(sections(true,false),['basic','specs','media','channels','fiscal','variations']);
+ assert.deepEqual(sections(true,true),['basic','specs','media','channels','files','production','commercial','fiscal','variations']);
+ assert.deepEqual(sections(false,true),['basic','specs','media','channels','files','production','commercial','fiscal']);
  assert(!sections(false,true,true).includes('variations'));
  const basic=form.slice(form.indexOf('id="product-basic-section"'),form.indexOf('{/* 1. TIPO DE PRODUTO */}'));
  assert(!basic.includes('<ProductFamilyEditor'));
  assert.match(form,/id="product-variations-section" className=\{activeSection === 'variations'/);
- assert.match(form,/activeSection === \(isParentProduct \? 'variations' : 'production'\)/);
+ assert.match(form,/\['files','production'\].includes\(activeSection\)/);
  assert.match(form,/type="button" onClick=\{\(\) => selectSection\('variations'\)\}/);
 });

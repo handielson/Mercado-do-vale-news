@@ -2003,6 +2003,7 @@ fastify.get('/admin/navigation-log', { preHandler: requireSyncKeyOrAdmin }, asyn
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 require('./services/print3dMaterialsServer.cjs').registerPrint3dMaterialRoutes(fastify, { pool, requireAdminBearerToken });
+require('./services/productFormDraftsServer.cjs').registerProductFormDraftRoutes(fastify, { pool, requireAdminBearerToken });
 const filamentCatalogRoutes = require('./services/print3dFilamentsServer.cjs').registerPrint3dFilamentRoutes(fastify, {
   pool, getBearerAuthContext:getVpsBearerAuthContext, stockEnabled:process.env.MDV_PRINT3D_FILAMENT_STOCK_ENABLED === '1',
 });
