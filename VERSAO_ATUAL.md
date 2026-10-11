@@ -3,13 +3,15 @@
 Data: 11/10/2026. Branch: main. Tag: v1.2.605-cadastro-variacoes.
 Release MDV: /var/www/mdv-site/releases/20261011-195330-cadastro-variacoes.
 Release 3DMV: /var/www/print3d-site/releases/20261011-195330-cadastro-variacoes.
-Status: preparada; publicacao e validacao final pendentes.
+Status: publicada e validada em producao. Commit da release: 9b28cdde.
 
 Cadastro de familias e variacoes na mesma tela: atributos, SKU complementar imutavel, EAN proprio, fotos/video com envio ao Synology e campos individuais ou herdados. Capa do pai com fallback de filho para familias antigas. Descricao HTML resolvida pela API nos dois sites, preservando o valor original no editor.
 
 Fichas privadas por SKU/revisao, lote com varias placas, consumo e tempo por placa, custos em centavos, anexos e link de origem. Ativacao autorizada apenas de MDV_PRINT3D_RECIPES_ENABLED; pedidos, pagamentos e producao automatica permanecem desligados. Schema existente, sem migration ou gravacao comercial de teste.
 
-167 testes aprovados. Build, deploy seletivo e Chrome serao validados no commit isolado. Defesa adicional exige o editor de variacoes no bundle realmente alcancavel. Alteracoes Shopee e documento/fixture preexistentes fora do escopo.
+171 testes focados/regressivos e guardas aprovados, alem de money e filtro admin TypeScript. Builds isolados, deploy seletivo, status autenticados e Chrome de producao conferidos. Ambos VERSION.json correspondem a esta release; API com mysql.ok=true. Defesa adicional exige o editor de variacoes no bundle realmente alcancavel. Alteracoes Shopee e documento/fixture preexistentes fora do escopo.
+
+Fichas e arquivos privados habilitados; acesso anonimo retorna 401. Editor conferido com tres placas para dez produtos, sem salvar dados de teste. Upload real ao NAS nao executado nesta validacao. Checkout temporario limpo removido, recuperavel pelo commit; 34 worktrees bloqueados preservados. Main sincronizada com origin/main, com seis arquivos preexistentes fora do escopo mantidos.
 
 Detalhes: docs/versoes/2026-10-11-v1.2.605-cadastro-variacoes.md.
 
