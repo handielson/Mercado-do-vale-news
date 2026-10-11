@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store, Camera, LayoutGrid, ListTree } from 'lucide-react';
+import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store, Camera, LayoutGrid, ListTree, FileText } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { Print3dProductEntry } from '../../../components/products/Print3dProductEntry';
@@ -29,6 +29,8 @@ import {
  * Products are loaded instantly from localStorage cache and silently refreshed
  * in the background. A manual "Atualizar" button forces a fresh fetch.
  */
+const productActionClass = 'inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-60';
+
 export const ProductListPage: React.FC = () => {
     const navigate = useNavigate();
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -382,131 +384,59 @@ export const ProductListPage: React.FC = () => {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="space-y-3">
-                {/* Linha 1: Título + ações principais */}
+            <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-900">Produtos</h1>
-                        <p className="text-sm text-slate-500 mt-1">
-                            Gerencie o catálogo de produtos do sistema
-                        </p>
+                        <p className="mt-1 text-sm text-slate-500">Gerencie o catálogo de produtos do sistema</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        {/* Selection mode toggle */}
-                        <button
-                            onClick={() => selectionMode ? handleExitSelection() : setSelectionMode(true)}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors shadow-sm border text-sm font-medium ${
-                                selectionMode
-                                    ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
-                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                            }`}
-                            title={selectionMode ? 'Sair do modo seleção' : 'Ativar modo seleção para edição em lote'}
-                        >
-                            {selectionMode ? <XSquare className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
-                            <span>{selectionMode ? 'Cancelar' : 'Selecionar'}</span>
+                        <button onClick={() => selectionMode ? handleExitSelection() : setSelectionMode(true)}
+                            className={selectionMode ? 'inline-flex items-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700' : productActionClass}
+                            title={selectionMode ? 'Sair do modo seleção' : 'Ativar modo seleção para edição em lote'}>
+                            {selectionMode ? <XSquare className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
+                            {selectionMode ? 'Cancelar seleção' : 'Selecionar'}
                         </button>
-
-                        {/* Refresh button */}
-                        <button
-                            onClick={handleRefresh}
-                            disabled={isRefreshing}
-                            title="Atualizar dados sem recarregar a página"
-                            className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors shadow-sm disabled:opacity-60 text-sm"
-                        >
-                            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                            <span className="font-medium">
-                                {isRefreshing ? 'Atualizando...' : 'Atualizar'}
-                            </span>
-                            {cacheAge && !isRefreshing && (
-                                <span className="text-xs text-slate-400 font-normal">({cacheAge})</span>
-                            )}
+                        <button onClick={handleRefresh} disabled={isRefreshing} className={productActionClass} title="Atualizar dados sem recarregar a página">
+                            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            {isRefreshing ? 'Atualizando...' : 'Atualizar'}
+                            {cacheAge && !isRefreshing && <span className="text-xs text-slate-400">({cacheAge})</span>}
                         </button>
-
-                        <button
-                            onClick={() => navigate('/admin/products/storefronts')}
-                            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                            <Store className="h-4 w-4" />
-                            Sites e preços
-                        </button>
-
-                        <Print3dProductEntry />
-                        <button onClick={() => navigate('/admin/products/drafts')} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">Rascunhos de anúncios</button>
-
-                        {/* Novo Produto — ação principal em destaque */}
-                        <button
-                            onClick={handleNewProduct}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
-                        >
-                            <Plus className="w-4 h-4" />
-                            Novo Produto
+                        <button onClick={handleNewProduct} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
+                            <Plus className="h-4 w-4" /> Novo Produto
                         </button>
                     </div>
                 </div>
-
-                {/* Linha 2: Ações secundárias */}
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-slate-400 uppercase tracking-wider mr-1">Ferramentas:</span>
-                    <button
-                        onClick={() => navigate('/admin/products/labels')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-xs font-medium"
-                    >
-                        <Barcode className="w-3.5 h-3.5" />
-                        Etiquetas
-                    </button>
-                    <button
-                        onClick={() => setIsExportModalOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm text-xs font-medium"
-                    >
-                        <Share2 className="w-3.5 h-3.5" />
-                        Exportar Catálogo
-                    </button>
-                    <button
-                        onClick={() => navigate('/admin/products/image-bank')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-sm text-xs font-medium"
-                    >
-                        <Images className="w-3.5 h-3.5" />
-                        Banco de Imagens
-                    </button>
-                    <button
-                        onClick={handleAutoGenerateVideos}
-                        disabled={isGeneratingVideos}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-60 text-xs font-medium"
-                        title="Gerar links de vídeo para todos os produtos com SKU sem vídeo"
-                    >
-                        <Video className={`w-3.5 h-3.5 ${isGeneratingVideos ? 'animate-pulse' : ''}`} />
-                        Gerar Links de Vídeo
-                    </button>
-                    <button
-                        onClick={handleBulkRegistration}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs font-medium"
-                    >
-                        <Package className="w-3.5 h-3.5" />
-                        Cadastro em Massa
-                    </button>
-                    <button
-                        onClick={() => navigate('/admin/products/photo-intake')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors shadow-sm text-xs font-medium"
-                        title="Cadastrar smartphones lendo a etiqueta da caixa por foto"
-                    >
-                        <Camera className="w-3.5 h-3.5" />
-                        Smartphones por Foto
-                    </button>
-                    <button
-                        onClick={() => navigate('/admin/products/offers')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors shadow-sm text-xs font-medium"
-                    >
-                        <Store className="w-3.5 h-3.5" />
-                        Ofertas
-                    </button>
-                    <button
-                        onClick={() => navigate('/admin/products/combos')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm text-xs font-medium"
-                    >
-                        <Package className="w-3.5 h-3.5" />
-                        Combos
-                    </button>
-                </div>
+                <nav aria-label="Ações dos produtos" className="grid gap-3 xl:grid-cols-3">
+                    <section aria-labelledby="product-actions-registration" className="rounded-xl border border-slate-200 bg-white p-3">
+                        <h2 id="product-actions-registration" className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Cadastro</h2>
+                        <div className="flex flex-wrap gap-2">
+                            <Print3dProductEntry className={productActionClass} />
+                            <button onClick={() => navigate('/admin/products/drafts')} className={productActionClass}><FileText className="h-4 w-4" /> Rascunhos de anúncios</button>
+                            <button onClick={handleBulkRegistration} className={productActionClass}><Package className="h-4 w-4" /> Cadastro em Massa</button>
+                            <button onClick={() => navigate('/admin/products/photo-intake')} className={productActionClass} title="Cadastrar smartphones lendo a etiqueta da caixa por foto"><Camera className="h-4 w-4" /> Smartphones por Foto</button>
+                        </div>
+                    </section>
+                    <section aria-labelledby="product-actions-sales" className="rounded-xl border border-slate-200 bg-white p-3">
+                        <h2 id="product-actions-sales" className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Sites e vendas</h2>
+                        <div className="flex flex-wrap gap-2">
+                            <button onClick={() => navigate('/admin/products/storefronts')} className={productActionClass}><Store className="h-4 w-4" /> Sites e preços</button>
+                            <button onClick={() => navigate('/admin/products/offers')} className={productActionClass}><Store className="h-4 w-4" /> Ofertas</button>
+                            <button onClick={() => navigate('/admin/products/combos')} className={productActionClass}><Package className="h-4 w-4" /> Combos</button>
+                        </div>
+                    </section>
+                    <section aria-labelledby="product-actions-media" className="rounded-xl border border-slate-200 bg-white p-3">
+                        <h2 id="product-actions-media" className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Mídia e impressão</h2>
+                        <div className="flex flex-wrap gap-2">
+                            <button onClick={() => navigate('/admin/products/labels')} className={productActionClass}><Barcode className="h-4 w-4" /> Etiquetas</button>
+                            <button onClick={() => setIsExportModalOpen(true)} className={productActionClass}><Share2 className="h-4 w-4" /> Exportar Catálogo</button>
+                            <button onClick={() => navigate('/admin/products/image-bank')} className={productActionClass}><Images className="h-4 w-4" /> Banco de Imagens</button>
+                            <button onClick={handleAutoGenerateVideos} disabled={isGeneratingVideos} className={productActionClass} title="Gerar links de vídeo para todos os produtos com SKU sem vídeo">
+                                <Video className={`h-4 w-4 ${isGeneratingVideos ? 'animate-pulse' : ''}`} /> {isGeneratingVideos ? 'Gerando links...' : 'Gerar Links de Vídeo'}
+                            </button>
+                        </div>
+                    </section>
+                </nav>
             </div>
 
             {/* Refreshing banner (shows when refreshing in background while list is visible) */}

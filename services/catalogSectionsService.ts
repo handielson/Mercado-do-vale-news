@@ -111,7 +111,7 @@ class CatalogSectionsService {
 
     // Prefix for persistent LocalStorage caching of section products
     // ⚠️ Bump a versão aqui sempre que a lógica de fetch mudar (invalida cache antigo automaticamente)
-    private CACHE_KEY_PREFIX = '@mv:section_products:v9:';
+    private CACHE_KEY_PREFIX = '@mv:section_products:v10:';
 
     // Helper to safely access localStorage (prevents SSR errors)
     private getStorage = () => typeof window !== 'undefined' && !vpsAuthService.getStoredToken() ? window.localStorage : null;
@@ -290,6 +290,9 @@ class CatalogSectionsService {
             // O limite visual conta familias, que podem ter varias memorias/cores.
             const fetchLimit = Math.min((section.max_products || 12) * 20, 200);
             params.append('limit', fetchLimit.toString());
+            // Cards need the compact projection; descriptions/full image arrays
+            // can make a section response several MB and exhaust its deadline.
+            params.append('compact', 'true');
 
             // App settings filters
             const settings = await catalogConfigService.getSettings();
@@ -364,6 +367,7 @@ class CatalogSectionsService {
                 try {
                     const pinnedParams = new URLSearchParams();
                     pinnedParams.append('limit', fetchLimit.toString());
+                    pinnedParams.append('compact', 'true');
                     pinnedParams.append('in_ids', section.pinned_product_ids.join(','));
                     
                     const pinnedRes = await fetch(buildVpsUrl(`/products?${pinnedParams.toString()}`), {

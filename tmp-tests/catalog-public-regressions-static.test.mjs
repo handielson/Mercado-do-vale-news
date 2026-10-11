@@ -19,8 +19,7 @@ assert.match(
 );
 
 const catalogSections = readFileSync('services/catalogSectionsService.ts', 'utf8');
-assert.match(
-  catalogSections,
-  /CACHE_KEY_PREFIX\s*=\s*['"]@mv:section_products:v5:/,
+assert(
+  Number(catalogSections.match(/CACHE_KEY_PREFIX\s*=\s*['"]@mv:section_products:v(\d+):/)?.[1]) >= 5,
   'catalog section cache prefix must be bumped after visibility normalization changes',
 );

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Printer, X } from 'lucide-react';
 import { vpsApiService } from '../../services/vpsApiService';
 
-export function Print3dProductEntry() {
+export function Print3dProductEntry({ className }: { className?:string } = {}) {
     const navigate = useNavigate();
     const dialog = useRef<HTMLDialogElement>(null);
     const [open, setOpen] = useState(false);
@@ -34,7 +34,7 @@ export function Print3dProductEntry() {
     };
 
     return <>
-        <button type="button" onClick={() => { setError(''); setOpen(true); }} className="flex items-center gap-2 rounded-lg bg-violet-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-violet-800">
+        <button type="button" onClick={() => { setError(''); setOpen(true); }} className={className || "flex items-center gap-2 rounded-lg bg-violet-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-violet-800"}>
             <Printer className="h-4 w-4" /> Produto 3D
         </button>
         <dialog ref={dialog} onClose={() => setOpen(false)} aria-labelledby="print3d-entry-title" className="w-[calc(100%_-_2rem)] max-w-lg rounded-xl p-0 shadow-xl backdrop:bg-slate-900/50">

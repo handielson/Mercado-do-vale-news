@@ -2,7 +2,7 @@ import { calculatePrint3dCost } from '../utils/print3dCost.mjs';
 import { buildPrint3dRecipeDraft } from '../utils/print3dRecipeDraft.mjs';
 import { print3dRecipesService } from './print3dRecipes';
 import { print3dRecipeFilesService, type Print3dFileKind } from './print3dRecipeFiles';
-import type { Print3dCostSettings } from './print3dCostSettings';
+import type { Print3dCostSettings, Print3dSupply } from './print3dCostSettings';
 import type { ProductInput } from '../types/product';
 
 export type PlateFile = { kind: Print3dFileKind; file?: File; existing?: { id:string; kind:Print3dFileKind; sha256:string; byte_size:number; original_name:string } };
@@ -10,14 +10,29 @@ export type PlateSetup = { id:string; name:string; hours:number; minutes:number;
 export type Print3dSetup = {
   revision:string; sourceUrl:string; printer:string; profile:string; pieces:number; laborMinutes:number;
   includesWaste:boolean; notes:string; plates:PlateSetup[]; settings:Print3dCostSettings;
-  supplies:Array<{ id:string; quantity:number }>;
+  supplies:Array<{ id:string; quantity:number; custom?:Print3dSupply }>;
 };
+export const PRINT3D_PRINTER_OPTIONS = ['Bambu Lab A1', 'Bambu Lab A1 mini', 'Bambu Lab P1S', 'Bambu Lab X1 Carbon', 'Creality Ender-3 V3 SE', 'Creality K1', 'Prusa MK4S'] as const;
+export const DEFAULT_PRINT3D_PRINTER = PRINT3D_PRINTER_OPTIONS[0];
+// Bambu Lab A1 FAQ: average PLA printing consumption at 220 V, not peak power.
+export const BAMBU_A1_AVERAGE_WATTS = 95;
 export const newPrint3dPlate = (): PlateSetup => ({ id:crypto.randomUUID(), name:'', hours:0, minutes:0, notes:'', filaments:[{ id:'', grams:0 }], files:[] });
-export const newPrint3dSetup = (settings:Print3dCostSettings): Print3dSetup => ({ revision:`r${Date.now()}`, sourceUrl:'', printer:'', profile:'', pieces:1, laborMinutes:0, includesWaste:true, notes:'', plates:[newPrint3dPlate()], settings, supplies:[] });
+export const newPrint3dSetup = (settings:Print3dCostSettings): Print3dSetup => ({ revision:`r${Date.now()}`, sourceUrl:'', printer:DEFAULT_PRINT3D_PRINTER, profile:'', pieces:1, laborMinutes:0, includesWaste:true, notes:'', plates:[newPrint3dPlate()], settings:{...settings,printerWatts:settings.printerWatts > 0 ? settings.printerWatts : BAMBU_A1_AVERAGE_WATTS}, supplies:[] });
 // Copies share immutable File bytes, but never share editable lists or settings.
 export function copyPrint3dSetup(setup:Print3dSetup):Print3dSetup {
   return { ...setup, revision:`r${crypto.randomUUID()}`, settings:{ ...setup.settings, filaments:setup.settings.filaments.map(f => ({ ...f })), supplies:setup.settings.supplies.map(s => ({ ...s })) },
-    supplies:setup.supplies.map(s => ({ ...s })), plates:setup.plates.map(plate => ({ ...plate, id:crypto.randomUUID(), filaments:plate.filaments.map(f => ({ ...f })), files:plate.files.map(entry => ({ ...entry, ...(entry.existing ? { existing:{ ...entry.existing } } : {}) })) })) };
+    supplies:setup.supplies.map(s => ({ ...s, ...(s.custom ? {custom:{...s.custom}} : {}) })), plates:setup.plates.map(plate => ({ ...plate, id:crypto.randomUUID(), filaments:plate.filaments.map(f => ({ ...f })), files:plate.files.map(entry => ({ ...entry, ...(entry.existing ? { existing:{ ...entry.existing } } : {}) })) })) };
+}
+export function formatPrint3dDuration(minutes:number):string {
+  const seconds = Math.round(minutes * 60);
+  const h = Math.floor(seconds / 3600), m = Math.floor(seconds % 3600 / 60), s = seconds % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}${s ? ':'+String(s).padStart(2,'0') : ''}`;
+}
+export function parsePrint3dDuration(value:string):number | undefined {
+  const match = /^(\d+):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
+  if (!match || Number(match[2]) >= 60 || Number(match[3] || 0) >= 60) return undefined;
+  const minutes = Number(match[1]) * 60 + Number(match[2]) + Number(match[3] || 0) / 60;
+  return Number.isSafeInteger(Math.round(minutes * 60)) ? minutes : undefined;
 }
 export async function assertPrint3dRegistrationAvailable() {
   const status = await print3dRecipesService.status();
@@ -46,10 +61,12 @@ export function print3dSetupParameters(setup:Print3dSetup) {
     return { ...filament, consumedGrams };
   });
   const supplies = setup.supplies.map(line => {
-    const supply = setup.settings.supplies.find(s => s.id === line.id);
+    const supply = line.custom || setup.settings.supplies.find(s => s.id === line.id);
     if (!supply) throw new Error('Selecione um insumo cadastrado.');
+    if (supply.id !== line.id || !supply.name.trim() || !(supply.unitLabel || 'un').trim()) throw new Error('Informe nome e unidade de cada insumo do lote.');
     return { ...supply, quantity:line.quantity };
   });
+  if (new Set(supplies.map(s => s.id)).size !== supplies.length) throw new Error('Este insumo já está incluído no lote. Ajuste sua quantidade.');
   if (setup.settings.packagingCentsPerPiece > 0) supplies.push({ id:'packaging-per-piece', name:'Embalagem por peça', unitLabel:'un', quantity:setup.pieces, unitCostCents:setup.settings.packagingCentsPerPiece });
   const printMinutes = setup.plates.reduce((sum, p) => sum + p.hours * 60 + p.minutes, 0);
   const cost = calculatePrint3dCost({ pieces:setup.pieces, printMinutes, laborMinutes:setup.laborMinutes, ...setup.settings, filaments, supplies });

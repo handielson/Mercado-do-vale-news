@@ -89,6 +89,24 @@ test('cadastro, custos e movimentos locais não escrevem na API central; aprova�
   assert.equal(isLocalCatalogPreviewPath('/admin/print3d/production/id/progress','POST'),false);
 });
 
+test('catálogo central novo permanece disponível ao lado do rascunho antigo, sem rebase ou escrita',async t=>{
+  const app=require('fastify')();t.after(()=>app.close());
+  const {registerLocalFilaments}=require('../services/localPrint3dFilaments.cjs');
+  const local={id:'black',name:'PETG',color:'Preto',spoolGrams:1000,spoolCostCents:5750};
+  const base={filaments:[{...local,spoolCostCents:5650},{id:'white',name:'PLA',color:'Branco',spoolGrams:1000,spoolCostCents:7000}]};
+  const state={filamentDraft:{base_version:'original',filaments:[local],movements:[],base_costs:{}}};
+  const original=JSON.stringify(state);
+  registerLocalFilaments({app,store:{read:async()=>state,write:async()=>assert.fail('Read mutated draft')},serialize:work=>work(),requestRemote:async route=>{
+    assert.equal(route,'/admin/preferences/print3d.cost.v1');return{value:base};
+  }});
+  const result=(await app.inject('/admin/preferences/print3d.cost.v1')).json();
+  assert.equal(result.value.filaments.length,2);
+  assert.equal(result.value.filaments[0].spoolCostCents,5750);
+  assert.equal(result.value.filaments[1].id,'white');
+  assert.equal(JSON.stringify(state),original);
+  assert.equal(base.filaments[0].spoolCostCents,5650);
+});
+
 test('listas reutilizam paginação do banco de cores e atualização busca a cor nova sem cache',async t=>{
   const app=require('fastify')();t.after(()=>app.close());
   const {registerLocalFilaments}=require('../services/localPrint3dFilaments.cjs');

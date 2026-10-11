@@ -10,6 +10,7 @@ const ttl = 5 * 60 * 1000;
 
 function setup(cached) {
   let now = 1000000, token = null, calls = 0, offline = true;
+  const urls = [];
   const entries = new Map(cached == null ? [] : [[key, cached]]);
   const storage = {
     getItem: name => entries.get(name) || null,
@@ -28,7 +29,8 @@ function setup(cached) {
   const context = { exports: {}, require: id => modules[id] || {}, URLSearchParams, AbortSignal,
     window: { localStorage: storage }, Date: class extends Date { static now() { return now; } },
     console: { log() {}, warn() {}, error() {} },
-    fetch: async () => {
+    fetch: async url => {
+      urls.push(url);
       calls++;
       if (offline) throw new Error('offline');
       return { ok: true, json: async () => [{ id: 'live', price_retail: 2000, images: ['image'] }] };
@@ -37,11 +39,22 @@ function setup(cached) {
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
   } }).outputText, context);
-  return { service: context.exports.catalogSectionsService, entries,
+  return { service: context.exports.catalogSectionsService, entries, urls,
     get calls() { return calls; }, setNow: value => now = value,
     authenticate: () => token = 'admin', online: () => offline = false };
 }
 const cached = timestamp => JSON.stringify({ timestamp, data: [{ id: 'cached', price_retail: 1000 }] });
+
+test('section cards request compact data for dynamic and pinned products while retaining filters', async () => {
+  const state=setup(null); state.online();
+  const rows=await state.service.getProductsForSection({...section,section_type:'featured',sort_by:'updated_at',sort_direction:'desc',pinned_product_ids:['live']});
+  assert.equal(rows[0].id,'live'); assert.equal(rows[0].price_retail,2000); assert.equal(rows[0].images[0],'image');
+  assert.equal(state.urls.length,2);
+  const queries=state.urls.map(url=>new URL(url).searchParams);
+  assert(queries.every(query=>query.get('compact')==='true'));
+  assert.equal(queries[0].get('limit'),'20'); assert.equal(queries[0].get('is_featured'),'true');
+  assert.equal(queries[0].get('sort_by'),'updated_at'); assert.equal(queries[1].get('in_ids'),'live');
+});
 
 test('fresh public cache uses its original age; fallback expires at five minutes', async () => {
   const state = setup(cached(1000000 - ttl + 1));

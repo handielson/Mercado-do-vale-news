@@ -90,7 +90,7 @@ test('entry links reach pages that prefill 3D without replacing the SKU', () => 
     const form = fs.readFileSync('components/products/ProductForm.tsx', 'utf8');
     const list = fs.readFileSync('pages/admin/products/ProductListPage.tsx', 'utf8');
     assert.match(routes, /path: "\/admin\/products\/:id\/:slug\?"/);
-    assert.match(list, /<Print3dProductEntry\s*\/>/);
+    assert.match(list, /<Print3dProductEntry(?:\s+className=\{productActionClass\})?\s*\/>/);
     assert.match(detail, /get\('print3d'\) === '1'/);
     assert.match(detail, /\{ \.\.\.product, is_print3d: true \}/);
     assert.match(detail, /print3dEntry && savedProduct.is_print3d && !Number\(savedProduct.is_parent\)/);

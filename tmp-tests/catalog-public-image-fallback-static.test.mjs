@@ -32,7 +32,7 @@ for (const [label, content] of [['catalog', source], ['sections', sections]]) {
   );
 }
 
-assert.match(source, /@mv:catalog:v8:/, 'catalog cache must invalidate cross-color image entries');
-assert.match(sections, /@mv:section_products:v6:/, 'section cache must invalidate cross-color image entries');
+assert(Number(source.match(/@mv:catalog:v(\d+):/)?.[1]) >= 8, 'catalog cache must invalidate cross-color image entries');
+assert(Number(sections.match(/@mv:section_products:v(\d+):/)?.[1]) >= 6, 'section cache must invalidate cross-color image entries');
 
 console.log('catalog public image fallback static checks passed');

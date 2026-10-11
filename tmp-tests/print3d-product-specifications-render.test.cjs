@@ -31,7 +31,7 @@ test('3D renders editable canonical attributes and hides phone fields even for a
  assert.match(html,/id="field-finish"[^>]*value="Fosco"/);
  assert(!html.includes('id="field-size"'));
  for(const {key,label,unit} of measurements.PRINT3D_MEASUREMENT_FIELDS){
-  assert.match(html,new RegExp(`id="field-${key}" type="number" min="0" step="0.001"`));
+  assert.match(html,key==='weight_kg' ? /id="field-weight_kg" type="text" inputMode="numeric"/ : new RegExp(`id="field-${key}" type="number" min="0" step="0.001"`));
   assert(html.includes(`${label} (${unit})`));
  }
  assert.match(html,/Tamanho antigo preservado: Grande/);
@@ -53,7 +53,7 @@ test('3D respects category visibility and avoids duplicate custom attributes',()
 function phoneHasMeasurements(html){return html.includes('Medidas do produto');}
 test('existing cm dimensions render as mm in the actual 3D inputs and announcement preview',()=>{
  const html=render(true,{},[],{'dimensions.height_cm':3.5,'dimensions.width_cm':2,'dimensions.depth_cm':1.2,'weight_kg':0.012,dimensions:{height_cm:3.5,width_cm:2,depth_cm:1.2}});
- for(const [key,value] of [['dimensions.height_cm',35],['dimensions.width_cm',20],['dimensions.depth_cm',12],['weight_kg',0.012]]){
+ for(const [key,value] of [['dimensions.height_cm',35],['dimensions.width_cm',20],['dimensions.depth_cm',12],['weight_kg','0,012']]){
   assert.match(html,new RegExp(`id="field-${key}"[^>]*value="${value}"`));
  }
  for(const label of ['Altura (mm)','Largura (mm)','Profundidade (mm)','Peso (kg)'])assert(html.includes(label));

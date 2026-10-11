@@ -32,7 +32,11 @@ function registerLocalFilaments({ app, store, serialize, requestRemote }) {
     const base = await centralSettings(auth);
     const state = await store.read();
     const draft = state.filamentDraft;
-    return { state, base, items:draft?.filaments || base.filaments || [] };
+    // A pending local snapshot must not hide filaments added centrally later.
+    // Local records still win by ID; reads never rebase approval or mutate drafts.
+    const items = new Map((base.filaments || []).map(f => [f.id,f]));
+    for (const filament of draft?.filaments || []) items.set(filament.id,filament);
+    return { state, base, items:[...items.values()] };
   };
   const draftFor = (state, base) => state.filamentDraft ||= { base_version:version(base.filaments), filaments:base.filaments || [], movements:[], base_costs:base };
   const stock = async (auth, pending = []) => {

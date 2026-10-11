@@ -15,7 +15,7 @@ import { TableRelationField } from '../../fields/TableRelationField';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { shouldAddSerializedFieldToBatchOnEnter } from '../serializedBatch.js';
 import { isVariationSpec, modelTechnicalSpecs } from '../../../services/smartphoneModelSpecs.mjs';
-import { PRINT3D_MEASUREMENT_FIELDS, formatPrint3dMeasurements, print3dMeasurementDisplayValue, print3dMeasurementStoredValue } from '../../../utils/print3dMeasurements.js';
+import { PRINT3D_MEASUREMENT_FIELDS, formatPrint3dMeasurements, print3dMeasurementDisplayValue, print3dMeasurementStoredValue, formatPrint3dWeightInput, parsePrint3dWeightInput } from '../../../utils/print3dMeasurements.js';
 
 interface ProductSpecificationsProps {
     categoryConfig: CategoryConfig | null;
@@ -659,10 +659,17 @@ export function ProductSpecifications({
                         {PRINT3D_MEASUREMENT_FIELDS.map(({ key, label, unit, max }) => (
                             <div key={key}>
                                 <label htmlFor={`field-${key}`} className="mb-1 block text-sm font-medium text-slate-700">{label} ({unit})</label>
-                                <input id={`field-${key}`} type="number" min="0" step="0.001" max={max} inputMode="decimal"
+                                {key === 'weight_kg' ? <>
+                                  <input id={`field-${key}`} type="text" inputMode="numeric" maxLength={12} placeholder="0,000"
+                                    value={formatPrint3dWeightInput(watch('weight_kg'))}
+                                    onFocus={event => event.target.select()}
+                                    onChange={event => setValue('weight_kg', parsePrint3dWeightInput(event.target.value), { shouldDirty:true, shouldValidate:true })}
+                                    className="w-full rounded-md border border-slate-300 bg-white p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                                  <p className="mt-1 text-xs text-slate-500">Preenchimento automático em kg: 10 → 0,010 kg; 1000 → 1,000 kg.</p>
+                                </> : <input id={`field-${key}`} type="number" min="0" step="0.001" max={max} inputMode="decimal"
                                     value={print3dMeasurementDisplayValue(key, watch(key as any))}
                                     onChange={event => setValue(key as any, print3dMeasurementStoredValue(key, event.target.value), { shouldDirty: true, shouldValidate: true })}
-                                    className="w-full rounded-md border border-slate-300 bg-white p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                                    className="w-full rounded-md border border-slate-300 bg-white p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />}
                                 {(key === 'weight_kg' ? errors.weight_kg : (errors.dimensions as any)?.[key.split('.')[1]])?.message && <p className="mt-1 text-xs text-red-600">{String((key === 'weight_kg' ? errors.weight_kg : (errors.dimensions as any)?.[key.split('.')[1]])?.message)}</p>}
                             </div>
                         ))}

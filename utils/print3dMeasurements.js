@@ -7,6 +7,17 @@ export const PRINT3D_MEASUREMENT_FIELDS = [
   { key: 'weight_kg', label: 'Peso', unit: 'kg', max: 30, factor: 1 },
 ];
 
+// The input fills from the right with gram precision; storage remains kg.
+export function formatPrint3dWeightInput(kg) {
+  if (kg == null || kg === '') return '';
+  return Number(kg).toLocaleString('pt-BR', { minimumFractionDigits:3, maximumFractionDigits:3, useGrouping:false });
+}
+
+export function parsePrint3dWeightInput(text) {
+  const digits = String(text).replace(/\D/g, '');
+  return digits ? Number(digits) / 1000 : null;
+}
+
 export function print3dMeasurementDisplayValue(key, value) {
   if (value == null || value === '') return '';
   const factor = PRINT3D_MEASUREMENT_FIELDS.find(field => field.key === key)?.factor || 1;

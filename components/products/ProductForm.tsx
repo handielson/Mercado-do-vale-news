@@ -2062,7 +2062,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
 
     return (
         <form onSubmit={event => { event.stopPropagation(); if (!savingDraftRef.current) void handleFormSubmit(event); }} className="space-y-6 pb-20">
-            <nav id={variationDraftMode ? 'variation-form-sections' : 'product-form-sections'} aria-label="Seções do cadastro" className="sticky top-0 z-20 flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur scroll-mt-4">
+            <nav id={variationDraftMode ? 'variation-form-sections' : 'product-form-sections'} aria-label="Seções do cadastro" className="sticky top-0 z-20 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur scroll-mt-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {([
                     ['basic', 'Dados básicos'],
                     ['specs', 'Características'],
@@ -2074,7 +2074,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                     ...(!variationDraftMode && isParentProduct ? [['variations', 'Variações'] as const] : []),
                 ] as const).map(([section, label]) => <button key={section} type="button" aria-current={activeSection === section ? 'page' : undefined}
                     onClick={() => selectSection(section)}
-                    className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold ${activeSection === section ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}
+                    className={`min-w-0 whitespace-normal break-words rounded-lg px-3 py-2 text-center text-sm font-semibold ${activeSection === section ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}
             </nav>
             {hasValidationErrors && validationErrorList.length > 0 && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm mb-6 animate-in fade-in slide-in-from-top-4">

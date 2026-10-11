@@ -54,3 +54,17 @@ test('parent variations are the last stage, while standalone children retain pro
  assert.match(form,/\['files','production'\].includes\(activeSection\)/);
  assert.match(form,/type="button" onClick=\{\(\) => selectSection\('variations'\)\}/);
 });
+
+test('form sections wrap in responsive rows and remain directly navigable without horizontal scrolling',()=>{
+ const nav=form.slice(form.indexOf('<nav id='),form.indexOf('</nav>')+6);
+ const jsx=(type,props)=>({type,props}); const selected=[];
+ const context={exports:{},require:()=>({jsx,jsxs:jsx}),variationDraftMode:false,isPrint3d:true,isParentProduct:true,activeSection:'basic',selectSection:section=>selected.push(section)};
+ vm.runInNewContext(ts.transpileModule('exports.nav=('+nav+');',{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,context);
+ const menu=context.exports.nav;
+ assert.match(menu.props.className,/grid-cols-2/); assert.match(menu.props.className,/xl:grid-cols-5/);
+ assert.doesNotMatch(menu.props.className,/overflow-x|flex-nowrap/);
+ assert.equal(menu.props.children.length,9);
+ for(const button of menu.props.children) {assert.equal(button.props.type,'button');assert.match(button.props.className,/min-w-0 whitespace-normal/);assert.doesNotMatch(button.props.className,/shrink-0|whitespace-nowrap/);button.props.onClick();}
+ assert.deepEqual(selected,['basic','specs','media','channels','files','production','commercial','fiscal','variations']);
+ assert.equal(menu.props.children[0].props['aria-current'],'page');
+});

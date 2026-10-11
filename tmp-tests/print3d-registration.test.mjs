@@ -28,6 +28,121 @@ const setup = () => ({ revision:'r1', sourceUrl:'https://makerworld.com/pt/model
   plates:[10,20,30].map((grams,i) => ({ id:`plate-${i+1}`, name:`Placa ${i+1}`, hours:i+1, minutes:0, notes:'', filaments:[{ id:'petg', grams }], files:[{ kind:'model', file:new File([`solid plate ${i}`],`plate-${i+1}.stl`) }] })),
 });
 const product = { id:'11111111-1111-4111-8111-111111111111', name:'Mini Branco - MINI0001-02', sku:'MINI0001-02' };
+
+test('A1 usa referência média de 95 W quando não há potência configurada e preserva ajustes',()=>{
+  const api=service(),settings={...setup().settings,printerWatts:0};
+  assert.equal(api.newPrint3dSetup(settings).settings.printerWatts,95);
+  assert.equal(settings.printerWatts,0);
+  assert.equal(api.newPrint3dSetup({...settings,printerWatts:135}).settings.printerWatts,135);
+  const copied=api.copyPrint3dSetup({...setup(),printer:'Bambu Lab A1',settings:{...settings,printerWatts:135}});
+  assert.equal(copied.settings.printerWatts,135);
+  const source=fs.readFileSync('components/products/Print3dRegistrationEditor.tsx','utf8');
+  assert.match(source,/value.settings.printerWatts === 0/);
+  assert.match(source,/Usar referência da A1/);
+  assert.match(source,/wiki.bambulab.com\/en\/a1\/manual\/faq/);
+});
+
+test('tarifa de energia fica visível e alimenta custo e revisão em centavos sem mudar a venda',async()=>{
+  const api=service(),value=setup();value.settings.energyCentsPerKwh=150;
+  const {cost}=api.print3dSetupParameters(value);
+  assert.equal(cost.energyCents,90);assert.equal(cost.batchCents,1590);
+  const priced=api.withPrint3dCost({price_retail:2500},value);
+  assert.equal(priced.price_cost,159);assert.equal(priced.price_retail,2500);
+  await api.savePrint3dRegistration(value,product);
+  assert.equal(api.saved[0].rateSnapshot.energyCentsPerKwh,150);
+  const source=fs.readFileSync('components/products/Print3dRegistrationEditor.tsx','utf8');
+  const label='Valor da energia (R$/kWh)';assert(source.indexOf(label)<source.indexOf('<details'));
+  assert.equal(source.split(label).length-1,1);
+  assert.match(source,/value=\{value.settings.energyCentsPerKwh\}/);
+  assert.match(source,/Potência da impressora \(W\)/);
+});
+
+test('ao reabrir a ficha, novos filamentos são incluídos sem perder edições nem mudar custos existentes', async () => {
+  const source=fs.readFileSync('components/products/Print3dRegistrationEditor.tsx','utf8');
+  const start=source.indexOf('  useEffect(() => {\n    if (!value) return;');
+  const end=source.indexOf('  const [colorHexes',start);
+  assert(start>=0 && end>start);
+  const old={id:'black',name:'PETG',color:'Preto',spoolCostCents:5750};
+  const value={pieces:10,settings:{filaments:[old]}};
+  const currentSetup={current:value},changes=[];let resolve;
+  const context={value,currentSetup,onChange:next=>changes.push(next),productId:undefined,Boolean,Set,setFilamentLoadError:()=>{},useEffect:callback=>callback(),print3dCostSettingsService:{get:()=>new Promise(r=>{resolve=r;})}};
+  vm.runInNewContext(ts.transpileModule(source.slice(start,end),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
+  currentSetup.current={...value,pieces:20};
+  resolve({filaments:[{...old,spoolCostCents:5650},{id:'white',name:'PLA',color:'Branco',spoolCostCents:7000}]});
+  await new Promise(r=>setImmediate(r));
+  assert.equal(changes.length,1);assert.equal(changes[0].pieces,20);
+  assert.equal(changes[0].settings.filaments.length,2);
+  assert.equal(changes[0].settings.filaments[0].spoolCostCents,5750);
+});
+
+test('custo fixo é rateado no lote e imposto compõe o mínimo sem mudar preço de venda', async () => {
+  const api=service(), value=setup();
+  value.settings.taxPercent=10;
+  value.supplies=[{id:'fixed',quantity:1,custom:{id:'fixed',name:'Manutenção rateada',unitLabel:'lote',unitCostCents:100}}];
+  const {cost}=api.print3dSetupParameters(value);
+  assert.equal(cost.batchCents,1660); assert.equal(cost.unitCents,166);
+  assert.equal(cost.minimumBatchSaleCents,1845); assert.equal(cost.minimumUnitSaleCents,185);
+  assert.equal(cost.estimatedTaxCents,185);
+  const priced=api.withPrint3dCost({price_retail:2500},value);
+  assert.equal(priced.price_cost,166); assert.equal(priced.price_retail,2500);
+  await api.savePrint3dRegistration(value,product);
+  assert.equal(api.saved[0].rateSnapshot.taxPercent,10);
+  assert.equal(api.saved[0].supplies[0].unitLabel,'lote');
+  value.settings.taxPercent=100; assert.throws(()=>api.print3dSetupParameters(value),/Imposto/);
+  const source=fs.readFileSync('components/products/Print3dRegistrationEditor.tsx','utf8');
+  assert.match(source,/Imposto estimado sobre a venda \(%\)/);
+  assert.match(source,/Adicionar custo fixo ao lote/);
+  assert.match(source,/totals.cost.minimumUnitSaleCents/);
+});
+
+test('duração mantém horas acima de 24 e rejeita minutos e segundos inválidos', () => {
+  const api = service();
+  for (const minutes of [0,150,1530,1.5]) assert.equal(api.parsePrint3dDuration(api.formatPrint3dDuration(minutes)),minutes);
+  assert.equal(api.formatPrint3dDuration(150),'02:30');
+  assert.equal(api.parsePrint3dDuration('25:30'),1530);
+  for (const invalid of ['02:60','-1:30','02:30:60','2.5','00:1','']) assert.equal(api.parsePrint3dDuration(invalid),undefined);
+});
+
+test('argolas e serviços próprios entram no cálculo e revisão sem alterar cadastro geral', async () => {
+  const api=service(), value=setup();
+  value.supplies=[{id:'argolas',quantity:10,custom:{id:'argolas',name:'Argola para chaveiro',unitLabel:'un',unitCostCents:15}},
+    {id:'montagem',quantity:1,custom:{id:'montagem',name:'Serviço de montagem',unitLabel:'lote',unitCostCents:200}}];
+  const cloned=api.copyPrint3dSetup(value); cloned.supplies[0].custom.unitCostCents=50;
+  assert.equal(value.supplies[0].custom.unitCostCents,15);
+  const priced=api.withPrint3dCost({price_retail:2500},value);
+  assert.equal(priced.price_cost,191); assert.equal(priced.price_retail,2500);
+  await api.savePrint3dRegistration(value,product);
+  assert.equal(api.saved[0].costSnapshot.suppliesCents,650);
+  assert.equal(api.saved[0].supplies[0].name,'Argola para chaveiro');
+  assert.equal(api.saved[0].supplies[0].unitCostCents,15);
+  assert.equal(value.settings.supplies.length,0);
+  value.supplies[0].custom.name=''; assert.throws(()=>api.print3dSetupParameters(value),/nome/);
+});
+
+test('parâmetros exibem amostras canônicas de cor e insumos editáveis fora das tarifas', () => {
+  const source=fs.readFileSync('components/products/Print3dRegistrationEditor.tsx','utf8');
+  assert.match(source,/filamentColorStyle\(f.color,f.colorNames/);
+  assert.match(source,/colorHexes\[name\] \|\| getColorHex\(name\)/);
+  assert.match(source,/renderLeading=\{label/);
+  assert.match(source,/Insumos e outros custos do lote/);
+  assert(source.indexOf('Insumos e outros custos do lote') < source.indexOf('<details'));
+  assert.match(source,/label="Custo por unidade"/);
+  assert.match(source,/Tempo da placa.*HH:MM/);
+});
+
+test('nova ficha sugere impressoras e começa na A1; cópia preserva o modelo escolhido', () => {
+  const api = service();
+  const fresh = api.newPrint3dSetup(setup().settings);
+  assert.equal(fresh.printer,'Bambu Lab A1');
+  assert.equal(api.PRINT3D_PRINTER_OPTIONS[0],fresh.printer);
+  assert(api.PRINT3D_PRINTER_OPTIONS.length > 1);
+  fresh.printer = 'Minha impressora personalizada';
+  assert.equal(api.copyPrint3dSetup(fresh).printer,'Minha impressora personalizada');
+  const source = fs.readFileSync('components/products/Print3dRegistrationEditor.tsx','utf8');
+  assert.match(source,/list=\{printerOptionsId\} value=\{value.printer\}/);
+  assert.match(source,/<datalist id=\{printerOptionsId\}>\{PRINT3D_PRINTER_OPTIONS.map/);
+  assert.match(source,/const printerOptionsId = useId\(\)/);
+});
 test('cópia do pai é independente e seu custo por produto não altera o preço de venda', () => {
   const api = service(), parent = setup();
   const child = api.copyPrint3dSetup(parent), sibling = api.copyPrint3dSetup(parent);

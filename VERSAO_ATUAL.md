@@ -1,3 +1,45 @@
+# v1.2.608-cadastro-3d-menus
+
+Data: 11/10/2026. Branch: main. Tag: v1.2.608-cadastro-3d-menus.
+Release MDV: /var/www/mdv-site/releases/20261011-230349-cadastro-3d-menus.
+Status: pronta para publicar.
+
+Cadastro 3D: impressoras sugeridas com Bambu Lab A1 preenchida, filamentos com amostras de cor e inclusao de novos IDs cadastrados, duracoes HH:MM inclusive acima de 24h, insumos editaveis por lote, custos fixos, imposto estimado e energia. A referencia editavel da A1 e 95 W medios para PLA em 220 V, conforme https://wiki.bambulab.com/en/a1/manual/faq. Consumo em kWh = W / 1000 x horas; custo usa a tarifa informada. Custos e consumos salvos continuam preservados. Copia do pai permanece independente.
+
+Peso em kg com preenchimento de tres casas decimais ao digitar. Menus de produtos agrupados em Cadastro, Sites e vendas, Midia e impressao; abas do formulario em grade responsiva sem rolagem horizontal.
+
+Catalogo solicita produtos compactos e invalida o cache anterior, mantendo informacoes comerciais dos cartoes. No preview local, filamentos centrais e pendentes sao combinados por ID sem alterar registros ou aprovacoes; esse servico e exclusivo do ambiente local.
+
+Escopo: frontend/painel MDV e servico de preview local versionado. API e site 3DMV preservados; nenhum deploy de API, migration ou alteracao de flags.
+
+Validacoes: 80 testes focados (cadastro, custos, rascunhos, familia, filamentos, medidas, menus e catalogo), suite money, sintaxe de localPrint3dFilaments.cjs e servidores existentes. Build e validacao de producao seguem no fechamento.
+
+Arquivos da entrega:
+- components/products/Print3dProductEntry.tsx
+- components/products/Print3dRegistrationEditor.tsx
+- components/products/ProductForm.tsx
+- components/products/sections/ProductSpecifications.tsx
+- pages/admin/products/ProductListPage.tsx
+- services/catalogSectionsService.ts
+- services/localPrint3dFilaments.cjs
+- services/print3dRegistration.ts
+- tmp-tests/catalog-public-image-fallback-static.test.mjs
+- tmp-tests/catalog-public-regressions-static.test.mjs
+- tmp-tests/catalog-sections-cache-validity.test.cjs
+- tmp-tests/local-print3d-filaments.test.cjs
+- tmp-tests/print3d-measurements.test.cjs
+- tmp-tests/print3d-product-entry.test.cjs
+- tmp-tests/print3d-product-specifications-render.test.cjs
+- tmp-tests/print3d-registration.test.mjs
+- tmp-tests/product-create-feedback.test.cjs
+- tmp-tests/product-list-actions.test.cjs
+- utils/print3dMeasurements.js
+- public/VERSION.json
+- VERSAO_ATUAL.md
+- docs/versoes/2026-10-11-v1.2.608-cadastro-3d-menus.md
+
+## Historico anterior
+
 # v1.2.607-rascunhos-placas-precos
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.607-rascunhos-placas-precos.

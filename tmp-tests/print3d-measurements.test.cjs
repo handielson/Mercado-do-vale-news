@@ -10,6 +10,21 @@ function load(file, requireImpl = name => require(name)) {
 }
 const measurements = load('utils/print3dMeasurements.js');
 const product = { specs: { material: 'PETG', size: 'Grande' }, dimensions: { height_cm: 3.5, width_cm: 2, depth_cm: 1.2 }, weight_kg: 0.012 };
+
+test('weight fills three kg decimals while typing and keeps existing kg on reopen', () => {
+  for (const [digits,kg,display] of [['1',0.001,'0,001'],['10',0.01,'0,010'],['100',0.1,'0,100'],['1000',1,'1,000'],['1250',1.25,'1,250']]) {
+    assert.equal(measurements.parsePrint3dWeightInput(digits),kg);
+    assert.equal(measurements.formatPrint3dWeightInput(kg),display);
+    assert.equal(measurements.parsePrint3dWeightInput(display),kg);
+  }
+  assert.equal(measurements.formatPrint3dWeightInput(10),'10,000');
+  assert.equal(measurements.parsePrint3dWeightInput(''),null);
+  assert.equal(measurements.formatPrint3dWeightInput(null),'');
+  assert.equal(measurements.formatPrint3dWeightInput(0),'0,000');
+  const source=fs.readFileSync('components/products/sections/ProductSpecifications.tsx','utf8');
+  assert.match(source,/value=\{formatPrint3dWeightInput\(watch\('weight_kg'\)\)\}/);
+  assert.match(source,/setValue\('weight_kg', parsePrint3dWeightInput\(event.target.value\)/);
+});
 test('combines existing dimensions and weight with units and Brazilian decimals', () => {
   assert.equal(measurements.formatPrint3dMeasurements(product), 'Altura: 35 mm • Largura: 20 mm • Profundidade: 12 mm • Peso: 0,012 kg');
 });
