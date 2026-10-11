@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { webcrypto, createHash } from 'node:crypto';
 import { buildPrint3dRecipeDraft } from '../utils/print3dRecipeDraft.mjs';
 import { calculatePrint3dCost } from '../utils/print3dCost.mjs';
@@ -28,6 +30,54 @@ const setup = () => ({ revision:'r1', sourceUrl:'https://makerworld.com/pt/model
   plates:[10,20,30].map((grams,i) => ({ id:`plate-${i+1}`, name:`Placa ${i+1}`, hours:i+1, minutes:0, notes:'', filaments:[{ id:'petg', grams }], files:[{ kind:'model', file:new File([`solid plate ${i}`],`plate-${i+1}.stl`) }] })),
 });
 const product = { id:'11111111-1111-4111-8111-111111111111', name:'Mini Branco - MINI0001-02', sku:'MINI0001-02' };
+
+function renderEditor(value) {
+  const exports={}, api=service();
+  const compiled=ts.transpileModule(fs.readFileSync('components/products/Print3dRegistrationEditor.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
+  vm.runInNewContext(compiled,{exports,require:name=>{
+    if(name==='react') return React;
+    if(name==='sonner') return {toast:{}};
+    if(name.endsWith('/CurrencyInput')) return {CurrencyInput:({label})=>React.createElement('span',null,label)};
+    if(name.endsWith('/SearchableSelect')) return {SearchableSelect:()=>null};
+    if(name.endsWith('/colors')) return {colorService:{},getColorHex:()=> '#ffffff'};
+    if(name.endsWith('/print3dFilamentInventory.mjs')) return {filamentColorStyle:()=>({})};
+    if(name.endsWith('/print3dCostSettings')) return {print3dCostSettingsService:{}};
+    if(name.endsWith('/print3dRecipes')) return {print3dRecipesService:{}};
+    if(name.endsWith('/print3dRecipeFiles')) return {print3dRecipeFilesService:{}};
+    if(name.endsWith('/print3dRegistration')) return api;
+    if(name.endsWith('/localCatalogPreview')) return {isLocalCatalogPreviewRuntime:()=>false};
+    throw Error('Unexpected editor import: '+name);
+  }});
+  return renderToStaticMarkup(React.createElement(exports.Print3dRegistrationEditor,{value,onChange:()=>{},view:'parameters'})).replace(/[\u00a0\u202f]/g,' ');
+}
+
+test('campo final renderiza todos os custos por unidade com imposto, sem alterar preco de venda',()=>{
+  const value=setup();value.settings.taxPercent=6;value.settings.printerWatts=95;value.settings.energyCentsPerKwh=150;value.laborMinutes=12;
+  value.supplies=[{id:'fixed',quantity:1,custom:{id:'fixed',name:'Custo fixo',unitLabel:'lote',unitCostCents:100}},
+    {id:'argola',quantity:10,custom:{id:'argola',name:'Argola',unitLabel:'un',unitCostCents:25}}];
+  const api=service(),cost=api.print3dSetupParameters(value).cost;
+  for(const key of ['filamentCents','energyCents','machineCents','laborCents','suppliesCents','estimatedTaxCents']) assert(cost[key]>0,key);
+  const html=renderEditor(value);
+  assert.match(html,/Custo final por unidade/);
+  assert.equal((html.match(/<output\b/g)||[]).length,1);
+  assert.equal(html.match(/<output[^>]*>(.*?)<\/output>/)[1],(cost.minimumUnitSaleCents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}).replace(/\u00a0/g,' '));
+  assert.match(html,/<details[^>]*><summary[^>]*>Detalhamento do cálculo/);
+  assert.doesNotMatch(html,/Mínimo para cobrir custo e imposto|Por produto:/);
+  assert.equal(api.withPrint3dCost({price_retail:2500},value).price_retail,2500);
+  value.settings.taxPercent=0;
+  assert.equal(renderEditor(value).match(/<output[^>]*>(.*?)<\/output>/)[1],(api.print3dSetupParameters(value).cost.unitCents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}).replace(/\u00a0/g,' '));
+});
+
+test('campo final aguarda energia em vez de apresentar custo incompleto como final',()=>{
+  const value=setup();value.settings.energyCentsPerKwh=0;
+  let html=renderEditor(value);
+  assert.match(html,/<output[^>]*>Aguardando energia<\/output>/);
+  assert.match(html,/Preencha o valor da energia \(R\$\/kWh\)/);
+  value.settings.energyCentsPerKwh=100;value.settings.printerWatts=0;
+  html=renderEditor(value);assert.match(html,/Preencha a potência da impressora \(W\)/);
+  value.settings.printerWatts=95;
+  assert.doesNotMatch(renderEditor(value),/Aguardando energia/);
+});
 
 test('A1 usa referência média de 95 W quando não há potência configurada e preserva ajustes',()=>{
   const api=service(),settings={...setup().settings,printerWatts:0};

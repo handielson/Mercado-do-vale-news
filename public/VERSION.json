@@ -1,27 +1,25 @@
 {
-  "version": "v1.2.609-rascunhos-json",
+  "version": "v1.2.610-custo-final-unidade",
   "date": "2026-10-11",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.609-rascunhos-json",
-  "release_vps": "/var/www/mdv-site/releases/20261011-231242-rascunhos-json",
+  "tag": "v1.2.610-custo-final-unidade",
+  "release_vps": "/var/www/mdv-site/releases/20261011-232624-custo-final-unidade",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Corrige dupla decodificacao JSON na listagem dos rascunhos, preservando dados e arquivos existentes.",
+  "summary": "Campo unico de custo final por unidade com todos os custos informados e imposto; detalhamento recolhivel e aviso de energia pendente.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "services/productFormDraftsServer.cjs",
-    "scripts/deploy-product-registration.cjs",
-    "tmp-tests/product-form-drafts.test.cjs",
-    "tmp-tests/deploy-product-registration.test.cjs",
+    "components/products/Print3dRegistrationEditor.tsx",
+    "tmp-tests/print3d-registration.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-11-v1.2.609-rascunhos-json.md"
+    "docs/versoes/2026-10-11-v1.2.610-custo-final-unidade.md"
   ],
   "validations": [
-    "38 testes focados aprovados, com reproducao do erro antes da correcao.",
-    "Sintaxe do modulo, publisher e servidores; preflight seletivo da API, build e validacao publica registrados na nota."
+    "20 testes de custo e cadastro 3D aprovados, incluindo renderizacao do campo final.",
+    "Build e verificacao publica registrados na nota da versao."
   ]
 }

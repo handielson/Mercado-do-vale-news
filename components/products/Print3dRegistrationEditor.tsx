@@ -31,6 +31,7 @@ export function Print3dRegistrationEditor({ value, onChange, productId, disabled
   view?:'all' | 'files' | 'parameters'; template?:boolean;
 }) {
   const printerOptionsId = useId();
+  const finalCostId = useId();
   const currentSetup = useRef(value);
   currentSetup.current = value;
   const [filamentLoadError,setFilamentLoadError] = useState('');
@@ -104,6 +105,7 @@ export function Print3dRegistrationEditor({ value, onChange, productId, disabled
   let totals:ReturnType<typeof print3dSetupParameters> | undefined;
   let costError = '';
   if (value) { try { totals = print3dSetupParameters(value); } catch (e) { costError = e instanceof Error ? e.message : 'Preencha os custos.'; } }
+  const energyMissing = Boolean(totals && totals.printMinutes > 0 && value && (value.settings.energyCentsPerKwh <= 0 || value.settings.printerWatts <= 0));
   const numeric = (label:string, number:number, update:(n:number)=>void, step = 'any') => <label className="block text-sm text-slate-700">{label}<input className={inputClass} type="number" min="0" step={step} value={number || ''} onChange={e => update(Number(e.target.value))} /></label>;
   return <fieldset disabled={disabled || busy} className="space-y-4 rounded-xl border border-violet-200 bg-white p-4 disabled:opacity-60">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -232,12 +234,23 @@ export function Print3dRegistrationEditor({ value, onChange, productId, disabled
         <a className="ml-4 text-sm text-blue-700 underline" href="/admin/loja-3d/calculadora" target="_blank" rel="noreferrer">Tarifas e outros insumos</a>
       </details>
       <label className="block text-sm">Instruções gerais / montagem<textarea className={inputClass} rows={2} maxLength={1000} value={value.notes} onChange={e => change({ notes:e.target.value })} /></label>
-      {totals && <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-950"><p>{value.plates.length} placa(s) → {value.pieces} produto(s) completos · {totals.materialGrams.toLocaleString('pt-BR')} g · {totals.printMinutes.toLocaleString('pt-BR')} min</p><p className="mt-1 font-bold">Custo do lote: {money(totals.cost.batchCents)} · Por produto: {money(totals.cost.unitCents)}</p><p className="mt-1 text-xs">Filamento {money(totals.cost.filamentCents)} · Energia {money(totals.cost.energyCents)} · Máquina {money(totals.cost.machineCents)} · Mão de obra {money(totals.cost.laborCents)} · Insumos {money(totals.cost.suppliesCents)}</p></div>}
-      {totals && view !== 'files' && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-        <p>Provisão de imposto ({totals.cost.taxPercent.toLocaleString('pt-BR')}%): <strong>{money(totals.cost.estimatedTaxCents)} no lote</strong></p>
-        <p className="mt-1 font-semibold">Mínimo para cobrir custo e imposto: {money(totals.cost.minimumBatchSaleCents)} por lote · {money(totals.cost.minimumUnitSaleCents)} por produto</p>
-        <p className="mt-1 text-xs">Estimativa sem margem de lucro. Cálculo: custo ÷ (1 − imposto / 100). O arredondamento por produto pode aumentar o total; o preço de venda não é alterado automaticamente.</p>
-      </div>}
+      {totals && view !== 'files' && <section aria-label="Resumo do custo" className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950">
+        <label htmlFor={finalCostId} className="block text-sm font-semibold">Custo final por unidade</label>
+        <output id={finalCostId} aria-live="polite" className="block rounded-lg border border-emerald-200 bg-white px-4 py-3 text-3xl font-bold">{energyMissing ? 'Aguardando energia' : money(totals.cost.minimumUnitSaleCents)}</output>
+        {energyMissing ? <p role="status" className="text-sm font-medium text-amber-900">Preencha {value.settings.energyCentsPerKwh <= 0 ? 'o valor da energia (R$/kWh)' : 'a potência da impressora (W)'} para incluir a energia e apresentar o custo final.</p> : <p className="text-sm">Inclui filamento, energia, máquina, mão de obra, insumos, custos fixos e imposto informado ({totals.cost.taxPercent.toLocaleString('pt-BR')}%), divididos entre {value.pieces} produtos completos.</p>}
+        <p className="text-xs">Calculado automaticamente com os valores informados, sem margem de lucro. O preço de venda é definido na aba Preços.</p>
+        <details className="rounded-lg border border-emerald-200 bg-white p-3 text-sm">
+          <summary className="cursor-pointer font-semibold">Detalhamento do cálculo</summary>
+          <div className="mt-3 space-y-2">
+            <p>{value.plates.length} placa(s) · {value.pieces} produtos completos · {totals.materialGrams.toLocaleString('pt-BR')} g · {totals.printMinutes.toLocaleString('pt-BR')} min</p>
+            <p>Filamento: {money(totals.cost.filamentCents)} · Energia: {money(totals.cost.energyCents)} · Máquina: {money(totals.cost.machineCents)} · Mão de obra: {money(totals.cost.laborCents)} · Insumos e custos fixos: {money(totals.cost.suppliesCents)}</p>
+            <p>Custo de produção do lote: {money(totals.cost.batchCents)}</p>
+            <p>Imposto estimado ({totals.cost.taxPercent.toLocaleString('pt-BR')}%): {money(totals.cost.estimatedTaxCents)} no lote</p>
+            <p>Total do lote com imposto{energyMissing ? ', ainda sem energia' : ''}: {money(totals.cost.minimumBatchSaleCents)}</p>
+            <p className="text-xs text-slate-600">O imposto é estimado sobre o mínimo necessário para cobrir os custos, sem lucro. O custo por unidade é arredondado para cima em centavos.</p>
+          </div>
+        </details>
+      </section>}
       {costError && <p className="text-sm text-amber-800">{costError}</p>}
       <p className="text-xs text-slate-600">{template ? 'Esta base fica privada no pai para cópia explícita. Cada variação recebe sua própria ficha; editar a base não atualiza cópias anteriores.' : 'Salvar cria uma revisão privada imutável. Para utilizá-la em novas produções, confira os arquivos e selecione a revisão na ficha de produção. Cada placa precisa de um arquivo imprimível; ordens antigas mantêm sua revisão.'}</p>
     </>}

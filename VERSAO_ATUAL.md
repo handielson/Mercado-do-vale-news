@@ -1,3 +1,26 @@
+# v1.2.610-custo-final-unidade
+
+Data: 11/10/2026. Branch: main. Tag: v1.2.610-custo-final-unidade.
+Release MDV: /var/www/mdv-site/releases/20261011-232624-custo-final-unidade.
+Status: pronta para publicar.
+
+Resumo do cadastro 3D apresenta um unico campo destacado: Custo final por unidade. Usa minimumUnitSaleCents do calculador canonico, incluindo filamento, energia, maquina, mao de obra, insumos, custos fixos e imposto informado, rateados pelos produtos completos. Trata-se do minimo para cobrir custos e imposto, sem margem de lucro; o imposto e estimado sobre esse minimo. Nao altera preco de venda nem o custo de producao gravado no produto.
+
+Detalhamento do calculo fica recolhido abaixo do campo. Quando existe tempo de impressao mas falta tarifa de energia ou potencia, mostra Aguardando energia, sem apresentar o parcial como custo final. Mostra a orientacao para completar o campo faltante; zero nao e substituido por tarifa inventada.
+
+Escopo: componente do cadastro e protecao regressiva. Sem mudanca na API, dados, arquivos, formulas ou tarifas salvas.
+
+Validacoes: 20 testes focados passaram, incluindo renderizacao real do editor com todos os custos, imposto zero/positivo e energia pendente. Previa local confirmou valor unitario R$ 0,54 para exemplo de 24 unidades, 3h48 e tarifa R$ 1,00/kWh. Build local aprovado. Build versionado e verificacao publica seguem no fechamento.
+
+Arquivos da entrega:
+- components/products/Print3dRegistrationEditor.tsx
+- tmp-tests/print3d-registration.test.mjs
+- public/VERSION.json
+- VERSAO_ATUAL.md
+- docs/versoes/2026-10-11-v1.2.610-custo-final-unidade.md
+
+## Historico anterior
+
 # v1.2.609-rascunhos-json
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.609-rascunhos-json.
