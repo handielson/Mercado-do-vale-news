@@ -1,3 +1,15 @@
+# v1.2.604-filamentos-amostras
+
+Data: 11/10/2026. Branch: main. Tag: v1.2.604-filamentos-amostras.
+Release: /var/www/mdv-site/releases/20261011-162111-filamentos-amostras.
+Status: preparada; publicacao e validacao pendentes.
+
+Amostras antes dos nomes no seletor filtravel de cores dos filamentos, na lista e no valor selecionado. Cor simples e degrade de duas ou tres cores usam a mesma lista cadastrada e os tons personalizados. Contratos de estoque e custos preservados.
+
+Publicacao exclusiva do painel/site MDV, com build isolado; sem API, migration, gravacao comercial ou aprovacao de rascunhos. Detalhes: docs/versoes/2026-10-11-v1.2.604-filamentos-amostras.md.
+
+## Historico
+
 # v1.2.603-cores-translucidas
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.603-cores-translucidas.

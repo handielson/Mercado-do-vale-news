@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 interface SearchableSelectProps {
   id: string;
@@ -8,10 +8,11 @@ interface SearchableSelectProps {
   disabled?: boolean;
   placeholder?: string;
   className?: string;
+  renderLeading?: (option: string) => ReactNode;
 }
 
 // Search text is not a new option: only a registered value can be selected.
-export function SearchableSelect({ id, value, options, onChange, disabled = false, placeholder = 'Digite para buscar...', className }: SearchableSelectProps) {
+export function SearchableSelect({ id, value, options, onChange, disabled = false, placeholder = 'Digite para buscar...', className, renderLeading }: SearchableSelectProps) {
   const [query, setQuery] = useState(value);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -28,7 +29,7 @@ export function SearchableSelect({ id, value, options, onChange, disabled = fals
       aria-autocomplete="list" aria-expanded={open && !disabled} aria-controls={`${id}-options`}
       aria-activedescendant={open && active >= 0 ? `${id}-option-${active}` : undefined}
       disabled={disabled} value={query} placeholder={placeholder}
-      className={className || 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm'}
+      className={`${className || 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm'} ${renderLeading ? 'pl-10' : ''}`}
       onFocus={() => { setQuery(''); setOpen(true); setActive(-1); }}
       onBlur={close}
       onChange={event => {
@@ -48,9 +49,13 @@ export function SearchableSelect({ id, value, options, onChange, disabled = fals
         } else if (event.key === 'Escape') { event.preventDefault(); close(); }
       }}
     />
+    {renderLeading && value && query === value && <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 flex -translate-y-1/2 items-center">{renderLeading(value)}</span>}
     {open && !disabled && <ul ref={list} id={`${id}-options`} role="listbox" aria-label="Opções disponíveis" className="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
       {filtered.map((option, index) => <li key={option} id={`${id}-option-${index}`} role="option" aria-selected={option === value}>
-        <button type="button" tabIndex={-1} onMouseDown={event => event.preventDefault()} onClick={() => select(option)} className={`block w-full px-3 py-2 text-left text-sm hover:bg-violet-50 ${index === active || option === value ? 'bg-violet-50 font-medium text-violet-800' : 'text-slate-700'}`}>{option}</button>
+        <button type="button" tabIndex={-1} onMouseDown={event => event.preventDefault()} onClick={() => select(option)} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-violet-50 ${index === active || option === value ? 'bg-violet-50 font-medium text-violet-800' : 'text-slate-700'}`}>
+          {renderLeading && <span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center">{renderLeading(option)}</span>}
+          <span>{option}</span>
+        </button>
       </li>)}
       {!filtered.length && <li role="presentation" className="px-3 py-2 text-sm text-slate-500">Nenhuma opção encontrada.</li>}
     </ul>}

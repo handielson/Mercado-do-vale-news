@@ -1,32 +1,26 @@
 {
-  "version": "v1.2.603-cores-translucidas",
+  "version": "v1.2.604-filamentos-amostras",
   "date": "2026-10-11",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.603-cores-translucidas",
-  "release_vps": "/var/www/mdv-site/releases/20261011-160009-cores-translucidas",
+  "tag": "v1.2.604-filamentos-amostras",
+  "release_vps": "/var/www/mdv-site/releases/20261011-162111-filamentos-amostras",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261010-211100-sku-nome-automatico",
-  "summary": "Paleta com 13 sugestoes translucidas, amostras quadriculadas e tons personalizados preservados; cores solidas e translucidas permanecem separadas no estoque.",
+  "summary": "Amostra antes do nome no seletor filtravel de cores dos filamentos, incluindo as duas ou tres cores do degrade e tons translucidos personalizados.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/products/selectors/ColorSelect.tsx",
-    "components/products/selectors/ColorSmartSelect.tsx",
-    "components/settings/ColorModal.tsx",
-    "pages/admin/settings/ColorsPage.tsx",
-    "services/colors.ts",
-    "utils/colorAppearance.mjs",
-    "utils/print3dFilamentInventory.mjs",
-    "tmp-tests/colors-refresh.test.cjs",
-    "tmp-tests/translucent-colors.test.mjs",
+    "components/print3d/FilamentCatalog.tsx",
+    "components/ui/SearchableSelect.tsx",
+    "tmp-tests/filament-color-select.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-11-v1.2.603-cores-translucidas.md"
+    "docs/versoes/2026-10-11-v1.2.604-filamentos-amostras.md"
   ],
   "validations": [
-    "28 testes de cores, cache, amostras, catalogo/API de filamentos e estoque.",
+    "28 testes de render, filtro, selecao, cores e catalogo/API de filamentos e estoque.",
     "Build e deploy do commit isolado, com trava contra runtime Supabase.",
     "Validacao publica e Chrome autenticado sem salvar fixtures; API, banco, rascunhos e site publico 3DMV preservados."
   ]
