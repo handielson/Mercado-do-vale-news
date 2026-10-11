@@ -2,7 +2,7 @@
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.607-rascunhos-placas-precos.
 Release MDV: /var/www/mdv-site/releases/20261011-214056-rascunhos-placas-precos.
-Status: pronta para publicacao; validacao publica pendente.
+Status: publicada e validada em producao. Commit da release: 3b0d49bc.
 
 Rascunhos compartilhados do cadastro incompleto de produtos, com lista para continuar em qualquer computador e controle de revisao contra sobrescrita concorrente. Salvar rascunho preserva formulario, variacoes, arquivos e parametros sem criar produto ou estoque. Concluir e arquivar preservam o registro privado.
 
@@ -43,6 +43,52 @@ Arquivos da entrega:
 - public/VERSION.json
 - VERSAO_ATUAL.md
 - docs/versoes/2026-10-11-v1.2.607-rascunhos-placas-precos.md
+
+## Fechamento da publicacao
+
+Publicado e validado em 11/10/2026. Commit da release: 3b0d49bc. Tag v1.2.607-rascunhos-placas-precos enviada ao origin; main sincronizada.
+
+API seletiva reiniciada; backup de recuperacao: /var/www/mdv-api/backups/product-form-drafts-1791755040721. Status HTTP 200 com mysql.ok=true; rascunhos anonimos HTTP 401. Nenhuma migration ou flag alterada. Site completo publicado na release acima; home e lista de rascunhos HTTP 200, VERSION.json confere. As rotas Nginx ativas ja abrangem /admin/products/drafts pelo padrao de produtos; nao foi necessario recarregar Nginx.
+
+Chrome autenticado conferiu lista de rascunhos sem falhas, abas Arquivos e URL, Parametros e placas, Precos e Variacoes por ultimo, base do pai e arquivos por placa. Sem gravar produtos, rascunhos ou uploads de teste em producao. Edicao independente, custos e retomada com arquivos foram verificados localmente. Sem erro de console; aviso preexistente de companyContext usa ID padrao VPS. Build: aviso Browserslist desatualizado, sem falha; guardas de runtime/editor aprovadas. Aviso local do helper de credenciais Git nao impediu push do commit/tag. Publicacao executada pela skill publish-vps; sem atualizacao da skill.
+
+Temporarios de build/deploy/auditoria removidos; evidencia de tela mantida em .local/publish-607-production.png. Alteracoes preexistentes preservadas: docs/print3d-production.md (somente os novos paragrafos desta entrega foram stageados), scripts/shopee-auto-print.cjs, docs/operacional/2026-10-07-shopee-glaucia-impressao-lenovo.md, scripts/prepare-shopee-personal-account-update.cjs, tmp-tests/fixtures/print3d-plate-ui.stl e tmp-tests/shopee-personal-account-update.test.cjs.
+
+Auditoria obrigatoria: 0 candidatos, 0 removidos e 34 worktrees bloqueadas preservadas:
+- C:/tmp/mdv-model-fix-clean — dirty
+- C:/tmp/mdv-phone-filter — dirty
+- C:/tmp/mdv-publish-surgical-20260612-b — dirty
+- C:/tmp/mdv-refactor-repair-20260612 — dirty
+- C:/tmp/mdv-virtual-ram-deploy — dirty
+- C:/Users/Nitro/Documents/Codex/2026-10-02/task/ml-local-preview — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-phone-memory-filter-20260801 — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-price-followup-20260716 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-product-search-specialist-20260725 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/n8n-remove-generic-freight-example-20260718 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/.worktrees/sale-message-order-number-20260716 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mdv-perf-main — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-admin-app — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-displays-pix — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/android-sales-push-20260728 — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/autoresponder-integrate — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/autoresponder-reformulation — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/meta-smartphones-sem-preco-20260825 — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/new-model-regressions — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/pdp-model-shortcut-publish — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/pdv-sale-repair-publish — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-autoresponder-editable — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-family-page-jump — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-receipt-private-payment-20260613 — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-sales-summary-20260613 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/publish-whatsapp-order — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/repair-refactor-product-build — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/signed-warranty-synology — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/system-backup-admin-20260613 — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/tiktok-bulk-release-20260727 — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/.worktrees/tiktok-shop-foundation — not_merged_into_origin_main
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-n8n-context-handoff-fix — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-publish-novo-bot — dirty
+- C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-status-contacts-fix — dirty
 
 ## Historico
 
