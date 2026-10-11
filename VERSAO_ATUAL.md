@@ -3,9 +3,9 @@
 Data: 10/10/2026. Branch: main. Tag: v1.2.599-medidas-3d-mm.
 Release MDV: /var/www/mdv-site/releases/20261010-235533-medidas-3d-mm.
 Release 3DMV: /var/www/print3d-site/releases/20261010-235533-medidas-3d-mm.
-Status: preparada para publicação.
+Status: publicada e validada em produção. Commit da release: b4f6faaa.
 
-Altura, largura e profundidade em mm na aba Características e nos anúncios dos dois sites. Um único conjunto de medidas: dimensions em cm no contrato interno, convertido na interface; peso em kg. API pública envia as medidas existentes, sem duplicar campos ou alterar descrição do pai. Preview conserva rascunhos locais até aprovação. 40 testes aprovados; builds, publicação seletiva da API e validação pública previstos. Quatro arquivos Shopee preexistentes fora do escopo.
+Altura, largura e profundidade em mm na aba Características e nos anúncios dos dois sites. Um único conjunto de medidas: dimensions em cm no contrato interno, convertido na interface; peso em kg. API pública envia as medidas existentes, sem duplicar campos ou alterar descrição do pai. Preview conserva rascunhos locais até aprovação. 40 testes e dois builds aprovados. Releases MDV e 3DMV ativas; ambos os domínios respondem 200 com VERSION.json correto. Dois módulos da API publicados seletivamente com backup; mdv-api online e mysql.ok=true. Navegador confirmou os quatro campos e prévia 35/20/12 mm sem salvar produto. Manutenção pública 3DMV mantida. Quatro arquivos Shopee preexistentes preservados. Auditoria: zero removidos, 34 bloqueados preservados (lista no registro desta versão).
 
 ## Histórico
 
