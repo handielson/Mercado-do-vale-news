@@ -20,7 +20,11 @@ function fixture() {
     if (sql.startsWith('INSERT')) { if (!records.has(args[0])) records.set(args[0], JSON.parse(args[1])); return [{}]; }
     if (sql.startsWith('UPDATE')) { records.set(args[1], JSON.parse(args[0])); return [{}]; }
     if (sql.includes('$.savedProductId')) return [[...[...records.values()].reverse().filter(row=>row.status==='completed' && row.savedProductId===args[1]).slice(0,1).map(value_json=>({value_json}))]];
-    if (sql.includes('JSON_EXTRACT')) return [[...records.values()].filter(row=>row.status==='pending').map(({snapshot:state,...meta})=>Object.fromEntries(Object.entries({...meta,is_print3d:!!state.data.is_print3d,is_parent:!!state.data.is_parent}).map(([key,value])=>[key,JSON.stringify(value)])))];
+    // mysql2 parses JSON-typed columns automatically; CHAR projections stay serialized.
+    if (sql.includes('JSON_EXTRACT')) return [[...records.values()].filter(row=>row.status==='pending').map(({snapshot:state,...meta})=>Object.fromEntries(Object.entries({...meta,is_print3d:state.data.is_print3d ?? null,is_parent:state.data.is_parent ?? null}).map(([key,value])=>{
+      const jsonPath = ['is_print3d','is_parent'].includes(key) ? 'snapshot.data.'+key : key;
+      return [key,sql.includes(`CAST(JSON_EXTRACT(value_json,'$.${jsonPath}') AS CHAR)`) ? JSON.stringify(value) : value];
+    })))];
     return [[...(records.has(args[0]) ? [{value_json:records.get(args[0])}] : [])]];
   };
   const connection = { query, async beginTransaction(){backup=structuredClone(records);}, async commit(){}, async rollback(){records.clear();for(const entry of backup)records.set(...entry);}, release(){} };
@@ -36,6 +40,26 @@ async function appFixture() {
   return {...db,app,root,async close(){await app.close();await fsp.rm(root,{recursive:true,force:true});}};
 }
 const headers = {authorization:'Bearer test'};
+
+test('lista leve preserva UUID, textos semelhantes a JSON, booleanos e revisao com mysql2',async()=>{
+  const ctx=await appFixture();try {
+    for (const title of ['Produto 3D','123','true','null','"Texto entre aspas"','[1,2]','Peça azul 🟦']) {
+      const state=snapshot();state.data.name=title;state.data.is_print3d=true;
+      const previous=ctx.records.get(PREFIX+ID);
+      const saved=await ctx.app.inject({method:'PUT',url:`/admin/product-form-drafts/${ID}`,headers,payload:{revision:previous?.revision || 0,snapshot:state}});
+      assert.equal(saved.statusCode,200);
+      const list=await ctx.app.inject({url:'/admin/product-form-drafts',headers});
+      assert.equal(list.statusCode,200);
+      const draft=list.json().drafts[0];
+      assert.equal(draft.id,ID);assert.equal(draft.title,title);assert.equal(draft.status,'pending');
+      assert.equal(draft.revision,saved.json().revision);assert.equal(draft.is_print3d,true);assert.equal(draft.is_parent,true);
+      assert.equal(draft.updated_at,saved.json().updated_at);assert.equal(draft.snapshot,undefined);
+    }
+    const record=ctx.records.get(PREFIX+ID);record.snapshot.data.is_print3d=false;delete record.snapshot.data.is_parent;
+    const draft=(await ctx.app.inject({url:'/admin/product-form-drafts',headers})).json().drafts[0];
+    assert.equal(draft.is_print3d,false);assert.equal(draft.is_parent,null);
+  }finally{await ctx.close();}
+});
 test('base do pai fica privada, é retomada após concluir e pode ser removida numa nova confirmação',async()=>{
   const ctx=await appFixture();try {
     const state = snapshot();state.activeSection='files';state.productionSetups.parent={sourceUrl:'https://makerworld.com/model',pieces:10,plates:[]};

@@ -1,7 +1,22 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { patchModule, patchEntry, patchDraftEntry, schemaReady, setRecipeFlag, MODULES } = require('../scripts/deploy-product-registration.cjs');
+const { patchModule, patchEntry, patchDraftEntry, deployProductDrafts, schemaReady, setRecipeFlag, MODULES } = require('../scripts/deploy-product-registration.cjs');
+
+test('draft update accepts the reviewed installed module, retries safely and rejects remote drift',async()=>{
+  const module='services/productFormDraftsServer.cjs';
+  const baseline=require('node:child_process').execFileSync('git',['show','v1.2.607-rascunhos-placas-precos:'+module],{encoding:'utf8'});
+  const updated=fs.readFileSync(module,'utf8');
+  for (const source of [baseline,updated,'']) await deployProductDrafts({
+    root:process.cwd(),appDir:'/var/www/mdv-api',apiProc:{name:'mdv-api',pm2_env:{pm_exec_path:'/var/www/mdv-api/server.js'}},checkOnly:true,
+    read:async remote=>remote.endsWith('/'+module) ? source : fs.readFileSync('vps_server.cjs','utf8'),
+    write:async()=>assert.fail('Preflight must not write'),exec:async()=>assert.fail('Preflight must not restart'),
+  });
+  await assert.rejects(deployProductDrafts({
+    root:process.cwd(),appDir:'/var/www/mdv-api',apiProc:{name:'mdv-api',pm2_env:{pm_exec_path:'/var/www/mdv-api/server.js'}},checkOnly:true,
+    read:async()=>baseline+'\n// unknown remote change',write:async()=>assert.fail('Drift must not write'),exec:async()=>assert.fail('Drift must not restart'),
+  }),/differs/);
+});
 
 test('draft publisher adds only its authenticated hook and preserves remote integrations', () => {
   const source = fs.readFileSync('vps_server.cjs','utf8');

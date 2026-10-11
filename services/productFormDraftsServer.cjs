@@ -29,7 +29,20 @@ function registerProductFormDraftRoutes(app, { pool, requireAdminBearerToken, fi
   const filePath = (id, fileId) => { key(id); key(fileId); return path.join(filesRoot, id.toLowerCase(), fileId.toLowerCase()); };
   const read = async id => { const [rows] = await pool.query('SELECT value_json FROM admin_preferences WHERE preference_key=? LIMIT 1', [key(id)]); if (!rows[0]) throw Object.assign(Error('Rascunho não encontrado.'), { statusCode: 404 }); return parse(rows[0].value_json); };
   app.get('/admin/product-form-drafts', options, async () => {
-    const [rows] = await pool.query("SELECT JSON_EXTRACT(value_json,'$.id') AS id, JSON_EXTRACT(value_json,'$.revision') AS revision, JSON_EXTRACT(value_json,'$.title') AS title, JSON_EXTRACT(value_json,'$.status') AS status, JSON_EXTRACT(value_json,'$.updated_at') AS updated_at, JSON_EXTRACT(value_json,'$.created_at') AS created_at, JSON_EXTRACT(value_json,'$.snapshot.data.is_print3d') AS is_print3d, JSON_EXTRACT(value_json,'$.snapshot.data.is_parent') AS is_parent FROM admin_preferences WHERE preference_key LIKE ? AND JSON_UNQUOTE(JSON_EXTRACT(value_json,'$.status'))='pending' ORDER BY updated_at DESC", [PREFIX + '%']);
+    // Keep the lightweight JSON projections serialized: mysql2 otherwise decodes
+    // JSON-typed columns itself and parsing a plain UUID/title again throws.
+    const [rows] = await pool.query(`SELECT
+      CAST(JSON_EXTRACT(value_json,'$.id') AS CHAR) AS id,
+      CAST(JSON_EXTRACT(value_json,'$.revision') AS CHAR) AS revision,
+      CAST(JSON_EXTRACT(value_json,'$.title') AS CHAR) AS title,
+      CAST(JSON_EXTRACT(value_json,'$.status') AS CHAR) AS status,
+      CAST(JSON_EXTRACT(value_json,'$.updated_at') AS CHAR) AS updated_at,
+      CAST(JSON_EXTRACT(value_json,'$.created_at') AS CHAR) AS created_at,
+      CAST(JSON_EXTRACT(value_json,'$.snapshot.data.is_print3d') AS CHAR) AS is_print3d,
+      CAST(JSON_EXTRACT(value_json,'$.snapshot.data.is_parent') AS CHAR) AS is_parent
+      FROM admin_preferences WHERE preference_key LIKE ?
+      AND JSON_UNQUOTE(JSON_EXTRACT(value_json,'$.status'))='pending'
+      ORDER BY updated_at DESC`, [PREFIX + '%']);
     return { drafts: rows.map(row => Object.fromEntries(Object.entries(row).map(([field, value]) => [field, typeof value === 'string' ? parse(value) : value]))) };
   });
   app.get('/admin/product-form-drafts/:id', options, req => read(req.params.id));

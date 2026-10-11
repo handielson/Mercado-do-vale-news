@@ -7,6 +7,7 @@ const { deployProductReadPrivacy } = require('./deploy-product-read-privacy.cjs'
 const { patchEntry: patchSku } = require('./deploy-product-auto-sku.cjs');
 const { waitForHealth } = require('./deploy-print3d.cjs');
 const BASELINE = '7555d8eb324f4e3b6893ef488096c1be34b9fc27';
+const DRAFTS_BASELINE = 'v1.2.607-rascunhos-placas-precos';
 const ENTRIES = ['server.js', 'vps_server.js', 'vps_server.cjs'];
 const MODULES = ['services/productSku.cjs', 'services/smartphoneModelSpecs.mjs',
   'services/productReadPrivacy.cjs',
@@ -125,8 +126,9 @@ function patchDraftEntry(source) {
 async function deployProductDrafts(options) {
   const module = 'services/productFormDraftsServer.cjs';
   const updated = fs.readFileSync(path.join(options.root,module),'utf8');
+  const baseline = execFileSync('git',['show',DRAFTS_BASELINE+':'+module],{cwd:options.root,encoding:'utf8'});
   await deployProductReadPrivacy({...options,files:[module,...ENTRIES],backupPrefix:'product-form-drafts',patchFile(source,file) {
-    return file === module ? patchModule(source,updated,'') : patchDraftEntry(source);
+    return file === module ? patchModule(source,updated,source ? baseline : '') : patchDraftEntry(source);
   },exec:async cmd => {
     const out = await options.exec(cmd);
     if (cmd === 'pm2 restart mdv-api') await options.exec(command(`(${waitForHealth.toString()})().then(r=>console.log(JSON.stringify(r))).catch(e=>{console.error(e.message);process.exit(1)})`));

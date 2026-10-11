@@ -1,3 +1,30 @@
+# v1.2.609-rascunhos-json
+
+Data: 11/10/2026. Branch: main. Tag: v1.2.609-rascunhos-json.
+Release MDV: /var/www/mdv-site/releases/20261011-231242-rascunhos-json.
+Status: pronta para publicar.
+
+Correcao da lista administrativa de rascunhos: mysql2 ja interpreta colunas do tipo JSON retornadas por JSON_EXTRACT. O endpoint tentava JSON.parse novamente sobre UUID, titulo e datas simples, causando HTTP 500. A consulta leve agora projeta os oito campos como CHAR, mantendo a serializacao JSON ate a unica decodificacao. Titulos parecidos com JSON preservam seu tipo e conteudo; revisao e flags preservam numero/booleano/null.
+
+O teste antigo simulava somente strings JSON serializadas; o fixture agora reproduz a decodificacao automatica real do driver, e o teste novo falha antes da correcao. Inclui UUID, datas, titulos numericos, true, null, aspas, listas, Unicode e booleanos ausentes/falsos. Nao retorna snapshots na lista.
+
+Publisher seletivo aceita a baseline revisada do modulo de rascunhos da release v1.2.607, a versao atual ou instalacao ausente. Rejeita drift desconhecido; preflight e repeticao testados. Preserva entrypoints remotos e integracoes, com backup, sintaxe, rollback e healthcheck pelo fluxo oficial.
+
+Escopo: modulo autenticado de rascunhos e publisher; site atualizado para a versao. Nenhuma gravacao ou migration no banco, arquivo de rascunho ou flag de producao. Rascunhos existentes preservados.
+
+Validacoes locais: 38 testes focados de rascunhos, publisher, familia e cadastro 3D; sintaxe dos servidores, modulo e publisher. Build e verificacao publica seguem no fechamento.
+
+Arquivos da entrega:
+- services/productFormDraftsServer.cjs
+- scripts/deploy-product-registration.cjs
+- tmp-tests/product-form-drafts.test.cjs
+- tmp-tests/deploy-product-registration.test.cjs
+- public/VERSION.json
+- VERSAO_ATUAL.md
+- docs/versoes/2026-10-11-v1.2.609-rascunhos-json.md
+
+## Historico anterior
+
 # v1.2.608-cadastro-3d-menus
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.608-cadastro-3d-menus.
