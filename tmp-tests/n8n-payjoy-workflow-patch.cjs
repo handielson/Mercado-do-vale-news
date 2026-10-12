@@ -1,4 +1,14 @@
 const fs = require('node:fs');
+const assert = require('node:assert/strict');
+
+const installmentOptionsMarker = 'installment-options-payjoy-v1';
+const cardInstallmentReply = "  output = 'No cartão de crédito, dividimos em até 12x. 💳||As parcelas seguem a tabela da maquininha e eu te passo tudo certinho antes de finalizar. O pagamento no cartão é presencial.';";
+const installmentOptionsAddition = String.raw`
+  // installment-options-payjoy-v1: general installment questions include both options.
+  if (!/\b(?:cartao|credito|maquininha)\b/.test(normalized)) {
+    remember('awaiting_link_confirmation');
+    output += '|||Via Boleto: também temos financiamento de celulares pela PayJoy, com parcelas pagas por boleto ou Pix. 😊||A entrada, as parcelas e o custo total dependem da proposta após a análise de crédito da PayJoy. Quer que eu envie o link para você fazer a análise?';
+  }`;
 
 const paymentCode = String.raw`const source = $('Resolver Acao de Conversacao').first().json || {};
 const config = $json || {};
@@ -60,6 +70,19 @@ if ((contextual || payjoyMention) && denied) {
   output = 'Recebemos por Pix, transferência bancária, dinheiro, cartão de débito e cartão de crédito. 💳||Para financiar um celular com parcelas em boleto ou Pix, temos a PayJoy, sujeita à análise de crédito. Quer que eu envie o link?';
 }
 return [{ json: { ...source, output, payjoyFollowupKind, payjoyNeedsHandoff } }];`;
+
+function updateInstallmentOptionsWorkflow(input) {
+  const workflow = structuredClone(input);
+  const node = workflow.nodes.find((entry) => entry.name === 'Pagamento - Politica');
+  assert.ok(node?.parameters?.jsCode, 'Missing node: Pagamento - Politica');
+  const current = String(node.parameters.jsCode);
+  if (current.includes(installmentOptionsMarker)) return workflow;
+  assert.equal(current.split(cardInstallmentReply).length - 1, 1, 'Review changed card installment reply before patching');
+  assert.ok(current.includes("const remember =") && current.includes('payjoyPendingLinkV1'), 'PayJoy confirmation must already be integrated');
+  node.parameters.jsCode = current.replace(cardInstallmentReply, cardInstallmentReply + installmentOptionsAddition);
+  new Function('$json', '$', '$getWorkflowStaticData', node.parameters.jsCode);
+  return workflow;
+}
 
 function cloneNode(nodes, name, newName, newId, position) {
   const original = nodes.find((node) => node.name === name);
@@ -161,7 +184,8 @@ const deterministicPayjoyV1 = !payjoyHumanV1 && (payjoyExplicitV1 || (payjoyCont
 if (require.main === module) {
   const [inputPath, outputPath] = process.argv.slice(2);
   if (!inputPath || !outputPath) throw new Error('Usage: node n8n-payjoy-workflow-patch.cjs input.json output.json');
-  fs.writeFileSync(outputPath, JSON.stringify(transformWorkflow(JSON.parse(fs.readFileSync(inputPath, 'utf8')))));
+  const transform = process.argv.includes('--installment-options') ? updateInstallmentOptionsWorkflow : transformWorkflow;
+  fs.writeFileSync(outputPath, JSON.stringify(transform(JSON.parse(fs.readFileSync(inputPath, 'utf8')))));
 }
 
-module.exports = { transformWorkflow, updateExistingPayJoyWorkflow, paymentCode };
+module.exports = { transformWorkflow, updateExistingPayJoyWorkflow, updateInstallmentOptionsWorkflow, paymentCode };

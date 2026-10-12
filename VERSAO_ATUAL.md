@@ -1,3 +1,18 @@
+# v1.2.611-parcelamento-via-boleto
+
+Data: 12/10/2026. Branch: main. Tag: v1.2.611-parcelamento-via-boleto.
+Release MDV: /var/www/mdv-site/releases/20261012-154150-parcelamento-via-boleto.
+
+Perguntas gerais de parcelamento apresentam cartao ate 12x e Via Boleto: financiamento de celulares PayJoy, com boleto ou Pix e condicoes conforme proposta apos analise. Oferta do link grava awaiting_link_confirmation; somente confirmacao envia o link e agenda analysis_check. Perguntas especificas sobre cartao preservam a resposta existente.
+
+Patch restrito a Pagamento - Politica no workflow SkrkB4vyKVDnQ68t. Preserva confirmacao PayJoy, prioridade de usados, conexoes e demais nos. Publicacao reutiliza o mutador existente com --installment-options; backup, verificacao de drift, entidade/historico ativo e retomada dos servicos.
+
+Validacoes: testes focados sobre export ativo, confirmacoes/negativas, URL oficial, limites da proposta, cartao especifico e isolamento; dry-run remoto e sintaxe dos entrypoints aprovados. Publicacao e verificacoes finais registradas na nota da entrega.
+
+Site recebe a versao; API e site 3DMV sem deploy. Nenhuma mensagem de teste enviada ao cliente.
+
+## Historico anterior
+
 # v1.2.610-custo-final-unidade
 
 Data: 11/10/2026. Branch: main. Tag: v1.2.610-custo-final-unidade.
