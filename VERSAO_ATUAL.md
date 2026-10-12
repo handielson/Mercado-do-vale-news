@@ -798,3 +798,6 @@ Fechamento v1.2.614: commit 5b729077/tag em main, site publicado; preto validado
 
 
 Fechamento v1.2.615: commit funcional 86153590/tag enviados, site publicado e validado no catalogo e painel reais. API/MySQL saudaveis, sem restart. Auditoria: 0 removidos, 34 bloqueados preservados na nota; seis arquivos preexistentes fora do escopo.
+
+
+Fechamento v1.2.616: commit 73758b95/tag enviados a main, site publicado e VERSION.json/catalogo real validados sem erro fatal. Workflow PayJoy ativo, API/MySQL e n8n saudaveis; sem novo restart. Limpeza: 0 removidos, 34 bloqueados preservados, listados na nota. Seis arquivos preexistentes fora do escopo.
