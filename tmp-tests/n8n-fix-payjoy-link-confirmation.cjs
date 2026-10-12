@@ -16,7 +16,8 @@ const RESOLVER_NODE = 'Resolver Acao de Conversacao';
 const PAYMENT_NODE = 'Pagamento - Politica';
 const INSTALLMENT_OPTIONS = process.argv.includes('--installment-options');
 const APPROVAL = process.argv.includes('--approval');
-const MARKER = INSTALLMENT_OPTIONS ? 'installment-options-payjoy-v1' : 'payjoy-link-confirmation-v1';
+const CONTEXTUAL_INTENT = process.argv.includes('--contextual-intent');
+const MARKER = CONTEXTUAL_INTENT ? 'payjoy-contextual-intent-v5' : INSTALLMENT_OPTIONS ? 'installment-options-payjoy-v1' : 'payjoy-link-confirmation-v1';
 const APPLY = process.argv.includes('--apply');
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 const dollar = (value, tag) => `$${tag}$${String(value)}$${tag}$`;
@@ -217,6 +218,7 @@ function executePayment(code, staticData, resolverOutput) {
 }
 
 function validate(workflow) {
+  if (workflow.nodes.find(n=>n.name===RESOLVER_NODE)?.parameters.jsCode.includes('payjoy-contextual-intent-v5')) return require('./n8n-payjoy-contextual-intent-patch.cjs').validate(workflow);
   const resolverCode = String(workflow.nodes.find((item) => item.name === RESOLVER_NODE)?.parameters?.jsCode || '');
   const paymentCode = String(workflow.nodes.find((item) => item.name === PAYMENT_NODE)?.parameters?.jsCode || '');
   const remoteJid = '558791183196@s.whatsapp.net';
@@ -298,12 +300,12 @@ async function main() {
     const raw = await psql(connection, database, `COPY (SELECT json_build_object('nodesHex',encode(convert_to(we.nodes::text,'UTF8'),'hex'),'connectionsHex',encode(convert_to(we.connections::text,'UTF8'),'hex'),'activeVersionId',we.\"activeVersionId\",'active',we.active,'versionAligned',we.\"versionId\"=we.\"activeVersionId\",'entityHistoryEqual',we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb)::text FROM workflow_entity we JOIN workflow_history wh ON wh.\"workflowId\"=we.id AND wh.\"versionId\"=we.\"activeVersionId\" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`);
     const row = JSON.parse(raw.trim());
     const workflow = { nodes: JSON.parse(Buffer.from(row.nodesHex, 'hex').toString('utf8')), connections: JSON.parse(Buffer.from(row.connectionsHex, 'hex').toString('utf8')) };
-    const transform = APPROVAL ? require('./n8n-payjoy-approval-patch.cjs').patchWorkflow : INSTALLMENT_OPTIONS ? require('./n8n-payjoy-workflow-patch.cjs').updateInstallmentOptionsWorkflow : patchWorkflow;
+    const transform = CONTEXTUAL_INTENT ? require('./n8n-payjoy-contextual-intent-patch.cjs').patchWorkflow : APPROVAL ? require('./n8n-payjoy-approval-patch.cjs').patchWorkflow : INSTALLMENT_OPTIONS ? require('./n8n-payjoy-workflow-patch.cjs').updateInstallmentOptionsWorkflow : patchWorkflow;
     const updated = transform(workflow);
     if (APPROVAL) require('./n8n-payjoy-approval-patch.cjs').validate(updated);
     else assert.deepEqual(updated.connections, workflow.connections, 'connections must remain unchanged');
     const changedNodes = updated.nodes.filter(node => JSON.stringify(node) !== JSON.stringify(workflow.nodes.find(n=>n.name===node.name))).map(node => node.name);
-    assert.ok(changedNodes.every(name => (APPROVAL ? [PAYMENT_NODE,RESOLVER_NODE,'Agente Geral - Atendimento','Dados','PayJoy - Recebeu print?','PayJoy - Print tem arquivo?','PayJoy - Recuperar midia','PayJoy - Restaurar imagem','PayJoy - Preparar imagem','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'] : INSTALLMENT_OPTIONS ? [PAYMENT_NODE] : [RESOLVER_NODE, PAYMENT_NODE, 'Agente Geral - Atendimento', 'Controle Bot - Aplicar Controle', 'Estado Conversa - Preparar']).includes(name)), 'only scoped payment nodes may change');
+    assert.ok(changedNodes.every(name => (CONTEXTUAL_INTENT ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Vendas - Preparar Contexto IA','Agente Inicial - Classificador','Parse Classificacao'] : APPROVAL ? [PAYMENT_NODE,RESOLVER_NODE,'Agente Geral - Atendimento','Dados','PayJoy - Recebeu print?','PayJoy - Print tem arquivo?','PayJoy - Recuperar midia','PayJoy - Restaurar imagem','PayJoy - Preparar imagem','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'] : INSTALLMENT_OPTIONS ? [PAYMENT_NODE] : [RESOLVER_NODE, PAYMENT_NODE, 'Agente Geral - Atendimento', 'Controle Bot - Aplicar Controle', 'Estado Conversa - Preparar']).includes(name)), 'only scoped payment nodes may change');
     if (APPROVAL) {
       const retained=Object.fromEntries(Object.entries(updated.connections).filter(([name])=>Object.hasOwn(workflow.connections,name)&&name!=='Controle Bot - Bloqueado?'));
       assert.deepEqual(retained,Object.fromEntries(Object.entries(workflow.connections).filter(([name])=>name!=='Controle Bot - Bloqueado?')));

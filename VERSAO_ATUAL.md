@@ -1,3 +1,12 @@
+# v1.2.616-payjoy-interpretacao-ia
+
+Data: 12/10/2026. Branch: main. Tag: v1.2.616-payjoy-interpretacao-ia.
+Release: /var/www/mdv-site/releases/20261012-222327-payjoy-interpretacao-ia.
+
+PayJoy usa interpretacao contextual no classificador existente para aceitar respostas naturais como oi sim, sem repetir permissao. Recusas, duvidas, humano, resultados e entrada/prints preservados. Fluxo ja aplicado, historico alinhado e servicos saudaveis. Site recebe registro da versao; API e 3DMV sem deploy.
+
+## Historico anterior
+
 # v1.2.615-catalogo-familias-cores
 
 Data: 12/10/2026. Branch: main. Tag: v1.2.615-catalogo-familias-cores.

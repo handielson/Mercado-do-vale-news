@@ -1,32 +1,28 @@
 {
-  "version": "v1.2.615-catalogo-familias-cores",
+  "version": "v1.2.616-payjoy-interpretacao-ia",
   "date": "2026-10-12",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.615-catalogo-familias-cores",
-  "release_vps": "/var/www/mdv-site/releases/20261012-214845-catalogo-familias-cores",
+  "tag": "v1.2.616-payjoy-interpretacao-ia",
+  "release_vps": "/var/www/mdv-site/releases/20261012-222327-payjoy-interpretacao-ia",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Selecao e desmarcacao de cores, resumo de estoque por memoria/cor e edicao de variacoes por lapis; autenticacao na previa local.",
+  "summary": "IA interpreta aceite, recusa e duvida da oferta PayJoy com contexto, sem exigir palavra exata.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/catalog/ModernProductCard.tsx",
-    "components/products/ProductCard.tsx",
-    "components/products/ProductList.tsx",
-    "services/localCatalogPreviewServer.cjs",
-    "scripts/publish-vps-plan.cjs",
-    "tmp-tests/local-catalog-preview.test.cjs",
-    "tmp-tests/product-family-card-render.test.cjs",
-    "tmp-tests/product-family-images.test.mjs",
+    "tmp-tests/n8n-fix-payjoy-link-confirmation.cjs",
+    "tmp-tests/n8n-payjoy-contextual-intent-patch.cjs",
+    "tmp-tests/n8n-payjoy-contextual-intent.test.cjs",
+    "docs/operacional/2026-10-12-payjoy-consentimento-contextual.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-12-v1.2.615-catalogo-familias-cores.md"
+    "docs/versoes/2026-10-12-v1.2.616-payjoy-interpretacao-ia.md"
   ],
   "validations": [
-    "60 testes focados aprovados, incluindo isolamento de sessao da previa local.",
-    "Poco X8 e Poco C85 com pai unico; precos, unidades e historicos preservados.",
-    "Build, deploy completo do site e verificacao publica conforme nota da versao."
+    "Classificador real aprovou onze mensagens sinteticas; testes de parse, contexto, prioridade e consentimento passaram.",
+    "Workflow ativo alinhado ao historico, dry-run sem diferencas; healthz 200 e servicos 1/1.",
+    "Build e deploy do site para registrar versao, com verificacao publica conforme nota."
   ]
 }
