@@ -48,6 +48,14 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       host: '0.0.0.0',
       proxy: {
+        '/local-ai-finance': {
+          target: 'http://127.0.0.1:3102',
+          rewrite: pathStr => pathStr.replace(/^\/local-ai-finance/, ''),
+          configure: proxy => proxy.on('proxyReq', proxyReq => {
+            const key = syncKey || env.VITE_VPS_SYNC_KEY || '';
+            if (key) proxyReq.setHeader('x-sync-key', key);
+          }),
+        },
         '/local-catalog-preview': {
           target: localPreviewOrigin,
           changeOrigin: true,

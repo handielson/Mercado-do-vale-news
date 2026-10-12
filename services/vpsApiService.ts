@@ -5,6 +5,7 @@
  */
 
 import { buildAuthHeaders } from './authSession';
+import { isLocalCatalogPreviewRuntime } from './localCatalogPreview';
 import { CATALOG_TITLE_UPDATED_EVENT } from './catalogTitle.js';
 import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 import type { ShippingPriceRange, ShippingPriceRangeInput, ShippingZone, ShippingZoneInput } from '../types/shipping';
@@ -846,6 +847,16 @@ class VpsApiService {
     this.cache.delete(`/products/${id}`);
     this.invalidateProductCache();
     return this.writeSafe('PUT', `/products/${id}`, data);
+  }
+
+  async updateProductMedia(id: string, media: { images: string[]; video_url: string | null }): Promise<boolean> {
+    this.cache.delete(`/products/${id}`);
+    this.invalidateProductCache();
+    const local = isLocalCatalogPreviewRuntime();
+    // The production PUT is a full product replacement. Media must use the existing partial PATCH.
+    return this.writeSafe(local ? 'PUT' : 'PATCH', local ? `/products/${id}` : `/table-data/products/${encodeURIComponent(id)}?pk=id`, {
+      ...media, image_url: media.images[0] || null,
+    });
   }
 
   async updateProductSeo(id: string, exclude_from_seo: boolean): Promise<boolean> {

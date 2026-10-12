@@ -52,6 +52,7 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
     const [colorData, setColorData] = useState<ColorWithImages[]>([]);
     const [expandedColors, setExpandedColors] = useState<Set<string>>(new Set());
     const [initialLoading, setInitialLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
     const [uploadDebugByColor, setUploadDebugByColor] = useState<Record<string, UploadDebugEntry>>({});
 
     useEffect(() => {
@@ -60,31 +61,13 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
 
     const loadAllColors = async () => {
         setInitialLoading(true);
+        setLoadError('');
         try {
-            const colors = await colorService.list();
-
-            // Load images for all colors in parallel
-            const colorDataPromises = colors.map(async (color) => {
-                try {
-                    const data = await modelColorImagesService.get(modelId, color.id);
-                    return {
-                        color,
-                        images: data?.images || [],
-                        loading: false,
-                        uploading: false
-                    };
-                } catch (error) {
-                    console.error(`Error loading images for ${color.name}:`, error);
-                    return {
-                        color,
-                        images: [],
-                        loading: false,
-                        uploading: false
-                    };
-                }
-            });
-
-            const loadedData = await Promise.all(colorDataPromises);
+            // One canonical model query instead of downloading the entire image table per color.
+            const [colors, imageRows] = await Promise.all([colorService.list(), modelColorImagesService.getByModel(modelId)]);
+            const byColor = new Map<string, string[]>();
+            for (const row of imageRows) if (!byColor.has(row.color_id)) byColor.set(row.color_id, row.images);
+            const loadedData = colors.map(color => ({ color, images: byColor.get(color.id) || [], loading: false, uploading: false }));
             setColorData(loadedData);
 
             // Auto-expand colors that have images
@@ -96,6 +79,7 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
             setExpandedColors(hasImages);
         } catch (error) {
             console.error('Error loading colors:', error);
+            setLoadError('Não foi possível carregar as fotos por cor. As fotos cadastradas não foram removidas.');
             toast.error('Erro ao carregar cores');
         } finally {
             setInitialLoading(false);
@@ -290,6 +274,8 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
 
     return (
         <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-slate-800">Fotos de cada cor</h3>
+            {loadError && <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{loadError}<button type="button" onClick={() => void loadAllColors()} className="ml-3 font-semibold underline">Tentar carregar cores novamente</button></div>}
             {colorData.map((cd) => {
                 const isExpanded = expandedColors.has(cd.color.id);
                 const hasImages = cd.images.length > 0;

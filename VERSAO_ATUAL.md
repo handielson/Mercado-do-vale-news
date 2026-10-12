@@ -1,3 +1,14 @@
+# v1.2.613-modelos-midias-openai-payjoy
+
+Data: 12/10/2026. Branch: main. Tag: v1.2.613-modelos-midias-openai-payjoy.
+Release: /var/www/mdv-site/releases/20261012-193852-modelos-midias-openai-payjoy.
+
+Midias do pai no modelo, custos oficiais OpenAI e aprovacao PayJoy com leitura de print e calculo da entrada.
+
+API seletiva para financeiro; PayJoy ja ativo. Testes e build aprovados. Fechamento na nota da versao.
+
+## Historico anterior
+
 # v1.2.612-estoque-relatorio
 
 Data: 12/10/2026. Branch: main. Tag: v1.2.612-estoque-relatorio.

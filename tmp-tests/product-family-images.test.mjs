@@ -2,11 +2,134 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { productImageList, resolveProductFamilyImages } from '../services/productFamilyImages.js';
 const require = createRequire(import.meta.url);
 const { projectStorefrontProduct } = require('../services/productStorefrontOffer.cjs');
 const { registerProductStorefrontOfferRoutes } = require('../services/productStorefrontOffersServer.cjs');
 const child = (id, images = [], extra = {}) => ({ id, parent_id: 'family', model_id: 'shared-model', name: 'Vaso', images, ...extra });
+
+function parentProductService(api) {
+  const source = readFileSync(new URL('../services/products.ts', import.meta.url), 'utf8');
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exports = {};
+  vm.runInNewContext(code, { exports, console, URL, setTimeout: callback => { callback(); }, require: name => {
+    if (name === './vpsApiService') return { vpsApiService: api };
+    if (name === './productFamilyImages.js') return { productImageList };
+    if (name === '../utils/field-standards') return { ProductStatus: { ACTIVE: 'active' } };
+    return {};
+  } });
+  return exports.productService;
+}
+
+test('model photos resolve direct and child-linked parents by IDs and fetch their complete galleries', async () => {
+  const fetched = [];
+  const service = parentProductService({
+    getProducts: async params => {
+      assert.equal(params.model_id, 'm');
+      assert.equal(params.status, 'all');
+      assert.equal(params.compact, true);
+      return [
+        { id: 'direct', model_id: 'm', is_parent: 1 },
+        { id: 'child', model_id: 'm', parent_id: 'linked' },
+        { id: 'child2', model_id: 'm', parent_id: 'linked' },
+        { id: 'unrelated', model_id: 'other', is_parent: 1 },
+      ];
+    },
+    getProductById: async (id, fresh) => {
+      assert.equal(fresh, true);
+      fetched.push(id);
+      return { id, is_parent: id === 'linked' ? 0 : 1, name: id, images: '["cover.jpg","back.jpg"]', image_url: 'cover.jpg' };
+    },
+  });
+  const parents = await service.listParentsByModel('m');
+  assert.deepEqual(fetched.sort(), ['direct', 'linked']);
+  assert.equal(parents.length, 2);
+  assert.deepEqual(parents[0].images, ['cover.jpg', 'back.jpg']);
+});
+
+test('model parent gallery paginates and treats lookup failures as errors, not absence of parents', async () => {
+  const offsets = [];
+  const service = parentProductService({
+    getProducts: async params => {
+      offsets.push(params.offset);
+      return params.offset === 0 ? Array(500).fill({ model_id: 'm' }) : [{ id: 'p', model_id: 'm', is_parent: 1 }];
+    },
+    getProductById: async () => ({ id: 'p', name: 'Pai', is_parent: 1, images: [] }),
+  });
+  assert.equal((await service.listParentsByModel('m')).length, 1);
+  assert.deepEqual(offsets, [0, 500]);
+  await assert.rejects(parentProductService({ getProducts: async () => null }).listParentsByModel('m'), /consultar/);
+  await assert.rejects(parentProductService({ getProducts: async () => [{ id: 'p', model_id: 'm', is_parent: 1 }], getProductById: async () => null }).listParentsByModel('m'), /cadastro do pai/);
+});
+
+test('model parent lookup retries a transient failure once and never treats failed reads as empty galleries', async () => {
+  let lists=0, details=0;
+  const service=parentProductService({
+    getProducts:async()=> ++lists === 1 ? null : [{id:'p',model_id:'m',is_parent:1}],
+    getProductById:async()=> ++details === 1 ? null : {id:'p',name:'Pai',is_parent:1,images:['cover.jpg']},
+  });
+  assert.equal((await service.listParentsByModel('m'))[0].images[0],'cover.jpg');
+  assert.equal(lists,2); assert.equal(details,2);
+  let failures=0;
+  await assert.rejects(parentProductService({getProducts:async()=>{failures++;return null;}}).listParentsByModel('m'),/consultar/);
+  assert.equal(failures,2);
+});
+
+test('model media editor shows canonical cover, five photo limit, one video and all parent choices', () => {
+  const source = readFileSync(new URL('../components/settings/ModelParentImages.tsx', import.meta.url), 'utf8');
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true } }).outputText;
+  const exports = {};
+  const values = [[{ id: 'p', name: 'Pai', sku: 'P', images: ['cover.jpg', 'back.jpg'], video_url: 'https://video.test/p.mp4' }, { id: 'p2', name: 'Outro pai', images: [] }], 'p', false, '', 0, ['cover.jpg', 'back.jpg'], 'https://video.test/p.mp4', null, false, '', true];
+  const gallery = {};
+  const galleryCode = ts.transpileModule(readFileSync('components/products/sections/ProductImages.tsx', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true } }).outputText;
+  vm.runInNewContext(galleryCode, { exports: gallery, require: name => name === 'react' ? React : name.includes('cache-buster') ? { getCacheBustedUrl: url => url } : require(name) });
+  let state = 0;
+  vm.runInNewContext(code, { exports, require: name => {
+    if (name === 'react') return { ...React, useState: () => [values[state++], () => {}], useEffect: () => {} };
+    if (name === '../../services/products') return { productService: {} };
+    if (name === '../products/sections/ProductImages') return gallery;
+    if (name === '../../services/productImageUpload' || name === '../../services/productVideoUpload') return {};
+    if (name === '../../services/localCatalogPreview') return { isLocalCatalogPreviewRuntime: () => true };
+    if (name === '../../utils/media-url') return { toBrowserSafeMediaUrl: url => url };
+    return require(name);
+  } });
+  const html = renderToStaticMarkup(React.createElement(exports.ModelParentImages, { modelId: 'm' }));
+  assert.match(html, /CAPA/);
+  assert.match(html, /cover.jpg/);
+  assert.match(html, /back.jpg/);
+  assert.match(html, /Outro pai/);
+  assert.doesNotMatch(html, /Abrir cadastro do pai|href="\/admin\/products\/p"|target="_blank"/);
+  assert.match(html, /type="file"/);
+  assert.match(html, /Vídeo do pai \(1 vídeo\)/);
+  assert.match(html, /Salvar mídias do pai/);
+  assert.match(html, /2 \/ 5 imagens/);
+  assert.match(html, /https:\/\/video.test\/p.mp4/);
+  const modal = readFileSync(new URL('../components/settings/ModelModal.tsx', import.meta.url), 'utf8');
+  assert.match(modal, /<ModelParentImages[\s\S]*<ColorImageManager/);
+});
+
+test('parent media saves only images/video on the linked parent, preserves child and prices', async () => {
+  const writes = [];
+  const service = parentProductService({
+    getProducts: async () => [{ id: 'c', model_id: 'm', parent_id: 'p' }],
+    getProductById: async () => ({ id: 'p', name: 'Pai', sku: 'P', is_parent: 0, images: ['old.jpg'], price_retail: 99900 }),
+    updateProductMedia: async (id, payload) => { writes.push({ id, payload: JSON.parse(JSON.stringify(payload)) }); return true; },
+  });
+  const saved = await service.saveParentMedia('m', 'p', {images: ['a.jpg','b.jpg','c.jpg','d.jpg','e.jpg'],video_url:'https://video.test/p.mp4'});
+  assert.equal(saved.price_retail,99900);
+  assert.deepEqual(writes,[{id:'p',payload:{images:['a.jpg','b.jpg','c.jpg','d.jpg','e.jpg'],video_url:'https://video.test/p.mp4'}}]);
+  await service.saveParentMedia('m','p',{images:[],video_url:null});
+  assert.deepEqual(writes[1].payload,{images:[],video_url:null});
+  await assert.rejects(service.saveParentMedia('m','p',{images:Array(6).fill('x.jpg'),video_url:null}),/5 fotos/);
+  await assert.rejects(service.saveParentMedia('m','p',{images:[],video_url:'javascript:alert(1)'}),/link público/);
+  await assert.rejects(service.saveParentMedia('m','c',{images:[],video_url:null}),/vinculado/);
+  assert.equal(writes.length,2);
+  await assert.rejects(parentProductService({getProducts:async()=>[{id:'p',model_id:'m',is_parent:1}],getProductById:async()=>({id:'p',name:'Pai',is_parent:1}),updateProductMedia:async()=>false}).saveParentMedia('m','p',{images:[],video_url:null}),/salvar/);
+});
 
 test('capa do pai e fotos próprias das cores ficam separadas, sem mutações', () => {
   const red = child('a', ['red.jpg'], { parent_images: ['all-colors.jpg'] });

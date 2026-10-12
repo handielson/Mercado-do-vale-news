@@ -15,6 +15,7 @@ const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const RESOLVER_NODE = 'Resolver Acao de Conversacao';
 const PAYMENT_NODE = 'Pagamento - Politica';
 const INSTALLMENT_OPTIONS = process.argv.includes('--installment-options');
+const APPROVAL = process.argv.includes('--approval');
 const MARKER = INSTALLMENT_OPTIONS ? 'installment-options-payjoy-v1' : 'payjoy-link-confirmation-v1';
 const APPLY = process.argv.includes('--apply');
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -63,17 +64,17 @@ function replaceOnce(text, search, replacement, label) {
 
 function patchResolver(code) {
   let next = String(code || '');
-  if (next.includes(`${MARKER}:resolver`)) return patchAnalysisConfirmation(next);
+  if (next.includes(`${MARKER}:resolver`)) return patchPayJoyContinuation(patchAnalysisConfirmation(next), 'resolver');
   const previous = `const payjoyExplicitV1 = /\\b(?:payjoy|boleto|financiamento de celular)\\b/.test(payjoyCurrentV1);\nconst payjoyOutcomeV1 = /\\b(?:aprovad[oa]|reprovad[oa]|nao aprovou|deu negado|nao consegui|nao passei|fui negad[oa])\\b/.test(payjoyCurrentV1);\nconst payjoyHumanV1 = /\\b(?:atendente|humano|vendedor|pessoa da equipe)\\b/.test(payjoyCurrentV1);\nconst deterministicPayjoyV1 = !payjoyHumanV1 && (payjoyExplicitV1 || (payjoyContextV1 && payjoyOutcomeV1))\n  ? { acao: 'responder_politica_pagamento', intencao: 'payjoy', confianca: 1, motivo: 'Pergunta ou resultado da analise PayJoy.' }\n  : null;`;
   const replacement = `// ${MARKER}:resolver\nconst payjoyExplicitV1 = /\\b(?:payjoy|boletos?|financiamento de celular)\\b/.test(payjoyCurrentV1);\nconst payjoyOutcomeV1 = /\\b(?:aprovad[oa]|reprovad[oa]|nao aprovou|deu negado|nao consegui|nao passei|fui negad[oa])\\b/.test(payjoyCurrentV1);\nconst payjoyHumanV1 = /\\b(?:atendente|humano|vendedor|pessoa da equipe)\\b/.test(payjoyCurrentV1);\nconst payjoyShortAffirmativeV1 = /^(?:sim|quero|pode|pode sim|manda|envia|claro|ok|beleza|por favor)$/.test(payjoyCurrentV1);\nconst payjoyExplicitLinkReplyV1 = /\\b(?:quero|pode|manda|mande|envia|envie|receber)\\b.{0,35}\\blink\\b|\\blink\\b.{0,35}\\b(?:quero|manda|envia|receber)\\b/.test(payjoyCurrentV1);\nconst payjoyLinkConfirmationV1 = payjoyContextV1 && payjoyStateV1?.status === 'awaiting_link_confirmation'\n  && (payjoyShortAffirmativeV1 || payjoyExplicitLinkReplyV1);\nconst deterministicPayjoyV1 = !payjoyHumanV1 && (payjoyExplicitV1 || payjoyLinkConfirmationV1 || (payjoyContextV1 && payjoyOutcomeV1))\n  ? { acao: 'responder_politica_pagamento', intencao: 'payjoy', confianca: 1, motivo: payjoyLinkConfirmationV1 ? 'Cliente confirmou o envio do link PayJoy.' : 'Pergunta ou resultado da analise PayJoy.' }\n  : null;`;
   next = replaceOnce(next, previous, replacement, 'PayJoy resolver context');
   new Function('$json', '$', '$getWorkflowStaticData', next);
-  return patchAnalysisConfirmation(next);
+  return patchPayJoyContinuation(patchAnalysisConfirmation(next), 'resolver');
 }
 
 function patchPayment(code) {
   let next = String(code || '');
-  if (next.includes(`${MARKER}:payment`)) return patchAnalysisConfirmation(next);
+  if (next.includes(`${MARKER}:payment`)) return patchPayJoyContinuation(patchAnalysisConfirmation(next), 'payment');
   next = replaceOnce(
     next,
     "const payjoyMention = /\\b(?:payjoy|boleto|financiamento(?: no boleto)?)\\b/.test(normalized);",
@@ -111,7 +112,7 @@ function patchPayment(code) {
     'generic payment offer memory',
   );
   new Function('$json', '$', '$getWorkflowStaticData', next);
-  return patchAnalysisConfirmation(next);
+  return patchPayJoyContinuation(patchAnalysisConfirmation(next), 'payment');
 }
 
 function patchAnalysisConfirmation(code) {
@@ -131,7 +132,62 @@ function patchWorkflow(input) {
   assert.ok(payment?.parameters?.jsCode, `${PAYMENT_NODE} not found`);
   resolver.parameters.jsCode = patchResolver(resolver.parameters.jsCode);
   payment.parameters.jsCode = patchPayment(payment.parameters.jsCode);
+  for (const name of ['Controle Bot - Aplicar Controle', 'Estado Conversa - Preparar']) {
+    const stateNode = workflow.nodes.find(item => item.name === name);
+    if (stateNode?.parameters.jsCode.includes('payjoy-direct-analysis-v3:persist')) {
+      stateNode.parameters.jsCode = replaceOnce(stateNode.parameters.jsCode,
+        "// payjoy-direct-analysis-v3:persist\nfor (const key of ['salesPostList', 'pendingDeviceClarification', 'payjoyByJid'])",
+        "for (const key of ['salesPostList', 'pendingDeviceClarification'])", name);
+      if (name === 'Controle Bot - Aplicar Controle') {
+        stateNode.parameters.jsCode = replaceOnce(stateNode.parameters.jsCode,
+          '  delete staticData.salesPostList[remoteJid];\n  if (staticData.payjoyByJid) delete staticData.payjoyByJid[remoteJid];',
+          '  delete staticData.salesPostList[remoteJid];', 'Restore existing reset');
+      }
+      new Function('$json', '$', '$getWorkflowStaticData', stateNode.parameters.jsCode);
+    }
+  }
+  const general = workflow.nodes.find(item => item.name === 'Agente Geral - Atendimento');
+  if (general) {
+    const guard = 'payjoy-direct-analysis-v3:agent';
+    if (!general.parameters.options.systemMessage.includes(guard)) {
+      general.parameters.options.systemMessage += `\n\nPAYJOY: ANALISE DIRETAMENTE COM A FINANCEIRA (${guard}):\n- A analise de credito da PayJoy e realizada pelo proprio cliente diretamente no link oficial configurado pelo fluxo. O Mercado do Vale nao realiza nem envia essa analise pelo WhatsApp.\n- Nunca solicite nome completo, CPF, documento, foto de documento, data de nascimento ou outros dados para iniciar ou fazer analise PayJoy. Nunca prometa iniciar, encaminhar, aprovar ou consultar uma proposta em nome do cliente.\n- Oriente o cliente a preencher os dados diretamente com a PayJoy e retornar com o resultado para continuarmos a compra. Nao trate dados enviados espontaneamente como inicio de uma analise.\n- Use somente o link oficial fornecido pelo fluxo. Nao invente URL; se ela nao estiver disponivel no contexto, encaminhe para a equipe confirmar.\n- Essa regra e especifica da analise PayJoy; nao altera o cadastro normal de uma venda confirmada.`;
+    }
+  }
   return workflow;
+}
+
+function patchPayJoyContinuation(code, kind) {
+  const marker = 'payjoy-direct-analysis-v3';
+  if (code.includes(`${marker}:${kind}`)) return code;
+  const current = kind === 'resolver' ? 'payjoyCurrentV1' : 'normalized';
+  const state = kind === 'resolver' ? 'payjoyStateV1' : 'active';
+  const context = kind === 'resolver' ? 'payjoyContextV1' : 'contextual';
+  const anchor = kind === 'resolver' ? 'const payjoyLinkConfirmationV1' : 'const payjoyPendingLinkV1';
+  const continuation = String.raw`// MARKER:KIND
+const payjoyAnalysisQuestionV3 = /\b(?:tem como|posso|como|quero|pode|vamos|fazer|iniciar|comecar)\b.{0,50}\b(?:analise|analisar|aprovacao)\b|^(?:como (?:faz|faco|fazer)(?: pra| para)? (?:saber|conseguir)|como funciona|como faz|o que (?:preciso|devo) fazer)[?!.\s]*$/.test(CURRENT);
+const payjoyDeclineV3 = /\bnao\s+(?:quero|vou|desejo|preciso|pretendo)\b.{0,40}\b(?:analise|analisar|link|fazer|continuar)|^(?:nao|nao quero|deixa|deixa pra la|agora nao)[?!.\s]*$/.test(CURRENT);
+const payjoyAnalysisContinuationV3 = CONTEXT && ['awaiting_link_confirmation', 'awaiting_result'].includes(STATE?.status)
+  && (payjoyAnalysisQuestionV3 || payjoyExplicitLinkReplyV1) && !payjoyDeclineV3;
+` .replaceAll('MARKER', marker).replaceAll('KIND', kind).replaceAll('CURRENT', current).replaceAll('CONTEXT', context).replaceAll('STATE', state);
+  code = replaceOnce(code, anchor, continuation + anchor, `${marker}:${kind}`);
+  const condition = kind === 'resolver'
+    ? "const payjoyLinkConfirmationV1 = payjoyContextV1 && payjoyStateV1?.status === 'awaiting_link_confirmation'\n  && (payjoyShortAffirmativeV1 || payjoyExplicitLinkReplyV1);"
+    : "const payjoyPendingLinkV1 = contextual && active?.status === 'awaiting_link_confirmation'\n  && (payjoyAffirmativeV1 || payjoyExplicitLinkReplyV1);";
+  code = replaceOnce(code, condition, condition.slice(0, -1) + ' && !payjoyDeclineV3 || payjoyAnalysisContinuationV3;', `${marker} continuation condition`);
+  if (kind === 'resolver') {
+    code = replaceOnce(code, 'const deterministicPayjoyV1 = !payjoyHumanV1 && (payjoyExplicitV1 ||',
+      'const deterministicPayjoyV1 = !payjoyHumanV1 && ((payjoyExplicitV1 && !payjoyDeclineV3) || (payjoyContextV1 && payjoyDeclineV3) ||', `${marker} refusal routing`);
+  }
+  if (kind === 'payment') {
+    code = replaceOnce(code, "{ status, updatedAt: Date.now() }", "{ status, updatedAt: Date.now(), expiresAt: Date.now() + 30 * 86400000 }", `${marker} expiry`);
+    code = replaceOnce(code, '} else if (payjoyPendingLinkV1) {', "} else if (payjoyDeclineV3 && (contextual || payjoyMention)) {\n  remember('declined');\n  output = 'Tudo bem! Não seguimos com a análise PayJoy. Se quiser, continuamos com as outras formas de pagamento da loja. 😊';\n} else if (payjoyPendingLinkV1 && !approved && !denied) {", `${marker} refusal`);
+    const priceReply = "    output = 'A entrada, as parcelas e o custo total aparecem na proposta da PayJoy após a análise. Eles variam conforme o aparelho e as condições aprovadas para você. Não consigo definir esses valores antes da proposta. 😊';";
+    code = replaceOnce(code, priceReply, "    remember('awaiting_link_confirmation');\n" + priceReply + "\n    output += '|||Quer que eu envie o link oficial da PayJoy para você fazer a análise diretamente com eles?';", `${marker} price context`);
+    code = code.replaceAll("Faça sua análise da PayJoy pelo link abaixo: 👇", "Você faz a análise diretamente com a PayJoy e preenche seus dados no site deles, pelo link abaixo: 👇")
+      .replaceAll("Faça sua análise pelo link abaixo: 👇", "Você faz a análise diretamente com a PayJoy e preenche seus dados no site deles, pelo link abaixo: 👇");
+  }
+  new Function('$json', '$', '$getWorkflowStaticData', code);
+  return code;
 }
 
 function executeResolver(code, staticData, conversation, parsedAction = 'listar_catalogo') {
@@ -198,11 +254,37 @@ function validate(workflow) {
     assert.equal(reply.payjoyFollowupKind, 'analysis_check');
     assert.equal(pending.payjoyByJid[remoteJid].status, 'awaiting_result');
   }
-  for (const phrase of ['Não quero fazer a análise', 'Quero falar com atendente', 'Quanto custa a análise?']) {
+  for (const phrase of ['Quero falar com atendente', 'Quanto custa a análise?']) {
     const pending = { payjoyByJid: { [remoteJid]: { status: 'awaiting_link_confirmation', updatedAt: Date.now() } } };
     assert.notEqual(executeResolver(resolverCode, pending, phrase, 'perguntar_esclarecimento').conversationIntent, 'payjoy', phrase);
   }
   assert.notEqual(executeResolver(resolverCode, { payjoyByJid: {} }, 'Fazer a análise', 'perguntar_esclarecimento').conversationIntent, 'payjoy');
+  if (paymentCode.includes('payjoy-direct-analysis-v3:payment')) {
+  for (const phrase of ['Como faz pra saber', 'Tem como fazer o análise', 'Sim', 'Pode']) {
+    const state = { payjoyByJid: {} };
+    const first = executeResolver(resolverCode, state, 'Parcela no boleto', 'perguntar_esclarecimento');
+    executePayment(paymentCode, state, first);
+    assert.equal(state.payjoyByJid[remoteJid].status, 'awaiting_link_confirmation');
+    const route = executeResolver(resolverCode, state, phrase, 'perguntar_esclarecimento');
+    assert.equal(route.conversationIntent, 'payjoy', phrase);
+    const reply = executePayment(paymentCode, state, route);
+    assert.match(reply.output, /fixture=1/, phrase);
+    assert.match(reply.output, /diretamente com a PayJoy/);
+    assert.doesNotMatch(reply.output, /envie.*CPF|me informe.*CPF|iniciar.*por voce/i);
+    assert.equal(state.payjoyByJid[remoteJid].status, 'awaiting_result');
+    assert.ok(state.payjoyByJid[remoteJid].expiresAt > Date.now());
+  }
+  const approvedState = { payjoyByJid: { [remoteJid]: { status: 'awaiting_result', updatedAt: Date.now() } } };
+  const approval = executePayment(paymentCode, approvedState, executeResolver(resolverCode, approvedState, 'Fui aprovada', 'perguntar_esclarecimento'));
+  assert.equal(approvedState.payjoyByJid[remoteJid].status, 'approved');
+  assert.doesNotMatch(approval.output, /fixture=1/);
+  const refusalState = { payjoyByJid: { [remoteJid]: { status: 'awaiting_link_confirmation', updatedAt: Date.now() } } };
+  const refusal = executePayment(paymentCode, refusalState, { remoteJid, conversation: 'Não quero o link da PayJoy' });
+  assert.equal(refusalState.payjoyByJid[remoteJid].status, 'declined');
+  assert.doesNotMatch(refusal.output, /fixture=1/);
+  const declinedRoute = executeResolver(resolverCode, refusalState, 'Sim', 'perguntar_esclarecimento');
+  assert.notEqual(declinedRoute.conversationIntent, 'payjoy');
+  }
   return { pluralBoletoRecognized: true, confirmationRemembered: true, shortYesSendsOfficialLink: true, explicitLinkRequestSendsOfficialLink: true, unrelatedYesPreserved: true, analysisConfirmationSendsLink: true, negativesAndUnrelatedContextPreserved: true };
 }
 
@@ -216,11 +298,17 @@ async function main() {
     const raw = await psql(connection, database, `COPY (SELECT json_build_object('nodesHex',encode(convert_to(we.nodes::text,'UTF8'),'hex'),'connectionsHex',encode(convert_to(we.connections::text,'UTF8'),'hex'),'activeVersionId',we.\"activeVersionId\",'active',we.active,'versionAligned',we.\"versionId\"=we.\"activeVersionId\",'entityHistoryEqual',we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb)::text FROM workflow_entity we JOIN workflow_history wh ON wh.\"workflowId\"=we.id AND wh.\"versionId\"=we.\"activeVersionId\" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`);
     const row = JSON.parse(raw.trim());
     const workflow = { nodes: JSON.parse(Buffer.from(row.nodesHex, 'hex').toString('utf8')), connections: JSON.parse(Buffer.from(row.connectionsHex, 'hex').toString('utf8')) };
-    const transform = INSTALLMENT_OPTIONS ? require('./n8n-payjoy-workflow-patch.cjs').updateInstallmentOptionsWorkflow : patchWorkflow;
+    const transform = APPROVAL ? require('./n8n-payjoy-approval-patch.cjs').patchWorkflow : INSTALLMENT_OPTIONS ? require('./n8n-payjoy-workflow-patch.cjs').updateInstallmentOptionsWorkflow : patchWorkflow;
     const updated = transform(workflow);
-    assert.deepEqual(updated.connections, workflow.connections, 'connections must remain unchanged');
-    const changedNodes = workflow.nodes.filter((node, index) => JSON.stringify(node) !== JSON.stringify(updated.nodes[index])).map(node => node.name);
-    assert.ok(changedNodes.every(name => (INSTALLMENT_OPTIONS ? [PAYMENT_NODE] : [RESOLVER_NODE, PAYMENT_NODE]).includes(name)), 'only scoped payment nodes may change');
+    if (APPROVAL) require('./n8n-payjoy-approval-patch.cjs').validate(updated);
+    else assert.deepEqual(updated.connections, workflow.connections, 'connections must remain unchanged');
+    const changedNodes = updated.nodes.filter(node => JSON.stringify(node) !== JSON.stringify(workflow.nodes.find(n=>n.name===node.name))).map(node => node.name);
+    assert.ok(changedNodes.every(name => (APPROVAL ? [PAYMENT_NODE,RESOLVER_NODE,'Agente Geral - Atendimento','Dados','PayJoy - Recebeu print?','PayJoy - Print tem arquivo?','PayJoy - Recuperar midia','PayJoy - Restaurar imagem','PayJoy - Preparar imagem','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'] : INSTALLMENT_OPTIONS ? [PAYMENT_NODE] : [RESOLVER_NODE, PAYMENT_NODE, 'Agente Geral - Atendimento', 'Controle Bot - Aplicar Controle', 'Estado Conversa - Preparar']).includes(name)), 'only scoped payment nodes may change');
+    if (APPROVAL) {
+      const retained=Object.fromEntries(Object.entries(updated.connections).filter(([name])=>Object.hasOwn(workflow.connections,name)&&name!=='Controle Bot - Bloqueado?'));
+      assert.deepEqual(retained,Object.fromEntries(Object.entries(workflow.connections).filter(([name])=>name!=='Controle Bot - Bloqueado?')));
+      assert.deepEqual(updated.connections['Controle Bot - Bloqueado?'].main[0],workflow.connections['Controle Bot - Bloqueado?'].main[0]);
+    }
     const validation = validate(updated);
     if (INSTALLMENT_OPTIONS) {
       const state = {};
@@ -235,7 +323,7 @@ async function main() {
     }
     assert.deepEqual(transform(updated).nodes, updated.nodes, 'patch must be idempotent');
     const changed = JSON.stringify(updated.nodes) !== JSON.stringify(workflow.nodes);
-    const summary = { apply: APPLY, active: row.active, versionAligned: row.versionAligned, entityHistoryEqual: row.entityHistoryEqual, changed, validation };
+    const summary = { apply: APPLY, active: row.active, versionAligned: row.versionAligned, entityHistoryEqual: row.entityHistoryEqual, changed, changedNodes, validation };
     if (!APPLY) return console.log(JSON.stringify(summary, null, 2));
 
     assert.equal(row.active, true);
@@ -258,13 +346,28 @@ async function main() {
     const unchangedGraph = await psql(connection, database, `SELECT COUNT(*) FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)} AND we."activeVersionId"=${quote(row.activeVersionId)} AND we."versionId"=we."activeVersionId" AND encode(convert_to(we.connections::text,'UTF8'),'hex')=${quote(row.connectionsHex)} AND we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb;`);
     assert.equal(unchangedGraph.trim(), '1', 'workflow version, graph or active history changed since preflight');
     const sql = `BEGIN;
-UPDATE workflow_entity SET nodes=${dollar(JSON.stringify(updated.nodes), 'nodespayjoylink')}::json,\"versionId\"=\"activeVersionId\",\"updatedAt\"=NOW() WHERE id=${quote(WORKFLOW_ID)};
-UPDATE workflow_history SET nodes=${dollar(JSON.stringify(updated.nodes), 'historypayjoylink')}::json,\"updatedAt\"=NOW() WHERE \"workflowId\"=${quote(WORKFLOW_ID)} AND \"versionId\"=${quote(row.activeVersionId)};
+UPDATE workflow_entity SET nodes=${dollar(JSON.stringify(updated.nodes), 'nodespayjoylink')}::json,connections=${dollar(JSON.stringify(updated.connections),'graphpayjoylink')}::json,\"versionId\"=\"activeVersionId\",\"updatedAt\"=NOW() WHERE id=${quote(WORKFLOW_ID)};
+UPDATE workflow_history SET nodes=${dollar(JSON.stringify(updated.nodes), 'historypayjoylink')}::json,connections=${dollar(JSON.stringify(updated.connections),'graphhistorypayjoylink')}::json,\"updatedAt\"=NOW() WHERE \"workflowId\"=${quote(WORKFLOW_ID)} AND \"versionId\"=${quote(row.activeVersionId)};
 COMMIT;
 COPY (SELECT json_build_object('entityHistoryEqual',we.nodes::jsonb=wh.nodes::jsonb,'payjoyLinkConfirmation',EXISTS(SELECT 1 FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->>'name'=${quote(PAYMENT_NODE)} AND node->'parameters'->>'jsCode' LIKE '%${MARKER}%') AND EXISTS(SELECT 1 FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->>'name'=${quote(RESOLVER_NODE)} AND node->'parameters'->>'jsCode' LIKE '%${INSTALLMENT_OPTIONS ? 'payjoy-link-confirmation-v1' : MARKER}%'))::text FROM workflow_entity we JOIN workflow_history wh ON wh.\"workflowId\"=we.id AND wh.\"versionId\"=we.\"activeVersionId\" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
     const verification = JSON.parse((await psql(connection, database, sql)).trim());
     assert.equal(verification.entityHistoryEqual, true);
     assert.equal(verification.payjoyLinkConfirmation, true);
+    if (!INSTALLMENT_OPTIONS) {
+      const continuation = JSON.parse((await psql(connection, database, `SELECT json_build_object('entityNodes',(SELECT count(*) FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->'parameters'::text IS NOT NULL AND (node->'parameters')::text LIKE '%payjoy-direct-analysis-v3%'),'historyNodes',(SELECT count(*) FROM jsonb_array_elements(wh.nodes::jsonb) node WHERE (node->'parameters')::text LIKE '%payjoy-direct-analysis-v3%'),'connectionsPreserved',encode(convert_to(we.connections::text,'UTF8'),'hex')=${quote(row.connectionsHex)} AND we.connections::jsonb=wh.connections::jsonb) FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)};`)).trim());
+      assert.equal(continuation.entityNodes, 3);
+      assert.equal(continuation.historyNodes, 3);
+      if (!APPROVAL) assert.equal(continuation.connectionsPreserved, true);
+      verification.directAnalysisContinuation = continuation;
+    }
+    if (APPROVAL) {
+      const activeWorkflow = JSON.parse((await psql(connection,database,`SELECT json_build_object('nodes',we.nodes,'connections',we.connections,'historyAligned',we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb) FROM workflow_entity we JOIN workflow_history wh ON wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)};`)).trim());
+      assert.deepEqual(activeWorkflow.nodes,updated.nodes);
+      assert.deepEqual(activeWorkflow.connections,updated.connections);
+      assert.equal(activeWorkflow.historyAligned,true);
+      require('./n8n-payjoy-approval-patch.cjs').validate(activeWorkflow);
+      verification.approvalPrintVerified=true;
+    }
     await run(connection, 'docker service scale n8n_n8n=1 >/dev/null');
     await waitService(connection, 'n8n_n8n', 1);
     await run(connection, 'docker service scale n8n_n8n-runner=1 >/dev/null');

@@ -1035,6 +1035,8 @@ async function requireAdminBearerToken(request, reply) {
   return reply.code(401).send({ error: 'Admin bearer token required' });
 }
 
+require('./services/openAiFinanceServer.cjs').registerOpenAiFinanceRoutes(fastify, { pool, requireAdminBearerToken });
+
 async function requireSyncKeyOrCustomer(request, reply) {
   const key = request.headers['x-sync-key'] || request.headers['x-api-key'];
   if (key && key === process.env.SYNC_SECRET) {
@@ -22340,9 +22342,7 @@ fastify.get('/autoresponder/stats', { preHandler: requireSyncKey }, async (req) 
     openai_official_cost_status: openAiOfficialCosts.status,
     openai_official_cost_updated_at: openAiOfficialCosts.updated_at || null,
     openai_official_month_cost_usd: openAiOfficialMonthCostUsd,
-    openai_official_remaining_credit_usd: openAiOfficialMonthCostUsd == null
-      ? null
-      : Number((creditBalanceUsd - openAiOfficialMonthCostUsd).toFixed(6)),
+    openai_official_remaining_credit_usd: null,
   };
   const topProducts = await getAutoresponderTopProducts(10);
   return { source: 'mysql', summary: { ...summary, ai_finance: aiFinance }, byIntent, topRules, topProducts };

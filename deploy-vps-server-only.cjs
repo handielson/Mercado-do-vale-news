@@ -701,6 +701,14 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--openai-finance-only') || process.argv.includes('--openai-finance-check')) {
+    await require('./scripts/deploy-openai-finance.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--openai-finance-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--system-backup-only')) {
     if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
     const backupDir = appDir + '/backups/system-backup-' + Date.now();

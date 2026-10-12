@@ -3,6 +3,7 @@ import { Loader2, X, Upload, GripVertical } from 'lucide-react';
 import { getCacheBustedUrl } from '../../../utils/cache-buster';
 
 interface ProductImagesProps {
+    title?: string;
     compact?: boolean;
     imagePreviews: string[];
     isCompressing: boolean;
@@ -18,6 +19,7 @@ interface ProductImagesProps {
 const MAX_IMAGES = 5;
 
 export function ProductImages({
+    title,
     compact = false,
     imagePreviews,
     isCompressing,
@@ -66,7 +68,7 @@ export function ProductImages({
     return (
         <div className={compact ? 'bg-white space-y-2' : 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4'}>
             <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-800">{compact ? 'Fotos da variação' : 'Imagens do Produto'}</h3>
+                <h3 className="font-semibold text-slate-800">{title || (compact ? 'Fotos da variação' : 'Imagens do Produto')}</h3>
                 <span className="text-sm text-slate-600">
                     {imagePreviews.length} / {MAX_IMAGES} imagens
                 </span>

@@ -1,10 +1,39 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import vm from 'node:vm';
 
 const servicePath = 'services/modelAiService.ts';
 const modal = readFileSync('components/settings/ModelModal.tsx', 'utf8');
 const server = readFileSync('vps_server.js', 'utf8');
 const serverCjs = readFileSync('vps_server.cjs', 'utf8');
+
+// Execute the actual React initializer/effect bodies to reproduce full or blocked browser storage.
+const initializer = modal.match(/const \[trustedSourceLinksText, setTrustedSourceLinksText\] = useState\(\(\) => \{([\s\S]*?)\n    \}\);/)?.[1];
+const effectEnd = modal.indexOf('    }, [trustedSourceLinksText]);');
+const effectStart = modal.lastIndexOf('useEffect(() => {', effectEnd);
+const persistence = modal.slice(effectStart + 'useEffect(() => {'.length, effectEnd);
+assert.ok(initializer && effectStart >= 0, 'trusted-source storage guards must remain testable');
+const key = 'mdv.modelAi.trustedSourceLinks';
+const context = { TRUSTED_SOURCE_LINKS_STORAGE_KEY: key, DEFAULT_TRUSTED_SOURCE_LINKS: 'default-links', trustedSourceLinksText: 'edited-links' };
+const readPreference = window => vm.runInNewContext(`(() => {${initializer}})()`, { ...context, window });
+const persistPreference = window => vm.runInNewContext(`(() => {${persistence}})()`, { ...context, window });
+assert.equal(readPreference(undefined), 'default-links');
+assert.equal(readPreference({ localStorage: { getItem: () => 'saved-links' } }), 'saved-links');
+const blockedStorage = { get localStorage() { throw new Error('SecurityError'); } };
+assert.equal(readPreference(blockedStorage), 'default-links');
+assert.doesNotThrow(() => persistPreference(blockedStorage));
+let quotaWrites = 0;
+assert.doesNotThrow(() => persistPreference({ localStorage: {
+  getItem: () => null,
+  setItem() { quotaWrites++; throw Object.assign(new Error('Full'), { name: 'QuotaExceededError' }); },
+} }));
+assert.equal(quotaWrites, 1, 'full storage may attempt one write but must never crash the modal');
+let unchangedWrites = 0;
+persistPreference({ localStorage: { getItem: () => 'edited-links', setItem() { unchangedWrites++; } } });
+assert.equal(unchangedWrites, 0, 'opening an unchanged preference must not consume storage');
+let saved;
+persistPreference({ localStorage: { getItem: () => 'old-links', setItem(k, value) { saved = [k, value]; } } });
+assert.deepEqual(saved, [key, 'edited-links'], 'available storage must still persist edits');
 
 assert.equal(existsSync(servicePath), true, 'model AI service must exist');
 

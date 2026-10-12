@@ -3,6 +3,7 @@ import { MessageCircle } from 'lucide-react';
 import { WhatsAppAttendantsPanel } from '../../../components/whatsapp/WhatsAppAttendantsPanel';
 import { WhatsAppBotSettingsPanel } from '../../../components/whatsapp/WhatsAppBotSettingsPanel';
 import { WhatsAppChatGptPanel } from '../../../components/whatsapp/WhatsAppChatGptPanel';
+import { OpenAiFinancePanel } from '../../../components/whatsapp/OpenAiFinancePanel';
 import { WhatsAppInternalBotTester } from '../../../components/whatsapp/WhatsAppInternalBotTester';
 import { WhatsAppAutomationTemplatesPanel } from '../../../components/whatsapp/WhatsAppAutomationTemplatesPanel';
 import { WhatsAppNumberSwitchPanel } from '../../../components/whatsapp/WhatsAppNumberSwitchPanel';
@@ -22,6 +23,7 @@ export default function WhatsAppPage() {
       </div>
 
       <div className="space-y-4">
+        <OpenAiFinancePanel />
         <WhatsAppNumberSwitchPanel />
         <WhatsAppBotSettingsPanel />
         <WhatsAppAutomationTemplatesPanel />

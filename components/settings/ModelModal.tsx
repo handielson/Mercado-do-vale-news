@@ -17,6 +17,7 @@ import { CurrencyInput } from '../ui/CurrencyInput';
 import { tableDataService, type TableOption } from '../../services/table-data';
 import { CategorySelect } from '../products/CategorySelect';
 import { ColorImageManager } from './ColorImageManager';
+import { ModelParentImages } from './ModelParentImages';
 import { buildModelImportPrompt, isModelUnitFieldKey, normalizeModelImportPayload, parseModelImportJson } from './modelJsonImport.js';
 import { generateModelJsonWithAi } from '../../services/modelAiService';
 import { ModelListFieldInput } from './ModelListFieldInput';
@@ -570,6 +571,9 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
 
     // UI State
     const [saving, setSaving] = useState(false);
+    const [parentMediaBusy, setParentMediaBusy] = useState(false);
+    const parentMediaSaveRef = useRef<(() => Promise<boolean>) | null>(null);
+    const registerParentMediaSave = React.useCallback((save: (() => Promise<boolean>) | null) => { parentMediaSaveRef.current = save; }, []);
     const [listEditor, setListEditor] = useState<{
         field: CustomField;
         current: TableOption | null;
@@ -592,7 +596,11 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const applyingModelPayloadRef = useRef(false);
     const [trustedSourceLinksText, setTrustedSourceLinksText] = useState(() => {
         if (typeof window === 'undefined') return DEFAULT_TRUSTED_SOURCE_LINKS;
-        return window.localStorage.getItem(TRUSTED_SOURCE_LINKS_STORAGE_KEY) || DEFAULT_TRUSTED_SOURCE_LINKS;
+        try {
+            return window.localStorage.getItem(TRUSTED_SOURCE_LINKS_STORAGE_KEY) || DEFAULT_TRUSTED_SOURCE_LINKS;
+        } catch {
+            return DEFAULT_TRUSTED_SOURCE_LINKS;
+        }
     });
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -752,7 +760,13 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        window.localStorage.setItem(TRUSTED_SOURCE_LINKS_STORAGE_KEY, trustedSourceLinksText);
+        try {
+            if (window.localStorage.getItem(TRUSTED_SOURCE_LINKS_STORAGE_KEY) !== trustedSourceLinksText) {
+                window.localStorage.setItem(TRUSTED_SOURCE_LINKS_STORAGE_KEY, trustedSourceLinksText);
+            }
+        } catch {
+            // Optional browser preference: keep the edited value in React state if storage is full or blocked.
+        }
     }, [trustedSourceLinksText]);
 
     const handleFetchBlingDataBySku = async () => {
@@ -1683,6 +1697,8 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     };
 
     const handleSave = async () => {
+        if (parentMediaBusy) return;
+        if (parentMediaSaveRef.current && !await parentMediaSaveRef.current()) return;
         // Validation
         if (!name.trim()) {
             setError('Nome do modelo é obrigatório');
@@ -1755,6 +1771,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     </h2>
                     <button
                         onClick={onClose}
+                        disabled={parentMediaBusy}
                         className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
                     >
                         <X size={20} className="text-slate-500" />
@@ -1764,6 +1781,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 {/* Tabs */}
                 <div className="flex border-b border-slate-200 overflow-x-auto scrollbar-thin whitespace-nowrap">
                     <button
+                        disabled={parentMediaBusy}
                         onClick={() => setActiveTab('basic')}
                         className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'basic'
                             ? 'text-blue-600 border-b-2 border-blue-600'
@@ -1776,6 +1794,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         </div>
                     </button>
                     <button
+                        disabled={parentMediaBusy}
                         onClick={() => setActiveTab('json')}
                         className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'json'
                             ? 'text-blue-600 border-b-2 border-blue-600'
@@ -1788,6 +1807,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         </div>
                     </button>
                     <button
+                        disabled={parentMediaBusy}
                         onClick={() => setActiveTab('template')}
                         className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'template'
                             ? 'text-blue-600 border-b-2 border-blue-600'
@@ -1800,6 +1820,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         </div>
                     </button>
                     <button
+                        disabled={parentMediaBusy}
                         onClick={() => setActiveTab('seo')}
                         className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'seo'
                             ? 'text-blue-600 border-b-2 border-blue-600'
@@ -1812,6 +1833,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         </div>
                     </button>
                     <button
+                        disabled={parentMediaBusy}
                         onClick={() => setActiveTab('photos')}
                         className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'photos'
                             ? 'text-blue-600 border-b-2 border-blue-600'
@@ -1825,6 +1847,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         </div>
                     </button>
                     <button
+                        disabled={parentMediaBusy}
                         onClick={() => setActiveTab('tags')}
                         className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'tags'
                             ? 'text-blue-600 border-b-2 border-blue-600'
@@ -1836,6 +1859,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         </div>
                     </button>
                     <button
+                        disabled={parentMediaBusy}
                         onClick={() => setActiveTab('shopee')}
                         className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'shopee'
                             ? 'text-orange-600 border-b-2 border-orange-500'
@@ -2527,7 +2551,10 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     )}
 
                     {activeTab === 'photos' && model && (
-                        <ColorImageManager modelId={model.id} />
+                        <>
+                            <ModelParentImages key={model.id} modelId={model.id} onBusyChange={setParentMediaBusy} onSaveReady={registerParentMediaSave} />
+                            <ColorImageManager key={model.id} modelId={model.id} />
+                        </>
                     )}
 
                     {/* Tags Tab */}
@@ -2994,14 +3021,14 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200 bg-slate-50">
                     <button
                         onClick={onClose}
-                        disabled={saving}
+                        disabled={saving || parentMediaBusy}
                         className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
                     >
                         Cancelar
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={saving || loading}
+                        disabled={saving || loading || parentMediaBusy}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {saving ? 'Salvando...' : 'Salvar'}

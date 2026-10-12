@@ -14,6 +14,7 @@ import { isLocalCatalogPreviewRuntime } from './localCatalogPreview';
 import { mercadoLivreService } from './mercadoLivreService';
 import { toast } from 'sonner';
 import { isSmartphoneModel, stripModelOwnedSpecs } from './smartphoneModelSpecs.mjs';
+import { productImageList } from './productFamilyImages.js';
 
 /**
  * PRODUCT SERVICE — VPS MySQL (fonte exclusiva de verdade)
@@ -355,7 +356,63 @@ async function listChildren(parentId: string): Promise<Product[]> {
     return (data || []).map(transformFromDB);
 }
 
+/** Resolve family parents by explicit model/parent IDs; never by display name. */
+async function readParentMediaWithRetry<T>(read: () => Promise<T | null>): Promise<T | null> {
+    const result = await read();
+    if (result !== null) return result;
+    // A brief dev/proxy disconnect must not leave the editor unavailable until a manual retry.
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return read();
+}
+
+async function listParentsByModel(modelId: string): Promise<Product[]> {
+    if (!modelId) return [];
+    const parentIds = new Set<string>();
+    const referencedParentIds = new Set<string>();
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+        const rows = await readParentMediaWithRetry<any[]>(() => vpsApiService.getProducts({ model_id: modelId, status: 'all',
+            compact: true, limit: pageSize, offset, noCache: true }));
+        if (!Array.isArray(rows)) throw new Error('Não foi possível consultar os produtos do modelo.');
+        for (const row of rows) {
+            if (row.model_id !== modelId) continue;
+            if (Number(row.is_parent) === 1) parentIds.add(row.id);
+            else if (row.parent_id) {
+                parentIds.add(row.parent_id);
+                referencedParentIds.add(row.parent_id);
+            }
+        }
+        if (rows.length < pageSize) break;
+    }
+    const parents = await Promise.all([...parentIds].map(async id => {
+        const row = await readParentMediaWithRetry<any>(() => vpsApiService.getProductById(id, true));
+        if (!row || row.error) throw new Error('Não foi possível carregar o cadastro do pai.');
+        // Legacy families can have children pointing to a parent whose flag was never set.
+        if (Number(row.is_parent) !== 1 && !referencedParentIds.has(id)) return null;
+        return { ...transformFromDB(row), images: productImageList(row.images, row.images == null ? row.image_url : null) };
+    }));
+    return parents.filter((parent): parent is Product => parent !== null)
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR') || a.id.localeCompare(b.id));
+}
+
 // ─── WRITE ─────────────────────────────────────────────────────────────────
+
+async function saveParentMedia(modelId: string, parentId: string, media: { images: string[]; video_url: string | null }): Promise<Product> {
+    if (!Array.isArray(media.images) || media.images.length > 5 || media.images.some(url => typeof url !== 'string' || !url.trim())) {
+        throw new Error('O produto pai pode ter até 5 fotos.');
+    }
+    const video = String(media.video_url || '').trim();
+    if (video) {
+        try { if (!['https:', 'http:'].includes(new URL(video).protocol)) throw new Error(); }
+        catch { throw new Error('Informe um link público válido para o vídeo.'); }
+    }
+    const parent = (await listParentsByModel(modelId)).find(item => item.id === parentId);
+    if (!parent) throw new Error('Este produto pai não está vinculado ao modelo.');
+    const payload = { images: [...media.images], video_url: video || null };
+    if (!await vpsApiService.updateProductMedia(parentId, payload)) throw new Error('Não foi possível salvar as mídias do pai. Tente novamente.');
+    // Media-only update: never invoke the full product/price/marketplace save pipeline.
+    return { ...parent, images: payload.images, video_url: video || undefined };
+}
 
 async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> {
     const id = crypto.randomUUID();
@@ -696,4 +753,6 @@ export const productService = {
     searchByEAN,
     listByCategory,
     listChildren,
+    listParentsByModel,
+    saveParentMedia,
 };

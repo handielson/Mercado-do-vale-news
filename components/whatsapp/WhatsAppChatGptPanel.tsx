@@ -351,14 +351,14 @@ export function WhatsAppChatGptPanel() {
               <p className="mt-1 text-xs text-slate-500">{formatNumber(aiFinance?.month_responses)} respostas</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase text-slate-500">Credito local</p>
+              <p className="text-xs font-semibold uppercase text-slate-500">Estimativa local</p>
               <p className="mt-1 text-lg font-bold text-slate-900">{formatUsd(aiFinance?.remaining_credit_usd ?? form.ai_credit_balance_usd)}</p>
-              <p className="mt-1 text-xs text-slate-500">alerta em {formatUsd(form.ai_credit_alert_usd)}</p>
+              <p className="mt-1 text-xs text-slate-500">Somente registros deste módulo; não inclui o n8n.</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase text-slate-500">Credito oficial</p>
+              <p className="text-xs font-semibold uppercase text-slate-500">Gasto oficial no mês</p>
               <p className="mt-1 text-lg font-bold text-slate-900">
-                {aiFinance?.openai_official_remaining_credit_usd == null ? '-' : formatUsd(aiFinance.openai_official_remaining_credit_usd)}
+                {aiFinance?.openai_official_month_cost_usd == null ? '-' : formatUsd(aiFinance.openai_official_month_cost_usd)}
               </p>
               <p className="mt-1 text-xs text-slate-500">
                 {aiFinance?.openai_official_cost_status || 'Admin key pendente'}
