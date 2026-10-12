@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "n8n": {
+      "command": "npx",
+      "args": ["-y", "@n8n/chat"],
+      "env": {
+        "N8N_HOST": "https://SEU-N8N.example",
+        "N8N_API_KEY": "CONFIGURE_LOCALMENTE_NAO_COMMITAR"
+      }
+    }
+  }
+}

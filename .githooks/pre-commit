@@ -1,0 +1,2 @@
+#!/bin/sh
+node scripts/assert-no-n8n-secrets.cjs --staged

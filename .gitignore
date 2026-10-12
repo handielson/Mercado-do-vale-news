@@ -100,3 +100,6 @@ scripts/central-print-journal/
 
 # Prévia administrativa local: rascunhos nunca fazem parte do repositório nem da produção.
 /.local/
+
+# MCP clients keep credentials only in private local configuration.
+/.cursor/mcp.json

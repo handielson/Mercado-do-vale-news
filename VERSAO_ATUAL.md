@@ -1,3 +1,12 @@
+# v1.2.617-n8n-segredo-removido
+
+Data: 12/10/2026. Branch: main. Tag: v1.2.617-n8n-segredo-removido.
+Release: /var/www/mdv-site/releases/20261012-234206-n8n-segredo-removido.
+
+Configuracao sensivel MCP removida do Git, preservada localmente e ignorada. Exemplo sem chave, hook pre-commit e guarda no prebuild impedem nova inclusao de tokens n8n literais. Historico e revogacao da antiga conta Cloud permanecem pendentes.
+
+## Historico anterior
+
 # v1.2.616-payjoy-interpretacao-ia
 
 Data: 12/10/2026. Branch: main. Tag: v1.2.616-payjoy-interpretacao-ia.
