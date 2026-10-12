@@ -1,28 +1,32 @@
 {
-  "version": "v1.2.614-familia-note14s",
+  "version": "v1.2.615-catalogo-familias-cores",
   "date": "2026-10-12",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.614-familia-note14s",
-  "release_vps": "/var/www/mdv-site/releases/20261012-201156-familia-note14s",
+  "tag": "v1.2.615-catalogo-familias-cores",
+  "release_vps": "/var/www/mdv-site/releases/20261012-214845-catalogo-familias-cores",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Pai generico unico do Redmi Note 14S, quatro variacoes ativas e galeria coerente com a variacao selecionada.",
+  "summary": "Selecao e desmarcacao de cores, resumo de estoque por memoria/cor e edicao de variacoes por lapis; autenticacao na previa local.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "pages/store/PublicProductPage.tsx",
-    "scripts/repair-model-family.cjs",
-    "tmp-tests/model-family-repair.test.cjs",
+    "components/catalog/ModernProductCard.tsx",
+    "components/products/ProductCard.tsx",
+    "components/products/ProductList.tsx",
+    "services/localCatalogPreviewServer.cjs",
+    "scripts/publish-vps-plan.cjs",
+    "tmp-tests/local-catalog-preview.test.cjs",
+    "tmp-tests/product-family-card-render.test.cjs",
     "tmp-tests/product-family-images.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-12-v1.2.614-familia-note14s.md"
+    "docs/versoes/2026-10-12-v1.2.615-catalogo-familias-cores.md"
   ],
   "validations": [
-    "29 testes de familia, planejamento e midias aprovados; 15 unidades e historicos preservados em transacao.",
-    "Video do pai copiado para SKU proprio, variações preservam seus arquivos.",
-    "Site publicado e verificado conforme nota da versao."
+    "60 testes focados aprovados, incluindo isolamento de sessao da previa local.",
+    "Poco X8 e Poco C85 com pai unico; precos, unidades e historicos preservados.",
+    "Build, deploy completo do site e verificacao publica conforme nota da versao."
   ]
 }

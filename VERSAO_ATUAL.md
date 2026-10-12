@@ -1,3 +1,14 @@
+# v1.2.615-catalogo-familias-cores
+
+Data: 12/10/2026. Branch: main. Tag: v1.2.615-catalogo-familias-cores.
+Release: /var/www/mdv-site/releases/20261012-214845-catalogo-familias-cores.
+
+Card publico usa a foto do pai sem cor selecionada e a foto da cor ao selecionar; segundo clique desmarca. Cor aparece apenas no seletor. Painel recebe resumo disponivel por memoria e lista de cores, com lapis em cada variacao. Previa local encaminha a sessao administrativa sem compartilhar autenticacao entre requisicoes.
+
+Poco X8 e Poco C85 organizados em pais unicos; nome PC858256R corrigido para Poco C85. Historicos, precos e unidades preservados. Publicacao somente do site; sem deploy ou restart da API.
+
+## Historico anterior
+
 # v1.2.614-familia-note14s
 
 Data: 12/10/2026. Branch: main. Tag: v1.2.614-familia-note14s.

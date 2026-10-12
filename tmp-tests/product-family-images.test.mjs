@@ -203,8 +203,12 @@ test('os dois sites conectam a mesma regra à capa e à seleção de cor', () =>
   const source = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
   assert.match(source('pages/store/Print3dStorePage.tsx'), /<ProductImage product=\{product\} family=\{family\}/);
   assert.match(source('pages/store/Print3dProductPage.tsx'), /resolveProductFamilyImages\(product, variants, Boolean\(requestedVariant\)\)/);
-  assert.match(source('components/catalog/ModernProductCard.tsx'), /resolveProductFamilyImages\(currentProduct, family, userInteractedWithColor && currentColorIndex >= 0\)/);
-  assert.match(source('components/catalog/ModernProductCard.tsx'), /const currentImage = !userInteractedWithColor \|\| currentColorIndex === -1/);
+  assert.match(source('components/catalog/ModernProductCard.tsx'), /resolveProductFamilyImages\(currentProduct, family, currentColorIndex >= 0\)/);
+  assert.match(source('components/catalog/ModernProductCard.tsx'), /const currentImage = currentColorIndex === -1/);
+  assert.match(source('components/catalog/ModernProductCard.tsx'), /useState<number>\(-1\)/);
+  assert.match(source('components/catalog/ModernProductCard.tsx'), /setCurrentColorIndex\(isSelectedColor \? -1 : color.origIdx\)/);
+  assert.match(source('components/catalog/ModernProductCard.tsx'), /aria-pressed=\{isSelectedColor\}/);
+  assert.doesNotMatch(source('components/catalog/ModernProductCard.tsx'), /Cor: <span className="font-semibold"/);
   assert.match(source('pages/store/PublicProductPage.tsx'), /resolveProductFamilyImages\(product, siblings, variationImageSelected\)/);
   assert.match(source('pages/store/PublicProductPage.tsx'), /galleryImages\.map/);
   assert.match(source('pages/store/PublicProductPage.tsx'), /setSelectedVariantId\(String\(data\.id\)\);\s*setVariationImageSelected\(Number\(data\.is_parent\) !== 1\)/);

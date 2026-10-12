@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Copy, Package } from 'lucide-react';
+import { Copy, Package, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import type { TikTokShopProductLink } from '../../services/tiktokShopService';
@@ -64,6 +64,19 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
             onDelete={onDeleteProduct}
             forceDetailsExpanded={selectionMode}
             tiktokProductLink={tiktokProductLinks[familyProduct.id] || null}
+            familyStockSummary={<div className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800" aria-label="Estoque disponível para venda">
+                <p className="font-semibold">Disponível para vender: {variants.reduce((total, product) => total + Math.max(0, Number(product.stock_quantity) || 0), 0)} un.</p>
+                {sortedMemoryGroups.map(memoryGroup => {
+                    const available = memoryGroup.products.filter(product => Number(product.stock_quantity) > 0);
+                    if (!available.length) return null;
+                    return <div key={memoryGroup.title} className="mt-2">
+                        {memoryGroup.title && <p className="font-medium">{[getProductVariationSpecs(available[0]).ram, getProductVariationSpecs(available[0]).storage].filter(Boolean).join('/')}</p>}
+                        <ul className="mt-1 space-y-0.5">
+                            {available.map(product => <li key={product.id}>{label(product)} ({Number(product.stock_quantity)} un.)</li>)}
+                        </ul>
+                    </div>;
+                })}
+            </div>}
             familyVariants={<div className="mt-2 space-y-2 rounded-lg border border-violet-200 bg-violet-50/40 p-2" aria-label="SKUs da família">
                 <p className="text-xs font-semibold text-violet-700">{variants.length} variações · Estoque da família: {group.totalStock} un.</p>
                 {!group.parent && <p className="text-xs text-amber-700">Família sem pai vinculado</p>}
@@ -88,12 +101,14 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
                         {product.sku} <Copy size={10} />
                     </button> : <span className="ml-1 font-mono text-[10px]">Sem SKU</span>}
                     <span className="ml-1 text-[10px]">{Number(product.stock_quantity || 0)} un.</span>
+                    {onEditProduct && <button type="button" onClick={(event) => { event.stopPropagation(); onEditProduct(product); }}
+                        title={`Editar ${label(product)}${memoryGroup.title ? ` · ${memoryGroup.title}` : ''} · ${product.sku || product.id}`}
+                        aria-label={`Editar variação ${label(product)} · ${product.sku || product.id}`}
+                        className="ml-1 inline-flex items-center rounded p-1 text-blue-600 hover:bg-blue-100">
+                        <Pencil size={13} />
+                    </button>}
                 </div>)}</div>
                 </div>)}
-                {onEditProduct && group.parent && <button type="button" onClick={(event) => { event.stopPropagation(); onEditProduct(selected); }}
-                    className="text-xs font-semibold text-blue-700 hover:underline">
-                    Editar somente {label(selected)}{hasMemory && ` · ${[getProductVariationSpecs(selected).ram, getProductVariationSpecs(selected).storage].filter(Boolean).join(' / ')}`}
-                </button>}
             </div>} />
     </div>;
 }

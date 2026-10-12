@@ -129,9 +129,11 @@ function matchesAny(file, patterns) {
 
 function classifyFiles(files) {
   const normalized = unique(files.map(normalizeFile));
+  const localOnly = file => file === 'services/localCatalogPreviewServer.cjs';
   const siteFiles = normalized.filter((file) => matchesAny(file, SITE_PATTERNS)
+    && !localOnly(file)
     && !/^services\/(?:priorityStockDecrement|saleStockReconciliation)\.cjs$/.test(file));
-  const apiFiles = normalized.filter((file) => matchesAny(file, API_PATTERNS));
+  const apiFiles = normalized.filter((file) => matchesAny(file, API_PATTERNS) && !localOnly(file));
   const n8nFiles = normalized.filter((file) => matchesAny(file, N8N_WORKFLOW_PATTERNS));
   const versionFiles = normalized.filter((file) => (
     file === 'public/VERSION.json' ||
@@ -336,6 +338,10 @@ function runSelfTest() {
 
   const serviceServer = classifyFiles(['pages/admin/products/SmartphonePhotoIntakePage.tsx', 'services/smartphonePhotoIntakeServer.cjs']);
   assert(serviceServer.target === 'multiple', 'server modules inside services must deploy site and API');
+  const localPreview = classifyFiles(['components/products/ProductCard.tsx', 'services/localCatalogPreviewServer.cjs']);
+  assert(localPreview.target === 'site', 'local preview server must not trigger an API deploy');
+  const previewOnly = classifyFiles(['services/localCatalogPreviewServer.cjs']);
+  assert(!previewOnly.needs.api && !previewOnly.needs.site, 'local preview is development-only');
   const fiscalVault = classifyFiles(['services/fiscalCscVault.cjs']);
   assert(fiscalVault.target === 'multiple', 'server-side vault modules must deploy site and API');
 

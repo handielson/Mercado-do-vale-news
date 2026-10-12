@@ -36,6 +36,7 @@ import type { ProductStockLocation } from '../../types/stock-location';
 interface ProductCardProps {
     product: Product;
     familyVariants?: ReactNode;
+    familyStockSummary?: ReactNode;
     forceDetailsExpanded?: boolean;
     onEdit?: (product: Product) => void;
     onDelete?: (product: Product) => void;
@@ -271,7 +272,7 @@ const getUnitIdentifierChips = (units: Awaited<ReturnType<typeof unitService.lis
  * ProductCard Component
  * Displays product information in a card format with image, prices, and status
  */
-export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariants, forceDetailsExpanded = false, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariants, familyStockSummary, forceDetailsExpanded = false, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
     const [detailsExpanded, setDetailsExpanded] = useState(false);
     const detailsId = useId();
     const showDetails = detailsExpanded || forceDetailsExpanded;
@@ -1588,7 +1589,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
 
                     <div className="min-w-0">
                         <h3
-                            className="min-h-[3.75rem] font-semibold text-slate-900 text-sm leading-tight break-words overflow-hidden"
+                            className={`${familyStockSummary ? 'mb-2' : 'min-h-[3.75rem]'} font-semibold text-slate-900 text-sm leading-tight break-words overflow-hidden`}
                             style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3 }}
                         >
                             <a
@@ -1602,6 +1603,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                                 {product.name}
                             </a>
                         </h3>
+                        {familyStockSummary}
                         <CatalogTitleEditor product={product} inline />
                         {!familyVariants && <>
                             {/* Specs: cor + memória/RAM */}

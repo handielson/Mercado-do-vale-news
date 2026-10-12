@@ -79,16 +79,7 @@ export function ModernProductCard({
     // Selected variant state (defaults to first variant)
     const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
 
-    const [currentColorIndex, setCurrentColorIndex] = useState<number>(() => {
-        if (productGroup?.variants && productGroup.variants.length > 0) {
-            return productGroup.variants[0].colors.length === 1 ? 0 : -1;
-        }
-        return -1;
-    });
-
-    // We track if the user ever clicked a color manually. 
-    // This helps us decide whether to force reset the color if pagination adds more colors.
-    const [userInteractedWithColor, setUserInteractedWithColor] = useState(false);
+    const [currentColorIndex, setCurrentColorIndex] = useState<number>(-1);
 
     // Store installment values for each variant
     const [variantInstallments, setVariantInstallments] = useState<Map<number, { installment: string; total: string }>>(new Map());
@@ -133,15 +124,11 @@ export function ModernProductCard({
     useEffect(() => {
         if (!variants) return;
 
-        if (variants.colors.length === 1) {
-            // Se só tem 1 cor disponível, auto-seleciona
-            setCurrentColorIndex(0);
-        } else if (variants.colors.length > 1 && currentColorIndex === 0 && !userInteractedWithColor) {
-            // BUGFIX: Se a quantidade de cores subir de 1 para >1 (paginação inserindo mais cores no mesmo card/grupo)
-            // Precisamos RESETAR para -1 para garantir que a mensagem 'Escolha uma cor abaixo' apareça
+        if (currentColorIndex >= variants.colors.length) {
+            // Keep the parent cover until an explicit selection, and clear invalid indices after pagination.
             setCurrentColorIndex(-1);
         }
-    }, [variants?.colors.length, userInteractedWithColor]);
+    }, [variants?.colors.length, currentColorIndex]);
 
     // Get the currently selected variant
     const selectedVariant = productGroup?.variants?.[selectedVariantIndex];
@@ -260,7 +247,7 @@ export function ModernProductCard({
     // Get primary image — uses currentProduct (selected variant/color) not the representative product
     const getImageUrl = () => {
         const family = productGroup?.variants.flatMap(variant => variant.products) || [product, ...relatedProducts];
-        const familyImage = resolveProductFamilyImages(currentProduct, family, userInteractedWithColor && currentColorIndex >= 0)[0];
+        const familyImage = resolveProductFamilyImages(currentProduct, family, currentColorIndex >= 0)[0];
         if (familyImage) return familyImage;
         const productToUse = selectCatalogCardImageProduct({
             product,
@@ -379,7 +366,6 @@ export function ModernProductCard({
 
     const handlePrevImage = (e: React.MouseEvent) => {
         e.stopPropagation();
-        setUserInteractedWithColor(true);
         if (currentColorIndex === -1) {
             // If no color selected, default to first or last
             setCurrentColorIndex(colorImages.length - 1);
@@ -390,7 +376,6 @@ export function ModernProductCard({
 
     const handleNextImage = (e: React.MouseEvent) => {
         e.stopPropagation();
-        setUserInteractedWithColor(true);
         if (currentColorIndex === -1) {
             setCurrentColorIndex(0);
             return;
@@ -400,12 +385,11 @@ export function ModernProductCard({
 
     const handleColorClick = (index: number) => (e: React.MouseEvent) => {
         e.stopPropagation();
-        setUserInteractedWithColor(true);
-        setCurrentColorIndex(index);
+        setCurrentColorIndex(previous => previous === index ? -1 : index);
     };
 
     // Use default image if no color selected, otherwise use color's image
-    const currentImage = !userInteractedWithColor || currentColorIndex === -1
+    const currentImage = currentColorIndex === -1
         ? imageUrl
         : (colorImages[currentColorIndex] || imageUrl);
     const activeImageUrl = displayImageUrl || currentImage;
@@ -829,8 +813,7 @@ export function ModernProductCard({
                                                             e.stopPropagation();
                                                             setSelectedVariantIndex(idx);
                                                             if (selectedVariantIndex !== idx) {
-                                                                const newVariant = productGroup.variants[idx];
-                                                                setCurrentColorIndex(newVariant && newVariant.colors.length === 1 ? 0 : -1);
+                                                                setCurrentColorIndex(-1);
                                                             }
                                                         }}
                                                         className={`w-full p-2 sm:p-2.5 rounded-xl border transition-all text-left relative cursor-pointer
@@ -858,9 +841,9 @@ export function ModernProductCard({
                                                                             : formatCatalogVariationLabel(variant.colors[0]?.name) || 'Padrão'
                                                                     }
                                                                 </span>
-                                                                {isSelectedVariant && variant.colors.length > 0 && (
-                                                                    <span className={`text-[9px] sm:text-[10px] mt-0.5 ${currentColorIndex !== -1 ? 'text-blue-500' : 'text-slate-400 animate-pulse'}`}>
-                                                                        {currentColorIndex !== -1 ? formatCatalogVariationLabel(variant.colors[currentColorIndex]?.name) : 'Escolha a cor'}
+                                                                {isSelectedVariant && variant.colors.length > 0 && currentColorIndex === -1 && (
+                                                                    <span className="text-[9px] sm:text-[10px] mt-0.5 text-slate-400">
+                                                                        Escolha a cor
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -908,11 +891,11 @@ export function ModernProductCard({
                                                                         return (
                                                                             <button
                                                                                 key={color.name}
+                                                                                aria-pressed={isSelectedColor}
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation();
                                                                                     setSelectedVariantIndex(idx);
-                                                                                    setUserInteractedWithColor(true);
-                                                                                    setCurrentColorIndex(color.origIdx);
+                                                                                    setCurrentColorIndex(isSelectedColor ? -1 : color.origIdx);
                                                                                 }}
                                                                                 className={`px-2 py-0.5 rounded-full border text-[9px] sm:text-[10px] font-medium transition-all cursor-pointer
                                                                                     ${isSelectedColor
@@ -938,12 +921,6 @@ export function ModernProductCard({
                                                                 </div>
                                                             );
                                                         })()}
-                                                        {/* Selected color label */}
-                                                        {isSelectedVariant && currentColorIndex !== -1 && variant.colors[currentColorIndex] && (
-                                                            <p className="text-[9px] text-blue-500 mt-1">
-                                                                Cor: <span className="font-semibold">{formatCatalogVariationLabel(variant.colors[currentColorIndex].name)}</span>
-                                                            </p>
-                                                        )}
                                                     </div>
                                                 );
                                             })}

@@ -16,6 +16,20 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 }
 
+test('prévia encaminha a sessão de cada leitura sem compartilhar preços privados com visitantes', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-preview-auth-'));
+  const app = createLocalCatalogPreviewServer({port:0, draftFile:path.join(directory,'drafts.json'), fetchImpl:async(url, options) => {
+    const auth = options.headers.Authorization;
+    await new Promise(resolve => setTimeout(resolve, auth ? 15 : 5));
+    return json({id:childId, name:'Produto', price_retail:114000, ...(auth === 'Bearer admin-test' ? {price_cost:77000, price_reseller:109000, price_wholesale:104000} : {})});
+  }});
+  await app.start(); t.after(async()=>{await app.close();await fs.rm(directory,{recursive:true,force:true});});
+  const url=`http://127.0.0.1:${app.server.address().port}/products/${childId}`;
+  const [admin,visitor]=await Promise.all([fetch(url,{headers:{Authorization:'Bearer admin-test'}}).then(r=>r.json()),fetch(url).then(r=>r.json())]);
+  assert.equal(admin.price_reseller,109000); assert.equal(admin.price_wholesale,104000); assert.equal(admin.price_cost,77000);
+  for(const field of ['price_cost','price_reseller','price_wholesale']) assert.equal(Object.hasOwn(visitor,field),false);
+});
+
 test('foto do pai muda somente a prévia e mantém fotos próprias e produtos antigos', async t => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mdv-preview-family-cover-'));
   const child = { id: childId, parent_id: parentId, name:'Filho', sku:'SKU-01', status:'active', storefront:'loja_3d', is_print3d:1, price_retail:1000, images:['child.jpg'] };

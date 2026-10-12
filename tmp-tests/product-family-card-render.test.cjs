@@ -12,10 +12,10 @@ const mod = { exports: {} };
 const icon = () => null;
 vm.runInNewContext(compiled, { exports: mod.exports, module: mod, require(name) {
   if (name === 'react') return React;
-  if (name === 'lucide-react') return { ChevronDown: icon, Copy: icon, Package: icon };
+  if (name === 'lucide-react') return { ChevronDown: icon, Copy: icon, Package: icon, Pencil: icon };
   if (name === 'sonner') return { toast: {} };
   if (name === './CatalogTitleEditor') return { CatalogTitleEditor: () => null };
-  if (name === './ProductCard') return { ProductCard: props => React.createElement('section', { 'data-product': props.product.id }, props.product.name, props.familyVariants) };
+  if (name === './ProductCard') return { ProductCard: props => React.createElement('section', { 'data-product': props.product.id }, props.product.name, props.familyStockSummary, props.familyVariants) };
   if (name.includes('modelProductAggregator')) return { getProductVariationSpecs: p => ({ color: p.specs.color, ram: p.specs.ram || '', storage: p.specs.storage || '' }) };
   throw new Error(`Unexpected dependency: ${name}`);
 } });
@@ -39,8 +39,19 @@ test('detalhes usam o pai e mantêm seleção e edição explícitas dos filhos'
   assert.doesNotMatch(html, /data-product="child"/);
   assert.match(html, /Selecionar SKU FILHO/);
   assert.match(html, /checked=""/);
-  assert.match(html, /Editar somente Preto/);
+  assert.match(html, /aria-label="Editar variação Preto · FILHO"/);
+  assert.doesNotMatch(html, /Editar somente/);
   assert.match(html, /8GB RAM/);
+});
+test('resumo mostra apenas estoque positivo e fica antes dos detalhes da família', () => {
+  const empty = { ...child, id: 'empty', sku: 'ZERADO', stock_quantity: 0, specs: { ...child.specs, color: 'Azul' } };
+  const html = render({ groups: [{ ...group, familyProducts: [parent, child, empty] }] });
+  const summary = html.slice(html.indexOf('aria-label="Estoque disponível para venda"'), html.indexOf('aria-label="SKUs da família"'));
+  assert.match(summary, /Disponível para vender: 3 un/);
+  assert.match(summary, /Preto \(3 un\.\)/);
+  assert.match(summary, /8GB\/256GB/);
+  assert.match(summary, /<ul[^>]*><li[^>]*>Preto \(3 un\.\)<\/li><\/ul>/);
+  assert.doesNotMatch(summary, /Azul|ZERADO/);
 });
 test('todos os cards preservam mídia, atalhos, nome e SKU antes da expansão', () => {
   const card = fs.readFileSync('components/products/ProductCard.tsx', 'utf8');

@@ -1,6 +1,7 @@
 'use strict';
 
 const http = require('node:http');
+const { AsyncLocalStorage } = require('node:async_hooks');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { resolveStorefrontDescription } = require('./productStorefrontOffer.cjs');
@@ -166,6 +167,7 @@ function createLocalCatalogPreviewServer({
 
   const filamentPreview = createLocalFilamentPreview({ store, serialize:serializeSkuWrite, fetchImpl, origin, syncKey });
 
+  const requestAuth = new AsyncLocalStorage();
   async function remote(pathnameWithSearch, method = 'GET', body) {
     const response = await fetchImpl(new URL(pathnameWithSearch, origin), {
       method,
@@ -173,6 +175,7 @@ function createLocalCatalogPreviewServer({
         Accept: 'application/json',
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(syncKey ? { 'x-sync-key': syncKey } : {}),
+        ...(requestAuth.getStore() ? { Authorization: requestAuth.getStore() } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(60_000),
@@ -455,7 +458,9 @@ function createLocalCatalogPreviewServer({
   }
 
   const server = http.createServer((req, res) => {
-    void handler(req, res).catch((error) => send(res, error.statusCode || 500, { error: error.message || 'Falha na prévia local.' }));
+    requestAuth.run(req.headers.authorization || '', () => {
+      void handler(req, res).catch((error) => send(res, error.statusCode || 500, { error: error.message || 'Falha na prévia local.' }));
+    });
   });
   return {
     server,
