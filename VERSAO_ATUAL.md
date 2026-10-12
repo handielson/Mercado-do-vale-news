@@ -772,3 +772,6 @@ Bloqueados preservados:
 
 
 Fechamento v1.2.613: commit 7cc7bf07 e tag em main, site/API publicados e validados. Custos oficiais autenticados, catalogo renderizado e n8n saudavel. Auditoria: zero removidos, 34 worktrees preservados; seis arquivos preexistentes fora do escopo. Detalhes na nota da versao.
+
+
+Fechamento v1.2.614: commit 5b729077/tag em main, site publicado; preto validado com fotos proprias, videos em arquivos distintos e banco/MySQL saudavel. Auditoria preservou 34 worktrees e os seis preexistentes. Detalhes na nota desta versao.
