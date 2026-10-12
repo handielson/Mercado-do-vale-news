@@ -553,7 +553,7 @@ export const PublicProductPage: React.FC = () => {
                     : formattedProduct;
 
                 setSelectedVariantId(String(data.id));
-                setVariationImageSelected(false);
+                setVariationImageSelected(Number(data.is_parent) !== 1);
                 setProduct(displayProduct as unknown as CatalogProduct);
                 criticalProductLoaded = true;
                 trackViewItem(displayProduct);
@@ -562,7 +562,7 @@ export const PublicProductPage: React.FC = () => {
                 if (data.is_combo && data.tags?.includes('mosaic_combo') && displayProduct.images.length > 1) {
                     setSelectedImage('MOSAIC');
                 } else if (displayProduct.images.length > 0) {
-                    setSelectedImage(resolveProductFamilyImages(displayProduct)[0] || '');
+                    setSelectedImage(resolveProductFamilyImages(displayProduct, [], Number(data.is_parent) !== 1)[0] || '');
                 }
 
                 // Release the critical product view before secondary sections finish.

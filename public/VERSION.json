@@ -1,50 +1,28 @@
 {
-  "version": "v1.2.613-modelos-midias-openai-payjoy",
+  "version": "v1.2.614-familia-note14s",
   "date": "2026-10-12",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.613-modelos-midias-openai-payjoy",
-  "release_vps": "/var/www/mdv-site/releases/20261012-193852-modelos-midias-openai-payjoy",
+  "tag": "v1.2.614-familia-note14s",
+  "release_vps": "/var/www/mdv-site/releases/20261012-201156-familia-note14s",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Midias do pai no modelo, custos oficiais OpenAI e aprovacao PayJoy com leitura de print e calculo da entrada.",
+  "summary": "Pai generico unico do Redmi Note 14S, quatro variacoes ativas e galeria coerente com a variacao selecionada.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/products/sections/ProductImages.tsx",
-    "components/settings/ColorImageManager.tsx",
-    "components/settings/ModelModal.tsx",
-    "components/settings/ModelParentImages.tsx",
-    "components/whatsapp/OpenAiFinancePanel.tsx",
-    "components/whatsapp/WhatsAppChatGptPanel.tsx",
-    "pages/admin/settings/WhatsAppPage.tsx",
-    "services/products.ts",
-    "services/vpsApiService.ts",
-    "services/openAiFinanceServer.cjs",
-    "services/openAiFinanceService.ts",
-    "scripts/openai-finance-readonly.cjs",
-    "scripts/deploy-openai-finance.cjs",
-    "deploy-vps-server-only.cjs",
-    "vite.config.ts",
-    "vps_server.cjs",
-    "tmp-tests/model-ai-generate-json-static.test.mjs",
-    "tmp-tests/model-color-gallery-load.test.cjs",
-    "tmp-tests/model-parent-media-persistence.test.cjs",
+    "pages/store/PublicProductPage.tsx",
+    "scripts/repair-model-family.cjs",
+    "tmp-tests/model-family-repair.test.cjs",
     "tmp-tests/product-family-images.test.mjs",
-    "tmp-tests/openai-finance.test.cjs",
-    "tmp-tests/openai-finance-deploy.test.cjs",
-    "tmp-tests/n8n-fix-payjoy-link-confirmation.cjs",
-    "tmp-tests/n8n-payjoy-approval-patch.cjs",
-    "tmp-tests/n8n-payjoy-approval.test.cjs",
-    "tmp-tests/n8n-payjoy-continuation.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-12-v1.2.613-modelos-midias-openai-payjoy.md"
+    "docs/versoes/2026-10-12-v1.2.614-familia-note14s.md"
   ],
   "validations": [
-    "Midias, persistencia, pais/cores, quota, financeiro, autenticacao, deploy seletivo e PayJoy aprovados.",
-    "Visao real em imagem sintetica e aritmetica R$1600 x 14%=R$224 validadas.",
-    "Sintaxe, build e guarda contra Supabase aprovados; verificacoes publicas na nota da entrega."
+    "29 testes de familia, planejamento e midias aprovados; 15 unidades e historicos preservados em transacao.",
+    "Video do pai copiado para SKU proprio, variações preservam seus arquivos.",
+    "Site publicado e verificado conforme nota da versao."
   ]
 }

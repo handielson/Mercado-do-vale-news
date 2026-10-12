@@ -1,3 +1,13 @@
+# v1.2.614-familia-note14s
+
+Data: 12/10/2026. Branch: main. Tag: v1.2.614-familia-note14s.
+Release: /var/www/mdv-site/releases/20261012-201156-familia-note14s.
+
+Pai generico unico do Redmi Note 14S, quatro variacoes ativas e galeria coerente com a variacao selecionada.
+15 unidades e historicos preservados; tres duplicados inativos. Pai com foto e video proprios, variações com mídias próprias. Sem restart da API.
+
+## Historico anterior
+
 # v1.2.613-modelos-midias-openai-payjoy
 
 Data: 12/10/2026. Branch: main. Tag: v1.2.613-modelos-midias-openai-payjoy.

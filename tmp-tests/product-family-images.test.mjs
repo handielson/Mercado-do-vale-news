@@ -207,6 +207,8 @@ test('os dois sites conectam a mesma regra à capa e à seleção de cor', () =>
   assert.match(source('components/catalog/ModernProductCard.tsx'), /const currentImage = !userInteractedWithColor \|\| currentColorIndex === -1/);
   assert.match(source('pages/store/PublicProductPage.tsx'), /resolveProductFamilyImages\(product, siblings, variationImageSelected\)/);
   assert.match(source('pages/store/PublicProductPage.tsx'), /galleryImages\.map/);
+  assert.match(source('pages/store/PublicProductPage.tsx'), /setSelectedVariantId\(String\(data\.id\)\);\s*setVariationImageSelected\(Number\(data\.is_parent\) !== 1\)/);
+  assert.match(source('pages/store/PublicProductPage.tsx'), /resolveProductFamilyImages\(displayProduct, \[\], Number\(data\.is_parent\) !== 1\)/);
   assert.match(source('utils/print3dStorefront.ts'), /product.parent_id \? `family:\$\{product.parent_id\}`/);
   assert.match(source('vps_server.cjs'), /AS parent_images/);
   assert.match(source('vps_server.cjs'), /productFamilyNameSelectSql\('products', true\)/);
