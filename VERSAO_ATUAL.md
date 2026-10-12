@@ -759,3 +759,6 @@ Bloqueados preservados:
 - C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-n8n-context-handoff-fix — dirty
 - C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-publish-novo-bot — dirty
 - C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale-status-contacts-fix — dirty
+
+
+Fechamento v1.2.613: commit 7cc7bf07 e tag em main, site/API publicados e validados. Custos oficiais autenticados, catalogo renderizado e n8n saudavel. Auditoria: zero removidos, 34 worktrees preservados; seis arquivos preexistentes fora do escopo. Detalhes na nota da versao.
