@@ -786,3 +786,6 @@ Fechamento v1.2.613: commit 7cc7bf07 e tag em main, site/API publicados e valida
 
 
 Fechamento v1.2.614: commit 5b729077/tag em main, site publicado; preto validado com fotos proprias, videos em arquivos distintos e banco/MySQL saudavel. Auditoria preservou 34 worktrees e os seis preexistentes. Detalhes na nota desta versao.
+
+
+Fechamento v1.2.615: commit funcional 86153590/tag enviados, site publicado e validado no catalogo e painel reais. API/MySQL saudaveis, sem restart. Auditoria: 0 removidos, 34 bloqueados preservados na nota; seis arquivos preexistentes fora do escopo.
