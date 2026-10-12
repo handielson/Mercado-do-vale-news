@@ -1,27 +1,31 @@
 {
-  "version": "v1.2.611-parcelamento-via-boleto",
+  "version": "v1.2.612-estoque-relatorio",
   "date": "2026-10-12",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.611-parcelamento-via-boleto",
-  "release_vps": "/var/www/mdv-site/releases/20261012-154150-parcelamento-via-boleto",
+  "tag": "v1.2.612-estoque-relatorio",
+  "release_vps": "/var/www/mdv-site/releases/20261012-163430-estoque-relatorio",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Pergunta geral de parcelamento apresenta cartao e Via Boleto PayJoy, com confirmacao antes do link de analise.",
+  "summary": "Filtros responsivos e relatorio de estoque por categoria com seriais, IMEIs e valores opcionais de compra, custo medio e venda a vista.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "tmp-tests/n8n-payjoy-workflow-patch.cjs",
-    "tmp-tests/n8n-fix-payjoy-link-confirmation.cjs",
-    "tmp-tests/n8n-installment-options-payjoy.test.cjs",
+    "components/inventory/InventoryFilters.tsx",
+    "components/inventory/SerializedUnitsModal.tsx",
+    "pages/admin/inventory/InventoryPage.tsx",
+    "services/inventory.ts",
+    "utils/inventoryCategoryReport.mjs",
+    "tmp-tests/inventory-category-report.test.mjs",
+    "tmp-tests/inventory-vps-products-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-12-v1.2.611-parcelamento-via-boleto.md"
+    "docs/versoes/2026-10-12-v1.2.612-estoque-relatorio.md"
   ],
   "validations": [
-    "Teste focado com export do workflow ativo: opcoes, confirmacao, usados, cartao especifico e isolamento do patch aprovados.",
-    "Dry-run do mutador na VPS aprovado; sintaxe dos scripts e entrypoints aprovada.",
-    "Build e verificacao publica registrados na nota da versao."
+    "Testes de relatorio, custos, filtros, paginacao e falhas de consulta aprovados; guardas do inventario e lista manual aprovadas.",
+    "Layout renderizado em desktop e celular sem transbordamento horizontal; consulta real de Smartphones disponiveis validada.",
+    "Sintaxe dos entrypoints e build aprovados. Publicacao e validacao publica seguem na nota da versao."
   ]
 }

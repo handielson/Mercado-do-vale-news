@@ -1,3 +1,16 @@
+# v1.2.612-estoque-relatorio
+
+Data: 12/10/2026. Branch: main. Tag: v1.2.612-estoque-relatorio.
+Release MDV: /var/www/mdv-site/releases/20261012-163430-estoque-relatorio.
+
+Gestao de Estoque recebe filtros responsivos, campos mais largos, resumo geral recolhivel e area de impressao com escolha explicita Sem valores / Com valores. Relatorio por categoria e subcategorias apresenta estoque disponivel, seriais, IMEI 1/2 e marcacao de conferencia; custos e venda a vista sao opcionais.
+
+Consulta usa historico de unidades da VPS para status e quantidades serializadas, preserva legado e pagina todos os produtos. Compra usa custo da unidade com fallback ao produto; media ponderada por produto/variacao considera unidades disponiveis com custo informado. Venda usa preco efetivo de varejo com promocao ativa.
+
+Testes focados, guardas do inventario, sintaxe e build aprovados. Layout verificado em desktop e celular sem transbordamento; filtro real Smartphones + Disponivel + estoque positivo encontra 53 produtos/variacoes. Deploy apenas do site; nenhuma gravacao de estoque, preco ou venda. Fechamento na nota da versao.
+
+## Historico anterior
+
 # v1.2.611-parcelamento-via-boleto
 
 Data: 12/10/2026. Branch: main. Tag: v1.2.611-parcelamento-via-boleto.

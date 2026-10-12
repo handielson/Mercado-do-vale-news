@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 const source = readFileSync(resolve('services/inventory.ts'), 'utf8');
 
 assert(
-  /vpsApiService\.getProducts\(\{\s*status:\s*'all'[\s\S]*limit:\s*5000/.test(source),
+  /vpsApiService\.getProducts\(\{\s*status:\s*'all'[\s\S]*limit:\s*pageSize, offset/.test(source),
   'inventory service should load inventory product reads from VPS',
 );
 

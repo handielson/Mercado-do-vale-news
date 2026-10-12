@@ -8,6 +8,9 @@ import {
 import { Product } from '../types/product';
 import { vpsApiService } from './vpsApiService';
 import { vpsClient } from './vpsClient';
+import { getCompanyId } from './companyContext';
+import { buildInventoryCategoryRows } from '../utils/inventoryCategoryReport.mjs';
+import { getEffectiveRetailPrice } from '../utils/promoPrice';
 
 interface TableDataResponse<T> {
     rows?: T[];
@@ -92,17 +95,27 @@ function buildProductSearchFilter(searchTerm: string): string {
     ].join(',');
 }
 
-async function loadInventoryProducts(): Promise<Product[]> {
-    const rows = await vpsApiService.getProducts({
-        status: 'all',
-        limit: 5000,
-        noCache: true,
-    });
+async function loadInventoryProducts(categoryId?: string): Promise<Product[]> {
+    const rows: Product[] = [];
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+        const page = await vpsApiService.getProducts({
+            status: 'all', category: categoryId, compact: true,
+            limit: pageSize, offset, noCache: true,
+        });
+        if (!Array.isArray(page)) throw new Error('Não foi possível carregar o estoque completo.');
+        rows.push(...page);
+        if (page.length < pageSize) break;
+    }
 
     return (rows || []).map((p: any) => ({
         ...p,
         stock_quantity: normalizeStockQuantity(p)
     }));
+}
+
+function inventoryUnitStatus(status: string): string {
+    return status === 'rma' ? 'maintenance' : status === 'scrapped' ? 'defective' : status;
 }
 
 function matchesSearch(product: Product, search: string): boolean {
@@ -134,7 +147,14 @@ function applyInventoryFilters(products: Product[], filters: InventoryFilters = 
     }
 
     if (filters.status) {
-        result = result.filter(product => (product as any).specs?.unit_status === filters.status);
+        result = result.filter(product => {
+            const units = (product as any).inventory_units;
+            if (Array.isArray(units) && units.length) {
+                return units.some(unit => inventoryUnitStatus(unit.status) === filters.status);
+            }
+            const status = product.specs?.unit_status || (normalizeStockQuantity(product) > 0 ? 'available' : undefined);
+            return status === filters.status;
+        });
     }
 
     if (filters.only_available) {
@@ -174,6 +194,27 @@ function sortInventoryProducts(products: Product[], filters: InventoryFilters = 
  * - Real-time stock updates
  */
 class InventoryService {
+    async getCategoryStockReport(categoryId: string, categoryIds = [categoryId]) {
+        if (!categoryId) throw new Error('Selecione uma categoria.');
+        const companyId = await getCompanyId();
+        const units = await vpsClient.get<any[]>(`/units?company_id=${encodeURIComponent(companyId)}&status=all&_t=${Date.now()}`);
+        if (!Array.isArray(units)) throw new Error('Resposta inválida de unidades.');
+        const products: Product[] = [];
+        const pageSize = 500;
+        for (let offset = 0; ; offset += pageSize) {
+            const query = new URLSearchParams({ category: categoryIds.join(','), status: 'all', compact: 'true',
+                limit: String(pageSize), offset: String(offset), _t: String(Date.now()) });
+            const page = await vpsClient.get<Product[]>(`/products?${query}`);
+            if (!Array.isArray(page)) throw new Error('Resposta inválida de produtos.');
+            products.push(...page);
+            if (page.length < pageSize) break;
+        }
+        return buildInventoryCategoryRows(products.map(product => ({ ...product,
+            report_sale_price: product.price_retail == null && product.price_promo == null
+                ? null : getEffectiveRetailPrice(product),
+        })), units, categoryIds);
+    }
+
     /**
      * Get inventory with filters
      */
@@ -187,13 +228,32 @@ class InventoryService {
      * Non-serialized products show as individual groups
      */
     async getInventoryGrouped(filters: InventoryFilters = {}): Promise<import('../types/inventory').InventoryGroup[]> {
-        const products = applyInventoryFilters(await loadInventoryProducts(), filters);
+        const companyId = await getCompanyId();
+        const [allProducts, units] = await Promise.all([
+            loadInventoryProducts(filters.category_id),
+            vpsClient.get<any[]>(`/units?company_id=${encodeURIComponent(companyId)}&status=all&_t=${Date.now()}`),
+        ]);
+        if (!Array.isArray(units)) throw new Error('Resposta inválida de unidades.');
+        const unitsByProduct = new Map<string, any[]>();
+        for (const unit of units) {
+            const list = unitsByProduct.get(unit.product_id) || [];
+            list.push(unit);
+            unitsByProduct.set(unit.product_id, list);
+        }
+        const products = applyInventoryFilters(allProducts.map(product => {
+            const productUnits = unitsByProduct.get(product.id);
+            return productUnits ? { ...product, inventory_units: productUnits,
+                stock_quantity: productUnits.filter(unit => unit.status === 'available').length } : product;
+        }), filters);
 
         // Group products
         const groups = new Map<string, import('../types/inventory').InventoryGroup>();
 
         products.forEach(product => {
+            const unitHistory: any[] | undefined = (product as any).inventory_units;
+            const matchingUnits = unitHistory?.filter(unit => !filters.status || inventoryUnitStatus(unit.status) === filters.status);
             const isSerialized = !!(
+                unitHistory?.length ||
                 product.specs?.imei1 ||
                 product.specs?.imei2 ||
                 product.specs?.serial
@@ -201,7 +261,9 @@ class InventoryService {
 
             // Create group key
             let groupKey: string;
-            if (isSerialized) {
+            if (unitHistory?.length) {
+                groupKey = product.id;
+            } else if (isSerialized) {
                 // Group by brand+model+color+storage
                 groupKey = [
                     product.specs?.brand,
@@ -242,12 +304,29 @@ class InventoryService {
             const group = groups.get(groupKey)!;
             const stockQuantity = Math.max(0, normalizeStockQuantity(product));
 
+            if (unitHistory?.length) {
+                for (const unit of matchingUnits || []) {
+                    group.total_units++;
+                    switch (unit.status) {
+                        case 'available': group.available++; break;
+                        case 'reserved': group.reserved++; break;
+                        case 'sold': group.sold++; break;
+                        case 'rma': case 'maintenance': group.in_maintenance++; break;
+                        case 'scrapped': case 'defective': group.defective++; break;
+                    }
+                    group.units!.push({ id: unit.id, imei1: unit.imei_1, imei2: unit.imei_2,
+                        serial: unit.serial, unit_status: inventoryUnitStatus(unit.status) as import('../types/inventory').UnitStatus, created_at: unit.created_at,
+                        notes: unit.internal_notes });
+                }
+                return;
+            }
+
             // Count by status
             const status = product.specs?.unit_status || 'available';
-            group.total_units += isSerialized ? 1 : stockQuantity;
+            group.total_units += isSerialized && status !== 'available' ? 1 : stockQuantity;
 
             switch (status) {
-                case 'available': group.available += isSerialized ? 1 : stockQuantity; break;
+                case 'available': group.available += stockQuantity; break;
                 case 'reserved': group.reserved += isSerialized ? 1 : stockQuantity; break;
                 case 'sold': group.sold += isSerialized ? 1 : stockQuantity; break;
                 case 'maintenance': group.in_maintenance += isSerialized ? 1 : stockQuantity; break;

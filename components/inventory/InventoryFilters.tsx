@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Filter } from 'lucide-react';
+import { Search, SlidersHorizontal, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { InventoryFilters as FiltersType } from '../../types/inventory';
 
 interface InventoryFiltersProps {
@@ -40,12 +40,16 @@ export function InventoryFilters({ filters, onFiltersChange, categories, brands 
     };
 
     const handleSortOrderToggle = () => {
-        const newOrder = filters.sort_order === 'asc' ? 'desc' : 'asc';
+        const newOrder = (filters.sort_order || 'asc') === 'asc' ? 'desc' : 'asc';
         onFiltersChange({ ...filters, sort_order: newOrder });
     };
 
     return (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+        <section aria-label="Filtros do estoque" className="bg-white rounded-2xl border border-slate-200 p-5 space-y-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900"><SlidersHorizontal size={17} className="text-blue-600" />Filtrar estoque</h2>
+                <button type="button" onClick={() => onFiltersChange({})} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600"><X size={14} />Limpar filtros</button>
+            </div>
             {/* Search Bar */}
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -54,21 +58,23 @@ export function InventoryFilters({ filters, onFiltersChange, categories, brands 
                     value={filters.search || ''}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     placeholder="Buscar por nome, SKU, EAN ou IMEI1..."
-                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    aria-label="Buscar produto"
+                    className="h-12 w-full pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
                 />
             </div>
 
             {/* Filters Row */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 {/* Category Filter */}
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                         Categoria
                     </label>
                     <select
+                        aria-label="Categoria"
                         value={filters.category_id || ''}
                         onChange={(e) => handleCategoryChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="h-11 w-full min-w-0 px-3 bg-white text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
                     >
                         <option value="">Todas as categorias</option>
                         {categories.map(cat => (
@@ -85,9 +91,10 @@ export function InventoryFilters({ filters, onFiltersChange, categories, brands 
                         Marca
                     </label>
                     <select
+                        aria-label="Marca"
                         value={filters.brand || ''}
                         onChange={(e) => handleBrandChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="h-11 w-full min-w-0 px-3 bg-white text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
                     >
                         <option value="">Todas as marcas</option>
                         {brands.map(brand => (
@@ -104,16 +111,17 @@ export function InventoryFilters({ filters, onFiltersChange, categories, brands 
                         Status
                     </label>
                     <select
+                        aria-label="Status da unidade"
                         value={filters.status || ''}
                         onChange={(e) => onFiltersChange({ ...filters, status: e.target.value as any || undefined })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="h-11 w-full min-w-0 px-3 bg-white text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
                     >
                         <option value="">Todos os status</option>
-                        <option value="available">🟢 Disponível</option>
-                        <option value="reserved">🟡 Reservado</option>
-                        <option value="sold">🔴 Vendido</option>
-                        <option value="maintenance">🔵 Manutenção</option>
-                        <option value="defective">⚫ Defeituoso</option>
+                        <option value="available">Disponível</option>
+                        <option value="reserved">Reservado</option>
+                        <option value="sold">Vendido</option>
+                        <option value="maintenance">Manutenção</option>
+                        <option value="defective">Defeituoso</option>
                     </select>
                 </div>
 
@@ -123,6 +131,7 @@ export function InventoryFilters({ filters, onFiltersChange, categories, brands 
                         Tipo
                     </label>
                     <select
+                        aria-label="Tipo de estoque"
                         value={filters.only_serialized ? 'serialized' : filters.only_non_serialized ? 'non-serialized' : ''}
                         onChange={(e) => {
                             const value = e.target.value;
@@ -132,11 +141,11 @@ export function InventoryFilters({ filters, onFiltersChange, categories, brands 
                                 only_non_serialized: value === 'non-serialized' ? true : undefined
                             });
                         }}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="h-11 w-full min-w-0 px-3 bg-white text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
                     >
                         <option value="">Todos os tipos</option>
-                        <option value="serialized">🔵 Serializados</option>
-                        <option value="non-serialized">📦 Não Serializados</option>
+                        <option value="serialized">Serializados</option>
+                        <option value="non-serialized">Não Serializados</option>
                     </select>
                 </div>
 
@@ -147,9 +156,10 @@ export function InventoryFilters({ filters, onFiltersChange, categories, brands 
                     </label>
                     <div className="flex gap-2">
                         <select
+                            aria-label="Ordenar por"
                             value={filters.sort_by || 'name'}
                             onChange={(e) => handleSortChange(e.target.value as FiltersType['sort_by'])}
-                            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="h-11 min-w-0 flex-1 px-3 bg-white text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
                         >
                             <option value="name">Nome</option>
                             <option value="sku">SKU</option>
@@ -158,17 +168,19 @@ export function InventoryFilters({ filters, onFiltersChange, categories, brands 
                         </select>
                         <button
                             onClick={handleSortOrderToggle}
-                            className="px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                            title={filters.sort_order === 'asc' ? 'Crescente' : 'Decrescente'}
+                            type="button"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+                            aria-label={(filters.sort_order || 'asc') === 'asc' ? 'Ordem crescente' : 'Ordem decrescente'}
+                            title={(filters.sort_order || 'asc') === 'asc' ? 'Crescente' : 'Decrescente'}
                         >
-                            {filters.sort_order === 'asc' ? '↑' : '↓'}
+                            {(filters.sort_order || 'asc') === 'asc' ? <ArrowUp size={17} /> : <ArrowDown size={17} />}
                         </button>
                     </div>
                 </div>
             </div>
 
             {/* Available Only Checkbox */}
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
+            <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-3">
                 <input
                     type="checkbox"
                     id="only-available"
@@ -182,24 +194,19 @@ export function InventoryFilters({ filters, onFiltersChange, categories, brands 
             </div>
 
             {/* Active Filters Summary */}
-            {(filters.search || filters.category_id || filters.brand || filters.only_available) && (
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
-                    <Filter className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm text-slate-600">
+            {(filters.search || filters.category_id || filters.brand || filters.status || filters.only_serialized || filters.only_non_serialized || filters.only_available) && (
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex flex-wrap items-center gap-y-2 text-xs text-slate-500">
                         Filtros ativos:
                         {filters.search && <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Busca</span>}
-                        {filters.category_id && <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Categoria</span>}
-                        {filters.brand && <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Marca</span>}
-                        {filters.only_available && <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Disponíveis</span>}
+                        {filters.category_id && <span className="ml-2 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">{categories.find(category => category.id === filters.category_id)?.name || 'Categoria'}</span>}
+                        {filters.brand && <span className="ml-2 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">{filters.brand}</span>}
+                        {filters.status && <span className="ml-2 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">{{ available: 'Disponível', reserved: 'Reservado', sold: 'Vendido', maintenance: 'Manutenção', defective: 'Defeituoso' }[filters.status]}</span>}
+                        {(filters.only_serialized || filters.only_non_serialized) && <span className="ml-2 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">{filters.only_serialized ? 'Serializados' : 'Não serializados'}</span>}
+                        {filters.only_available && <span className="ml-2 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs">Com estoque</span>}
                     </span>
-                    <button
-                        onClick={() => onFiltersChange({})}
-                        className="ml-auto text-sm text-blue-600 hover:text-blue-700 font-medium"
-                    >
-                        Limpar filtros
-                    </button>
                 </div>
             )}
-        </div>
+        </section>
     );
 }

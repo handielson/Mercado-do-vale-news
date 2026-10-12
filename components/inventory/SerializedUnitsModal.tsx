@@ -59,7 +59,7 @@ export function SerializedUnitsModal({ group, isOpen, onClose, onReload }: Seria
             defective: { emoji: '⚫', label: 'Defeituoso', class: 'bg-gray-100 text-gray-800' }
         };
 
-        const badge = badges[status];
+        const badge = badges[status] || { emoji: '⚪', label: 'Oculto / não localizado', class: 'bg-gray-100 text-gray-800' };
         return (
             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${badge.class}`}>
                 <span>{badge.emoji}</span>
