@@ -11,6 +11,8 @@ Validacoes: testes focados sobre export ativo, confirmacoes/negativas, URL ofici
 
 Site recebe a versao; API e site 3DMV sem deploy. Nenhuma mensagem de teste enviada ao cliente.
 
+Publicacao concluida: commit funcional 0c0d5232 e tag enviados; workflow atualizado e alinhado, servicos 1/1 e healthz HTTP 200. Site ativo no release registrado, VERSION.json correto e catalogo real renderizado sem erro fatal. API saudavel, mysql.ok=true. Auditoria e limpeza: 0 removidos, 34 bloqueadas preservadas e detalhadas na nota; somente seis preexistentes fora do escopo.
+
 ## Historico anterior
 
 # v1.2.610-custo-final-unidade
