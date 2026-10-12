@@ -9,6 +9,8 @@ Consulta usa historico de unidades da VPS para status e quantidades serializadas
 
 Testes focados, guardas do inventario, sintaxe e build aprovados. Layout verificado em desktop e celular sem transbordamento; filtro real Smartphones + Disponivel + estoque positivo encontra 53 produtos/variacoes. Deploy apenas do site; nenhuma gravacao de estoque, preco ou venda. Fechamento na nota da versao.
 
+Publicacao concluida: commit funcional d0d2fc12 e tag enviados a main; release ativa e VERSION.json publico conferidos. Catalogo real renderizado sem erro fatal, login admin carregado e chunk de estoque com layout/relatorio correto. API saudavel, mysql.ok=true, sem restart. Auditoria e limpeza: 0 removidos, 34 bloqueados preservados e listados na nota; seis arquivos preexistentes fora do escopo. Evidencias em .local, logs no TEMP.
+
 ## Historico anterior
 
 # v1.2.611-parcelamento-via-boleto
