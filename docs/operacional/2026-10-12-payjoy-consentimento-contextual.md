@@ -12,7 +12,7 @@ Validacao: tres testes focados, cenarios adicionais no validate, conservacao do 
 
 Leitura posterior confirmou workflow ativo, entidade/historico alinhados e dry-run idempotente sem alteracoes pendentes. Evidencias privadas em .local/payjoy-contextual-*, backup no TEMP identificado pelo deploy. O consentimento nao deve ser reduzido novamente a uma lista de palavras exatas.
 
-## Conhecimento para dúvidas após o link — preparado, ainda não aplicado
+## Conhecimento para dúvidas após o link — publicado em v1.2.618
 
 Diagnóstico adicional em 12/10: uma dúvida curta após o link foi classificada como formas_pagamento. O histórico completo chegou ao fluxo, mas Pagamento - Politica respondeu com a lista genérica e reiniciou awaiting_link_confirmation. O conhecimento da IA precisa chegar à rota que efetivamente responde.
 
@@ -24,4 +24,4 @@ Endereço e horários foram conferidos em `https://api.xiaomipetrolina.com.br/pu
 
 Validação local usa snapshot somente leitura do workflow ativo, sem dados de cliente nos testes: definir `MDV_PAYJOY_WORKFLOW_SNAPSHOT` e executar `node --test tmp-tests/n8n-payjoy-knowledge.test.cjs tmp-tests/n8n-payjoy-contextual-intent.test.cjs`. Nove testes passaram, incluindo a lista e manutenção do consentimento pendente. Cinco mensagens fictícias foram avaliadas pelo gpt-4.1-mini real e suas saídas verificadas no parser final. O modelo chegou a atribuir uma dúvida sobre carregador à PayJoy; a guarda de contexto recente bloqueou essa falsa atribuição. Na redação, reforçada a distinção entre PayJoy e instituição financeira após uma primeira resposta incorreta. A resposta posterior explicou a finalidade do link sem repetir pagamentos ou oferecer outro link. Essas amostras não garantem todas as redações futuras.
 
-Export e candidato ficam em `.local/payjoy-knowledge-current.json` e `.local/payjoy-knowledge-ready.json`; evidências em `.local/payjoy-knowledge-provider-results.json`. Não versionar exports privados. Produção continua no estado anterior até autorização para ativação. Nenhum cliente recebeu mensagem de teste. A falha de áudio detectada na mesma conversa está fora deste ajuste.
+Export e candidato ficam em `.local/payjoy-knowledge-current.json` e `.local/payjoy-knowledge-ready.json`; evidências em `.local/payjoy-knowledge-provider-results.json`. Não versionar exports privados. Ativação autorizada e concluída pelo mutador canônico com --knowledge --apply. Entidade/histórico alinhados, grafo preservado e n8n/runner em 1/1; health/readiness 200. Dúvidas explicativas têm prioridade sobre o antigo atalho de continuidade da análise, mantendo reenvio explícito e consentimento. Fechamento e backup na nota v1.2.618. Nenhum cliente recebeu mensagem de teste. A falha de áudio detectada na mesma conversa está fora deste ajuste.

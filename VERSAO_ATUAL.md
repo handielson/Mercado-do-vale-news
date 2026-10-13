@@ -5,7 +5,7 @@ Release: /var/www/mdv-site/releases/20261013-004529-v1-2-618-payjoy-conhecimento
 
 Conhecimento oficial PayJoy e regras do Mercado do Vale alimentam classificador e atendimento geral. Dúvidas sobre o link, incluindo como funciona, chegam à IA sem reiniciar a oferta. Lista de pagamentos com emojis inclui boleto via PayJoy e oferece o link da análise, mantendo consentimento. Prints, cálculo em centavos e pausa humana preservados.
 
-Publicação em andamento; fechamento operacional na nota da versão. Site recebe registro da versão; API e 3DMV sem deploy.
+Publicação concluída: commit funcional a2e2b6fb e tag enviados a main, workflow ativo e histórico alinhados, nove testes sobre leitura publicada e health/readiness 200. Site com release/VERSION correspondentes e catálogo real sem erro fatal. API e 3DMV sem deploy; mysql.ok=true. Limpeza: zero removidas, 34 bloqueadas preservadas e listadas na nota. Seis arquivos preexistentes fora do escopo.
 
 ## Historico anterior
 
