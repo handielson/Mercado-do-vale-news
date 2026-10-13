@@ -5,6 +5,8 @@ Release: /var/www/mdv-site/releases/20261013-201458-catalogo-mensagem-familia.
 
 Copiar Mensagem e compartilhamento WhatsApp usam o agrupamento canonico dos cards do catalogo. Variacoes com nomes divergentes na mesma familia entram no mesmo bloco por memoria; nome do pai tem prioridade quando disponivel. Cadastros, precos e estoque preservados. Oito testes focados e build aprovados. Publicacao somente do site; API e 3DMV sem deploy.
 
+Publicacao concluida: commit e567a782 e tag enviados a main, VERSION.json publico correspondente e homepage HTTP 200. Chrome confirmou copia com um bloco e quatro cores, sem erros no console. Auditoria removeu zero worktrees e preservou 34 bloqueadas, listadas na nota. Seis arquivos preexistentes fora do escopo.
+
 ## Historico anterior
 
 # v1.2.619-tiktok-estoque-cancelamento
