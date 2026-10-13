@@ -1,3 +1,12 @@
+# v1.2.620-catalogo-mensagem-familia
+
+Data: 13/10/2026. Branch: main. Tag: v1.2.620-catalogo-mensagem-familia.
+Release: /var/www/mdv-site/releases/20261013-201458-catalogo-mensagem-familia.
+
+Copiar Mensagem e compartilhamento WhatsApp usam o agrupamento canonico dos cards do catalogo. Variacoes com nomes divergentes na mesma familia entram no mesmo bloco por memoria; nome do pai tem prioridade quando disponivel. Cadastros, precos e estoque preservados. Oito testes focados e build aprovados. Publicacao somente do site; API e 3DMV sem deploy.
+
+## Historico anterior
+
 # v1.2.619-tiktok-estoque-cancelamento
 
 Data: 13/10/2026. Branch: main. Tag: v1.2.619-tiktok-estoque-cancelamento.

@@ -1,27 +1,26 @@
 {
-  "version": "v1.2.619-tiktok-estoque-cancelamento",
+  "version": "v1.2.620-catalogo-mensagem-familia",
   "date": "2026-10-13",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.619-tiktok-estoque-cancelamento",
-  "release_vps": "/var/www/mdv-site/releases/20261013-152616-v1-2-619-tiktok-estoque-cancelamento",
+  "tag": "v1.2.620-catalogo-mensagem-familia",
+  "release_vps": "/var/www/mdv-site/releases/20261013-201458-catalogo-mensagem-familia",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Cancelamentos, devolucoes e reembolsos do TikTok reaplicam o estoque autoritativo local e impedem que unidades devolvidas automaticamente sejam revendidas sem saldo.",
+  "summary": "Mensagem compartilhada agrupa cores pelo vinculo de familia usado nos cards, preservando as configuracoes de memoria.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "vps_server.js",
-    "vps_server.cjs",
-    "tmp-tests/tiktok-cancellation-stock-replay.test.mjs",
+    "utils/catalogMessageGenerator.ts",
+    "tmp-tests/catalog-message-family.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-13-v1.2.619-tiktok-estoque-cancelamento.md"
+    "docs/versoes/2026-10-13-v1.2.620-catalogo-mensagem-familia.md"
   ],
   "validations": [
-    "Diagnostico read-only confirmou TT370C zerado no estoque local e remoto, pedido anterior cancelado e pedido posterior vendido apos a reposicao automatica do TikTok.",
-    "Teste focado cobre classificacao de status, normalizacao de SKU e reaplicacao do saldo zero no TikTok.",
-    "Sintaxe dos dois servidores, build, deploys e validacoes publicas registrados na nota da entrega."
+    "Oito testes focados de mensagem e compartilhamento aprovados.",
+    "Teste comportamental cobre nomes divergentes, resposta compacta, memorias e familias distintas, produtos ocultos e sem estoque.",
+    "Build aprovado; publicacao e validacao publica registradas na nota da entrega."
   ]
 }

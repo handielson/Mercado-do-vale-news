@@ -10,6 +10,7 @@ import {
     stripSharedProductColorVariation,
 } from '@/utils/sharedMessageFormatting';
 import { catalogService } from '@/services/catalogService';
+import { generateCatalogGroupKey, getCatalogFamilyName } from '@/services/productGroupingCore.js';
 
 export type CustomerType = 'retail' | 'wholesale' | 'resale';
 
@@ -78,13 +79,13 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
         const rawColor = product.specs?.color || 'Sem cor';
         const color = formatSharedColor(rawColor);
         // Clean product name (remove color variation and RAM/Storage if present)
-        const cleanName = stripSharedProductColorVariation(product.name, rawColor)
+        const cleanName = stripSharedProductColorVariation(getCatalogFamilyName(product) || product.name, rawColor)
             .replace(/,?\s*\d+GB\/\d+GB\s*$/i, '')
             .trim();
         const brand = product.brand || 'Sem marca';
 
         // Create unique key for variant
-        const key = `${product.model || cleanName}-${ram || 'sem-ram'}-${storage || 'sem-armazenamento'}`;
+        const key = `${generateCatalogGroupKey(product)}-${ram || 'sem-ram'}-${storage || 'sem-armazenamento'}`;
 
         if (grouped.has(key)) {
             // Add color to existing variant
