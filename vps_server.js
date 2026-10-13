@@ -8128,9 +8128,51 @@ async function recordMobileShopeeSaleVps(orderSn, connectionId = 'primary') {
   return mobileSalesPushService.recordSaleEvent(sale);
 }
 
+function tiktokOrderRestoresMarketplaceInventoryVps(status) {
+  return /CANCEL|REFUND|RETURN/i.test(String(status || ''));
+}
+
+function tiktokOrderSellerSkusVps(sale) {
+  return [...new Set(
+    (Array.isArray(sale?.details?.items) ? sale.details.items : [])
+      .map((item) => String(item?.sku || '').trim().toUpperCase())
+      .filter(Boolean),
+  )];
+}
+
+async function replayTikTokAuthoritativeStockAfterRestockVps(sale) {
+  const skus = tiktokOrderSellerSkusVps(sale);
+  if (!skus.length) return { ok: true, skipped: 'no_seller_skus', updated: 0, errors: [] };
+
+  const placeholders = skus.map(() => '?').join(',');
+  const [products] = await pool.query(
+    `SELECT id
+       FROM products
+      WHERE UPPER(TRIM(sku)) IN (${placeholders})`,
+    skus,
+  );
+  const productIds = [...new Set((products || []).map((product) => String(product.id || '')).filter(Boolean))];
+  if (!productIds.length) return { ok: true, skipped: 'no_local_products', updated: 0, errors: [] };
+
+  const stockTargets = await getShopeeStockTargetsForProductIds(productIds);
+  return syncTikTokStockFromBlingTargetsVps(stockTargets);
+}
+
 async function recordMobileTikTokSaleVps(orderId) {
   const sale = (await loadMobileTikTokSalesVps(1, orderId))[0];
-  if (!sale || /CANCEL|UNPAID|REFUND|RETURN/i.test(sale.status)) return null;
+  if (!sale) return null;
+  if (tiktokOrderRestoresMarketplaceInventoryVps(sale.status)) {
+    const replay = await replayTikTokAuthoritativeStockAfterRestockVps(sale);
+    if (!replay.ok) {
+      console.error('[tiktok-shop-stock] Falha ao reaplicar estoque autoritativo apos cancelamento/devolucao', {
+        orderId: String(orderId || ''),
+        status: String(sale.status || ''),
+        errors: replay.errors || [],
+      });
+    }
+    return null;
+  }
+  if (/UNPAID/i.test(sale.status)) return null;
   return mobileSalesPushService.recordSaleEvent(sale);
 }
 

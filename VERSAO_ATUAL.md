@@ -1,3 +1,14 @@
+# v1.2.619-tiktok-estoque-cancelamento
+
+Data: 13/10/2026. Branch: main. Tag: v1.2.619-tiktok-estoque-cancelamento.
+Release: /var/www/mdv-site/releases/20261013-152616-v1-2-619-tiktok-estoque-cancelamento.
+
+Cancelamentos, devolucoes e reembolsos do TikTok agora identificam os SKUs do pedido e reaplicam no marketplace o estoque autoritativo do Mercado do Vale. Pedidos normais nao recebem reposicao. A correcao impede que uma unidade devolvida automaticamente pelo TikTok reapareca para venda quando o saldo local continua zerado.
+
+O incidente TT370C foi confirmado sem escrita manual: estoque local e duas localizacoes em zero; pedido anterior cancelado; unidade restaurada no anuncio; nova venda em 11/10; Bling posteriormente informou saldo fisico -3. O TikTok ja esta novamente zerado. Teste focado e sintaxe dos servidores aprovados; publicacao e validacao final registradas na nota da entrega.
+
+## Historico anterior
+
 # v1.2.618-payjoy-conhecimento-pagamentos
 
 Data: 12/10/2026. Branch: main. Tag: v1.2.618-payjoy-conhecimento-pagamentos.
