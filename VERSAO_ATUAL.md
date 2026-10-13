@@ -7,6 +7,8 @@ Cancelamentos, devolucoes e reembolsos do TikTok agora identificam os SKUs do pe
 
 O incidente TT370C foi confirmado sem escrita manual: estoque local e duas localizacoes em zero; pedido anterior cancelado; unidade restaurada no anuncio; nova venda em 11/10; Bling posteriormente informou saldo fisico -3. O TikTok ja esta novamente zerado. Teste focado e sintaxe dos servidores aprovados; publicacao e validacao final registradas na nota da entrega.
 
+Publicacao concluida: commit funcional 204b0007 e tag enviados a main; API reiniciada e `online`, status HTTP 200 com MySQL saudavel. Site ativo na release registrada e `VERSION.json` publico correspondente. Auditoria removeu zero worktrees e preservou 34 bloqueadas; seis arquivos preexistentes de impressao/Shopee ficaram fora do escopo.
+
 ## Historico anterior
 
 # v1.2.618-payjoy-conhecimento-pagamentos
