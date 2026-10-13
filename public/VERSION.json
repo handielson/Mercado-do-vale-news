@@ -1,32 +1,30 @@
 {
-  "version": "v1.2.617-n8n-segredo-removido",
+  "version": "v1.2.618-payjoy-conhecimento-pagamentos",
   "date": "2026-10-12",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.617-n8n-segredo-removido",
-  "release_vps": "/var/www/mdv-site/releases/20261012-234206-n8n-segredo-removido",
+  "tag": "v1.2.618-payjoy-conhecimento-pagamentos",
+  "release_vps": "/var/www/mdv-site/releases/20261013-004529-v1-2-618-payjoy-conhecimento-pagamentos",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Configuracao MCP privada fora do Git, exemplo sem segredo e guarda de tokens n8n em commits/builds.",
+  "summary": "IA responde dúvidas PayJoy com contexto e conhecimento oficial; pagamentos em lista com emojis e boleto via PayJoy, oferecendo análise de crédito.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    ".cursor/mcp.json (removido do Git)",
-    ".cursor/mcp.example.json",
-    ".githooks/pre-commit",
-    ".gitignore",
-    "package.json",
-    "scripts/assert-no-n8n-secrets.cjs",
-    "tmp-tests/n8n-secret-guard.test.cjs",
-    "docs/operacional/n8n-mcp-credenciais.md",
+    "services/payjoyKnowledge.cjs",
+    "tmp-tests/n8n-payjoy-knowledge-patch.cjs",
+    "tmp-tests/n8n-payjoy-knowledge.test.cjs",
+    "tmp-tests/n8n-fix-payjoy-link-confirmation.cjs",
+    "docs/operacional/2026-10-12-payjoy-consentimento-contextual.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-12-v1.2.617-n8n-segredo-removido.md"
+    "docs/versoes/2026-10-12-v1.2.618-payjoy-conhecimento-pagamentos.md"
   ],
   "validations": [
-    "Tres testes focados da guarda passaram; arquivo privado ignorado e fora do index.",
-    "Build/deploy e verificacao publica registrados na nota.",
-    "Historico antigo ainda exige limpeza coordenada; revogacao na conta Cloud antiga nao confirmada."
+    "Nove testes focados e regressões PayJoy passaram; revisão independente sem bloqueadores.",
+    "Dry-run remoto: cinco nós alterados, grafo preservado, entidade/histórico alinhados e patch idempotente.",
+    "Mensagens fictícias verificadas pelo modelo e parser; nenhum WhatsApp enviado a clientes.",
+    "Build, deploy e pós-validação registrados na nota da entrega."
   ]
 }

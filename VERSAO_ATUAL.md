@@ -1,3 +1,14 @@
+# v1.2.618-payjoy-conhecimento-pagamentos
+
+Data: 12/10/2026. Branch: main. Tag: v1.2.618-payjoy-conhecimento-pagamentos.
+Release: /var/www/mdv-site/releases/20261013-004529-v1-2-618-payjoy-conhecimento-pagamentos.
+
+Conhecimento oficial PayJoy e regras do Mercado do Vale alimentam classificador e atendimento geral. Dúvidas sobre o link, incluindo como funciona, chegam à IA sem reiniciar a oferta. Lista de pagamentos com emojis inclui boleto via PayJoy e oferece o link da análise, mantendo consentimento. Prints, cálculo em centavos e pausa humana preservados.
+
+Publicação em andamento; fechamento operacional na nota da versão. Site recebe registro da versão; API e 3DMV sem deploy.
+
+## Historico anterior
+
 # v1.2.617-n8n-segredo-removido
 
 Data: 12/10/2026. Branch: main. Tag: v1.2.617-n8n-segredo-removido.

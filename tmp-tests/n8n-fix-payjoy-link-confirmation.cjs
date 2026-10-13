@@ -17,7 +17,9 @@ const PAYMENT_NODE = 'Pagamento - Politica';
 const INSTALLMENT_OPTIONS = process.argv.includes('--installment-options');
 const APPROVAL = process.argv.includes('--approval');
 const CONTEXTUAL_INTENT = process.argv.includes('--contextual-intent');
-const MARKER = CONTEXTUAL_INTENT ? 'payjoy-contextual-intent-v5' : INSTALLMENT_OPTIONS ? 'installment-options-payjoy-v1' : 'payjoy-link-confirmation-v1';
+const KNOWLEDGE = process.argv.includes('--knowledge');
+assert.ok([CONTEXTUAL_INTENT, INSTALLMENT_OPTIONS, APPROVAL, KNOWLEDGE].filter(Boolean).length <= 1, 'Choose one PayJoy patch mode');
+const MARKER = KNOWLEDGE ? 'payjoy-knowledge-v1' : CONTEXTUAL_INTENT ? 'payjoy-contextual-intent-v5' : INSTALLMENT_OPTIONS ? 'installment-options-payjoy-v1' : 'payjoy-link-confirmation-v1';
 const APPLY = process.argv.includes('--apply');
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 const dollar = (value, tag) => `$${tag}$${String(value)}$${tag}$`;
@@ -300,18 +302,19 @@ async function main() {
     const raw = await psql(connection, database, `COPY (SELECT json_build_object('nodesHex',encode(convert_to(we.nodes::text,'UTF8'),'hex'),'connectionsHex',encode(convert_to(we.connections::text,'UTF8'),'hex'),'activeVersionId',we.\"activeVersionId\",'active',we.active,'versionAligned',we.\"versionId\"=we.\"activeVersionId\",'entityHistoryEqual',we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb)::text FROM workflow_entity we JOIN workflow_history wh ON wh.\"workflowId\"=we.id AND wh.\"versionId\"=we.\"activeVersionId\" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`);
     const row = JSON.parse(raw.trim());
     const workflow = { nodes: JSON.parse(Buffer.from(row.nodesHex, 'hex').toString('utf8')), connections: JSON.parse(Buffer.from(row.connectionsHex, 'hex').toString('utf8')) };
-    const transform = CONTEXTUAL_INTENT ? require('./n8n-payjoy-contextual-intent-patch.cjs').patchWorkflow : APPROVAL ? require('./n8n-payjoy-approval-patch.cjs').patchWorkflow : INSTALLMENT_OPTIONS ? require('./n8n-payjoy-workflow-patch.cjs').updateInstallmentOptionsWorkflow : patchWorkflow;
+    const transform = KNOWLEDGE ? require('./n8n-payjoy-knowledge-patch.cjs').patchWorkflow : CONTEXTUAL_INTENT ? require('./n8n-payjoy-contextual-intent-patch.cjs').patchWorkflow : APPROVAL ? require('./n8n-payjoy-approval-patch.cjs').patchWorkflow : INSTALLMENT_OPTIONS ? require('./n8n-payjoy-workflow-patch.cjs').updateInstallmentOptionsWorkflow : patchWorkflow;
     const updated = transform(workflow);
     if (APPROVAL) require('./n8n-payjoy-approval-patch.cjs').validate(updated);
     else assert.deepEqual(updated.connections, workflow.connections, 'connections must remain unchanged');
     const changedNodes = updated.nodes.filter(node => JSON.stringify(node) !== JSON.stringify(workflow.nodes.find(n=>n.name===node.name))).map(node => node.name);
-    assert.ok(changedNodes.every(name => (CONTEXTUAL_INTENT ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Vendas - Preparar Contexto IA','Agente Inicial - Classificador','Parse Classificacao'] : APPROVAL ? [PAYMENT_NODE,RESOLVER_NODE,'Agente Geral - Atendimento','Dados','PayJoy - Recebeu print?','PayJoy - Print tem arquivo?','PayJoy - Recuperar midia','PayJoy - Restaurar imagem','PayJoy - Preparar imagem','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'] : INSTALLMENT_OPTIONS ? [PAYMENT_NODE] : [RESOLVER_NODE, PAYMENT_NODE, 'Agente Geral - Atendimento', 'Controle Bot - Aplicar Controle', 'Estado Conversa - Preparar']).includes(name)), 'only scoped payment nodes may change');
+    assert.ok(changedNodes.every(name => (KNOWLEDGE ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Agente Inicial - Classificador','Parse Classificacao'] : CONTEXTUAL_INTENT ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Vendas - Preparar Contexto IA','Agente Inicial - Classificador','Parse Classificacao'] : APPROVAL ? [PAYMENT_NODE,RESOLVER_NODE,'Agente Geral - Atendimento','Dados','PayJoy - Recebeu print?','PayJoy - Print tem arquivo?','PayJoy - Recuperar midia','PayJoy - Restaurar imagem','PayJoy - Preparar imagem','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'] : INSTALLMENT_OPTIONS ? [PAYMENT_NODE] : [RESOLVER_NODE, PAYMENT_NODE, 'Agente Geral - Atendimento', 'Controle Bot - Aplicar Controle', 'Estado Conversa - Preparar']).includes(name)), 'only scoped payment nodes may change');
     if (APPROVAL) {
       const retained=Object.fromEntries(Object.entries(updated.connections).filter(([name])=>Object.hasOwn(workflow.connections,name)&&name!=='Controle Bot - Bloqueado?'));
       assert.deepEqual(retained,Object.fromEntries(Object.entries(workflow.connections).filter(([name])=>name!=='Controle Bot - Bloqueado?')));
       assert.deepEqual(updated.connections['Controle Bot - Bloqueado?'].main[0],workflow.connections['Controle Bot - Bloqueado?'].main[0]);
     }
     const validation = validate(updated);
+    if (KNOWLEDGE) Object.assign(validation, require('./n8n-payjoy-knowledge-patch.cjs').validate(updated));
     if (INSTALLMENT_OPTIONS) {
       const state = {};
       const route = executeResolver(updated.nodes.find(n => n.name === RESOLVER_NODE).parameters.jsCode, state, 'Quais são as opções de parcelamento?', 'responder_politica_pagamento');
@@ -362,13 +365,18 @@ COPY (SELECT json_build_object('entityHistoryEqual',we.nodes::jsonb=wh.nodes::js
       if (!APPROVAL) assert.equal(continuation.connectionsPreserved, true);
       verification.directAnalysisContinuation = continuation;
     }
-    if (APPROVAL) {
+    if (APPROVAL || KNOWLEDGE) {
       const activeWorkflow = JSON.parse((await psql(connection,database,`SELECT json_build_object('nodes',we.nodes,'connections',we.connections,'historyAligned',we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb) FROM workflow_entity we JOIN workflow_history wh ON wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)};`)).trim());
       assert.deepEqual(activeWorkflow.nodes,updated.nodes);
       assert.deepEqual(activeWorkflow.connections,updated.connections);
       assert.equal(activeWorkflow.historyAligned,true);
-      require('./n8n-payjoy-approval-patch.cjs').validate(activeWorkflow);
-      verification.approvalPrintVerified=true;
+      if (KNOWLEDGE) {
+        require('./n8n-payjoy-knowledge-patch.cjs').validate(activeWorkflow);
+        verification.knowledgeReadbackVerified=true;
+      } else {
+        require('./n8n-payjoy-approval-patch.cjs').validate(activeWorkflow);
+        verification.approvalPrintVerified=true;
+      }
     }
     await run(connection, 'docker service scale n8n_n8n=1 >/dev/null');
     await waitService(connection, 'n8n_n8n', 1);
