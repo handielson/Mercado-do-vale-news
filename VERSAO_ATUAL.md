@@ -5,7 +5,7 @@ Release: /var/www/mdv-site/releases/20261014-144155-diario-aparelhos.
 
 Diário permanente por unidade física e atalho de histórico no card do produto, ao lado dos locais de estoque. Impressão e compartilhamento consultam todas as páginas; históricos longos geram TXT completo para anexar ao WhatsApp. Registros existentes identificados como fotografia da implantação, preservando a data original nos dados. Sem edição/exclusão na aplicação.
 
-MySQL 8 real: eventos de cadastro, alteração, saída e remoção; rollback e proteção imutável aprovados em schema isolado. Clone do schema operacional validado, backup verificado e 20 triggers instalados com 244 registros iniciais e 162 referências existentes. Totais comerciais preservados. Publicação e validação final na nota da entrega.
+MySQL 8 real: eventos de cadastro, alteração, saída e remoção; rollback e proteção imutável aprovados em schema isolado. Clone do schema operacional validado, backup verificado e 20 triggers instalados com 244 registros iniciais e 162 referências existentes. Totais comerciais preservados. Publicação concluída: commit 1c8fcb2e e tag em main, API online/mysql saudável, site/VERSION correspondentes e atalho validado no Chrome autenticado. Dezenove testes, integração MySQL e build aprovados. Seis arquivos preexistentes e 34 worktrees bloqueados preservados. Detalhes na nota da entrega.
 
 ## Histórico anterior
 
