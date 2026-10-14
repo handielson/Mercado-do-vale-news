@@ -1,3 +1,13 @@
+# v1.2.627-gcode3d-domain
+
+Data: 14/10/2026. Branch: main. Tag: v1.2.627-gcode3d-domain.
+Release MDV: /var/www/mdv-site/releases/20261014-215600-gcode3d-domain.
+Release 3D: /var/www/print3d-site/releases/20261014-215601-gcode3d-domain.
+
+Delegação DNS liberada para carlos/jill Cloudflare. Certificado próprio emitido para gcode3d.com.br e www, com renovação automática. Publicação seletiva de API, bundles completos e Nginx preparados; validação final registrada na nota. Preserva a entrega de agrupamento por modelo v1.2.626 e alterações preexistentes. Verificação do modo SSL Cloudflare pendente de acesso ao painel.
+
+## Histórico anterior
+
 # v1.2.626-celular-modelo-unico
 
 Data: 14/10/2026. Branch: main. Tag: v1.2.626-celular-modelo-unico.

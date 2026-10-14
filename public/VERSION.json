@@ -1,41 +1,48 @@
 {
-  "version": "v1.2.626-celular-modelo-unico",
+  "version": "v1.2.627-gcode3d-domain",
   "date": "2026-10-14",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.626-celular-modelo-unico",
-  "release_vps": "/var/www/mdv-site/releases/20261014-203032-celular-modelo-unico",
-  "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "WhatsApp agrupa celular por modelo e memoria; usa nome canonico Poco X8 Pro 5G.",
+  "tag": "v1.2.627-gcode3d-domain",
+  "release_vps": "/var/www/mdv-site/releases/20261014-215600-gcode3d-domain",
+  "release_print3d_vps": "/var/www/print3d-site/releases/20261014-215601-gcode3d-domain",
+  "summary": "Loja 3D migrada para gcode3d.com.br com DNS e certificado independentes.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "pending_deployments": {
     "gcode3d": {
-      "version": "v1.2.625-gcode3d-domain",
-      "status": "waiting-dns",
+      "version": "v1.2.627-gcode3d-domain",
+      "status": "ssl-mode-verification-pending",
       "tag": "v1.2.625-gcode3d-domain-prepared",
-      "planned_release_vps": "/var/www/mdv-site/releases/20261014-191630-gcode3d-domain",
-      "planned_release_print3d_vps": "/var/www/print3d-site/releases/20261014-191631-gcode3d-domain"
+      "planned_release_vps": "/var/www/mdv-site/releases/20261014-215600-gcode3d-domain",
+      "planned_release_print3d_vps": "/var/www/print3d-site/releases/20261014-215601-gcode3d-domain"
     }
   },
-  "site_source_base": "v1.2.624-extrato-entrada-saida",
+  "site_source_base": "main",
   "changed_files": [
-    "services/smartphoneModelSpecs.mjs",
-    "scripts/deploy-model-specs.cjs",
+    "apps/print3d/index.html",
+    "vite.print3d.config.ts",
+    "pages/admin/print3d/Print3dSettingsPage.tsx",
+    "pages/store/Print3dAccountActionPage.tsx",
+    "services/print3dStorefrontSettingsServer.cjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "scripts/deploy-print3d-domain.cjs",
+    "scripts/install-print3d-site-nginx.cjs",
+    "infra/nginx/print3d-site-production.conf",
+    "infra/nginx/mdv-api-ssl.conf",
     "deploy-vps-server-only.cjs",
-    "tmp-tests/smartphone-model-specs.test.cjs",
-    "tmp-tests/deploy-model-specs.test.cjs",
-    "tmp-tests/n8n-fix-unique-smartphone-config-price.cjs",
-    "tmp-tests/n8n-smartphone-model-id-grouping.test.cjs",
+    "tmp-tests/print3d-domain-migration.test.cjs",
+    "tmp-tests/print3d-domain-deploy-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-14-v1.2.626-celular-modelo-unico.md"
+    "docs/versoes/2026-10-14-v1.2.627-gcode3d-domain.md"
   ],
   "validations": [
-    "Replay offline 107 produtos: duas entradas viram uma familia; configuracoes e cores preservadas.",
-    "Testes de projecao, publicador, catalogo e agrupamento aprovados.",
-    "Publicacao seletiva e validacao publica registradas na nota."
+    "11 testes de domínio, sessão e configuração aprovados.",
+    "DNS público delegado à Cloudflare; certificado próprio emitido.",
+    "Builds, publicação seletiva e validação pública registrados na nota."
   ]
 }
