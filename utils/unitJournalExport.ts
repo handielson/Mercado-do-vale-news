@@ -42,8 +42,16 @@ export function journalSummary(event: JournalEvent, labels: Record<string, strin
         if (movement.reason) description += `. Motivo: ${movement.reason}`;
     }
     const identifier = unit.imei_1 || unit.imei_2 || unit.serial;
+    let direction: 'in' | 'out' | 'neutral' = 'neutral';
+    if (event.event_type === 'existing_sale_reference') direction = 'out';
+    if (event.event_type === 'unit_insert' && after.status === 'available') direction = 'in';
+    if (event.event_type === 'unit_update' && before.status !== after.status) {
+        if (after.status === 'sold' || after.status === 'scrapped') direction = 'out';
+        else if (after.status === 'available' && ['sold', 'scrapped', 'rma'].includes(String(before.status))) direction = 'in';
+    }
     return {
         id: event.id,
+        direction,
         date: displayDate(event.recorded_at),
         device: identifier ? `${unit.imei_1 || unit.imei_2 ? 'IMEI' : 'Serial'} final ${String(identifier).slice(-4)}` : `Aparelho ${event.unit_id.slice(0, 8)}`,
         description,

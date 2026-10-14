@@ -57,3 +57,15 @@ test('simple exports include all entries without technical snapshots; full expor
     assert.doesNotMatch(simple, /Conta técnica|Dados completos|<script>/);
     assert.ok(journalText('Produto', rows, {}).startsWith(simple));
 });
+test('visual direction identifies entries and exits without inventing movement from baseline or balance', () => {
+    const transition = (from, to) => journalSummary(event('2', { event_type: 'unit_update', before_data: { unit: { status: from } }, after_data: { unit: { status: to } } }), {}).direction;
+    assert.equal(transition('available', 'sold'), 'out');
+    assert.equal(transition('sold', 'available'), 'in');
+    assert.equal(transition('available', 'reserved'), 'neutral');
+    assert.equal(transition('reserved', 'available'), 'neutral');
+    assert.equal(transition('sold', 'sold'), 'neutral');
+    assert.equal(journalSummary(event('1', { after_data: { unit: { status: 'available' } } }), {}).direction, 'neutral');
+    assert.equal(journalSummary(event('1', { event_type: 'unit_insert', after_data: { unit: { status: 'available' } } }), {}).direction, 'in');
+    assert.equal(journalSummary(event('1', { event_type: 'existing_sale_reference' }), {}).direction, 'out');
+    assert.equal(journalSummary(event('1', { event_type: 'product_stock_locations_update' }), {}).direction, 'neutral');
+});

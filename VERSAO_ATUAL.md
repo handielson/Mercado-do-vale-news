@@ -1,3 +1,12 @@
+# v1.2.624-extrato-entrada-saida
+
+Data: 14/10/2026. Branch: main. Tag: v1.2.624-extrato-entrada-saida.
+Release: /var/www/mdv-site/releases/20261014-181235-extrato-entrada-saida.
+
+Extrato diferencia entradas em verde e saídas em vermelho, com setas e rótulos. Fotografia inicial, reservas e alterações sem movimento ficam neutras. Saldo por local não representa deslocamento físico do aparelho. Dezoito testes e build aprovados; publicação somente do site. Fechamento na nota da entrega.
+
+## Histórico anterior
+
 # v1.2.623-extrato-aparelhos
 
 Data: 14/10/2026. Branch: main. Tag: v1.2.623-extrato-aparelhos.

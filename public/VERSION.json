@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.623-extrato-aparelhos",
+  "version": "v1.2.624-extrato-entrada-saida",
   "date": "2026-10-14",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.623-extrato-aparelhos",
-  "release_vps": "/var/www/mdv-site/releases/20261014-150101-extrato-aparelhos",
+  "tag": "v1.2.624-extrato-entrada-saida",
+  "release_vps": "/var/www/mdv-site/releases/20261014-181235-extrato-entrada-saida",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Extrato simples do diario: data, aparelho, ocorrencia e situacao. Impressao e WhatsApp com resumo ou dados completos.",
+  "summary": "Extrato com entradas em verde, saidas em vermelho e setas/legenda. Registros iniciais e alteracoes neutros.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -17,10 +17,10 @@
     "tmp-tests/unit-journal-export.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-14-v1.2.623-extrato-aparelhos.md"
+    "docs/versoes/2026-10-14-v1.2.624-extrato-entrada-saida.md"
   ],
   "validations": [
-    "17 testes do diario/exportacao aprovados, incluindo resumo, transicoes e datas originais.",
+    "18 testes do diario/exportacao aprovados, incluindo classificacao visual sem inventar movimentos.",
     "Build com guardas aprovado. Publicacao somente do site, sem migration ou restart da API.",
     "Validacao publica e do extrato no navegador registrada na nota da entrega."
   ]
