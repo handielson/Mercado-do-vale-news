@@ -59,7 +59,8 @@ export function applySmartphoneModelSpecs(product, model) {
   if (Number(product.is_print3d) === 1 || Number(product.is_combo) === 1 || product.offer_type) return product;
   if (!isSmartphoneModel(model) && !(product.model_specs_authoritative === true && !model.id && !model.category_name)) return product;
   const template = specObject(model.template_values);
-  return { ...product, specs: resolveSmartphoneSpecs(product.specs, template),
+  return { ...product, ...(model.id && String(model.name || '').trim() ? { model_name: String(model.name).trim() } : {}),
+    specs: resolveSmartphoneSpecs(product.specs, template),
     custom_fields: stripModelTechnicalCustomFields(product.custom_fields, template, product.specs),
     model_template_values: modelTechnicalSpecs(template), model_specs_authoritative: true };
 }
@@ -68,7 +69,7 @@ export async function applyModelSpecsToProducts(db, products) {
   if (!products.length) return products;
   const ids = [...new Set(products.map(p => p.id).filter(Boolean))];
   if (!ids.length) return products;
-  const [models] = await db.query(`SELECT p.id AS product_id,m.id,m.template_values,COALESCE(mc.name,c.name) AS category_name
+  const [models] = await db.query(`SELECT p.id AS product_id,m.id,m.name,m.template_values,COALESCE(mc.name,c.name) AS category_name
     FROM products p LEFT JOIN models m ON m.id=p.model_id
     LEFT JOIN categories mc ON mc.id=m.category_id LEFT JOIN categories c ON c.id=p.category_id
     WHERE p.id IN (${ids.map(() => '?').join(',')})`, ids);

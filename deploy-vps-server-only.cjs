@@ -562,6 +562,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--model-name-only') || process.argv.includes('--model-name-check')) {
+    await require('./scripts/deploy-model-specs.cjs').deployModelName({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--model-name-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--model-specs-only') || process.argv.includes('--model-specs-check')) {
     await require('./scripts/deploy-model-specs.cjs').deployModelSpecs({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

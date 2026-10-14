@@ -4,6 +4,20 @@ const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { BASELINE, ENTRIES, ANCHORS, block, patch, patchBotProjection } = require('../scripts/deploy-model-specs.cjs');
 const { deployProductReadPrivacy } = require('../scripts/deploy-product-read-privacy.cjs');
+test('model-name release checks only the projection module and rejects unknown drift', async () => {
+  const { deployModelName } = require('../scripts/deploy-model-specs.cjs');
+  const root = require('node:path').resolve(__dirname, '..');
+  const file = 'services/smartphoneModelSpecs.mjs';
+  const baseline = execFileSync('git', ['show', `v1.2.624-extrato-entrada-saida:${file}`], { encoding: 'utf8' });
+  const options = { root, appDir: '/var/www/mdv-api', apiProc: { name: 'mdv-api', pm2_env: { pm_exec_path: '/var/www/mdv-api/vps_server.cjs' } }, checkOnly: true,
+    write: async () => assert.fail('preflight must not write'), exec: async () => assert.fail('preflight must not restart'),
+  };
+  let reads = [];
+  await deployModelName({ ...options, read: async path => { reads.push(path); return baseline; } });
+  assert.deepEqual(reads, [`/var/www/mdv-api/${file}`]);
+  await deployModelName({ ...options, read: async () => fs.readFileSync(require('node:path').join(root, file), 'utf8') });
+  await assert.rejects(deployModelName({ ...options, read: async () => baseline + '\n// unknown runtime edit' }), /drift/);
+});
 test('selective model specs deployment preserves remote unrelated code and is idempotent', () => {
   for (const file of ENTRIES) {
     const old = execFileSync('git', ['show', `${BASELINE}:${file}`], { encoding: 'utf8', maxBuffer: 15e6 });

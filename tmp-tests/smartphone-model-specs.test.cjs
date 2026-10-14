@@ -1,6 +1,21 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const core = import('../services/smartphoneModelSpecs.mjs');
+test('catalog exposes current registered smartphone name without changing variation data', async () => {
+  const { applyModelSpecsToProducts } = await core;
+  const raw = { id: 'p', model_id: 'm', name: 'Poco X8 Pró', sku: 'unchanged', price_retail: 266000, stock_quantity: 2,
+    specs: { ram: '8GB', storage: '256GB', color: 'Preto' } };
+  const db = { query: async (sql, ids) => {
+    assert.match(sql, /m\.name/);
+    assert.deepEqual(ids, ['p']);
+    return [[{ product_id: 'p', id: 'm', name: 'Poco X8 Pro 5G', category_name: 'Smartphones', template_values: {} }]];
+  } };
+  const [result] = await applyModelSpecsToProducts(db, [raw]);
+  assert.equal(result.model_name, 'Poco X8 Pro 5G');
+  for (const key of ['id', 'model_id', 'name', 'sku', 'price_retail', 'stock_quantity']) assert.equal(result[key], raw[key]);
+  for (const key of ['ram', 'storage', 'color']) assert.equal(result.specs[key], raw.specs[key]);
+  assert.equal(raw.model_name, undefined);
+});
 test('model changes replace stale technical copies but preserve unit and variation identity', async () => {
   const { applySmartphoneModelSpecs } = await core;
   const product = { model_id: 'm', specs: { rede_operadora: '5G', nfc: 'Sim', ram: '8GB', color: 'Verde', storage: '256GB', version: 'Global', battery_health: 98, serial: 'test-unit', _acquisition_cost: 90000 }, custom_fields: { rede_operadora: '5G' }, price_retail: 120000, stock_quantity: 2 };

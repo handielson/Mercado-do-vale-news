@@ -140,3 +140,17 @@ async function deployModelSpecs(options) {
     files: [...modules, ...ENTRIES], patchFile, backupPrefix: 'model-specs' });
 }
 module.exports = { BASELINE, ENTRIES, MODULES, ANCHORS, block, patch, patchBotProjection, patchBotSearch, deployModelSpecs };
+
+async function deployModelName(options) {
+  const file = 'services/smartphoneModelSpecs.mjs';
+  const baseline = execFileSync('git', ['show', `v1.2.624-extrato-entrada-saida:${file}`], { cwd: options.root, encoding: 'utf8' });
+  const current = fs.readFileSync(path.join(options.root, file), 'utf8');
+  await require('./deploy-product-read-privacy.cjs').deployProductReadPrivacy({ ...options,
+    files: [file], backupPrefix: 'smartphone-model-name',
+    patchFile: remote => {
+      if (normalize(remote) !== normalize(baseline) && normalize(remote) !== normalize(current)) throw new Error('Remote smartphone model projection drift');
+      return current;
+    },
+  });
+}
+module.exports.deployModelName = deployModelName;

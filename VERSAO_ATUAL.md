@@ -1,3 +1,16 @@
+# v1.2.626-celular-modelo-unico
+
+Data: 14/10/2026. Branch: main. Tag: v1.2.626-celular-modelo-unico.
+Release MDV: /var/www/mdv-site/releases/20261014-203032-celular-modelo-unico.
+
+WhatsApp agrupa smartphones pelo modelo vinculado, com configuracoes de memoria separadas e cores reunidas. API expoe model_name do cadastro atual. Nome Poco X8 Pro 5G padronizado no modelo, 13 produtos e textos publicos relacionados; sem alteracao de estoque, precos, SKU ou vinculos.
+
+Replay offline da execucao 40580 passou: 107 produtos de entrada, duas entradas do mesmo Poco reduzidas a uma familia. Testes de memoria fisica, cores, preco, filtros, fallback, idempotencia, estado e guardas de publicacao aprovados. Publicacao seletiva da API altera apenas smartphoneModelSpecs.mjs; workflow muda somente Vendas - Contexto Produtos.
+
+Site gerado isoladamente a partir da tag publicada v1.2.624-extrato-entrada-saida com a versao atual, para preservar a migracao gcode3d preparada e ainda pendente. Detalhes e evidencias na nota desta entrega.
+
+## Historico anterior e entrega pendente
+
 # v1.2.625-gcode3d-domain — preparada, aguardando DNS
 
 Data: 14/10/2026. Branch: main. Tag preparada: v1.2.625-gcode3d-domain-prepared.
