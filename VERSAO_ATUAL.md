@@ -3,7 +3,7 @@
 Data: 14/10/2026. Branch: main. Tag: v1.2.623-extrato-aparelhos.
 Release: /var/www/mdv-site/releases/20261014-150101-extrato-aparelhos.
 
-Diário passa a apresentar extrato resumido com data, aparelho, ocorrência e situação. Impressão e WhatsApp usam o resumo por padrão, com opção de incluir dados completos. Datas originais e fotografia da implantação distinguidas; saldos por local permanecem contexto do produto. Dezessete testes e build aprovados. Publicação somente do site. Fechamento na nota da entrega.
+Diário passa a apresentar extrato resumido com data, aparelho, ocorrência e situação. Impressão e WhatsApp usam o resumo por padrão, com opção de incluir dados completos. Datas originais e fotografia da implantação distinguidas; saldos por local permanecem contexto do produto. Dezessete testes e build aprovados. Publicação somente do site concluída: commit ef821972 e tag em main, site/VERSION correspondentes, tabela e preparação do WhatsApp validadas no Chrome, sem erros. Seis arquivos preexistentes e 34 worktrees bloqueados preservados. Detalhes na nota da entrega.
 
 ## Histórico anterior
 
