@@ -23,7 +23,21 @@ function createWhatsAppStatusHealth({ env = process.env, fetchImpl = fetch, now 
       const messages = await fetchImpl(`${base}/api/${encodeURIComponent(session)}/chats/status%40broadcast/messages?limit=1&downloadMedia=false`, {
         method: 'GET', headers: { 'X-Api-Key': key }, signal: AbortSignal.timeout(8000),
       });
-      if (!messages.ok) return { configured: true, connected: false, state: 'STATUS_UNAVAILABLE', httpStatus: messages.status, checkedAt };
+      if (!messages.ok) {
+        // WPP may not have created this virtual chat after a fresh sync.
+        // Check another browser-backed read only for that exact provider error;
+        // timeouts and other status failures must continue to block sending.
+        const errorBody = await messages.json().catch(() => null);
+        const message = String(errorBody?.exception?.message || errorBody?.message || '');
+        if (messages.status !== 500 || !/^Chat not found for status@broadcast(?:\n|$)/.test(message)) {
+          return { configured: true, connected: false, state: 'STATUS_UNAVAILABLE', httpStatus: messages.status, checkedAt };
+        }
+        const chats = await fetchImpl(`${base}/api/${encodeURIComponent(session)}/chats?limit=1&offset=0`, {
+          method: 'GET', headers: { 'X-Api-Key': key }, signal: AbortSignal.timeout(8000),
+        });
+        if (!chats.ok || !Array.isArray(await chats.json())) return { configured: true, connected: false, state: 'STATUS_UNAVAILABLE', checkedAt };
+        return { configured: true, connected: true, state, checkedAt, statusRead: 'CHAT_NOT_INITIALIZED' };
+      }
       if (!Array.isArray(await messages.json())) return { configured: true, connected: false, state: 'STATUS_UNAVAILABLE', checkedAt };
       return { configured: true, connected: true, state, checkedAt };
     } catch {

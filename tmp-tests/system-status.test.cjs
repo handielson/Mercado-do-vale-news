@@ -67,6 +67,33 @@ test('WORKING session with hung or malformed Status read cannot be healthy', asy
     assert.ok(!JSON.stringify(data).includes('private-key'));
   }
 });
+
+test('WPP virtual status chat missing after sync falls back to another browser-backed read', async () => {
+  for (const fallbackOk of [true, false]) {
+    const read = createWhatsAppStatusHealth({ env, fetchImpl: async (url) => {
+      if (url.includes('/sessions/')) return { ok: true, json: async () => ({ status: 'WORKING', me: {} }) };
+      if (url.includes('/messages?')) return { ok: false, status: 500, json: async () => ({ exception: { message: 'Chat not found for status@broadcast\nprovider stack' } }) };
+      assert.ok(url.endsWith('/chats?limit=1&offset=0'));
+      return { ok: fallbackOk, json: async () => [] };
+    } });
+    const data = await read();
+    assert.equal(data.connected, fallbackOk);
+    if (fallbackOk) assert.equal(data.statusRead, 'CHAT_NOT_INITIALIZED');
+  }
+});
+
+test('generic 500, a different missing chat, or wrong HTTP status never uses the fallback', async () => {
+  for (const [status, message] of [[500, 'Unexpected error'], [500, 'Chat not found for other-chat'], [503, 'Chat not found for status@broadcast']]) {
+    let calls = 0;
+    const read = createWhatsAppStatusHealth({ env, fetchImpl: async (url) => {
+      calls++;
+      if (url.includes('/sessions/')) return { ok: true, json: async () => ({ status: 'WORKING', me: {} }) };
+      return { ok: false, status, json: async () => ({ message }) };
+    } });
+    assert.equal((await read()).connected, false);
+    assert.equal(calls, 2);
+  }
+});
 test('WAHA route requires admin auth and no-store', async () => {
   const admin = () => {}; let route;
   registerWhatsAppStatusHealthRoute({ get: (path, options, handler) => { route = { path, options, handler }; } }, admin, { env: {} });

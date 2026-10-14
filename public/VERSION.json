@@ -3,7 +3,7 @@
   "date": "2026-10-14",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.621-estoque-finance-status",
+  "tag": "v1.2.621-estoque-finance-status-r1",
   "release_vps": "/var/www/mdv-site/releases/20261014-141311-estoque-finance-status",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
   "summary": "Distribuicao de estoque somente leitura, rota Finance conectada ao runtime e Status WhatsApp com preflight e protecao contra reenvio incerto.",

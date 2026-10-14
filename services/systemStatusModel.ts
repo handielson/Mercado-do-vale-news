@@ -104,7 +104,7 @@ export function interpretSystemStatus(id: string, data: any, now = new Date()): 
     case 'waha': {
       if (data.configured === false) return result('unconfigured', 'Não configurado', 'A sessão de publicação dos Status não foi configurada.');
       if (!recent(data.checkedAt, now, 120000)) return result('unknown', 'Leitura desatualizada', 'Sem verificação recente da sessão de publicação.', data.checkedAt);
-      if (data.connected === true && data.state === 'WORKING') return result('healthy', 'Conectado', 'Sessão conectada e leitura dos Status respondendo. Confira cada envio nas publicações.', data.checkedAt);
+      if (data.connected === true && data.state === 'WORKING') return result('healthy', 'Conectado', data.statusRead === 'CHAT_NOT_INITIALIZED' ? 'Sessão e leitura de conversas respondendo; histórico de Status ainda não inicializado. Confira cada envio nas publicações.' : 'Sessão conectada e leitura dos Status respondendo. Confira cada envio nas publicações.', data.checkedAt);
       return result(data.state === 'STARTING' ? 'warning' : 'error', data.state === 'SCAN_QR_CODE' ? 'Precisa de QR Code' : data.state === 'STARTING' ? 'Iniciando' : 'Indisponível', 'A sessão WAHA usada pelos Status não está pronta.', data.checkedAt);
     }
     case 'instagram': case 'facebook': {
