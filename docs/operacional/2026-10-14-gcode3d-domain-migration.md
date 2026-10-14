@@ -1,5 +1,9 @@
 # Migração do endereço da loja 3D para gcode3d.com.br
 
+## Retomada de 14/10/2026, depois de 18h50
+
+Delegação liberada e certificado próprio emitido com renovação automática. Publicação final v1.2.627: API seletiva, Nginx/CORS e bundles completos. Cloudflare Full(strict) confirmado após reconexão do Chrome. Raiz/host antigo redirecionam para www.gcode3d.com.br com caminho/query preservados; novo site usa origem direta e certificado independente. Manutenção pública preexistente preservada. Nota final em docs/versoes/2026-10-14-v1.2.627-gcode3d-domain.md. As seções seguintes registram a preparação e o procedimento de recuperação.
+
 Autorização: operador solicitou substituir 3dmv.com.br em todo o sistema e eliminar dependências do endereço antigo. Mesmo site, catálogo, banco e armazenamento; nome da marca 3DMV e identificadores internos preservados. Não habilitar contas, Google, pagamentos ou produção por causa desta troca.
 
 ## Estado externo verificado em 14/10/2026

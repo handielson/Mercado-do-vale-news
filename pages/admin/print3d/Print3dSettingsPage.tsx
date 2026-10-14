@@ -42,7 +42,7 @@ export default function Print3dSettingsPage() {
     setBusy(true);
     try {
       const preview = await print3dStorefrontSettingsService.createPreview();
-      const previewUrl = new URL('/loja-3d', window.location.origin);
+      const previewUrl = new URL(preview.preview_url);
       previewUrl.searchParams.set('maintenance_preview', preview.token);
       if (previewTab) previewTab.location.replace(previewUrl.toString());
       else window.location.assign(previewUrl.toString());

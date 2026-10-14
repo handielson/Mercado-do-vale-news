@@ -4,22 +4,14 @@
   "status": "ready",
   "branch": "main",
   "tag": "v1.2.627-gcode3d-domain",
-  "release_vps": "/var/www/mdv-site/releases/20261014-215600-gcode3d-domain",
-  "release_print3d_vps": "/var/www/print3d-site/releases/20261014-215601-gcode3d-domain",
+  "release_vps": "/var/www/mdv-site/releases/20261014-220100-gcode3d-domain-verified",
+  "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Loja 3D migrada para gcode3d.com.br com DNS e certificado independentes.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
-  "pending_deployments": {
-    "gcode3d": {
-      "version": "v1.2.627-gcode3d-domain",
-      "status": "ssl-mode-verification-pending",
-      "tag": "v1.2.625-gcode3d-domain-prepared",
-      "planned_release_vps": "/var/www/mdv-site/releases/20261014-215600-gcode3d-domain",
-      "planned_release_print3d_vps": "/var/www/print3d-site/releases/20261014-215601-gcode3d-domain"
-    }
-  },
+  "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
     "apps/print3d/index.html",
@@ -41,7 +33,7 @@
     "docs/versoes/2026-10-14-v1.2.627-gcode3d-domain.md"
   ],
   "validations": [
-    "11 testes de domínio, sessão e configuração aprovados.",
+    "12 testes de domínio, prévia, sessão e configuração aprovados.",
     "DNS público delegado à Cloudflare; certificado próprio emitido.",
     "Builds, publicação seletiva e validação pública registrados na nota."
   ]
