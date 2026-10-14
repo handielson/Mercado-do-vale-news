@@ -15,15 +15,17 @@ function patch(source){
  }else if(!next.includes(replacement))throw Error('Balance anchor drift');
  return next;
 }
-async function deploy({appDir,apiProc,exec,root,read,write,checkOnly=false}){
+async function deploy({appDir,apiProc,exec,root,read,write,checkOnly=false,patchSource=patch,moduleFiles=['services/openAiFinanceServer.cjs'],backupSlug='openai-finance'}){
  if(appDir!=='/var/www/mdv-api'||apiProc.name!=='mdv-api')throw Error('Unexpected API target');
+ if(!/^[a-z0-9-]+$/.test(backupSlug)||moduleFiles.some(file=>!/^services\/[a-zA-Z0-9]+\.cjs$/.test(file)))throw Error('Invalid deployment paths');
  const staged=[];
- for(const file of ['server.js','vps_server.js','vps_server.cjs']){const original=await read(appDir+'/'+file);staged.push({file,original,content:patch(original)});}
- const moduleFile='services/openAiFinanceServer.cjs';
+ for(const file of ['server.js','vps_server.js','vps_server.cjs']){const original=await read(appDir+'/'+file);staged.push({file,original,content:patchSource(original)});}
+ for(const moduleFile of moduleFiles){
  const exists=(await exec(`if [ -f ${appDir}/${moduleFile} ]; then printf yes; fi`)).trim()==='yes';
  staged.unshift({file:moduleFile,original:exists?await read(appDir+'/'+moduleFile):null,content:fs.readFileSync(path.join(root,moduleFile),'utf8')});
+ }
  if(checkOnly){console.log(JSON.stringify({checkOnly:true,target:appDir,files:staged.map(item=>({file:item.file,changed:item.original!==item.content}))}));return;}
- const backup=appDir+'/backups/openai-finance-'+Date.now();await exec('mkdir -p '+backup+'/services');
+ const backup=appDir+'/backups/'+backupSlug+'-'+Date.now();await exec('mkdir -p '+backup+'/services');
  for(const item of staged){await write(appDir+'/'+item.file+'.next.cjs',item.content);await exec('node --check '+appDir+'/'+item.file+'.next.cjs');}
  for(const item of staged)if(item.original!==null&&await read(appDir+'/'+item.file)!==item.original)throw Error('Remote API changed during staging');
  for(const item of staged)if(item.original!==null)await exec('cp -p '+appDir+'/'+item.file+' '+backup+'/'+item.file);
@@ -31,7 +33,7 @@ async function deploy({appDir,apiProc,exec,root,read,write,checkOnly=false}){
   for(const item of staged)await exec('mv '+appDir+'/'+item.file+'.next.cjs '+appDir+'/'+item.file);
   console.log((await exec('pm2 restart mdv-api')).trim());
   for(const item of staged)if(await read(appDir+'/'+item.file)!==item.content)throw Error('Remote readback mismatch');
-  console.log('OpenAI finance API backup: '+backup);
+  console.log('API backup: '+backup);
  }catch(error){for(const item of staged)if(item.original!==null)await exec('cp -p '+backup+'/'+item.file+' '+appDir+'/'+item.file);await exec('pm2 restart mdv-api');throw error;}
 }
 module.exports={patch,deploy};

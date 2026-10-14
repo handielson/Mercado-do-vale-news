@@ -9,6 +9,8 @@ import { cn } from '../../utils/cn';
 import { getModelImageWithCache } from '../../services/modelImageCache';
 import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
+import { UnitJournalModal } from '../inventory/UnitJournalModal';
+import { History } from 'lucide-react';
 import { ProductQuickTagsModal } from './ProductQuickTagsModal';
 import { CatalogTitleEditor } from './CatalogTitleEditor';
 import { ProductPublicationChannels } from './ProductPublicationChannels';
@@ -288,6 +290,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
     const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+    const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
     const [isTagsModalOpen, setIsTagsModalOpen] = useState(false);
     // Tags de cross-sell vivem no modelo. Lemos do produto (que herda via specs)
     // pra exibir contagem sem carregar o modelo. O modal carrega o modelo só ao abrir.
@@ -1379,6 +1382,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                         >
                             <MapPin className="w-4 h-4 text-emerald-600 group-hover:text-emerald-700" />
                         </button>
+                        <button
+                            type="button"
+                            onClick={event => { event.stopPropagation(); setIsJournalModalOpen(true); }}
+                            className="shrink-0 p-1.5 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                            title="Histórico do produto"
+                            aria-label="Histórico do produto"
+                        >
+                            <History className="w-4 h-4 text-amber-700" />
+                        </button>
 
                         <button
                             onClick={handleOpenShopeeModal}
@@ -2156,6 +2168,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                     }}
                 />
             )}
+            {isJournalModalOpen && <UnitJournalModal productId={product.id} productIds={equivalentProductIds} productName={product.name} onClose={() => setIsJournalModalOpen(false)} />}
         </div>
     );
 };

@@ -14,6 +14,7 @@ import { unitService } from '@/services/units';
 import { releaseSerializedDocsForOrder } from '@/services/orderService';
 import type { Unit } from '@/types/unit';
 import { UnitStatus } from '@/utils/field-standards';
+import { UnitJournalModal } from '@/components/inventory/UnitJournalModal';
 import {
     Smartphone, Search, RefreshCw, Loader2, ArrowLeftRight,
     CheckCircle2, Clock, Package, ChevronDown, ChevronUp,
@@ -200,12 +201,14 @@ function SwapUnitModal({
 
 function UnitRow({
     unit,
+    onJournal,
     onSwap,
     onConfirmDelivery,
     actionLoading,
     showSwapBtn,
 }: {
     unit: UnitWithProduct;
+    onJournal: (unit: UnitWithProduct) => void;
     onSwap: (unit: UnitWithProduct) => void;
     onConfirmDelivery: (unit: UnitWithProduct) => void;
     actionLoading: string | null;
@@ -253,6 +256,7 @@ function UnitRow({
 
                 {/* Ações rápidas */}
                 <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => onJournal(unit)} title="Diário do aparelho" aria-label="Abrir diário do aparelho" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"><History className="h-4 w-4" /></button>
                     {/* Trocar — apenas unidades reservadas */}
                     {unit.status === UnitStatus.RESERVED && showSwapBtn && (
                         <button
@@ -358,6 +362,7 @@ export default function SerializedUnitsPage() {
     const [swapLogs, setSwapLogs] = useState<SwapLog[]>([]);
     const [showLogs, setShowLogs] = useState(false);
     const [logsLoading, setLogsLoading] = useState(false);
+    const [journalTarget, setJournalTarget] = useState<string | null>(null);
 
     // ─── Carregar unidades ──────────────────────────────────────────────────
 
@@ -559,6 +564,8 @@ export default function SerializedUnitsPage() {
             </div>
 
             {/* Filtros */}
+            <button onClick={() => setJournalTarget('')} className="mb-4 flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm"><History className="h-4 w-4" />Consultar diário por IMEI ou serial</button>
+            {journalTarget !== null && <UnitJournalModal unitId={journalTarget || undefined} onClose={() => setJournalTarget(null)} />}
             <div className="flex flex-col sm:flex-row gap-3 mb-5">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -635,6 +642,7 @@ export default function SerializedUnitsPage() {
                 <div className="space-y-2">
                     {filtered.map(unit => (
                         <UnitRow
+                            onJournal={unit => setJournalTarget(unit.id)}
                             key={unit.id}
                             unit={unit}
                             onSwap={u => setSwapTarget(u)}

@@ -47,6 +47,8 @@ const tiktokShopAutomationPaths = [
   'services/tiktokShopPrintServer.cjs',
 ];
 const print3dRecipeRuntimePaths = [
+  'services/unitJournalServer.cjs',
+  'services/unitJournalSchema.cjs',
   'services/productFormDraftsServer.cjs',
   'services/print3dMaterialsServer.cjs',
   'services/print3dProductOffer.cjs',
@@ -700,6 +702,14 @@ async function main() {
     console.log(JSON.stringify(result));
     conn.end();
     return;
+  }
+  if (process.argv.includes('--unit-journal-only') || process.argv.includes('--unit-journal-check')) {
+    await require('./scripts/deploy-unit-journal.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--unit-journal-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
   }
   if (process.argv.includes('--openai-finance-only') || process.argv.includes('--openai-finance-check')) {
     await require('./scripts/deploy-openai-finance.cjs').deploy({appDir,apiProc,exec,root:__dirname,

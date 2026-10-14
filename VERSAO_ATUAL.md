@@ -1,3 +1,14 @@
+# v1.2.622-diario-aparelhos
+
+Data: 14/10/2026. Branch: main. Tag: v1.2.622-diario-aparelhos.
+Release: /var/www/mdv-site/releases/20261014-144155-diario-aparelhos.
+
+Diário permanente por unidade física e atalho de histórico no card do produto, ao lado dos locais de estoque. Impressão e compartilhamento consultam todas as páginas; históricos longos geram TXT completo para anexar ao WhatsApp. Registros existentes identificados como fotografia da implantação, preservando a data original nos dados. Sem edição/exclusão na aplicação.
+
+MySQL 8 real: eventos de cadastro, alteração, saída e remoção; rollback e proteção imutável aprovados em schema isolado. Clone do schema operacional validado, backup verificado e 20 triggers instalados com 244 registros iniciais e 162 referências existentes. Totais comerciais preservados. Publicação e validação final na nota da entrega.
+
+## Histórico anterior
+
 # v1.2.621-estoque-finance-status
 
 Data: 14/10/2026. Branch: main. Tag: v1.2.621-estoque-finance-status-r1.

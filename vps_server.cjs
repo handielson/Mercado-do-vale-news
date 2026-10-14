@@ -29165,6 +29165,7 @@ fastify.patch('/products/:id/category', { preHandler: requireSyncKey }, async (r
 });
 
 // ─── Units (inventory de unidades serializadas: 1 linha por aparelho) ──────
+require('./services/unitJournalServer.cjs').registerUnitJournalRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 
 // Lista unidades — filtra por product_id, order_id ou sale_id (FIFO por created_at)
 fastify.get('/units', async (req, reply) => {
