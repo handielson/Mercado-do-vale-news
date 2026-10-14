@@ -10,7 +10,9 @@ Registro.br salvou carlos.ns.cloudflare.com e jill.ns.cloudflare.com. Informou t
 
 VPS: bootstrap HTTP somente para os novos hostnames instalado em /etc/nginx/sites-available/gcode3d-acme-bootstrap.conf, com webroot ACME /var/www/certbot e resposta 503 para o restante. Não altera a configuração do site antigo. Certbot 2.9.0 disponível. A loja atual usa certificado origin com nome api.xiaomipetrolina.com.br; o novo domínio terá certificado próprio.
 
-Auditoria da API: nenhum valor de .env ou ambiente PM2 contém 3dmv.com.br. Nenhuma referência encontrada nas colunas de configuração de admin_preferences/company_settings/companies/print3d_storefront_settings. Contas, Google e verificação de telefone 3D estão desligados, public URL/callback Google e Turnstile ausentes. Preservar essas flags e credenciais; não criar novos fluxos de autenticação. Sessões do navegador têm origem própria e não migram entre os domínios.
+Auditoria da API: nenhum valor de .env ou ambiente PM2 contém 3dmv.com.br. Nenhuma referência encontrada nas colunas de texto/JSON de admin_preferences/company_settings/companies/print3d_storefront_settings/products/banners/product_storefront_offers/models/model_image_assets que existem no schema atual. Contas, Google e verificação de telefone 3D estão desligados, public URL/callback Google e Turnstile ausentes. Preservar essas flags e credenciais; não criar novos fluxos de autenticação. Sessões do navegador têm origem própria e não migram entre os domínios.
+
+Preparação salva no commit fb5373f5, tag v1.2.625-gcode3d-domain-prepared, enviada a main. Versão local waiting-dns e releases pendentes; não houve deploy da API ou dos builds web. Site antigo HTTP 200 e API/mysql saudáveis após o bootstrap. Onze testes, guardas de domínio/SEO/transporte/PDV e builds aprovados. Seis arquivos preexistentes preservados. Pedido de retomada automática apresentado ao operador; não criar agendamento sem resposta explícita.
 
 ## Fontes preparadas
 
