@@ -703,6 +703,14 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--print3d-domain-only') || process.argv.includes('--print3d-domain-check')) {
+    await require('./scripts/deploy-print3d-domain.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--print3d-domain-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--unit-journal-only') || process.argv.includes('--unit-journal-check')) {
     await require('./scripts/deploy-unit-journal.cjs').deploy({appDir,apiProc,exec,root:__dirname,
       checkOnly:process.argv.includes('--unit-journal-check'),

@@ -1,3 +1,12 @@
+# v1.2.625-gcode3d-domain — preparada, aguardando DNS
+
+Data: 14/10/2026. Branch: main. Tag preparada: v1.2.625-gcode3d-domain-prepared.
+Site principal/3D e API: corte público pendente. Produção permanece na entrega anterior até validação de DNS e HTTPS.
+
+gcode3d.com.br registrado/pago e zona independente Free criada na Cloudflare; A raiz/www direto para VPS, sem CNAME para o domínio antigo. Nameservers carlos/jill salvos no Registro.br, em transição obrigatória de cerca de duas horas. Bootstrap ACME instalado sem alterar o site antigo. Canonical, links, prévia, ações de conta, sitemap e CORS atualizados nas fontes. Certificado próprio e novos vhosts preparados; 3dmv somente redirecionamento opcional no estado final. Onze testes, três guardas e builds principal/3D aprovados; bundles sem URLs antigas. Não cancelar o domínio antigo antes da validação final. Runbook e estado completo em docs/operacional/2026-10-14-gcode3d-domain-migration.md.
+
+## Histórico anterior
+
 # v1.2.624-extrato-entrada-saida
 
 Data: 14/10/2026. Branch: main. Tag: v1.2.624-extrato-entrada-saida.

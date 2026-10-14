@@ -358,8 +358,8 @@ const CORS_ORIGINS = [
   'https://staging.mercadodovale.com.br',
   'https://www.mercadodovale.com',
   'https://mercadodovale.com',
-  'https://www.3dmv.com.br',
-  'https://3dmv.com.br',
+  'https://www.gcode3d.com.br',
+  'https://gcode3d.com.br',
   'https://www.xiaomipetrolina.com.br',
   'https://xiaomipetrolina.com.br',
   'http://localhost:5173',
@@ -14688,7 +14688,7 @@ fastify.get('/api/sitemap', async (request, reply) => {
         <priority>0.9</priority>
     </url>`).join('\n');
 
-    const print3dDomain = /(^|\.)3dmv\.com\.br$/i.test(new URL(baseUrl).hostname);
+    const print3dDomain = /(^|\.)gcode3d\.com\.br$/i.test(new URL(baseUrl).hostname);
     if (print3dDomain) {
       const print3dXml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -21274,7 +21274,7 @@ const print3dAccounts = registerPrint3dCustomerAccountRoutes(fastify, {
   pool,
   enabled: process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig()),
   authSecret: process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET,
-  publicUrl: process.env.MDV_PRINT3D_PUBLIC_URL,
+  publicUrl: process.env.MDV_PRINT3D_PUBLIC_URL || 'https://www.gcode3d.com.br',
   fromEmail: process.env.MDV_PRINT3D_SMTP_FROM,
   brandName: process.env.MDV_PRINT3D_BRAND_NAME,
   phoneEnabled: process.env.MDV_PRINT3D_PHONE_ENABLED === '1' && print3dWhatsAppSender.configured,
@@ -21309,7 +21309,7 @@ require('./services/print3dStorefrontSettingsServer.cjs').registerPrint3dStorefr
   pool,
   getBearerAuthContext: getVpsBearerAuthContext,
   authSecret: VPS_AUTH_SECRET,
-  publicOrigin: process.env.PRINT3D_PUBLIC_ORIGIN || 'https://www.3dmv.com.br',
+  publicOrigin: process.env.PRINT3D_PUBLIC_ORIGIN || 'https://www.gcode3d.com.br',
 });
 registerPrint3dCheckoutRoutes(fastify, {
   pool, getCustomer: print3dAccounts.getCustomer,

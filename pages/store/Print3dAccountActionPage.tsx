@@ -11,7 +11,7 @@ export default function Print3dAccountActionPage() {
   const verify = location.pathname.endsWith('/confirmar-email');
   const previewPath = location.pathname.startsWith('/loja-3d/');
   const hostname = typeof window === 'undefined' ? '' : window.location.hostname.toLowerCase();
-  const allowedHost = ['3dmv.com.br', 'www.3dmv.com.br', 'localhost', '127.0.0.1'].includes(hostname);
+  const allowedHost = ['gcode3d.com.br', 'www.gcode3d.com.br', 'localhost', '127.0.0.1'].includes(hostname);
   const [state, setState] = useState<'waiting' | 'success' | 'error'>(verify ? 'waiting' : 'success');
   const [message, setMessage] = useState('');
   const [password, setPassword] = useState('');

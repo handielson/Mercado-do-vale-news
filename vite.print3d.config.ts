@@ -36,7 +36,7 @@ export default defineConfig({
   ] },
   define: {
     'import.meta.env.VITE_PRINT3D_TURNSTILE_SITE_KEY': JSON.stringify(process.env.PRINT3D_PUBLIC_TURNSTILE_SITE_KEY || ''),
-    'import.meta.env.VITE_PRINT3D_PUBLIC_ORIGIN': JSON.stringify(process.env.PRINT3D_PUBLIC_ORIGIN || 'https://www.3dmv.com.br'),
+    'import.meta.env.VITE_PRINT3D_PUBLIC_ORIGIN': JSON.stringify(process.env.PRINT3D_PUBLIC_ORIGIN || 'https://www.gcode3d.com.br'),
     'import.meta.env.VITE_FORCE_VPS_PROXY': JSON.stringify('0'),
     'import.meta.env.VITE_FORCE_LOCAL_VPS_PROXY': JSON.stringify('0'),
     'import.meta.env.VITE_VPS_SYNC_KEY': JSON.stringify(''),

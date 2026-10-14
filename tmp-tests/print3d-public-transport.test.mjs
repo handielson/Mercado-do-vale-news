@@ -13,7 +13,7 @@ for (const [method, path] of [
   assert.equal(transport.isPublicVpsPath(path, method), true, `${method} ${path} must use the public API directly`);
   assert.match(transport.buildVpsUrl(path, {
     env: { MODE: 'production', VITE_ALLOW_DIRECT_PUBLIC_VPS: '1' },
-    runtimeHostname: 'www.3dmv.com.br',
+    runtimeHostname: 'www.gcode3d.com.br',
     method,
   }), /^https:\/\/api\.xiaomipetrolina\.com\.br\//);
 }

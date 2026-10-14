@@ -75,7 +75,7 @@ function validateInput(body = {}) {
   return { maintenance_mode: body.maintenance_mode, maintenance_message: message };
 }
 
-function registerPrint3dStorefrontSettingsRoutes(app, { pool, getBearerAuthContext, authSecret, publicOrigin = 'https://www.3dmv.com.br' }) {
+function registerPrint3dStorefrontSettingsRoutes(app, { pool, getBearerAuthContext, authSecret, publicOrigin = 'https://www.gcode3d.com.br' }) {
   let ready;
   const ensure = () => (ready ||= ensurePrint3dStorefrontSettingsTable(pool));
   const admin = async (request, reply) => {
@@ -102,7 +102,7 @@ function registerPrint3dStorefrontSettingsRoutes(app, { pool, getBearerAuthConte
   app.post('/admin/print3d/settings/preview', { preHandler: admin }, async (_request, reply) => {
     try {
       const preview = createMaintenancePreviewToken(authSecret);
-      const origin = String(publicOrigin || 'https://www.3dmv.com.br').replace(/\/$/, '');
+      const origin = String(publicOrigin || 'https://www.gcode3d.com.br').replace(/\/$/, '');
       reply.header('Cache-Control', 'no-store');
       return { ...preview, preview_url: `${origin}/loja-3d?maintenance_preview=${encodeURIComponent(preview.token)}` };
     } catch (error) {

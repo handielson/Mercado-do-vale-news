@@ -1,27 +1,44 @@
 {
-  "version": "v1.2.624-extrato-entrada-saida",
+  "version": "v1.2.625-gcode3d-domain",
   "date": "2026-10-14",
-  "status": "ready",
+  "status": "waiting-dns",
   "branch": "main",
-  "tag": "v1.2.624-extrato-entrada-saida",
-  "release_vps": "/var/www/mdv-site/releases/20261014-181235-extrato-entrada-saida",
-  "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Extrato com entradas em verde, saidas em vermelho e setas/legenda. Registros iniciais e alteracoes neutros.",
+  "tag": "v1.2.625-gcode3d-domain-prepared",
+  "release_vps": "pendente",
+  "release_print3d_vps": "pendente",
+  "planned_release_vps": "/var/www/mdv-site/releases/20261014-191630-gcode3d-domain",
+  "planned_release_print3d_vps": "/var/www/print3d-site/releases/20261014-191631-gcode3d-domain",
+  "summary": "Migracao preparada para gcode3d.com.br, independente do dominio antigo. Aguardando transicao DNS do Registro.br antes do corte publico.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "components/inventory/UnitJournalModal.tsx",
-    "utils/unitJournalExport.ts",
-    "tmp-tests/unit-journal-export.test.cjs",
+    "apps/print3d/index.html",
+    "vite.print3d.config.ts",
+    "pages/admin/print3d/Print3dSettingsPage.tsx",
+    "pages/store/Print3dAccountActionPage.tsx",
+    "services/print3dStorefrontSettingsServer.cjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-print3d-domain.cjs",
+    "scripts/install-print3d-site-nginx.cjs",
+    "infra/nginx/gcode3d-acme-bootstrap.conf",
+    "infra/nginx/print3d-site-production.conf",
+    "infra/nginx/mdv-api-ssl.conf",
+    "tmp-tests/print3d-domain-migration.test.cjs",
+    "tmp-tests/print3d-domain-deploy-static.test.mjs",
+    "tmp-tests/print3d-public-transport.test.mjs",
+    "tmp-tests/vps-seo-produto-3d-static.test.mjs",
+    "docs/operacional/2026-10-14-gcode3d-domain-migration.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-14-v1.2.624-extrato-entrada-saida.md"
+    "docs/versoes/2026-10-14-v1.2.625-gcode3d-domain.md"
   ],
   "validations": [
-    "18 testes do diario/exportacao aprovados, incluindo classificacao visual sem inventar movimentos.",
-    "Build com guardas aprovado. Publicacao somente do site, sem migration ou restart da API.",
-    "Validacao publica e do extrato no navegador registrada na nota da entrega."
+    "11 testes de origem, publicacao seletiva, sessao e configuracao aprovados; guardas dominio, SEO e transporte aprovadas.",
+    "Build principal e 3D aprovados; bundles sem URLs 3dmv.com.br. Nginx bootstrap validado e instalado apenas para os novos hostnames.",
+    "Zona Cloudflare Free e A raiz/www configurados; DNS salvo no Registro.br. Corte publico pendente da transicao obrigatoria e certificado proprio."
   ]
 }
