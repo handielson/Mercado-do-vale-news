@@ -24,6 +24,7 @@ test('Bling stock re-entry does not lock deposit metadata across connections', {
   const pool=mysql.createPool(config);
   t.after(()=>pool.end());
   await pool.query('CREATE TABLE products (id CHAR(36) PRIMARY KEY,company_id CHAR(36),stock_quantity INT NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB');
+  await pool.query('CREATE TABLE units (id CHAR(36) PRIMARY KEY,product_id CHAR(36) NOT NULL,status VARCHAR(32) NOT NULL,INDEX (product_id)) ENGINE=InnoDB');
   await pool.query('CREATE TABLE stock_deposits (id CHAR(36) PRIMARY KEY,name VARCHAR(60),is_default TINYINT NOT NULL DEFAULT 1) ENGINE=InnoDB');
   await pool.query('CREATE TABLE stock_locations (id CHAR(36) PRIMARY KEY,name VARCHAR(60),is_default TINYINT NOT NULL DEFAULT 1) ENGINE=InnoDB');
   await pool.query('CREATE TABLE product_stock_locations (id CHAR(36) PRIMARY KEY,company_id CHAR(36),product_id CHAR(36),deposit_id CHAR(36),location_id CHAR(36),quantity INT NOT NULL,reserved_quantity INT NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX (product_id)) ENGINE=InnoDB');
@@ -63,4 +64,15 @@ test('Bling stock re-entry does not lock deposit metadata across connections', {
   assert.equal(Number(product.stock_quantity),1);
   assert.equal(Number(stock.quantity),1);
   assert.deepEqual([Number(movement.quantity),movement.reference_type],[1,'external_stock_total']);
+  // A stale product aggregate must not become another serialized appliance.
+  await pool.query('INSERT INTO units (id,product_id,status) VALUES (?,?,?)',[randomUUID(),productId,'available']);
+  await pool.query('UPDATE products SET stock_quantity=2 WHERE id=?',[productId]);
+  const materialize=()=>reconcileExternalStock(pool,{productId,materializeUndistributed:true,
+    getIncoming:async()=>{throw new Error('Must not create an incoming balance');}});
+  assert.equal((await materialize()).materialized,0);
+  assert.equal((await materialize()).materialized,0);
+  const [[afterGuard]]=await pool.query('SELECT quantity FROM product_stock_locations WHERE id=?',[stockId]);
+  const [[historyAfterGuard]]=await pool.query('SELECT COUNT(*) count FROM stock_location_movements WHERE product_id=?',[productId]);
+  assert.equal(Number(afterGuard.quantity),1);
+  assert.equal(Number(historyAfterGuard.count),1);
 });

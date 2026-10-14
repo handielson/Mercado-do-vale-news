@@ -26,8 +26,8 @@ assert.match(stock, /SELECT id,company_id,stock_quantity FROM products.*FOR UPDA
   'materialization must read its source balance under the product lock');
 
 assert.ok(
-  server.includes('async function materializeProductUndistributedStock'),
-  'VPS must materialize existing product stock that has no location'
+  server.includes('materializeUndistributed: true, initialMigration: true'),
+  'initial migration must retain explicit stock materialization'
 );
 assert.ok(
   server.includes('async function resetProductStockLocationsToIncoming'),
@@ -59,8 +59,8 @@ const distributionRoute = server.slice(
   server.indexOf("fastify.get('/stock-locations/locations/:locationId/contents'")
 );
 assert.ok(
-  /await\s+materializeProductUndistributedStock\(\s*req\.params\.productId/.test(distributionRoute),
-  'distribution reads must first materialize any stock that exists only in products.stock_quantity'
+  !/materializeProductUndistributedStock|INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM/.test(distributionRoute),
+  'distribution reads must not materialize, change or remove stock'
 );
 
 console.log('stock location incoming conference static checks passed');

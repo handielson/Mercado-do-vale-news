@@ -15,6 +15,17 @@ async function reconcileExternalStock(pool,{productId,targetQuantity,reason,note
     if(materializeUndistributed) {
       target=Number(product.stock_quantity);
       if(!Number.isSafeInteger(target)||target<0||target>2147483647) throw new Error('undistributed_stock_invalid');
+      // A unidade fisica e a fonte do saldo serializado, como no catalogo.
+      // Nunca materializar a diferenca de um agregado antigo como outro aparelho.
+      let units=[];
+      try {
+        [units]=await connection.query('SELECT status FROM units WHERE product_id=? FOR UPDATE',[productId]);
+      } catch(error) {
+        // O bootstrap inicial cria units depois da migracao dos locais.
+        // Fora desse bootstrap, falhar em vez de confiar num saldo sem validar.
+        if(!initialMigration||error.code!=='ER_NO_SUCH_TABLE') throw error;
+      }
+      if(units.length) target=units.filter(unit=>unit.status==='available').length;
     }
     const companyId=product.company_id||await getDefaultCompanyId?.();
     if(!companyId) throw new Error('Empresa do produto não configurada.');

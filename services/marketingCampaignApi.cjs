@@ -2026,8 +2026,7 @@ async function runNextSocialStoryDelivery(pool, dependencies) {
       [result?.containerId || null, result?.publicationId || result?.id || null, delivery.id],
     );
   } catch (error) {
-    const retryableMediaFailure = error?.code === 'SOCIAL_STORY_MEDIA_UNAVAILABLE'
-      && Number(delivery.attempt_count || 0) < socialStoryMediaRetryLimit();
+    const retryableMediaFailure = shouldRetrySocialStoryFailure(error, delivery);
     const deliveryStatus = retryableMediaFailure ? 'pending' : 'failed';
     const errorMessage = retryableMediaFailure
       ? `${text(error.message, 9000)}. Nova tentativa automatica em ${SOCIAL_STORY_MEDIA_RETRY_DELAY_MINUTES} minutos.`
@@ -2040,6 +2039,13 @@ async function runNextSocialStoryDelivery(pool, dependencies) {
   }
   await refreshSocialStoryScheduleStatus(pool, delivery.schedule_id);
   return delivery.id;
+}
+
+function shouldRetrySocialStoryFailure(error, delivery) {
+  // Only preflight failures are safe to retry: no publication POST occurred.
+  if (error?.code === 'WAHA_STATUS_PREFLIGHT_UNAVAILABLE') return Number(delivery.attempt_count || 0) + 1 < 3;
+  return error?.code === 'SOCIAL_STORY_MEDIA_UNAVAILABLE'
+    && Number(delivery.attempt_count || 0) < socialStoryMediaRetryLimit();
 }
 
 async function runNextMetaApproval(pool) {
@@ -3678,4 +3684,5 @@ module.exports = {
   registerMarketingCampaignRoutes,
   expandSocialStoryItemsForDates,
   assertSocialStoryMediaAvailable,
+  shouldRetrySocialStoryFailure,
 };

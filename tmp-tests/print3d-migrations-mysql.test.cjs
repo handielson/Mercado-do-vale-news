@@ -41,6 +41,7 @@ test('MySQL local: migrations 3D, checkout concorrente, reserva central e rollba
     catch(error) { if(attempt===59) throw error;await new Promise(resolve=>setTimeout(resolve,1000)); }
   }
   pool=mysql.createPool(config);
+  await pool.query('CREATE TABLE units (id CHAR(36) PRIMARY KEY,product_id CHAR(36) NOT NULL,status VARCHAR(32) NOT NULL,INDEX (product_id)) ENGINE=InnoDB');
   await pool.query("CREATE TABLE products (id CHAR(36) NOT NULL PRIMARY KEY, company_id CHAR(36) NULL, status VARCHAR(32) NOT NULL DEFAULT 'active',stock_quantity INT NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await pool.query(`CREATE TABLE orders (id CHAR(36) NOT NULL PRIMARY KEY,customer_id CHAR(36) NULL,company_id CHAR(36) NULL,
     customer_name VARCHAR(255),customer_phone VARCHAR(30),customer_email VARCHAR(254),status VARCHAR(40),payment_status VARCHAR(40),

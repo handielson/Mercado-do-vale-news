@@ -1,26 +1,37 @@
 {
-  "version": "v1.2.620-catalogo-mensagem-familia",
-  "date": "2026-10-13",
+  "version": "v1.2.621-estoque-finance-status",
+  "date": "2026-10-14",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.620-catalogo-mensagem-familia",
-  "release_vps": "/var/www/mdv-site/releases/20261013-201458-catalogo-mensagem-familia",
+  "tag": "v1.2.621-estoque-finance-status",
+  "release_vps": "/var/www/mdv-site/releases/20261014-141311-estoque-finance-status",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261011-195330-cadastro-variacoes",
-  "summary": "Mensagem compartilhada agrupa cores pelo vinculo de familia usado nos cards, preservando as configuracoes de memoria.",
+  "summary": "Distribuicao de estoque somente leitura, rota Finance conectada ao runtime e Status WhatsApp com preflight e protecao contra reenvio incerto.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
   "changed_files": [
-    "utils/catalogMessageGenerator.ts",
-    "tmp-tests/catalog-message-family.test.mjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "services/externalStockReconciliation.cjs",
+    "services/marketingCampaignApi.cjs",
+    "services/systemStatusModel.ts",
+    "services/whatsappStatusHealth.cjs",
+    "services/whatsappStatusSender.cjs",
+    "scripts/recover-whatsapp-status-session.cjs",
+    "tmp-tests/stock-distribution-read-only.test.cjs",
+    "tmp-tests/openai-finance-deploy.test.cjs",
+    "tmp-tests/system-status.test.cjs",
+    "tmp-tests/whatsapp-status-sender.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-13-v1.2.620-catalogo-mensagem-familia.md"
+    "docs/versoes/2026-10-14-v1.2.621-estoque-finance-status.md"
   ],
   "validations": [
-    "Oito testes focados de mensagem e compartilhamento aprovados.",
-    "Teste comportamental cobre nomes divergentes, resposta compacta, memorias e familias distintas, produtos ocultos e sem estoque.",
-    "Build aprovado; publicacao e validacao publica registradas na nota da entrega."
+    "Testes de estoque, Finance, saude e envio de Status aprovados; build e sintaxe aprovados.",
+    "Recuperacao somente da sessao statusloja-wpp autorizada, sem reenvio dos cinco resultados incertos.",
+    "Validacao publica e resultado da recuperacao registrados na nota da entrega; sem migracao do diario ou ajuste de saldo comercial."
   ]
 }

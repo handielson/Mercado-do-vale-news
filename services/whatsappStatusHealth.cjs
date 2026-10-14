@@ -1,11 +1,12 @@
 // Read-only health check for the same WAHA session used by standalone Stories.
-function createWhatsAppStatusHealth({ env = process.env, fetchImpl = fetch, now = Date.now } = {}) {
+function createWhatsAppStatusHealth({ env = process.env, fetchImpl = fetch, now = Date.now, cacheMs = 30000 } = {}) {
   let cached = null;
   let pending = null;
   async function probe() {
     const checkedAt = new Date(now()).toISOString();
     const session = String(env.WAHA_STATUS_SESSION || '').trim();
     const key = String(env.WAHA_STATUS_API_KEY || '').trim();
+    let readingStatus = false;
     if (!session || !key) return { configured: false, connected: false, state: 'NOT_CONFIGURED', checkedAt };
     try {
       const base = String(env.WAHA_STATUS_SERVER_URL || 'http://127.0.0.1:18082').replace(/\/+$/, '');
@@ -15,13 +16,22 @@ function createWhatsAppStatusHealth({ env = process.env, fetchImpl = fetch, now 
       if (!response.ok) return { configured: true, connected: false, state: 'UNAVAILABLE', httpStatus: response.status, checkedAt };
       const body = await response.json();
       const state = ['WORKING', 'STARTING', 'SCAN_QR_CODE', 'STOPPED', 'FAILED'].includes(body?.status) ? body.status : 'UNKNOWN';
-      return { configured: true, connected: state === 'WORKING' && Boolean(body.me), state, checkedAt };
+      if (state !== 'WORKING' || !body.me) return { configured: true, connected: false, state, checkedAt };
+      // WORKING is session metadata; a hung browser can still report it.
+      // Exercise the same status chat read used for reconciliation, without sending.
+      readingStatus = true;
+      const messages = await fetchImpl(`${base}/api/${encodeURIComponent(session)}/chats/status%40broadcast/messages?limit=1&downloadMedia=false`, {
+        method: 'GET', headers: { 'X-Api-Key': key }, signal: AbortSignal.timeout(8000),
+      });
+      if (!messages.ok) return { configured: true, connected: false, state: 'STATUS_UNAVAILABLE', httpStatus: messages.status, checkedAt };
+      if (!Array.isArray(await messages.json())) return { configured: true, connected: false, state: 'STATUS_UNAVAILABLE', checkedAt };
+      return { configured: true, connected: true, state, checkedAt };
     } catch {
-      return { configured: true, connected: false, state: 'UNAVAILABLE', checkedAt };
+      return { configured: true, connected: false, state: readingStatus ? 'STATUS_UNAVAILABLE' : 'UNAVAILABLE', checkedAt };
     }
   }
   return async function getHealth() {
-    if (cached && now() - cached.at < 30000) return cached.value;
+    if (cached && now() - cached.at < cacheMs) return cached.value;
     if (!pending) pending = probe().then(value => { cached = { at: now(), value }; return value; }).finally(() => { pending = null; });
     return pending;
   };

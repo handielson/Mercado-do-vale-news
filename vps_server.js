@@ -1035,6 +1035,8 @@ async function requireAdminBearerToken(request, reply) {
   return reply.code(401).send({ error: 'Admin bearer token required' });
 }
 
+require('./services/openAiFinanceServer.cjs').registerOpenAiFinanceRoutes(fastify, { pool, requireAdminBearerToken });
+
 async function requireSyncKeyOrCustomer(request, reply) {
   const key = request.headers['x-sync-key'] || request.headers['x-api-key'];
   if (key && key === process.env.SYNC_SECRET) {
@@ -27095,15 +27097,6 @@ async function syncProductStockFromLocations(productId, db = pool) {
   return quantity;
 }
 
-async function materializeProductUndistributedStock(productId, reason = 'undistributed_stock', notes = null) {
-  const result = await require('./services/externalStockReconciliation.cjs').reconcileExternalStock(pool, {
-    productId, materializeUndistributed: true, reason,
-    notes: notes || 'Saldo sem local definido materializado em Deposito / Entrada-Conferencia para permitir transferencia.',
-    getIncoming: ensureIncomingStockLocation, getDefaultCompanyId: getDefaultStockCompanyId,
-  });
-  return { ...result, materialized: result.materialized || 0 };
-}
-
 async function resetProductStockLocationsToIncoming(productId, targetQuantity, reason = 'external_stock_reentry', notes = null) {
   return require('./services/externalStockReconciliation.cjs').reconcileExternalStock(pool, {
     productId, targetQuantity, reason, notes, resetToIncoming: true,
@@ -27406,11 +27399,7 @@ fastify.patch('/stock-locations/locations/:id', { preHandler: requireSyncKey }, 
 });
 
 fastify.get('/stock-locations/products/:productId/distribution', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
-  await materializeProductUndistributedStock(
-    req.params.productId,
-    'distribution_open',
-    'Saldo sem local definido materializado automaticamente ao abrir a distribuicao.'
-  );
+  // Consultar a distribuicao nunca cria saldos ou movimentacoes.
   const [rows] = await pool.query(`
     SELECT
       psl.*,
@@ -31154,29 +31143,7 @@ async function resolveWhatsAppStatusVideoUrls(product) {
 }
 
 async function sendWahaStatusMedia({ baseUrl, apiKey, session, type, mediaUrl, caption, timeoutMs }) {
-  const endpoint = `${baseUrl}/api/${encodeURIComponent(session)}/status/${type}`;
-  const payload = {
-    file: { url: mediaUrl },
-    caption,
-    ...(type === 'video' ? { convert: true } : {}),
-  };
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Api-Key': apiKey,
-    },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const text = await response.text();
-  let body = text;
-  try { body = text ? JSON.parse(text) : {}; } catch {}
-  if (!response.ok) {
-    const message = body?.exception?.message || body?.message || body?.error || response.statusText;
-    throw new Error(`WAHA ${type} HTTP ${response.status}: ${String(message || '').slice(0, 300)}`);
-  }
-  return { endpoint, status: response.status, body, bodyText: text };
+  return require('./services/whatsappStatusSender.cjs').sendWahaStatusMedia({ baseUrl, apiKey, session, type, mediaUrl, caption, timeoutMs });
 }
 
 let whatsAppStatusMediaQueueVps = Promise.resolve();
@@ -31289,7 +31256,7 @@ async function sendWhatsAppStandaloneStoryMediaVps({ type, mediaUrl, caption = '
     const result = await sendWahaStatusMedia({
       baseUrl, apiKey, session, type: type === 'video' ? 'video' : 'image', mediaUrl, caption, timeoutMs,
     });
-    return { id: result?.body?.id || null };
+    return { id: result.id };
   });
 }
 
@@ -31381,7 +31348,7 @@ async function markStaleWhatsAppStatusSendingLogs(campaignId = null) {
     'WHATSAPP_STATUS_SEND_DEBUG',
     'Erro: envio ficou preso em andamento e foi encerrado automaticamente.',
     `Limite sem atualizacao: ${staleSeconds}s`,
-    'Acao: clique em Enviar agora novamente se o Status nao aparecer no WhatsApp.',
+    'Acao: resultado incerto; confira o WhatsApp antes de considerar um reenvio para evitar duplicidade.',
   ].join('\n');
   const params = [debug, staleSeconds];
   let where = "status = 'sending' AND created_at < DATE_SUB(NOW(), INTERVAL ? SECOND)";

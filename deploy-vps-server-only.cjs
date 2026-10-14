@@ -871,9 +871,13 @@ async function main() {
   console.log(`Uploading server to ${appDir}`);
   await exec(`mkdir -p ${appDir}/services`);
   await upload(path.join(__dirname, 'services/whatsappStatusHealth.cjs'), remotePathJoin(appDir, 'services/whatsappStatusHealth.cjs'));
+  await upload(path.join(__dirname, 'services/whatsappStatusSender.cjs'), remotePathJoin(appDir, 'services/whatsappStatusSender.cjs'));
   await upload(path.join(__dirname, 'services/productReadPrivacy.cjs'), remotePathJoin(appDir, 'services/productReadPrivacy.cjs'));
   await upload(path.join(__dirname, 'services/serializedSaleFinalization.cjs'), remotePathJoin(appDir, 'services/serializedSaleFinalization.cjs'));
+  await upload(path.join(__dirname, 'services/openAiFinanceServer.cjs'), remotePathJoin(appDir, 'services/openAiFinanceServer.cjs'));
+  await exec(`node --check ${appDir}/services/openAiFinanceServer.cjs`);
   await exec(`node --check ${appDir}/services/whatsappStatusHealth.cjs`);
+  await exec(`node --check ${appDir}/services/whatsappStatusSender.cjs`);
   await upload(localServer, `${appDir}/vps_server.js`);
   await upload(localServerCjs, `${appDir}/vps_server.cjs`);
   await upload(localServer, `${appDir}/server.js`);

@@ -7,12 +7,16 @@ const service = fs.readFileSync('services/whatsappStatusCampaignService.ts', 'ut
 const panel = fs.readFileSync('pages/admin/settings/marketing/WhatsAppStatusCampaignPanel.tsx', 'utf8');
 const marketingStudio = fs.readFileSync('pages/admin/settings/MarketingPage.tsx', 'utf8');
 const deployServerOnly = fs.readFileSync('deploy-vps-server-only.cjs', 'utf8');
+const sender = fs.readFileSync('services/whatsappStatusSender.cjs', 'utf8');
+assert.match(sender, /\/api\/\$\{encodeURIComponent\(session\)\}\/status\/\$\{type\}/);
+assert.match(sender, /convert: true/);
+assert.match(sender, /X-Api-Key/);
 
 for (const source of [server, serverCjs]) {
   assert.match(source, /CREATE TABLE IF NOT EXISTS whatsapp_status_campaigns/);
   assert.match(source, /CREATE TABLE IF NOT EXISTS whatsapp_status_campaign_logs/);
   assert.match(source, /MAX_WHATSAPP_STATUS_PRODUCTS_PER_RUN = 300/);
-  assert.match(source, /\/api\/\$\{encodeURIComponent\(session\)\}\/status\/\$\{type\}/);
+  assert.match(source, /require\('\.\/services\/whatsappStatusSender\.cjs'\)\.sendWahaStatusMedia/);
   assert.match(source, /WHATSAPP_STATUS_SEND_DEBUG/);
   assert.match(source, /slot_index/);
   assert.match(source, /product_ids JSON NULL/);
@@ -54,7 +58,7 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /product\?\.model_id \? '' : normalizeWhatsAppStatusText\(groupName\)/);
   assert.match(source, /Cores disponiveis/);
   assert.match(source, /specs, custom_fields/);
-  assert.match(source, /image_url, video_url, marketing_background_url, marketing_video_url, price_retail/);
+  assert.match(source, /image_url, video_url, marketing_background_url, (?:marketing_background_no_price_url, )?marketing_video_url, price_retail/);
   assert.match(source, /sameWhatsAppStatusMemoryVariation/);
   assert.doesNotMatch(source, /function getWhatsAppStatusCardPlan/);
   assert.doesNotMatch(source, /A vista no PIX:.*formatWhatsAppStatusMoney/);
@@ -85,11 +89,9 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /videos\.map\(\(video\) => \(\{ type: 'video', url: video\.url, color: video\.color/);
   assert.match(source, /enqueueWhatsAppStatusMediaBatchVps/);
   assert.match(source, /whatsAppStatusMediaQueueVps = Promise\.resolve\(\)/);
-  assert.match(source, /convert: true/);
   assert.match(source, /\{ type: 'image', url: image, color: '' \}/);
   assert.match(source, /WAHA_STATUS_MEDIA_INTERVAL_MS/);
   assert.match(source, /WAHA_STATUS_MEDIA_INTERVAL_MS \|\| 8000/);
-  assert.match(source, /X-Api-Key/);
   assert.match(source, /aceito para publicacao assincrona/);
   assert.match(source, /const timedOut = error\?\.name === 'TimeoutError'/);
   assert.doesNotMatch(source, /status: timedOut \? 'sent' : 'failed'/);

@@ -18,8 +18,12 @@ const env = { WAHA_STATUS_SESSION: 'private/session', WAHA_STATUS_API_KEY: 'priv
 
 test('health probes only GET and returns no account or credential data', async () => {
   const read = createWhatsAppStatusHealth({ env, now: () => now.getTime(), fetchImpl: async (url, options) => {
-    assert.equal(url, 'http://localhost:18082/api/sessions/private%2Fsession');
     assert.equal(options.method, 'GET'); assert.equal(options.headers['X-Api-Key'], env.WAHA_STATUS_API_KEY);
+    if (url.includes('/chats/')) {
+      assert.equal(url, 'http://localhost:18082/api/private%2Fsession/chats/status%40broadcast/messages?limit=1&downloadMedia=false');
+      return { ok: true, json: async () => [] };
+    }
+    assert.equal(url, 'http://localhost:18082/api/sessions/private%2Fsession');
     return { ok: true, json: async () => ({ status: 'WORKING', me: { id: 'secret-phone', name: 'private-name' }, config: { apiKey: 'private-key' } }) };
   } });
   assert.deepEqual(await read(), { configured: true, connected: true, state: 'WORKING', checkedAt: now.toISOString() });
@@ -45,9 +49,23 @@ test('WAHA errors omit raw provider messages and credentials', async () => {
 });
 test('health uses cache and single-flight with expiration', async () => {
   let time = now.getTime(); let calls = 0;
-  const read = createWhatsAppStatusHealth({ env, now: () => time, fetchImpl: async () => { calls++; return { ok: true, json: async () => ({ status: 'WORKING', me: {} }) }; } });
-  await Promise.all([read(), read(), read()]); await read(); assert.equal(calls, 1);
-  time += 30001; await read(); assert.equal(calls, 2);
+  const read = createWhatsAppStatusHealth({ env, now: () => time, fetchImpl: async (url) => { calls++; return { ok: true, json: async () => url.includes('/chats/') ? [] : ({ status: 'WORKING', me: {} }) }; } });
+  await Promise.all([read(), read(), read()]); await read(); assert.equal(calls, 2);
+  time += 30001; await read(); assert.equal(calls, 4);
+});
+
+test('WORKING session with hung or malformed Status read cannot be healthy', async () => {
+  for (const outcome of ['timeout', 'malformed', 'http']) {
+    const read = createWhatsAppStatusHealth({ env, fetchImpl: async (url) => {
+      if (!url.includes('/chats/')) return { ok: true, json: async () => ({ status: 'WORKING', me: {} }) };
+      if (outcome === 'timeout') throw Object.assign(new Error('private-key'), { name: 'TimeoutError' });
+      return { ok: outcome !== 'http', status: 503, json: async () => ({ error: 'private-name' }) };
+    } });
+    const data = await read();
+    assert.equal(data.connected, false);
+    assert.notEqual(state('waha', data, new Date(data.checkedAt)).state, 'healthy');
+    assert.ok(!JSON.stringify(data).includes('private-key'));
+  }
 });
 test('WAHA route requires admin auth and no-store', async () => {
   const admin = () => {}; let route;

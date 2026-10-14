@@ -1,3 +1,12 @@
+# v1.2.621-estoque-finance-status
+
+Data: 14/10/2026. Branch: main. Tag: v1.2.621-estoque-finance-status.
+Release: /var/www/mdv-site/releases/20261014-141311-estoque-finance-status.
+
+Consultar distribuicao nao cria saldo ou movimentos. Materializacao explicita usa unidades disponiveis quando serializadas. Rota Finance registrada no runtime JS e modulo incluido no deploy. Status exige leitura operacional da sessao antes do envio; timeout apos POST fica incerto sem reenvio automatico. Recuperacao somente da sessao de Status autorizada. Sem ajuste de saldo ou instalacao do diario. Testes focados, build e sintaxe aprovados; fechamento na nota da entrega.
+
+## Historico anterior
+
 # v1.2.620-catalogo-mensagem-familia
 
 Data: 13/10/2026. Branch: main. Tag: v1.2.620-catalogo-mensagem-familia.
