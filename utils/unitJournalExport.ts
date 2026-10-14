@@ -9,6 +9,55 @@ export interface JournalEvent {
 }
 export interface JournalResponse { events: JournalEvent[]; next: string | null }
 
+export function journalSummary(event: JournalEvent, labels: Record<string, string>) {
+    const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {};
+    const before = record(event.before_data?.unit);
+    const after = record(event.after_data?.unit);
+    const unit = event.after_data ? after : before;
+    const status = (value: unknown) => value == null ? 'Não informado' : labels[String(value)] || String(value);
+    const displayDate = (value: string) => {
+        const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(value) ? value.replace(' ', 'T') + 'Z' : value;
+        const parsed = new Date(normalized);
+        return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    };
+    let description = labels[event.event_type] || event.event_type;
+    if (event.event_type === 'baseline') {
+        description = 'Início do diário — aparelho já cadastrado';
+        if (unit.created_at) description += `. Cadastro original: ${displayDate(String(unit.created_at))}`;
+    } else if (event.event_type === 'existing_sale_reference') {
+        description = 'Venda anterior localizada — referência recuperada';
+        const sale = record(event.after_data?.sale);
+        if (sale.created_at) description += `. Data da venda: ${displayDate(String(sale.created_at))}`;
+    } else if (event.event_type === 'unit_update' && before.status !== after.status) {
+        description = `Situação alterada: ${status(before.status)} → ${status(after.status)}`;
+    } else if (event.event_type.startsWith('product_stock_locations_')) {
+        const oldLocation = record(event.before_data?.product_stock_locations);
+        const newLocation = record(event.after_data?.product_stock_locations);
+        const oldQuantity = oldLocation.quantity ?? 'Não informado';
+        const newQuantity = newLocation.quantity ?? 'Não informado';
+        description += `. Saldo do local: ${oldQuantity} → ${newQuantity} (contexto do produto)`;
+    } else if (event.event_type.startsWith('stock_location_movements_')) {
+        const movement = record(event.after_data?.stock_location_movements || event.before_data?.stock_location_movements);
+        if (movement.quantity != null) description += `. Quantidade: ${movement.quantity} (contexto do produto)`;
+        if (movement.reason) description += `. Motivo: ${movement.reason}`;
+    }
+    const identifier = unit.imei_1 || unit.imei_2 || unit.serial;
+    return {
+        id: event.id,
+        date: displayDate(event.recorded_at),
+        device: identifier ? `${unit.imei_1 || unit.imei_2 ? 'IMEI' : 'Serial'} final ${String(identifier).slice(-4)}` : `Aparelho ${event.unit_id.slice(0, 8)}`,
+        description,
+        status: event.event_type === 'unit_delete' ? 'Cadastro removido' : status(unit.status),
+    };
+}
+
+export function journalSummaryText(title: string, events: JournalEvent[], labels: Record<string, string>) {
+    return [`Mercado do Vale — ${title}`, 'EXTRATO RESUMIDO', `${events.length} registros — horário de São Paulo`,
+        ...events.map(event => { const row = journalSummary(event, labels); return `${row.date} | ${row.device}\n${row.description}\nSituação: ${row.status}`; }),
+        'Registros de saldo por local são contexto do produto; não comprovam movimentação física deste aparelho.',
+    ].join('\n\n');
+}
+
 export async function collectJournal(read: (cursor?: string) => Promise<JournalResponse>) {
     const events: JournalEvent[] = [];
     const seen = new Set<string>();
@@ -35,7 +84,7 @@ export function journalText(title: string, events: JournalEvent[], labels: Recor
         // Binary image content is preserved in the journal; it is not useful in a text document.
         return text.startsWith('data:image/') ? '[Imagem preservada no registro; consulte no painel]' : labels[text] || text;
     }
-    return [`Mercado do Vale — ${title}`, `${events.length} registros — ordem cronológica`,
+    return [journalSummaryText(title, events, labels), '\nDADOS COMPLETOS', `${events.length} registros — ordem cronológica`,
         'Datas dos eventos em horário de São Paulo. Os dados originais preservam seus valores e datas.',
         ...events.map(event => [
             `\n━━━━━━━━━━━━━━━━━━━━━━\n${labels[event.event_type] || event.event_type}`,

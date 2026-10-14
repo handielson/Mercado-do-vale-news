@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { History, Loader2, Search, X, Printer, MessageCircle } from 'lucide-react';
 import { vpsClient } from '@/services/vpsClient';
-import { collectJournal, journalText, journalPrintHtml, type JournalEvent, type JournalResponse } from '@/utils/unitJournalExport';
+import { collectJournal, journalText, journalSummary, journalSummaryText, journalPrintHtml, type JournalEvent, type JournalResponse } from '@/utils/unitJournalExport';
 const labels: Record<string, string> = {
     baseline: 'Registro inicial de uma unidade já cadastrada',
     existing_sale_reference: 'Venda anterior localizada no sistema',
@@ -50,6 +50,7 @@ export function UnitJournalModal({ unitId, productId, productIds = [], productNa
     const [error, setError] = useState('');
     const [exporting, setExporting] = useState(false);
     const [notice, setNotice] = useState('');
+    const [includeFullData, setIncludeFullData] = useState(false);
     const request = useRef(0);
     const title = productId ? `Histórico do produto${productName ? ` — ${productName}` : ''}` : 'Diário do aparelho';
     const productIdsKey = productIds.join(',');
@@ -67,7 +68,8 @@ export function UnitJournalModal({ unitId, productId, productIds = [], productNa
         try {
             const complete = await collectJournal(read);
             if (ticket !== request.current) { popup.close(); return; }
-            const text = journalText(title, complete, labels);
+            const summary = journalSummaryText(title, complete, labels);
+            const text = includeFullData ? journalText(title, complete, labels) : summary;
             if (mode === 'print') {
                 popup.document.open(); popup.document.write(journalPrintHtml(title, text)); popup.document.close();
                 popup.focus(); popup.print();
@@ -77,7 +79,7 @@ export function UnitJournalModal({ unitId, productId, productIds = [], productNa
                     const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
                     const link = document.createElement('a'); link.href = url; link.download = 'historico-mercado-do-vale.txt'; link.click();
                     window.setTimeout(() => URL.revokeObjectURL(url), 60000);
-                    message = `Mercado do Vale — ${title}\nHistórico completo: ${complete.length} registros. Segue arquivo do histórico em anexo.`;
+                    message = encodeURIComponent(summary).length <= 5500 ? `${summary}\n\nSegue arquivo do histórico em anexo.` : `Mercado do Vale — ${title}\nHistórico: ${complete.length} registros. Segue arquivo do histórico em anexo.`;
                     setNotice('O histórico completo foi baixado. Anexe o arquivo historico-mercado-do-vale.txt na conversa do WhatsApp antes de enviar.');
                 }
                 popup.location.replace(`https://wa.me/?text=${encodeURIComponent(message)}`);
@@ -113,6 +115,7 @@ export function UnitJournalModal({ unitId, productId, productIds = [], productNa
                     <button type="button" onClick={() => void exportHistory('print')} disabled={loading || exporting || !events.length} className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm disabled:opacity-50"><Printer className="h-4 w-4" />Imprimir histórico</button>
                     <button type="button" onClick={() => void exportHistory('whatsapp')} disabled={loading || exporting || !events.length} className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm text-white disabled:opacity-50"><MessageCircle className="h-4 w-4" />Compartilhar via WhatsApp</button>
                 </div>
+                <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={includeFullData} onChange={e => setIncludeFullData(e.target.checked)} disabled={exporting} />Incluir dados completos na impressão e no compartilhamento</label>
                 {exporting && <p role="status" className="text-sm">Preparando todos os registros do histórico…</p>}
                 {notice && <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">{notice}</p>}
                 {!unitId && !productId && <form onSubmit={e => { e.preventDefault(); setTarget(identifier.trim()); }} className="flex gap-2">
@@ -121,6 +124,14 @@ export function UnitJournalModal({ unitId, productId, productIds = [], productNa
                 </form>}
                 {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
                 {!loading && !error && target && events.length === 0 && <p className="text-sm text-slate-500">Nenhum registro encontrado neste diário.</p>}
+                {events.length > 0 && <section aria-label="Extrato resumido" className="rounded-xl border border-slate-200">
+                    <div className="border-b bg-slate-50 p-3"><h3 className="font-semibold">Extrato resumido</h3><p className="mt-1 text-xs text-slate-500">{events.length} registros exibidos{next ? ' · Há registros anteriores para carregar' : ''} · Horário de São Paulo</p></div>
+                    <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Data</th><th className="p-3">Aparelho</th><th className="p-3">Ocorrência</th><th className="p-3">Situação</th></tr></thead><tbody>{events.map(event => {
+                        const row = journalSummary(event, labels);
+                        return <tr key={row.id} className="border-t align-top"><td className="whitespace-nowrap p-3 text-xs">{row.date}</td><td className="p-3 text-xs">{row.device}</td><td className="min-w-56 p-3">{row.description}</td><td className="p-3">{row.status}</td></tr>;
+                    })}</tbody></table></div>
+                    <p className="border-t p-3 text-xs text-slate-500">Saldo por local é contexto do produto; não comprova movimentação física deste aparelho. Os dados completos estão abaixo.</p>
+                </section>}
                 {events.map(event => <article key={event.id} className="rounded-xl border border-slate-200 p-4 space-y-2">
                     <h3 className="font-semibold">{labels[event.event_type] || event.event_type}</h3>
                     {productId && <p className="text-xs text-slate-500">Unidade: {event.unit_id}</p>}
