@@ -5,6 +5,8 @@ Release: /var/www/mdv-site/releases/20261014-141311-estoque-finance-status.
 
 Consultar distribuicao nao cria saldo ou movimentos. Materializacao explicita usa unidades disponiveis quando serializadas. Rota Finance registrada no runtime JS e modulo incluido no deploy. Status exige leitura operacional da sessao antes do envio; timeout apos POST fica incerto sem reenvio automatico. Recuperacao somente da sessao de Status autorizada. Sem ajuste de saldo ou instalacao do diario. Testes focados, build e sintaxe aprovados; fechamento na nota da entrega.
 
+Publicacao concluida: commit98e0907a e tagr1 enviados a main. Site/VERSION publicos correspondentes; API online/mysql.ok=true, Finance privado200. Sessao Status recuperada apos sincronizacao e leitura funcional. 47 testes e build do checkout isolado aprovados. Cinco resultados incertos sem reenvio, saldos preservados. Limpeza removeu um checkout, arquivou um gerenciado e preservou34 bloqueados. Diario ainda local, sem migration.
+
 ## Historico anterior
 
 # v1.2.620-catalogo-mensagem-familia

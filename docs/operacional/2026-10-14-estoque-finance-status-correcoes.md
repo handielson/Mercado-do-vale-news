@@ -2,6 +2,8 @@
 
 Estado: implementação local testada, sem commit, push, publicação ou recuperação mutante de sessão. Três agentes trabalharam em frentes separadas; revisão e validação integrada concluídas no checkout primário. Diário de aparelhos anteriormente preparado e arquivos preexistentes Shopee/3D preservados.
 
+Atualizacao apos autorizacao: correcoes publicadas em v1.2.621-estoque-finance-status, commit funcional98e0907a, tagr1. API/site validados, Finance200 e sessaoStatus recuperada apos um restart e sincronizacao. Cinco resultados incertos sem reenvio; saldos e diario sem escrita. Fechamento completo na nota docs/versoes/2026-10-14-v1.2.621-estoque-finance-status.md.
+
 ## Estoque
 
 A consulta GET da distribuição não materializa mais saldo nem gera movimentos. Removido wrapper sem consumidores. A materialização explícita na reconciliação canônica consulta unidades serializadas disponíveis quando existem; bootstrap sem tabela units é permitido somente na migração inicial. Nenhuma mudança na reconciliação externa normal ou no SKU compartilhado.
