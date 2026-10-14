@@ -9,6 +9,8 @@ Replay offline da execucao 40580 passou: 107 produtos de entrada, duas entradas 
 
 Site gerado isoladamente a partir da tag publicada v1.2.624-extrato-entrada-saida com a versao atual, para preservar a migracao gcode3d preparada e ainda pendente. Detalhes e evidencias na nota desta entrega.
 
+Publicado: commit funcional 3c8d29d2/tag principal e commit de site bdbcb731/tag -site enviados. API somente modulo de nome canônico, workflow somente Contexto Produtos; readback/idempotencia, servicos e endpoints aprovados. Codigo publicado com dados reais gera um Poco X8 Pro 5G 8GB/256GB, quatro cores, R$ 2.660,00. Site isolado ativo e navegador validado. Pendencia legada de teste amplo do publicador e 35 worktrees bloqueadas detalhadas na nota; seis preexistentes preservados.
+
 ## Historico anterior e entrega pendente
 
 # v1.2.625-gcode3d-domain — preparada, aguardando DNS
