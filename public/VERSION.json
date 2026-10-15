@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.638-catalogo-whatsapp-3-partes",
+  "version": "v1.2.639-visita-loja-maps",
   "date": "2026-10-15",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.638-catalogo-whatsapp-3-partes",
-  "release_vps": "/var/www/mdv-site/releases/20261015-195134-v1638-catalogo-whatsapp-3-partes",
+  "tag": "v1.2.639-visita-loja-maps",
+  "release_vps": "/var/www/mdv-site/releases/20261015-200722-v1639-visita-loja-maps",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Padroniza cards do catalogo com preco Pix e cartao, separa cores com precos diferentes e divide o WhatsApp em tres mensagens.",
+  "summary": "Corrige continuidade da visita presencial no bot com endereco, horario regular cadastrado e link do Google Maps.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,22 +14,17 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "utils/catalogMessageGenerator.ts",
-    "components/catalog/ShareCatalogButton.tsx",
-    "components/catalog/ShareCategoryButton.tsx",
-    "components/admin/ExportCatalogModal.tsx",
-    "tmp-tests/catalog-message-family.test.mjs",
-    "tmp-tests/catalog-share-optional-memory-static.test.mjs",
-    "tmp-tests/catalog-share-spacing-static.test.mjs",
-    "tmp-tests/shared-budget-message-format.test.mjs",
+    "tmp-tests/n8n-store-visit-location-patch.cjs",
+    "tmp-tests/n8n-store-visit-location.test.cjs",
+    "tmp-tests/n8n-deploy-store-visit-location.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-15-v1.2.638-catalogo-whatsapp-3-partes.md"
+    "docs/versoes/2026-10-15-v1.2.639-visita-loja-maps.md"
   ],
   "validations": [
-    "Nove testes focados do catalogo e compartilhamento passaram.",
-    "Lista de 24 aparelhos dividida em tres partes de oito; cores com precos distintos permanecem em blocos separados.",
-    "Build do site e guardas de segredos/Supabase passaram."
+    "Cinco testes focados de visita, localizacao, entrega e endereco ausente passaram.",
+    "Workflow e historico ativo alinhados apos a publicacao de quatro nos existentes.",
+    "Conexoes preservadas; n8n e runner saudaveis."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

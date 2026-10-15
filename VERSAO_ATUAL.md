@@ -1,3 +1,12 @@
+# v1.2.639-visita-loja-maps
+
+Data: 15/10/2026. Branch: main. Tag: v1.2.639-visita-loja-maps.
+Release MDV: /var/www/mdv-site/releases/20261015-200722-v1639-visita-loja-maps.
+
+O bot reconhece perguntas sobre visitar a loja para conferir aparelhos e usa o ramo de localizacao ja existente. A resposta informa o endereco cadastrado, link do Google Maps, horario regular do dia quando disponivel e pede o modelo para conferir estoque antes da visita. A regra nao captura perguntas de entrega, frete ou retirada de pedido. Quatro nos existentes mudaram, sem alterar conexoes; workflow e historico ativo foram verificados. Nao houve reenvio ao cliente 5234.
+
+## Histórico anterior
+
 # v1.2.638-catalogo-whatsapp-3-partes
 
 Data: 15/10/2026. Branch: main. Tag: v1.2.638-catalogo-whatsapp-3-partes.
