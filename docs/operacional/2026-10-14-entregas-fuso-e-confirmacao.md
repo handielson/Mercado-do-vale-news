@@ -1,6 +1,6 @@
 # Entregas: filtro diário, etapas e notificações
 
-Estado: correções locais testadas, sem publicação, envio de mensagens ou alteração de vendas reais.
+Estado: publicado em v1.2.628-vendas-entregas, com API/site conferidos e APK 1.1.5 instalado no Realme RMX5011. Validação sem envio de mensagens nem alteração de vendas reais pelo agente; detalhes na nota da versão.
 
 ## Evidências
 
@@ -31,6 +31,6 @@ Após publicação autorizada da API e do site, conferir o filtro “Hoje” no 
 
 Versão Android preparada: 1.1.5, versionCode 9. A página chama `MdvDelivery.closeDelivery()` somente depois de receber `delivery_status=delivered`. A ponte nativa encerra GPS, remove a WebView da operação e recria o painel inicial com consulta atualizada. Falhas ou resposta sem confirmação mantêm a operação aberta. A versão instalada 1.1.4 não tem esse método: o retorno automático depende do APK novo e da publicação da página.
 
-Cinco testes adicionais cobrem a ordem da confirmação, falha de API, resposta não confirmada, compatibilidade com ponte ausente e descarte/retorno nativo. A bateria de entregas passou em 39 testes e o build web foi aprovado. Não houve instalação em aparelho nem publicação.
+Cinco testes adicionais cobrem a ordem da confirmação, falha de API, resposta não confirmada, compatibilidade com ponte ausente e descarte/retorno nativo. A bateria de entregas passou em 39 testes e os builds web/Android foram aprovados. APK instalado com `install -r`, versão 1.1.5/code 9 conferida e Activity aberta. Não foi feita conclusão de entrega real como teste.
 
 Documentação oficial consultada: [ciclo de vida de Activity](https://developer.android.com/guide/components/activities/activity-lifecycle), [WebView](https://developer.android.com/reference/android/webkit/WebView#destroy()) e [JavascriptInterface](https://developer.android.com/reference/android/webkit/JavascriptInterface).

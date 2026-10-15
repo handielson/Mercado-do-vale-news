@@ -1,6 +1,6 @@
 # Vendas WhatsApp: correções e proteção contra regressões
 
-Estado: candidato corrigido e testado localmente; publicação pendente. Não houve envio de WhatsApp, alteração de estoque ou criação de pedido nesta validação.
+Estado: publicado em v1.2.628-vendas-entregas. API contrato 2 instalada antes do workflow; entidade/histórico alinhados, 61 testes no readback e dry-run posterior changed=false. Não houve envio de WhatsApp, alteração de estoque ou criação de pedido nesta validação.
 
 ## Causas e correções
 
