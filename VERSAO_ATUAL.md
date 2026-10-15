@@ -3,7 +3,7 @@
 Data: 15/10/2026. Branch: main. Tag: v1.2.635-modelo-configuracao.
 Release MDV: /var/www/mdv-site/releases/20261015-120500-v1635-modelo-configuracao.
 
-4G/5G deixam de virar RAM. A falta de 8GB/256GB oferece primeiro o mesmo modelo em 6GB/128GB disponivel, com aviso da diferenca. Nova mensagem sobre o modelo reavalia a memoria e preserva rede e contexto. Sem reserva ou venda automatica. 84 testes e 10 cenarios nativos reais aprovados no candidato 0099b60d7899b03cc400dcd0b3506550f93a58ae567a542a08f4b396b67d3a15. Publicacao em andamento; API sem alteracoes.
+4G/5G deixam de virar RAM. A falta de 8GB/256GB oferece primeiro o mesmo modelo em 6GB/128GB disponivel, com aviso da diferenca. Nova mensagem sobre o modelo reavalia a memoria e preserva rede e contexto. Sem reserva ou venda automatica. 84 testes e 10 cenarios nativos reais aprovados no candidato 0099b60d7899b03cc400dcd0b3506550f93a58ae567a542a08f4b396b67d3a15. Publicado: commit 492fe22d e tag enviados a main; workflow e historico alinhados, 84 testes repetidos e leitura apos reinicio confirmou o hash nativo. Site/VERSION 635 e catalogo sem erros, n8n/banco/runner 1/1, API/MySQL saudaveis sem deploy/reinicio. Alteracoes preexistentes e 35 worktrees bloqueadas preservadas.
 
 ## Histórico anterior
 

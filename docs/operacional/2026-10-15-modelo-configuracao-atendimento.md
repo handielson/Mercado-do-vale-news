@@ -1,6 +1,6 @@
 # Modelo disponível com configuração diferente
 
-Situação: publicação autorizada em 15/10/2026, em andamento na versão v1.2.635-modelo-configuracao; sem envio de teste a clientes.
+Situação: publicada e validada em 15/10/2026 na versão v1.2.635-modelo-configuracao, commit funcional 492fe22d; sem envio de teste a clientes.
 
 O atendimento final 6240 pediu Redmi Note 15 4G, 8GB/256GB. As execuções 42002 e 42032 receberam o catálogo contendo quatro unidades 6GB/128GB do mesmo modelo e zero unidades 8GB/256GB. A preparação interpretou 4G como RAM; o filtro de memória descartou as outras configurações antes da busca do modelo; a resposta negou o modelo inteiro e ofereceu outros. A segunda mensagem manteve os filtros anteriores. Os nós responsáveis são anteriores à publicação PayJoy 634 e ficaram inalterados naquela entrega.
 
@@ -26,3 +26,5 @@ Testes com chamadas reais: oito cenários nativos anteriores e dois turnos de ve
 A identidade mantém a família/marca quando a preparação extrai apenas o código alfanumérico (C71, A15, M6 Pro), sem confundir Pro/Plus como o mesmo aparelho. O acknowledgment offline de preferências usa a função real extractCatalogPreferences com o corpo message/remoteJid do endpoint; testa a memória mínima persistida sem atribuir esses campos à preparação.
 
 O executor nativo foi corrigido: substituições de payload usam callbacks literais para não expandir $&, $` ou $' dentro do JavaScript dos nós; o script gerado é compilado localmente antes do SSH e executado como CommonJS explícito. A substituição antiga corrompia o script e acionava falhas antes dos testes no Node 26.7.0. Diagnósticos filtram trechos de fonte que poderiam conter credenciais. Os testes falhos anteriores não geraram evidência aprovada nem gravaram em produção.
+
+Publicação: workflow ativo e histórico alinhados no hash testado; 84 testes aprovados após a gravação e nova leitura depois do reinício. n8n/banco/runner 1/1, site/VERSION 635 e catálogo sem erros confirmados. API saudável, sem deploy ou reinício. Backups e guarda de rollback mantidos.
