@@ -3,7 +3,7 @@
 Data: 14/10/2026. Branch: main. Tag: v1.2.631-n8n-gpt6-luna.
 Release MDV: /var/www/mdv-site/releases/20261014-231800-v1631-n8n-gpt6-luna.
 
-Quatro nós de IA migram para gpt-6-luna: conversa, classificação, vendas e leitura PayJoy. Visão nativa 2.3 usa Responses e limite de saída compatível; parser aceita retorno novo e legado e recusa dados incompletos/erro. Sessenta e um testes do contrato, seis de migração, suíte PayJoy e oito testes reais nativos passaram antes da publicação. Candidato testado: 929ea50086ffac24cab632231dc3aece71b4774f99e95b66370ecbeb032bd116. Publicação em andamento, sem alteração de credenciais, conexões ou modelos de áudio.
+Quatro nós de IA usam gpt-6-luna: conversa, classificação, vendas e leitura PayJoy. Visão nativa 2.3 usa Responses e limite de saída compatível; parser aceita retorno novo e legado e recusa dados incompletos/erro. Sessenta e um testes do contrato, seis de migração, suíte PayJoy e oito testes reais nativos passaram antes da publicação. Candidato testado: 929ea50086ffac24cab632231dc3aece71b4774f99e95b66370ecbeb032bd116. Publicação concluída: commit 5428f86e e tag enviados, histórico ativo conferido com mesmo hash, n8n/runner 1/1 e site/VERSION 631 confirmados. Credenciais, conexões e áudio preservados. Seis arquivos preexistentes e 35 worktrees bloqueadas preservados.
 
 ## Histórico anterior
 
