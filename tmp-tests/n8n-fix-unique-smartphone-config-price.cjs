@@ -15,6 +15,7 @@ const WORKFLOW_ID = 'SkrkB4vyKVDnQ68t';
 const NODE_NAME = 'Vendas - Contexto Produtos';
 const MARKER = 'catalog-unique-smartphone-config-price-v248';
 const MODEL_GROUP_MARKER = 'catalog-smartphone-model-id-memory-v2';
+const CONFIGURATION_NUMBER_MARKER = 'catalog-smartphone-configuration-numbering-v3';
 const APPLY = process.argv.includes('--apply');
 const INSPECT = process.argv.includes('--inspect');
 const INSPECT_MERGE = process.argv.includes('--inspect-merge');
@@ -72,7 +73,7 @@ function replaceOnce(code, anchor, replacement, label) {
 
 function patchContext(code) {
   let result = patchConfigurationPrice(String(code || ''));
-  if (result.includes(MODEL_GROUP_MARKER)) return result;
+  if (result.includes(MODEL_GROUP_MARKER)) return patchConfigurationNumbering(result);
   result = replaceOnce(result,
     '      id: product.id,\n      name: withoutColorSuffix(product.name, color),',
     `      id: product.id,
@@ -109,12 +110,26 @@ const canonicalProductByConfigurationV248 = new Map();`,
     'configuration grouping');
   result = replaceOnce(result,
     "const quoteProductGroupKey = (product) => [\n  'product',\n  normalizeKey(product.name),\n  normalizeKey(product.memory),\n  product.priceCents,\n].join('|');",
-    "const quoteProductGroupKey = (product) => isQuoteDeviceProduct(product)\n  ? quoteModelIdentityV2(product)\n  : ['product', normalizeKey(product.name), normalizeKey(product.memory), product.priceCents].join('|');",
+    "const quoteProductGroupKey = (product) => isQuoteDeviceProduct(product)\n  ? quoteConfigurationKeyV2(product)\n  : ['product', normalizeKey(product.name), normalizeKey(product.memory), product.priceCents].join('|');",
     'smartphone model family grouping');
   result = replaceOnce(result,
     'groups.set(key, { ...product, memoryOptions: isQuoteDeviceProduct(product) && product.memory ? [{ ...product }] : [] });',
     'groups.set(key, { ...product, colors: [...(product.colors || [])], memoryOptions: isQuoteDeviceProduct(product) && product.memory ? [{ ...product }] : [] });',
     'independent family colors');
+  new Function('$json', '$input', '$getWorkflowStaticData', '$', result);
+  return patchConfigurationNumbering(result);
+}
+
+// Number each physical configuration. Keep the canonical model name and color
+// consolidation, while leaving already-presented option numbers in state intact.
+function patchConfigurationNumbering(code) {
+  const oldKey = 'const quoteProductGroupKey = (product) => isQuoteDeviceProduct(product)\n  ? quoteModelIdentityV2(product)';
+  const newKey = 'const quoteProductGroupKey = (product) => isQuoteDeviceProduct(product)\n  ? quoteConfigurationKeyV2(product)';
+  assert.ok(code.includes('const quoteConfigurationKeyV2 = (product) => ['), 'configuration identity helper missing');
+  let result = code;
+  if (result.includes(oldKey)) result = replaceOnce(result, oldKey, newKey, 'number model and physical memory separately');
+  assert.equal(result.split(newKey).length - 1, 1, 'configuration numbering key changed');
+  if (!result.includes(CONFIGURATION_NUMBER_MARKER)) result = result.replace(newKey, '// ' + CONFIGURATION_NUMBER_MARKER + '\n' + newKey);
   new Function('$json', '$input', '$getWorkflowStaticData', '$', result);
   return result;
 }
@@ -175,6 +190,15 @@ async function main() {
       console.log(JSON.stringify({ ...summary, verified: true }, null, 2));
       return;
     }
+    // Gate the exact node and connection graph that will be written. A dry run
+    // over the current workflow would validate the old behavior instead.
+    const candidatePath = path.join(os.tmpdir(), `mdv-phone-numbering-candidate-${Date.now()}.json`);
+    fs.writeFileSync(candidatePath, JSON.stringify({ nodes: workflow.nodes, connections: workflow.connections }), { flag: 'wx' });
+    try {
+      summary.regressionGate = require('../scripts/n8n-sales-regression-gate.cjs').runGate(candidatePath);
+    } finally {
+      fs.unlinkSync(candidatePath);
+    }
     const backupPath = path.join(os.tmpdir(), `mdv-phone-grouping-before-${Date.now()}.json`);
     fs.writeFileSync(backupPath, JSON.stringify(snapshot, null, 2), { flag: 'wx' });
     summary.backupPath = backupPath;
@@ -218,6 +242,8 @@ COMMIT;`;
     assert.deepEqual(verified.nodes, workflow.nodes, 'only intended target code may change');
     assert.deepEqual(verified.connections, snapshot.connections, 'connections must remain unchanged');
     assert.equal(verified.activeVersionId, snapshot.activeVersionId);
+    assert.equal(require('../scripts/n8n-sales-regression-gate.cjs').fingerprint(verified), summary.regressionGate.sha256,
+      'readback must be the exact tested candidate');
     assert.equal(patchContext(verified.nodes[nodeIndex].parameters.jsCode), verified.nodes[nodeIndex].parameters.jsCode, 'post-write patch idempotence');
     await runRemote(conn, 'docker service scale n8n_n8n=1 >/dev/null'); await waitService(conn, 'n8n_n8n', 1);
     await runRemote(conn, 'docker service scale n8n_n8n-runner=1 >/dev/null'); await waitService(conn, 'n8n_n8n-runner', 1); stopped = false;
@@ -241,4 +267,4 @@ COMMIT;`;
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.stack || error.message); process.exit(1); });
-module.exports = { patchContext, MODEL_GROUP_MARKER, assertDeployableSnapshot };
+module.exports = { patchContext, patchConfigurationNumbering, MODEL_GROUP_MARKER, CONFIGURATION_NUMBER_MARKER, assertDeployableSnapshot };

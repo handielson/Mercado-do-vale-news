@@ -58,21 +58,21 @@ const rows = [
   row('inactive', 'model-x8', 'Poco X8 Pro 5G', '8GB', '256GB', 'Prata', 999999, { status: 'inactive' }),
 ];
 const { result, state } = execute(rows);
-assert.equal(result.productLookupCount, 2, 'different model IDs never merge even with the same canonical name');
-const family = result.productsInStock.find((product) => product.modelId === 'model-x8');
+assert.equal(result.productLookupCount, 3, 'model plus physical configuration owns each numbered entry');
+const family = result.productsInStock.find((product) => product.modelId === 'model-x8' && product.storageGb === 256);
 assert.equal(family.name, 'Poco X8 Pro 5G');
-assert.equal(family.stock, 3);
-assert.deepEqual(new Set(family.productIds), new Set(['blue-256', 'black-256', 'green-512']));
-assert.equal(family.memoryOptions.length, 2, 'memory configurations share a single model entry');
+assert.equal(family.stock, 2);
+assert.deepEqual(new Set(family.productIds), new Set(['blue-256', 'black-256']));
+assert.equal(family.memoryOptions.length, 1, 'one memory configuration per numbered entry');
 const memory256 = family.memoryOptions.find((option) => option.storageGb === 256);
 assert.equal(memory256.stock, 2);
 assert.equal(memory256.priceCents, 266000, 'preserve v248 maximum configuration price across colors');
 assert.equal(memory256.card.total, (297920 / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
 assert.deepEqual(new Set(memory256.colors), new Set(['Azul', 'Preto']));
-assert.equal(family.memoryOptions.find((option) => option.storageGb === 512).priceCents, 310000);
-assert.equal(family.variants.length, 3, 'selection variants and product IDs survive family merging');
-const shown = state.salesPostList['fixture@s.whatsapp.net'].options.find((option) => option.colors.length === 3);
-assert.equal(shown.memoryOptions.length, 2);
+assert.equal(result.productsInStock.find((product) => product.modelId === 'model-x8' && product.storageGb === 512).priceCents, 310000);
+assert.equal(family.variants.length, 2, 'colors and product IDs stay inside the same configuration');
+const shown = state.salesPostList['fixture@s.whatsapp.net'].options.find((option) => option.colors.length === 2);
+assert.equal(shown.memoryOptions.length, 1);
 assert.deepEqual(new Set(shown.colors.map((variant) => variant.productId)), new Set(family.productIds));
 assert.match(result.deterministicCatalogOutput, /Poco X8 Pro 5G/);
 assert.doesNotMatch(result.deterministicCatalogOutput, /Pró/);
@@ -83,12 +83,12 @@ const fallbackRows = [
   row('fallback-256', undefined, 'Poco Fallback Verde', '8GB', '256GB', 'Verde', 120000, { model_name: '' }),
 ];
 const fallback = execute(fallbackRows).result.productsInStock;
-assert.equal(fallback.length, 1, 'missing model_id uses the existing normalized color-free name');
+assert.equal(fallback.length, 2, 'missing model_id uses color-free name plus physical memory');
 assert.equal(fallback[0].name, 'Poco Fallback');
-assert.equal(fallback[0].memoryOptions.length, 2);
+assert.equal(fallback[0].memoryOptions.length, 1);
 assert.equal(fallback[0].memoryOptions[0].priceCents, 110000);
 const legacyContract = execute(rows.slice(0, 3).map((product) => ({ ...product, model_name: undefined }))).result;
-assert.equal(legacyContract.productLookupCount, 1, 'model identity works before API supplies model_name');
+assert.equal(legacyContract.productLookupCount, 2, 'configuration identity works before API supplies model_name');
 
 const specific = execute(rows, patched, { requestedDeviceModelQuery: 'Poco X8 Pro 5G 512GB',
   requestedStorageGb: [512], requestedRamGb: [12], specificDeviceModelRequest: true }).result;
@@ -96,13 +96,11 @@ assert.equal(specific.productLookupCount, 1);
 assert.equal(specific.productsInStock[0].memoryOptions.length, 1);
 assert.equal(specific.productsInStock[0].memoryOptions[0].storageGb, 512, 'memory filter precedes family merge');
 
-// Upgrade remains supported for snapshots preceding v248, without losing later code.
-const preV248 = original
-  .replace('  const parsedPartsV248 = getPhysicalMemoryPartsV155(product);\n  const parts = {\n    ramGb: Number(product.ramGb || parsedPartsV248.ramGb || 0),\n    storageGb: Number(product.storageGb || parsedPartsV248.storageGb || 0),\n  };', '  const parts = getPhysicalMemoryPartsV155(product);')
-  .replace(/\/\/ catalog-unique-smartphone-config-price-v248[\s\S]*?const product = \{[\s\S]*?card: canonicalProductV248.card,\n  \};/, 'const groupsByKey = new Map();\nfor (const product of candidateProducts) {')
-  .replace('  const key = [\n    normalizeKey(product.name),\n    normalizeKey(product.memory),\n  ].join(\'|\');', '  const key = [\n    normalizeKey(product.name),\n    normalizeKey(product.memory),\n    product.priceCents,\n  ].join(\'|\');');
-assert.ok(!preV248.includes('catalog-unique-smartphone-config-price-v248'));
-assert.equal(execute(rows, patchContext(preV248)).result.productLookupCount, 2);
+// The previous production key collapses two memories and must fail the new contract.
+const oldGrouping = patched.replace('? quoteConfigurationKeyV2(product)\n  :', '? quoteModelIdentityV2(product)\n  :');
+assert.throws(() => assert.equal(execute(rows, oldGrouping).result.productLookupCount, 3), /Expected values/);
+assert.equal(patchContext(oldGrouping), patched, 'existing v626 snapshots upgrade without losing later code');
+assert.deepEqual(workflow.connections, safeDeployment.connections, 'grouping never renumbers persisted state');
 
 const executionPath = process.env.MDV_PHONE_GROUPING_EXECUTION;
 if (executionPath) {
@@ -127,9 +125,9 @@ if (executionPath) {
   const actualFees = nodeRows('Vendas - Buscar Taxas');
   const before = execute(actualRows, original, actualBase, actualFees).result;
   const after = execute(actualRows, patched, actualBase, actualFees).result;
-  assert.ok(after.productLookupCount < before.productLookupCount, 'incident replay removes duplicate model entries');
-  const modelIds = after.productsInStock.map((product) => product.modelId).filter(Boolean);
-  assert.equal(new Set(modelIds).size, modelIds.length, 'replay shows each linked model only once');
+  assert.ok(after.productsInStock.every(product => product.memoryOptions.length === 1), 'replay separates configurations');
+  const configurationIds = after.productsInStock.map(product => [product.modelId || product.name, product.ramGb, product.storageGb].join('|'));
+  assert.equal(new Set(configurationIds).size, configurationIds.length, 'replay shows each configuration only once');
   for (const product of after.productsInStock) {
     assert.equal(product.stock, product.memoryOptions.reduce((total, option) => total + option.stock, 0));
     for (const option of product.memoryOptions) {

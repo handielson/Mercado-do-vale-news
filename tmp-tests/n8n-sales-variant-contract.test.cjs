@@ -3,18 +3,23 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { patchWorkflow, resolveVariant } = require('./n8n-sales-variant-contract.cjs');
-const snapshot = process.env.MDV_SALES_VARIANT_SNAPSHOT || '.local/91688751/workflow-41075.json';
+const snapshot = process.env.MDV_SALES_VARIANT_SNAPSHOT || process.env.MDV_N8N_SALES_SNAPSHOT || '.local/91688751/workflow-41075.json';
 const before = JSON.parse(fs.readFileSync(snapshot));
+if (process.env.MDV_SALES_VARIANT_SNAPSHOT || process.env.MDV_N8N_SALES_SNAPSHOT) {
+  const exactContext = before.nodes.find(n => n.name === 'Vendas - Contexto Produtos').parameters.jsCode;
+  assert.match(exactContext, /const quoteProductGroupKey = \(product\) => isQuoteDeviceProduct\(product\)\n  \? quoteConfigurationKeyV2\(product\)/, 'Exact candidate must already number each physical configuration; tests must not repair it');
+}
 const after = patchWorkflow(before);
 const code = name => after.nodes.find(n => n.name === name).parameters.jsCode;
 const jid = 'fixture@s.whatsapp.net';
 const product = (id, ram, storage, color, price) => ({id, model_id:'redmi15', model_name:'Redmi 15', name:'Redmi 15 '+color, brand:'Xiaomi', status:'active',stock_quantity:1,price_retail:price,specs:{ram,storage,color},slug:id,images:[]});
-function context(rows) {
+function context(rows, legacy = false) {
   const base = {conversation:'Quais celulares disponíveis?',productCategoryId:'smartphones',productSearchKind:'categoria',remoteJid:jid};
   const state = {};
   const sources = {'Vendas - Preparar Busca':[base],'Vendas - Buscar Produtos':rows,'switc Mensagens':[base]};
   const lookup = name => { assert(sources[name],name); return {first:()=>({json:sources[name][0]}),all:()=>sources[name].map(json=>({json}))}; };
-  const result = new Function('$json','$input','$getWorkflowStaticData','$',code('Vendas - Contexto Produtos'))({}, {all:()=>[{json:{channel:'presencial',installments:12,applied_fee_pct:11.9}}]},()=>state,lookup)[0].json;
+  const contextCode = legacy ? code('Vendas - Contexto Produtos').replace('? quoteConfigurationKeyV2(product)\n  :', '? quoteModelIdentityV2(product)\n  :') : code('Vendas - Contexto Produtos');
+  const result = new Function('$json','$input','$getWorkflowStaticData','$',contextCode)({}, {all:()=>[{json:{channel:'presencial',installments:12,applied_fee_pct:11.9}}]},()=>state,lookup)[0].json;
   return {result,state};
 }
 const rows = [product('black128','6GB','128GB','Preto',99900),product('purple256','8GB','256GB','Roxo',122400),product('black256','8GB','256GB','Preto',122400)];
@@ -24,8 +29,22 @@ async function select(state,text,extra={}) {
   const result = (await new Function('$json','$input','$getWorkflowStaticData','$',code('Vendas - Verificar Pos Lista'))({}, {},()=>state,name=>{assert.equal(name,'Parse Classificacao');return {first:()=>({json:source})}}))[0].json;
   return result;
 }
-test('context keeps family visual grouping and exposes one memory/price/color relation per AI line',()=>{
+test('new catalog numbers each model and physical memory separately and consolidates only colors',()=>{
   const {result,state} = context(rows);
+  assert.equal(result.productsInStock.length,2);
+  assert.ok(result.productsInStock.every(p => p.memoryOptions.length === 1));
+  const options = state.salesPostList[jid].options;
+  assert.deepEqual(options.map(p => p.number),[1,2]);
+  assert.deepEqual(options.map(p => p.memory),['6GB/128GB','8GB/256GB']);
+  assert.deepEqual(options[0].colors.map(p => p.productId),['black128']);
+  assert.deepEqual(new Set(options[1].colors.map(p => p.productId)),new Set(['purple256','black256']));
+  const lines=result.productsContext.split('\n');
+  assert.match(lines[0],/^1\..*6GB\/128GB.*999,00/);
+  assert.match(lines[1],/^2\..*8GB\/256GB.*1\.224,00/);
+});
+
+test('legacy grouped options retain memory/price/color relations without renumbering',()=>{
+  const {result,state} = context(rows,true);
   assert.equal(result.productsInStock.length,1);
   assert.equal(result.productsInStock[0].memoryOptions.length,2);
   const lines=result.productsContext.split('\n');
@@ -37,8 +56,20 @@ test('context keeps family visual grouping and exposes one memory/price/color re
   const purple=resolveVariant(option,'Roxo','Roxo').selected;
   assert.equal(purple.productId,'purple256'); assert.equal(purple.memory,'8GB/256GB'); assert.equal(purple.priceCents,122400);
 });
+test('new numeric option then color creates the exact SKU, memory and price',async()=>{
+  for (const [number,color,id,memory,price] of [[1,'Preto','black128','6GB/128GB',99900],[2,'Preto','black256','8GB/256GB',122400],[2,'Roxo','purple256','8GB/256GB',122400]]) {
+    const {state}=context(rows);
+    const choice=await select(state,String(number),{salesFlowAction:'escolher_item',salesFlowItemNumber:number});
+    const result=choice.orderDraft ? choice : await select(state,color,{salesFlowAction:'escolher_cor',salesFlowItemNumber:number,salesFlowColor:color});
+    assert.equal(result.orderDraft.productId,id);
+    assert.equal(result.orderDraft.memory,memory);
+    assert.equal(result.orderDraft.unitPriceCents,price);
+    assert.equal(state.salesPostList[jid].selectedOptionNumber,number);
+  }
+});
+
 test('runtime purple selection creates an exact identity and correct unit price',async()=>{
-  const {state}=context(rows);
+  const {state}=context(rows,true);
   const result=await select(state,'Roxo',{salesFlowAction:'escolher_cor',salesFlowItemNumber:1,salesFlowColor:'Roxo'});
   assert.equal(result.salesPostListStep,'awaiting_purchase_confirmation');
   assert.equal(result.orderDraft.productId,'purple256');
@@ -46,7 +77,7 @@ test('runtime purple selection creates an exact identity and correct unit price'
   assert.equal(result.orderDraft.unitPriceCents,122400);
 });
 test('shared color asks memory, then resolves selected memory rather than first same-color ID',async()=>{
-  const {state}=context(rows);
+  const {state}=context(rows,true);
   const first=await select(state,'Preto',{salesFlowAction:'escolher_cor',salesFlowItemNumber:1,salesFlowColor:'Preto'});
   assert.equal(first.salesPostListStep,'awaiting_memory');
   assert.equal(first.orderDraft,undefined);
@@ -56,20 +87,20 @@ test('shared color asks memory, then resolves selected memory rather than first 
   assert.equal(second.orderDraft.unitPriceCents,122400);
 });
 test('unavailable memory/color never prepares wrong cheaper draft',async()=>{
-  const {state}=context(rows);
+  const {state}=context(rows,true);
   const result=await select(state,'128 roxo',{salesFlowAction:'escolher_cor',salesFlowItemNumber:1,salesFlowColor:'Roxo'});
   assert.equal(result.salesPostListStep,'awaiting_memory');
   assert.equal(result.orderDraft,undefined);
   assert.match(result.output,/não está disponível/);
 });
 test('legacy state derives exact configuration from product ID membership',()=>{
-  const option=context(rows).state.salesPostList[jid].options[0];
+  const option=context(rows,true).state.salesPostList[jid].options[0];
   for(const v of option.colors)for(const k of ['memory','price','priceCents','card'])delete v[k];
   assert.equal(resolveVariant(option,'Roxo','Roxo').selected.memory,'8GB/256GB');
   assert.match(resolveVariant(option,'Roxo','Roxo').selected.price,/1.224,00/);
 });
 test('a previously rejected color cannot silently select another color after memory answer',async()=>{
-  const {state}=context(rows);
+  const {state}=context(rows,true);
   await select(state,'128 roxo',{salesFlowAction:'escolher_cor',salesFlowItemNumber:1});
   const result=await select(state,'128',{salesFlowAction:'nova_busca',salesFlowItemNumber:128});
   assert.equal(result.salesPostListStep,'awaiting_color');
@@ -79,7 +110,7 @@ test('a previously rejected color cannot silently select another color after mem
   assert.equal(confirmed.orderDraft.productId,'black128');
 });
 test('installment lookup uses exact variant facts and asks when configuration ambiguous',async()=>{
-  const {state}=context(rows);
+  const {state}=context(rows,true);
   state.salesPostList[jid].selectedOptionNumber=1;
   let result=await select(state,'Quanto fica em 12x no cartão?');
   assert.equal(result.needsPaymentOptionsLookup,undefined);

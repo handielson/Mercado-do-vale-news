@@ -1,6 +1,7 @@
 'use strict';
 // Pure workflow transformation; no network or production writes.
 const assert = require('node:assert/strict');
+const { patchConfigurationNumbering } = require('./n8n-fix-unique-smartphone-config-price.cjs');
 const MARKER = 'sales-exact-variant-contract-v1';
 function variantsOf(option) {
   const configs = option.memoryOptions?.length ? option.memoryOptions : [option];
@@ -58,6 +59,7 @@ function patchWorkflow(input) {
       "  return (index + 1) + '. ' + product.name + ' | ' + details;\n  });\n});");
     context.parameters.jsCode = c;
   }
+  context.parameters.jsCode = patchConfigurationNumbering(context.parameters.jsCode);
   const post = get('Vendas - Verificar Pos Lista');
   if (!post.parameters.jsCode.includes(MARKER)) {
     let c = post.parameters.jsCode;

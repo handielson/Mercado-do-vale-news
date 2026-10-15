@@ -37,13 +37,32 @@ function catalog() {
   [{ channel: 'presencial', installments: 12, applied_fee_pct: 11.9 }])[0].json;
   return { state, result };
 }
+// Model the persisted shape issued by v626. Only fixture state is merged;
+// every runtime Code node still comes unchanged from the exact candidate.
+function legacyGroupedCatalog() {
+  const {state,result}=catalog();
+  const options=state.salesPostList[jid].options;
+  const configurations=options.filter(option=>option.name==='Redmi 15');
+  assert.equal(configurations.length,2,'new catalogs must separate physical memory');
+  const family={...configurations[0],number:1,
+    memory:configurations.map(option=>option.memory).join(' / '),
+    memoryOptions:configurations.flatMap(option=>option.memoryOptions),
+    colors:configurations.flatMap(option=>option.colors)};
+  state.salesPostList[jid].options=[family,...options.filter(option=>option.name!=='Redmi 15').map((option,index)=>({...option,number:index+2}))];
+  return {state,result};
+}
+function optionFor(state,productId) {
+  const option=state.salesPostList[jid].options.find(option=>option.colors.some(color=>color.productId===productId));
+  assert.ok(option,'fixture SKU must exist in a numbered option');
+  return option;
+}
 async function say(state, conversation, extra = {}) {
   const source = { remoteJid: jid, conversation, salesFlowAction: 'indefinido', ...extra };
   return (await execute('Vendas - Verificar Pos Lista', {}, { 'Parse Classificacao': source }, state))[0]?.json;
 }
 function collecting(step) {
   const { state } = catalog();
-  Object.assign(state.salesPostList[jid], { step, selectedOptionNumber: 1, orderDraft: {
+  Object.assign(state.salesPostList[jid], { step, selectedOptionNumber: optionFor(state,'fixture-purple256').number, orderDraft: {
     productId: 'fixture-purple256', name: 'Redmi 15', memory: '8GB/256GB', color: 'Roxo', price: 'R$ 1.224,00',
     unitPriceCents: 122400, quantity: 1, fulfillment: 'delivery', deliveryNeighborhood: 'Centro' } });
   return state;
@@ -87,15 +106,33 @@ test('AI context keeps each memory/color/price relation separate from another mo
 
 test('purple selection binds product ID, memory and price to the same variant', async () => {
   const { state } = catalog();
-  state.salesPostList[jid].selectedOptionNumber = 1;
-  const result = await say(state, 'Roxo', { salesFlowAction: 'escolher_cor', salesFlowItemNumber: 1, salesFlowColor: 'Roxo' });
+  const number=optionFor(state,'fixture-purple256').number;
+  state.salesPostList[jid].selectedOptionNumber = number;
+  const result = await say(state, 'Roxo', { salesFlowAction: 'escolher_cor', salesFlowItemNumber: number, salesFlowColor: 'Roxo' });
   assert.equal(result.orderDraft.productId, 'fixture-purple256');
   assert.equal(result.orderDraft.memory, '8GB/256GB');
   assert.equal(result.orderDraft.unitPriceCents, 122400);
 });
 
-test('same color in two memories asks configuration before drafting', async () => {
-  const { state } = catalog();
+test('new numbered catalog selects each configuration and exact SKU without memory ambiguity',async()=>{
+  for(const [number,color,id,memory,price] of [[1,'Preto','fixture-black128','6GB/128GB',99900],[2,'Preto','fixture-black256','8GB/256GB',122400],[2,'Roxo','fixture-purple256','8GB/256GB',122400]]) {
+    const {state,result}=catalog();
+    assert.equal(result.productLookupCount,3);
+    assert.deepEqual(state.salesPostList[jid].options.map(option=>[option.number,option.name,option.memory]),
+      [[1,'Redmi 15','6GB/128GB'],[2,'Redmi 15','8GB/256GB'],[3,'Redmi 15C','8GB/256GB']]);
+    const choice=await say(state,String(number),{salesFlowAction:'escolher_item',salesFlowItemNumber:number});
+    const selected=choice.orderDraft ? choice : await say(state,color,{salesFlowAction:'escolher_cor',salesFlowItemNumber:number,salesFlowColor:color});
+    assert.equal(selected.orderDraft.productId,id);
+    assert.equal(selected.orderDraft.memory,memory);
+    assert.equal(selected.orderDraft.unitPriceCents,price);
+    assert.equal(selected.orderDraft.color,color);
+    assert.equal(state.salesPostList[jid].selectedOptionNumber,number);
+    assert.equal(selected.salesPostListStep,'awaiting_purchase_confirmation');
+  }
+});
+
+test('legacy same color in two memories asks configuration before drafting', async () => {
+  const { state } = legacyGroupedCatalog();
   state.salesPostList[jid].selectedOptionNumber = 1;
   const ambiguous = await say(state, 'Preto', { salesFlowAction: 'escolher_cor', salesFlowItemNumber: 1, salesFlowColor: 'Preto' });
   assert.equal(ambiguous.orderDraft, undefined); assert.equal(ambiguous.salesPostListStep, 'awaiting_memory');
@@ -103,8 +140,8 @@ test('same color in two memories asks configuration before drafting', async () =
   assert.equal(exact.orderDraft.productId, 'fixture-black256'); assert.equal(exact.orderDraft.unitPriceCents, 122400);
 });
 
-test('unavailable color/memory never silently chooses another variant', async () => {
-  const { state } = catalog();
+test('legacy unavailable color/memory never silently chooses another variant', async () => {
+  const { state } = legacyGroupedCatalog();
   state.salesPostList[jid].selectedOptionNumber = 1;
   const result = await say(state, '128 roxo', { salesFlowAction: 'escolher_cor', salesFlowItemNumber: 1, salesFlowColor: 'Roxo' });
   assert.equal(result.orderDraft, undefined); assert.match(result.output, /não está disponível/);
