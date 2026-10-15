@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.637-celulares-memoria",
+  "version": "v1.2.638-catalogo-whatsapp-3-partes",
   "date": "2026-10-15",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.637-celulares-memoria",
-  "release_vps": "/var/www/mdv-site/releases/20261015-133500-v1637-celulares-memoria",
+  "tag": "v1.2.638-catalogo-whatsapp-3-partes",
+  "release_vps": "/var/www/mdv-site/releases/20261015-195134-v1638-catalogo-whatsapp-3-partes",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Separa cada modelo e configuracao de memoria como opcao numerada no WhatsApp, mantendo as cores da mesma configuracao juntas.",
+  "summary": "Padroniza cards do catalogo com preco Pix e cartao, separa cores com precos diferentes e divide o WhatsApp em tres mensagens.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,19 +14,22 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "tmp-tests/n8n-fix-unique-smartphone-config-price.cjs",
-    "tmp-tests/n8n-sales-variant-contract.cjs",
-    "tmp-tests/n8n-smartphone-model-id-grouping.test.cjs",
-    "tmp-tests/n8n-sales-variant-contract.test.cjs",
-    "tmp-tests/n8n-sales-end-to-end.test.cjs",
+    "utils/catalogMessageGenerator.ts",
+    "components/catalog/ShareCatalogButton.tsx",
+    "components/catalog/ShareCategoryButton.tsx",
+    "components/admin/ExportCatalogModal.tsx",
+    "tmp-tests/catalog-message-family.test.mjs",
+    "tmp-tests/catalog-share-optional-memory-static.test.mjs",
+    "tmp-tests/catalog-share-spacing-static.test.mjs",
+    "tmp-tests/shared-budget-message-format.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-15-v1.2.637-celulares-memoria.md"
+    "docs/versoes/2026-10-15-v1.2.638-catalogo-whatsapp-3-partes.md"
   ],
   "validations": [
-    "Suíte de vendas aplicada ao snapshot exato do workflow ativo, com proteção para memória e SKU.",
-    "Reprodução local com produtos reais sem envio a clientes de teste.",
-    "Readback do workflow e histórico ativos após a publicação."
+    "Nove testes focados do catalogo e compartilhamento passaram.",
+    "Lista de 24 aparelhos dividida em tres partes de oito; cores com precos distintos permanecem em blocos separados.",
+    "Build do site e guardas de segredos/Supabase passaram."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

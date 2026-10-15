@@ -4,9 +4,10 @@ import { paymentFeesService, type PaymentFee } from '@/services/payment-fees';
 import { vpsApiService } from '@/services/vpsApiService';
 import { publicCompanySettingsService } from '@/services/publicCompanySettings';
 import { getMemorySpecs } from '@/utils/productSpecUtils';
+import { buildSharedPhoneFeatureSummary } from '@/utils/cartShareUtils';
 import {
-    buildSharedColorLines,
     formatSharedColor,
+    normalizeSharedColors,
     stripSharedProductColorVariation,
 } from '@/utils/sharedMessageFormatting';
 import { catalogService } from '@/services/catalogService';
@@ -43,6 +44,7 @@ interface GroupedProduct {
         storage: string;
     };
     colors: string[];
+    featureSummary: string;
     price: number;
     installmentPrice: number;
     installmentTotal: number;
@@ -65,7 +67,7 @@ function getPriceForCustomer(product: Product, customerType: CustomerType): numb
 }
 
 /**
- * Group products by variant (model + RAM + Storage)
+ * Group products by model, memory and price so one color never inherits another color's price.
  */
 function groupProductsByVariant(products: Product[]): GroupedProduct[] {
     const grouped = new Map<string, GroupedProduct>();
@@ -78,14 +80,18 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
         const storage = rawStorage;
         const rawColor = product.specs?.color || 'Sem cor';
         const color = formatSharedColor(rawColor);
+        const featureSummary = buildSharedPhoneFeatureSummary(product);
         // Clean product name (remove color variation and RAM/Storage if present)
         const cleanName = stripSharedProductColorVariation(getCatalogFamilyName(product) || product.name, rawColor)
             .replace(/,?\s*\d+GB\/\d+GB\s*$/i, '')
             .trim();
         const brand = product.brand || 'Sem marca';
+        const name = /^(realme|oukitel)$/i.test(brand) && !cleanName.toLocaleLowerCase('pt-BR').startsWith(`${brand.toLocaleLowerCase('pt-BR')} `)
+            ? `${brand} ${cleanName}`
+            : cleanName;
 
         // Create unique key for variant
-        const key = `${generateCatalogGroupKey(product)}-${ram || 'sem-ram'}-${storage || 'sem-armazenamento'}`;
+        const key = `${generateCatalogGroupKey(product)}-${ram || 'sem-ram'}-${storage || 'sem-armazenamento'}-${Number(product.price_retail || 0)}`;
 
         if (grouped.has(key)) {
             // Add color to existing variant
@@ -93,17 +99,16 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
             if (!existing.colors.includes(color)) {
                 existing.colors.push(color);
             }
-            if (product.price_retail > 0 && product.price_retail < existing.price) {
-                existing.price = product.price_retail;
-            }
+            if (!existing.featureSummary && featureSummary) existing.featureSummary = featureSummary;
         } else {
             // Create new variant entry
             grouped.set(key, {
-                name: cleanName,
+                name,
                 brand,
                 model: product.model || cleanName,
                 variant: { ram, storage },
                 colors: [color],
+                featureSummary,
                 price: product.price_retail, // Will be updated based on customer type
                 installmentPrice: 0,
                 installmentTotal: 0
@@ -261,14 +266,17 @@ export function generateCatalogMessage(
             const installment = calculateInstallmentFromFees(item.price, paymentFees, 12);
             const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
 
-            const lines = [`${productIndex++}. *${item.name}*`];
+            const lines = [`${productIndex++}. ${item.name}`];
+            if (item.featureSummary) lines.push(`   ${item.featureSummary}`);
             const memoryLabel = [item.variant.ram, item.variant.storage].filter(Boolean).join('/');
             if (memoryLabel) {
                 lines.push(`   📱 ${memoryLabel}`);
             }
-            lines.push(`   💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}`);
-            lines.push(`   💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})`);
-            lines.push(buildSharedColorLines(item.colors).join('\n'));
+            const detailIndent = memoryLabel ? '      ' : '   ';
+            lines.push(`${detailIndent}💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}`);
+            lines.push(`${detailIndent}💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})`);
+            const colors = normalizeSharedColors(item.colors);
+            lines.push(`${detailIndent}🎨 Cores: ${colors.length > 0 ? colors.join(', ') : 'Consultar'}`);
             return lines.join('\n');
         });
 
@@ -277,11 +285,60 @@ export function generateCatalogMessage(
 
     message += brandBlocks.join('\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n');
 
-    message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    message += `\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     message += `*Gostou de algum desses?*\n`;
     message += `Veja no site: ${catalogUrl}`;
 
     return message;
+}
+
+/** Split the official catalog at product boundaries for sequential WhatsApp sends. */
+export function splitCatalogMessageForWhatsApp(message: string): string[] {
+    const separator = '━━━━━━━━━━━━━━━━━━━━━━';
+    if (!message.includes(separator)) return [message];
+    const headerEnd = message.indexOf(`${separator}\n\n`);
+    const footerStart = message.lastIndexOf(`\n${separator}\n\n*Gostou de algum desses?*`);
+    if (headerEnd < 0 || footerStart <= headerEnd) throw new Error('Formato do catálogo inválido para divisão em mensagens');
+
+    const header = message.slice(0, headerEnd).trim();
+    const body = message.slice(headerEnd + separator.length, footerStart).trim();
+    const footer = message.slice(footerStart + separator.length).trim();
+    const entries: Array<{ brand: string; text: string }> = [];
+
+    for (const brandBlock of body.split(`\n\n${separator}\n\n`)) {
+        const splitAt = brandBlock.indexOf('\n\n');
+        if (splitAt < 0) throw new Error('Bloco de marca inválido no catálogo');
+        const brand = brandBlock.slice(0, splitAt).trim();
+        const products = brandBlock.slice(splitAt + 2).split(`\n${separator}\n`);
+        if (!/^\*[^*\n]+\*$/.test(brand)) throw new Error('Marca inválida no catálogo');
+        for (const product of products) {
+            const text = product.trim();
+            if (!/^\d+\. [^\n]+/.test(text)) throw new Error('Produto inválido no catálogo');
+            entries.push({ brand, text });
+        }
+    }
+
+    if (entries.length < 3) return [message];
+    const title = header.split('\n')[0];
+    const parts: string[] = [];
+    for (let partIndex = 0; partIndex < 3; partIndex += 1) {
+        const start = Math.floor(partIndex * entries.length / 3);
+        const end = Math.floor((partIndex + 1) * entries.length / 3);
+        const blocks: string[] = [];
+        let previousBrand = '';
+        for (const entry of entries.slice(start, end)) {
+            if (entry.brand !== previousBrand) {
+                if (blocks.length) blocks.push(separator);
+                blocks.push(entry.brand);
+                previousBrand = entry.brand;
+            }
+            if (blocks.at(-1) !== entry.brand) blocks.push(separator);
+            blocks.push(entry.text);
+        }
+        const partHeader = partIndex === 0 ? header : title;
+        parts.push(`${partHeader} — parte ${partIndex + 1}/3\n\n${separator}\n\n${blocks.join('\n\n')}${partIndex === 2 ? `\n\n${separator}\n\n${footer}` : ''}`);
+    }
+    return parts;
 }
 
 /** Generate a message from the search and filters currently applied in the public catalog. */

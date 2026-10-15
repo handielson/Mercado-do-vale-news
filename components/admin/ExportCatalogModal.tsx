@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { X, MessageCircle, Copy, Check, FileText } from 'lucide-react';
-import { generateFullCatalogMessage, type CustomerType } from '@/utils/catalogMessageGenerator';
+import { generateFullCatalogMessage, splitCatalogMessageForWhatsApp, type CustomerType } from '@/utils/catalogMessageGenerator';
 import { generateFullCatalogPDF, generateCategoryPDF } from '@/utils/catalogPDFGenerator';
 import toast from 'react-hot-toast';
 
@@ -18,6 +18,13 @@ export function ExportCatalogModal({ isOpen, onClose, categoryId, categoryName }
     const [exportFormat, setExportFormat] = useState<'whatsapp' | 'copy' | 'pdf'>('pdf');
     const [isLoading, setIsLoading] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
+    const [pendingParts, setPendingParts] = useState<string[]>([]);
+    const [nextPartIndex, setNextPartIndex] = useState(0);
+
+    const resetParts = () => {
+        setPendingParts([]);
+        setNextPartIndex(0);
+    };
 
     if (!isOpen) return null;
 
@@ -35,30 +42,35 @@ export function ExportCatalogModal({ isOpen, onClose, categoryId, categoryName }
                 onClose();
             } else {
                 // Generate text message
-                let message: string;
-
-                if (categoryId) {
-                    const { generateCategoryMessage } = await import('@/utils/catalogMessageGenerator');
-                    message = await generateCategoryMessage(categoryId, customerType);
-                } else {
-                    message = await generateFullCatalogMessage(customerType);
+                let parts = pendingParts;
+                if (!parts.length) {
+                    let message: string;
+                    if (categoryId) {
+                        const { generateCategoryMessage } = await import('@/utils/catalogMessageGenerator');
+                        message = await generateCategoryMessage(categoryId, customerType);
+                    } else {
+                        message = await generateFullCatalogMessage(customerType);
+                    }
+                    parts = splitCatalogMessageForWhatsApp(message);
+                    setPendingParts(parts);
                 }
+                const part = parts[nextPartIndex];
 
                 if (exportFormat === 'whatsapp') {
-                    const encodedMessage = encodeURIComponent(message);
+                    const encodedMessage = encodeURIComponent(part);
                     const whatsappLink = `whatsapp://send?text=${encodedMessage}`;
                     window.location.href = whatsappLink;
-                    toast.success('Abrindo WhatsApp...');
-                    onClose();
+                    toast.success(parts.length > 1 ? `Abrindo parte ${nextPartIndex + 1}/${parts.length}. Envie e volte para a próxima.` : 'Abrindo WhatsApp...');
                 } else {
-                    await navigator.clipboard.writeText(message);
+                    await navigator.clipboard.writeText(part);
                     setIsCopied(true);
-                    toast.success('Mensagem copiada!');
+                    toast.success(parts.length > 1 ? `Parte ${nextPartIndex + 1}/${parts.length} copiada. Envie antes da próxima.` : 'Mensagem copiada!');
                     setTimeout(() => {
                         setIsCopied(false);
-                        onClose();
                     }, 2000);
                 }
+                if (nextPartIndex + 1 < parts.length) setNextPartIndex(nextPartIndex + 1);
+                else { resetParts(); onClose(); }
             }
         } catch (error) {
             console.error('Error exporting catalog:', error);
@@ -106,7 +118,7 @@ export function ExportCatalogModal({ isOpen, onClose, categoryId, categoryName }
                                         name="customerType"
                                         value="retail"
                                         checked={customerType === 'retail'}
-                                        onChange={(e) => setCustomerType(e.target.value as CustomerType)}
+                                        onChange={(e) => { setCustomerType(e.target.value as CustomerType); resetParts(); }}
                                         className="w-4 h-4 text-blue-600"
                                     />
                                     <div>
@@ -121,7 +133,7 @@ export function ExportCatalogModal({ isOpen, onClose, categoryId, categoryName }
                                         name="customerType"
                                         value="wholesale"
                                         checked={customerType === 'wholesale'}
-                                        onChange={(e) => setCustomerType(e.target.value as CustomerType)}
+                                        onChange={(e) => { setCustomerType(e.target.value as CustomerType); resetParts(); }}
                                         className="w-4 h-4 text-blue-600"
                                     />
                                     <div>
@@ -136,7 +148,7 @@ export function ExportCatalogModal({ isOpen, onClose, categoryId, categoryName }
                                         name="customerType"
                                         value="resale"
                                         checked={customerType === 'resale'}
-                                        onChange={(e) => setCustomerType(e.target.value as CustomerType)}
+                                        onChange={(e) => { setCustomerType(e.target.value as CustomerType); resetParts(); }}
                                         className="w-4 h-4 text-blue-600"
                                     />
                                     <div>
@@ -159,7 +171,7 @@ export function ExportCatalogModal({ isOpen, onClose, categoryId, categoryName }
                                         name="exportFormat"
                                         value="whatsapp"
                                         checked={exportFormat === 'whatsapp'}
-                                        onChange={(e) => setExportFormat(e.target.value as 'whatsapp' | 'copy')}
+                                        onChange={(e) => { setExportFormat(e.target.value as 'whatsapp' | 'copy'); resetParts(); }}
                                         className="w-4 h-4 text-green-600"
                                     />
                                     <MessageCircle className="w-5 h-5 text-green-600" />
@@ -175,7 +187,7 @@ export function ExportCatalogModal({ isOpen, onClose, categoryId, categoryName }
                                         name="exportFormat"
                                         value="pdf"
                                         checked={exportFormat === 'pdf'}
-                                        onChange={(e) => setExportFormat(e.target.value as 'whatsapp' | 'copy' | 'pdf')}
+                                        onChange={(e) => { setExportFormat(e.target.value as 'whatsapp' | 'copy' | 'pdf'); resetParts(); }}
                                         className="w-4 h-4 text-red-600"
                                     />
                                     <FileText className="w-5 h-5 text-red-600" />
@@ -191,7 +203,7 @@ export function ExportCatalogModal({ isOpen, onClose, categoryId, categoryName }
                                         name="exportFormat"
                                         value="copy"
                                         checked={exportFormat === 'copy'}
-                                        onChange={(e) => setExportFormat(e.target.value as 'whatsapp' | 'copy')}
+                                        onChange={(e) => { setExportFormat(e.target.value as 'whatsapp' | 'copy'); resetParts(); }}
                                         className="w-4 h-4 text-blue-600"
                                     />
                                     {isCopied ? (
@@ -210,6 +222,8 @@ export function ExportCatalogModal({ isOpen, onClose, categoryId, categoryName }
                         </div>
                     </div>
 
+                    {pendingParts.length > 1 && <p className="px-6 pb-3 text-sm text-slate-600">Próxima mensagem: parte {nextPartIndex + 1}/{pendingParts.length}. Envie cada parte na mesma conversa.</p>}
+
                     {/* Footer */}
                     <div className="flex gap-3 p-4 border-t border-slate-200 bg-slate-50">
                         <button
@@ -223,7 +237,7 @@ export function ExportCatalogModal({ isOpen, onClose, categoryId, categoryName }
                             disabled={isLoading}
                             className="flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {isLoading ? 'Gerando...' : 'Gerar Catálogo'}
+                            {isLoading ? 'Gerando...' : pendingParts.length > 1 ? `${exportFormat === 'copy' ? 'Copiar' : 'Abrir'} parte ${nextPartIndex + 1}/${pendingParts.length}` : 'Gerar Catálogo'}
                         </button>
                     </div>
                 </div>

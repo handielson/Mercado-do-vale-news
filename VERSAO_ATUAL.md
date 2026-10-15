@@ -1,3 +1,12 @@
+# v1.2.638-catalogo-whatsapp-3-partes
+
+Data: 15/10/2026. Branch: main. Tag: v1.2.638-catalogo-whatsapp-3-partes.
+Release MDV: /var/www/mdv-site/releases/20261015-195134-v1638-catalogo-whatsapp-3-partes.
+
+O compartilhamento do catálogo pelo site mostra modelo, características confirmadas, memória, preço à vista no Pix, cartão em 12x com total e cores na mesma linha. Cores do mesmo modelo e memória com preços diferentes ficam em blocos próprios para não atribuir o menor preço a todas. Listas longas são divididas em três mensagens completas, com numeração preservada e marca repetida quando a divisão cai dentro dela. Os botões WhatsApp e Copiar avançam uma parte por vez nos três pontos de compartilhamento. Nove testes focados e o build do site passaram. Somente o site é publicado; API e n8n não mudam nesta entrega.
+
+## Histórico anterior
+
 # v1.2.637-celulares-memoria
 
 Data: 15/10/2026. Branch: main. Tag: v1.2.637-celulares-memoria.

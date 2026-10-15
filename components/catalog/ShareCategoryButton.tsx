@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Share2, MessageCircle, Copy, Check } from 'lucide-react';
-import { generateCategoryMessage } from '@/utils/catalogMessageGenerator';
+import { generateCategoryMessage, splitCatalogMessageForWhatsApp } from '@/utils/catalogMessageGenerator';
 import toast from 'react-hot-toast';
 
 interface ShareCategoryButtonProps {
@@ -14,17 +14,34 @@ export function ShareCategoryButton({ categoryId, categoryName }: ShareCategoryB
     const [isOpen, setIsOpen] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [pendingParts, setPendingParts] = useState<string[]>([]);
+    const [nextPartIndex, setNextPartIndex] = useState(0);
+
+    const getNextSharePart = async () => {
+        const parts = pendingParts.length ? pendingParts : splitCatalogMessageForWhatsApp(await generateCategoryMessage(categoryId, 'retail'));
+        if (!pendingParts.length) setPendingParts(parts);
+        return { parts, index: nextPartIndex };
+    };
+
+    const advanceSharePart = (parts: string[], index: number) => {
+        if (index + 1 < parts.length) setNextPartIndex(index + 1);
+        else {
+            setPendingParts([]);
+            setNextPartIndex(0);
+            setIsOpen(false);
+        }
+    };
 
     const handleShareWhatsApp = async () => {
         setIsLoading(true);
         try {
-            const message = await generateCategoryMessage(categoryId, 'retail'); // Public always uses retail
-            const encodedMessage = encodeURIComponent(message);
+            const { parts, index } = await getNextSharePart();
+            const encodedMessage = encodeURIComponent(parts[index]);
             const whatsappLink = `whatsapp://send?text=${encodedMessage}`;
 
             window.location.href = whatsappLink;
-            toast.success('Abrindo WhatsApp...');
-            setIsOpen(false);
+            toast.success(parts.length > 1 ? `Abrindo parte ${index + 1}/${parts.length}. Envie e volte para a próxima.` : 'Abrindo WhatsApp...');
+            advanceSharePart(parts, index);
         } catch (error) {
             console.error('Error sharing category:', error);
             toast.error('Erro ao compartilhar categoria');
@@ -36,14 +53,14 @@ export function ShareCategoryButton({ categoryId, categoryName }: ShareCategoryB
     const handleCopyMessage = async () => {
         setIsLoading(true);
         try {
-            const message = await generateCategoryMessage(categoryId, 'retail');
-            await navigator.clipboard.writeText(message);
+            const { parts, index } = await getNextSharePart();
+            await navigator.clipboard.writeText(parts[index]);
             setIsCopied(true);
-            toast.success('Mensagem copiada!');
+            toast.success(parts.length > 1 ? `Parte ${index + 1}/${parts.length} copiada. Envie antes da próxima.` : 'Mensagem copiada!');
+            advanceSharePart(parts, index);
 
             setTimeout(() => {
                 setIsCopied(false);
-                setIsOpen(false);
             }, 2000);
         } catch (error) {
             console.error('Error copying message:', error);
@@ -78,6 +95,7 @@ export function ShareCategoryButton({ categoryId, categoryName }: ShareCategoryB
                             <div className="text-xs font-semibold text-slate-500 uppercase">
                                 {categoryName}
                             </div>
+                            {pendingParts.length > 1 && <div className="mt-1 text-xs text-slate-600">Próxima: parte {nextPartIndex + 1}/{pendingParts.length}. Envie na mesma conversa.</div>}
                         </div>
                         <div className="py-1">
                             <button
@@ -87,7 +105,7 @@ export function ShareCategoryButton({ categoryId, categoryName }: ShareCategoryB
                             >
                                 <MessageCircle className="w-5 h-5 text-green-600" />
                                 <div>
-                                    <div className="font-medium text-slate-900">Via WhatsApp</div>
+                                    <div className="font-medium text-slate-900">{pendingParts.length > 1 ? `Via WhatsApp — parte ${nextPartIndex + 1}/${pendingParts.length}` : 'Via WhatsApp'}</div>
                                     <div className="text-xs text-slate-500">Compartilhar mensagem</div>
                                 </div>
                             </button>
@@ -104,7 +122,7 @@ export function ShareCategoryButton({ categoryId, categoryName }: ShareCategoryB
                                 )}
                                 <div>
                                     <div className="font-medium text-slate-900">
-                                        {isCopied ? 'Copiado!' : 'Copiar Mensagem'}
+                                        {isCopied ? 'Copiado!' : (pendingParts.length > 1 ? `Copiar parte ${nextPartIndex + 1}/${pendingParts.length}` : 'Copiar Mensagem')}
                                     </div>
                                     <div className="text-xs text-slate-500">Copiar para área de transferência</div>
                                 </div>

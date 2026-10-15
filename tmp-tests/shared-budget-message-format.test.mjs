@@ -40,7 +40,8 @@ for (const [name, source] of [
     assert.match(source, /stripSharedProductColorVariation/, `${name} must clean the product name`);
 }
 
-assert.match(catalogShareSource, /buildSharedColorLines/, 'catalog copy must print one color per numbered line');
+assert.match(catalogShareSource, /normalizeSharedColors/, 'catalog copy must normalize grouped colors');
+assert.match(catalogShareSource, /🎨 Cores: \$\{colors\.length > 0 \? colors\.join\(', '\) : 'Consultar'\}/, 'catalog copy must keep colors on one concise line');
 assert.match(
     cartShareSource,
     /🎨 Cores: \$\{colors\.length > 0 \? colors\.join\(', '\) : 'Consultar'\}/,

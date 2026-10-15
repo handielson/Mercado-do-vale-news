@@ -6,6 +6,7 @@ import {
     generateFullCatalogMessage,
     generateCategoryMessage,
     generateFilteredCatalogMessage,
+    splitCatalogMessageForWhatsApp,
     type CatalogShareFilters,
 } from '@/utils/catalogMessageGenerator';
 import toast from 'react-hot-toast';
@@ -23,6 +24,8 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
     const [isCopied, setIsCopied] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [shareScope, setShareScope] = useState<ShareScope>('filtered');
+    const [pendingParts, setPendingParts] = useState<string[]>([]);
+    const [nextPartIndex, setNextPartIndex] = useState(0);
 
     const hasFilteredScope = Boolean(
         filteredScope && (
@@ -48,16 +51,31 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
             : generateFullCatalogMessage('retail');
     };
 
+    const getNextSharePart = async () => {
+        const parts = pendingParts.length ? pendingParts : splitCatalogMessageForWhatsApp(await generateSelectedMessage());
+        if (!pendingParts.length) setPendingParts(parts);
+        return { parts, index: nextPartIndex };
+    };
+
+    const advanceSharePart = (parts: string[], index: number) => {
+        if (index + 1 < parts.length) setNextPartIndex(index + 1);
+        else {
+            setPendingParts([]);
+            setNextPartIndex(0);
+            setIsOpen(false);
+        }
+    };
+
     const handleShareWhatsApp = async () => {
         setIsLoading(true);
         try {
-            const message = await generateSelectedMessage();
-            const encodedMessage = encodeURIComponent(message);
+            const { parts, index } = await getNextSharePart();
+            const encodedMessage = encodeURIComponent(parts[index]);
             const whatsappLink = `whatsapp://send?text=${encodedMessage}`;
 
             window.location.href = whatsappLink;
-            toast.success('Abrindo WhatsApp...');
-            setIsOpen(false);
+            toast.success(parts.length > 1 ? `Abrindo parte ${index + 1}/${parts.length}. Envie e volte para a próxima.` : 'Abrindo WhatsApp...');
+            advanceSharePart(parts, index);
         } catch (error) {
             console.error('Error sharing catalog:', error);
             toast.error('Erro ao compartilhar catálogo');
@@ -69,14 +87,14 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
     const handleCopyMessage = async () => {
         setIsLoading(true);
         try {
-            const message = await generateSelectedMessage();
-            await navigator.clipboard.writeText(message);
+            const { parts, index } = await getNextSharePart();
+            await navigator.clipboard.writeText(parts[index]);
             setIsCopied(true);
-            toast.success('Mensagem copiada!');
+            toast.success(parts.length > 1 ? `Parte ${index + 1}/${parts.length} copiada. Envie antes da próxima.` : 'Mensagem copiada!');
+            advanceSharePart(parts, index);
 
             setTimeout(() => {
                 setIsCopied(false);
-                setIsOpen(false);
             }, 2000);
         } catch (error) {
             console.error('Error copying message:', error);
@@ -138,6 +156,9 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
                     {/* Dropdown Menu Minimalista */}
                     <div role="dialog" aria-label="Compartilhar catálogo" className="fixed left-3 right-3 top-1/2 z-50 max-h-[calc(100dvh-1.5rem)] w-auto -translate-y-1/2 overflow-y-auto bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] border border-white/20 transform transition-all animate-in fade-in zoom-in-95 duration-200 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-3 sm:max-h-none sm:w-72 sm:translate-y-0 sm:overflow-hidden sm:origin-top-right">
                         <div className="p-3 space-y-1.5">
+                            {pendingParts.length > 1 && (
+                                <p className="px-2 text-xs text-slate-600">Próxima mensagem: parte {nextPartIndex + 1}/{pendingParts.length}. Envie cada parte na mesma conversa.</p>
+                            )}
                             {hasFilteredScope && (
                                 <div className="mb-2 rounded-2xl bg-slate-50 p-1.5">
                                     <p className="px-2 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
@@ -145,7 +166,7 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
                                     </p>
                                     <button
                                         type="button"
-                                        onClick={() => setShareScope('filtered')}
+                                        onClick={() => { setShareScope('filtered'); setPendingParts([]); setNextPartIndex(0); }}
                                         className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors ${shareScope === 'filtered' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}
                                     >
                                         <ListFilter className="h-4 w-4 shrink-0" />
@@ -154,7 +175,7 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setShareScope('complete')}
+                                        onClick={() => { setShareScope('complete'); setPendingParts([]); setNextPartIndex(0); }}
                                         className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors ${shareScope === 'complete' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:bg-white/70'}`}
                                     >
                                         <Layers3 className="h-4 w-4 shrink-0" />
@@ -172,7 +193,7 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
                                     <MessageCircle className="w-5 h-5 text-green-600" />
                                 </div>
                                 <div className="flex-1">
-                                    <div className="text-[13px] font-semibold text-slate-800">Via WhatsApp</div>
+                                    <div className="text-[13px] font-semibold text-slate-800">{pendingParts.length > 1 ? `Via WhatsApp — parte ${nextPartIndex + 1}/${pendingParts.length}` : 'Via WhatsApp'}</div>
                                     <div className="text-[11px] text-slate-400 font-medium">{actionScopeLabel}</div>
                                 </div>
                             </button>
@@ -207,7 +228,7 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
                                 </div>
                                 <div className="flex-1">
                                     <div className="text-[13px] font-semibold text-slate-800">
-                                        {isCopied ? 'Copiado!' : 'Copiar Mensagem'}
+                                        {isCopied ? 'Copiado!' : (pendingParts.length > 1 ? `Copiar parte ${nextPartIndex + 1}/${pendingParts.length}` : 'Copiar Mensagem')}
                                     </div>
                                     <div className="text-[11px] text-slate-400 font-medium">{actionScopeLabel}</div>
                                 </div>

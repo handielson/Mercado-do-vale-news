@@ -7,7 +7,7 @@ assert.match(source, /const ram = rawRam;\s*const storage = rawStorage;/,
   'catalog sharing must preserve missing memory fields as empty values');
 assert.match(source, /const memoryLabel = \[item\.variant\.ram, item\.variant\.storage\]\.filter\(Boolean\)\.join\('\/'\);/,
   'catalog sharing must build a memory label only from available fields');
-assert.match(source, /if \(memoryLabel\) \{[\s\S]*message \+= `\s+📱 \$\{memoryLabel\}\\n`;/,
+assert.match(source, /if \(memoryLabel\) \{\s*lines\.push\(`   📱 \$\{memoryLabel\}`\);\s*\}/,
   'catalog sharing must omit the smartphone line when both fields are absent');
 assert.doesNotMatch(source, /const ram = rawRam \|\| 'N\/A'/,
   'catalog sharing must not default RAM to N/A');

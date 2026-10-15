@@ -6,7 +6,9 @@ const source = readFileSync(new URL('../utils/catalogMessageGenerator.ts', impor
 assert.match(source, /const brandBlocks = groupedByBrand\.map\(\(\{ brand, items \}\) =>/);
 assert.match(source, /productBlocks\.join\('\\n━━━━━━━━━━━━━━━━━━━━━━\\n'\)/);
 assert.match(source, /brandBlocks\.join\('\\n\\n━━━━━━━━━━━━━━━━━━━━━━\\n\\n'\)/);
-assert.match(source, /const lines = \[`\$\{productIndex\+\+\}\. \*\$\{item\.name\}\*`\];/);
+assert.match(source, /const lines = \[`\$\{productIndex\+\+\}\. \$\{item\.name\}`\];/);
+assert.match(source, /if \(item\.featureSummary\) lines\.push\(`   \$\{item\.featureSummary\}`\)/);
+assert.match(source, /const detailIndent = memoryLabel \? '      ' : '   '/);
 assert.doesNotMatch(source, /message \+= `\$\{buildSharedColorLines\(item\.colors\)\.join\('\n'\)\}\\n`;/);
 
 console.log('catalog share spacing static checks passed');
