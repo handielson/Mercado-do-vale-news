@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.634-payjoy-continuidade",
+  "version": "v1.2.635-modelo-configuracao",
   "date": "2026-10-15",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.634-payjoy-continuidade",
-  "release_vps": "/var/www/mdv-site/releases/20261015-112900-v1634-payjoy-continuidade",
+  "tag": "v1.2.635-modelo-configuracao",
+  "release_vps": "/var/www/mdv-site/releases/20261015-120500-v1635-modelo-configuracao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Pedidos contextuais do site PayJoy seguem para o link oficial configurado sem reiniciar o atendimento.",
+  "summary": "Busca distingue rede de RAM e oferece configuracao disponivel do mesmo modelo antes de outros aparelhos.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,20 +14,21 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "tmp-tests/n8n-payjoy-link-continuity.cjs",
-    "tmp-tests/n8n-payjoy-link-continuity.test.cjs",
+    "tmp-tests/n8n-sales-model-configuration.cjs",
+    "tmp-tests/n8n-sales-model-configuration.test.cjs",
     "tmp-tests/n8n-gpt6-luna-native-smoke.cjs",
     "tmp-tests/n8n-fix-payjoy-link-confirmation.cjs",
     "scripts/n8n-sales-regression-gate.cjs",
-    "docs/operacional/2026-10-15-payjoy-continuidade-link.md",
+    "scripts/publish-vps-plan.cjs",
+    "docs/operacional/2026-10-15-modelo-configuracao-atendimento.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-15-v1.2.634-payjoy-continuidade.md"
+    "docs/versoes/2026-10-15-v1.2.635-modelo-configuracao.md"
   ],
   "validations": [
-    "71 testes de regressao no candidato exato.",
-    "20 cenarios reais com Agent nativo/Responses, incluindo 12 de continuidade e duas imagens sinteticas.",
-    "Dry-run: cinco nos, grafo e demais configuracoes preservados.",
+    "84 testes do gate no candidato exato, incluindo 13 grupos de modelo/configuracao.",
+    "10 cenarios reais nativos: oito anteriores e os dois turnos de vendas.",
+    "Auto-teste do publicador e dry-run com escopo de tres nos.",
     "Build web com trava Supabase."
   ],
   "android_entregas": {

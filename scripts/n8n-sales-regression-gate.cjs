@@ -13,9 +13,10 @@ function runGate(snapshot,{stdio='inherit'}={}){
   if(!Array.isArray(workflow.nodes)||!workflow.connections)throw new Error('Snapshot de workflow invalido');
   const digest=fingerprint(workflow);
   const continuity=workflow.nodes.some(n=>JSON.stringify(n).includes('payjoy-link-continuity-v1'));
-  const candidateTests=continuity?[...tests,'tmp-tests/n8n-payjoy-link-continuity.test.cjs']:tests;
+  const configuration=workflow.nodes.some(n=>JSON.stringify(n).includes('sales-model-configuration-v1'));
+  const candidateTests=[...tests,...(continuity?['tmp-tests/n8n-payjoy-link-continuity.test.cjs']:[]),...(configuration?['tmp-tests/n8n-sales-model-configuration.test.cjs']:[])];
   const result=spawnSync(process.execPath,['--test',...candidateTests],{cwd:root,stdio,
-    env:{...process.env,MDV_PAYJOY_CONTINUITY_EXACT:'1',MDV_N8N_SALES_SNAPSHOT:absolute,MDV_SALES_VARIANT_SNAPSHOT:absolute,MDV_PAYJOY_WORKFLOW_SNAPSHOT:absolute}});
+    env:{...process.env,MDV_MODEL_CONFIGURATION_EXACT:'1',MDV_PAYJOY_CONTINUITY_EXACT:'1',MDV_N8N_SALES_SNAPSHOT:absolute,MDV_SALES_VARIANT_SNAPSHOT:absolute,MDV_PAYJOY_WORKFLOW_SNAPSHOT:absolute}});
   if(result.error)throw result.error;
   if(result.status!==0)throw new Error('Regressao detectada no candidato '+digest+'; publicacao bloqueada.');
   if(fingerprint(JSON.parse(fs.readFileSync(absolute,'utf8')))!==digest)throw new Error('Candidato mudou durante os testes; execute a suite novamente.');

@@ -20,9 +20,10 @@ const CONTEXTUAL_INTENT = process.argv.includes('--contextual-intent');
 const KNOWLEDGE = process.argv.includes('--knowledge');
 const SALES_FLOW = process.argv.includes('--sales-contract');
 const MODEL_FLOW = process.argv.includes('--gpt6-luna');
+const CONFIGURATION_FLOW = process.argv.includes('--model-configuration');
 const CONTINUITY_FLOW = process.argv.includes('--payjoy-continuity');
-assert.ok([CONTEXTUAL_INTENT, INSTALLMENT_OPTIONS, APPROVAL, KNOWLEDGE, SALES_FLOW, MODEL_FLOW, CONTINUITY_FLOW].filter(Boolean).length <= 1, 'Choose one workflow patch mode');
-const MARKER = CONTINUITY_FLOW ? 'payjoy-link-continuity-v1' : MODEL_FLOW ? 'gpt6-luna-migration-v1' : SALES_FLOW ? 'sales-collection-state-contract-v1' : KNOWLEDGE ? 'payjoy-knowledge-v1' : CONTEXTUAL_INTENT ? 'payjoy-contextual-intent-v5' : INSTALLMENT_OPTIONS ? 'installment-options-payjoy-v1' : 'payjoy-link-confirmation-v1';
+assert.ok([CONTEXTUAL_INTENT, INSTALLMENT_OPTIONS, APPROVAL, KNOWLEDGE, SALES_FLOW, MODEL_FLOW, CONTINUITY_FLOW, CONFIGURATION_FLOW].filter(Boolean).length <= 1, 'Choose one workflow patch mode');
+const MARKER = CONFIGURATION_FLOW ? 'sales-model-configuration-v1' : CONTINUITY_FLOW ? 'payjoy-link-continuity-v1' : MODEL_FLOW ? 'gpt6-luna-migration-v1' : SALES_FLOW ? 'sales-collection-state-contract-v1' : KNOWLEDGE ? 'payjoy-knowledge-v1' : CONTEXTUAL_INTENT ? 'payjoy-contextual-intent-v5' : INSTALLMENT_OPTIONS ? 'installment-options-payjoy-v1' : 'payjoy-link-confirmation-v1';
 const APPLY = process.argv.includes('--apply');
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 const dollar = (value, tag) => `$${tag}$${String(value)}$${tag}$`;
@@ -307,12 +308,12 @@ async function main() {
     const raw = await psql(connection, database, `COPY (SELECT json_build_object('nodesHex',encode(convert_to(we.nodes::text,'UTF8'),'hex'),'connectionsHex',encode(convert_to(we.connections::text,'UTF8'),'hex'),'activeVersionId',we.\"activeVersionId\",'active',we.active,'versionAligned',we.\"versionId\"=we.\"activeVersionId\",'entityHistoryEqual',we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb)::text FROM workflow_entity we JOIN workflow_history wh ON wh.\"workflowId\"=we.id AND wh.\"versionId\"=we.\"activeVersionId\" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`);
     const row = JSON.parse(raw.trim());
     const workflow = { nodes: JSON.parse(Buffer.from(row.nodesHex, 'hex').toString('utf8')), connections: JSON.parse(Buffer.from(row.connectionsHex, 'hex').toString('utf8')) };
-    const transform = CONTINUITY_FLOW ? require('./n8n-payjoy-link-continuity.cjs').patchWorkflow : MODEL_FLOW ? require('./n8n-gpt6-luna-migration.cjs').patchWorkflow : SALES_FLOW ? require('./n8n-sales-flow-contract.cjs').patchWorkflow : KNOWLEDGE ? require('./n8n-payjoy-knowledge-patch.cjs').patchWorkflow : CONTEXTUAL_INTENT ? require('./n8n-payjoy-contextual-intent-patch.cjs').patchWorkflow : APPROVAL ? require('./n8n-payjoy-approval-patch.cjs').patchWorkflow : INSTALLMENT_OPTIONS ? require('./n8n-payjoy-workflow-patch.cjs').updateInstallmentOptionsWorkflow : patchWorkflow;
+    const transform = CONFIGURATION_FLOW ? require('./n8n-sales-model-configuration.cjs').patchWorkflow : CONTINUITY_FLOW ? require('./n8n-payjoy-link-continuity.cjs').patchWorkflow : MODEL_FLOW ? require('./n8n-gpt6-luna-migration.cjs').patchWorkflow : SALES_FLOW ? require('./n8n-sales-flow-contract.cjs').patchWorkflow : KNOWLEDGE ? require('./n8n-payjoy-knowledge-patch.cjs').patchWorkflow : CONTEXTUAL_INTENT ? require('./n8n-payjoy-contextual-intent-patch.cjs').patchWorkflow : APPROVAL ? require('./n8n-payjoy-approval-patch.cjs').patchWorkflow : INSTALLMENT_OPTIONS ? require('./n8n-payjoy-workflow-patch.cjs').updateInstallmentOptionsWorkflow : patchWorkflow;
     const updated = transform(workflow);
     if (APPROVAL) require('./n8n-payjoy-approval-patch.cjs').validate(updated);
     else if (!SALES_FLOW) assert.deepEqual(updated.connections, workflow.connections, 'connections must remain unchanged');
     const changedNodes = updated.nodes.filter(node => JSON.stringify(node) !== JSON.stringify(workflow.nodes.find(n=>n.name===node.name))).map(node => node.name);
-    assert.ok(changedNodes.every(name => (CONTINUITY_FLOW ? require('./n8n-payjoy-link-continuity.cjs').SCOPED_NODES : MODEL_FLOW ? require('./n8n-gpt6-luna-migration.cjs').SCOPED_NODES : SALES_FLOW ? [...require('./n8n-sales-flow-contract.cjs').SCOPED_NODES] : KNOWLEDGE ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Agente Inicial - Classificador','Parse Classificacao'] : CONTEXTUAL_INTENT ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Vendas - Preparar Contexto IA','Agente Inicial - Classificador','Parse Classificacao'] : APPROVAL ? [PAYMENT_NODE,RESOLVER_NODE,'Agente Geral - Atendimento','Dados','PayJoy - Recebeu print?','PayJoy - Print tem arquivo?','PayJoy - Recuperar midia','PayJoy - Restaurar imagem','PayJoy - Preparar imagem','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'] : INSTALLMENT_OPTIONS ? [PAYMENT_NODE] : [RESOLVER_NODE, PAYMENT_NODE, 'Agente Geral - Atendimento', 'Controle Bot - Aplicar Controle', 'Estado Conversa - Preparar']).includes(name)), 'only scoped workflow nodes may change');
+    assert.ok(changedNodes.every(name => (CONFIGURATION_FLOW ? require('./n8n-sales-model-configuration.cjs').SCOPED_NODES : CONTINUITY_FLOW ? require('./n8n-payjoy-link-continuity.cjs').SCOPED_NODES : MODEL_FLOW ? require('./n8n-gpt6-luna-migration.cjs').SCOPED_NODES : SALES_FLOW ? [...require('./n8n-sales-flow-contract.cjs').SCOPED_NODES] : KNOWLEDGE ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Agente Inicial - Classificador','Parse Classificacao'] : CONTEXTUAL_INTENT ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Vendas - Preparar Contexto IA','Agente Inicial - Classificador','Parse Classificacao'] : APPROVAL ? [PAYMENT_NODE,RESOLVER_NODE,'Agente Geral - Atendimento','Dados','PayJoy - Recebeu print?','PayJoy - Print tem arquivo?','PayJoy - Recuperar midia','PayJoy - Restaurar imagem','PayJoy - Preparar imagem','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'] : INSTALLMENT_OPTIONS ? [PAYMENT_NODE] : [RESOLVER_NODE, PAYMENT_NODE, 'Agente Geral - Atendimento', 'Controle Bot - Aplicar Controle', 'Estado Conversa - Preparar']).includes(name)), 'only scoped workflow nodes may change');
     if (APPROVAL) {
       const retained=Object.fromEntries(Object.entries(updated.connections).filter(([name])=>Object.hasOwn(workflow.connections,name)&&name!=='Controle Bot - Bloqueado?'));
       assert.deepEqual(retained,Object.fromEntries(Object.entries(workflow.connections).filter(([name])=>name!=='Controle Bot - Bloqueado?')));
@@ -358,7 +359,7 @@ async function main() {
       assert.ok(!APPLY && process.argv[snapshotIndex+1], '--snapshot-out requires dry-run and a path');
       fs.writeFileSync(path.resolve(process.argv[snapshotIndex+1]), JSON.stringify(updated), {mode:0o600});
     }
-    if ((MODEL_FLOW || CONTINUITY_FLOW) && APPLY) {
+    if ((MODEL_FLOW || CONTINUITY_FLOW || CONFIGURATION_FLOW) && APPLY) {
       const evidenceIndex = process.argv.indexOf('--model-test-evidence');
       assert.ok(evidenceIndex >= 0 && process.argv[evidenceIndex+1], 'Real native model tests are required before publication');
       const evidence = JSON.parse(fs.readFileSync(process.argv[evidenceIndex+1], 'utf8'));
@@ -375,6 +376,12 @@ async function main() {
         assert.equal(evidence.payjoyContinuityCases?.length,12,'All PayJoy continuity scenarios must pass');
         assert.ok(evidence.payjoyContinuityCases.every(item=>item.passed===true));
       }
+    }
+    if (CONFIGURATION_FLOW && APPLY) {
+      const index=process.argv.indexOf('--model-test-evidence');
+      const evidence=JSON.parse(fs.readFileSync(process.argv[index+1],'utf8'));
+      assert.equal(evidence.salesModelConfigurationCases?.length,2,'Both customer turns require native model coverage');
+      assert.ok(evidence.salesModelConfigurationCases.every(item=>item.passed===true));
     }
     const changed = JSON.stringify(updated.nodes) !== JSON.stringify(workflow.nodes);
     const summary = { apply: APPLY, active: row.active, versionAligned: row.versionAligned, entityHistoryEqual: row.entityHistoryEqual, changed, changedNodes, validation };
@@ -410,10 +417,10 @@ UPDATE workflow_entity SET nodes=${dollar(JSON.stringify(updated.nodes), 'nodesp
 UPDATE workflow_history SET nodes=${dollar(JSON.stringify(updated.nodes), 'historypayjoylink')}::json,connections=${dollar(JSON.stringify(updated.connections),'graphhistorypayjoylink')}::json,\"updatedAt\"=NOW() WHERE \"workflowId\"=${quote(WORKFLOW_ID)} AND \"versionId\"=${quote(row.activeVersionId)};
 COMMIT;
 COPY (SELECT json_build_object('entityHistoryEqual',we.nodes::jsonb=wh.nodes::jsonb,'payjoyLinkConfirmation',EXISTS(SELECT 1 FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->>'name'=${quote(PAYMENT_NODE)} AND node->'parameters'->>'jsCode' LIKE '%${MARKER}%') AND EXISTS(SELECT 1 FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->>'name'=${quote(RESOLVER_NODE)} AND node->'parameters'->>'jsCode' LIKE '%${INSTALLMENT_OPTIONS ? 'payjoy-link-confirmation-v1' : MARKER}%'))::text FROM workflow_entity we JOIN workflow_history wh ON wh.\"workflowId\"=we.id AND wh.\"versionId\"=we.\"activeVersionId\" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
-    if(MODEL_FLOW || CONTINUITY_FLOW) modelRollback={database,workflow,version:row.activeVersionId};
+    if(MODEL_FLOW || CONTINUITY_FLOW || CONFIGURATION_FLOW) modelRollback={database,workflow,version:row.activeVersionId};
     const verification = JSON.parse((await psql(connection, database, sql)).trim());
     assert.equal(verification.entityHistoryEqual, true);
-    if (!SALES_FLOW && !MODEL_FLOW) assert.equal(verification.payjoyLinkConfirmation, true);
+    if (!SALES_FLOW && !MODEL_FLOW && !CONFIGURATION_FLOW) assert.equal(verification.payjoyLinkConfirmation, true);
     else delete verification.payjoyLinkConfirmation; // Sales mode uses the full behavioral readback gate below.
     if (!INSTALLMENT_OPTIONS) {
       const continuation = JSON.parse((await psql(connection, database, `SELECT json_build_object('entityNodes',(SELECT count(*) FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->'parameters'::text IS NOT NULL AND (node->'parameters')::text LIKE '%payjoy-direct-analysis-v3%'),'historyNodes',(SELECT count(*) FROM jsonb_array_elements(wh.nodes::jsonb) node WHERE (node->'parameters')::text LIKE '%payjoy-direct-analysis-v3%'),'connectionsPreserved',encode(convert_to(we.connections::text,'UTF8'),'hex')=${quote(row.connectionsHex)} AND we.connections::jsonb=wh.connections::jsonb) FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)};`)).trim());
