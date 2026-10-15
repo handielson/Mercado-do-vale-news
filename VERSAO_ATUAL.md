@@ -3,7 +3,7 @@
 Data: 15/10/2026. Branch: main. Tag: v1.2.632-n8n-responses-fix.
 Release MDV: /var/www/mdv-site/releases/20261015-111233-v1632-n8n-responses-fix.
 
-Corrige HTTP 400 do classificador após a migração: três modelos explicitam Responses e usam reasoning.effort, preservando GPT-6 Luna. O teste anterior simulava incorretamente o padrão da API; agora executa o Tools Agent V3 instalado e inspeciona o corpo efetivamente enviado. 61 testes de vendas, seis da migração e oito cenários reais passaram no candidato 1ef08bb887e985f859976d81f673002d4cc86baf790af7816b5d5b720b33c88f. Publicação autorizada, em andamento. As sete correções de atendimento preparadas anteriormente continuam fora desta entrega.
+Corrige HTTP 400 do classificador após a migração: três modelos explicitam Responses e usam reasoning.effort, preservando GPT-6 Luna. O teste anterior simulava incorretamente o padrão da API; agora executa o Tools Agent V3 instalado e inspeciona o corpo efetivamente enviado. 61 testes de vendas, seis da migração e oito cenários reais passaram no candidato 1ef08bb887e985f859976d81f673002d4cc86baf790af7816b5d5b720b33c88f. Publicado: commit 1d9d5e0a/tag enviados a main; entidade/histórico com mesmo hash, n8n/runner 1/1, health/readiness aprovados e oito cenários reais repetidos sobre o readback. Site e VERSION 632 confirmados; catálogo renderiza sem erros no console. API saudável sem deploy/reinício. As sete correções de atendimento preparadas anteriormente continuam fora desta entrega; alterações preexistentes e 35 worktrees bloqueadas foram preservadas.
 
 ## Histórico anterior
 

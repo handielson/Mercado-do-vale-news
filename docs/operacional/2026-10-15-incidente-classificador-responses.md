@@ -1,6 +1,6 @@
 # Incidente do classificador OpenAI — 15/10/2026
 
-Status: causa identificada; correção mínima preparada e testada localmente. Produção não alterada nesta investigação.
+Status: causa identificada e correção publicada após autorização. Versão v1.2.632-n8n-responses-fix; commit funcional 1d9d5e0a.
 
 ## Evidência em produção
 
@@ -48,6 +48,10 @@ O publicador rejeita evidência antiga que não confirme `responsesApi=true` e `
 - 8 cenários reais passaram: quatro decisões do classificador; explicação contextual PayJoy; produto sem estoque confirmado; imagem sintética aprovada; imagem ilegível.
 - O hash da evidência real coincide com o candidato gerado no preflight: `1ef08bb887e985f859976d81f673002d4cc86baf790af7816b5d5b720b33c88f`.
 - Revisão especializada confirmou o padrão do schema e reproduziu o caminho do Agent com rede simulada.
-- Nenhum `--apply`, restart, commit, push ou envio WhatsApp foi executado nesta investigação.
+- A investigação inicial não alterou produção. Após autorização, houve commit/push, aplicação do patch com backup e readback, reinício do main/runner e publicação da versão no site. Não houve envio WhatsApp a clientes ou replay de execuções.
 
 O preflight disponível usa `tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --gpt6-luna --snapshot-out CAMINHO`. Antes de publicar, repetir o preflight e gerar evidência recente com `tmp-tests/n8n-gpt6-luna-native-smoke.cjs --snapshot CAMINHO --evidence EVIDENCIA`; o hash deve coincidir. Aplicação em produção depende de autorização e do procedimento de publicação existente.
+
+## Resultado da publicação autorizada
+
+Entidade e histórico ativo conferidos com hash 1ef08bb887e985f859976d81f673002d4cc86baf790af7816b5d5b720b33c88f. Main e runner em 1/1, health/readiness ok. Os oito cenários reais passaram novamente usando o snapshot relido após o reinício. Site e VERSION 632 confirmados. Não foi observada entrega a cliente como parte do teste; nenhuma conversa foi disparada para isso. As sete correções de atendimento pendentes continuam separadas.
