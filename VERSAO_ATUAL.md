@@ -3,7 +3,7 @@
 Data: 14/10/2026. Branch: main. Tag: v1.2.630-pdv-bipagem.
 Release MDV: /var/www/mdv-site/releases/20261014-225800-v1630-pdv-bipagem.
 
-Após adicionar um produto comum ao carrinho, o PDV devolve o foco à busca e seleciona o código inteiro. A próxima bipagem substitui o anterior. Teste executa o handler existente com duas leituras, rejeição por estoque e confirmação obrigatória de IMEI. Publicação somente do site em andamento.
+Após adicionar um produto comum ao carrinho, o PDV devolve o foco à busca e seleciona o código inteiro. A próxima bipagem substitui o anterior. Teste executa o handler existente com duas leituras, rejeição por estoque e confirmação obrigatória de IMEI. Publicação somente do site concluída: commit 9b5abaa1 e tag enviados a main; build e quatro guardas aprovados. VERSION.json e chunk atualizado confirmados em produção; PDV renderiza a busca. API saudável, sem reinício. Seis arquivos preexistentes e 35 worktrees bloqueadas preservados.
 
 ## Histórico anterior
 
