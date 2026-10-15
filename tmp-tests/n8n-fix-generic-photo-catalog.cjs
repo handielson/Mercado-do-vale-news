@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { Client } = require('ssh2');
 const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
 
@@ -12,8 +13,16 @@ const CATALOG = 'Vendas - Contexto Produtos';
 const COMPOSER = 'Vendas - Compor Resposta IA';
 const DETAILS_MARKER = 'blueprint-with-characteristics-v1';
 
+function splitAllPhotoReply(code) {
+  const previous = "'Como são muitos modelos, não consigo mandar todas as fotos de uma vez pelo WhatsApp. 😊' + lineBreak\n      + 'Você pode ver todos com fotos aqui: https://www.mercadodovale.com.br/?categoria=Smartphones' + lineBreak\n      + 'Se quiser fotos de algum modelo específico, me diga o número ou nome dele que envio por aqui.'";
+  const replacement = previous.replaceAll('+ lineBreak', "+ '[[MSG]]'");
+  if (code.includes(replacement)) return code;
+  assert.equal(code.split(previous).length, 2, 'all-photo reply must have one exact three-part anchor');
+  return code.replace(previous, replacement);
+}
+
 function patchPostList(code) {
-  if (code.includes(MARKER)) return code;
+  if (code.includes(MARKER)) return splitAllPhotoReply(code);
   const noList = `    return [{\n      json: {\n        ...source,\n        salesPostListHandled: true,\n        // rapid-catalog-all-color-photos-v344-no-color-question\n          output: withGreeting(String(source.salesSearchQuery || '').trim()\n            ? 'Nao encontrei esse modelo disponivel no estoque agora. Posso te enviar a lista dos celulares disponiveis.'\n            : 'Consigo te mandar a foto sim 😊 Me informa qual modelo voce quer ver.'),\n      },\n    }];`;
   assert.ok(code.includes(noList), 'generic no-list photo fallback changed');
   code = code.replace(noList, `    // ${MARKER}: an unqualified photo request needs the real smartphone catalog first.\n    const genericPhotoCatalogV1 = !String(source.salesSearchQuery || '').trim()\n      && !/\\b(?:relogio|smartwatch|capa|capinha|pelicula|carregador|fone|fonte)\\b/.test(normalized);\n    if (genericPhotoCatalogV1) {\n      return [{ json: {\n        ...source, salesPostListHandled: false,\n        salesRequestKind: 'categoria', salesCategoryId: '${CATEGORY_ID}',\n        salesCategoryName: 'smartphones', salesSearchQuery: '',\n        photoCatalogRequestedV1: true,\n      } }];\n    }\n${noList}`);
@@ -62,7 +71,7 @@ function patchPostList(code) {
   assert.ok(code.includes('requestedOptionsV343.length > 3'), 'three-model cap not installed');
   assert.ok(code.includes('await buildPhotoMessages(photoVariantV343, selectedOptionV343)'), 'blueprint-aware photo builder not installed');
   new Function('$json', '$input', '$getWorkflowStaticData', '$', '$env', 'helpers', code);
-  return code;
+  return splitAllPhotoReply(code);
 }
 
 function patchCatalog(code) {
@@ -201,7 +210,8 @@ async function runFixtures(nodes) {
   const unrelated = await invoke('Todos', { ...state, photoChoiceOfferedV1: false }, { salesFlowAction: 'nova_busca' });
   assert.equal(unrelated[0].json.salesPostListHandled, false);
   const mediaOptions = Array.from({ length: 4 }, (_, index) => ({
-    number: index + 1, name: 'Modelo ' + (index + 1), colors: [{
+    number: index + 1, name: 'Modelo ' + (index + 1), memory: '8GB/256GB', price: 'R$ 1.000,00', colors: [{
+      productId: 'fixture-photo-' + (index + 1), memory: '8GB/256GB', price: 'R$ 1.000,00', priceCents: 100000,
       color: 'Preto', sku: 'PHOTO' + (index + 1),
       images: ['https://api.xiaomipetrolina.com.br/images/photo-' + (index + 1) + '.jpg'],
       blueprintImageUrl: 'https://api.xiaomipetrolina.com.br/images/blueprint-' + (index + 1) + '.jpg',
@@ -229,6 +239,17 @@ async function runFixtures(nodes) {
 }
 
 const shellQuote = (value) => "'" + String(value).replace(/'/g, "'\\''") + "'";
+function runContractTests(nodes, connections) {
+  const snapshot = path.join(os.tmpdir(), 'mdv-photo-split-' + require('node:crypto').randomUUID() + '.json');
+  try {
+    fs.writeFileSync(snapshot, JSON.stringify({nodes, connections}), {flag:'wx',mode:0o600});
+    const test = require('node:child_process').spawnSync(process.execPath,
+      ['--test','tmp-tests/n8n-photo-catalog-message-split.test.cjs'],
+      {cwd:path.resolve(__dirname,'..'),stdio:'inherit',env:{...process.env,MDV_PAYJOY_WORKFLOW_SNAPSHOT:snapshot,MDV_PHOTO_SPLIT_EXACT:'1'}});
+    assert.equal(test.status,0,'Exact photo split contract failed');
+    return require('../scripts/n8n-sales-regression-gate.cjs').runGate(snapshot);
+  } finally {if(fs.existsSync(snapshot))fs.unlinkSync(snapshot);}
+}
 const sqlQuote = (value) => "'" + String(value).replace(/'/g, "''") + "'";
 const dollar = (value, tag) => {
   assert.ok(!String(value).includes(`$${tag}$`), `dollar-quote collision: ${tag}`);
@@ -314,10 +335,14 @@ async function main() {
     assert.equal(patched.length, current.nodes.length);
     assert.deepEqual(patchNodes(patched), patched, 'workflow patch must be idempotent');
     await runFixtures(patched);
+    const changedNodes = patched.filter((n,i)=>JSON.stringify(n)!==JSON.stringify(current.nodes[i])).map(n=>n.name);
+    if(current.nodes.find(n=>n.name===POST_LIST).parameters.jsCode.includes(MARKER))
+      assert.ok(changedNodes.every(name=>name===POST_LIST),'Only the existing photo reply may change');
+    const regressionGate = runContractTests(patched, current.connections);
     const changed = JSON.stringify(patched) !== JSON.stringify(current.nodes);
     if (!apply) {
       console.log(JSON.stringify({ dryRun: true, workflowId: WORKFLOW_ID, changed,
-        nodesChanged: [POST_LIST, CATALOG, COMPOSER], nodeCount: current.nodes.length,
+        nodesChanged: changedNodes, regressionGate, nodeCount: current.nodes.length,
         activeVersionId: current.activeVersionId, entityHistoryEqual: current.entityHistoryEqual }));
       return;
     }
@@ -359,6 +384,10 @@ async function main() {
     assert.equal(verification.entityHistoryEqual, true);
     assert.equal(verification.genericPhotoMarker, true);
     assert.equal(verification.detailsMarker, true);
+    const persisted = await readWorkflow(connection, db);
+    assert.deepEqual(persisted.nodes,patched,'Persisted workflow differs from candidate');
+    assert.deepEqual(persisted.connections,current.connections);
+    runContractTests(persisted.nodes,persisted.connections);
     await runRemote(connection, 'docker service scale n8n_n8n=1 >/dev/null');
     await waitService(connection, 'n8n_n8n', 1);
     mainStopped = false;

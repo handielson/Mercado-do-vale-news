@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.632-n8n-responses-fix",
+  "version": "v1.2.633-fotos-tres-mensagens",
   "date": "2026-10-15",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.632-n8n-responses-fix",
-  "release_vps": "/var/www/mdv-site/releases/20261015-111233-v1632-n8n-responses-fix",
+  "tag": "v1.2.633-fotos-tres-mensagens",
+  "release_vps": "/var/www/mdv-site/releases/20261015-112153-v1633-fotos-tres-mensagens",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Corrige o parametro reasoning na API Responses dos tres modelos de atendimento; testes executam o Agent nativo.",
+  "summary": "Separa em tres mensagens a resposta sobre fotos de todos os modelos: explicacao, link e escolha de modelo.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,19 +14,15 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "tmp-tests/n8n-gpt6-luna-migration.cjs",
-    "tmp-tests/n8n-gpt6-luna-migration.test.cjs",
-    "tmp-tests/n8n-gpt6-luna-native-smoke.cjs",
-    "tmp-tests/n8n-gpt6-luna-native-agent.cjs",
-    "tmp-tests/n8n-fix-payjoy-link-confirmation.cjs",
-    "docs/operacional/2026-10-15-incidente-classificador-responses.md",
+    "tmp-tests/n8n-fix-generic-photo-catalog.cjs",
+    "tmp-tests/n8n-photo-catalog-message-split.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-15-v1.2.632-n8n-responses-fix.md"
+    "docs/versoes/2026-10-15-v1.2.633-fotos-tres-mensagens.md"
   ],
   "validations": [
-    "61 testes do contrato de vendas e seis de migracao no candidato exato.",
-    "Oito cenarios reais em Responses: seis chamadas pelo Tools Agent V3 nativo e duas imagens sinteticas PayJoy.",
+    "61 testes do contrato de vendas e dois testes da separacao no candidato exato.",
+    "Fixtures de fotos e catalogo, idempotencia e preservacao do grafo.",
     "Build web com guarda contra runtime Supabase."
   ],
   "android_entregas": {
