@@ -32964,6 +32964,7 @@ fastify.get('/delivery/app/dashboard', { preHandler: requireSyncKeyOrCustomer },
     }
   }
 
+  const period = String(req.query?.period || 'today').trim().toLowerCase();
   const dateFilter = buildDeliveryAppDateFilter(req.query, 'today');
 
   const actorCondition = access.isAdmin ? '1 = 1' : 'jobs.delivery_person_customer_id = ?';

@@ -1,3 +1,13 @@
+# v1.2.629-entregas-painel
+
+Data: 14/10/2026. Branch: main. Tag: v1.2.629-entregas-painel.
+Release MDV: /var/www/mdv-site/releases/20261014-224700-v1629-entregas-painel.
+Android Entregas permanece 1.1.5, versionCode 9.
+
+Corrige ReferenceError na API do painel de entregas: o período continuava no retorno depois de sua definição ter sido removida. O aplicativo apresentava o erro como falha de conexão. Teste executa o handler completo para administrador e entregador, com cinco filtros, e reproduziu o erro antes da correção. Publicação corretiva em andamento, sem necessidade de reinstalar o APK.
+
+## Histórico anterior
+
 # v1.2.628-vendas-entregas
 
 Data: 14/10/2026. Branch: main. Tag: v1.2.628-vendas-entregas.

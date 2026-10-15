@@ -7,6 +7,31 @@ for(const file of ['vps_server.cjs','vps_server.js']) {
   const source=fs.readFileSync(file,'utf8');
   const fn=name=>{const start=source.indexOf('async function '+name+'(')>=0?source.indexOf('async function '+name+'('):source.indexOf('function '+name+'(');
     assert(start>=0,name);const rest=source.slice(start);const end=rest.slice(1).search(/\n(?:async function |function |const |fastify\.)/);return end<0?rest:rest.slice(0,end+1);};
+  test(file+': dashboard returns its period and totals for store and delivery worker',async()=>{
+    let handler;const queries=[];
+    const context={
+      fastify:{get(_path,_options,fn){handler=fn;}},requireSyncKeyOrCustomer(){},
+      STORE_DELIVERY_PERSON_ID:'store:delivery',STORE_UNASSIGNED_DELIVERY_PERSON_ID:'store:unassigned',
+      pool:{async query(sql,params){
+        assert.match(sql.trim(),/^SELECT/);queries.push({sql,params});
+        if(sql.includes('is_delivery_worker FROM customers'))return [[{id:'worker',name:'Teste',is_delivery_worker:1}]];
+        if(sql.includes('GROUP BY'))return [[{person_id:'worker',person_name:'Teste',jobs_count:2,delivered_count:1,total_amount_cents:3000}]];
+        return [[{total_jobs:2,pending_jobs:1,in_route_jobs:0,delivered_jobs:1,cancelled_jobs:0,total_delivery_cents:3000}]];
+      }},
+    };
+    vm.createContext(context);
+    const start=source.indexOf("fastify.get('/delivery/app/dashboard'");
+    vm.runInContext(fn('buildDeliveryAppDateFilter')+'\n'+source.slice(start,source.indexOf('\n});',start)+5),context);
+    for(const isAdmin of [true,false])for(const query of [{},{period:'today'},{period:'all'},{period:'month'},{period:'custom',date_from:'2026-10-14',date_to:'2026-10-14'}]){
+      queries.length=0;
+      const result=await handler({query,customerAccess:{isAdmin,customerId:'worker'}},{code(status){throw Error('Unexpected HTTP '+status);}});
+      assert.equal(result.period,query.period||'today');assert.equal(result.summary.total_jobs,2);
+      assert.equal(result.summary.total_delivery_cents,3000);assert.equal(result.by_person.length,isAdmin?1:0);
+      const summary=queries.find(q=>q.sql.includes('COUNT(*) as total_jobs'));
+      assert.equal(summary.sql.includes('TIMESTAMPADD'),query.period!=='all');
+      assert.deepEqual(Array.from(summary.params),isAdmin?[]:['worker']);
+    }
+  });
   test(file+': store day after 21h keeps both afternoon and late-night deliveries',()=>{
     const build=new Function(fn('buildDeliveryAppDateFilter')+';return buildDeliveryAppDateFilter;')();
     const now=new Date('2026-10-15T01:14:30Z');

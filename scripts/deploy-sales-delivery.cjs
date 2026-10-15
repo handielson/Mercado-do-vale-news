@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-const BASELINE='36157fca846c8b066904eefc1d0e1faadc744e84';
+const BASELINE='7cee11f2';
 const normalize=value=>value.replace(/\r\n/g,'\n');
 const SPECS=[
   ['function decideN8nBotConversationStateWrite(', '\n}\n'],

@@ -9,7 +9,7 @@ for(const file of ['vps_server.cjs','vps_server.js']){
     assert.equal(patch(result,old,current),result);
   });
   test(file+': rejects drift in changed code and unaccounted local edits',()=>{
-    assert.throws(()=>patch(old.replace("if (currentRevision !== expectedRevision && !eventVersionProvided)","if (currentRevision > expectedRevision && !eventVersionProvided)"),old,current),/drift/);
+    assert.throws(()=>patch(old.replace("const dateFilter = buildDeliveryAppDateFilter(req.query, 'today');","const dateFilter = '';"),old,current),/drift/);
     assert.throws(()=>patch(old,old,current+'\n// extra unauthorized change\n'),/Unaccounted/);
   });
 }
