@@ -206,6 +206,7 @@ function existingChecks(files) {
   }
   if (sales) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract');
   if (configuration) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --model-configuration');
+  if(files.includes('scripts/deploy-catalog-media.cjs'))checks.push('node scripts/assert-catalog-media-contract.cjs','node deploy-vps-server-only.cjs --catalog-media-check');
   if (models) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --gpt6-luna');
 
   const serverFilesChanged = files.some((file) => ['server.js', 'vps_server.js', 'vps_server.cjs'].includes(file));
@@ -243,12 +244,14 @@ function buildPlan(options) {
   if (classification.target === 'docs-only') validations.push('Revisar docs alterados; deploy nao e necessario.');
 
   const deployCommands = [];
+  const catalogMedia = allFiles.includes('scripts/deploy-catalog-media.cjs');
   const salesDelivery = allFiles.includes('scripts/deploy-sales-delivery.cjs');
-  if (classification.needs.api && salesDelivery) deployCommands.push('node deploy-vps-server-only.cjs --sales-delivery-only');
+  if (classification.needs.api && catalogMedia) deployCommands.push('node deploy-vps-server-only.cjs --catalog-media-only');
+  if (classification.needs.api && salesDelivery && !catalogMedia) deployCommands.push('node deploy-vps-server-only.cjs --sales-delivery-only');
   if (classification.needs.site) {
     deployCommands.push(`$env:VPS_SITE_RELEASE_NAME='${releaseName}'; npm.cmd run deploy:vps-site`);
   }
-  if (classification.needs.api && !salesDelivery) {
+  if (classification.needs.api && !salesDelivery && !catalogMedia) {
     deployCommands.push('node deploy-vps-server-only.cjs');
   }
   deployCommands.push(...n8nDeployCommands(classification.n8nFiles));
@@ -391,6 +394,9 @@ function runSelfTest() {
   );
 
   const docs = classifyFiles(['docs/versoes/2026-06-23-v1.2.3-note.md']);
+  const mediaPlan=buildPlan({mockFiles:['scripts/deploy-catalog-media.cjs','vps_server.js','public/VERSION.json'],slug:'media'});
+  assert(mediaPlan.deployCommands[0]==='node deploy-vps-server-only.cjs --catalog-media-only','media API must publish selectively before the site');
+  assert(existingChecks(['scripts/deploy-catalog-media.cjs']).includes('node deploy-vps-server-only.cjs --catalog-media-check'),'media release needs a readonly remote preflight');
   assert(docs.target === 'docs-only', 'docs-only classification failed');
 
   const releaseName = buildReleaseName({ slug: 'Sincronizacao Shopee' }, new Date('2026-06-23T12:34:56Z'));

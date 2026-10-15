@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.635-modelo-configuracao",
+  "version": "v1.2.636-imagens-pai-previa",
   "date": "2026-10-15",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.635-modelo-configuracao",
-  "release_vps": "/var/www/mdv-site/releases/20261015-120500-v1635-modelo-configuracao",
+  "tag": "v1.2.636-imagens-pai-previa",
+  "release_vps": "/var/www/mdv-site/releases/20261015-122600-v1636-imagens-pai-previa",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Busca distingue rede de RAM e oferece configuracao disponivel do mesmo modelo antes de outros aparelhos.",
+  "summary": "Restaura fotos do pai no catalogo, resolve o link publico da variacao e prepara JPEG versionado para previa social.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,22 +14,28 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "tmp-tests/n8n-sales-model-configuration.cjs",
-    "tmp-tests/n8n-sales-model-configuration.test.cjs",
-    "tmp-tests/n8n-gpt6-luna-native-smoke.cjs",
-    "tmp-tests/n8n-fix-payjoy-link-confirmation.cjs",
-    "scripts/n8n-sales-regression-gate.cjs",
+    "server.js",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-catalog-media.cjs",
+    "scripts/assert-catalog-media-contract.cjs",
     "scripts/publish-vps-plan.cjs",
-    "docs/operacional/2026-10-15-modelo-configuracao-atendimento.md",
+    "services/socialPreviewImage.cjs",
+    "services/productFamilyImages.js",
+    "components/catalog/ModernProductCard.tsx",
+    "tmp-tests/catalog-parent-media-contract.test.mjs",
+    "tmp-tests/social-preview-image.test.cjs",
+    "tmp-tests/product-family-images.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-15-v1.2.635-modelo-configuracao.md"
+    "docs/versoes/2026-10-15-v1.2.636-imagens-pai-previa.md"
   ],
   "validations": [
-    "84 testes do gate no candidato exato, incluindo 13 grupos de modelo/configuracao.",
-    "10 cenarios reais nativos: oito anteriores e os dois turnos de vendas.",
-    "Auto-teste do publicador e dry-run com escopo de tres nos.",
-    "Build web com trava Supabase."
+    "33 testes de midia, familia, contrato API, SEO e publicacao seletiva.",
+    "Consulta compacta/completa real no MySQL em transacao somente leitura.",
+    "Guardas das tres entradas API e preflight remoto sem escrita.",
+    "Build com trava Supabase e self-test do planejador."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

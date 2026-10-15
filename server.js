@@ -9384,7 +9384,7 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     const description = cleanDescription.slice(0, 155) || `Compre ${product.name} no Mercado do Vale com o melhor preco.`;
     const canonicalSlug = product.seo_route_target || product.slug || slug;
     const url = `${baseUrl}/produto/${encodeURIComponent(canonicalSlug)}`;
-    const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
+    const image = await require('./services/socialPreviewImage.cjs').resolveSocialPreviewImage(publicImages[0] || `${baseUrl}/og-cover.jpg`, { uploadsDir: UPLOADS_DIR });
     const stockQuantity = product.computed_stock_quantity ?? product.stock_quantity ?? 0;
     const availability = Number(stockQuantity) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
     const schemaProduct = {
@@ -18188,6 +18188,25 @@ function comboStockSql(productAlias = 'products') {
   ), 0) ELSE ${productStock} END)`;
 }
 
+function productFamilyNameSelectSql(productAlias = 'products', compact = false) {
+  return `(SELECT family_parent.name FROM products family_parent
+    WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+    LIMIT 1) AS parent_name,
+    (SELECT ${compact ? "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(family_parent.images, '$[0]')) LIKE 'http%' THEN JSON_ARRAY(JSON_UNQUOTE(JSON_EXTRACT(family_parent.images, '$[0]'))) ELSE JSON_ARRAY() END" : 'family_parent.images'} FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_images,
+    (SELECT family_parent.image_url FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_image_url,
+    (SELECT ${compact ? 'NULL' : 'family_parent.description'} FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_description,
+    ${productAlias}.catalog_title_complement,
+    (SELECT family_parent.catalog_title_complement FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_catalog_title_complement`;
+}
+
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   // Valores monetarios deste contrato sao inteiros em centavos.
   const priceBounds = {};
@@ -18242,6 +18261,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        ${imgCol},
+       ${productFamilyNameSelectSql('products', true)},
        status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
@@ -18254,7 +18274,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        ${comboStockSql('products')} AS stock_quantity,
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
-       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
+       images, ${productFamilyNameSelectSql('products')}, status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -18375,7 +18395,7 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
 
   const placeholders = ids.map(() => '?').join(',');
   const [rows] = await pool.query(
-    `SELECT *,
+    `SELECT *, ${productFamilyNameSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products
      WHERE id IN (${placeholders})
@@ -18395,7 +18415,7 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
 
 fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [rows] = await pool.query(
-    `SELECT *,
+    `SELECT *, ${productFamilyNameSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products WHERE id = ?`, 
     [req.params.id]
@@ -18419,7 +18439,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 
   let rows;
   [rows] = await pool.query(
-    `SELECT *,
+    `SELECT *, ${productFamilyNameSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products WHERE slug = ?`,
     [slugParam]
@@ -18428,7 +18448,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   // Fallback: slug pode ser um UUID (produto sem slug no banco)
   if (!rows.length && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(slugParam)) {
     [rows] = await pool.query(
-      `SELECT *,
+      `SELECT *, ${productFamilyNameSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products WHERE id = ?`,
       [slugParam]
@@ -18437,7 +18457,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 
   if (!rows.length) {
     const [routeCandidates] = await pool.query(
-      `SELECT *,
+      `SELECT *, ${productFamilyNameSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products
        WHERE ? LIKE CONCAT(slug, '-%')
@@ -18455,6 +18475,16 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
     if (matchedRoute) rows = [matchedRoute];
   }
 
+  // Public aliases must resolve to the same product as the server-rendered share page.
+  if (!rows.length) {
+    const sharedProduct = await loadSeoProductBySlug(slugParam);
+    if (sharedProduct?.id) {
+      [rows] = await pool.query(
+        `SELECT *, ${productFamilyNameSelectSql('products')}, ${modelBlueprintSelectSql('products')},
+          ${comboStockSql('products')} AS stock_quantity FROM products WHERE id = ?`, [sharedProduct.id]
+      );
+    }
+  }
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
   const r = rows[0];
 
@@ -18503,7 +18533,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 fastify.get('/products/by-ean/:ean', async (req, reply) => {
   const ean = req.params.ean;
   const [rows] = await pool.query(
-    `SELECT *, ${comboStockSql('products')} AS stock_quantity
+    `SELECT *, ${productFamilyNameSelectSql('products')}, ${comboStockSql('products')} AS stock_quantity
      FROM products
      WHERE ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?))`,
     [ean, ean]

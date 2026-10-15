@@ -203,7 +203,7 @@ test('os dois sites conectam a mesma regra à capa e à seleção de cor', () =>
   const source = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
   assert.match(source('pages/store/Print3dStorePage.tsx'), /<ProductImage product=\{product\} family=\{family\}/);
   assert.match(source('pages/store/Print3dProductPage.tsx'), /resolveProductFamilyImages\(product, variants, Boolean\(requestedVariant\)\)/);
-  assert.match(source('components/catalog/ModernProductCard.tsx'), /resolveProductFamilyImages\(currentProduct, family, currentColorIndex >= 0\)/);
+  assert.match(source('components/catalog/ModernProductCard.tsx'), /resolveProductFamilyImages\(currentProduct, family, currentColorIndex >= 0, \{ parentFirst: true \}\)/);
   assert.match(source('components/catalog/ModernProductCard.tsx'), /const currentImage = currentColorIndex === -1/);
   assert.match(source('components/catalog/ModernProductCard.tsx'), /useState<number>\(-1\)/);
   assert.match(source('components/catalog/ModernProductCard.tsx'), /setCurrentColorIndex\(isSelectedColor \? -1 : color.origIdx\)/);
@@ -216,4 +216,12 @@ test('os dois sites conectam a mesma regra à capa e à seleção de cor', () =>
   assert.match(source('utils/print3dStorefront.ts'), /product.parent_id \? `family:\$\{product.parent_id\}`/);
   assert.match(source('vps_server.cjs'), /AS parent_images/);
   assert.match(source('vps_server.cjs'), /productFamilyNameSelectSql\('products', true\)/);
+});
+
+
+test('card keeps parent image after color selection while PDP can show the exact SKU image',()=>{
+ const product=child('a',['child.jpg'],{parent_images:['parent.jpg']});
+ assert.deepEqual(resolveProductFamilyImages(product,[],true,{parentFirst:true}),['parent.jpg']);
+ assert.deepEqual(resolveProductFamilyImages({...product,parent_images:[]},[],true,{parentFirst:true}),['child.jpg']);
+ assert.deepEqual(resolveProductFamilyImages(product,[],true),['child.jpg']);
 });

@@ -14436,7 +14436,7 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     const description = cleanDescription.slice(0, 155) || `Compre ${product.name} no Mercado do Vale com o melhor preco.`;
     const canonicalSlug = product.seo_route_target || product.slug || slug;
     const url = `${baseUrl}/produto/${encodeURIComponent(canonicalSlug)}`;
-    const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
+    const image = await require('./services/socialPreviewImage.cjs').resolveSocialPreviewImage(publicImages[0] || `${baseUrl}/og-cover.jpg`, { uploadsDir: UPLOADS_DIR });
     const imageMetadata = await loadSeoImageMetadata(image);
     const stockQuantity = product.computed_stock_quantity ?? product.stock_quantity ?? 0;
     const availability = Number(stockQuantity) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
@@ -14539,7 +14539,7 @@ fastify.get('/api/seo-produto-3d', async (request, reply) => {
     const description = cleanDescription.slice(0, 155) || `Conheca ${product.name}, produzido pela 3DMV.`;
     const canonicalTarget = product.seo_route_target || routeTarget;
     const url = `${baseUrl}/loja-3d/produto/${encodeURIComponent(canonicalTarget)}`;
-    const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
+    const image = await require('./services/socialPreviewImage.cjs').resolveSocialPreviewImage(publicImages[0] || `${baseUrl}/og-cover.jpg`, { uploadsDir: UPLOADS_DIR });
     const imageMetadata = await loadSeoImageMetadata(image);
     const stockQuantity = Number(product.available_stock ?? product.stock_quantity) || 0;
     const availability = stockQuantity > 0
@@ -26562,6 +26562,25 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
   }));
 });
 
+function productFamilyNameSelectSql(productAlias = 'products', compact = false) {
+  return `(SELECT family_parent.name FROM products family_parent
+    WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+    LIMIT 1) AS parent_name,
+    (SELECT ${compact ? "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(family_parent.images, '$[0]')) LIKE 'http%' THEN JSON_ARRAY(JSON_UNQUOTE(JSON_EXTRACT(family_parent.images, '$[0]'))) ELSE JSON_ARRAY() END" : 'family_parent.images'} FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_images,
+    (SELECT family_parent.image_url FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_image_url,
+    (SELECT ${compact ? 'NULL' : 'family_parent.description'} FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_description,
+    ${productAlias}.catalog_title_complement,
+    (SELECT family_parent.catalog_title_complement FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_catalog_title_complement`;
+}
+
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   // Valores monetarios deste contrato sao inteiros em centavos.
   const priceBounds = {};
@@ -26620,6 +26639,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        ${imgCol},
+       ${productFamilyNameSelectSql('products', true)},
        status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        ${modelBlueprintSelectSql('products')},
        ${modelSpecsCol}
@@ -26635,7 +26655,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        ${comboStockSql('products')} AS stock_quantity,
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
-       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
+       images, ${productFamilyNameSelectSql('products')}, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        ${modelBlueprintSelectSql('products')},
        ${modelSpecsCol}
        slug, origin, specs, custom_fields, kits,
@@ -26760,7 +26780,7 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
 
   const placeholders = ids.map(() => '?').join(',');
   const [rows] = await pool.query(
-    `SELECT *,
+    `SELECT *, ${productFamilyNameSelectSql('products')},
       ${modelBlueprintSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products
@@ -26781,7 +26801,7 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
 
 fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [rows] = await pool.query(
-    `SELECT *,
+    `SELECT *, ${productFamilyNameSelectSql('products')},
       ${modelBlueprintSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products WHERE id = ?`,
@@ -26806,7 +26826,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 
   let rows;
   [rows] = await pool.query(
-    `SELECT *,
+    `SELECT *, ${productFamilyNameSelectSql('products')},
       ${modelBlueprintSelectSql('products')},
       ${comboStockSql('products')} AS stock_quantity
      FROM products WHERE slug = ?
@@ -26824,7 +26844,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   // Fallback: slug pode ser um UUID (produto sem slug no banco)
   if (!rows.length && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(slugParam)) {
     [rows] = await pool.query(
-      `SELECT *,
+      `SELECT *, ${productFamilyNameSelectSql('products')},
         ${modelBlueprintSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products WHERE id = ?`,
@@ -26834,7 +26854,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 
   if (!rows.length) {
     const [routeCandidates] = await pool.query(
-      `SELECT *,
+      `SELECT *, ${productFamilyNameSelectSql('products')},
         ${modelBlueprintSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products
@@ -26853,6 +26873,16 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
     if (matchedRoute) rows = [matchedRoute];
   }
 
+  // Public aliases must resolve to the same product as the server-rendered share page.
+  if (!rows.length) {
+    const sharedProduct = await loadSeoProductBySlug(slugParam);
+    if (sharedProduct?.id) {
+      [rows] = await pool.query(
+        `SELECT *, ${productFamilyNameSelectSql('products')}, ${modelBlueprintSelectSql('products')},
+          ${comboStockSql('products')} AS stock_quantity FROM products WHERE id = ?`, [sharedProduct.id]
+      );
+    }
+  }
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
   const r = rows[0];
 
@@ -26865,7 +26895,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
       return { error: 'No available variants for this parent' };
     }
     const [variantRows] = await pool.query(
-      `SELECT *,
+      `SELECT *, ${productFamilyNameSelectSql('products')},
         ${modelBlueprintSelectSql('products')},
         ${comboStockSql('products')} AS stock_quantity
        FROM products
@@ -26920,7 +26950,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 fastify.get('/products/by-ean/:ean', async (req, reply) => {
   const ean = req.params.ean;
   const [rows] = await pool.query(
-    `SELECT *, ${modelBlueprintSelectSql('products')}, ${comboStockSql('products')} AS stock_quantity
+    `SELECT *, ${productFamilyNameSelectSql('products')}, ${modelBlueprintSelectSql('products')}, ${comboStockSql('products')} AS stock_quantity
      FROM products
      WHERE ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?))`,
     [ean, ean]

@@ -14501,7 +14501,7 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     const description = cleanDescription.slice(0, 155) || `Compre ${product.name} no Mercado do Vale com o melhor preco.`;
     const canonicalSlug = product.seo_route_target || product.slug || slug;
     const url = `${baseUrl}/produto/${encodeURIComponent(canonicalSlug)}`;
-    const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
+    const image = await require('./services/socialPreviewImage.cjs').resolveSocialPreviewImage(publicImages[0] || `${baseUrl}/og-cover.jpg`, { uploadsDir: UPLOADS_DIR });
     const imageMetadata = await loadSeoImageMetadata(image);
     const stockQuantity = product.computed_stock_quantity ?? product.stock_quantity ?? 0;
     const availability = Number(stockQuantity) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
@@ -14604,7 +14604,7 @@ fastify.get('/api/seo-produto-3d', async (request, reply) => {
     const description = cleanDescription.slice(0, 155) || `Conheca ${product.name}, produzido pela 3DMV.`;
     const canonicalTarget = product.seo_route_target || routeTarget;
     const url = `${baseUrl}/loja-3d/produto/${encodeURIComponent(canonicalTarget)}`;
-    const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
+    const image = await require('./services/socialPreviewImage.cjs').resolveSocialPreviewImage(publicImages[0] || `${baseUrl}/og-cover.jpg`, { uploadsDir: UPLOADS_DIR });
     const imageMetadata = await loadSeoImageMetadata(image);
     const stockQuantity = Number(product.available_stock ?? product.stock_quantity) || 0;
     const availability = stockQuantity > 0
@@ -25507,6 +25507,9 @@ function productFamilyNameSelectSql(productAlias = 'products', compact = false) 
     (SELECT ${compact ? "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(family_parent.images, '$[0]')) LIKE 'http%' THEN JSON_ARRAY(JSON_UNQUOTE(JSON_EXTRACT(family_parent.images, '$[0]'))) ELSE JSON_ARRAY() END" : 'family_parent.images'} FROM products family_parent
      WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
      LIMIT 1) AS parent_images,
+    (SELECT family_parent.image_url FROM products family_parent
+     WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
+     LIMIT 1) AS parent_image_url,
     (SELECT ${compact ? 'NULL' : 'family_parent.description'} FROM products family_parent
      WHERE family_parent.id COLLATE utf8mb4_unicode_ci = ${productAlias}.parent_id COLLATE utf8mb4_unicode_ci
      LIMIT 1) AS parent_description,
@@ -26753,6 +26756,16 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
     if (matchedRoute) rows = [matchedRoute];
   }
 
+  // Public aliases must resolve to the same product as the server-rendered share page.
+  if (!rows.length) {
+    const sharedProduct = await loadSeoProductBySlug(slugParam);
+    if (sharedProduct?.id) {
+      [rows] = await pool.query(
+        `SELECT *, ${productFamilyNameSelectSql('products')}, ${modelBlueprintSelectSql('products')},
+          ${comboStockSql('products')} AS stock_quantity FROM products WHERE id = ?`, [sharedProduct.id]
+      );
+    }
+  }
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
   const r = rows[0];
 

@@ -1,4 +1,5 @@
 const { Client } = require('ssh2');
+require('./scripts/assert-catalog-media-contract.cjs').assertCatalogMediaContract(file => require('fs').readFileSync(require('path').join(__dirname, file), 'utf8'));
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -754,6 +755,15 @@ async function main() {
     await exec('mv ' + appDir + '/services/systemBackupPolicy.cjs.next.cjs ' + appDir + '/services/systemBackupPolicy.cjs');
     console.log((await exec('pm2 restart mdv-api --update-env')).trim());
     console.log('System backup API rollback files: ' + backupDir);
+    conn.end();
+    return;
+  }
+  if (process.argv.includes('--catalog-media-only') || process.argv.includes('--catalog-media-check')) {
+    await require('./scripts/deploy-catalog-media.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--catalog-media-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
     conn.end();
     return;
   }

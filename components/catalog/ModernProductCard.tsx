@@ -247,7 +247,7 @@ export function ModernProductCard({
     // Get primary image — uses currentProduct (selected variant/color) not the representative product
     const getImageUrl = () => {
         const family = productGroup?.variants.flatMap(variant => variant.products) || [product, ...relatedProducts];
-        const familyImage = resolveProductFamilyImages(currentProduct, family, currentColorIndex >= 0)[0];
+        const familyImage = resolveProductFamilyImages(currentProduct, family, currentColorIndex >= 0, { parentFirst: true })[0];
         if (familyImage) return familyImage;
         const productToUse = selectCatalogCardImageProduct({
             product,
@@ -351,7 +351,7 @@ export function ModernProductCard({
         return variants.colors.map(color => {
             // Find product with this color in the selected variant
             const colorProduct = selectedVariant.products.find(p => p.specs?.color === color.name);
-            const colorImage = resolveProductFamilyImages(colorProduct, selectedVariant.products, true)[0];
+            const colorImage = resolveProductFamilyImages(colorProduct, productGroup?.variants.flatMap(variant => variant.products) || selectedVariant.products, true, { parentFirst: true })[0];
             if (colorImage) return getCacheBustedUrl(colorImage, colorProduct?.updated || colorProduct?.created);
             if (colorProduct && Array.isArray(colorProduct.images) && colorProduct.images.length > 0) {
                 const imgUrl = typeof colorProduct.images[0] === 'string' ? colorProduct.images[0] : imageUrl;

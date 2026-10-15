@@ -9,7 +9,7 @@ export function productImageList(images, imageUrl) {
     .filter(value => typeof value === 'string' && value.trim()).map(value => value.trim()))];
 }
 
-export function resolveProductFamilyImages(product, candidates = [], selectedVariation = false) {
+export function resolveProductFamilyImages(product, candidates = [], selectedVariation = false, { parentFirst = false } = {}) {
   if (!product) return [];
   const key = generateCatalogGroupKey(product);
   const family = [product, ...candidates.filter(candidate => generateCatalogGroupKey(candidate) === key)]
@@ -18,8 +18,9 @@ export function resolveProductFamilyImages(product, candidates = [], selectedVar
   let specs = product.specs;
   if (typeof specs === 'string') { try { specs = JSON.parse(specs); } catch { specs = {}; } }
   const ownImages = productImageList(product.images, product.image_url);
-  if (selectedVariation && specs?._inherit_parent_images !== true && ownImages.length) return ownImages;
+  if (!parentFirst && selectedVariation && specs?._inherit_parent_images !== true && ownImages.length) return ownImages;
   if (parentImages.length) return parentImages;
+  if (selectedVariation && ownImages.length) return ownImages;
   // Stable legacy cover regardless of selected color, inventory order or price.
   const fallback = [...family].sort((a, b) => String(a.id).localeCompare(String(b.id)))
     .map(item => productImageList(item.images, item.image_url)).find(images => images.length);
