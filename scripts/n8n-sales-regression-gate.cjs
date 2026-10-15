@@ -12,12 +12,14 @@ function runGate(snapshot,{stdio='inherit'}={}){
   const workflow=JSON.parse(fs.readFileSync(absolute,'utf8'));
   if(!Array.isArray(workflow.nodes)||!workflow.connections)throw new Error('Snapshot de workflow invalido');
   const digest=fingerprint(workflow);
-  const result=spawnSync(process.execPath,['--test',...tests],{cwd:root,stdio,
-    env:{...process.env,MDV_N8N_SALES_SNAPSHOT:absolute,MDV_SALES_VARIANT_SNAPSHOT:absolute,MDV_PAYJOY_WORKFLOW_SNAPSHOT:absolute}});
+  const continuity=workflow.nodes.some(n=>JSON.stringify(n).includes('payjoy-link-continuity-v1'));
+  const candidateTests=continuity?[...tests,'tmp-tests/n8n-payjoy-link-continuity.test.cjs']:tests;
+  const result=spawnSync(process.execPath,['--test',...candidateTests],{cwd:root,stdio,
+    env:{...process.env,MDV_PAYJOY_CONTINUITY_EXACT:'1',MDV_N8N_SALES_SNAPSHOT:absolute,MDV_SALES_VARIANT_SNAPSHOT:absolute,MDV_PAYJOY_WORKFLOW_SNAPSHOT:absolute}});
   if(result.error)throw result.error;
   if(result.status!==0)throw new Error('Regressao detectada no candidato '+digest+'; publicacao bloqueada.');
   if(fingerprint(JSON.parse(fs.readFileSync(absolute,'utf8')))!==digest)throw new Error('Candidato mudou durante os testes; execute a suite novamente.');
-  return {validated:true,sha256:digest,testFiles:tests.length};
+  return {validated:true,sha256:digest,testFiles:candidateTests.length};
 }
 module.exports={runGate,fingerprint,tests};
 if(require.main===module){try{

@@ -1,3 +1,12 @@
+# v1.2.634-payjoy-continuidade
+
+Data: 15/10/2026. Branch: main. Tag: v1.2.634-payjoy-continuidade.
+Release MDV: /var/www/mdv-site/releases/20261015-112900-v1634-payjoy-continuidade.
+
+Pedidos como “me passa esse site” apos explicacao PayJoy seguem para o link oficial configurado. Referencia contextual recente, decisao semantica validada e preservacao de duvidas, recusas e humano. Cinco nos existentes, sem alteracao do grafo ou modelos. 71 testes locais e 20 cenarios nativos com chamadas reais aprovados no candidato 4f8af0756eb441102f300cec8d8be8eee2216f6388eab5d2ab08e6655f0e1051. Publicacao em andamento; API sem alteracoes.
+
+## Histórico anterior
+
 # v1.2.633-fotos-tres-mensagens
 
 Data: 15/10/2026. Branch: main. Tag: v1.2.633-fotos-tres-mensagens.

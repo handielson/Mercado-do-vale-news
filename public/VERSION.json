@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.633-fotos-tres-mensagens",
+  "version": "v1.2.634-payjoy-continuidade",
   "date": "2026-10-15",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.633-fotos-tres-mensagens",
-  "release_vps": "/var/www/mdv-site/releases/20261015-112153-v1633-fotos-tres-mensagens",
+  "tag": "v1.2.634-payjoy-continuidade",
+  "release_vps": "/var/www/mdv-site/releases/20261015-112900-v1634-payjoy-continuidade",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Separa em tres mensagens a resposta sobre fotos de todos os modelos: explicacao, link e escolha de modelo.",
+  "summary": "Pedidos contextuais do site PayJoy seguem para o link oficial configurado sem reiniciar o atendimento.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,16 +14,21 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "tmp-tests/n8n-fix-generic-photo-catalog.cjs",
-    "tmp-tests/n8n-photo-catalog-message-split.test.cjs",
+    "tmp-tests/n8n-payjoy-link-continuity.cjs",
+    "tmp-tests/n8n-payjoy-link-continuity.test.cjs",
+    "tmp-tests/n8n-gpt6-luna-native-smoke.cjs",
+    "tmp-tests/n8n-fix-payjoy-link-confirmation.cjs",
+    "scripts/n8n-sales-regression-gate.cjs",
+    "docs/operacional/2026-10-15-payjoy-continuidade-link.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-15-v1.2.633-fotos-tres-mensagens.md"
+    "docs/versoes/2026-10-15-v1.2.634-payjoy-continuidade.md"
   ],
   "validations": [
-    "61 testes do contrato de vendas e dois testes da separacao no candidato exato.",
-    "Fixtures de fotos e catalogo, idempotencia e preservacao do grafo.",
-    "Build web com guarda contra runtime Supabase."
+    "71 testes de regressao no candidato exato.",
+    "20 cenarios reais com Agent nativo/Responses, incluindo 12 de continuidade e duas imagens sinteticas.",
+    "Dry-run: cinco nos, grafo e demais configuracoes preservados.",
+    "Build web com trava Supabase."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

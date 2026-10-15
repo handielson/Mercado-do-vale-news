@@ -9,7 +9,15 @@ const arg=name=>{const i=process.argv.indexOf(name);assert.ok(i>=0&&process.argv
 async function main(){
  const workflow=JSON.parse(fs.readFileSync(arg('--snapshot'),'utf8'));validate(workflow);
  const evidencePath=arg('--evidence');
+ const continuityMode=process.argv.includes('--payjoy-continuity');
  const names=['OpenAI Chat Model','OpenAI Classificador','OpenAI Vendas','Agente Geral - Atendimento','Agente Inicial - Classificador','Especialista - Vendas','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'];
+ if(continuityMode){
+  names.push('Vendas - Preparar Contexto IA','Parse Classificacao','Resolver Acao de Conversacao','Pagamento - Politica');
+  for(const name of ['Vendas - Preparar Contexto IA','Agente Inicial - Classificador','Parse Classificacao','Resolver Acao de Conversacao','Pagamento - Politica']){
+   const node=workflow.nodes.find(n=>n.name===name);assert.ok(node,'Continuity node missing: '+name);
+   assert.ok(JSON.stringify(node.parameters).includes('payjoy-link-continuity-v1'),'Continuity candidate missing patch: '+name);
+  }
+ }
  const nodes=workflow.nodes.filter(n=>names.includes(n.name));
  const images=['approval','unreadable'].map(kind=>({kind,data:fs.readFileSync(path.join(__dirname,'fixtures','payjoy-model-test-'+kind+'.png')).toString('base64')}));
  const script=String.raw`
@@ -17,8 +25,8 @@ const fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const parent='/usr/local/lib/node_modules/n8n/node_modules/.pnpm';
 const pkg=fs.readdirSync(parent).find(p=>p.startsWith('@n8n+n8n-nodes-langchain@'));
 const root=path.join(parent,pkg,'node_modules/@n8n/n8n-nodes-langchain/dist/nodes');
-const nodes=PAYLOAD_NODES,images=PAYLOAD_IMAGES;
-const get=name=>nodes.find(n=>n.name===name);let current='setup',diagnostic=null;const results=[];
+const nodes=PAYLOAD_NODES,images=PAYLOAD_IMAGES,continuityMode=PAYLOAD_CONTINUITY;
+const get=name=>nodes.find(n=>n.name===name);let current='setup',diagnostic=null;const results=[],continuityResults=[];
 const logger={debug(){},warn(){},error(){},info(){}};
 const invokeAgent=NATIVE_AGENT_INVOKE;
 const nativeFetch=global.fetch;
@@ -56,10 +64,86 @@ async function invoke(m,agent,conversation){source.conversation=conversation;con
   if(fixture.kind==='approval'){assert.equal(actual.payjoyCalculation?.amountCents,160000);assert.equal(actual.payjoyCalculation?.percentBp,1400);assert.equal(actual.payjoyCalculation?.entryCents,22400);}else{assert.ok(!actual.payjoyCalculation);assert.match(actual.output,/n[aã]o consegui ler|n[aã]o confirma/i);}
   results.push({case:current,passed:true,status:output[0].json.status});
  }
+ if(continuityMode){
+  const fixtureUrl='https://payjoy.com/mdv-synthetic-test';
+  const lastOutbound='Você faz a análise diretamente no site oficial da PayJoy e depois retorna com o resultado.';
+  const cases=[
+   {id:'friend-site-request',text:'Qual que é esse site que você tem como me passar esse site pra me passar pra ele?',decision:'request',send:true},
+   {id:'analysis-address-request',text:'Pode me passar o endereço pra fazer a análise?',decision:'request',send:true},
+   {id:'explicit-payjoy-request',text:'Me passa o link oficial da PayJoy para fazer a análise.',decision:'request',send:true,history:false},
+   {id:'simple-yes-without-offer',text:'sim',send:false},
+   {id:'site-safety-question',text:'Esse site é seguro?',decision:'question',send:false},
+   {id:'human-request',text:'Quero falar com um atendente.',decision:'other',send:false},
+   {id:'decline-request',text:'Não quero esse link nem fazer a análise.',decision:'decline',send:false},
+   {id:'approved-result',text:'Fui aprovado, e agora?',decision:'other',send:false},
+   {id:'catalog-change',text:'Quais celulares você tem disponíveis?',decision:'other',send:false},
+   {id:'physical-delivery',text:'Pode enviar pelo motoboy?',decision:'other',send:false},
+   {id:'site-without-context',text:'Pode me passar esse site?',send:false,history:false},
+   {id:'expired-reference',text:'Pode me passar esse site?',send:false,stale:true},
+  ];
+  for(const fixture of cases){
+   current='continuity-'+fixture.id;
+   const jid='synthetic-continuity@s.whatsapp.net';
+   const state={payjoyByJid:{},salesPostList:{}};
+   const createdAt=new Date(Date.now()-(fixture.stale?25*3600000:60000)).toISOString();
+   const inbound={remoteJid:jid,Instancia:'synthetic',conversation:fixture.text,saudacaoDetectada:false,
+    recentMessages:fixture.history===false?[]:[{direction:'outbound',text:lastOutbound,created_at:createdAt}],
+    conversationHistory:fixture.history===false?'':'Loja ('+createdAt+'): '+lastOutbound,
+   };
+   let contextReads=0;
+   const code=async(name,payload,lookup)=>{
+    const dollar=name=>{
+     if(!Object.hasOwn(lookup,name))throw Error('Unexecuted node referenced by continuity fixture: '+name);
+     return {first:()=>({json:lookup[name]}),all:()=>[{json:lookup[name]}]};
+    };
+    const stubFetch=async()=>{
+     assert.equal(name,'Vendas - Preparar Contexto IA','Continuity code attempted an external request');
+     contextReads++;return {ok:false,json:async()=>({})};
+    };
+    const items=await new Function('$json','$','$getWorkflowStaticData','$input','fetch',get(name).parameters.jsCode)(
+     payload,dollar,()=>state,{all:()=>[{json:payload}]},stubFetch);
+    assert.ok(Array.isArray(items)&&items[0]?.json,'Continuity code returned no item: '+name);
+    return items[0].json;
+   };
+   const prepared=await code('Vendas - Preparar Contexto IA',inbound,{});
+   assert.equal(contextReads,1,'Store-hours read must remain stubbed');
+   assert.equal(prepared.payjoyLinkContext.ativo,false,'Fixture has no pending link offer');
+   if(fixture.history===false&&!fixture.send||fixture.stale)assert.notEqual(prepared.payjoyLinkContext.referenciaDisponivel,true,'Context reference must expire or be absent');
+   else assert.equal(prepared.payjoyLinkContext.referenciaDisponivel,true,'Recent or explicit PayJoy reference missing');
+   for(const key of Object.keys(source))delete source[key];Object.assign(source,prepared);
+   const raw=await invoke(classifier,'Agente Inicial - Classificador',fixture.text);
+   const classification=JSON.parse(clean(raw));
+   diagnostic={case:fixture.id,classification};
+   if(fixture.decision)assert.equal(classification.payjoy_link_reply?.decision,fixture.decision,'Continuity semantic decision mismatch: '+fixture.id);
+   if(fixture.send)assert.ok(classification.payjoy_link_reply.confidence>=0.8,'Explicit request must meet confidence threshold');
+   const parsed=await code('Parse Classificacao',{output:raw},{'Vendas - Preparar Contexto IA':prepared});
+   const resolved=await code('Resolver Acao de Conversacao',parsed,{'switc Mensagens':inbound});
+   let payment=null;
+   if(resolved.conversationAction==='responder_politica_pagamento'){
+    payment=await code('Pagamento - Politica',{payjoy_analysis_url:fixtureUrl},{'Resolver Acao de Conversacao':resolved});
+   }
+   const emitted=String(payment?.output||'').includes(fixtureUrl);
+   diagnostic={...diagnostic,preservedDecision:parsed.payjoyLinkReply?.decision,action:resolved.conversationAction,emitted};
+   assert.equal(emitted,fixture.send,'Configured URL routing mismatch: '+fixture.id);
+   if(fixture.send){
+    assert.equal(parsed.payjoyLinkReply?.decision,'request','Parser discarded explicit contextual request');
+    assert.equal(resolved.conversationAction,'responder_politica_pagamento');
+    assert.equal(payment.payjoyNeedsHandoff,false,'Configured URL must not require a fabricated handoff');
+   }else{
+    assert.ok(!payment||!/https?:\/\//.test(String(payment.output||'')),'Negative fixture emitted a URL');
+    assert.notEqual(state.payjoyByJid[jid]?.status,'awaiting_result','Negative fixture advanced to awaiting analysis');
+   }
+   assert.ok(responseRequests.includes(current),'No native Agent Responses request for '+fixture.id);
+   continuityResults.push({case:current,passed:true,decision:classification.payjoy_link_reply?.decision,
+    action:resolved.conversationAction,configuredUrlEmitted:emitted});
+  }
+ }
  for(const item of results)assert.ok(responseRequests.includes(item.case),'No Responses request captured for '+item.case);
- console.log(JSON.stringify({passed:true,cases:results,responsesApi:true,nativeAgentExecution:true}));
-})().catch(e=>{console.log(JSON.stringify({passed:false,failedCase:current,errorName:e.name,diagnostic,cases:results}));process.exitCode=1});
-`.replace('PAYLOAD_NODES',JSON.stringify(nodes)).replace('PAYLOAD_IMAGES',JSON.stringify(images)).replace('NATIVE_AGENT_INVOKE',invokeNativeAgent.toString());
+ console.log(JSON.stringify({passed:true,cases:results,responsesApi:true,nativeAgentExecution:true,
+  ...(continuityMode?{payjoyContinuityCases:continuityResults}:{})}));
+})().catch(e=>{console.log(JSON.stringify({passed:false,failedCase:current,errorName:e.name,diagnostic,cases:results,
+ ...(continuityMode?{payjoyContinuityCases:continuityResults}:{})}));process.exitCode=1});
+`.replace('PAYLOAD_NODES',JSON.stringify(nodes)).replace('PAYLOAD_IMAGES',JSON.stringify(images)).replace('PAYLOAD_CONTINUITY',JSON.stringify(continuityMode)).replace('NATIVE_AGENT_INVOKE',invokeNativeAgent.toString());
  // Existing configured shop API credential stays in the remote process and stdin only.
  const keyReader="require('dotenv').config({path:'.env',quiet:true});(async()=>{const p=await require('mysql2/promise').createConnection({host:process.env.DB_HOST,user:process.env.DB_USER,password:process.env.DB_PASS,database:process.env.DB_NAME});try{const [[r]]=await p.query('SELECT openai_api_key FROM autoresponder_settings WHERE id=1 LIMIT 1');process.stdout.write(JSON.stringify(String(r?.openai_api_key||process.env.OPENAI_API_KEY||'').trim()));}finally{await p.end();}})().catch(()=>process.exit(1));";
  const py='import subprocess,json\nkey=json.loads(subprocess.check_output(["node","-e",'+JSON.stringify(keyReader)+'],cwd="/var/www/mdv-api",text=True))\nassert key\nc=next(x for x in subprocess.check_output(["docker","ps","--format","{{.Names}}"],text=True).splitlines() if x.startswith("n8n_n8n."))\nraise SystemExit(subprocess.run(["docker","exec","-i",c,"node"],input="const apiKey="+json.dumps(key)+";\\n"+'+JSON.stringify(script)+',text=True).returncode)';
