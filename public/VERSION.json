@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.639-visita-loja-maps",
+  "version": "v1.2.640-precos-whatsapp",
   "date": "2026-10-15",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.639-visita-loja-maps",
-  "release_vps": "/var/www/mdv-site/releases/20261015-200722-v1639-visita-loja-maps",
+  "tag": "v1.2.640-precos-whatsapp",
+  "release_vps": "/var/www/mdv-site/releases/20261015-181600-v1640-precos-whatsapp",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Corrige continuidade da visita presencial no bot com endereco, horario regular cadastrado e link do Google Maps.",
+  "summary": "Corrige lista de celulares nao enviada e respostas de precos Pix/cartao no contexto do WhatsApp.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,17 +14,17 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "tmp-tests/n8n-store-visit-location-patch.cjs",
-    "tmp-tests/n8n-store-visit-location.test.cjs",
-    "tmp-tests/n8n-deploy-store-visit-location.cjs",
+    "tmp-tests/n8n-missing-prices-sequence-fix.cjs",
+    "tmp-tests/n8n-missing-prices-sequence-fix.test.cjs",
+    "tmp-tests/n8n-deploy-missing-prices-sequence.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-15-v1.2.639-visita-loja-maps.md"
+    "docs/versoes/2026-10-15-v1.2.640-precos-whatsapp.md"
   ],
   "validations": [
-    "Cinco testes focados de visita, localizacao, entrega e endereco ausente passaram.",
-    "Workflow e historico ativo alinhados apos a publicacao de quatro nos existentes.",
-    "Conexoes preservadas; n8n e runner saudaveis."
+    "Doze testes focados da sequencia de precos e vinte de vendas passaram no candidato.",
+    "Sete nos de codigo alterados; conexoes preservadas e leitura de retorno obrigatoria.",
+    "Confirmacao de envio da lista pela Evolution evita afirmar que ela foi apresentada antes do ACK."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

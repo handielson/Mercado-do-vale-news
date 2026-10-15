@@ -1,3 +1,12 @@
+# v1.2.640-precos-whatsapp
+
+Data: 15/10/2026. Branch: main. Tag: v1.2.640-precos-whatsapp.
+Release MDV: /var/www/mdv-site/releases/20261015-181600-v1640-precos-whatsapp.
+
+O bot interpreta "6 gigas e 128 de armazenamento" como 6GB/128GB, preserva a lista durante mensagens simultaneas e somente a considera apresentada apos a confirmacao do envio pelo WhatsApp. "Valores?" e "No Pix, menor valor?" seguem para cotacao dos modelos em contexto, com caracteristicas verificadas, memoria, preco Pix, cartao 12x com total, cores e separadores. Nao promete desconto extra. Sete nos de codigo mudam, sem alterar conexoes. Doze testes focados e vinte de vendas passaram no candidato; a verificacao de producao consta na nota desta versao.
+
+## Histórico anterior
+
 # v1.2.639-visita-loja-maps
 
 Data: 15/10/2026. Branch: main. Tag: v1.2.639-visita-loja-maps.
