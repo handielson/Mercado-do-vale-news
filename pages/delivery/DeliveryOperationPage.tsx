@@ -28,6 +28,7 @@ declare global {
             startTracking(jobId: string): void;
             stopTracking(): void;
             openExternalUrl(url: string): void;
+            closeDelivery?(): void;
         };
     }
 }
@@ -103,8 +104,10 @@ const DeliveryOperationPage: React.FC = () => {
     const saleTotal = toCents(job?.receipt_snapshot_json?.sale?.total);
     const salePaymentMethods = job ? getDeliverySalePaymentMethods(job) : [];
     const pixApproved = job?.payment_status === 'approved' || job?.payment_status === 'not_required';
-    const canStartRoute = Boolean(job && job.delivery_status !== 'in_route' && job.delivery_status !== 'delivered' && job.delivery_status !== 'cancelled');
-    const canComplete = Boolean(job && pixApproved && job.delivery_status !== 'delivered');
+    const hasDeliveryAssignee = Boolean(job?.delivery_person_customer_id && job.delivery_person_customer_id !== 'store:unassigned');
+    const routeNotificationUncertain = String(job?.route_whatsapp_error || '').startsWith('envio_incerto:');
+    const canStartRoute = Boolean(job && hasDeliveryAssignee && !routeNotificationUncertain && !job.route_whatsapp_sent_at && job.delivery_status !== 'delivered' && job.delivery_status !== 'cancelled');
+    const canComplete = Boolean(job && hasDeliveryAssignee && pixApproved && job.delivery_status === 'in_route');
     const openExternalUrl = (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {
         if (!window.MdvDelivery?.openExternalUrl) return;
         event.preventDefault();
@@ -177,9 +180,19 @@ const DeliveryOperationPage: React.FC = () => {
             const updated = await startDeliveryRoute(token);
             setJob(updated);
             window.MdvDelivery?.startTracking(updated.id);
-            toast.success('Pedido saiu para entrega');
+            if (updated.route_whatsapp_sent_at) {
+                toast.success('Pedido saiu para entrega e o cliente foi avisado');
+            } else {
+                const message = updated.route_notification?.status === 'ambiguous'
+                    ? 'Saída registrada. O envio do aviso ficou incerto; confira o WhatsApp antes de reenviar.'
+                    : 'Saída registrada, mas o aviso ao cliente ainda não foi confirmado.';
+                setErrorMessage(message);
+                toast.warning(message);
+            }
         } catch (error) {
             const message = getDeliveryErrorMessage(error, 'Erro ao marcar saida para entrega.');
+            // A network timeout may occur after commit; refresh the authoritative state.
+            try { setJob((await getDeliveryJob(token)).job); } catch { /* keep the last known state */ }
             setErrorMessage(message);
             toast.error(message);
         } finally {
@@ -191,9 +204,12 @@ const DeliveryOperationPage: React.FC = () => {
         setBusy(true);
         setErrorMessage('');
         try {
-            setJob(await completeDeliveryJob(token, { delivery_person_note: note.trim() || undefined }));
+            const updated = await completeDeliveryJob(token, { delivery_person_note: note.trim() || undefined });
+            if (updated.delivery_status !== 'delivered') throw new Error('A entrega ainda não foi confirmada. Confira o status antes de sair.');
+            setJob(updated);
             window.MdvDelivery?.stopTracking();
             toast.success('Entrega realizada com sucesso');
+            window.MdvDelivery?.closeDelivery?.();
         } catch (error) {
             const message = getDeliveryErrorMessage(error, 'Erro ao finalizar entrega.');
             setErrorMessage(message);
@@ -321,19 +337,21 @@ const DeliveryOperationPage: React.FC = () => {
                 <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h2 className="text-base font-semibold text-slate-900">Rota de entrega</h2>
                     <p className="mt-1 text-sm text-slate-500">Avise o cliente automaticamente quando estiver saindo para entrega.</p>
+                    {!hasDeliveryAssignee && <p className="mt-2 text-sm font-semibold text-amber-700">Volte à lista do aplicativo e defina quem fará esta entrega antes de iniciar a rota.</p>}
                     <button className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60" disabled={busy || !canStartRoute} onClick={handleStartRoute}>
                         <Bike className="h-5 w-5" />
-                        {job.delivery_status === 'in_route' ? 'Pedido saiu para entrega' : 'Saindo para entrega'}
+                        {job.delivery_status === 'in_route' ? (job.route_whatsapp_sent_at ? 'Pedido saiu para entrega' : 'Reenviar aviso de saída') : 'Saindo para entrega'}
                     </button>
                     {job.route_whatsapp_sent_at && <p className="mt-2 text-xs font-semibold text-emerald-700">Mensagem enviada em {new Date(job.route_whatsapp_sent_at).toLocaleString('pt-BR')}</p>}
                     {job.route_whatsapp_error && <p className="mt-2 text-xs font-semibold text-red-600">Falha no WhatsApp: {job.route_whatsapp_error}</p>}
                 </section>
                 <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h2 className="text-base font-semibold text-slate-900">Finalizar</h2>
+                    {job.delivery_status === 'pending' && <p className="mt-2 text-sm text-slate-600">Registre a saída para entrega antes de confirmar o recebimento pelo cliente.</p>}
                     <textarea className="mt-3 w-full rounded-xl border border-slate-200 p-3 text-sm" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Observacao do entregador apenas para uso interno" />
                     <button className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60" disabled={busy || !canComplete} onClick={handleComplete}>
                         {job.delivery_status === 'delivered' ? <CheckCircle2 className="h-5 w-5" /> : null}
-                        Entrega realizada com sucesso
+                        {job.delivery_status === 'delivered' ? 'Entrega realizada com sucesso' : 'Confirmar entrega ao cliente'}
                     </button>
                 </section>
             </div>

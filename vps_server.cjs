@@ -2968,11 +2968,13 @@ function decideN8nBotConversationStateWrite({
   eventVersionProvided,
   eventVersion,
 }) {
-  if (currentRevision !== expectedRevision && !eventVersionProvided) {
-    return { action: 'conflict', currentRevision };
-  }
   if (eventVersionProvided && currentEventVersion > 0 && eventVersion <= currentEventVersion) {
     return { action: 'ignore', currentRevision, currentEventVersion };
+  }
+  // A later event can still have been calculated from an obsolete conversation.
+  // Rehydrate and replay it before writing; timestamp order cannot replace CAS.
+  if (currentRevision !== expectedRevision) {
+    return { action: 'conflict', currentRevision };
   }
   return {
     action: 'apply',
@@ -3544,7 +3546,37 @@ async function sendDeliveryWhatsappDocument(phone, pdfBuffer, fileName, caption 
   return { ok: response.ok, status: response.status, body: parsed, instanceName };
 }
 
+async function withCustomerDeliveryNotificationLock(job, kind, send, beforeCheck) {
+  if (!job?.id) return { status: 'failed', error: 'missing_job' };
+  const connection = await pool.getConnection();
+  const lockName = `mdv:delivery:${kind}:${job.id}`;
+  let locked = false;
+  try {
+    const [locks] = await connection.query('SELECT GET_LOCK(?, 0) AS acquired', [lockName]);
+    locked = Number(locks?.[0]?.acquired) === 1;
+    if (!locked) return { status: 'pending', reason: 'notification_in_progress' };
+    const [rows] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
+    const current = rows?.[0];
+    if (!current) return { status: 'failed', error: 'missing_job' };
+    const sentAt = kind === 'route' ? current.route_whatsapp_sent_at : current.completion_whatsapp_sent_at;
+    if (current.delivery_status !== (kind === 'route' ? 'in_route' : 'delivered')) {
+      return { status: 'skipped', reason: 'delivery_status_changed' };
+    }
+    if (beforeCheck) await beforeCheck(current);
+    if (sentAt) return { status: 'sent', duplicate: true };
+    const previousError = kind === 'route' ? current.route_whatsapp_error : current.completion_whatsapp_error;
+    if (String(previousError || '').startsWith('envio_incerto:')) {
+      return { status: 'ambiguous', reason: 'delivery_confirmation_required' };
+    }
+    return await send(mapCustomerDeliveryJob(current));
+  } finally {
+    if (locked) await connection.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
+    connection.release();
+  }
+}
+
 async function notifyCustomerDeliveryCompleted(job) {
+  return withCustomerDeliveryNotificationLock(job, 'completion', async (job) => {
   if (!job?.id) return;
   const settings = await getCustomerDeliverySettings();
   if (!settings.completion_whatsapp_enabled) {
@@ -3564,8 +3596,11 @@ async function notifyCustomerDeliveryCompleted(job) {
       [job.id]
     );
     await logCustomerDeliveryJobEvent(job.id, 'info', 'completion_whatsapp_sent', 'Mensagem de conclusao enviada ao cliente.', { status: result.status });
+    return { status: 'sent' };
   } catch (err) {
-    const message = err?.message || 'Falha ao enviar mensagem de conclusao pelo WhatsApp';
+    const rawMessage = err?.message || 'Falha ao enviar mensagem de conclusao pelo WhatsApp';
+    const ambiguous = /timeout|etimedout|econnreset|socket|gateway|502|503|504/i.test(rawMessage);
+    const message = (ambiguous ? 'envio_incerto: ' : '') + rawMessage;
     await pool.query(
       `UPDATE customer_delivery_jobs
           SET completion_whatsapp_error = ?,
@@ -3573,8 +3608,20 @@ async function notifyCustomerDeliveryCompleted(job) {
         WHERE id = ?`,
       [message.slice(0, 1000), job.id]
     );
-    await logCustomerDeliveryJobEvent(job.id, 'error', 'completion_whatsapp_failed', message, { buyer_phone: job.buyer_phone || null });
+    await logCustomerDeliveryJobEvent(job.id, 'error', 'completion_whatsapp_failed', message);
+    return { status: ambiguous ? 'ambiguous' : 'failed', error: message };
   }
+  }, async (current) => {
+    // Serialize the deferred sale receipt and completion notice together.
+    const [uncertainReceipts] = await pool.query(
+      "SELECT id FROM whatsapp_automation_logs WHERE template_key = 'sale_completed' AND entity_type = 'sale' AND entity_id = ? AND status = 'ambiguous' LIMIT 1",
+      [current.sale_id]
+    );
+    if (uncertainReceipts?.length) return;
+    await notifySaleCompletedWhatsApp(current.sale_id).catch((error) => {
+      console.warn('[customer-delivery] deferred sale whatsapp notification failed:', error.message);
+    });
+  });
 }
 
 
@@ -4392,6 +4439,7 @@ async function sendBirthdayGreetingsForToday(options = {}) {
   return summary;
 }
 async function notifyCustomerDeliveryOutForDelivery(job) {
+  return withCustomerDeliveryNotificationLock(job, 'route', async (job) => {
   if (!job?.id) return { status: 'failed', error: 'missing_job' };
   const assigneeId = String(job.delivery_person_customer_id || '').trim();
   const [deliveryPeople] = assigneeId === STORE_DELIVERY_PERSON_ID
@@ -4428,23 +4476,24 @@ async function notifyCustomerDeliveryOutForDelivery(job) {
         WHERE id = ?`,
       [job.id]
     );
-  } else if (result.status === 'failed') {
+  } else {
     await pool.query(
       `UPDATE customer_delivery_jobs
           SET route_whatsapp_error = ?,
               updated_at = CURRENT_TIMESTAMP
         WHERE id = ?`,
-      [String(result.error || 'Falha ao enviar mensagem de rota').slice(0, 1000), job.id]
+      [String((result.status === 'ambiguous' ? 'envio_incerto: ' : '') + (result.error || result.reason || 'Falha ao enviar mensagem de rota')).slice(0, 1000), job.id]
     );
   }
 
   await logCustomerDeliveryJobEvent(
     job.id,
-    result.status === 'failed' ? 'error' : 'info',
-    result.status === 'sent' ? 'route_whatsapp_sent' : result.status === 'skipped' ? 'route_whatsapp_skipped' : 'route_whatsapp_failed',
+    ['failed', 'ambiguous'].includes(result.status) ? 'error' : 'info',
+    result.status === 'sent' ? 'route_whatsapp_sent' : result.status === 'skipped' ? 'route_whatsapp_skipped' : result.status === 'ambiguous' ? 'route_whatsapp_ambiguous' : 'route_whatsapp_failed',
     result.status === 'sent' ? 'Mensagem de saida para entrega enviada ao cliente.' : result.reason || result.error || 'Mensagem de saida para entrega nao enviada.'
   );
   return result;
+  });
 }
 const STORE_UNASSIGNED_DELIVERY_PERSON_ID = 'store:unassigned';
 const STORE_DELIVERY_PERSON_ID = 'store:delivery';
@@ -4604,6 +4653,7 @@ function getCustomerDeliveryCompletionBlockers(job, proof, options = {}) {
   if (options?.adminOverride) return [];
   if (isUnassignedStoreDeliveryJob(job)) return ['Entrega da loja exige identificar quem realizou a entrega'];
   const blockers = [];
+  if (job?.delivery_status !== 'in_route' && job?.delivery_status !== 'delivered') blockers.push('Registre a saida para entrega antes de concluir');
   const addressText = String(job?.delivery_address_text || '').trim();
   const routeUrl = String(job?.delivery_route_url || '').trim();
   const deliveryAmount = normalizeDeliveryLedgerAmount(job?.delivery_amount);
@@ -4618,6 +4668,8 @@ function getCustomerDeliveryCompletionBlockers(job, proof, options = {}) {
 }
 
 async function completeCustomerDeliveryJob(connection, job, note, options = {}) {
+  if (job.delivery_status === 'delivered') return mapCustomerDeliveryJob(job);
+  if (job.delivery_status === 'cancelled') throw Object.assign(new Error('Entrega cancelada nao pode ser concluida'), { statusCode: 409 });
   const adminReason = String(options.adminReason || '').trim();
   const isAdminCompletion = Boolean(options.adminOverride);
   const [proofs] = await connection.query('SELECT * FROM customer_delivery_proofs WHERE job_id = ? ORDER BY created_at DESC LIMIT 1', [job.id]);
@@ -31951,7 +32003,8 @@ fastify.post('/n8n-bot/client-control/handoff', { preHandler: requireSyncKey }, 
   let adminNotification = null;
   if (handoffBy === 'bot-handoff-request') {
     try {
-      adminNotification = await notifyN8nHandoffAdmins({ pool, identity, sendText: sendN8nBotEvolutionTextMessage });
+      adminNotification = await notifyN8nHandoffAdmins({ pool, identity, sendText: sendN8nBotEvolutionTextMessage,
+        contextSummary: typeof body.contextSummary === 'string' ? body.contextSummary.slice(0, 1500) : '' });
     } catch (error) {
       console.error('[n8n-admin-handoff] notification failed:', error?.message || error);
       adminNotification = { notified: false, error: true };
@@ -32007,9 +32060,11 @@ fastify.post('/n8n-bot/client-control/conversation-state', { preHandler: require
     });
     if (decision.action === 'conflict') {
       await connection.rollback();
-      return reply.code(409).send({ error: 'conversation_state_revision_conflict', currentRevision });
-    }
-    if (decision.action === 'ignore') {
+      if (body.allowRebase !== true) {
+        return reply.code(409).send({ error: 'conversation_state_revision_conflict', currentRevision });
+      }
+      writeResult = { applied: false, reason: 'revision_conflict', currentRevision, currentEventVersion };
+    } else if (decision.action === 'ignore') {
       await connection.rollback();
       writeResult = {
         applied: false,
@@ -32765,7 +32820,42 @@ fastify.post('/delivery/jobs/from-sale', { preHandler: requireSyncKey }, async (
 
 fastify.get('/delivery/settings', { preHandler: requireSyncKey }, async () => getCustomerDeliverySettings());
 
+function buildDeliveryAppDateFilter(query = {}, defaultPeriod = 'all', now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Recife', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now).map(part => [part.type, part.value]));
+  const today = `${parts.year}-${parts.month}-${parts.day}`;
+  const period = String(query.period || defaultPeriod).trim().toLowerCase();
+  const from = String(query.date_from || '').trim();
+  const to = String(query.date_to || '').trim();
+  const day = value => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value + 'T00:00:00Z'))
+        || new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) !== value) {
+      throw Object.assign(new Error('Data de entrega invalida'), { statusCode: 400 });
+    }
+    return new Date(value + 'T00:00:00Z');
+  };
+  let start, end;
+  if (from) { start = day(from); end = day(to || from); }
+  else if (period === 'today') { start = day(today); end = day(today); }
+  else if (period === 'yesterday') { start = day(today); start.setUTCDate(start.getUTCDate() - 1); end = new Date(start); }
+  else if (period === '7d') { start = day(today); start.setUTCDate(start.getUTCDate() - 7); end = day(today); }
+  else if (period === 'month') { start = day(today.slice(0, 8) + '01'); end = day(today); }
+  else return '';
+  if (end < start) throw Object.assign(new Error('Periodo de entrega invalido'), { statusCode: 400 });
+  end.setUTCDate(end.getUTCDate() + 1);
+  // Petrolina/Juazeiro use UTC-03. Convert both store midnights to UTC,
+  // then to the SQL session clock without depending on MySQL timezone tables.
+  const boundary = date => {
+    date.setUTCHours(3);
+    const utc = date.toISOString().slice(0, 19).replace('T', ' ');
+    return `TIMESTAMPADD(SECOND, TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), NOW()), '${utc}')`;
+  };
+  return `AND jobs.created_at >= ${boundary(start)} AND jobs.created_at < ${boundary(end)}`;
+}
+
 fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  reply.header('Cache-Control', 'no-store');
   const access = req.customerAccess || {};
   const customerId = String(access.customerId || '').trim();
   if (access.isSync || !customerId) {
@@ -32783,23 +32873,7 @@ fastify.get('/delivery/app/jobs', { preHandler: requireSyncKeyOrCustomer }, asyn
     }
   }
   const requestedStatus = String(req.query?.status || 'open').trim().toLowerCase();
-  const period = String(req.query?.period || 'all').trim().toLowerCase();
-  const dateFrom = String(req.query?.date_from || '').trim();
-  const dateTo = String(req.query?.date_to || '').trim();
-  let dateFilter = '';
-  if (dateFrom && dateTo) {
-    dateFilter = `AND DATE(jobs.created_at) BETWEEN ${pool.escape(dateFrom)} AND ${pool.escape(dateTo)}`;
-  } else if (dateFrom) {
-    dateFilter = `AND DATE(jobs.created_at) = ${pool.escape(dateFrom)}`;
-  } else if (period === 'today') {
-    dateFilter = 'AND jobs.created_at >= CURDATE()';
-  } else if (period === 'yesterday') {
-    dateFilter = 'AND jobs.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND jobs.created_at < CURDATE()';
-  } else if (period === '7d') {
-    dateFilter = 'AND jobs.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)';
-  } else if (period === 'month') {
-    dateFilter = 'AND jobs.created_at >= DATE_FORMAT(CURDATE(), "%Y-%m-01")';
-  }
+  const dateFilter = buildDeliveryAppDateFilter(req.query, 'all');
   const statusClause = requestedStatus === 'all'
     ? ''
     : requestedStatus === 'delivered'
@@ -32890,23 +32964,7 @@ fastify.get('/delivery/app/dashboard', { preHandler: requireSyncKeyOrCustomer },
     }
   }
 
-  const period = String(req.query?.period || 'today').trim().toLowerCase();
-  const dateFrom = String(req.query?.date_from || '').trim();
-  const dateTo = String(req.query?.date_to || '').trim();
-  let dateFilter = '';
-  if (dateFrom && dateTo) {
-    dateFilter = `AND DATE(jobs.created_at) BETWEEN ${pool.escape(dateFrom)} AND ${pool.escape(dateTo)}`;
-  } else if (dateFrom) {
-    dateFilter = `AND DATE(jobs.created_at) = ${pool.escape(dateFrom)}`;
-  } else if (period === 'today') {
-    dateFilter = 'AND jobs.created_at >= CURDATE()';
-  } else if (period === 'yesterday') {
-    dateFilter = 'AND jobs.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND jobs.created_at < CURDATE()';
-  } else if (period === '7d') {
-    dateFilter = 'AND jobs.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)';
-  } else if (period === 'month') {
-    dateFilter = 'AND jobs.created_at >= DATE_FORMAT(CURDATE(), "%Y-%m-01")';
-  }
+  const dateFilter = buildDeliveryAppDateFilter(req.query, 'today');
 
   const actorCondition = access.isAdmin ? '1 = 1' : 'jobs.delivery_person_customer_id = ?';
   const queryParams = access.isAdmin ? [] : [customerId];
@@ -33230,20 +33288,27 @@ fastify.post('/delivery/jobs/:token/start-route', { config: { rateLimit: { max: 
           WHERE id = ?`,
         [trackingToken, job.id]
       );
-      await logCustomerDeliveryJobEvent(job.id, 'info', 'delivery_in_route', 'Entregador marcou saida para entrega.');
     }
     const [updatedRows] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
     const updated = mapCustomerDeliveryJob(updatedRows?.[0] || job);
     await connection.commit();
+    if (job.delivery_status !== 'in_route') {
+      await logCustomerDeliveryJobEvent(job.id, 'info', 'delivery_in_route', 'Entregador marcou saida para entrega.');
+    }
 
+    let routeNotification = { status: 'sent', duplicate: true };
     if (!updated.route_whatsapp_sent_at) {
-      await notifyCustomerDeliveryOutForDelivery(updated).catch((error) => {
+      routeNotification = await notifyCustomerDeliveryOutForDelivery(updated).catch(async (error) => {
         console.warn('[customer-delivery] route whatsapp notification failed:', error.message);
+        await pool.query('UPDATE customer_delivery_jobs SET route_whatsapp_error = ? WHERE id = ?', ['Falha ao confirmar aviso de saida', job.id]);
+        return { status: 'failed', error: 'Falha ao confirmar aviso de saida' };
       });
     }
 
     const [finalRows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
-    return mapCustomerDeliveryJob(finalRows?.[0] || updated);
+    return { ...mapCustomerDeliveryJob(finalRows?.[0] || updated), route_notification: {
+      status: routeNotification.status, reason: routeNotification.reason, error: routeNotification.error,
+    } };
   } catch (error) {
     await connection.rollback().catch(() => {});
     return reply.code(error.statusCode || 500).send({ error: error.message || 'Erro ao iniciar rota da entrega' });
@@ -33288,9 +33353,6 @@ fastify.post('/delivery/jobs/:token/complete', { config: { rateLimit: { max: 20,
     if (!job) throw Object.assign(new Error('Entrega nao encontrada'), { statusCode: 404 });
     const updated = await completeCustomerDeliveryJob(connection, job, String(req.body?.delivery_person_note || '').trim());
     await connection.commit();
-    await notifySaleCompletedWhatsApp(updated.sale_id).catch((error) => {
-      console.warn('[customer-delivery] deferred sale whatsapp notification failed:', error.message);
-    });
     await notifyCustomerDeliveryCompleted(updated).catch((error) => {
       console.warn('[customer-delivery] completion whatsapp notification failed:', error.message);
     });
@@ -33318,9 +33380,6 @@ fastify.post('/delivery/jobs/:token/admin-complete', { preHandler: requireSyncKe
       adminReason: reason,
     });
     await connection.commit();
-    await notifySaleCompletedWhatsApp(updated.sale_id).catch((error) => {
-      console.warn('[customer-delivery] deferred sale whatsapp notification failed:', error.message);
-    });
     await notifyCustomerDeliveryCompleted(updated).catch((error) => {
       console.warn('[customer-delivery] completion whatsapp notification failed:', error.message);
     });
@@ -35065,6 +35124,7 @@ fastify.get('/status', async (req, reply) => {
   return {
     ok: true,
     uptime_seconds: Math.floor(process.uptime()),
+    n8n_conversation_state_contract: 2,
     response_ms: Date.now() - t0,
     memory: {
       rss_mb:        Math.round(m.rss / 1048576),

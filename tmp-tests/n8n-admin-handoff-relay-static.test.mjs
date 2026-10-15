@@ -17,6 +17,38 @@ assert.equal(relay.normalizeRelayCommand('RESPONDER A7K2'), null);
 assert.equal(relay.normalizeRelayCommand('1. blz'), null);
 const notification = relay.buildAdminNotification({ code: 'A7K2', contactName: 'Cliente', phone: '5587000000000', message: 'Preciso de ajuda' });
 for (const expected of ['1. A7K2 sua resposta', '2. A7K2 sua resposta', 'RESPONDER A7K2 sua mensagem', 'LIBERAR A7K2', 'ENCERRAR A7K2']) assert.match(notification, new RegExp(expected.replace('.', '\\.')));
+const adminSends = [];
+const notifyResult = await relay.notifyAdmins({
+  identity: {remoteJid:'fixture@s.whatsapp.net',phone:'5587000000000'},
+  contextSummary: 'Modelo de teste 8GB/256GB Roxo — R$ 1.224,00; confirmar entrega.',
+  pool: {async query(sql) {
+    if (/SELECT \* FROM n8n_bot_handoffs/.test(sql)) return [[{code:'A7K2'}]];
+    if (/SELECT contact_name/.test(sql)) return [[{contact_name:'Cliente',message_text:'Sim'}]];
+    if (/SELECT remote_jid, phone FROM n8n_bot_admin_numbers/.test(sql)) return [[{remote_jid:'admin@s.whatsapp.net',phone:'5587000000001'}]];
+    return [{affectedRows:1}];
+  }},
+  sendText: async (identity, text) => {adminSends.push({identity,text});return {ok:true,body:{}};},
+});
+assert.equal(notifyResult.notified, true);
+assert.equal(adminSends.length, 1);
+assert.match(adminSends[0].text, /8GB\/256GB Roxo/);
+assert.match(adminSends[0].text, /1.224,00/);
+assert.equal(adminSends[0].identity.remoteJid, 'admin@s.whatsapp.net');
+
+// A concurrent claim is not proof that the other notification succeeded.
+for (const delivered of [false, true]) {
+  const duplicate = await relay.notifyAdmins({
+    identity: {remoteJid:'fixture@s.whatsapp.net',phone:'5587000000000'},
+    pool: {async query(sql) {
+      if (/SELECT \* FROM n8n_bot_handoffs/.test(sql)) return [[{code:'A7K2',notified_at:delivered ? '2026-01-01' : null}]];
+      return [{affectedRows:0}];
+    }},
+    sendText: async () => {throw new Error('Duplicate must not send again');},
+  });
+  assert.equal(duplicate.notified, false);
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(duplicate.deliveryConfirmed, delivered);
+}
 
 const queries = [];
 const logged = [];

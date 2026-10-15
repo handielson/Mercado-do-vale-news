@@ -95,6 +95,7 @@ export interface CustomerDeliveryJob {
     completion_whatsapp_error?: string | null;
     route_whatsapp_sent_at?: string | null;
     route_whatsapp_error?: string | null;
+    route_notification?: { status: string; reason?: string; error?: string; duplicate?: boolean };
     tracking_token?: string | null;
     current_latitude?: number | string | null;
     current_longitude?: number | string | null;

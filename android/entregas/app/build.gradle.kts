@@ -18,8 +18,8 @@ android {
         applicationId = "br.com.mercadodovale.entregas"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.1.3"
+        versionCode = 9
+        versionName = "1.1.5"
         buildConfigField("String", "VPS_BASE_URL", "\"${vpsBaseUrl.trimEnd('/')}\"")
         buildConfigField("String", "WEB_BASE_URL", "\"${webBaseUrl.trimEnd('/')}\"")
     }

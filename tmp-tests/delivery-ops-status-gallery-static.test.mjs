@@ -91,7 +91,7 @@ assert.match(modal, /podem ser liberadas pelo operador[\s\S]*motivo seja informa
 
 assert.match(deliveryPage, /const \[proofs, setProofs\]/, 'delivery page must keep proof gallery state');
 assert.match(deliveryPage, /proofs\.map/, 'delivery page must render all uploaded proof photos');
-assert.match(deliveryPage, /const canComplete = Boolean\(job && pixApproved && job\.delivery_status !== 'delivered'\)/, 'delivery completion must not require a proof photo');
+assert.match(deliveryPage, /const canComplete = Boolean\(job && hasDeliveryAssignee && pixApproved && job\.delivery_status === 'in_route'\)/, 'normal completion requires an assignee, route and confirmed payment, without requiring a photo');
 assert.match(deliveryPage, /capture="environment"/, 'proof input must request the rear camera');
 assert.match(deliveryPage, /Foto de comprovacao opcional/, 'delivery page must describe proof photo as optional');
 assert.match(deliveryPage, /O valor da entrega ja esta incluido e quitado na venda/, 'delivery page must state that delivery is already paid within the sale');

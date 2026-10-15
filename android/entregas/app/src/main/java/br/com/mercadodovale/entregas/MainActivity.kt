@@ -10,7 +10,9 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.os.Build
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import android.webkit.ValueCallback
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -45,11 +47,15 @@ class MainActivity : Activity() {
     private var pendingCameraPhotoUri: Uri? = null
     private var operationWebView: WebView? = null
     private var pendingTrackingJobId: String = ""
+    private var currentTab: String = "dashboard" // "dashboard" or "jobs"
+    private var currentPeriod: String = "today"  // "today", "yesterday", "7d", "month", "all", "custom"
+    private var customDate: String = "" // "YYYY-MM-DD"
+    private var currentJobStatus: String = "open" // "open", "delivered", "all"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         sessionToken = preferences.getString("access_token", "").orEmpty()
-        if (sessionToken.isBlank()) showLogin() else showDashboard()
+        if (sessionToken.isBlank()) showLogin() else showMainScreen()
     }
 
     private fun showLogin(message: String = "") {
@@ -100,7 +106,7 @@ class MainActivity : Activity() {
                 }.onSuccess { token ->
                     sessionToken = token
                     preferences.edit().putString("access_token", token).apply()
-                    runOnUiThread { showDashboard() }
+                    runOnUiThread { showMainScreen() }
                 }.onFailure { error ->
                     runOnUiThread {
                         login.isEnabled = true
@@ -112,61 +118,381 @@ class MainActivity : Activity() {
         setSafeContentView(root)
     }
 
+    private fun showDatePickerDialog() {
+        val calendar = java.util.Calendar.getInstance()
+        val dpd = android.app.DatePickerDialog(
+            this,
+            { _, year, month, dayOfMonth ->
+                customDate = String.format("%04d-%02d-%02d", year, month + 1, dayOfMonth)
+                currentPeriod = "custom"
+                showMainScreen()
+            },
+            calendar.get(java.util.Calendar.YEAR),
+            calendar.get(java.util.Calendar.MONTH),
+            calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        )
+        dpd.show()
+    }
+
+    private fun formatCustomDateLabel(dateStr: String): String {
+        return try {
+            val parts = dateStr.split("-")
+            if (parts.size == 3) "${parts[2]}/${parts[1]}" else dateStr
+        } catch (_: Exception) {
+            dateStr
+        }
+    }
+
     private fun showDashboard(status: String = "open") {
+        currentTab = "jobs"
+        currentJobStatus = status
+        showMainScreen()
+    }
+
+    private fun showMainScreen() {
         operationWebView = null
         val root = verticalLayout(0).apply { setBackgroundColor(Color.rgb(248, 250, 252)) }
-        val header = verticalLayout(20).apply { setBackgroundColor(Color.rgb(20, 83, 45)) }
-        val headingLine = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+
+        val header = verticalLayout(16).apply {
+            setBackgroundColor(Color.rgb(20, 83, 45))
+        }
+        val headingLine = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
         headingLine.addView(TextView(this).apply {
             text = "Mercado do Vale\nEntregas"
             textSize = 22f
             setTextColor(Color.WHITE)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        headingLine.addView(Button(this).apply {
-            text = "Sair"
-            setOnClickListener { logout() }
-        })
-        header.addView(headingLine)
-        root.addView(header)
 
-        val filters = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(16, 12, 16, 8) }
-        listOf("open" to "Em aberto", "delivered" to "Concluídas", "all" to "Todas").forEach { (value, label) ->
-            filters.addView(Button(this).apply {
-                text = label
-                isEnabled = value != status
-                setOnClickListener { showDashboard(value) }
-            }, LinearLayout.LayoutParams(0, 52, 1f))
+        val logoutBtn = TextView(this).apply {
+            text = "Sair"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(32, 16, 32, 16)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.argb(50, 255, 255, 255))
+                cornerRadius = 24f
+            }
         }
-        root.addView(filters)
+        setupIPhonePressEffect(logoutBtn) { logout() }
+        headingLine.addView(logoutBtn)
+        header.addView(headingLine)
+
+        // Segmented Control em Cápsula (Estilo iPhone)
+        val capsuleContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(6, 6, 6, 6)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.argb(60, 0, 0, 0))
+                cornerRadius = 32f
+            }
+            layoutParams = LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 14, 0, 0)
+            }
+        }
+
+        val isDashboard = currentTab == "dashboard"
+        val dashboardTab = TextView(this).apply {
+            text = "📊 Resumos"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setPadding(0, 18, 0, 18)
+            setTextColor(if (isDashboard) Color.rgb(20, 83, 45) else Color.rgb(220, 252, 231))
+            setTypeface(typeface, if (isDashboard) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            background = if (isDashboard) {
+                android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.WHITE)
+                    cornerRadius = 26f
+                }
+            } else null
+        }
+        setupIPhonePressEffect(dashboardTab) {
+            if (currentTab != "dashboard") {
+                currentTab = "dashboard"
+                showMainScreen()
+            }
+        }
+        capsuleContainer.addView(dashboardTab, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        val jobsTab = TextView(this).apply {
+            text = "📋 Entregas"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setPadding(0, 18, 0, 18)
+            setTextColor(if (!isDashboard) Color.rgb(20, 83, 45) else Color.rgb(220, 252, 231))
+            setTypeface(typeface, if (!isDashboard) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            background = if (!isDashboard) {
+                android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.WHITE)
+                    cornerRadius = 26f
+                }
+            } else null
+        }
+        setupIPhonePressEffect(jobsTab) {
+            if (currentTab != "jobs") {
+                currentTab = "jobs"
+                showMainScreen()
+            }
+        }
+        capsuleContainer.addView(jobsTab, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(capsuleContainer)
+
+        // Barra de Filtro de Período Horizontal (Estilo iOS Chips)
+        val periodScrollView = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            setPadding(0, 10, 0, 2)
+        }
+        val periodRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        val periodOptions = listOf(
+            "today" to "Hoje",
+            "yesterday" to "Ontem",
+            "7d" to "7 dias",
+            "month" to "Mês",
+            "all" to "Tudo"
+        )
+        for ((code, label) in periodOptions) {
+            val isSelected = currentPeriod == code
+            val chip = TextView(this).apply {
+                text = label
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setPadding(26, 12, 26, 12)
+                setTextColor(if (isSelected) Color.rgb(20, 83, 45) else Color.rgb(220, 252, 231))
+                setTypeface(typeface, if (isSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    if (isSelected) {
+                        setColor(Color.WHITE)
+                    } else {
+                        setColor(Color.argb(40, 255, 255, 255))
+                    }
+                    cornerRadius = 20f
+                }
+            }
+            setupIPhonePressEffect(chip) {
+                if (currentPeriod != code) {
+                    currentPeriod = code
+                    customDate = ""
+                    showMainScreen()
+                }
+            }
+            periodRow.addView(chip, LinearLayout.LayoutParams(-2, -2).apply { setMargins(0, 0, 8, 0) })
+        }
+
+        val isCustomSelected = currentPeriod == "custom"
+        val customLabel = if (isCustomSelected && customDate.isNotEmpty()) {
+            "📅 ${formatCustomDateLabel(customDate)}"
+        } else {
+            "📅 Data"
+        }
+        val customDateChip = TextView(this).apply {
+            text = customLabel
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(26, 12, 26, 12)
+            setTextColor(if (isCustomSelected) Color.rgb(20, 83, 45) else Color.rgb(220, 252, 231))
+            setTypeface(typeface, if (isCustomSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                if (isCustomSelected) {
+                    setColor(Color.WHITE)
+                } else {
+                    setColor(Color.argb(40, 255, 255, 255))
+                }
+                cornerRadius = 20f
+            }
+        }
+        setupIPhonePressEffect(customDateChip) {
+            showDatePickerDialog()
+        }
+        periodRow.addView(customDateChip, LinearLayout.LayoutParams(-2, -2))
+        periodScrollView.addView(periodRow)
+        header.addView(periodScrollView)
+
+        root.addView(header)
 
         val content = verticalLayout(16)
         content.addView(ProgressBar(this).apply { isIndeterminate = true })
         root.addView(ScrollView(this).apply { addView(content) }, LinearLayout.LayoutParams(-1, 0, 1f))
         setSafeContentView(root)
-        loadJobs(status, content)
+
+        if (isDashboard) {
+            renderDashboardTab(content)
+        } else {
+            renderJobsTab(content)
+        }
     }
 
-    private fun loadJobs(status: String, content: LinearLayout) {
+    private fun renderDashboardTab(content: LinearLayout) {
+        val dateParams = if (currentPeriod == "custom" && customDate.isNotEmpty()) {
+            "&date_from=$customDate&date_to=$customDate"
+        } else ""
         thread {
-            runCatching { apiRequest("/delivery/app/jobs?status=$status", bearer = sessionToken) }
+            runCatching { apiRequest("/delivery/app/dashboard?period=$currentPeriod$dateParams", bearer = sessionToken) }
                 .onSuccess { response ->
                     runOnUiThread {
                         content.removeAllViews()
                         val profile = response.optJSONObject("profile")
-                        content.addView(title("Olá, ${profile?.optString("name", "Entregador") ?: "Entregador"}", 20f))
-                        val summary = response.optJSONObject("delivery_summary")
-                        if (summary != null) {
-                            content.addView(body("${summary.optInt("jobs")} entregas · Custo ${formatCents(summary.optLong("cost_cents"))}"), spacedParams())
+                        val summary = response.optJSONObject("summary") ?: JSONObject()
+                        val byPerson = response.optJSONArray("by_person") ?: JSONArray()
+
+                        content.addView(title("Olá, ${profile?.optString("name", "Loja") ?: "Entregador"}", 22f))
+                        val periodSubtitle = when (currentPeriod) {
+                            "today" -> "Hoje"
+                            "yesterday" -> "Ontem"
+                            "7d" -> "Últimos 7 dias"
+                            "month" -> "Este Mês"
+                            "custom" -> "Data: ${formatCustomDateLabel(customDate)}"
+                            else -> "Histórico completo"
                         }
-                        val jobs = response.optJSONArray("jobs") ?: JSONArray()
-                        val deliveryPeople = response.optJSONArray("delivery_people") ?: JSONArray()
-                        if (jobs.length() == 0) {
-                            content.addView(body("Nenhuma entrega nesta categoria."), spacedParams())
-                        } else {
-                            for (index in 0 until jobs.length()) addJobCard(content, jobs.getJSONObject(index), deliveryPeople)
+                        content.addView(body("Resumo operacional · $periodSubtitle"), LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 2, 0, 14) })
+
+                        // Grid 2 Colunas de KPIs Navegáveis
+                        val totalJobs = summary.optInt("total_jobs")
+                        val pendingJobs = summary.optInt("pending_jobs")
+                        val inRouteJobs = summary.optInt("in_route_jobs")
+                        val deliveredJobs = summary.optInt("delivered_jobs")
+
+                        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                        row1.addView(createKpiCard("📦", "Total Pedidos", totalJobs.toString(), Color.rgb(15, 23, 42), Color.rgb(241, 245, 249)) {
+                            currentTab = "jobs"
+                            currentJobStatus = "all"
+                            showMainScreen()
+                        }, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, 6, 12) })
+
+                        row1.addView(createKpiCard("⏳", "Pendentes", pendingJobs.toString(), Color.rgb(180, 83, 9), Color.rgb(254, 243, 199)) {
+                            currentTab = "jobs"
+                            currentJobStatus = "open"
+                            showMainScreen()
+                        }, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(6, 0, 0, 12) })
+                        content.addView(row1)
+
+                        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                        row2.addView(createKpiCard("🛵", "Em Rota", inRouteJobs.toString(), Color.rgb(29, 78, 216), Color.rgb(219, 234, 254)) {
+                            currentTab = "jobs"
+                            currentJobStatus = "open"
+                            showMainScreen()
+                        }, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, 6, 12) })
+
+                        row2.addView(createKpiCard("✅", "Concluídas", deliveredJobs.toString(), Color.rgb(22, 101, 52), Color.rgb(220, 252, 231)) {
+                            currentTab = "jobs"
+                            currentJobStatus = "delivered"
+                            showMainScreen()
+                        }, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(6, 0, 0, 12) })
+                        content.addView(row2)
+
+                        // Card Destaque de Frete Total
+                        val freteCard = verticalLayout(18).apply {
+                            background = android.graphics.drawable.GradientDrawable().apply {
+                                setColor(Color.WHITE)
+                                cornerRadius = 24f
+                                setStroke(2, Color.rgb(226, 232, 240))
+                            }
+                            elevation = 3f
                         }
-                        content.addView(primaryButton("Atualizar").apply { setOnClickListener { showDashboard(status) } }, spacedParams())
+                        val freteHeader = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                        freteHeader.addView(TextView(this).apply { text = "💰"; textSize = 22f })
+                        freteHeader.addView(TextView(this).apply {
+                            text = "  Total em Fretes no Período"
+                            textSize = 14f
+                            setTextColor(Color.rgb(100, 116, 139))
+                            setTypeface(typeface, android.graphics.Typeface.BOLD)
+                        })
+                        freteCard.addView(freteHeader)
+                        freteCard.addView(TextView(this).apply {
+                            text = formatCents(summary.optLong("total_delivery_cents"))
+                            textSize = 30f
+                            setTextColor(Color.rgb(20, 83, 45))
+                            setTypeface(typeface, android.graphics.Typeface.BOLD)
+                        }, LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 6, 0, 2) })
+                        freteCard.addView(body("Soma das taxas de entregas no período selecionado."))
+                        setupIPhonePressEffect(freteCard) {
+                            currentTab = "jobs"
+                            currentJobStatus = "all"
+                            showMainScreen()
+                        }
+                        content.addView(freteCard, LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, 16) })
+
+                        // Desempenho por Entregador (se houver)
+                        if (byPerson.length() > 0) {
+                            content.addView(title("Entregas por Responsável", 18f))
+                            val teamGroup = verticalLayout(0).apply {
+                                background = android.graphics.drawable.GradientDrawable().apply {
+                                    setColor(Color.WHITE)
+                                    cornerRadius = 24f
+                                    setStroke(2, Color.rgb(226, 232, 240))
+                                }
+                                elevation = 3f
+                                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 10, 0, 16) }
+                            }
+                            for (i in 0 until byPerson.length()) {
+                                val person = byPerson.getJSONObject(i)
+                                val personItem = LinearLayout(this).apply {
+                                    orientation = LinearLayout.HORIZONTAL
+                                    gravity = Gravity.CENTER_VERTICAL
+                                    setPadding(18, 16, 18, 16)
+                                }
+                                val initials = person.optString("person_name", "E").split(" ")
+                                    .filter { it.isNotBlank() }
+                                    .take(2)
+                                    .map { it.first().uppercase() }
+                                    .joinToString("")
+                                val avatar = TextView(this).apply {
+                                    text = initials.ifBlank { "E" }
+                                    textSize = 14f
+                                    gravity = Gravity.CENTER
+                                    setTextColor(Color.rgb(20, 83, 45))
+                                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                                    background = android.graphics.drawable.GradientDrawable().apply {
+                                        setColor(Color.rgb(220, 252, 231))
+                                        cornerRadius = 30f
+                                    }
+                                }
+                                personItem.addView(avatar, LinearLayout.LayoutParams(42, 42))
+
+                                val personInfo = verticalLayout(0).apply {
+                                    layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(14, 0, 0, 0) }
+                                }
+                                personInfo.addView(TextView(this).apply {
+                                    text = person.optString("person_name", "Entregador")
+                                    textSize = 15f
+                                    setTextColor(Color.rgb(15, 23, 42))
+                                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                                })
+                                personInfo.addView(TextView(this).apply {
+                                    text = "${person.optInt("delivered_count")} entregas concluídas"
+                                    textSize = 13f
+                                    setTextColor(Color.rgb(100, 116, 139))
+                                })
+                                personItem.addView(personInfo)
+
+                                personItem.addView(TextView(this).apply {
+                                    text = formatCents(person.optLong("total_amount_cents"))
+                                    textSize = 14f
+                                    setTextColor(Color.rgb(20, 83, 45))
+                                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                                })
+
+                                teamGroup.addView(personItem)
+                                if (i < byPerson.length() - 1) {
+                                    teamGroup.addView(View(this).apply {
+                                        setBackgroundColor(Color.rgb(241, 245, 249))
+                                        layoutParams = LinearLayout.LayoutParams(-1, 2).apply { setMargins(18, 0, 18, 0) }
+                                    })
+                                }
+                            }
+                            content.addView(teamGroup)
+                        }
+
+                        val refreshBtn = primaryButton("Atualizar Resumos")
+                        setupIPhonePressEffect(refreshBtn) { renderDashboardTab(content) }
+                        content.addView(refreshBtn, spacedParams())
+
+                        fadeInSlide(content)
                     }
                 }
                 .onFailure { error ->
@@ -176,7 +502,165 @@ class MainActivity : Activity() {
                         } else {
                             content.removeAllViews()
                             content.addView(body(friendlyError(error)).apply { setTextColor(Color.rgb(185, 28, 28)) })
-                            content.addView(primaryButton("Tentar novamente").apply { setOnClickListener { showDashboard(status) } }, spacedParams())
+                            val retryBtn = primaryButton("Tentar novamente")
+                            setupIPhonePressEffect(retryBtn) { renderDashboardTab(content) }
+                            content.addView(retryBtn, spacedParams())
+                        }
+                    }
+                }
+        }
+    }
+
+    private fun createKpiCard(icon: String, label: String, value: String, accentColor: Int, badgeBg: Int, onClick: () -> Unit): View {
+        val card = verticalLayout(14).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = 22f
+                setStroke(2, Color.rgb(226, 232, 240))
+            }
+            elevation = 3f
+        }
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val iconBadge = TextView(this).apply {
+            text = icon
+            textSize = 16f
+            gravity = Gravity.CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(badgeBg)
+                cornerRadius = 16f
+            }
+        }
+        topRow.addView(iconBadge, LinearLayout.LayoutParams(34, 34))
+        topRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        topRow.addView(TextView(this).apply {
+            text = "›"
+            textSize = 22f
+            setTextColor(Color.rgb(148, 163, 184))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+        card.addView(topRow)
+
+        card.addView(TextView(this).apply {
+            text = value
+            textSize = 30f
+            setTextColor(accentColor)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }, LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 8, 0, 0) })
+
+        card.addView(TextView(this).apply {
+            text = label
+            textSize = 13f
+            setTextColor(Color.rgb(100, 116, 139))
+        })
+
+        setupIPhonePressEffect(card, onClick)
+        return card
+    }
+
+    private fun renderJobsTab(content: LinearLayout) {
+        val filterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, 12)
+        }
+        listOf("open" to "Em aberto", "delivered" to "Concluídas", "all" to "Todas").forEach { (value, label) ->
+            val isSelected = currentJobStatus == value
+            val filterChip = TextView(this).apply {
+                text = label
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setPadding(20, 14, 20, 14)
+                setTextColor(if (isSelected) Color.WHITE else Color.rgb(71, 85, 105))
+                setTypeface(typeface, if (isSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    if (isSelected) {
+                        setColor(Color.rgb(20, 83, 45))
+                    } else {
+                        setColor(Color.WHITE)
+                        setStroke(2, Color.rgb(226, 232, 240))
+                    }
+                    cornerRadius = 20f
+                }
+            }
+            setupIPhonePressEffect(filterChip) {
+                if (currentJobStatus != value) {
+                    currentJobStatus = value
+                    renderJobsTab(content)
+                }
+            }
+            filterRow.addView(filterChip, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(4, 0, 4, 0) })
+        }
+        content.removeAllViews()
+        content.addView(filterRow)
+
+        val listContainer = verticalLayout(0)
+        listContainer.addView(ProgressBar(this).apply { isIndeterminate = true })
+        content.addView(listContainer)
+
+        loadJobs(currentJobStatus, listContainer)
+    }
+
+    private fun loadJobs(status: String, content: LinearLayout) {
+        val dateParams = if (currentPeriod == "custom" && customDate.isNotEmpty()) {
+            "&date_from=$customDate&date_to=$customDate"
+        } else ""
+        thread {
+            runCatching { apiRequest("/delivery/app/jobs?status=$status&period=$currentPeriod$dateParams", bearer = sessionToken) }
+                .onSuccess { response ->
+                    runOnUiThread {
+                        content.removeAllViews()
+                        val jobs = response.optJSONArray("jobs") ?: JSONArray()
+                        val deliveryPeople = response.optJSONArray("delivery_people") ?: JSONArray()
+                        val summary = response.optJSONObject("delivery_summary")
+                        if (summary != null) {
+                            val periodSubtitle = when (currentPeriod) {
+                                "today" -> "Hoje"
+                                "yesterday" -> "Ontem"
+                                "7d" -> "Últimos 7 dias"
+                                "month" -> "Este Mês"
+                                "custom" -> formatCustomDateLabel(customDate)
+                                else -> "Histórico completo"
+                            }
+                            content.addView(body("${summary.optInt("jobs")} entregas ($periodSubtitle) · Total: ${formatCents(summary.optLong("cost_cents"))}"), LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 4, 0, 12) })
+                        }
+                        if (jobs.length() == 0) {
+                            val emptyCard = verticalLayout(24).apply {
+                                gravity = Gravity.CENTER_HORIZONTAL
+                                background = android.graphics.drawable.GradientDrawable().apply {
+                                    setColor(Color.WHITE)
+                                    cornerRadius = 24f
+                                    setStroke(2, Color.rgb(226, 232, 240))
+                                }
+                                setPadding(24, 32, 24, 32)
+                            }
+                            emptyCard.addView(TextView(this).apply { text = "📦"; textSize = 36f; gravity = Gravity.CENTER })
+                            emptyCard.addView(title("Nenhuma entrega encontrada", 17f).apply { gravity = Gravity.CENTER })
+                            emptyCard.addView(body("Não há entregas nesta categoria no momento.").apply { gravity = Gravity.CENTER })
+                            content.addView(emptyCard, spacedParams())
+                        } else {
+                            for (index in 0 until jobs.length()) {
+                                addJobCard(content, jobs.getJSONObject(index), deliveryPeople)
+                            }
+                        }
+                        val refreshBtn = primaryButton("Atualizar Lista")
+                        setupIPhonePressEffect(refreshBtn) { loadJobs(status, content) }
+                        content.addView(refreshBtn, spacedParams())
+
+                        fadeInSlide(content)
+                    }
+                }
+                .onFailure { error ->
+                    runOnUiThread {
+                        if (error.message?.contains("401") == true) {
+                            logout("Sua sessão expirou. Entre novamente.")
+                        } else {
+                            content.removeAllViews()
+                            content.addView(body(friendlyError(error)).apply { setTextColor(Color.rgb(185, 28, 28)) })
+                            val retryBtn = primaryButton("Tentar novamente")
+                            setupIPhonePressEffect(retryBtn) { loadJobs(status, content) }
+                            content.addView(retryBtn, spacedParams())
                         }
                     }
                 }
@@ -191,19 +675,83 @@ class MainActivity : Activity() {
         val rawOrder = job.optString("sale_id").take(8).uppercase().ifBlank {
             job.optString("order_number").take(8).uppercase()
         }
+        val status = job.optString("delivery_status")
+
         val card = verticalLayout(16).apply {
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.WHITE); cornerRadius = 24f; setStroke(1, Color.rgb(226, 232, 240))
+                setColor(Color.WHITE)
+                cornerRadius = 24f
+                setStroke(2, Color.rgb(226, 232, 240))
             }
             elevation = 3f
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, 14) }
         }
-        card.addView(title("Pedido #$rawOrder", 18f))
-        card.addView(body(job.optString("buyer_name", "Cliente")))
-        card.addView(body(job.optString("delivery_address_text", "Endereço não informado")))
-        card.addView(body("Situação: ${statusLabel(job.optString("delivery_status"))}"))
-        card.addView(body("Valor da entrega: ${formatCents(job.optLong("delivery_amount"))}"))
-        card.addView(body("Entregador: ${assigneeName.ifBlank { "A definir pela loja" }}"))
-        if (assigneeId == "store:unassigned" && deliveryPeople.length() > 0 && job.optString("delivery_status") !in listOf("delivered", "cancelled")) {
+
+        val cardHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        cardHeader.addView(title("Pedido #$rawOrder", 17f), LinearLayout.LayoutParams(0, -2, 1f))
+
+        val (badgeBg, badgeText, statusText) = when (status) {
+            "delivered" -> Triple(Color.rgb(220, 252, 231), Color.rgb(22, 101, 52), "Entregue")
+            "in_route" -> Triple(Color.rgb(219, 234, 254), Color.rgb(29, 78, 216), "Em rota")
+            "cancelled" -> Triple(Color.rgb(254, 226, 226), Color.rgb(185, 28, 28), "Cancelada")
+            else -> Triple(Color.rgb(254, 243, 199), Color.rgb(180, 83, 9), "Aguardando")
+        }
+        val statusPill = TextView(this).apply {
+            text = statusText
+            textSize = 12f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(badgeText)
+            setPadding(18, 8, 18, 8)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(badgeBg)
+                cornerRadius = 16f
+            }
+        }
+        cardHeader.addView(statusPill)
+        card.addView(cardHeader)
+
+        card.addView(View(this).apply {
+            setBackgroundColor(Color.rgb(241, 245, 249))
+            layoutParams = LinearLayout.LayoutParams(-1, 2).apply { setMargins(0, 10, 0, 10) }
+        })
+
+        val buyerName = job.optString("buyer_name", "Cliente")
+        val address = job.optString("delivery_address_text", "Endereço não informado")
+        card.addView(TextView(this).apply {
+            text = "👤 $buyerName"
+            textSize = 15f
+            setTextColor(Color.rgb(15, 23, 42))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+        card.addView(TextView(this).apply {
+            text = "📍 $address"
+            textSize = 14f
+            setTextColor(Color.rgb(71, 85, 105))
+        }, LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 4, 0, 0) })
+
+        val bottomInfo = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 10, 0, 0) }
+        }
+        bottomInfo.addView(TextView(this).apply {
+            text = "🛵 ${assigneeName.ifBlank { "A definir pela loja" }}"
+            textSize = 13f
+            setTextColor(Color.rgb(100, 116, 139))
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+
+        bottomInfo.addView(TextView(this).apply {
+            text = formatCents(job.optLong("delivery_amount"))
+            textSize = 16f
+            setTextColor(Color.rgb(20, 83, 45))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+        card.addView(bottomInfo)
+
+        if (assigneeId == "store:unassigned" && deliveryPeople.length() > 0 && status !in listOf("delivered", "cancelled")) {
             val people = (0 until deliveryPeople.length()).map { deliveryPeople.getJSONObject(it) }
             val selector = Spinner(this).apply {
                 adapter = ArrayAdapter(
@@ -215,39 +763,74 @@ class MainActivity : Activity() {
             card.addView(selector, spacedParams())
             val assignmentFeedback = body("").apply { setTextColor(Color.rgb(185, 28, 28)) }
             card.addView(assignmentFeedback, spacedParams())
-            card.addView(primaryButton("Definir quem entregou").apply {
-                setOnClickListener {
-                    if (selector.selectedItemPosition <= 0) {
-                        assignmentFeedback.text = "Selecione quem fará a entrega."
-                        return@setOnClickListener
-                    }
-                    val selected = people[selector.selectedItemPosition - 1]
-                    isEnabled = false
-                    assignmentFeedback.text = "Salvando responsável..."
-                    thread {
-                        runCatching {
-                            apiRequest(
-                                "/delivery/app/jobs/$jobId/assign",
-                                "POST",
-                                JSONObject().put("delivery_person_id", selected.getString("id")),
-                                bearer = sessionToken
-                            )
-                        }.onSuccess { runOnUiThread { showDashboard() } }
-                            .onFailure { error ->
-                                runOnUiThread {
-                                    isEnabled = true
-                                    assignmentFeedback.text = friendlyError(error)
-                                }
-                            }
-                    }
+            val assignBtn = primaryButton("Definir quem entregou")
+            setupIPhonePressEffect(assignBtn) {
+                if (selector.selectedItemPosition <= 0) {
+                    assignmentFeedback.text = "Selecione quem fará a entrega."
+                    return@setupIPhonePressEffect
                 }
-            }, spacedParams())
+                val selected = people[selector.selectedItemPosition - 1]
+                assignBtn.isEnabled = false
+                assignmentFeedback.text = "Salvando responsável..."
+                thread {
+                    runCatching {
+                        apiRequest(
+                            "/delivery/app/jobs/$jobId/assign",
+                            "POST",
+                            JSONObject().put("delivery_person_id", selected.getString("id")),
+                            bearer = sessionToken
+                        )
+                    }.onSuccess { runOnUiThread { showMainScreen() } }
+                        .onFailure { error ->
+                            runOnUiThread {
+                                assignBtn.isEnabled = true
+                                assignmentFeedback.text = friendlyError(error)
+                            }
+                        }
+                }
+            }
+            card.addView(assignBtn, spacedParams())
         }
-        card.addView(primaryButton(if (job.optString("delivery_status") == "delivered") "Ver entrega" else "Abrir entrega").apply {
+
+        val actionBtn = primaryButton(if (status == "delivered") "Ver detalhes / Comprovante" else "Abrir entrega").apply {
             isEnabled = token.isNotBlank() && assigneeId != "store:unassigned"
-            setOnClickListener { openOperation(token) }
-        }, spacedParams())
-        parent.addView(card, spacedParams())
+        }
+        setupIPhonePressEffect(actionBtn) {
+            openOperation(token)
+        }
+        card.addView(actionBtn, spacedParams())
+
+        parent.addView(card)
+    }
+
+    private fun setupIPhonePressEffect(view: View, onClick: () -> Unit) {
+        view.isClickable = true
+        view.setOnTouchListener { v, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    v.animate().scaleX(0.96f).scaleY(0.96f).setDuration(110).start()
+                }
+                MotionEvent.ACTION_UP -> {
+                    v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(130).start()
+                    onClick()
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(130).start()
+                }
+            }
+            true
+        }
+    }
+
+    private fun fadeInSlide(view: View) {
+        view.alpha = 0f
+        view.translationY = 28f
+        view.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(240)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
     }
 
     private fun openOperation(token: String) {
@@ -309,7 +892,11 @@ class MainActivity : Activity() {
         val web = operationWebView
         when {
             web?.canGoBack() == true -> web.goBack()
-            web != null -> showDashboard()
+            web != null -> showMainScreen()
+            currentTab == "jobs" -> {
+                currentTab = "dashboard"
+                showMainScreen()
+            }
             else -> super.onBackPressed()
         }
     }
@@ -355,6 +942,24 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun stopTracking() { runOnUiThread { stopLocationTracking() } }
+
+        @JavascriptInterface
+        fun closeDelivery() {
+            runOnUiThread {
+                val completedWebView = operationWebView ?: return@runOnUiThread
+                stopLocationTracking()
+                pendingTrackingJobId = ""
+                currentTab = "dashboard"
+                currentJobStatus = "open"
+                currentPeriod = "today"
+                customDate = ""
+                operationWebView = null
+                completedWebView.stopLoading()
+                completedWebView.removeJavascriptInterface("MdvDelivery")
+                showMainScreen()
+                completedWebView.destroy()
+            }
+        }
 
         @JavascriptInterface
         fun openExternalUrl(rawUrl: String) { openTrustedExternalUrl(rawUrl) }

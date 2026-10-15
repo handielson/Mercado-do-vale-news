@@ -1,3 +1,13 @@
+# v1.2.628-vendas-entregas
+
+Data: 14/10/2026. Branch: main. Tag: v1.2.628-vendas-entregas.
+Release MDV: /var/www/mdv-site/releases/20261014-223500-v1628-vendas-entregas.
+Android Entregas: 1.1.5, versionCode 9. Publicação autorizada em andamento.
+
+Vendas preservam produto, memória, cor e valor exatos; perguntas não consomem campos de cadastro/endereço e mensagens concorrentes exigem revisão e reprocessamento. Encaminhamento à equipe só é confirmado com evidência. Entregas usam o dia comercial de Petrolina nos filtros; conclusão exige saída prévia, preserva a data em repetições e protege avisos concorrentes/incertos. O app fecha os detalhes após a API confirmar a entrega e volta ao painel inicial. Base do painel 1.1.4 recuperada e preservada. 61 testes do bot, 39 de entregas, publicador seletivo e builds aprovados. Fechamento da publicação e instalação registrado na nota.
+
+## Histórico anterior
+
 # v1.2.627-gcode3d-domain
 
 Data: 14/10/2026. Branch: main. Tag: v1.2.627-gcode3d-domain.

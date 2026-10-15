@@ -16,8 +16,8 @@ for (const file of ['vps_server.cjs', 'vps_server.js']) {
 }
 
 assert.match(gradle, /applicationId = "br\.com\.mercadodovale\.entregas"/);
-assert.match(gradle, /versionCode = 7/);
-assert.match(gradle, /versionName = "1\.1\.3"/);
+assert.match(gradle, /versionCode = 9/);
+assert.match(gradle, /versionName = "1\.1\.5"/);
 assert.match(manifest, /Mercado do Vale Entregas/);
 assert.doesNotMatch(activity + gradle, /x-sync-key|SYNC_SECRET|VITE_VPS_SYNC_KEY/);
 assert.match(activity, /\/auth\/login/);

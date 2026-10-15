@@ -757,6 +757,14 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--sales-delivery-only') || process.argv.includes('--sales-delivery-check')) {
+    await require('./scripts/deploy-sales-delivery.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--sales-delivery-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--nfce-homologation-only') || process.argv.includes('--nfce-homologation-check')) {
     await require('./scripts/deploy-nfce-homologation.cjs').deployNfceHomologation({appDir,apiProc,exec,upload,root:__dirname,checkOnly:process.argv.includes('--nfce-homologation-check')});
     conn.end();

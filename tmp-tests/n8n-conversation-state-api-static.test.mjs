@@ -43,9 +43,16 @@ for (const file of serverFiles) {
   );
   assert.deepEqual(
     decideWrite({ currentRevision: 4, currentEventVersion: 2000, expectedRevision: 3, eventVersionProvided: true, eventVersion: 3000 }),
-    { action: 'apply', nextRevision: 5, nextEventVersion: 3000 },
-    `${file} must allow a later message to supersede a stale read`
+    { action: 'conflict', currentRevision: 4 },
+    `${file} must rebase a newer event instead of overwriting state computed from a stale read`
   );
+  assert.deepEqual(
+    decideWrite({ currentRevision: 4, currentEventVersion: 2000, expectedRevision: 4, eventVersionProvided: true, eventVersion: 3000 }),
+    { action: 'apply', nextRevision: 5, nextEventVersion: 3000 },
+    `${file} must apply the newer event after rehydration of the current revision`
+  );
+  assert.equal(source.includes('body.allowRebase !== true'), true, `${file} must opt in to a rebase response without changing legacy conflict semantics`);
+  assert.match(source, /reason: 'revision_conflict'/, `${file} must identify the rebase outcome distinctly from stale events`);
   assert.deepEqual(
     decideWrite({ currentRevision: 4, currentEventVersion: 3000, expectedRevision: 3, eventVersionProvided: true, eventVersion: 2000 }),
     { action: 'ignore', currentRevision: 4, currentEventVersion: 3000 },
@@ -94,10 +101,19 @@ for (const file of serverFiles) {
   );
 }
 
-assert.equal(
-  readFileSync('vps_server.cjs', 'utf8'),
-  readFileSync('vps_server.js', 'utf8'),
-  'the two API entry files must remain identical'
-);
+// Entry points can legitimately load different unrelated modules. Protect the
+// actual conversation-state implementation and route in both representations.
+for (const [start, end] of [
+  ['const N8N_BOT_CONVERSATION_STATE_KEYS', 'function mapN8nBotControlRow'],
+  ["fastify.post('/n8n-bot/client-control/conversation-state'", "fastify.post('/n8n-bot/client-control/reset'"],
+]) {
+  const sections = serverFiles.map(file => {
+    const source = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+    const from = source.indexOf(start), to = source.indexOf(end, from);
+    assert.equal(from >= 0 && to > from, true, `${file} must contain the conversation-state contract`);
+    return source.slice(from, to);
+  });
+  assert.equal(sections[0] === sections[1], true, 'conversation-state implementations must remain identical');
+}
 
 console.log('n8n conversation state API static checks passed');

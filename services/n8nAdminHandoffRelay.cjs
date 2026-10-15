@@ -32,12 +32,13 @@ function buildAdminLegend(code) {
   ].join('\n');
 }
 
-function buildAdminNotification({ code, contactName, phone, message }) {
+function buildAdminNotification({ code, contactName, phone, message, contextSummary }) {
   return [
     '🔔 Cliente aguardando atendimento',
     `Código: ${code}`,
     `Cliente: ${contactName || 'Nome não informado'} — ${phone}`,
     `Mensagem: “${String(message || 'Sem mensagem registrada').slice(0, 900)}”`,
+    contextSummary ? `Conferência da compra: ${String(contextSummary).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 1500)}` : '',
     '',
     buildAdminLegend(code),
   ].join('\n');
@@ -69,7 +70,7 @@ function newCode() {
   return crypto.randomBytes(3).toString('hex').toUpperCase();
 }
 
-async function notifyAdmins({ pool, identity, sendText }) {
+async function notifyAdmins({ pool, identity, sendText, contextSummary }) {
   const [existingRows] = await pool.query(
     `SELECT * FROM n8n_bot_handoffs WHERE remote_jid = ? AND status = 'open' AND expires_at > CURRENT_TIMESTAMP LIMIT 1`,
     [identity.remoteJid],
@@ -95,16 +96,16 @@ async function notifyAdmins({ pool, identity, sendText }) {
     );
     handoff = { remote_jid: identity.remoteJid, phone: identity.phone, code, contact_name: latest.contact_name || null, message_text: latest.message_text || '' };
   }
-  if (handoff.notified_at) return { notified: false, duplicate: true, code: handoff.code };
+  if (handoff.notified_at) return { notified: false, duplicate: true, deliveryConfirmed: true, code: handoff.code };
   const [claim] = await pool.query(
     `UPDATE n8n_bot_handoffs SET notification_claimed_at=CURRENT_TIMESTAMP WHERE remote_jid=? AND notified_at IS NULL AND (notification_claimed_at IS NULL OR notification_claimed_at < DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 2 MINUTE))`,
     [identity.remoteJid],
   );
-  if (!claim.affectedRows) return { notified: false, duplicate: true, code: handoff.code };
+  if (!claim.affectedRows) return { notified: false, duplicate: true, deliveryConfirmed: false, code: handoff.code };
   const [latestRows] = await pool.query(`SELECT contact_name, message_text FROM n8n_bot_messages WHERE remote_jid=? AND direction='inbound' ORDER BY id DESC LIMIT 1`, [identity.remoteJid]);
   const latest = latestRows?.[0] || {};
   const [admins] = await pool.query(`SELECT remote_jid, phone FROM n8n_bot_admin_numbers WHERE active=1 ORDER BY updated_at DESC`);
-  const notification = buildAdminNotification({ code: handoff.code, contactName: latest.contact_name || handoff.contact_name, phone: identity.phone, message: latest.message_text || handoff.message_text });
+  const notification = buildAdminNotification({ code: handoff.code, contactName: latest.contact_name || handoff.contact_name, phone: identity.phone, message: latest.message_text || handoff.message_text, contextSummary });
   let sent = 0;
   for (const admin of admins || []) {
     const result = await sendText({ remoteJid: admin.remote_jid, phone: admin.phone }, notification);

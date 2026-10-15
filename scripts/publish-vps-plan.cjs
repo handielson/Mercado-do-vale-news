@@ -162,14 +162,18 @@ function classifyFiles(files) {
 }
 
 function n8nDeployCommands(files) {
-  return files.flatMap((file) => {
+  const sales = files.some(file => /^tmp-tests\/n8n-sales-/.test(file));
+  return [
+    ...(sales ? ['node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract --apply'] : []),
+    ...files.filter(file => !sales || (!/^tmp-tests\/n8n-sales-/.test(file) && file !== 'tmp-tests/n8n-fix-payjoy-link-confirmation.cjs')).flatMap((file) => {
     const absolute = path.join(process.cwd(), file);
     if (!existsSync(absolute)) return [];
     const source = require('node:fs').readFileSync(absolute, 'utf8');
     if (source.includes('--apply-production')) return [`node ${file} --apply-production`];
     if (source.includes('--apply')) return [`node ${file} --apply`];
     return [`Revisar e aplicar manualmente o mutador n8n: ${file}`];
-  });
+    }),
+  ];
 }
 
 function buildReleaseName(options, now = new Date()) {
@@ -184,10 +188,13 @@ function buildReleaseName(options, now = new Date()) {
 
 function existingChecks(files) {
   const checks = [];
-  const changedTests = files.filter((file) => /^tmp-tests\/.*\.(?:mjs|cjs|js)$/.test(file));
+  const sales = files.some(file => /^tmp-tests\/n8n-sales-/.test(file));
+  const changedTests = files.filter((file) => /^tmp-tests\/.*\.test\.(?:mjs|cjs|js)$/.test(file)
+    && !(sales && /^tmp-tests\/n8n-sales-/.test(file)));
   for (const testFile of changedTests) {
     checks.push(`node ${testFile}`);
   }
+  if (sales) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract');
 
   const serverFilesChanged = files.some((file) => ['server.js', 'vps_server.js', 'vps_server.cjs'].includes(file));
   if (serverFilesChanged && existsSync(path.join(process.cwd(), 'tmp-tests/pdv-stock-location-decrement-static.test.mjs'))) {
@@ -224,10 +231,12 @@ function buildPlan(options) {
   if (classification.target === 'docs-only') validations.push('Revisar docs alterados; deploy nao e necessario.');
 
   const deployCommands = [];
+  const salesDelivery = allFiles.includes('scripts/deploy-sales-delivery.cjs');
+  if (classification.needs.api && salesDelivery) deployCommands.push('node deploy-vps-server-only.cjs --sales-delivery-only');
   if (classification.needs.site) {
     deployCommands.push(`$env:VPS_SITE_RELEASE_NAME='${releaseName}'; npm.cmd run deploy:vps-site`);
   }
-  if (classification.needs.api) {
+  if (classification.needs.api && !salesDelivery) {
     deployCommands.push('node deploy-vps-server-only.cjs');
   }
   deployCommands.push(...n8nDeployCommands(classification.n8nFiles));
@@ -350,6 +359,10 @@ function runSelfTest() {
   assert(n8n.needs.n8n === true, 'n8n workflow publication need failed');
   const n8nTest = classifyFiles(['tmp-tests/n8n-phone-price-list-cards.test.cjs']);
   assert(n8nTest.target === 'docs-only', 'n8n regression test must not be treated as a workflow deploy');
+  const salesFiles=['tmp-tests/n8n-fix-payjoy-link-confirmation.cjs','tmp-tests/n8n-sales-flow-contract.cjs','tmp-tests/n8n-sales-end-to-end.test.cjs'];
+  assert(JSON.stringify(n8nDeployCommands(salesFiles)) === JSON.stringify(['node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract --apply']), 'sales composition must have one canonical deploy command with its explicit mode');
+  assert(existingChecks(salesFiles).includes('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract'), 'sales preflight must validate the exact generated candidate');
+  assert(!existingChecks(salesFiles).some(command=>/node tmp-tests\/n8n-sales-/.test(command)), 'sales tests need the gate-provided snapshot and helper modules are not executable checks');
 
   const serverChecks = existingChecks(['vps_server.js']);
   assert(
