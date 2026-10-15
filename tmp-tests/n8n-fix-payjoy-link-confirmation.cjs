@@ -366,6 +366,8 @@ async function main() {
       const evidenceAge=Date.now()-Date.parse(evidence.testedAt);
       assert.ok(evidenceAge >= 0 && evidenceAge < 24*3600000, 'Model test evidence expired');
       assert.equal(evidence.nativeN8nModules,true,'Tests must execute installed native modules');
+      assert.equal(evidence.responsesApi,true,'Tests must cover the configured Responses API');
+      assert.equal(evidence.nativeAgentExecution,true,'Tests must execute the native Agent, not just a provider invocation');
       assert.equal(evidence.cases?.length,8,'All model scenarios must pass');
       assert.ok(evidence.cases.every(item=>item.passed===true));
     }

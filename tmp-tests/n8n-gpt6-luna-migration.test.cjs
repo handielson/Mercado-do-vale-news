@@ -38,11 +38,12 @@ test('all three chat providers use the replacement without changing agent wiring
     assert.equal(actual.type, '@n8n/n8n-nodes-langchain.lmChatOpenAi');
     assert.equal(actual.parameters.model.value, MODEL, name);
     assert.equal(actual.parameters.options.reasoningEffort, undefined, name);
-    assert.deepEqual(JSON.parse(actual.parameters.options.extraBody), { reasoning_effort: 'none' }, name);
+    assert.equal(actual.parameters.responsesApiEnabled, true, name);
+    assert.deepEqual(JSON.parse(actual.parameters.options.extraBody), { reasoning: { effort: 'none' } }, name);
     assert.equal(actual.parameters.options.temperature, 0, name);
     assert.deepEqual(updated.connections[name], original.connections[name], name);
     for (const [key, value] of Object.entries(old.parameters)) {
-      if (!['model', 'options'].includes(key)) assert.deepEqual(actual.parameters[key], value, `${name}:${key}`);
+      if (!['model', 'options', 'responsesApiEnabled'].includes(key)) assert.deepEqual(actual.parameters[key], value, `${name}:${key}`);
     }
     for (const [key, value] of Object.entries(old.parameters.options || {})) {
       if (!['reasoningEffort', 'extraBody', 'temperature'].includes(key)) assert.deepEqual(actual.parameters.options[key], value, `${name}:${key}`);

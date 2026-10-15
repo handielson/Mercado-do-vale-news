@@ -4,6 +4,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const {Client}=require('ssh2'),{getVpsSshConfig}=require('./vps-ssh-config.cjs');
 const {fingerprint}=require('../scripts/n8n-sales-regression-gate.cjs');
 const {validate}=require('./n8n-gpt6-luna-migration.cjs');
+const {invokeNativeAgent}=require('./n8n-gpt6-luna-native-agent.cjs');
 const arg=name=>{const i=process.argv.indexOf(name);assert.ok(i>=0&&process.argv[i+1],'Required '+name);return path.resolve(process.argv[i+1]);};
 async function main(){
  const workflow=JSON.parse(fs.readFileSync(arg('--snapshot'),'utf8'));validate(workflow);
@@ -19,8 +20,10 @@ const root=path.join(parent,pkg,'node_modules/@n8n/n8n-nodes-langchain/dist/node
 const nodes=PAYLOAD_NODES,images=PAYLOAD_IMAGES;
 const get=name=>nodes.find(n=>n.name===name);let current='setup',diagnostic=null;const results=[];
 const logger={debug(){},warn(){},error(){},info(){}};
+const invokeAgent=NATIVE_AGENT_INVOKE;
 const nativeFetch=global.fetch;
-global.fetch=async(url,options)=>{if(String(url).includes('/chat/completions')){const body=JSON.parse(options.body);assert.equal(body.model,'gpt-6-luna','Native model resolution must match candidate');assert.equal(body.reasoning_effort,'none');assert.equal(body.temperature,0);assert.ok(!('max_tokens' in body));}return nativeFetch(url,options);};
+const responseRequests=[];
+global.fetch=async(url,options)=>{if(/\/(?:responses|chat\/completions)(?:\?|$)/.test(String(url))){const body=JSON.parse(options.body);assert.ok(String(url).includes('/responses'),'Native agent must use the configured Responses API');assert.equal(body.model,'gpt-6-luna','Native model resolution must match candidate');if(!current.startsWith('vision-')){assert.equal(body.reasoning_effort,undefined);assert.equal(body.reasoning?.effort,'none');assert.equal(body.temperature,0);}assert.ok(!('max_tokens' in body));responseRequests.push(current);}return nativeFetch(url,options);};
 const source={remoteJid:'synthetic-model-eval',conversation:'',saudacaoDetectada:false,payjoyLinkContext:{ativo:true},salesConversationState:{ativo:false},conversationHistory:'Loja: Quer que eu envie o link oficial da PayJoy para sua análise?',storeHoursContext:'HORARIO_OFICIAL_INDISPONIVEL'};
 const dollar=()=>({first:()=>({json:source}),all:()=>[{json:source}]});
 function render(text){if(typeof text!=='string')return '';return text.startsWith('={{')?new Function('$json','$','return ('+text.slice(3,-2)+')')(source,dollar):text;}
@@ -28,7 +31,7 @@ function clean(text){return String(text).replace(/^\s*[\x60]{3}(?:json)?\s*/,'')
 function runCalc(response){const state={payjoyByJid:{},salesPostList:{}};return new Function('$json','$','$getWorkflowStaticData',get('PayJoy - Calcular entrada do print').parameters.jsCode)(response,dollar,()=>state)[0].json;}
 const context=node=>({getNode:()=>node,getNodeParameter:(name,i,f)=>name.split('.').reduce((value,key)=>value?.[key],node.parameters)??f,getCredentials:async()=>({apiKey}),getWorkflow:()=>({id:'isolated-model-test',name:'Synthetic model test'}),getExecutionId:()=> 'isolated',getMode:()=> 'manual',getWorkflowSettings:()=>({}),logger,addInputData(){},addOutputData(){},getInputConnectionData:async()=>null});
 async function model(name){const lm=new(require(root+'/llms/LMChatOpenAi/LmChatOpenAi.node.js').LmChatOpenAi)();const supplied=await lm.supplyData.call(context(get(name)),0);supplied.response.callbacks=[];return supplied.response;}
-async function invoke(m,agent,conversation){source.conversation=conversation;const p=get(agent).parameters;const response=await m.invoke([{role:'system',content:render(p.options.systemMessage)},{role:'user',content:render(p.text)}]);assert.ok(typeof response.content==='string'&&response.content.trim(),'Empty native output');return response.content;}
+async function invoke(m,agent,conversation){source.conversation=conversation;const p=get(agent).parameters;return await invokeAgent(m,get(agent),source,render(p.options.systemMessage),render(p.text));}
 (async()=>{
  const classifier=await model('OpenAI Classificador');
  for(const [text,decision]of [['oi sim, pois mande','accept'],['agora nao, deixa pra depois','decline'],['sim mas isso e seguro?','question'],['Quero falar com atendente','other']]){
@@ -53,9 +56,10 @@ async function invoke(m,agent,conversation){source.conversation=conversation;con
   if(fixture.kind==='approval'){assert.equal(actual.payjoyCalculation?.amountCents,160000);assert.equal(actual.payjoyCalculation?.percentBp,1400);assert.equal(actual.payjoyCalculation?.entryCents,22400);}else{assert.ok(!actual.payjoyCalculation);assert.match(actual.output,/n[aã]o consegui ler|n[aã]o confirma/i);}
   results.push({case:current,passed:true,status:output[0].json.status});
  }
- console.log(JSON.stringify({passed:true,cases:results}));
+ for(const item of results)assert.ok(responseRequests.includes(item.case),'No Responses request captured for '+item.case);
+ console.log(JSON.stringify({passed:true,cases:results,responsesApi:true,nativeAgentExecution:true}));
 })().catch(e=>{console.log(JSON.stringify({passed:false,failedCase:current,errorName:e.name,diagnostic,cases:results}));process.exitCode=1});
-`.replace('PAYLOAD_NODES',JSON.stringify(nodes)).replace('PAYLOAD_IMAGES',JSON.stringify(images));
+`.replace('PAYLOAD_NODES',JSON.stringify(nodes)).replace('PAYLOAD_IMAGES',JSON.stringify(images)).replace('NATIVE_AGENT_INVOKE',invokeNativeAgent.toString());
  // Existing configured shop API credential stays in the remote process and stdin only.
  const keyReader="require('dotenv').config({path:'.env',quiet:true});(async()=>{const p=await require('mysql2/promise').createConnection({host:process.env.DB_HOST,user:process.env.DB_USER,password:process.env.DB_PASS,database:process.env.DB_NAME});try{const [[r]]=await p.query('SELECT openai_api_key FROM autoresponder_settings WHERE id=1 LIMIT 1');process.stdout.write(JSON.stringify(String(r?.openai_api_key||process.env.OPENAI_API_KEY||'').trim()));}finally{await p.end();}})().catch(()=>process.exit(1));";
  const py='import subprocess,json\nkey=json.loads(subprocess.check_output(["node","-e",'+JSON.stringify(keyReader)+'],cwd="/var/www/mdv-api",text=True))\nassert key\nc=next(x for x in subprocess.check_output(["docker","ps","--format","{{.Names}}"],text=True).splitlines() if x.startswith("n8n_n8n."))\nraise SystemExit(subprocess.run(["docker","exec","-i",c,"node"],input="const apiKey="+json.dumps(key)+";\\n"+'+JSON.stringify(script)+',text=True).returncode)';

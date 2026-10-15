@@ -25,8 +25,11 @@ function patchWorkflow(input){
   const n=get(w,name);assert.equal(n.type,'@n8n/n8n-nodes-langchain.lmChatOpenAi');
   assert.ok(['gpt-4.1-mini',MODEL].includes(n.parameters.model?.value),'Unexpected model drift: '+name);
   n.parameters.model={__rl:true,value:MODEL,mode:'id'};
+  n.parameters.responsesApiEnabled=true;
   const extra=JSON.parse(n.parameters.options?.extraBody || '{}');
-  n.parameters.options={...n.parameters.options,extraBody:JSON.stringify({...extra,reasoning_effort:'none'}),temperature:0};
+  delete extra.reasoning_effort;
+  extra.reasoning={...extra.reasoning,effort:'none'};
+  n.parameters.options={...n.parameters.options,extraBody:JSON.stringify(extra),temperature:0};
   delete n.parameters.options.reasoningEffort;
  }
  const vision=get(w,VISION);assert.equal(vision.type,'@n8n/n8n-nodes-langchain.openAi');
@@ -46,7 +49,7 @@ function patchWorkflow(input){
  validate(w);return w;
 }
 function validate(w){
- for(const name of CHAT_NODES){const n=get(w,name);assert.equal(n.parameters.model.value,MODEL);assert.equal(JSON.parse(n.parameters.options.extraBody).reasoning_effort,'none');assert.equal(n.parameters.options.temperature,0);}
+ for(const name of CHAT_NODES){const n=get(w,name);assert.equal(n.parameters.model.value,MODEL);assert.equal(n.parameters.responsesApiEnabled,true);const extra=JSON.parse(n.parameters.options.extraBody);assert.equal(extra.reasoning_effort,undefined);assert.equal(extra.reasoning?.effort,'none');assert.equal(n.parameters.options.reasoningEffort,undefined);assert.equal(n.parameters.options.temperature,0);}
  const v=get(w,VISION);assert.equal(v.typeVersion,2.3);assert.equal(v.parameters.modelId.value,MODEL);
  assert.equal(v.parameters.inputType,'base64');assert.equal(v.parameters.binaryPropertyName,'payjoy');
  assert.equal(v.parameters.simplify,false);assert.equal(v.parameters.options.maxTokens,1600);

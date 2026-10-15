@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.631-n8n-gpt6-luna",
-  "date": "2026-10-14",
+  "version": "v1.2.632-n8n-responses-fix",
+  "date": "2026-10-15",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.631-n8n-gpt6-luna",
-  "release_vps": "/var/www/mdv-site/releases/20261014-231800-v1631-n8n-gpt6-luna",
+  "tag": "v1.2.632-n8n-responses-fix",
+  "release_vps": "/var/www/mdv-site/releases/20261015-111233-v1632-n8n-responses-fix",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Quatro nos do bot usam gpt-6-luna; PayJoy usa visao nativa Responses com testes antes da publicacao.",
+  "summary": "Corrige o parametro reasoning na API Responses dos tres modelos de atendimento; testes executam o Agent nativo.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -17,17 +17,16 @@
     "tmp-tests/n8n-gpt6-luna-migration.cjs",
     "tmp-tests/n8n-gpt6-luna-migration.test.cjs",
     "tmp-tests/n8n-gpt6-luna-native-smoke.cjs",
-    "tmp-tests/fixtures/payjoy-model-test-approval.png",
-    "tmp-tests/fixtures/payjoy-model-test-unreadable.png",
+    "tmp-tests/n8n-gpt6-luna-native-agent.cjs",
     "tmp-tests/n8n-fix-payjoy-link-confirmation.cjs",
-    "scripts/publish-vps-plan.cjs",
+    "docs/operacional/2026-10-15-incidente-classificador-responses.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-14-v1.2.631-n8n-gpt6-luna.md"
+    "docs/versoes/2026-10-15-v1.2.632-n8n-responses-fix.md"
   ],
   "validations": [
-    "61 testes do contrato de vendas e seis de migracao no candidato exato, mais suite de aprovacao PayJoy.",
-    "Oito testes reais com modulos nativos instalados: quatro consentimentos, conversa, vendas e duas imagens sinteticas.",
+    "61 testes do contrato de vendas e seis de migracao no candidato exato.",
+    "Oito cenarios reais em Responses: seis chamadas pelo Tools Agent V3 nativo e duas imagens sinteticas PayJoy.",
     "Build web com guarda contra runtime Supabase."
   ],
   "android_entregas": {

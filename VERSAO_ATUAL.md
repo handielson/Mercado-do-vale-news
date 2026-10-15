@@ -1,3 +1,12 @@
+# v1.2.632-n8n-responses-fix
+
+Data: 15/10/2026. Branch: main. Tag: v1.2.632-n8n-responses-fix.
+Release MDV: /var/www/mdv-site/releases/20261015-111233-v1632-n8n-responses-fix.
+
+Corrige HTTP 400 do classificador após a migração: três modelos explicitam Responses e usam reasoning.effort, preservando GPT-6 Luna. O teste anterior simulava incorretamente o padrão da API; agora executa o Tools Agent V3 instalado e inspeciona o corpo efetivamente enviado. 61 testes de vendas, seis da migração e oito cenários reais passaram no candidato 1ef08bb887e985f859976d81f673002d4cc86baf790af7816b5d5b720b33c88f. Publicação autorizada, em andamento. As sete correções de atendimento preparadas anteriormente continuam fora desta entrega.
+
+## Histórico anterior
+
 # v1.2.631-n8n-gpt6-luna
 
 Data: 14/10/2026. Branch: main. Tag: v1.2.631-n8n-gpt6-luna.
