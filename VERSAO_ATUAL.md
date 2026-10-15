@@ -3,7 +3,7 @@
 Data: 15/10/2026. Branch: main. Tag: v1.2.636-imagens-pai-previa.
 Release MDV: /var/www/mdv-site/releases/20261015-122600-v1636-imagens-pai-previa.
 
-A API retorna as fotos do pai no catalogo compacto/completo e nos detalhes. O card prioriza a capa do pai inclusive ao escolher cor; quando o pai nao tem fotos, usa o filho. A pagina de detalhe aceita o mesmo endereco publico reconhecido pela previa. Open Graph usa JPEG separado e versionado sem alterar os originais. 33 testes e leitura real MySQL aprovados. Publicacao em andamento; API e site, sem alteracao do n8n.
+A API retorna as fotos do pai no catalogo compacto/completo e nos detalhes. O card prioriza a capa do pai inclusive ao escolher cor; quando o pai nao tem fotos, usa o filho. A pagina de detalhe aceita o mesmo endereco publico reconhecido pela previa. Open Graph usa JPEG separado e versionado sem alterar os originais. 33 testes e leitura real MySQL aprovados. Publicado: commit 5eba910e e tag enviados a main; API seletiva com backup e reinicio mdv-api concluido, MySQL saudavel e site/VERSION 636 confirmados. Card real manteve a foto do pai ao selecionar Preto; alias do suporte abriu o produto correto e previa retornou JPEG de 28.445 bytes com HTTP 200. Protecao obrigatoria no publicador das tres entradas. Alteracoes preexistentes e 35 worktrees bloqueadas preservadas. Sem alteracao do n8n.
 
 ## Histórico anterior
 
