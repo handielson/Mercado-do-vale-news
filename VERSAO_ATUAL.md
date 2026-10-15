@@ -3,7 +3,7 @@
 Data: 15/10/2026. Branch: main. Tag: v1.2.633-fotos-tres-mensagens.
 Release MDV: /var/www/mdv-site/releases/20261015-112153-v1633-fotos-tres-mensagens.
 
-A resposta sobre fotos de todos os modelos passa a enviar três mensagens: explicação, link do catálogo e convite para escolher um modelo. Texto e link preservados. Apenas Vendas - Verificar Pos Lista muda no workflow; dois separadores de linha viram separadores de mensagem. 63 testes e fixtures de fotos/catálogo aprovados no candidato 31dc49a57e8a80b5f998136a87354e22a29dcbaecae86c2346bc94f118caa4db. Publicação em andamento. Outras correções pendentes permanecem fora desta entrega.
+A resposta sobre fotos de todos os modelos passa a enviar três mensagens: explicação, link do catálogo e convite para escolher um modelo. Texto e link preservados. Apenas Vendas - Verificar Pos Lista muda no workflow; dois separadores de linha viram separadores de mensagem. 63 testes e fixtures de fotos/catálogo aprovados no candidato 31dc49a57e8a80b5f998136a87354e22a29dcbaecae86c2346bc94f118caa4db. Publicado: commit 9a1694f9/tag enviados a main; workflow e histórico conferidos com mesmo hash após reinício, 63 testes repetidos e health/readiness ok. Site e VERSION 633 confirmados, catálogo renderizado; API saudável sem deploy/reinício. Outras correções pendentes e 35 worktrees bloqueadas preservadas.
 
 ## Histórico anterior
 
