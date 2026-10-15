@@ -3,7 +3,7 @@
 Data: 15/10/2026. Branch: main. Tag: v1.2.637-celulares-memoria.
 Release MDV: /var/www/mdv-site/releases/20261015-133500-v1637-celulares-memoria.
 
-No WhatsApp, cada numero da lista de celulares identifica um modelo com RAM e armazenamento definidos. As cores da mesma configuracao continuam juntas. A selecao por numero e cor preserva SKU, memoria e preco exatos; listas antigas agrupadas ainda exigem desambiguacao. O mutador de publicacao testa o candidato exato antes de gravar e confere o mesmo hash depois da leitura do n8n. Candidato f2e827d19bea0e8adc78469827be2a257569c996128a1c85787f83127a361a57, 87 testes aprovados e build aprovado. O timeout do especialista de vendas e a renovacao da chave REST sao investigacoes separadas desta correcao.
+No WhatsApp, cada numero da lista de celulares identifica um modelo com RAM e armazenamento definidos. As cores da mesma configuracao continuam juntas. A selecao por numero e cor preserva SKU, memoria e preco exatos; listas antigas agrupadas ainda exigem desambiguacao. O mutador de publicacao testa o candidato exato antes de gravar e confere o mesmo hash depois da leitura do n8n. Candidato f2e827d19bea0e8adc78469827be2a257569c996128a1c85787f83127a361a57, 87 testes aprovados antes e depois, build aprovado. Publicado: commit funcional 2f6578cd/tag enviados a main, workflow/historico alinhados, n8n/runner/banco 1/1, site/VERSION 637 e API/MySQL saudaveis. O timeout do especialista de vendas e a renovacao da chave REST sao investigacoes separadas desta correcao.
 
 ## Histórico anterior
 
