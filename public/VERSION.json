@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.629-entregas-painel",
+  "version": "v1.2.630-pdv-bipagem",
   "date": "2026-10-14",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.629-entregas-painel",
-  "release_vps": "/var/www/mdv-site/releases/20261014-224700-v1629-entregas-painel",
+  "tag": "v1.2.630-pdv-bipagem",
+  "release_vps": "/var/www/mdv-site/releases/20261014-225800-v1630-pdv-bipagem",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Corrige falha da API no painel de entregas exibida como erro de conexao no app 1.1.5.",
+  "summary": "PDV mantem o codigo selecionado apos adicionar produto para permitir bipagens consecutivas.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,19 +14,16 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "vps_server.cjs",
-    "vps_server.js",
-    "scripts/deploy-sales-delivery.cjs",
-    "tmp-tests/delivery-transition-regression.test.cjs",
-    "tmp-tests/deploy-sales-delivery.test.cjs",
+    "components/pdv/ProductSearchSection.tsx",
+    "tmp-tests/pdv-product-search-autocomplete-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-14-v1.2.629-entregas-painel.md"
+    "docs/versoes/2026-10-14-v1.2.630-pdv-bipagem.md"
   ],
   "validations": [
-    "Teste comportamental do handler reproduziu ReferenceError antes da correcao e passou depois nos dois entrypoints.",
-    "24 testes de transicoes e publicador seletivo aprovados; sintaxe dos dois entrypoints validada.",
-    "Preflight remoto seletivo confirma somente a correcao do painel."
+    "Teste executa o handler de adicao e verifica selecao, duas leituras consecutivas, bloqueio por estoque e confirmacao de IMEI.",
+    "Guardas de autocomplete, confirmacao de IMEI e inventario serializado aprovadas.",
+    "Build web com guarda contra runtime Supabase."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

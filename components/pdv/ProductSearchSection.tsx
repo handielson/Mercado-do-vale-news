@@ -194,6 +194,8 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
         onAddToCart(card.product, quantity);
         toast.success(`${card.product.name} adicionado ao carrinho`);
         setQuantities(prev => ({ ...prev, [card.id]: 1 }));
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
     };
 
     const handleSearch = async (options: ProductSearchOptions = {}) => {
