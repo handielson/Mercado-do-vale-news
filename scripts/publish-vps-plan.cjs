@@ -162,6 +162,9 @@ function classifyFiles(files) {
 }
 
 function n8nDeployCommands(files) {
+  if (files.some(file => /^tmp-tests\/n8n-gpt6-luna-/.test(file))) {
+    return ['node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --gpt6-luna --apply --model-test-evidence .local/n8n-gpt6-native-evidence.json'];
+  }
   const sales = files.some(file => /^tmp-tests\/n8n-sales-/.test(file));
   return [
     ...(sales ? ['node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract --apply'] : []),
@@ -188,13 +191,16 @@ function buildReleaseName(options, now = new Date()) {
 
 function existingChecks(files) {
   const checks = [];
+  const models = files.some(file => /^tmp-tests\/n8n-gpt6-luna-/.test(file));
   const sales = files.some(file => /^tmp-tests\/n8n-sales-/.test(file));
   const changedTests = files.filter((file) => /^tmp-tests\/.*\.test\.(?:mjs|cjs|js)$/.test(file)
-    && !(sales && /^tmp-tests\/n8n-sales-/.test(file)));
+    && !(sales && /^tmp-tests\/n8n-sales-/.test(file))
+    && !(models && /^tmp-tests\/n8n-gpt6-luna-/.test(file)));
   for (const testFile of changedTests) {
     checks.push(`node ${testFile}`);
   }
   if (sales) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract');
+  if (models) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --gpt6-luna');
 
   const serverFilesChanged = files.some((file) => ['server.js', 'vps_server.js', 'vps_server.cjs'].includes(file));
   if (serverFilesChanged && existsSync(path.join(process.cwd(), 'tmp-tests/pdv-stock-location-decrement-static.test.mjs'))) {
@@ -364,6 +370,10 @@ function runSelfTest() {
   assert(existingChecks(salesFiles).includes('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract'), 'sales preflight must validate the exact generated candidate');
   assert(!existingChecks(salesFiles).some(command=>/node tmp-tests\/n8n-sales-/.test(command)), 'sales tests need the gate-provided snapshot and helper modules are not executable checks');
 
+  const modelFiles=['tmp-tests/n8n-fix-payjoy-link-confirmation.cjs','tmp-tests/n8n-gpt6-luna-migration.cjs','tmp-tests/n8n-gpt6-luna-native-smoke.cjs','tmp-tests/n8n-gpt6-luna-migration.test.cjs'];
+  assert(n8nDeployCommands(modelFiles).length===1 && n8nDeployCommands(modelFiles)[0].includes('--gpt6-luna --apply --model-test-evidence'), 'model migration requires explicit mode and native evidence');
+  assert(existingChecks(modelFiles).includes('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --gpt6-luna'), 'model migration tests require the exact candidate');
+  assert(!existingChecks(modelFiles).some(command=>command.includes('migration.test.cjs')), 'model tests receive their snapshot from canonical dry-run');
   const serverChecks = existingChecks(['vps_server.js']);
   assert(
     serverChecks.includes('node tmp-tests/pdv-stock-location-decrement-static.test.mjs'),

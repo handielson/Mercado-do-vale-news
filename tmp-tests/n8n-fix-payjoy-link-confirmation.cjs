@@ -19,8 +19,9 @@ const APPROVAL = process.argv.includes('--approval');
 const CONTEXTUAL_INTENT = process.argv.includes('--contextual-intent');
 const KNOWLEDGE = process.argv.includes('--knowledge');
 const SALES_FLOW = process.argv.includes('--sales-contract');
-assert.ok([CONTEXTUAL_INTENT, INSTALLMENT_OPTIONS, APPROVAL, KNOWLEDGE, SALES_FLOW].filter(Boolean).length <= 1, 'Choose one workflow patch mode');
-const MARKER = SALES_FLOW ? 'sales-collection-state-contract-v1' : KNOWLEDGE ? 'payjoy-knowledge-v1' : CONTEXTUAL_INTENT ? 'payjoy-contextual-intent-v5' : INSTALLMENT_OPTIONS ? 'installment-options-payjoy-v1' : 'payjoy-link-confirmation-v1';
+const MODEL_FLOW = process.argv.includes('--gpt6-luna');
+assert.ok([CONTEXTUAL_INTENT, INSTALLMENT_OPTIONS, APPROVAL, KNOWLEDGE, SALES_FLOW, MODEL_FLOW].filter(Boolean).length <= 1, 'Choose one workflow patch mode');
+const MARKER = MODEL_FLOW ? 'gpt6-luna-migration-v1' : SALES_FLOW ? 'sales-collection-state-contract-v1' : KNOWLEDGE ? 'payjoy-knowledge-v1' : CONTEXTUAL_INTENT ? 'payjoy-contextual-intent-v5' : INSTALLMENT_OPTIONS ? 'installment-options-payjoy-v1' : 'payjoy-link-confirmation-v1';
 const APPLY = process.argv.includes('--apply');
 const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 const dollar = (value, tag) => `$${tag}$${String(value)}$${tag}$`;
@@ -297,18 +298,20 @@ async function main() {
   const connection = new Client();
   await new Promise((resolve, reject) => connection.once('ready', resolve).once('error', reject).connect(getVpsSshConfig()));
   let stopped = false;
+  let modelRollback = null;
+  let rollbackFailed = false;
   try {
     const database = (await run(connection, "docker ps --filter 'name=n8n_n8n-db' --format '{{.Names}}' | head -n 1")).trim();
     assert.ok(database, 'n8n database not found');
     const raw = await psql(connection, database, `COPY (SELECT json_build_object('nodesHex',encode(convert_to(we.nodes::text,'UTF8'),'hex'),'connectionsHex',encode(convert_to(we.connections::text,'UTF8'),'hex'),'activeVersionId',we.\"activeVersionId\",'active',we.active,'versionAligned',we.\"versionId\"=we.\"activeVersionId\",'entityHistoryEqual',we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb)::text FROM workflow_entity we JOIN workflow_history wh ON wh.\"workflowId\"=we.id AND wh.\"versionId\"=we.\"activeVersionId\" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`);
     const row = JSON.parse(raw.trim());
     const workflow = { nodes: JSON.parse(Buffer.from(row.nodesHex, 'hex').toString('utf8')), connections: JSON.parse(Buffer.from(row.connectionsHex, 'hex').toString('utf8')) };
-    const transform = SALES_FLOW ? require('./n8n-sales-flow-contract.cjs').patchWorkflow : KNOWLEDGE ? require('./n8n-payjoy-knowledge-patch.cjs').patchWorkflow : CONTEXTUAL_INTENT ? require('./n8n-payjoy-contextual-intent-patch.cjs').patchWorkflow : APPROVAL ? require('./n8n-payjoy-approval-patch.cjs').patchWorkflow : INSTALLMENT_OPTIONS ? require('./n8n-payjoy-workflow-patch.cjs').updateInstallmentOptionsWorkflow : patchWorkflow;
+    const transform = MODEL_FLOW ? require('./n8n-gpt6-luna-migration.cjs').patchWorkflow : SALES_FLOW ? require('./n8n-sales-flow-contract.cjs').patchWorkflow : KNOWLEDGE ? require('./n8n-payjoy-knowledge-patch.cjs').patchWorkflow : CONTEXTUAL_INTENT ? require('./n8n-payjoy-contextual-intent-patch.cjs').patchWorkflow : APPROVAL ? require('./n8n-payjoy-approval-patch.cjs').patchWorkflow : INSTALLMENT_OPTIONS ? require('./n8n-payjoy-workflow-patch.cjs').updateInstallmentOptionsWorkflow : patchWorkflow;
     const updated = transform(workflow);
     if (APPROVAL) require('./n8n-payjoy-approval-patch.cjs').validate(updated);
     else if (!SALES_FLOW) assert.deepEqual(updated.connections, workflow.connections, 'connections must remain unchanged');
     const changedNodes = updated.nodes.filter(node => JSON.stringify(node) !== JSON.stringify(workflow.nodes.find(n=>n.name===node.name))).map(node => node.name);
-    assert.ok(changedNodes.every(name => (SALES_FLOW ? [...require('./n8n-sales-flow-contract.cjs').SCOPED_NODES] : KNOWLEDGE ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Agente Inicial - Classificador','Parse Classificacao'] : CONTEXTUAL_INTENT ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Vendas - Preparar Contexto IA','Agente Inicial - Classificador','Parse Classificacao'] : APPROVAL ? [PAYMENT_NODE,RESOLVER_NODE,'Agente Geral - Atendimento','Dados','PayJoy - Recebeu print?','PayJoy - Print tem arquivo?','PayJoy - Recuperar midia','PayJoy - Restaurar imagem','PayJoy - Preparar imagem','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'] : INSTALLMENT_OPTIONS ? [PAYMENT_NODE] : [RESOLVER_NODE, PAYMENT_NODE, 'Agente Geral - Atendimento', 'Controle Bot - Aplicar Controle', 'Estado Conversa - Preparar']).includes(name)), 'only scoped workflow nodes may change');
+    assert.ok(changedNodes.every(name => (MODEL_FLOW ? require('./n8n-gpt6-luna-migration.cjs').SCOPED_NODES : SALES_FLOW ? [...require('./n8n-sales-flow-contract.cjs').SCOPED_NODES] : KNOWLEDGE ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Agente Inicial - Classificador','Parse Classificacao'] : CONTEXTUAL_INTENT ? [RESOLVER_NODE,PAYMENT_NODE,'Agente Geral - Atendimento','Vendas - Preparar Contexto IA','Agente Inicial - Classificador','Parse Classificacao'] : APPROVAL ? [PAYMENT_NODE,RESOLVER_NODE,'Agente Geral - Atendimento','Dados','PayJoy - Recebeu print?','PayJoy - Print tem arquivo?','PayJoy - Recuperar midia','PayJoy - Restaurar imagem','PayJoy - Preparar imagem','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'] : INSTALLMENT_OPTIONS ? [PAYMENT_NODE] : [RESOLVER_NODE, PAYMENT_NODE, 'Agente Geral - Atendimento', 'Controle Bot - Aplicar Controle', 'Estado Conversa - Preparar']).includes(name)), 'only scoped workflow nodes may change');
     if (APPROVAL) {
       const retained=Object.fromEntries(Object.entries(updated.connections).filter(([name])=>Object.hasOwn(workflow.connections,name)&&name!=='Controle Bot - Bloqueado?'));
       assert.deepEqual(retained,Object.fromEntries(Object.entries(workflow.connections).filter(([name])=>name!=='Controle Bot - Bloqueado?')));
@@ -321,16 +324,22 @@ async function main() {
       validation.scopedSalesGraphChanges = JSON.stringify(updated.connections) !== JSON.stringify(workflow.connections);
     }
     if (KNOWLEDGE) Object.assign(validation, require('./n8n-payjoy-knowledge-patch.cjs').validate(updated));
+    if (MODEL_FLOW) Object.assign(validation, require('./n8n-gpt6-luna-migration.cjs').validate(updated));
     // Validate the exact artifact, including when an older patch is rerun later.
     const hasSalesContract = updated.nodes.some(n => String(n.parameters?.jsCode || '').includes('sales-exact-variant-contract-v1'));
     const regressionGate = candidate => {
       const temp = path.join(os.tmpdir(), `mdv-n8n-candidate-${require('node:crypto').randomUUID()}.json`);
       try {
         fs.writeFileSync(temp, JSON.stringify(candidate), {flag:'wx',mode:0o600});
+        if (MODEL_FLOW) {
+          const tests = require('node:child_process').spawnSync(process.execPath,['--test','tmp-tests/n8n-gpt6-luna-migration.test.cjs'],
+            {cwd:path.resolve(__dirname,'..'),stdio:'inherit',env:{...process.env,MDV_PAYJOY_WORKFLOW_SNAPSHOT:temp}});
+          assert.equal(tests.status,0,'Model migration regressions failed');
+        }
         return require('../scripts/n8n-sales-regression-gate.cjs').runGate(temp);
       } finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
     };
-    if (SALES_FLOW || hasSalesContract) validation.regressionGate = regressionGate(updated);
+    if (MODEL_FLOW || SALES_FLOW || hasSalesContract) validation.regressionGate = regressionGate(updated);
     if (INSTALLMENT_OPTIONS) {
       const state = {};
       const route = executeResolver(updated.nodes.find(n => n.name === RESOLVER_NODE).parameters.jsCode, state, 'Quais são as opções de parcelamento?', 'responder_politica_pagamento');
@@ -343,6 +352,23 @@ async function main() {
       validation.installmentOptions = true;
     }
     assert.deepEqual(transform(updated).nodes, updated.nodes, 'patch must be idempotent');
+    const snapshotIndex = process.argv.indexOf('--snapshot-out');
+    if (snapshotIndex >= 0) {
+      assert.ok(!APPLY && process.argv[snapshotIndex+1], '--snapshot-out requires dry-run and a path');
+      fs.writeFileSync(path.resolve(process.argv[snapshotIndex+1]), JSON.stringify(updated), {mode:0o600});
+    }
+    if (MODEL_FLOW && APPLY) {
+      const evidenceIndex = process.argv.indexOf('--model-test-evidence');
+      assert.ok(evidenceIndex >= 0 && process.argv[evidenceIndex+1], 'Real native model tests are required before publication');
+      const evidence = JSON.parse(fs.readFileSync(process.argv[evidenceIndex+1], 'utf8'));
+      assert.equal(evidence.sha256, require('../scripts/n8n-sales-regression-gate.cjs').fingerprint(updated), 'Model tests must cover this exact candidate');
+      assert.equal(evidence.passed, true, 'Native model tests failed');
+      const evidenceAge=Date.now()-Date.parse(evidence.testedAt);
+      assert.ok(evidenceAge >= 0 && evidenceAge < 24*3600000, 'Model test evidence expired');
+      assert.equal(evidence.nativeN8nModules,true,'Tests must execute installed native modules');
+      assert.equal(evidence.cases?.length,8,'All model scenarios must pass');
+      assert.ok(evidence.cases.every(item=>item.passed===true));
+    }
     const changed = JSON.stringify(updated.nodes) !== JSON.stringify(workflow.nodes);
     const summary = { apply: APPLY, active: row.active, versionAligned: row.versionAligned, entityHistoryEqual: row.entityHistoryEqual, changed, changedNodes, validation };
     if (!APPLY) return console.log(JSON.stringify(summary, null, 2));
@@ -377,9 +403,10 @@ UPDATE workflow_entity SET nodes=${dollar(JSON.stringify(updated.nodes), 'nodesp
 UPDATE workflow_history SET nodes=${dollar(JSON.stringify(updated.nodes), 'historypayjoylink')}::json,connections=${dollar(JSON.stringify(updated.connections),'graphhistorypayjoylink')}::json,\"updatedAt\"=NOW() WHERE \"workflowId\"=${quote(WORKFLOW_ID)} AND \"versionId\"=${quote(row.activeVersionId)};
 COMMIT;
 COPY (SELECT json_build_object('entityHistoryEqual',we.nodes::jsonb=wh.nodes::jsonb,'payjoyLinkConfirmation',EXISTS(SELECT 1 FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->>'name'=${quote(PAYMENT_NODE)} AND node->'parameters'->>'jsCode' LIKE '%${MARKER}%') AND EXISTS(SELECT 1 FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->>'name'=${quote(RESOLVER_NODE)} AND node->'parameters'->>'jsCode' LIKE '%${INSTALLMENT_OPTIONS ? 'payjoy-link-confirmation-v1' : MARKER}%'))::text FROM workflow_entity we JOIN workflow_history wh ON wh.\"workflowId\"=we.id AND wh.\"versionId\"=we.\"activeVersionId\" WHERE we.id=${quote(WORKFLOW_ID)}) TO STDOUT;`;
+    if(MODEL_FLOW) modelRollback={database,workflow,version:row.activeVersionId};
     const verification = JSON.parse((await psql(connection, database, sql)).trim());
     assert.equal(verification.entityHistoryEqual, true);
-    if (!SALES_FLOW) assert.equal(verification.payjoyLinkConfirmation, true);
+    if (!SALES_FLOW && !MODEL_FLOW) assert.equal(verification.payjoyLinkConfirmation, true);
     else delete verification.payjoyLinkConfirmation; // Sales mode uses the full behavioral readback gate below.
     if (!INSTALLMENT_OPTIONS) {
       const continuation = JSON.parse((await psql(connection, database, `SELECT json_build_object('entityNodes',(SELECT count(*) FROM jsonb_array_elements(we.nodes::jsonb) node WHERE node->'parameters'::text IS NOT NULL AND (node->'parameters')::text LIKE '%payjoy-direct-analysis-v3%'),'historyNodes',(SELECT count(*) FROM jsonb_array_elements(wh.nodes::jsonb) node WHERE (node->'parameters')::text LIKE '%payjoy-direct-analysis-v3%'),'connectionsPreserved',encode(convert_to(we.connections::text,'UTF8'),'hex')=${quote(row.connectionsHex)} AND we.connections::jsonb=wh.connections::jsonb) FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)};`)).trim());
@@ -388,12 +415,13 @@ COPY (SELECT json_build_object('entityHistoryEqual',we.nodes::jsonb=wh.nodes::js
       if (!APPROVAL && !SALES_FLOW) assert.equal(continuation.connectionsPreserved, true);
       verification.directAnalysisContinuation = continuation;
     }
-    if (APPROVAL || KNOWLEDGE || SALES_FLOW || hasSalesContract) {
+    if (MODEL_FLOW || APPROVAL || KNOWLEDGE || SALES_FLOW || hasSalesContract) {
       const activeWorkflow = JSON.parse((await psql(connection,database,`SELECT json_build_object('nodes',we.nodes,'connections',we.connections,'historyAligned',we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb) FROM workflow_entity we JOIN workflow_history wh ON wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)};`)).trim());
       assert.deepEqual(activeWorkflow.nodes,updated.nodes);
       assert.deepEqual(activeWorkflow.connections,updated.connections);
       assert.equal(activeWorkflow.historyAligned,true);
-      if (SALES_FLOW || hasSalesContract) {
+      if (MODEL_FLOW) require('./n8n-gpt6-luna-migration.cjs').validate(activeWorkflow);
+      if (MODEL_FLOW || SALES_FLOW || hasSalesContract) {
         verification.salesRegressionReadback = regressionGate(activeWorkflow);
       } else if (KNOWLEDGE) {
         require('./n8n-payjoy-knowledge-patch.cjs').validate(activeWorkflow);
@@ -409,8 +437,30 @@ COPY (SELECT json_build_object('entityHistoryEqual',we.nodes::jsonb=wh.nodes::js
     await waitService(connection, 'n8n_n8n-runner', 1);
     stopped = false;
     console.log(JSON.stringify({ ...summary, ...verification, backupPath }, null, 2));
+  } catch(error) {
+    if(modelRollback && stopped){
+      const {database,workflow,version}=modelRollback;
+      try {
+      await run(connection,'docker service scale n8n_n8n-runner=0 >/dev/null');
+      await waitService(connection,'n8n_n8n-runner',0);
+      await run(connection,'docker service scale n8n_n8n=0 >/dev/null');
+      await waitService(connection,'n8n_n8n',0);
+      await psql(connection,database,`BEGIN;
+UPDATE workflow_entity SET nodes=${dollar(JSON.stringify(workflow.nodes),'rollbackmodelnodes')}::json,connections=${dollar(JSON.stringify(workflow.connections),'rollbackmodelgraph')}::json,"updatedAt"=NOW() WHERE id=${quote(WORKFLOW_ID)} AND "activeVersionId"=${quote(version)};
+UPDATE workflow_history SET nodes=${dollar(JSON.stringify(workflow.nodes),'rollbackmodelhistory')}::json,connections=${dollar(JSON.stringify(workflow.connections),'rollbackmodelhistorygraph')}::json,"updatedAt"=NOW() WHERE "workflowId"=${quote(WORKFLOW_ID)} AND "versionId"=${quote(version)};
+COMMIT;`);
+      const restored=await psql(connection,database,`SELECT count(*) FROM workflow_entity we JOIN workflow_history wh ON wh."workflowId"=we.id AND wh."versionId"=we."activeVersionId" WHERE we.id=${quote(WORKFLOW_ID)} AND we."activeVersionId"=${quote(version)} AND we.nodes::jsonb=${dollar(JSON.stringify(workflow.nodes),'verifyrollbacknodes')}::jsonb AND we.connections::jsonb=${dollar(JSON.stringify(workflow.connections),'verifyrollbackgraph')}::jsonb AND we.nodes::jsonb=wh.nodes::jsonb AND we.connections::jsonb=wh.connections::jsonb;`);
+      assert.equal(restored.trim(),'1','Model migration rollback verification failed');
+      console.error('Model migration readback failed; previous workflow restored before restart');
+      } catch(restoreError) {
+        rollbackFailed=true;
+        console.error('Model migration rollback not verified; services remain stopped for recovery');
+        throw restoreError;
+      }
+    }
+    throw error;
   } finally {
-    if (stopped) {
+    if (stopped && !rollbackFailed) {
       await run(connection, 'docker service scale n8n_n8n=1 >/dev/null').catch(() => {});
       await waitService(connection, 'n8n_n8n', 1).catch(() => {});
       await run(connection, 'docker service scale n8n_n8n-runner=1 >/dev/null').catch(() => {});

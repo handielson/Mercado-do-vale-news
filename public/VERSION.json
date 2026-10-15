@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.630-pdv-bipagem",
+  "version": "v1.2.631-n8n-gpt6-luna",
   "date": "2026-10-14",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.630-pdv-bipagem",
-  "release_vps": "/var/www/mdv-site/releases/20261014-225800-v1630-pdv-bipagem",
+  "tag": "v1.2.631-n8n-gpt6-luna",
+  "release_vps": "/var/www/mdv-site/releases/20261014-231800-v1631-n8n-gpt6-luna",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "PDV mantem o codigo selecionado apos adicionar produto para permitir bipagens consecutivas.",
+  "summary": "Quatro nos do bot usam gpt-6-luna; PayJoy usa visao nativa Responses com testes antes da publicacao.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,15 +14,20 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/pdv/ProductSearchSection.tsx",
-    "tmp-tests/pdv-product-search-autocomplete-static.test.mjs",
+    "tmp-tests/n8n-gpt6-luna-migration.cjs",
+    "tmp-tests/n8n-gpt6-luna-migration.test.cjs",
+    "tmp-tests/n8n-gpt6-luna-native-smoke.cjs",
+    "tmp-tests/fixtures/payjoy-model-test-approval.png",
+    "tmp-tests/fixtures/payjoy-model-test-unreadable.png",
+    "tmp-tests/n8n-fix-payjoy-link-confirmation.cjs",
+    "scripts/publish-vps-plan.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-14-v1.2.630-pdv-bipagem.md"
+    "docs/versoes/2026-10-14-v1.2.631-n8n-gpt6-luna.md"
   ],
   "validations": [
-    "Teste executa o handler de adicao e verifica selecao, duas leituras consecutivas, bloqueio por estoque e confirmacao de IMEI.",
-    "Guardas de autocomplete, confirmacao de IMEI e inventario serializado aprovadas.",
+    "61 testes do contrato de vendas e seis de migracao no candidato exato, mais suite de aprovacao PayJoy.",
+    "Oito testes reais com modulos nativos instalados: quatro consentimentos, conversa, vendas e duas imagens sinteticas.",
     "Build web com guarda contra runtime Supabase."
   ],
   "android_entregas": {
