@@ -7909,6 +7909,17 @@ async function loadMobileTikTokSalesVps(limit = 50, orderId = '', startDate = ''
     .slice(0, safeLimit);
 }
 
+async function loadTikTokShopOrderForStockVps(orderId) {
+  const safeOrderId = String(orderId || '').trim();
+  if (!safeOrderId) return null;
+  const settings = await loadTikTokShopOAuthSettingsVps();
+  const result = await callTikTokShopOpenApiVps(settings, {
+    pathname: '/order/202309/orders',
+    query: { ids: safeOrderId },
+  });
+  return (result?.payload?.data?.orders || []).find(order => String(order?.id || '') === safeOrderId) || null;
+}
+
 function shopeeSupportIsoVps(value) {
   const numeric = Number(value);
   if (Number.isFinite(numeric) && numeric > 0) {
@@ -8244,9 +8255,16 @@ async function replayTikTokAuthoritativeStockAfterRestockVps(sale) {
 }
 
 async function recordMobileTikTokSaleVps(orderId) {
-  const sale = (await loadMobileTikTokSalesVps(1, orderId))[0];
+  const order = await loadTikTokShopOrderForStockVps(orderId);
+  const sale = order ? normalizeMobileTikTokOrderVps(order) : null;
   if (!sale) return null;
   if (tiktokOrderRestoresMarketplaceInventoryVps(sale.status)) {
+    if (/CANCEL/i.test(String(sale.status || ''))) {
+      const restored = await tiktokOrderStockProtectionVps.restoreOrder(order);
+      if (restored.productIds?.length) {
+        await syncMarketplaceStockAfterLocalMutationVps(restored.productIds, 'tiktok_order_cancelled_before_bling');
+      }
+    }
     const replay = await replayTikTokAuthoritativeStockAfterRestockVps(sale);
     if (!replay.ok) {
       console.error('[tiktok-shop-stock] Falha ao reaplicar estoque autoritativo apos cancelamento/devolucao', {
@@ -8258,6 +8276,16 @@ async function recordMobileTikTokSaleVps(orderId) {
     return null;
   }
   if (/UNPAID/i.test(sale.status)) return null;
+  const protection = await tiktokOrderStockProtectionVps.protectOrder(order);
+  if (protection.productIds?.length) {
+    await syncMarketplaceStockAfterLocalMutationVps(protection.productIds, 'tiktok_order_committed');
+  }
+  if (!protection.ok) {
+    console.error('[tiktok-shop-stock] Pedido recebido com SKU sem vinculo local', {
+      orderId: String(orderId || ''),
+      errors: protection.results?.filter(row => row.error).map(row => row.error) || [],
+    });
+  }
   return mobileSalesPushService.recordSaleEvent(sale);
 }
 
@@ -10799,9 +10827,10 @@ function distributeTikTokInventoryQuantityVps(inventory = [], quantity = 0) {
   }));
 }
 
-async function syncTikTokStockFromBlingTargetsVps(stockTargets = []) {
+async function syncTikTokStockFromBlingTargetsVps(stockTargets = [], { skipQueue = false } = {}) {
   const targets = Array.isArray(stockTargets) ? stockTargets.filter((target) => target?.id) : [];
   if (!targets.length) return { ok: true, skipped: 'no_stock_targets', updated: 0, errors: [] };
+  const targetByProductId = new Map(targets.map(target => [String(target.id), target]));
 
   const targetIds = [...new Set(targets.map((target) => String(target.id)))];
   const placeholders = targetIds.map(() => '?').join(',');
@@ -10819,6 +10848,11 @@ async function syncTikTokStockFromBlingTargetsVps(stockTargets = []) {
     [...targetIds, ...targetIds],
   );
   if (!links.length) return { ok: true, skipped: 'no_tiktok_links', updated: 0, errors: [] };
+
+  const linkedProductIds = [...new Set(links.map(link => String(link.product_id || '')).filter(Boolean))];
+  const queuedEntries = !skipQueue && tiktokStockSyncQueueVps
+    ? await tiktokStockSyncQueueVps.enqueue(linkedProductIds, 'inventory_changed')
+    : [];
 
   let settings;
   try {
@@ -10848,9 +10882,10 @@ async function syncTikTokStockFromBlingTargetsVps(stockTargets = []) {
           || (remoteSkus.length === 1 ? localRows?.[0] : null)
           || (remoteSkuId === String(link.tiktok_sku_id || '') ? localRows?.[0] : null);
         if (!remoteSkuId || !local) continue;
+        const protectedTarget = targetByProductId.get(String(local.id));
         const quantity = Number(local.track_inventory) === 0
           ? 999
-          : Math.max(0, Math.trunc(Number(local.stock_quantity || 0)));
+          : Math.max(0, Math.trunc(Number(protectedTarget?.stock_quantity ?? local.stock_quantity ?? 0)));
         const inventory = distributeTikTokInventoryQuantityVps(remoteSku.inventory, quantity);
         if (!inventory.length) {
           throw new Error(`TikTok SKU ${remoteSkuId} nao retornou armazem para atualizar estoque.`);
@@ -10882,6 +10917,10 @@ async function syncTikTokStockFromBlingTargetsVps(stockTargets = []) {
         [message, link.product_id],
       ).catch(() => {});
     }
+  }
+  if (queuedEntries.length && tiktokStockSyncQueueVps) {
+    const failed = new Set(results.errors.map(error => String(error.product_id || '')));
+    await tiktokStockSyncQueueVps.complete(queuedEntries.filter(entry => !failed.has(String(entry.product_id))));
   }
   return results;
 }
@@ -11038,6 +11077,14 @@ async function patchVpsJsonForBlingAdminVps(request, method, pathname, body) {
 }
 
 const { createBlingStockWebhookQueue, isBlingStockEvent } = require('./services/blingStockWebhookQueue.cjs');
+const { createTikTokStockSyncQueue } = require('./services/tiktokStockSyncQueue.cjs');
+const { createTikTokOrderStockProtection } = require('./services/tiktokOrderStockProtection.cjs');
+const tiktokOrderStockProtectionVps = createTikTokOrderStockProtection({ pool });
+const tiktokStockSyncQueueVps = createTikTokStockSyncQueue({
+  pool,
+  loadTargets: getShopeeStockTargetsForProductIds,
+  syncTargets: syncTikTokStockFromBlingTargetsVps,
+});
 const blingStockWebhookQueue = createBlingStockWebhookQueue({
   pool,
   processEvent: async (request) => {
@@ -11125,6 +11172,9 @@ async function processBlingWebhookVps(request, reply) {
         vpsResult: selfCallResult,
       });
       const marketplaceStockSync = await syncMarketplaceStockFromBlingTargetsVps(vpsStockResult.stockTargets || []);
+      if (vpsStockResult.ok) {
+        await tiktokOrderStockProtectionVps.absorbProducts((vpsStockResult.stockTargets || []).map(target => target.id));
+      }
       return reply.code(200).send({
         ok: Boolean(vpsStockResult.ok && marketplaceStockSync.ok),
         event,
@@ -11224,6 +11274,9 @@ async function processBlingWebhookVps(request, reply) {
             tiktok: { ok: true, skipped: 'stock_unchanged', updated: 0, errors: [] },
             mercadoLivre: { ok: true, skipped: 'stock_unchanged', updated: 0, errors: [] },
           };
+      if (updates.stock_quantity !== undefined && effectivePriceStockResult?.ok) {
+        await tiktokOrderStockProtectionVps.absorbProducts((effectivePriceStockResult.stockTargets || []).map(target => target.id));
+      }
       return reply.code(200).send({
         ok: Boolean(vpsNameResult?.ok && effectivePriceStockResult?.ok && marketplaceStockSync.ok),
         event,
@@ -13785,6 +13838,10 @@ fastify.post('/shopee-connections', { preHandler: requireSyncKey }, async (reque
   });
 });
 fastify.all('/api/tiktok-shop/webhook', handleTikTokShopWebhookVps);
+fastify.get('/api/tiktok-shop/stock-protection/status', { preHandler: requireSyncKeyOrAdmin }, async (request) => ({
+  orders: await tiktokOrderStockProtectionVps.getStatus(request.query?.limit),
+  outbox: await tiktokStockSyncQueueVps.getStatus(request.query?.limit),
+}));
 const fulfillTikTokOrderRoute = async (request, reply) => {
   try {
     const result = await fulfillTikTokOrderVps(request.params?.orderId, { handoverMethod: String(request.body?.handover_method || 'DROP_OFF').toUpperCase() });
@@ -28634,16 +28691,24 @@ async function getShopeeStockTargetsForProductIds(productIds) {
   if (!ids.length) return [];
   const placeholders = ids.map(() => '?').join(',');
   const comboStock = comboStockSql('p');
+  const pendingTikTokClaim = `(SELECT COALESCE(SUM(GREATEST(tse.requested_quantity-tse.applied_quantity,0)),0)
+    FROM tiktok_order_stock_events tse WHERE tse.product_id=p.id AND tse.state IN ('active','shortage'))`;
+  const protectedStock = `GREATEST(0,(CASE WHEN p.is_combo=1 THEN ${comboStock}
+    ELSE LEAST(${comboStock},GREATEST(COALESCE(p.stock_quantity,0),0)) END)-${pendingTikTokClaim})`;
   const [rows] = await pool.query(
-    `SELECT p.id, p.sku, p.offer_type, p.shopee_strategy, p.track_inventory, ${comboStock} AS stock_quantity
+    `SELECT p.id, p.sku, p.offer_type, p.shopee_strategy, p.track_inventory, ${protectedStock} AS stock_quantity
        FROM products p
       WHERE p.id IN (${placeholders})
      UNION
-     SELECT p.id, p.sku, p.offer_type, p.shopee_strategy, p.track_inventory, ${comboStock} AS stock_quantity
+     SELECT p.id, p.sku, p.offer_type, p.shopee_strategy, p.track_inventory, ${protectedStock} AS stock_quantity
+       FROM products p
+      WHERE p.parent_id IN (${placeholders})
+     UNION
+     SELECT p.id, p.sku, p.offer_type, p.shopee_strategy, p.track_inventory, ${protectedStock} AS stock_quantity
        FROM product_combos pc
        JOIN products p ON p.id = pc.combo_product_id
       WHERE pc.child_product_id IN (${placeholders})`,
-    [...ids, ...ids]
+    [...ids, ...ids, ...ids]
   );
   return rows.map(row => ({
     id: row.id,
@@ -43239,6 +43304,8 @@ require('./services/accountantPortalServer.cjs').registerAccountantPortalRoutes(
 scheduleNextSystemBackup();
 
 runMigrations().then(async () => {
+  await tiktokOrderStockProtectionVps.ensureSchema();
+  await tiktokStockSyncQueueVps.start();
   await blingStockWebhookQueue.start();
   blingFiscalAutomation.start();
   if (process.env.MDV_FISCAL_AUTO_CANCEL_ENABLED === '1' && process.env.MDV_FISCAL_AUTO_CANCEL_HOMOLOGATED === '1') {
@@ -43300,6 +43367,39 @@ runMigrations().then(async () => {
   };
   void pollTikTokPrint();
   setInterval(() => void pollTikTokPrint(), 60_000).unref?.();
+  let tiktokStockPollRunning = false;
+  const pollTikTokStockProtection = async () => {
+    if (tiktokStockPollRunning) return;
+    tiktokStockPollRunning = true;
+    try {
+      const settings = await loadTikTokShopOAuthSettingsVps();
+      const result = await callTikTokShopOpenApiVps(settings, {
+        method: 'POST', pathname: '/order/202309/orders/search',
+        query: { page_size: 100, sort_field: 'update_time', sort_order: 'DESC' },
+        body: { update_time_ge: Math.floor(Date.now() / 1000) - 15 * 60 },
+      });
+      for (const order of result?.payload?.data?.orders || []) {
+        await recordMobileTikTokSaleVps(order.id).catch(error => {
+          console.error('[tiktok-shop-stock] polling order failed', {
+            orderId: String(order?.id || ''), error: String(error?.message || error),
+          });
+        });
+      }
+    } catch (error) {
+      console.error('[tiktok-shop-stock] polling failed:', error.message);
+    } finally { tiktokStockPollRunning = false; }
+  };
+  void pollTikTokStockProtection();
+  setInterval(() => void pollTikTokStockProtection(), 60_000).unref?.();
+  const enqueueAllTikTokStockLinks = async (reason) => {
+    try {
+      const [rows] = await pool.query(`SELECT DISTINCT product_id FROM tiktok_shop_products
+        WHERE tiktok_product_id IS NOT NULL AND COALESCE(status,'') NOT IN ('DELETED','FREEZE')`);
+      await tiktokStockSyncQueueVps.enqueue(rows.map(row => row.product_id), reason);
+    } catch (error) { console.error('[tiktok-stock-outbox] hourly reconciliation failed:', error.message); }
+  };
+  setTimeout(() => void enqueueAllTikTokStockLinks('startup_reconciliation'), 2 * 60 * 1000).unref?.();
+  setInterval(() => void enqueueAllTikTokStockLinks('hourly_reconciliation'), 60 * 60 * 1000).unref?.();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);

@@ -1,5 +1,25 @@
 # TikTok Shop - Solucoes de problemas
 
+## Venda aceita enquanto o Bling ainda informava saldo antigo
+
+- Data: 2026-10-17
+- Area: pedidos / estoque / webhooks
+- Sintoma: um pedido TikTok era confirmado, mas o saldo dos demais canais permanecia
+  disponivel ate chegar o webhook fisico de estoque do Bling.
+- Evidencia: o handler `ORDER_STATUS_CHANGE` apenas registrava a venda; a sincronizacao
+  de marketplace dependia da baixa absoluta posterior do Bling. Falhas de escrita no
+  TikTok eram registradas em `last_error`, sem uma fila duravel de repeticao.
+- Fontes oficiais: `Get Order List`, `Order Management System` e `Update Inventory`
+  na documentacao do TikTok Shop Partner Center.
+- Causa: janela sem reserva/baixa local entre pedido confirmado e atualizacao do Bling,
+  somada a ausencia de outbox para uma escrita de estoque que falhasse.
+- Correcao local: baixa provisoria idempotente por pedido + SKU; confirmacao absoluta
+  pelo Bling; polling por `update_time`; outbox versionada com retry; reconciliacao
+  inicial e horaria dos anuncios ativos.
+- Protecao: `tmp-tests/tiktok-oversell-protection.test.mjs` e
+  `tmp-tests/tiktok-stock-sync-outbox.test.mjs`.
+- Publicacao: pendente de checkpoint explicito e validacao controlada na VPS.
+
 ## Coluna `shipping_weight` inexistente ao criar rascunho
 
 - Data: 2026-07-26

@@ -47,6 +47,8 @@ const tiktokShopAutomationPaths = [
   tiktokShopFulfillmentServicePath,
   'services/tiktokShopFulfillmentAutomation.cjs',
   'services/tiktokShopPrintServer.cjs',
+  'services/tiktokOrderStockProtection.cjs',
+  'services/tiktokStockSyncQueue.cjs',
 ];
 const print3dRecipeRuntimePaths = [
   'services/unitJournalServer.cjs',

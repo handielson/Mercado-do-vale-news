@@ -21,6 +21,13 @@ Decisões:
 - Baixar o Bling uma única vez por pedido + SKU.
 - Em `CANCEL`, estornar somente movimentos anteriormente confirmados.
 - Nunca baixar novamente estoque em reentrega do mesmo webhook.
+- Ao receber `ON_HOLD`, `AWAITING_SHIPMENT` ou `AWAITING_COLLECTION`, fazer uma baixa
+  provisoria e idempotente por pedido + SKU antes de aguardar o saldo absoluto do Bling.
+- O webhook absoluto do Bling absorve a baixa provisoria, sem aplicar um segundo delta.
+- Polling de contingencia usa `update_time_ge`, com sobreposicao curta, para recuperar
+  webhooks atrasados ou perdidos sem rebaixar o mesmo pedido.
+- Toda escrita de estoque TikTok passa por uma outbox duravel, versionada por produto;
+  uma tentativa antiga nunca pode encerrar ou sobrescrever uma quantidade mais nova.
 
 ## 2. Calculadora e preço
 

@@ -329,6 +329,13 @@ Contrato por SKU:
 }
 ```
 
+Depois de aplicar o saldo absoluto do Bling, a VPS marca como absorvidas as baixas
+provisorias de pedidos TikTok daquele produto. Essa confirmacao impede que um
+cancelamento posterior devolva duas vezes uma unidade que o Bling ja contabilizou.
+Falhas ao publicar o novo saldo no TikTok permanecem na tabela
+`tiktok_stock_sync_outbox` e sao repetidas com backoff; o webhook do Bling nao e a
+unica oportunidade de sincronizacao.
+
 ## Contratos da VPS
 
 ### `PATCH /products/name`

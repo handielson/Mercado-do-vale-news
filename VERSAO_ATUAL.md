@@ -1,3 +1,12 @@
+# v1.2.644-tiktok-stock-protection
+
+Data: 17/10/2026. Branch: main. Tag: v1.2.644-tiktok-stock-protection.
+Release MDV: /var/www/mdv-site/releases/20261017-110207-v12644-tiktok-stock-protection.
+
+Pedidos confirmados no TikTok passam a reservar imediatamente o estoque local por pedido e SKU, sem duplicar a baixa quando webhook e polling entregam o mesmo evento. O saldo absoluto posterior do Bling absorve a reserva provisoria, cancelamentos restauram apenas baixas ainda nao absorvidas e falhas ao atualizar o TikTok permanecem em fila persistente versionada. Um polling por data de atualizacao e uma reconciliacao periodica cobrem webhooks atrasados ou perdidos. O formato real do TikTok, com uma unidade por `line_item` e sem campo `quantity`, esta protegido por teste. O saldo operacional existente nao e alterado pela publicacao.
+
+## Histórico anterior
+
 # v1.2.643-shopee-anatel-condicional
 
 Data: 17/10/2026. Branch: main. Tag: v1.2.643-shopee-anatel-condicional.
