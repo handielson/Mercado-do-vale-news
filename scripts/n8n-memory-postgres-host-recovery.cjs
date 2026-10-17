@@ -74,14 +74,14 @@ async function waitService(connection, name, timeoutMs = 120000) {
   throw new Error(`${name} did not reach 1/1`);
 }
 
-async function waitHealth(connection, timeoutMs = 120000) {
+async function waitEndpoint(connection, url, label, timeoutMs = 120000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const code = await run(connection, "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://n8n.mercadodovale.com.br/healthz || true");
+    const code = await run(connection, `curl -s -o /dev/null -w '%{http_code}' --max-time 10 ${quote(url)} || true`);
     if (code === '200') return;
     await new Promise((resolve) => setTimeout(resolve, 2500));
   }
-  throw new Error('n8n health did not return HTTP 200');
+  throw new Error(`${label} did not return HTTP 200`);
 }
 
 async function readMemoryCredential(connection, dbContainer) {
@@ -160,15 +160,16 @@ async function main() {
     await run(connection, `docker exec ${quote(mainContainer)} rm -f ${tempFiles.map(quote).join(' ')}`);
     tempFiles.length = 0;
 
-    await run(connection, 'docker service update --force --detach=true n8n_n8n >/dev/null');
-    await waitService(connection, 'n8n_n8n');
-    await waitHealth(connection);
-    await run(connection, 'docker service update --force --detach=true n8n_n8n-runner >/dev/null');
+    if (transformSummary.changed) {
+      await run(connection, 'docker service update --force --detach=true n8n_n8n >/dev/null');
+      await waitService(connection, 'n8n_n8n');
+      await waitEndpoint(connection, 'https://n8n.mercadodovale.com.br/healthz', 'n8n health');
+      await run(connection, 'docker service update --force --detach=true n8n_n8n-runner >/dev/null');
+    }
     await waitService(connection, 'n8n_n8n-runner');
-    const readiness = await run(connection, "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://n8n.mercadodovale.com.br/healthz/readiness || true");
-    assert.equal(readiness, '200', 'n8n readiness failed');
+    await waitEndpoint(connection, 'https://n8n.mercadodovale.com.br/healthz/readiness', 'n8n readiness');
     const services = await run(connection, "docker service ls --filter name=n8n_ --format '{{.Name}}={{.Replicas}}' | sort");
-    console.log(JSON.stringify({ apply: true, workflowId: WORKFLOW_ID, backupPath, changed: transformSummary.changed, previousHost: transformSummary.previousHost, credential, health: 200, readiness: 200, services: services.split(/\r?\n/) }, null, 2));
+    console.log(JSON.stringify({ apply: true, workflowId: WORKFLOW_ID, backupPath, changed: transformSummary.changed, restarted: transformSummary.changed, previousHost: transformSummary.previousHost, credential, health: 200, readiness: 200, services: services.split(/\r?\n/) }, null, 2));
   } finally {
     if (mainContainer && tempFiles.length) {
       await run(connection, `docker exec ${quote(mainContainer)} rm -f ${tempFiles.map(quote).join(' ')}`).catch(() => {});

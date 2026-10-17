@@ -48,6 +48,8 @@ assert.match(source, /import:credentials --input=/);
 assert.match(source, /chmod 600/);
 assert.match(source, /sha256sum/);
 assert.match(source, /rm -f/);
+assert.match(source, /waitEndpoint\(connection, 'https:\/\/n8n\.mercadodovale\.com\.br\/healthz\/readiness'/);
+assert.match(source, /if \(transformSummary\.changed\)/, 'Idempotent apply must avoid an unnecessary restart');
 assert.doesNotMatch(source, /retry.*execution|execute_workflow/i);
 
 console.log('n8n memory Postgres host recovery checks passed.');

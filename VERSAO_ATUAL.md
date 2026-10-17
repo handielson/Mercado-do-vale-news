@@ -1,3 +1,12 @@
+# v1.2.646-n8n-memory-readiness
+
+Data: 17/10/2026. Branch: main. Tag: v1.2.646-n8n-memory-readiness.
+Release MDV: /var/www/mdv-site/releases/20261017-170500-v12646-n8n-memory-readiness.
+
+Conclui a recuperacao da memoria PostgreSQL do bot e torna a rotina operacional idempotente. Depois de alterar a credencial para `n8n-db`, health e readiness sao aguardados separadamente com timeout; um `502` transitório durante a inicializacao nao encerra a publicacao prematuramente. Se o host ja estiver correto, a verificacao preserva os servicos sem novo reinicio.
+
+## Histórico anterior
+
 # v1.2.645-n8n-memory-db-host
 
 Data: 17/10/2026. Branch: main. Tag: v1.2.645-n8n-memory-db-host.
