@@ -1,3 +1,12 @@
+# v1.2.645-n8n-memory-db-host
+
+Data: 17/10/2026. Branch: main. Tag: v1.2.645-n8n-memory-db-host.
+Release MDV: /var/www/mdv-site/releases/20261017-165936-v12645-n8n-memory-db-host.
+
+As memorias `Memoria Vendas` e `Memoria de contexto postggress` passam a acessar o PostgreSQL pelo alias interno estavel `n8n-db`, evitando o endereco inacessivel da rede compartilhada apos reinicios do Docker Swarm. A rotina cria backup criptografado com permissao restrita, altera somente o host da credencial existente, remove copias temporarias descriptografadas, reinicia n8n e runner em ordem e valida health/readiness. Execucoes de clientes que falharam nao sao repetidas.
+
+## Histórico anterior
+
 # v1.2.644-tiktok-stock-protection
 
 Data: 17/10/2026. Branch: main. Tag: v1.2.644-tiktok-stock-protection.

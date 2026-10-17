@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.644-tiktok-stock-protection",
+  "version": "v1.2.645-n8n-memory-db-host",
   "date": "2026-10-17",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.644-tiktok-stock-protection",
-  "release_vps": "/var/www/mdv-site/releases/20261017-110207-v12644-tiktok-stock-protection",
+  "tag": "v1.2.645-n8n-memory-db-host",
+  "release_vps": "/var/www/mdv-site/releases/20261017-165936-v12645-n8n-memory-db-host",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Protege o estoque contra vendas simultaneas no TikTok Shop com baixa idempotente, polling e fila persistente.",
+  "summary": "Corrige a memoria do bot para usar o alias interno estavel do PostgreSQL no Docker Swarm.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,24 +14,16 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "bling.md",
-    "deploy-vps-server-only.cjs",
-    "docs/tiktok-shop/commerce-roadmap.md",
-    "docs/tiktok-shop/troubleshooting.md",
-    "services/tiktokOrderStockProtection.cjs",
-    "services/tiktokStockSyncQueue.cjs",
-    "tmp-tests/tiktok-oversell-protection.test.mjs",
-    "tmp-tests/tiktok-stock-sync-outbox.test.mjs",
-    "vps_server.js",
-    "vps_server.cjs",
+    "scripts/n8n-memory-postgres-host-recovery.cjs",
+    "tmp-tests/n8n-memory-postgres-host-recovery.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-17-v1.2.644-tiktok-stock-protection.md"
+    "docs/versoes/2026-10-17-v1.2.645-n8n-memory-db-host.md"
   ],
   "validations": [
-    "Testes de baixa idempotente, cancelamento, fila persistente e sincronizacao de marketplaces aprovados.",
-    "Sintaxe dos servidores e servicos TikTok validada antes da publicacao.",
-    "Validacao publica da API, MySQL, endpoint protegido e VERSION obrigatoria antes de concluir."
+    "Teste focado garante que somente data.host da credencial PostgreSQL pode mudar.",
+    "Dry-run confirmou as duas memorias no mesmo credentialId e n8n-db:5432 acessivel.",
+    "Validacao publica do n8n, readiness, servicos e VERSION obrigatoria antes de concluir."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
