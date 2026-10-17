@@ -5,6 +5,7 @@ const { execFileSync } = require('node:child_process');
 const BASELINE = '0874b8060bc297fda26b572d65950db3bbedd15d';
 const ENTRIES = ['server.js', 'vps_server.js', 'vps_server.cjs'];
 const MODULE = 'services/shopeeShippingDocumentJob.cjs';
+const MODULE_BASELINE = 'c0668ae6';
 const normalize = source => source.replace(/\r\n/g, '\n');
 const SPECS = [
   ['async function shopeeCatalogRequestVps(', '\nfunction clampShopeeCatalogIntVps('],
@@ -38,7 +39,9 @@ async function deploy(options) {
     patchFile: (remote, file) => {
       const current = fs.readFileSync(path.join(options.root, file), 'utf8');
       if (ENTRIES.includes(file)) return patch(remote, baseline(file), current);
-      if (remote && normalize(remote) !== normalize(current)) throw new Error('Remote Shopee module drift');
+      if (remote && normalize(remote) !== normalize(current) && normalize(remote) !== normalize(
+        execFileSync('git', ['show', `${MODULE_BASELINE}:${MODULE}`], { cwd: options.root, encoding: 'utf8' }),
+      )) throw new Error('Remote Shopee module drift');
       return current;
     },
   });

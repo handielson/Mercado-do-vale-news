@@ -3,8 +3,8 @@
   "date": "2026-10-17",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.641-shopee-filelink",
-  "release_vps": "/var/www/mdv-site/releases/20261017-123706-v1641-shopee-filelink",
+  "tag": "v1.2.641-shopee-filelink-verificado",
+  "release_vps": "/var/www/mdv-site/releases/20261017-124500-v1641-shopee-filelink-verificado",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Migra etiquetas Shopee para jobs e download por Filelink, preservando PDF e impressao.",
   "gestao_mdv_android": {
@@ -31,10 +31,11 @@
     "docs/versoes/2026-10-17-v1.2.641-shopee-filelink.md"
   ],
   "validations": [
-    "49 testes de jobs, transporte, isolamento de contas, PDF termico e publicacao seletiva aprovados.",
+    "50 testes de jobs, transporte, isolamento de contas, PDF termico e publicacao seletiva aprovados.",
     "Download simulado de 17 MB, renovacao de link e retomada de job pendente aprovados.",
     "Preflight remoto seletivo aprovado para o modulo e as tres entradas; preserva alteracoes externas ao escopo.",
-    "Build com trava contra Supabase e validacao publica obrigatorios antes de concluir a publicacao."
+    "Build com trava contra Supabase aprovado; API/MySQL saudaveis e catalogo renderizado sem erros fatais.",
+    "Shopee recusou etiqueta de pedido ja enviado; resposta comercial tratada como HTTP 422 para preservar a mensagem no painel. Download real depende de pacote elegivel."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

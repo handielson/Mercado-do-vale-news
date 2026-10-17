@@ -145,8 +145,19 @@ for (const step of ['create_shipping_document_job', 'get_shipping_document_job_s
 test('rejects a per-package failure even when the API reports global success', async () => {
   const f = fixture({ request: step => step === 'create_shipping_document_job'
     ? json({ job_id: 'JOB-1', fail_list: [{ id: 'PKG-1', fail_error: 'error_param', fail_message: 'Invalid package' }] }) : null });
-  assert.equal((await f.download(context)).data.error, 'error_param');
+  const result = await f.download(context);
+  assert.equal(result.status, 422);
+  assert.equal(result.data.error, 'error_param');
   assert.equal(f.calls.length, 1);
+});
+
+test('non-printable package keeps the Shopee message in a client-readable 422 response', async () => {
+  const f = fixture({ request: step => step === 'create_shipping_document_job' ? apiError('error_param') : null });
+  const result = await f.download(context);
+  assert.equal(result.status, 422);
+  assert.equal(result.data.error, 'error_param');
+  assert.equal(result.data.message, 'Upstream error');
+  assert.equal(result.data.step, 'create_shipping_document_job');
 });
 
 test('rejects a missing job ID', async () => {

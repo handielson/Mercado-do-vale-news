@@ -23,7 +23,7 @@ function createShopeeShippingDocumentDownloader({
     const data = await response.json();
     if (!response.ok || data?.error) {
       return { failure: failure(data?.error || 'shipping_document_request_failed',
-        data?.message || 'A Shopee nao conseguiu processar a etiqueta.', step, response.ok ? 502 : response.status) };
+        data?.message || 'A Shopee nao conseguiu processar a etiqueta.', step, response.ok ? 422 : response.status) };
     }
     return { data: data?.response };
   }
@@ -41,7 +41,7 @@ function createShopeeShippingDocumentDownloader({
         if (created.failure) return created.failure;
         const rejected = created.data?.fail_list?.[0];
         if (rejected) return failure(rejected.fail_error || 'shipping_document_package_failed',
-          rejected.fail_message || 'A Shopee recusou a geracao da etiqueta deste pacote.', 'create_shipping_document_job');
+          rejected.fail_message || 'A Shopee recusou a geracao da etiqueta deste pacote.', 'create_shipping_document_job', 422);
         if (typeof created.data?.job_id !== 'string' || !created.data.job_id.trim()) {
           return failure('shipping_document_job_missing', 'A Shopee nao retornou o identificador da etiqueta.', 'create_shipping_document_job');
         }
@@ -81,7 +81,7 @@ function createShopeeShippingDocumentDownloader({
             if (generation === 0) break;
           }
           if (!response.ok || data?.error) return failure(data?.error || 'shipping_document_download_failed',
-            data?.message || 'Falha ao obter a etiqueta da Shopee.', 'download_shipping_document_job', response.ok ? 502 : response.status);
+            data?.message || 'Falha ao obter a etiqueta da Shopee.', 'download_shipping_document_job', response.ok ? 422 : response.status);
           const mediaLink = data?.response?.media_link || data?.media_link;
           let url;
           try { url = new URL(mediaLink); } catch { /* Invalid upstream response. */ }
