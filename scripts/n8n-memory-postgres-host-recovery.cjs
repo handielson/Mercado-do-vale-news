@@ -124,8 +124,8 @@ async function main() {
   let mainContainer = '';
   const tempFiles = [];
   try {
-    mainContainer = await run(connection, "docker ps --filter 'name=n8n_n8n.' --format '{{.Names}}' | head -n 1");
-    const dbContainer = await run(connection, "docker ps --filter 'name=n8n_n8n-db.' --format '{{.Names}}' | head -n 1");
+    mainContainer = await run(connection, "docker ps --filter 'label=com.docker.swarm.service.name=n8n_n8n' --format '{{.Names}}' | head -n 1");
+    const dbContainer = await run(connection, "docker ps --filter 'label=com.docker.swarm.service.name=n8n_n8n-db' --format '{{.Names}}' | head -n 1");
     assert.ok(mainContainer && dbContainer, 'n8n containers not found');
     const snapshot = await readMemoryCredential(connection, dbContainer);
     const tcpProbe = await run(connection, `docker exec ${quote(mainContainer)} node -e "const net=require('net');const s=net.connect({host:'${TARGET_HOST}',port:5432,timeout:3000},()=>{console.log('reachable');s.destroy()});s.on('timeout',()=>{console.log('timeout');s.destroy()});s.on('error',e=>console.log(e.code));"`);

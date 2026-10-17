@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.646-n8n-memory-readiness",
+  "version": "v1.2.647-n8n-memory-container",
   "date": "2026-10-17",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.646-n8n-memory-readiness",
-  "release_vps": "/var/www/mdv-site/releases/20261017-170500-v12646-n8n-memory-readiness",
+  "tag": "v1.2.647-n8n-memory-container",
+  "release_vps": "/var/www/mdv-site/releases/20261017-171500-v12647-n8n-memory-container",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Corrige a memoria PostgreSQL do bot e aguarda a prontidao real do n8n apos reinicios.",
+  "summary": "Corrige a memoria PostgreSQL do bot, aguarda a prontidao e seleciona os containers pelo servico Swarm exato.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -18,12 +18,13 @@
     "tmp-tests/n8n-memory-postgres-host-recovery.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-17-v1.2.646-n8n-memory-readiness.md"
+    "docs/versoes/2026-10-17-v1.2.647-n8n-memory-container.md"
   ],
   "validations": [
     "Teste focado garante que somente data.host da credencial PostgreSQL pode mudar.",
     "Dry-run confirmou as duas memorias no mesmo credentialId e n8n-db:5432 acessivel.",
     "Health e readiness aguardados com timeout; reaplicacao idempotente nao reinicia servicos.",
+    "Containers principal e PostgreSQL identificados pelo rotulo exato do servico Docker Swarm.",
     "Validacao publica do n8n, servicos e VERSION obrigatoria antes de concluir."
   ],
   "android_entregas": {

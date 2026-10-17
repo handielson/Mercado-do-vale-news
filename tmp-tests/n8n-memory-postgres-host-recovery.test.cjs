@@ -50,6 +50,9 @@ assert.match(source, /sha256sum/);
 assert.match(source, /rm -f/);
 assert.match(source, /waitEndpoint\(connection, 'https:\/\/n8n\.mercadodovale\.com\.br\/healthz\/readiness'/);
 assert.match(source, /if \(transformSummary\.changed\)/, 'Idempotent apply must avoid an unnecessary restart');
+assert.match(source, /label=com\.docker\.swarm\.service\.name=n8n_n8n'/, 'Main container selection must use the exact Swarm service label');
+assert.match(source, /label=com\.docker\.swarm\.service\.name=n8n_n8n-db'/, 'Database container selection must use the exact Swarm service label');
+assert.doesNotMatch(source, /--filter 'name=n8n_n8n\.'/);
 assert.doesNotMatch(source, /retry.*execution|execute_workflow/i);
 
 console.log('n8n memory Postgres host recovery checks passed.');

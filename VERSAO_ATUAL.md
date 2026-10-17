@@ -1,3 +1,12 @@
+# v1.2.647-n8n-memory-container
+
+Data: 17/10/2026. Branch: main. Tag: v1.2.647-n8n-memory-container.
+Release MDV: /var/www/mdv-site/releases/20261017-171500-v12647-n8n-memory-container.
+
+Torna deterministica a recuperacao da memoria PostgreSQL: os containers principal e de banco agora sao localizados pelo rotulo exato do servico Docker Swarm. Isso impede que o runner seja confundido com o container principal durante uma reaplicacao idempotente.
+
+## Histórico anterior
+
 # v1.2.646-n8n-memory-readiness
 
 Data: 17/10/2026. Branch: main. Tag: v1.2.646-n8n-memory-readiness.
