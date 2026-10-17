@@ -6,6 +6,8 @@ const { existsSync } = require('node:fs');
 const path = require('node:path');
 
 const API_PATTERNS = [
+  /^scripts\/deploy-meta-attendance\.cjs$/,
+  /^services\/metaAttendanceCore\.cjs$/,
   /^vps_server\.(?:js|cjs)$/,
   /^server\.js$/,
   /^deploy-vps-server-only\.cjs$/,
@@ -245,6 +247,8 @@ function buildPlan(options) {
   if (classification.target === 'docs-only') validations.push('Revisar docs alterados; deploy nao e necessario.');
 
   const deployCommands = [];
+  const metaAttendance = allFiles.includes('scripts/deploy-meta-attendance.cjs');
+  if (classification.needs.api && metaAttendance) deployCommands.push('node scripts/deploy-meta-attendance.cjs --apply');
   const catalogMedia = allFiles.includes('scripts/deploy-catalog-media.cjs');
   const salesDelivery = allFiles.includes('scripts/deploy-sales-delivery.cjs');
   const shopeeFilelink = allFiles.includes('scripts/deploy-shopee-filelink.cjs');
@@ -254,7 +258,7 @@ function buildPlan(options) {
   if (classification.needs.site) {
     deployCommands.push(`$env:VPS_SITE_RELEASE_NAME='${releaseName}'; npm.cmd run deploy:vps-site`);
   }
-  if (classification.needs.api && !salesDelivery && !catalogMedia && !shopeeFilelink) {
+  if (classification.needs.api && !metaAttendance && !salesDelivery && !catalogMedia && !shopeeFilelink) {
     deployCommands.push('node deploy-vps-server-only.cjs');
   }
   deployCommands.push(...n8nDeployCommands(classification.n8nFiles));

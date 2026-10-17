@@ -3670,6 +3670,7 @@ function registerSocialStoryRoutes(fastify, dependencies) {
 }
 
 function registerMarketingCampaignRoutes(fastify, dependencies) {
+  require('./metaAttendanceServer.cjs').registerMetaAttendanceRoutes(fastify, dependencies);
   require('./marketingScenesServer.cjs').registerMarketingSceneRoutes(fastify, dependencies);
   registerPhonePriceListRoutes(fastify, dependencies);
   registerApprovalRoutes(fastify, dependencies);

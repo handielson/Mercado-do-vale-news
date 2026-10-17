@@ -1,3 +1,12 @@
+# v1.2.648-meta-atendimento-piloto
+
+Data: 17/10/2026. Branch: main. Tag: v1.2.648-meta-atendimento-piloto.
+Release MDV: /var/www/mdv-site/releases/20261017-180000-v12648-meta-atendimento.
+
+Prepara a caixa de entrada de Direct, Messenger e comentarios Meta, em observacao e com envios bloqueados. O receptor valida o corpo bruto com HMAC, grava o lote antes de confirmar e mantem os canais separados. Nao conecta o n8n nem envia mensagens. Marketplace depende de mensagens entregues a Pagina conectada; perfis pessoais nao estao incluidos.
+
+## Historico anterior
+
 # v1.2.647-n8n-memory-container
 
 Data: 17/10/2026. Branch: main. Tag: v1.2.647-n8n-memory-container.

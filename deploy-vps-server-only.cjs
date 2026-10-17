@@ -20,6 +20,7 @@ const localServerCjs = path.join(__dirname, 'vps_server.cjs');
 const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim();
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
+const metaAttendanceServicePaths = ['services/metaAttendanceCore.cjs', 'services/metaAttendanceServer.cjs'];
 const phonePriceListServicePaths = [
   'services/socialStoryPriceListBatches.cjs',
   'services/phonePriceListArtwork.cjs',
@@ -236,7 +237,7 @@ async function uploadMobileSalesPushFiles(appDir) {
 
 async function uploadMarketingCampaignFiles(appDir) {
   await exec(`mkdir -p ${appDir}/services`);
-  for (const relativePath of [marketingCampaignServicePath, 'services/marketingScenesServer.cjs', 'services/marketingSceneCore.mjs', ...phonePriceListServicePaths]) {
+  for (const relativePath of [marketingCampaignServicePath, 'services/marketingScenesServer.cjs', 'services/marketingSceneCore.mjs', ...metaAttendanceServicePaths, ...phonePriceListServicePaths]) {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }
@@ -906,7 +907,7 @@ async function main() {
     if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
     const backupDir = `${appDir}/backups/marketing-scenes-${Date.now()}`;
     await exec(`mkdir -p ${backupDir} ${appDir}/services`);
-    for (const file of [marketingCampaignServicePath, 'services/marketingScenesServer.cjs', 'services/marketingSceneCore.mjs']) {
+    for (const file of [marketingCampaignServicePath, 'services/marketingScenesServer.cjs', 'services/marketingSceneCore.mjs', ...metaAttendanceServicePaths]) {
       await exec(`if test -f ${appDir}/${file}; then cp ${appDir}/${file} ${backupDir}/${path.basename(file)}; fi`);
       await upload(path.join(__dirname, file), remotePathJoin(appDir, file));
       console.log(`Uploaded ${file}`);

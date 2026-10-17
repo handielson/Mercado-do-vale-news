@@ -106,6 +106,28 @@ export interface MetaManagedAdReview {
 
 type ConnectionResponse = { ok: true; connection: MetaMarketingConnection };
 
+export interface MetaAttendanceStatus {
+    mode: 'capture_only';
+    outboundEnabled: false;
+    n8nConnected: false;
+    enabled: boolean;
+    configured: boolean;
+    storageReady: boolean;
+    webhookPath: string;
+    pageId: string | null;
+    instagramAccountId: string | null;
+}
+
+export interface MetaAttendanceEvent {
+    id: string;
+    channel: 'instagram' | 'messenger';
+    surface: 'dm' | 'comment' | 'other';
+    event_type: string;
+    status: 'captured' | 'ignored' | 'unsupported';
+    received_at: string;
+    normalized_event: { text?: string; attachments?: Array<{ type: string }> };
+}
+
 export type MetaInsightsDatePreset = 'last_7d' | 'last_14d' | 'last_30d' | 'this_month';
 
 export interface MetaCampaignMetrics {
@@ -228,6 +250,14 @@ export type MetaDeliveryStatusApprovalPayload = {
 };
 
 export const metaMarketingConnectionService = {
+    async getAttendanceStatus(): Promise<MetaAttendanceStatus> {
+        return await vpsClient.get<MetaAttendanceStatus & { ok: true }>('/admin/marketing/meta/attendance/status');
+    },
+
+    async listAttendanceEvents(): Promise<MetaAttendanceEvent[]> {
+        return (await vpsClient.get<{ rows: MetaAttendanceEvent[] }>('/admin/marketing/meta/attendance/events?limit=25')).rows;
+    },
+
     async getStatus(): Promise<MetaMarketingConnection> {
         return (await vpsClient.get<ConnectionResponse>('/admin/marketing/meta/status')).connection;
     },

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, Facebook, Loader2, PauseCircle, PlayCircle, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import MetaAttendancePanel from './MetaAttendancePanel';
 import {
     metaMarketingConnectionService,
     type MetaMarketingConnection,
@@ -153,6 +154,7 @@ export default function MetaMarketingConnectionPanel() {
             </div>
 
             <div className="space-y-4 p-5">
+                <MetaAttendancePanel />
                 {!connection.configured && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Configuração pendente na VPS.</strong><p className="mt-1">Faltam: {connection.missingConfiguration.join(', ')}.</p>{connection.redirectUri && <p className="mt-1">Callback: <code>{connection.redirectUri}</code></p>}</div>}
 
                 {connection.status === 'connected' && missingPublishingScopes.length > 0 && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><strong>Instagram conectado, mas sem autorização para publicar Stories.</strong><p className="mt-1">Clique em “Corrigir permissões Meta” e autorize novamente. Permissões pendentes: {missingPublishingScopes.join(', ')}.</p></div>}

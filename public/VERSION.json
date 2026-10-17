@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.647-n8n-memory-container",
+  "version": "v1.2.648-meta-atendimento-piloto",
   "date": "2026-10-17",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.647-n8n-memory-container",
-  "release_vps": "/var/www/mdv-site/releases/20261017-171500-v12647-n8n-memory-container",
+  "tag": "v1.2.648-meta-atendimento-piloto",
+  "release_vps": "/var/www/mdv-site/releases/20261017-180000-v12648-meta-atendimento",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Corrige a memoria PostgreSQL do bot, aguarda a prontidao e seleciona os containers pelo servico Swarm exato.",
+  "summary": "Prepara a caixa de entrada de Direct, Messenger e comentarios Meta, em observacao e com envios bloqueados.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,18 +14,29 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "scripts/n8n-memory-postgres-host-recovery.cjs",
-    "tmp-tests/n8n-memory-postgres-host-recovery.test.cjs",
+    ".env.vps.example",
+    "deploy-vps-server-only.cjs",
+    "services/metaAttendanceCore.cjs",
+    "services/metaAttendanceServer.cjs",
+    "services/marketingCampaignApi.cjs",
+    "services/metaMarketingConnectionService.ts",
+    "pages/admin/settings/marketing/MetaAttendancePanel.tsx",
+    "pages/admin/settings/marketing/MetaMarketingConnectionPanel.tsx",
+    "migrations/055_meta_attendance_events.sql",
+    "scripts/deploy-meta-attendance.cjs",
+    "scripts/publish-vps-plan.cjs",
+    "tmp-tests/meta-attendance-core.test.cjs",
+    "tmp-tests/meta-attendance-routes.test.cjs",
+    "tmp-tests/meta-attendance-deploy.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-17-v1.2.647-n8n-memory-container.md"
+    "docs/versoes/2026-10-17-v1.2.648-meta-atendimento-piloto.md"
   ],
   "validations": [
-    "Teste focado garante que somente data.host da credencial PostgreSQL pode mudar.",
-    "Dry-run confirmou as duas memorias no mesmo credentialId e n8n-db:5432 acessivel.",
-    "Health e readiness aguardados com timeout; reaplicacao idempotente nao reinicia servicos.",
-    "Containers principal e PostgreSQL identificados pelo rotulo exato do servico Docker Swarm.",
-    "Validacao publica do n8n, servicos e VERSION obrigatoria antes de concluir."
+    "26 testes focados de normalizacao, assinatura, transacao, deduplicacao e publicacao seletiva aprovados.",
+    "Contrato existente de conexao Meta e self-test do preflight aprovados.",
+    "Sintaxe dos servidores validada; build de producao obrigatorio antes da publicacao.",
+    "API, MySQL, callback HTTPS e VERSION publica serao conferidos apos deploy."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
