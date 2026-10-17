@@ -959,39 +959,13 @@ async function legacyRunLoop() {
             }
 
             console.log(`Processando impressão de ${order_sn}...`);
-            // 2. CREATE AND DOWNLOAD AWB
-            const tsDoc = Math.floor(Date.now() / 1000);
-            const pathDoc = '/api/v2/logistics/download_shipping_document';
-            const signDoc = generateSign(shopee_partner_id, shopee_partner_key, pathDoc, tsDoc, shopee_access_token, shopee_shop_id);
-
-            const pathCreate = '/api/v2/logistics/create_shipping_document';
-            const signCreate = generateSign(shopee_partner_id, shopee_partner_key, pathCreate, tsDoc, shopee_access_token, shopee_shop_id);
-            const urlCreate = `${shopeeApiUrl}${pathCreate}?partner_id=${shopee_partner_id}&timestamp=${tsDoc}&access_token=${shopee_access_token}&shop_id=${shopee_shop_id}&sign=${signCreate}`;
-
-            const docPayload = {
-                order_list: [{ order_sn }],
-                shipping_document_type: "NORMAL_AIR_WAYBILL"
-            };
-
-            // Request generation
-            await fetch(urlCreate, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order_list: [{ order_sn }], shipping_document_type: "NORMAL_AIR_WAYBILL", tracking_number: "" })
+            // Reuse the API's job/Filelink flow for the legacy loop as well.
+            const document = await callVpsShopeeAction('get_shipping_document', {
+                order_sn,
+                shipping_document_type: 'NORMAL_AIR_WAYBILL',
             });
-            await delay(2000); // Wait for Shopee to build the PDF
-
-            const urlDoc = `${shopeeApiUrl}${pathDoc}?partner_id=${shopee_partner_id}&timestamp=${tsDoc}&access_token=${shopee_access_token}&shop_id=${shopee_shop_id}&sign=${signDoc}`;
-            
-            const rDoc = await fetch(urlDoc, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(docPayload)
-            });
-
-            // Awb returns PDF stream, wait let me verify: Shopee download_shipping_document returns application/pdf byte stream
-            if (rDoc.headers.get('content-type')?.includes('pdf')) {
-                const pdfBuffer = await rDoc.arrayBuffer();
+            if (document.ok && document.buffer?.length && document.contentType.includes('pdf')) {
+                const pdfBuffer = document.buffer;
                 const tempPdfPath = path.join(shippingLabelsDir, `${order_sn}_etiqueta-10x15.pdf`);
                 fs.writeFileSync(tempPdfPath, await expandShopeeLabelForThermalPaper(Buffer.from(pdfBuffer)));
                 
@@ -1028,7 +1002,7 @@ async function legacyRunLoop() {
                     console.error(`Falha na fila de impressão da etiqueta ${order_sn}: `, e);
                 }
             } else {
-                const jsonDoc = await rDoc.json();
+                const jsonDoc = document.data || {};
                 console.log(`Shopee document skip: ${jsonDoc.message || jsonDoc.error} (Pode não estar pronto na Shopee ainda)`);
             }
             

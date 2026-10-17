@@ -11,8 +11,6 @@ const requiredEndpoints = [
   '/api/v2/order/get_order_detail',
   '/api/v2/order/get_package_detail',
   '/api/v2/logistics/ship_order',
-  '/api/v2/logistics/create_shipping_document',
-  '/api/v2/logistics/get_shipping_document_result',
   '/api/v2/product/update_stock',
   '/api/v2/product/update_price',
 ];
@@ -49,9 +47,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /embedPage\(sourcePage,[\s\S]*bottom:\s*height \/ 2,[\s\S]*right:\s*width \/ 2/, `${file} must crop the label's top-left A4 quadrant before scaling`);
   assert.match(source, /wantsFullPageA4[\s\S]*expandShopeeShippingLabelToA4Vps\(originalPdfBuffer\)/, `${file} must expand labels only when full_page_a4 is requested`);
   assert.match(source, /shipping_document_type \|\| 'NORMAL_AIR_WAYBILL'/, `${file} must use a currently supported Shopee document type`);
-  assert.match(source, /\.\.\.\(trackingNumber \? \{ tracking_number: trackingNumber \} : \{\}\)/, `${file} must use tracking when available without blocking label generation`);
-  assert.match(source, /order_list:\s*\[documentOrder\],\s*shipping_document_type:\s*shippingDocumentType/, `${file} must send the document type at the Shopee payload root`);
-  assert.match(source, /documentStatus === 'READY'/, `${file} must wait for the shipping document to become ready before download`);
+  assert.match(source, /downloadShopeeShippingDocumentVps\(\{[\s\S]*?scope: \[creds.partnerId, creds.shopId, connectionId\],[\s\S]*?packageNumber,[\s\S]*?documentType: shippingDocumentType/, `${file} must use package jobs scoped to the connected shop`);
   assert.match(source, /POST required/, `${file} must reject GET mutation calls`);
   assert.match(source, /product_id n(?:ÃƒÂ£|Ã£|ã)o fornecido/, `${file} must validate missing product_id`);
   assert.match(source, /Faltam parametros/, `${file} must validate missing stock or price`);

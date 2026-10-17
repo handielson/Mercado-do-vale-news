@@ -1,3 +1,12 @@
+# v1.2.641-shopee-filelink
+
+Data: 17/10/2026. Branch: main. Tag: v1.2.641-shopee-filelink.
+Release MDV: /var/www/mdv-site/releases/20261017-123706-v1641-shopee-filelink.
+
+Etiquetas Shopee usam create_shipping_document_job com package_list, consulta de job_status e download_shipping_document_job. A API baixa o media_link sem expor a URL assinada, aceita PDF direto durante a transicao e preserva a impressao A4/termica. Jobs pendentes sao retomados por conta/pacote/tipo; links vencidos sao renovados com o mesmo job. 49 testes e preflight remoto seletivo aprovados. Publicacao aplica somente os blocos da integracao e o novo modulo, com backup e rejeicao de drift. O agente atual recebe o PDF pela mesma rota; o caminho legado foi atualizado no codigo-fonte sem incluir ajustes locais preexistentes de documento PF. Conferir validacao publica na nota da versao.
+
+## Histórico anterior
+
 # v1.2.640-precos-whatsapp
 
 Data: 15/10/2026. Branch: main. Tag: v1.2.640-precos-whatsapp.

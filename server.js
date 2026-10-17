@@ -4799,19 +4799,21 @@ function buildShopeeCatalogUrlVps(apiPath, creds, extraParams = '') {
   return url;
 }
 
-async function shopeeCatalogRequestVps(method, apiPath, creds, body, extraParams = '', alreadyRetried = false) {
+async function shopeeCatalogRequestVps(method, apiPath, creds, body, extraParams = '', alreadyRetried = false, rawResponse = false) {
   const response = await fetch(buildShopeeCatalogUrlVps(apiPath, creds, extraParams), {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: body == null ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(20000),
   });
-  const data = await readShopeeCatalogJsonResponseVps(response);
+  if (rawResponse && !response.headers.get('content-type')?.includes('json')) return response;
+  const data = await readShopeeCatalogJsonResponseVps(rawResponse ? response.clone() : response);
   if (isRetryableShopeeAuthErrorVps(data) && !alreadyRetried) {
     const refreshedCreds = await refreshShopeeCatalogTokenVps(creds);
-    return shopeeCatalogRequestVps(method, apiPath, refreshedCreds, body, extraParams, true);
+    if (rawResponse) Object.assign(creds, refreshedCreds);
+    return shopeeCatalogRequestVps(method, apiPath, refreshedCreds, body, extraParams, true, rawResponse);
   }
-  return { status: response.status, ok: response.ok, data };
+  return rawResponse ? response : { status: response.status, ok: response.ok, data };
 }
 
 async function shopeeCatalogGetVps(apiPath, creds, extraParams = '') {
@@ -4821,6 +4823,12 @@ async function shopeeCatalogGetVps(apiPath, creds, extraParams = '') {
 async function shopeeCatalogPostVps(apiPath, creds, body = {}, extraParams = '') {
   return shopeeCatalogRequestVps('POST', apiPath, creds, body, extraParams);
 }
+
+const downloadShopeeShippingDocumentVps = require('./services/shopeeShippingDocumentJob.cjs')
+  .createShopeeShippingDocumentDownloader({
+    request: (apiPath, body, context) =>
+      shopeeCatalogRequestVps('POST', apiPath, context.creds, body, '', false, true),
+  });
 
 function clampShopeeCatalogIntVps(value, fallback, min, max) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -5581,90 +5589,25 @@ async function handleShopeeActionsVps(request, reply) {
           });
         }
 
-        const trackingResult = await shopeeCatalogGetVps('/api/v2/logistics/get_tracking_number', creds, encodeShopeeCatalogParamsVps({
-          order_sn: orderSn,
-          package_number: packageNumber,
-        }));
-        const trackingNumber = firstShopeeActionsNonEmptyVps(
-          trackingResult.data?.response?.tracking_number,
-          trackingResult.data?.response?.first_mile_tracking_number,
-          trackingResult.data?.response?.logistics_tracking_no,
-        );
-        const documentOrder = {
-          order_sn: orderSn,
-          package_number: packageNumber,
-          ...(trackingNumber ? { tracking_number: trackingNumber } : {}),
-        };
-        const resultOrder = {
-          order_sn: orderSn,
-          package_number: packageNumber,
-        };
-        const createResult = await shopeeCatalogPostVps('/api/v2/logistics/create_shipping_document', creds, {
-          order_list: [documentOrder],
-          shipping_document_type: shippingDocumentType,
+        const document = await downloadShopeeShippingDocumentVps({
+          scope: [creds.partnerId, creds.shopId, connectionId],
+          packageNumber,
+          documentType: shippingDocumentType,
+          creds,
         });
-        if (createResult.data?.error) {
-          return reply.code(createResult.status).send({
-            error: createResult.data.error,
-            message: createResult.data.message || 'A Shopee nao conseguiu iniciar a geracao da etiqueta.',
-            step: 'create_shipping_document',
-          });
-        }
-
-        let documentResult = null;
-        let documentStatus = '';
-        for (let attempt = 0; attempt < 8; attempt += 1) {
-          documentResult = await shopeeCatalogPostVps('/api/v2/logistics/get_shipping_document_result', creds, {
-            order_list: [resultOrder],
-            shipping_document_type: shippingDocumentType,
-          });
-          const resultList = documentResult.data?.response?.result_list
-            || documentResult.data?.response?.order_list
-            || [];
-          const entry = Array.isArray(resultList)
-            ? resultList.find((item) => item?.order_sn === orderSn) || resultList[0]
-            : null;
-          documentStatus = firstShopeeActionsNonEmptyVps(
-            entry?.status,
-            entry?.shipping_document_status,
-            documentResult.data?.response?.status,
-          ).toUpperCase();
-          if (documentStatus === 'READY') break;
-          if (documentResult.data?.error || ['FAILED', 'ERROR'].includes(documentStatus)) break;
-          await new Promise((resolve) => setTimeout(resolve, 750));
-        }
-
-        if (documentResult?.data?.error || documentStatus !== 'READY') {
-          return reply.code(202).send({
-            error: documentResult?.data?.error || 'shipping_document_processing',
-            message: documentResult?.data?.message || 'A etiqueta esta sendo gerada pela Shopee. Aguarde alguns segundos e tente novamente.',
-            status: documentStatus || 'PROCESSING',
-          });
-        }
-
-        const docResponse = await fetch(buildShopeeCatalogUrlVps('/api/v2/logistics/download_shipping_document', creds), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order_list: [resultOrder], shipping_document_type: shippingDocumentType }),
-          signal: AbortSignal.timeout(20000),
-        });
-        const contentType = docResponse.headers.get('content-type') || '';
-        if (contentType.includes('application/pdf')) {
-          const originalPdfBuffer = Buffer.from(await docResponse.arrayBuffer());
-          const wantsFullPageA4 = payload.full_page_a4 === true
-            || payload.full_page_a4 === 1
-            || ['true', '1'].includes(String(payload.full_page_a4).toLowerCase());
-          const pdfBuffer = wantsFullPageA4
-            ? await expandShopeeShippingLabelToA4Vps(originalPdfBuffer)
-            : originalPdfBuffer;
-          return reply
-            .code(200)
-            .header('Content-Type', 'application/pdf')
-            .header('Content-Disposition', `attachment; filename="etiqueta-${orderSn}.pdf"`)
-            .send(pdfBuffer);
-        }
-        const docData = await readShopeeCatalogJsonResponseVps(docResponse);
-        return reply.code(docResponse.status).send({ result: documentResult?.data, doc: docData });
+        if (!document.buffer) return reply.code(document.status).send(document.data);
+        const originalPdfBuffer = document.buffer;
+        const wantsFullPageA4 = payload.full_page_a4 === true
+          || payload.full_page_a4 === 1
+          || ['true', '1'].includes(String(payload.full_page_a4).toLowerCase());
+        const pdfBuffer = wantsFullPageA4
+          ? await expandShopeeShippingLabelToA4Vps(originalPdfBuffer)
+          : originalPdfBuffer;
+        return reply
+          .code(200)
+          .header('Content-Type', 'application/pdf')
+          .header('Content-Disposition', `attachment; filename="etiqueta-${orderSn}.pdf"`)
+          .send(pdfBuffer);
       }
 
       case 'ship_order': {

@@ -207,6 +207,7 @@ function existingChecks(files) {
   if (sales) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract');
   if (configuration) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --model-configuration');
   if(files.includes('scripts/deploy-catalog-media.cjs'))checks.push('node scripts/assert-catalog-media-contract.cjs','node deploy-vps-server-only.cjs --catalog-media-check');
+  if (files.includes('scripts/deploy-shopee-filelink.cjs')) checks.push('node deploy-vps-server-only.cjs --shopee-filelink-check');
   if (models) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --gpt6-luna');
 
   const serverFilesChanged = files.some((file) => ['server.js', 'vps_server.js', 'vps_server.cjs'].includes(file));
@@ -246,12 +247,14 @@ function buildPlan(options) {
   const deployCommands = [];
   const catalogMedia = allFiles.includes('scripts/deploy-catalog-media.cjs');
   const salesDelivery = allFiles.includes('scripts/deploy-sales-delivery.cjs');
-  if (classification.needs.api && catalogMedia) deployCommands.push('node deploy-vps-server-only.cjs --catalog-media-only');
-  if (classification.needs.api && salesDelivery && !catalogMedia) deployCommands.push('node deploy-vps-server-only.cjs --sales-delivery-only');
+  const shopeeFilelink = allFiles.includes('scripts/deploy-shopee-filelink.cjs');
+  if (classification.needs.api && shopeeFilelink) deployCommands.push('node deploy-vps-server-only.cjs --shopee-filelink-only');
+  if (classification.needs.api && catalogMedia && !shopeeFilelink) deployCommands.push('node deploy-vps-server-only.cjs --catalog-media-only');
+  if (classification.needs.api && salesDelivery && !catalogMedia && !shopeeFilelink) deployCommands.push('node deploy-vps-server-only.cjs --sales-delivery-only');
   if (classification.needs.site) {
     deployCommands.push(`$env:VPS_SITE_RELEASE_NAME='${releaseName}'; npm.cmd run deploy:vps-site`);
   }
-  if (classification.needs.api && !salesDelivery && !catalogMedia) {
+  if (classification.needs.api && !salesDelivery && !catalogMedia && !shopeeFilelink) {
     deployCommands.push('node deploy-vps-server-only.cjs');
   }
   deployCommands.push(...n8nDeployCommands(classification.n8nFiles));

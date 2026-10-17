@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.640-precos-whatsapp",
-  "date": "2026-10-15",
+  "version": "v1.2.641-shopee-filelink",
+  "date": "2026-10-17",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.640-precos-whatsapp",
-  "release_vps": "/var/www/mdv-site/releases/20261015-181600-v1640-precos-whatsapp",
+  "tag": "v1.2.641-shopee-filelink",
+  "release_vps": "/var/www/mdv-site/releases/20261017-123706-v1641-shopee-filelink",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Corrige lista de celulares nao enviada e respostas de precos Pix/cartao no contexto do WhatsApp.",
+  "summary": "Migra etiquetas Shopee para jobs e download por Filelink, preservando PDF e impressao.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,17 +14,27 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "tmp-tests/n8n-missing-prices-sequence-fix.cjs",
-    "tmp-tests/n8n-missing-prices-sequence-fix.test.cjs",
-    "tmp-tests/n8n-deploy-missing-prices-sequence.cjs",
+    "server.js",
+    "vps_server.js",
+    "vps_server.cjs",
+    "services/shopeeShippingDocumentJob.cjs",
+    "scripts/shopee-auto-print.cjs",
+    "scripts/deploy-shopee-filelink.cjs",
+    "scripts/publish-vps-plan.cjs",
+    "deploy-vps-server-only.cjs",
+    "tmp-tests/shopee-shipping-document-job.test.cjs",
+    "tmp-tests/deploy-shopee-filelink.test.cjs",
+    "tmp-tests/vps-shopee-actions-read-fastify-static.test.mjs",
+    "tmp-tests/vps-shopee-actions-mutations-fastify-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-15-v1.2.640-precos-whatsapp.md"
+    "docs/versoes/2026-10-17-v1.2.641-shopee-filelink.md"
   ],
   "validations": [
-    "Doze testes focados da sequencia de precos e vinte de vendas passaram no candidato.",
-    "Sete nos de codigo alterados; conexoes preservadas e leitura de retorno obrigatoria.",
-    "Confirmacao de envio da lista pela Evolution evita afirmar que ela foi apresentada antes do ACK."
+    "49 testes de jobs, transporte, isolamento de contas, PDF termico e publicacao seletiva aprovados.",
+    "Download simulado de 17 MB, renovacao de link e retomada de job pendente aprovados.",
+    "Preflight remoto seletivo aprovado para o modulo e as tres entradas; preserva alteracoes externas ao escopo.",
+    "Build com trava contra Supabase e validacao publica obrigatorios antes de concluir a publicacao."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

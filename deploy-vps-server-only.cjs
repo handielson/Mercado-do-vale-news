@@ -520,6 +520,14 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--shopee-filelink-only') || process.argv.includes('--shopee-filelink-check')) {
+    await require('./scripts/deploy-shopee-filelink.cjs').deploy({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--shopee-filelink-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--product-drafts-only') || process.argv.includes('--product-drafts-check')) {
     await require('./scripts/deploy-product-registration.cjs').deployProductDrafts({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
