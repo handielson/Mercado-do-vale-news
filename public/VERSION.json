@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.641-shopee-filelink",
+  "version": "v1.2.642-unit-visibility",
   "date": "2026-10-17",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.641-shopee-filelink-verificado",
-  "release_vps": "/var/www/mdv-site/releases/20261017-124500-v1641-shopee-filelink-verificado",
+  "tag": "v1.2.642-unit-visibility",
+  "release_vps": "/var/www/mdv-site/releases/20261017-125000-v1642-unit-visibility",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Migra etiquetas Shopee para jobs e download por Filelink, preservando PDF e impressao.",
+  "summary": "Restaura a acao de ocultar aparelhos na API e protege as entradas contra divergencia.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -16,26 +16,19 @@
   "changed_files": [
     "server.js",
     "vps_server.js",
-    "vps_server.cjs",
-    "services/shopeeShippingDocumentJob.cjs",
-    "scripts/shopee-auto-print.cjs",
-    "scripts/deploy-shopee-filelink.cjs",
-    "scripts/publish-vps-plan.cjs",
     "deploy-vps-server-only.cjs",
-    "tmp-tests/shopee-shipping-document-job.test.cjs",
-    "tmp-tests/deploy-shopee-filelink.test.cjs",
-    "tmp-tests/vps-shopee-actions-read-fastify-static.test.mjs",
-    "tmp-tests/vps-shopee-actions-mutations-fastify-static.test.mjs",
+    "scripts/deploy-unit-visibility.cjs",
+    "package.json",
+    "tmp-tests/unit-visibility-runtime-contract.test.cjs",
+    "tmp-tests/deploy-unit-visibility.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-17-v1.2.641-shopee-filelink.md"
+    "docs/versoes/2026-10-17-v1.2.642-unit-visibility.md"
   ],
   "validations": [
-    "50 testes de jobs, transporte, isolamento de contas, PDF termico e publicacao seletiva aprovados.",
-    "Download simulado de 17 MB, renovacao de link e retomada de job pendente aprovados.",
-    "Preflight remoto seletivo aprovado para o modulo e as tres entradas; preserva alteracoes externas ao escopo.",
-    "Build com trava contra Supabase aprovado; API/MySQL saudaveis e catalogo renderizado sem erros fatais.",
-    "Shopee recusou etiqueta de pedido ja enviado; resposta comercial tratada como HTTP 422 para preservar a mensagem no painel. Download real depende de pacote elegivel."
+    "Teste de ocultacao/restauracao, contrato das tres entradas e publicacao seletiva aprovados.",
+    "Suite de regressao, sintaxe da API e build obrigatorios antes da publicacao.",
+    "Preflight remoto seletivo e validacao publica da API/site obrigatorios antes de concluir."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

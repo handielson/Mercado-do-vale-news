@@ -1,3 +1,12 @@
+# v1.2.642-unit-visibility
+
+Data: 17/10/2026. Branch: main. Tag: v1.2.642-unit-visibility.
+Release MDV: /var/www/mdv-site/releases/20261017-125000-v1642-unit-visibility.
+
+Restaura a ação de ocultar e reativar aparelhos nas três entradas da API. O deploy seletivo altera apenas esse trecho, inclui os dois módulos de visibilidade e preserva outros ajustes da VPS. Testes impedem que uma publicação futura deixe as entradas divergentes. Nenhum aparelho é alterado pela publicação.
+
+## Histórico anterior
+
 # v1.2.641-shopee-filelink
 
 Data: 17/10/2026. Branch: main. Tag: v1.2.641-shopee-filelink-verificado.

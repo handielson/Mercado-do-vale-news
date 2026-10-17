@@ -1,5 +1,6 @@
 const { Client } = require('ssh2');
 require('./scripts/assert-catalog-media-contract.cjs').assertCatalogMediaContract(file => require('fs').readFileSync(require('path').join(__dirname, file), 'utf8'));
+require('./tmp-tests/unit-visibility-runtime-contract.test.cjs');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -520,6 +521,14 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--unit-visibility-only') || process.argv.includes('--unit-visibility-check')) {
+    await require('./scripts/deploy-unit-visibility.cjs').deploy({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--unit-visibility-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--shopee-filelink-only') || process.argv.includes('--shopee-filelink-check')) {
     await require('./scripts/deploy-shopee-filelink.cjs').deploy({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
@@ -926,6 +935,8 @@ async function main() {
   await upload(path.join(__dirname, 'services/whatsappStatusSender.cjs'), remotePathJoin(appDir, 'services/whatsappStatusSender.cjs'));
   await upload(path.join(__dirname, 'services/productReadPrivacy.cjs'), remotePathJoin(appDir, 'services/productReadPrivacy.cjs'));
   await upload(path.join(__dirname, 'services/serializedSaleFinalization.cjs'), remotePathJoin(appDir, 'services/serializedSaleFinalization.cjs'));
+  await upload(path.join(__dirname, 'services/unitVisibility.cjs'), remotePathJoin(appDir, 'services/unitVisibility.cjs'));
+  await upload(path.join(__dirname, 'services/unitStatusSchema.cjs'), remotePathJoin(appDir, 'services/unitStatusSchema.cjs'));
   await upload(path.join(__dirname, 'services/openAiFinanceServer.cjs'), remotePathJoin(appDir, 'services/openAiFinanceServer.cjs'));
   await exec(`node --check ${appDir}/services/openAiFinanceServer.cjs`);
   await exec(`node --check ${appDir}/services/whatsappStatusHealth.cjs`);

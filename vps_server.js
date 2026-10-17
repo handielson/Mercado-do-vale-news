@@ -29358,6 +29358,16 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
 // Atualiza unidade (status, IMEIs, notes, vínculos com order/sale)
 fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   const u = req.body || {};
+  if ('visibility_action' in u) {
+    try {
+      return await require('./services/unitVisibility.cjs').setUnitVisibility({
+        pool, syncProductStock, id: req.params.id, action: u.visibility_action, reason: u.reason,
+      });
+    } catch (error) {
+      if (!error.statusCode) throw error;
+      return reply.code(error.statusCode).send({ error: 'unit_visibility', message: error.message });
+    }
+  }
   const allowed = [
     'imei_1', 'imei_2', 'serial', 'status', 'condition',
     'internal_notes', 'cost_price', 'order_id', 'sale_id',
