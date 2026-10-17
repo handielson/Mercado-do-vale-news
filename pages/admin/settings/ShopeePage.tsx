@@ -84,6 +84,7 @@ import type { ShopeeVariationGroup } from '../../../types/shopee-variation';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 import { getShopeeBulkEffectiveStock, hasShopeeBulkPublishStock } from '../../../utils/shopeeBulkEligibility';
 import { buildMarketplaceParentGallery, collectMarketplaceProductImages } from '../../../services/marketplaceParentGallery.js';
+import { getShopeeAnatelAttributeState } from './shopeeAttributeResolver.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface ShopeeProduct {
@@ -691,10 +692,16 @@ function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attri
             .filter((attr) => attr.mandatory)
             .map((attr) => Number(attr.attribute_id))
     );
+    const anatel = getShopeeAnatelAttributeState(attributes, {});
+    const protectedAttributeIds = new Set([
+        ...SHOPEE_ATTRIBUTE_RETRY_PROTECTED_OPTIONAL_IDS,
+        anatel.parentAttributeId,
+        anatel.licenseAttributeId,
+    ].filter((id): id is number => typeof id === 'number' && id > 0));
     const attributeList = Array.isArray(payload.attribute_list) ? payload.attribute_list : [];
     const removedAttributes: any[] = [];
     const keptAttributes = attributeList.filter((attr: any) => {
-        if (!shouldPruneShopeeOptionalCustomAttribute(attr, mandatoryAttributeIds, SHOPEE_ATTRIBUTE_RETRY_PROTECTED_OPTIONAL_IDS)) return true;
+        if (!shouldPruneShopeeOptionalCustomAttribute(attr, mandatoryAttributeIds, protectedAttributeIds)) return true;
         removedAttributes.push(attr);
         return false;
     });
@@ -3214,6 +3221,7 @@ export function ShopeeSyncModal({
     const [selectedCat, setSelectedCat] = useState<any>(null);
     const [attributes, setAttributes] = useState<ShopeeAttributeField[]>([]);
     const [loadingAttrs, setLoadingAttrs] = useState(false);
+    const [attributesLoadedForCategoryId, setAttributesLoadedForCategoryId] = useState('');
     const [attrValues, setAttrValues] = useState<Record<number, string | string[]>>({});
     const [brandOptions, setBrandOptions] = useState<ShopeeBrandOption[]>([]);
     const [selectedBrandId, setSelectedBrandId] = useState('');
@@ -3786,8 +3794,18 @@ export function ShopeeSyncModal({
     const parsedStock = Math.max(0, Number.parseInt(String(shopeeStock || '0'), 10) || 0);
     const availableImages = mediaImages;
     const availableVideos = mediaVideos;
-    const requiredAttributes = attributes.filter((attr) => attr.mandatory);
-    const optionalAttributes = attributes.filter((attr) => !attr.mandatory);
+    const attributesReady = Boolean(selectedCat?.category_id) &&
+        attributesLoadedForCategoryId === String(selectedCat.category_id);
+    const anatelState = getShopeeAnatelAttributeState(attributes, attrValues);
+    const requiredAttributes = attributes.filter((attr) =>
+        !(anatelState.omitLicense && attr.attribute_id === anatelState.licenseAttributeId) &&
+        (attr.mandatory || attr.attribute_id === anatelState.parentAttributeId ||
+            (anatelState.requiresLicense && attr.attribute_id === anatelState.licenseAttributeId))
+    );
+    const optionalAttributes = attributes.filter((attr) =>
+        !requiredAttributes.includes(attr) &&
+        !(anatelState.omitLicense && attr.attribute_id === anatelState.licenseAttributeId)
+    );
     const missingRequiredAttributes = requiredAttributes.filter((attr) => !hasFilledAttributeValue(attrValues[attr.attribute_id]));
     const debugText = syncDebugEntries
         .map((entry) => `[${entry.timestamp}] ${entry.stage}\n${entry.payload}`)
@@ -3891,6 +3909,8 @@ export function ShopeeSyncModal({
         }
         setSelectedCat(cat);
         setStep(2);
+        setAttributes([]);
+        setAttributesLoadedForCategoryId('');
         setLoadingAttrs(true);
         setLoadingBrands(true);
         setAttrValues({});
@@ -3917,6 +3937,7 @@ export function ShopeeSyncModal({
             }
             const normalizedAttributes = normalizeShopeeAttributes(data);
             setAttributes(normalizedAttributes);
+            setAttributesLoadedForCategoryId(String(cat.category_id));
             const templateValues = buildShopeeTemplateAttributeValues(normalizedAttributes, product, activeFieldTemplate);
             const universalTemplateValues = resolveUniversalShopeeAttributeDefaults(shopeeTemplates);
             const selectedTemplateValues = selectedShopeeTemplate?.attributeDefaults || {};
@@ -4006,7 +4027,10 @@ export function ShopeeSyncModal({
 
     const buildAttributePayload = () => {
         return attributes
-            .filter((attr) => !shouldSkipShopeeAttributePayload(attr, activeFieldTemplate))
+            .filter((attr) => !shouldSkipShopeeAttributePayload(attr, activeFieldTemplate) ||
+                attr.attribute_id === anatelState.parentAttributeId ||
+                (anatelState.requiresLicense && attr.attribute_id === anatelState.licenseAttributeId))
+            .filter((attr) => !(anatelState.omitLicense && attr.attribute_id === anatelState.licenseAttributeId))
             .filter((attr) => hasFilledAttributeValue(attrValues[attr.attribute_id]) || getShopeeNativeConditionAttributeValue(attr))
             .map((attr) => {
                 const currentValue = attrValues[attr.attribute_id];
@@ -4101,6 +4125,14 @@ export function ShopeeSyncModal({
     };
 
     const handleAdvance = () => {
+        if (!attributesReady) {
+            toast.error('Aguarde a confirmação dos atributos da categoria Shopee.');
+            return;
+        }
+        if (anatelState.errors.length > 0) {
+            toast.error(anatelState.errors[0]);
+            return;
+        }
         if (missingRequiredAttributes.length > 0) {
             toast.error(`Preencha os atributos obrigatorios: ${missingRequiredAttributes.map((attr) => attr.label).join(', ')}`);
             return;
@@ -4686,6 +4718,18 @@ export function ShopeeSyncModal({
             return;
         }
 
+        if (!attributesReady) {
+            toast.error('Não foi possível conferir os atributos da categoria Shopee. Selecione-a novamente.');
+            setStep(1);
+            return;
+        }
+
+        if (anatelState.errors.length > 0) {
+            toast.error(anatelState.errors[0]);
+            setStep(2);
+            return;
+        }
+
         if (missingRequiredAttributes.length > 0) {
             toast.error(`Preencha os atributos obrigatorios: ${missingRequiredAttributes.map((attr) => attr.label).join(', ')}`);
             setStep(2);
@@ -5258,6 +5302,8 @@ export function ShopeeSyncModal({
             !variationBlocked &&
             matchesBulkAutoPreset &&
             Boolean(selectedCat?.category_id) &&
+            attributesReady &&
+            anatelState.errors.length === 0 &&
             missingRequiredAttributes.length === 0 &&
             availableImages.length > 0;
 
@@ -5286,6 +5332,8 @@ export function ShopeeSyncModal({
         variationValidation,
         titleSafety.hasBlocks,
         selectedCat,
+        attributesReady,
+        anatelState.errors.length,
         missingRequiredAttributes.length,
         availableImages.length,
         step,
@@ -5835,6 +5883,9 @@ export function ShopeeSyncModal({
                                 </div>
                             ) : (
                                 <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 max-h-72 overflow-y-auto">
+                                    {anatelState.parentAttributeId && (
+                                        <p className="text-xs text-amber-700">Informe se o produto possui Bluetooth, Wi-Fi ou RF. Se selecionar Sim, preencha o número da licença Anatel informado pelo fabricante.</p>
+                                    )}
                                     {requiredAttributes.map((attr) => (
                                         <div key={attr.attribute_id}>
                                             <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -6274,7 +6325,9 @@ function ExpandedItemPanel({
     const [saving, setSaving] = useState(false);
     const [attrs, setAttrs] = useState<any[]>([]);
     const [loadingAttrs, setLoadingAttrs] = useState(false);
+    const [attrsLoaded, setAttrsLoaded] = useState(false);
     const [attrValues, setAttrValues] = useState<Record<number, string>>({});
+    const anatelEditState = getShopeeAnatelAttributeState(attrs, attrValues);
     const [effectiveCategoryId, setEffectiveCategoryId] = useState(p.shopee_category_id || '');
     const descRef = useRef<HTMLTextAreaElement>(null);
     const [form, setForm] = useState({
@@ -6418,19 +6471,28 @@ function ExpandedItemPanel({
     // Load category attributes — uses effectiveCategoryId (from Shopee live data) as fallback
     useEffect(() => {
         if (!effectiveCategoryId) return;
+        setAttrsLoaded(false);
         setLoadingAttrs(true);
         fetch(shopeeConnectionUrl(`/api/shopee-catalog?action=attributes&category_id=${effectiveCategoryId}`))
-            .then(r => r.json())
-            .then((d) => {
-                const attrList = d.response?.list?.[0]?.attribute_tree || [];
-                setAttrs(attrList);
+            .then(async r => {
+                const data = await r.json();
+                if (!r.ok || data?.error) throw new Error(data?.message || data?.error || 'Falha ao carregar atributos Shopee');
+                return data;
             })
-            .catch(() => {})
+            .then((d) => {
+                const attrList = extractShopeeAttributeTree(d);
+                setAttrs(attrList);
+                setAttrsLoaded(true);
+            })
+            .catch(() => { setAttrs([]); })
             .finally(() => setLoadingAttrs(false));
     }, [effectiveCategoryId, shopeeConnectionUrl]);
 
     const handleSave = async () => {
         if (!p.shopee_item_id) { toast.error('Produto sem Item ID na Shopee.'); return; }
+        if (effectiveCategoryId && !attrsLoaded) { toast.error('Não foi possível conferir os atributos da categoria Shopee. Reabra o produto e tente novamente.'); return; }
+        const anatelState = getShopeeAnatelAttributeState(attrs, attrValues);
+        if (anatelState.errors.length > 0) { toast.error(anatelState.errors[0]); return; }
         setSaving(true);
         try {
             const payload: Record<string, any> = { item_id: p.shopee_item_id };
@@ -6459,6 +6521,7 @@ function ExpandedItemPanel({
             // Dynamic category attributes (INMETRO, ANATEL, etc.)
             const attrList = Object.entries(attrValues)
                 .filter(([, v]) => v?.trim())
+                .filter(([id]) => !(anatelState.omitLicense && Number(id) === anatelState.licenseAttributeId))
                 .map(([id, val]) => {
                     const attrId = parseInt(id);
                     const attrDef = attrs.find((a: any) => a.attribute_id === attrId);
@@ -6863,14 +6926,19 @@ function ExpandedItemPanel({
                     <p className="text-xs text-slate-400 mb-4 italic">Nenhum atributo disponível para esta categoria.</p>
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                        {attrs.map((attr: any) => {
+                        {anatelEditState.parentAttributeId && (
+                            <p className="col-span-full text-xs text-amber-700">Se o produto possui Bluetooth, Wi-Fi ou RF, informe o número da licença Anatel.</p>
+                        )}
+                        {attrs.filter((attr: any) => !(anatelEditState.omitLicense && attr.attribute_id === anatelEditState.licenseAttributeId)).map((attr: any) => {
                             const isEnum = Array.isArray(attr.attribute_value_list) && attr.attribute_value_list.length > 0;
                             const translatedAttrName = attr.multi_lang?.find((m: any) => m.language === 'pt-BR')?.value || attr.name;
                             return (
                                 <div key={attr.attribute_id} className="flex flex-col gap-1">
                                     <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
                                         {translatedAttrName}
-                                        {attr.mandatory && <span className="text-red-400 text-[10px]">*</span>}
+                                        {(attr.mandatory || attr.attribute_id === anatelEditState.parentAttributeId ||
+                                            (anatelEditState.requiresLicense && attr.attribute_id === anatelEditState.licenseAttributeId)) &&
+                                            <span className="text-red-400 text-[10px]">*</span>}
                                     </label>
                                     {isEnum ? (
                                         <select

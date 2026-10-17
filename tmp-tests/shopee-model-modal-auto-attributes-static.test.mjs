@@ -129,15 +129,15 @@ check('shows attribute summary badges',
 check('shows filled count badge',
     /preenchidos/.test(modalSrc));
 
-// ─── 3. ShopeePage.tsx untouched ──────────────────────────────────────────────
+// ─── 3. ShopeePage.tsx mantém a normalização local ───────────────────────────
 
-console.log('\n📦 ShopeePage.tsx (untouched)');
+console.log('\n📦 ShopeePage.tsx');
 
 const shopeePagePath = resolve(ROOT, 'pages/admin/settings/ShopeePage.tsx');
 const shopeePageSrc = readFileSync(shopeePagePath, 'utf8');
 
-check('ShopeePage.tsx does NOT import from shopeeAttributeResolver',
-    !shopeePageSrc.includes('shopeeAttributeResolver'));
+check('ShopeePage.tsx usa a validação Anatel compartilhada',
+    /import \{ getShopeeAnatelAttributeState \} from '\.\/shopeeAttributeResolver\.js'/.test(shopeePageSrc));
 check('ShopeePage.tsx still has local normalizeShopeeAttributes',
     /function normalizeShopeeAttributes/.test(shopeePageSrc));
 check('ShopeePage.tsx still has local extractShopeeAttributeTree',

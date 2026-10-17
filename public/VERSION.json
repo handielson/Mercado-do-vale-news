@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.642-unit-visibility",
+  "version": "v1.2.643-shopee-anatel-condicional",
   "date": "2026-10-17",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.642-unit-visibility",
-  "release_vps": "/var/www/mdv-site/releases/20261017-125000-v1642-unit-visibility",
+  "tag": "v1.2.643-shopee-anatel-condicional",
+  "release_vps": "/var/www/mdv-site/releases/20261017-131315-shopee-anatel-condicional",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Restaura a acao de ocultar aparelhos na API e protege as entradas contra divergencia.",
+  "summary": "Exige declaracao Bluetooth, Wi-Fi ou RF e licenca Anatel quando aplicavel nos anuncios Shopee.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,21 +14,19 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "server.js",
-    "vps_server.js",
-    "deploy-vps-server-only.cjs",
-    "scripts/deploy-unit-visibility.cjs",
-    "package.json",
-    "tmp-tests/unit-visibility-runtime-contract.test.cjs",
-    "tmp-tests/deploy-unit-visibility.test.cjs",
+    "pages/admin/settings/ShopeePage.tsx",
+    "pages/admin/settings/shopeeAttributeResolver.js",
+    "tmp-tests/shopee-anatel-conditional-attributes.test.mjs",
+    "tmp-tests/shopee-model-modal-auto-attributes-static.test.mjs",
+    "tmp-tests/shopee-searchable-attribute-value-id-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-17-v1.2.642-unit-visibility.md"
+    "docs/versoes/2026-10-17-v1.2.643-shopee-anatel-condicional.md"
   ],
   "validations": [
-    "Teste de ocultacao/restauracao, contrato das tres entradas e publicacao seletiva aprovados.",
-    "Suite de regressao, sintaxe da API e build obrigatorios antes da publicacao.",
-    "Preflight remoto seletivo e validacao publica da API/site obrigatorios antes de concluir."
+    "Testes dos atributos Anatel e regressao Shopee aprovados.",
+    "Build Vite e travas do frontend obrigatorios antes da publicacao.",
+    "Validacao publica do site e da versao obrigatoria antes de concluir."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

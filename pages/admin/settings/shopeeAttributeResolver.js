@@ -79,6 +79,46 @@ export function translateShopeeText(entity, fallbackKeys = []) {
     return '';
 }
 
+// A Shopee informa os IDs por categoria. Identificamos os campos pelo nome
+// devolvido em get_attribute_tree, sem assumir IDs ou homologação do produto.
+export function getShopeeAnatelAttributeState(attributes, values) {
+    const named = (attributes || []).map((attribute) => ({
+        attribute,
+        name: normalizeLookupText(attribute?.label || translateShopeeText(attribute, ['display_attribute_name', 'name', 'original_attribute_name'])),
+    }));
+    const parent = named.find(({ name }) =>
+        name.includes('bluetooth') && name.includes('wi fi') &&
+        (name.includes('radiofrequencia') || name.includes('radio frequency'))
+    )?.attribute;
+    if (!parent) return { parentAttributeId: null, licenseAttributeId: null, requiresLicense: false, omitLicense: false, errors: [] };
+
+    const license = named.find(({ name }) =>
+        name.includes('anatel') && /licenca|licence|license|registro|registration|homolog/.test(name)
+    )?.attribute;
+    const parentValue = String(values?.[parent.attribute_id] || '').trim();
+    const options = Array.isArray(parent.attribute_value_list) ? parent.attribute_value_list : [];
+    const chosen = parentValue && options.find((option) => [option.value_id, option.label, option.raw_name,
+        option.original_value_name, option.name].some((value) => normalizeLookupText(value) === normalizeLookupText(parentValue)));
+    const answer = normalizeLookupText(chosen?.original_value_name || chosen?.raw_name || chosen?.label || chosen?.name || parentValue);
+    const parentLabel = parent.label || translateShopeeText(parent, ['display_attribute_name', 'name', 'original_attribute_name']);
+    const parentAttributeId = parent.attribute_id;
+    const licenseAttributeId = license?.attribute_id || null;
+    if (!['sim', 'yes', 'nao', 'no'].includes(answer)) {
+        return { parentAttributeId, licenseAttributeId, requiresLicense: false, omitLicense: false, errors: [`Selecione Sim ou Não em ${parentLabel}.`] };
+    }
+    if (answer === 'nao' || answer === 'no') {
+        return { parentAttributeId, licenseAttributeId, requiresLicense: false, omitLicense: Boolean(licenseAttributeId), errors: [] };
+    }
+    if (!licenseAttributeId) {
+        return { parentAttributeId, licenseAttributeId: null, requiresLicense: true, omitLicense: false, errors: ['A Shopee não retornou o campo Número de licença Anatel para esta categoria. Atualize os atributos antes de publicar.'] };
+    }
+    const licenseValue = values?.[licenseAttributeId];
+    if (!String(Array.isArray(licenseValue) ? licenseValue[0] || '' : licenseValue || '').trim()) {
+        return { parentAttributeId, licenseAttributeId, requiresLicense: true, omitLicense: false, errors: ['Informe o Número de licença Anatel antes de enviar este produto.'] };
+    }
+    return { parentAttributeId, licenseAttributeId, requiresLicense: true, omitLicense: false, errors: [] };
+}
+
 // ─── Garantia do Fornecedor ───────────────────────────────────────────────────
 // A Shopee as vezes nao retorna a opcao "Supplier Warranty" no atributo de tipo
 // de garantia. Garantimos que ela exista para evitar erro de validacao.

@@ -1,3 +1,12 @@
+# v1.2.643-shopee-anatel-condicional
+
+Data: 17/10/2026. Branch: main. Tag: v1.2.643-shopee-anatel-condicional.
+Release MDV: /var/www/mdv-site/releases/20261017-131315-shopee-anatel-condicional.
+
+Na publicacao e edicao de anuncios Shopee, o painel exige a declaracao sobre Bluetooth, Wi-Fi ou RF quando a categoria retorna esse atributo. Ao selecionar Sim, exige o numero de licenca Anatel; ao selecionar Nao, nao envia uma licenca antiga. O envio aguarda os atributos da categoria e preserva esses campos mesmo em modelos estritos e tentativas de recuperacao. Nenhum numero de licenca e inventado. Somente o site sera publicado.
+
+## Histórico anterior
+
 # v1.2.642-unit-visibility
 
 Data: 17/10/2026. Branch: main. Tag: v1.2.642-unit-visibility.

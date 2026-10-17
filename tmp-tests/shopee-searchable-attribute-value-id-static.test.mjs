@@ -96,8 +96,8 @@ assert.match(
 
 assert.match(
   page,
-  /function shouldSkipShopeeAttributePayload\(attr: ShopeeAttributeField,\s*fieldTemplate:[\s\S]*strictAttributeIds[\s\S]*!strictAttributeIds\.has\(Number\(attr\.attribute_id\)\)[\s\S]*\.filter\(\(attr\) => !shouldSkipShopeeAttributePayload\(attr,\s*activeFieldTemplate\)\)/,
-  'Shopee add_item must omit attributes outside a strict field template allowlist.'
+  /function shouldSkipShopeeAttributePayload\(attr: ShopeeAttributeField,\s*fieldTemplate:[\s\S]*strictAttributeIds[\s\S]*!strictAttributeIds\.has\(Number\(attr\.attribute_id\)\)[\s\S]*\.filter\(\(attr\) => !shouldSkipShopeeAttributePayload\(attr,\s*activeFieldTemplate\) \|\|[\s\S]*anatelState\.parentAttributeId[\s\S]*anatelState\.licenseAttributeId\)/,
+  'Shopee add_item must honor the strict field template while retaining the new Anatel declaration and conditional license.'
 );
 
 assert.match(
