@@ -1,3 +1,12 @@
+# v1.2.651-meta-validacao-contexto
+
+Data: 18/10/2026. Branch: main. Tag: v1.2.651-meta-validacao-contexto.
+Release MDV: /var/www/mdv-site/releases/20261018-123300-v12651-meta-contexto.
+
+Exige prova real de continuidade e pausa humana nos dois canais antes de ativar novas respostas Meta.
+
+## Historico anterior
+
 # v1.2.650-meta-webhook-auth
 
 Data: 18/10/2026. Branch: main. Tag: v1.2.650-meta-webhook-auth.

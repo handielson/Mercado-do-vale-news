@@ -4,6 +4,13 @@ const {Client}=require('ssh2');
 const {getVpsSshConfig}=require('../tmp-tests/vps-ssh-config.cjs');
 const FILES=['services/metaAttendanceServer.cjs','services/metaAttendanceReplies.cjs','services/metaAttendanceTransport.cjs'];
 const PILOT_COMMIT='785f4f2754bb6b77a4ea44c03b951f82f4ddf893';
+function validateProof(attestation,modules,now=Date.now()){
+ const digest=s=>require('node:crypto').createHash('sha256').update(s).digest('hex');
+ const age=now-Date.parse(attestation?.at);
+ return attestation?.ok===true&&attestation.metaSends===0&&age>=0&&age<3600000
+   && ['instagram','messenger'].every(channel=>[1,2,3].every(turn=>attestation.turns?.some(t=>t.channel===channel&&t.turn===turn&&(turn===3?t.humanPauseRespected===true:t.statePersisted===true))))
+   && FILES.every(file=>typeof modules[file]==='string'&&attestation.moduleHashes?.[file]===digest(modules[file]));
+}
 function patchEnvironment(source,values){
  let result=source;
  for(const [key,value] of Object.entries(values)){
@@ -37,6 +44,9 @@ async function remote(bundle){
    if(runtime?.enabled&&process.env.META_ATTENDANCE_REPLIES_ENABLED==='true'){console.log(JSON.stringify({activated:true,changed:false}));return;}
    if(!runtime||process.env.META_ATTENDANCE_N8N_KEY!==bundle.key)throw Error('Prepared configuration mismatch');
    if(!bundle.validated)throw Error('Engine validation required before activation');
+   for(const [relative,content] of Object.entries(bundle.modules)){
+    if(!bundle.allowed.includes(relative)||digest(fs.readFileSync(root+'/'+relative,'utf8'))!==digest(content))throw Error('Validated runtime module drift');
+   }
    const nextEnv=patchEnvironment(oldEnv,{META_ATTENDANCE_REPLIES_ENABLED:'true'});
    const [[cursor]]=await db.query('SELECT COALESCE(MAX(id),0) AS id FROM meta_attendance_events');
    // The cursor is written before enabling the worker. Old captured messages stay history.
@@ -87,7 +97,10 @@ async function main(){
  const before={'services/metaAttendanceServer.cjs':cp.execFileSync('git',['show',PILOT_COMMIT+':services/metaAttendanceServer.cjs'],{cwd:root,encoding:'utf8'})};
  for(const f of FILES.slice(1))before[f]=null;
  let validated=false;
- if(args.includes('--activate')){const attestation=JSON.parse(fs.readFileSync(path.join(root,'.local/meta-engine-validation.json'),'utf8'));validated=attestation.ok===true&&Date.now()-Date.parse(attestation.at)<3600000;}
+ if(args.includes('--activate')){
+  const attestation=JSON.parse(fs.readFileSync(path.join(root,'.local/meta-engine-validation.json'),'utf8'));
+  validated=validateProof(attestation,Object.fromEntries(FILES.map(file=>[file,fs.readFileSync(path.join(root,file),'utf8')])));
+ }
  const bundle={allowed:FILES,modules:Object.fromEntries(FILES.map(f=>[f,fs.readFileSync(path.join(root,f),'utf8')])),before,key,apply:args.includes('--apply'),activate:args.includes('--activate'),validated,migration:fs.readFileSync(path.join(root,'migrations/056_meta_attendance_replies.sql'),'utf8')};
  const input=`const patchEnvironment=${patchEnvironment.toString()};(${remote.toString()})(${JSON.stringify(bundle)}).catch(()=>{console.error('Meta replies operation failed; sensitive diagnostics withheld');process.exitCode=1;});`;
  const client=new Client();try{
@@ -96,5 +109,5 @@ async function main(){
   console.log(output.trim());
  }finally{client.end();}
 }
-module.exports={patchEnvironment,FILES};
+module.exports={patchEnvironment,FILES,validateProof};
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});

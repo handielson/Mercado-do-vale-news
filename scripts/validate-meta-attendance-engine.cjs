@@ -21,7 +21,10 @@ async function validate(){
    const conversationKey=[channel,accountId,participantId,'dm'].map(encodeURIComponent).join(':');
    conversations.push(conversationKey);
    let previousRevision=0;
-   for(const [turn,text] of [[1,'Bom dia! Quais celulares estão disponíveis?'],[2,'1']]){
+   // The shared classifier deliberately asks a clarification for generic catalog questions.
+   // Request the complete list explicitly, then select an item in a separate execution.
+   for(const [turn,text] of [[1,'Bom dia! Envie a lista completa de todos os celulares disponíveis, por favor.'],[2,'1'],[3,'Quero mais informações']]){
+    if(turn===3)await db.query("UPDATE meta_attendance_conversations SET paused_until=DATE_ADD(CURRENT_TIMESTAMP(3),INTERVAL 2 HOUR),paused_by='human' WHERE conversation_hash=?",[digest(conversationKey)]);
     const providerEventId='mdv-validation-'+runId+'-'+channel+'-'+turn;
     const eventKey=digest(providerEventId);eventKeys.push(eventKey);
     const event={schemaVersion:1,channel,accountId,participantId,conversationKey,providerEventId,eventKey,
@@ -34,6 +37,10 @@ async function validate(){
       body:JSON.stringify({metaAttendance:event,conversationEventVersion:Date.now()*1000+turn}),signal:AbortSignal.timeout(155000),redirect:'error'});
     if(!result.ok)throw Error('Engine HTTP validation failed');
     const response=await result.json();
+    if(turn===3){
+      if(response.eventKey!==eventKey||response.conversationKey!==conversationKey||response.blocked!==true||response.messages?.length!==0)throw Error('Human pause validation failed');
+      summary.push({channel,turn,humanPauseRespected:true,messages:0});continue;
+    }
     if(response.eventKey!==eventKey||response.conversationKey!==conversationKey||!response.messages?.length||response.blocked)throw Error('Engine response validation failed');
     const [[state]]=await db.query('SELECT state_revision,conversation_state FROM meta_attendance_conversations WHERE conversation_hash=?',[digest(conversationKey)]);
     if(Number(state?.state_revision)<=previousRevision)throw Error('Conversation state was not persisted');
@@ -43,7 +50,9 @@ async function validate(){
     summary.push({channel,turn,messages:response.messages.length,statePersisted:true,responseSha256:digest(JSON.stringify(response.messages))});
    }
   }
-  console.log(JSON.stringify({ok:true,at:new Date().toISOString(),syntheticOnly:true,metaSends:0,conversations,turns:summary}));
+  const fs=require('node:fs');
+  const moduleHashes=Object.fromEntries(['services/metaAttendanceServer.cjs','services/metaAttendanceReplies.cjs','services/metaAttendanceTransport.cjs'].map(file=>[file,digest(fs.readFileSync(file,'utf8'))]));
+  console.log(JSON.stringify({ok:true,at:new Date().toISOString(),syntheticOnly:true,metaSends:0,moduleHashes,conversations,turns:summary}));
  }finally{
   for(const key of eventKeys){await db.query('DELETE FROM meta_attendance_outbox WHERE event_key=?',[key]);await db.query('DELETE FROM meta_attendance_jobs WHERE event_key=?',[key]);await db.query('DELETE FROM meta_attendance_events WHERE event_key=?',[key]);}
   for(const key of conversations)await db.query('DELETE FROM meta_attendance_conversations WHERE conversation_hash=?',[digest(key)]);

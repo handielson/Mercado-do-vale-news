@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.650-meta-webhook-auth",
+  "version": "v1.2.651-meta-validacao-contexto",
   "date": "2026-10-18",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.650-meta-webhook-auth",
-  "release_vps": "/var/www/mdv-site/releases/20261018-122600-v12650-meta-auth",
+  "tag": "v1.2.651-meta-validacao-contexto",
+  "release_vps": "/var/www/mdv-site/releases/20261018-123300-v12651-meta-contexto",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Valida o retorno 403 do Header Auth do n8n antes de liberar a entrada autenticada do atendimento Meta.",
+  "summary": "Exige prova real de continuidade e pausa humana nos dois canais antes de ativar novas respostas Meta.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,17 +14,19 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "scripts/deploy-n8n-meta-attendance.cjs",
-    "tmp-tests/n8n-meta-attendance-deploy.test.cjs",
+    "scripts/deploy-meta-attendance-replies.cjs",
+    "scripts/validate-meta-attendance-engine.cjs",
+    "tmp-tests/meta-attendance-replies-deploy.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-18-v1.2.650-meta-webhook-auth.md"
+    "docs/versoes/2026-10-18-v1.2.651-meta-validacao-contexto.md"
   ],
   "validations": [
-    "26 testes do builder/publicador passaram, incluindo rejeicao de 200,401 e500 na verificacao negativa.",
-    "Comportamento403 confirmado no codigo instalado do n8n2.38.5.",
-    "Worker SQL validado em tabelas MySQL temporarias: duas conversas e dois recibos, sem duplicacao ou envio externo.",
-    "Respostas permanecem desligadas ate a validacao integrada do n8n."
+    "Seis execucoes sinteticas reais no n8n: catalogo completo, selecao1 e pausa humana em Instagram e Messenger.",
+    "Revisoes1 e2 persistidas e resposta bloqueada no terceiro turno em ambos canais.",
+    "Ativacao exige prova recente, hashes dos tres modulos e ensaio sem envio externo.",
+    "Teste de guarda de ativacao rejeita prova parcial, antiga, futura ou codigo divergente.",
+    "Worker MySQL validado em tabelas temporarias com dois envios simulados e sem duplicacao."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
