@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const API_PATTERNS = [
   /^scripts\/deploy-meta-attendance\.cjs$/,
+  /^scripts\/deploy-meta-attendance-replies\.cjs$/,
   /^services\/metaAttendanceCore\.cjs$/,
   /^vps_server\.(?:js|cjs)$/,
   /^server\.js$/,
@@ -51,6 +52,7 @@ const SITE_PATTERNS = [
 ];
 
 const N8N_WORKFLOW_PATTERNS = [
+  /^scripts\/(?:build|deploy)-n8n-meta-attendance\.cjs$/,
   /^tmp-tests\/n8n-(?!.*(?:readonly|\.test\.cjs$)).*\.cjs$/,
 ];
 
@@ -164,6 +166,7 @@ function classifyFiles(files) {
 }
 
 function n8nDeployCommands(files) {
+  if(files.includes('scripts/deploy-n8n-meta-attendance.cjs')) return ['node scripts/deploy-n8n-meta-attendance.cjs --apply'];
   if(files.includes('tmp-tests/n8n-sales-model-configuration.cjs')){
     return ['node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --model-configuration --apply --model-test-evidence .local/n8n-sales-model-configuration-native-evidence.json'];
   }
@@ -247,8 +250,9 @@ function buildPlan(options) {
   if (classification.target === 'docs-only') validations.push('Revisar docs alterados; deploy nao e necessario.');
 
   const deployCommands = [];
-  const metaAttendance = allFiles.includes('scripts/deploy-meta-attendance.cjs');
-  if (classification.needs.api && metaAttendance) deployCommands.push('node scripts/deploy-meta-attendance.cjs --apply');
+  const metaReplies = allFiles.includes('scripts/deploy-meta-attendance-replies.cjs');
+  const metaAttendance = metaReplies || allFiles.includes('scripts/deploy-meta-attendance.cjs');
+  if (classification.needs.api && metaAttendance) deployCommands.push(`node scripts/deploy-meta-attendance${metaReplies?'-replies':''}.cjs --apply`);
   const catalogMedia = allFiles.includes('scripts/deploy-catalog-media.cjs');
   const salesDelivery = allFiles.includes('scripts/deploy-sales-delivery.cjs');
   const shopeeFilelink = allFiles.includes('scripts/deploy-shopee-filelink.cjs');

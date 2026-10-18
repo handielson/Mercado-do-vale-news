@@ -1,6 +1,7 @@
 'use strict';
 
 const { WEBHOOK_PATH, sameSecret, verifySignature, normalizeEnvelope } = require('./metaAttendanceCore.cjs');
+const { createMetaAttendanceReplies, replyConfig } = require('./metaAttendanceReplies.cjs');
 const BODY_LIMIT = 1024 * 1024;
 
 function attendanceConfig(env = process.env) {
@@ -42,6 +43,27 @@ function configured(config) {
 }
 
 function registerMetaAttendanceRoutes(fastify, { pool, requireAdminBearerToken, getConfig = attendanceConfig }) {
+  const replies = createMetaAttendanceReplies({pool});
+  let replyTimer = null;
+  let running = false;
+  fastify.addHook('onReady', async () => {
+    if (!replyConfig().enabled) return;
+    const run = async () => { if (running) return; running = true; try { await replies.tick(); } catch { /* Retry database availability on the next tick; no upstream details enter logs. */ } finally { running = false; } };
+    replyTimer = setInterval(() => { void run(); }, 1500);
+    replyTimer.unref();
+  });
+  fastify.addHook('onClose', async () => { if(replyTimer)clearInterval(replyTimer); });
+  fastify.route({method:['GET','POST'],url:'/internal/meta/attendance/n8n/:operation',
+    preHandler:async(req,reply)=>{
+      if(!sameSecret(req.headers['x-sync-key'],process.env.SYNC_SECRET))return reply.code(401).send({error:'unauthorized'});
+    },handler:async(req,reply)=>{
+      reply.header('Cache-Control','no-store');
+      const operation=req.params.operation;
+      if(!['context','log','state','preferences','handoff','freshness','reset'].includes(operation))return reply.code(404).send({error:'operation_not_found'});
+      if(req.method!==(['context','freshness'].includes(operation)?'GET':'POST'))return reply.code(405).send({error:'invalid_method'});
+      try{return await replies.operate(operation,req.query?.eventKey,req.body||{});}
+      catch(error){return reply.code(error.statusCode===400?400:503).send({error:'meta_attendance_operation_failed'});}
+    }});
   // This parser is encapsulated in this plugin. Other JSON APIs retain their own parser and limits.
   fastify.register(async app => {
     app.removeContentTypeParser('application/json');
@@ -86,8 +108,16 @@ function registerMetaAttendanceRoutes(fastify, { pool, requireAdminBearerToken, 
       const config = getConfig(), assets = await selectedAssets(pool);
       let storageReady = false;
       try { await pool.query('SELECT id FROM meta_attendance_events LIMIT 0'); storageReady = true; } catch {}
+      let runtime = null, activity = [];
+      try {
+        runtime = (await pool.query('SELECT enabled,activation_at FROM meta_attendance_runtime WHERE id=1'))[0][0];
+        activity = (await pool.query(`SELECT status,COUNT(*) AS count FROM meta_attendance_jobs GROUP BY status`))[0];
+      } catch {}
+      const bridge=replyConfig();
+      const outboundEnabled=bridge.enabled && Boolean(runtime?.enabled) && bridge.n8nKey.length>=32 && Boolean(bridge.n8nUrl);
       return {
-        ok: true, mode: 'capture_only', outboundEnabled: false, n8nConnected: false,
+        ok: true, mode: outboundEnabled?'automatic_replies':'capture_only',outboundEnabled,
+        n8nConnected:bridge.enabled&&bridge.n8nKey.length>=32&&Boolean(bridge.n8nUrl),activationAt:runtime?.activation_at||null,activity,
         enabled: config.enabled, configured: configured(config), storageReady, webhookPath: WEBHOOK_PATH, ...assets,
       };
     } catch { return reply.code(503).send({ error: 'meta_attendance_status_unavailable' }); }

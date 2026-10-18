@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.648-meta-atendimento-piloto",
-  "date": "2026-10-17",
+  "version": "v1.2.649-meta-atendimento-respostas",
+  "date": "2026-10-18",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.648-meta-atendimento-piloto",
-  "release_vps": "/var/www/mdv-site/releases/20261017-180000-v12648-meta-atendimento",
+  "tag": "v1.2.649-meta-atendimento-respostas",
+  "release_vps": "/var/www/mdv-site/releases/20261018-122000-v12649-meta-atendimento",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Prepara a caixa de entrada de Direct, Messenger e comentarios Meta, em observacao e com envios bloqueados.",
+  "summary": "Conecta novas mensagens do Direct e Messenger ao nucleo comercial do WhatsApp, com memoria por canal e fila de envio persistente.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -16,27 +16,31 @@
   "changed_files": [
     ".env.vps.example",
     "deploy-vps-server-only.cjs",
-    "services/metaAttendanceCore.cjs",
+    "migrations/056_meta_attendance_replies.sql",
     "services/metaAttendanceServer.cjs",
-    "services/marketingCampaignApi.cjs",
+    "services/metaAttendanceReplies.cjs",
+    "services/metaAttendanceTransport.cjs",
     "services/metaMarketingConnectionService.ts",
     "pages/admin/settings/marketing/MetaAttendancePanel.tsx",
-    "pages/admin/settings/marketing/MetaMarketingConnectionPanel.tsx",
-    "migrations/055_meta_attendance_events.sql",
-    "scripts/deploy-meta-attendance.cjs",
+    "scripts/build-n8n-meta-attendance.cjs",
+    "scripts/deploy-n8n-meta-attendance.cjs",
+    "scripts/deploy-meta-attendance-replies.cjs",
+    "scripts/validate-meta-attendance-engine.cjs",
     "scripts/publish-vps-plan.cjs",
-    "tmp-tests/meta-attendance-core.test.cjs",
-    "tmp-tests/meta-attendance-routes.test.cjs",
-    "tmp-tests/meta-attendance-deploy.test.cjs",
+    "tmp-tests/meta-attendance-replies.test.cjs",
+    "tmp-tests/meta-attendance-transport.test.cjs",
+    "tmp-tests/meta-attendance-replies-deploy.test.cjs",
+    "tmp-tests/n8n-meta-attendance-patch.test.cjs",
+    "tmp-tests/n8n-meta-attendance-deploy.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-17-v1.2.648-meta-atendimento-piloto.md"
+    "docs/versoes/2026-10-18-v1.2.649-meta-atendimento-respostas.md"
   ],
   "validations": [
-    "26 testes focados de normalizacao, assinatura, transacao, deduplicacao e publicacao seletiva aprovados.",
-    "Contrato existente de conexao Meta e self-test do preflight aprovados.",
-    "Sintaxe dos servidores validada; build de producao obrigatorio antes da publicacao.",
-    "API, MySQL, callback HTTPS e VERSION publica serao conferidos apos deploy."
+    "71 testes focados de entrada, transporte, worker, estado e publicacao passaram.",
+    "87 testes comerciais canonicos passaram no candidato exato, pelo gate commitado.",
+    "Build de producao e sintaxe dos servidores aprovados.",
+    "Publicacao inicia com respostas desligadas; validacao integrada sintetica obrigatoria antes da ativacao."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

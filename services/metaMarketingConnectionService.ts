@@ -107,9 +107,11 @@ export interface MetaManagedAdReview {
 type ConnectionResponse = { ok: true; connection: MetaMarketingConnection };
 
 export interface MetaAttendanceStatus {
-    mode: 'capture_only';
-    outboundEnabled: false;
-    n8nConnected: false;
+    mode: 'capture_only' | 'automatic_replies';
+    outboundEnabled: boolean;
+    n8nConnected: boolean;
+    activationAt?: string | null;
+    activity?: Array<{ status: string; count: number }>;
     enabled: boolean;
     configured: boolean;
     storageReady: boolean;

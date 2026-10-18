@@ -1,3 +1,14 @@
+# v1.2.649-meta-atendimento-respostas
+
+Data: 18/10/2026. Branch: main. Tag: v1.2.649-meta-atendimento-respostas.
+Release MDV: /var/www/mdv-site/releases/20261018-122000-v12649-meta-atendimento.
+
+Conecta novas mensagens do Direct e Messenger ao nucleo comercial do WhatsApp, com memoria por canal e fila de envio persistente.
+
+A ativacao exclui eventos historicos. Pausa humana e global sao reavaliadas antes de cada envio. Resultado ambiguo nao e reenviado. Comentarios continuam em observacao; Marketplace depende da Pagina conectada.
+
+## Historico anterior
+
 # v1.2.648-meta-atendimento-piloto
 
 Data: 17/10/2026. Branch: main. Tag: v1.2.648-meta-atendimento-piloto.
