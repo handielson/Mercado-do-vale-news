@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.651-meta-validacao-contexto",
+  "version": "v1.2.652-whatsapp-webhook-ack",
   "date": "2026-10-18",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.651-meta-validacao-contexto",
-  "release_vps": "/var/www/mdv-site/releases/20261018-123300-v12651-meta-contexto",
+  "tag": "v1.2.652-whatsapp-webhook-ack",
+  "release_vps": "/var/www/mdv-site/releases/20261018-152433-v12652-whatsapp-ack",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Exige prova real de continuidade e pausa humana nos dois canais antes de ativar novas respostas Meta.",
+  "summary": "Preserva o ACK imediato do WhatsApp ao compor o atendimento Meta e bloqueia candidatos sem o contrato de resposta.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,19 +14,22 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "scripts/deploy-meta-attendance-replies.cjs",
-    "scripts/validate-meta-attendance-engine.cjs",
-    "tmp-tests/meta-attendance-replies-deploy.test.cjs",
+    "scripts/build-n8n-meta-attendance.cjs",
+    "scripts/deploy-n8n-meta-attendance.cjs",
+    "scripts/n8n-whatsapp-webhook-ack.cjs",
+    "tmp-tests/n8n-meta-attendance-patch.test.cjs",
+    "tmp-tests/n8n-meta-attendance-deploy.test.cjs",
+    "tmp-tests/n8n-whatsapp-webhook-ack.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-18-v1.2.651-meta-validacao-contexto.md"
+    "docs/versoes/2026-10-18-v1.2.652-whatsapp-webhook-ack.md"
   ],
   "validations": [
-    "Seis execucoes sinteticas reais no n8n: catalogo completo, selecao1 e pausa humana em Instagram e Messenger.",
-    "Revisoes1 e2 persistidas e resposta bloqueada no terceiro turno em ambos canais.",
-    "Ativacao exige prova recente, hashes dos tres modulos e ensaio sem envio externo.",
-    "Teste de guarda de ativacao rejeita prova parcial, antiga, futura ou codigo divergente.",
-    "Worker MySQL validado em tabelas temporarias com dois envios simulados e sem duplicacao."
+    "31 testes focados de composicao Meta/WhatsApp, ACK e publicador aprovados.",
+    "87 testes do gate comercial versionado aprovados no checkout isolado, sem mudancas locais de outros trabalhos.",
+    "Preflight oficial do publicador aprovado com baseline recuperado de backup criptografado e hash exato; alreadyApplied=true e remoteWrites=false.",
+    "Gate comercial do checkout local: 107 aprovados e 9 falhas preexistentes identicas no baseline e no candidato; fora deste escopo.",
+    "Recuperacao emergencial anterior confirmada pela execucao natural 50937 e DELIVERY_ACK das quatro mensagens; sem reexecucao de clientes."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

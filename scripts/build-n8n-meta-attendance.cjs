@@ -4,6 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+const {patchWhatsAppWebhookAck} = require('./n8n-whatsapp-webhook-ack.cjs');
 const MARKER = 'meta-attendance-shared-core-v1';
 const BASE = 'https://api.xiaomipetrolina.com.br/internal/meta/attendance/n8n/';
 const SOURCE = "$('switc Mensagens').first().json";
@@ -149,7 +150,7 @@ function patchWorkflow(input, options={}) {
   const names=new Set(w.nodes.map(n=>n.name));assert.equal(names.size,w.nodes.length);
   for(const [name,outputs] of Object.entries(c)){assert.ok(names.has(name));for(const groups of Object.values(outputs))for(const group of groups)for(const e of group)assert.ok(names.has(e.node),e.node);}
   for(const n of w.nodes)if(n.parameters?.jsCode)new Function('$json','$input','$','$getWorkflowStaticData','$execution','$runIndex',n.parameters.jsCode);
-  return w;
+  return patchWhatsAppWebhookAck(w);
 }
 module.exports={patchWorkflow,OPERATIONS,NAMES,NORMALIZE,AGGREGATE,BLOCKED,MARKER};
 if(require.main===module){try{

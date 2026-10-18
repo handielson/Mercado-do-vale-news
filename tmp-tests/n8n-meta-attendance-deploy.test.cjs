@@ -35,6 +35,13 @@ test('graph validator catches dangling targets, drifted auth and credentials',()
  const auth=structuredClone(p.candidate);auth.nodes.find(n=>n.name==='Meta - Webhook Atendimento').parameters.authentication='none';
  assert.throws(()=>validateGraph(auth,p.credential.id),/schema/);
  assert.throws(()=>validateGraph(p.candidate,'other'),/binding/);
+ const missingAck=structuredClone(p.candidate);missingAck.nodes=missingAck.nodes.filter(n=>n.name!=='WhatsApp - Confirmar recebimento webhook');
+ missingAck.connections.Webhook=structuredClone(original.connections.Webhook);delete missingAck.connections['WhatsApp - Confirmar recebimento webhook'];
+ assert.throws(()=>validateGraph(missingAck,p.credential.id),/ACK missing/);
+ const lateAck=structuredClone(p.candidate);delete lateAck.nodes.find(n=>n.name==='Webhook').parameters.responseMode;
+ assert.throws(()=>validateGraph(lateAck,p.credential.id));
+ const wrongBody=structuredClone(p.candidate);wrongBody.nodes.find(n=>n.name==='WhatsApp - Confirmar recebimento webhook').parameters.responseBody='{}';
+ assert.throws(()=>validateGraph(wrongBody,p.credential.id));
 });
 test('CAS updates entity and active history atomically without changing settings, credentials or staticData',()=>{
  const s=snapshot(),p=createPlan(s),sql=casSql(s,s.workflow,p.candidate);

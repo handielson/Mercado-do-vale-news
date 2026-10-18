@@ -1,3 +1,14 @@
+# v1.2.652-whatsapp-webhook-ack
+
+Data: 18/10/2026. Branch: main. Tag: v1.2.652-whatsapp-webhook-ack.
+Release MDV: /var/www/mdv-site/releases/20261018-152433-v12652-whatsapp-ack.
+
+Preserva o ACK imediato do WhatsApp ao compor o atendimento Meta e bloqueia candidatos sem o contrato de resposta.
+
+O workflow ja recebeu a recuperacao emergencial autorizada. Esta entrega versiona a protecao no gerador e no validador; a reaplicacao deve confirmar o mesmo hash sem reiniciar n8n/runner. As nove falhas comerciais preexistentes permanecem separadas.
+
+## Historico anterior
+
 # v1.2.651-meta-validacao-contexto
 
 Data: 18/10/2026. Branch: main. Tag: v1.2.651-meta-validacao-contexto.

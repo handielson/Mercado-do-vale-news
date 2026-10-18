@@ -4,6 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const {patchWorkflow:transform,OPERATIONS,NAMES,NORMALIZE,AGGREGATE,BLOCKED}=require('../scripts/build-n8n-meta-attendance.cjs');
+const {ACK_NAME}=require('../scripts/n8n-whatsapp-webhook-ack.cjs');
 const patchWorkflow=input=>transform(input,{allowPlaceholder:true});
 const snapshot=process.env.MDV_META_SOURCE_SNAPSHOT || path.resolve(__dirname,'../.local/meta-current-workflow.private.json');
 assert.ok(fs.existsSync(snapshot),'Exact unpatched runtime source required; no fixture fallback');
@@ -24,17 +25,36 @@ test('source is immutable and WhatsApp node business rules/credentials preserved
  const before=JSON.stringify(source);patchWorkflow(source);assert.equal(JSON.stringify(source),before);
  const changed=new Set([...Object.keys(OPERATIONS),'Controle Bot - Aplicar Controle','Estado Conversa - Preparar','Vendas - Verificar Pos Lista']);
  for(const original of source.nodes){const current=node(original.name);assert.deepEqual(current.credentials,original.credentials,'Credential drift '+original.name);
-  if(!changed.has(original.name))assert.deepEqual(current,original,'Unscoped change '+original.name);
+  if(original.name==='Webhook'){const expected=structuredClone(original);expected.parameters.responseMode='responseNode';assert.deepEqual(current,expected);}
+  else if(!changed.has(original.name))assert.deepEqual(current,original,'Unscoped change '+original.name);
   else {const a=structuredClone(original),b=structuredClone(current);delete a.parameters;delete b.parameters;assert.deepEqual(b,a,'Nonparameter drift '+original.name);}
  }
 });
-test('WhatsApp graph preserved except three intentional boundary gates',()=>{
- const changed=new Set(['Controle Bot - Registrar Entrada','Controle Bot - Bloqueado?','Dividir mensagens']);
+test('WhatsApp graph preserved except immediate ACK and three intentional boundary gates',()=>{
+ const changed=new Set(['Webhook','Controle Bot - Registrar Entrada','Controle Bot - Bloqueado?','Dividir mensagens']);
  for(const [name,connections]of Object.entries(source.connections))if(!changed.has(name))assert.deepEqual(candidate.connections[name],connections,name);
  assert.deepEqual(candidate.connections[NAMES.afterLog].main[1],source.connections['Controle Bot - Registrar Entrada'].main[0]);
  assert.deepEqual(candidate.connections[NAMES.contactGate].main[1],source.connections['Controle Bot - Bloqueado?'].main[1]);
  assert.deepEqual(candidate.connections[NAMES.outputGate].main[1],source.connections['Dividir mensagens'].main[0]);
  assert.deepEqual(candidate.connections[NAMES.blockedGate].main[1],[]);
+ assert.deepEqual(candidate.connections[ACK_NAME],source.connections.Webhook);
+});
+test('composed Meta and WhatsApp graph satisfies n8n structural response validation and immediate ACK contract',()=>{
+ const descendants=(w,start)=>{const seen=new Set(),todo=[start];while(todo.length){const name=todo.pop();if(seen.has(name))continue;seen.add(name);for(const outputs of Object.values(w.connections[name]||{}))for(const edges of outputs)for(const edge of edges)todo.push(edge.node);}seen.delete(start);return [...seen];};
+ const validate=w=>{for(const hook of w.nodes.filter(n=>n.type==='n8n-nodes-base.webhook')){
+  const downstream=descendants(w,hook.name).map(name=>w.nodes.find(n=>n.name===name));
+  if(downstream.some(n=>n.type==='n8n-nodes-base.respondToWebhook'))assert.equal(hook.parameters.responseMode,'responseNode',hook.name+' response mode');
+ }};
+ const broken=structuredClone(candidate);delete broken.nodes.find(n=>n.name==='Webhook').parameters.responseMode;
+ broken.nodes=broken.nodes.filter(n=>n.name!==ACK_NAME);broken.connections.Webhook=structuredClone(source.connections.Webhook);delete broken.connections[ACK_NAME];
+ assert.ok(descendants(broken,'Webhook').includes(NAMES.respond),'Reproduce Meta responder reachable across all conditional outputs');
+ assert.throws(()=>validate(broken),/Webhook response mode/);validate(candidate);
+ assert.deepEqual(candidate.connections.Webhook.main,[[{node:ACK_NAME,type:'main',index:0}]]);
+ const ack=node(ACK_NAME);assert.equal(ack.type,'n8n-nodes-base.respondToWebhook');assert.equal(ack.typeVersion,1.4);
+ assert.equal(ack.parameters.respondWith,'json');assert.deepEqual(JSON.parse(ack.parameters.responseBody),{message:'Workflow was started'});
+ assert.equal(ack.parameters.options.responseCode,200);assert.notEqual(ack.parameters.enableResponseOutput,true);
+ assert.ok(!descendants(candidate,NAMES.webhook).includes(ACK_NAME),'Meta must retain its final JSON response');
+ assert.equal(node(NAMES.respond).parameters.respondWith,'firstIncomingItem');
 });
 test('webhook is authenticated and responds through explicit response node',()=>{
  const n=node(NAMES.webhook);assert.equal(n.parameters.httpMethod,'POST');assert.equal(n.parameters.authentication,'headerAuth');

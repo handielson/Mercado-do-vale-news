@@ -3,6 +3,7 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {spawnSync}=require('node:child_process');
 const assert=require('node:assert/strict');
+const {patchWhatsAppWebhookAck,ACK_NAME}=require('./n8n-whatsapp-webhook-ack.cjs');
 const {patchWorkflow,NAMES,NORMALIZE,AGGREGATE,BLOCKED}=require('./build-n8n-meta-attendance.cjs');
 const WORKFLOW_ID='SkrkB4vyKVDnQ68t';
 const MAIN='n8n_n8n',RUNNER='n8n_n8n-runner';
@@ -28,6 +29,8 @@ function validateGraph(w,credentialId){
  assert.equal(get(NAMES.normalize).parameters.jsCode,NORMALIZE,'Normalizer drift');
  assert.equal(get(NAMES.aggregate).parameters.jsCode,AGGREGATE,'Aggregator drift');
  assert.equal(get(NAMES.blocked).parameters.jsCode,BLOCKED,'Blocked contract drift');
+ assert.ok(w.nodes.some(n=>n.name===ACK_NAME),'WhatsApp immediate ACK missing');
+ assert.deepEqual(patchWhatsAppWebhookAck(w),w,'WhatsApp ACK contract drift');
  for(const n of w.nodes)if(n.parameters?.jsCode)new Function('$json','$input','$','$getWorkflowStaticData','$execution','$runIndex',n.parameters.jsCode);
  return true;
 }
