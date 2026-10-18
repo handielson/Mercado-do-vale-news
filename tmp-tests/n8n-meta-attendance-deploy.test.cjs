@@ -14,7 +14,7 @@ function harness(options={}){
   if(request.mode==='scale'){current.services[request.service].replicas=request.replicas;return {scaled:true};}
   if(request.mode==='replicas'){const n=current.services[request.service].replicas;return {desired:n,running:n};}
   if(request.mode==='ready'){if(options.failReady&&!readyFailed){readyFailed=true;return {status:500};}return {status:200};}
-  if(request.mode==='registration')return {registered:options.registration!==false,unauthenticatedStatus:401};
+  if(request.mode==='registration')return {registered:options.registration!==false,unauthenticatedStatus:options.unauthenticatedStatus ?? 403};
   if(request.mode==='sql'){sqlCount++;current.workflow=structuredClone(sqlCount===1?candidate:initial.workflow);current.entity={nodes:structuredClone(current.workflow.nodes),connections:structuredClone(current.workflow.connections)};return {applied:true};}
   throw Error('Unexpected request '+request.mode);
  };
@@ -56,6 +56,7 @@ test('apply backs up encrypted snapshot, stops main then runner, CAS publishes a
  const h=harness();const result=await deploy({apply:true,remote:h.remote,wait:h.wait,validate:()=>{}});
  assert.equal(result.entityHistoryAligned,true);assert.equal(result.servicesHealthy,true);
  assert.equal(result.registration.registered,true);assert.equal(result.activeVersionPreserved,true);
+ assert.equal(result.registration.unauthenticatedStatus,403);
  const scale=h.calls.filter(c=>c.mode==='scale').map(c=>[c.service,c.replicas]);
  assert.deepEqual(scale,[[MAIN,0],[RUNNER,0],[MAIN,1],[RUNNER,1]]);
  assert.ok(h.calls.findIndex(c=>c.mode==='backup')<h.calls.findIndex(c=>c.mode==='scale'));
@@ -67,6 +68,21 @@ test('idempotent repeat verifies registration and skips remote writes/restart',a
  const result=await deploy({apply:true,remote:h.remote,wait:h.wait,validate:()=>{}});
  assert.equal(result.alreadyApplied,true);assert.equal(result.restartSkipped,true);
  assert.deepEqual(h.calls.map(c=>c.mode),['inspect','registration']);
+});
+test('Header Auth rejects 200, Basic Auth 401 and broken credential 500 during publication',async()=>{
+ for(const status of [200,401,500]){
+  const h=harness({unauthenticatedStatus:status});
+  await assert.rejects(deploy({apply:true,remote:h.remote,wait:h.wait,validate:()=>{}}),/reject unauthenticated/);
+  assert.equal(fingerprint(h.current.workflow),fingerprint(h.initial.workflow),'Rollback for HTTP '+status);
+ }
+});
+test('idempotent verification also requires actual Header Auth rejection 403',async()=>{
+ for(const status of [200,401,500]){
+  const h=harness();await deploy({apply:true,remote:h.remote,wait:h.wait,validate:()=>{}});h.calls.length=0;
+  const remote=request=>request.mode==='registration'?Promise.resolve({registered:true,unauthenticatedStatus:status}):h.remote(request);
+  await assert.rejects(deploy({apply:true,remote,wait:h.wait,validate:()=>{}}),/authentication failed/);
+  assert.equal(h.calls.some(c=>c.mode==='scale'||c.mode==='sql'),false);
+ }
 });
 test('validation failure and active execution refuse publication before stopping services',async()=>{
  const h=harness();await assert.rejects(deploy({apply:true,remote:h.remote,wait:h.wait,validate:()=>{throw Error('regression');}}),/regression/);

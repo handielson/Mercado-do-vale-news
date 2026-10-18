@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.649-meta-atendimento-respostas",
+  "version": "v1.2.650-meta-webhook-auth",
   "date": "2026-10-18",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.649-meta-atendimento-respostas",
-  "release_vps": "/var/www/mdv-site/releases/20261018-122000-v12649-meta-atendimento",
+  "tag": "v1.2.650-meta-webhook-auth",
+  "release_vps": "/var/www/mdv-site/releases/20261018-122600-v12650-meta-auth",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Conecta novas mensagens do Direct e Messenger ao nucleo comercial do WhatsApp, com memoria por canal e fila de envio persistente.",
+  "summary": "Valida o retorno 403 do Header Auth do n8n antes de liberar a entrada autenticada do atendimento Meta.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,33 +14,17 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    ".env.vps.example",
-    "deploy-vps-server-only.cjs",
-    "migrations/056_meta_attendance_replies.sql",
-    "services/metaAttendanceServer.cjs",
-    "services/metaAttendanceReplies.cjs",
-    "services/metaAttendanceTransport.cjs",
-    "services/metaMarketingConnectionService.ts",
-    "pages/admin/settings/marketing/MetaAttendancePanel.tsx",
-    "scripts/build-n8n-meta-attendance.cjs",
     "scripts/deploy-n8n-meta-attendance.cjs",
-    "scripts/deploy-meta-attendance-replies.cjs",
-    "scripts/validate-meta-attendance-engine.cjs",
-    "scripts/publish-vps-plan.cjs",
-    "tmp-tests/meta-attendance-replies.test.cjs",
-    "tmp-tests/meta-attendance-transport.test.cjs",
-    "tmp-tests/meta-attendance-replies-deploy.test.cjs",
-    "tmp-tests/n8n-meta-attendance-patch.test.cjs",
     "tmp-tests/n8n-meta-attendance-deploy.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-18-v1.2.649-meta-atendimento-respostas.md"
+    "docs/versoes/2026-10-18-v1.2.650-meta-webhook-auth.md"
   ],
   "validations": [
-    "71 testes focados de entrada, transporte, worker, estado e publicacao passaram.",
-    "87 testes comerciais canonicos passaram no candidato exato, pelo gate commitado.",
-    "Build de producao e sintaxe dos servidores aprovados.",
-    "Publicacao inicia com respostas desligadas; validacao integrada sintetica obrigatoria antes da ativacao."
+    "26 testes do builder/publicador passaram, incluindo rejeicao de 200,401 e500 na verificacao negativa.",
+    "Comportamento403 confirmado no codigo instalado do n8n2.38.5.",
+    "Worker SQL validado em tabelas MySQL temporarias: duas conversas e dois recibos, sem duplicacao ou envio externo.",
+    "Respostas permanecem desligadas ate a validacao integrada do n8n."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

@@ -1,3 +1,12 @@
+# v1.2.650-meta-webhook-auth
+
+Data: 18/10/2026. Branch: main. Tag: v1.2.650-meta-webhook-auth.
+Release MDV: /var/www/mdv-site/releases/20261018-122600-v12650-meta-auth.
+
+Valida o retorno 403 do Header Auth do n8n antes de liberar a entrada autenticada do atendimento Meta.
+
+## Historico anterior
+
 # v1.2.649-meta-atendimento-respostas
 
 Data: 18/10/2026. Branch: main. Tag: v1.2.649-meta-atendimento-respostas.

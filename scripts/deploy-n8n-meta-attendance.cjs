@@ -117,6 +117,8 @@ async function remoteProgram(request){
  }
  if(request.mode==='registration'){
   const result=parse(`SELECT json_build_object('registered',COUNT(*)=1) FROM webhook_entity WHERE "workflowId"='${workflowId}' AND method='POST' AND "webhookPath"='meta-attendance';`);
+  // Installed n8n 2.38.5 Webhook/utils.js rejects missing or wrong Header Auth
+  // with 403. A 500 means missing credentials; it is not successful rejection.
   const response=await fetch('https://n8n.mercadodovale.com.br/webhook/meta-attendance',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(10000)});
   return {...result,unauthenticatedStatus:response.status};
  }
@@ -179,7 +181,7 @@ async function deploy({apply=false,remote,validate=runValidation,wait=waitFor,re
   validate(snapshot,plan);
   const summary={apply,workflowId:WORKFLOW_ID,credential:plan.credential,beforeSha256:plan.beforeSha256,afterSha256:plan.afterSha256,nodes:plan.candidate.nodes.length,alreadyApplied:plan.alreadyApplied};
   if(!apply){report({...summary,remoteWrites:false});return {...summary,remoteWrites:false};}
-  if(plan.alreadyApplied){const registration=await remote({mode:'registration'});assert.equal(registration.registered,true,'Existing webhook not registered');assert.equal(registration.unauthenticatedStatus,401,'Existing webhook authentication failed');return {...summary,restartSkipped:true};}
+  if(plan.alreadyApplied){const registration=await remote({mode:'registration'});assert.equal(registration.registered,true,'Existing webhook not registered');assert.equal(registration.unauthenticatedStatus,403,'Existing webhook authentication failed');return {...summary,restartSkipped:true};}
   await wait(async()=>Number((await remote({mode:'inspect'})).running)===0,'Active workflow executions');
   const backup=await remote({mode:'backup'});assert.equal(backup.encrypted,true,'Encrypted backup required');backupPath=backup.backupPath;
   // Main first prevents new webhooks while the runner finishes current work.
@@ -193,7 +195,7 @@ async function deploy({apply=false,remote,validate=runValidation,wait=waitFor,re
   assert.equal(fingerprint(published.workflow),plan.afterSha256,'Published workflow fingerprint mismatch');
   const registration=await remote({mode:'registration'});
   assert.equal(registration.registered,true,'Meta webhook database registration missing');
-  assert.equal(registration.unauthenticatedStatus,401,'Meta webhook must reject unauthenticated input');
+  assert.equal(registration.unauthenticatedStatus,403,'Meta webhook must reject unauthenticated input');
   stopped=false;
   const result={...summary,backupPath,entityHistoryAligned:true,activeVersionPreserved:true,registration,servicesHealthy:true};report(result);return result;
  }catch(error){
