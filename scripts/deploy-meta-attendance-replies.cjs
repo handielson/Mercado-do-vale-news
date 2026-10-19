@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_pro
 const {Client}=require('ssh2');
 const {getVpsSshConfig}=require('../tmp-tests/vps-ssh-config.cjs');
 const FILES=['services/metaAttendanceServer.cjs','services/metaAttendanceReplies.cjs','services/metaAttendanceTransport.cjs','services/metaAttendanceMedia.cjs'];
-const BASELINE_COMMIT='3a2d4db371fa51a0c647c4541bb53e91cced70f0';
+const BASELINE_COMMIT='ca52f58e4d89c8de1c5fdd89407f6a911c1335b9';
 function validateProof(attestation,modules,now=Date.now()){
  const digest=s=>require('node:crypto').createHash('sha256').update(s).digest('hex');
  const age=now-Date.parse(attestation?.at);

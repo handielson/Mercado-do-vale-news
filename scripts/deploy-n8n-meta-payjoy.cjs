@@ -23,7 +23,8 @@ function runValidation(snapshot,plan){
  fs.writeFileSync(sourcePath,JSON.stringify(snapshot.workflow),{mode:0o600});
  fs.writeFileSync(targetPath,JSON.stringify(plan.candidate),{mode:0o600});
  const baselinePath=path.join(directory,'meta-payjoy-readonly-source.private.json');
- if(!plan.alreadyApplied)fs.writeFileSync(baselinePath,JSON.stringify(snapshot.workflow),{mode:0o600});
+ if(!snapshot.workflow.nodes.some(n=>n.name==='Meta - Preparar print PayJoy'))fs.writeFileSync(baselinePath,JSON.stringify(snapshot.workflow),{mode:0o600});
+ assert.ok(fs.existsSync(baselinePath),'Original Meta baseline required to verify adapter upgrades');
  for(const args of [['scripts/n8n-sales-regression-gate.cjs','--snapshot',targetPath],
   ['--test','tmp-tests/n8n-meta-payjoy-images.test.cjs','tmp-tests/meta-attendance-replies.test.cjs','tmp-tests/meta-attendance-media.test.cjs']]){
   const result=spawnSync(process.execPath,args,{cwd:root,encoding:'utf8',maxBuffer:16*1024*1024,

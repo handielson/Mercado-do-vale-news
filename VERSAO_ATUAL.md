@@ -1,3 +1,12 @@
+# v1.2.656-meta-payjoy-contexto
+
+Data: 19/10/2026. Branch: main. Tag: v1.2.656-meta-payjoy-contexto.
+Release MDV: /var/www/mdv-site/releases/20261019-175000-v12656-meta-payjoy.
+
+O fluxo PayJoy tem prioridade quando o bot aguarda a cor do aparelho: perguntas sobre a entrada usam a aprovacao persistida e preservam a escolha. Novos prints em conversas iniciadas antes da correcao podem seguir ao leitor por contexto recente e confiavel da loja, sem recuperar valores do historico. Imagens indisponiveis seguem ao tratamento canonico e invalidam aprovacao anterior.
+
+## Historico anterior
+
 # v1.2.655-meta-payjoy-prints
 
 Data: 19/10/2026. Branch: main. Tag: v1.2.655-meta-payjoy-prints.

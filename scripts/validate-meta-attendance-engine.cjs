@@ -23,9 +23,9 @@ async function validate(options={}){
    let previousRevision=0,selectedName='';
    // The shared classifier deliberately asks a clarification for generic catalog questions.
    // Request the complete list explicitly, then select an item in a separate execution.
-   const turns=options.payjoy?[[1,'Bom dia! Envie a lista completa de todos os celulares disponíveis, por favor.'],[2,'1'],[3,'Me envie o link oficial da PayJoy para fazer a análise.'],[4,''],[5,'Quanto fica a entrada?'],[6,'']]:[[1,'Bom dia! Envie a lista completa de todos os celulares disponíveis, por favor.'],[2,'1'],[3,'Quero mais informações']];
+   const turns=options.payjoy?[[1,'Vocês trabalham com boleto?'],[2,'Sim, me envia o link'],[3,'Envie a lista completa de todos os celulares disponíveis, por favor.'],[4,'1'],[5,''],[6,'Quanto fica a entrada?'],[7,'']]:[[1,'Bom dia! Envie a lista completa de todos os celulares disponíveis, por favor.'],[2,'1'],[3,'Quero mais informações']];
    for(const [turn,text] of turns){
-    const humanPause=turn===(options.payjoy?6:3);
+    const humanPause=turn===(options.payjoy?7:3);
     if(humanPause)await db.query("UPDATE meta_attendance_conversations SET paused_until=DATE_ADD(CURRENT_TIMESTAMP(3),INTERVAL 2 HOUR),paused_by='human' WHERE conversation_hash=?",[digest(conversationKey)]);
     const providerEventId='mdv-validation-'+runId+'-'+channel+'-'+turn;
     const eventKey=digest(providerEventId);eventKeys.push(eventKey);
@@ -36,7 +36,7 @@ async function validate(options={}){
      VALUES (?,?,?,?,?,?,'dm','message','captured',?)`,[eventKey,channel,accountId,participantId,conversationKey,providerEventId,JSON.stringify(event)]);
     await db.query("INSERT INTO meta_attendance_jobs(event_key,conversation_hash,inbox_id,status) VALUES (?,?,?,'planning')",[eventKey,digest(conversationKey),insert.insertId]);
     const result=await fetch(process.env.META_ATTENDANCE_N8N_URL,{method:'POST',headers:{'Content-Type':'application/json','x-mdv-meta-key':process.env.META_ATTENDANCE_N8N_KEY},
-      body:JSON.stringify({metaAttendance:event,...(options.payjoy&&(turn===4||turn===6)?{payjoyImage:{data:options.approvalImage,mimeType:'image/png'}}:{}),conversationEventVersion:Date.now()*1000+turn}),signal:AbortSignal.timeout(155000),redirect:'error'});
+      body:JSON.stringify({metaAttendance:event,...(options.payjoy&&(turn===5||turn===7)?{payjoyImage:{data:options.approvalImage,mimeType:'image/png'}}:{}),conversationEventVersion:Date.now()*1000+turn}),signal:AbortSignal.timeout(155000),redirect:'error'});
     if(!result.ok)throw Error('Engine HTTP validation failed');
     const response=await result.json();
     if(humanPause){
@@ -48,16 +48,17 @@ async function validate(options={}){
     if(Number(state?.state_revision)<=previousRevision)throw Error('Conversation state was not persisted');
     previousRevision=Number(state.state_revision);
     const stateValue=typeof state.conversation_state==='string'?JSON.parse(state.conversation_state):state.conversation_state;
-    if(turn===1&&!stateValue?.salesPostList)throw Error('Catalog state missing');
+    if(turn===(options.payjoy?3:1)&&!stateValue?.salesPostList)throw Error('Catalog state missing');
     const output=response.messages.map(m=>m.text||'').join('\n');
-    if(options.payjoy&&turn===2){const selection=stateValue.salesPostList;selectedName=selection?.options?.find(o=>Number(o.number)===Number(selection.selectedOptionNumber))?.name||'';if(!selectedName)throw Error('Selected device missing');}
-    if(options.payjoy&&turn===3){if(stateValue.payjoyByJid?.status!=='awaiting_result'||!output.includes('https://'))throw Error('PayJoy link state not durable');}
-    if(options.payjoy&&(turn===4||turn===5)){
+    if(options.payjoy&&turn===4){const selection=stateValue.salesPostList;selectedName=selection?.options?.find(o=>Number(o.number)===Number(selection.selectedOptionNumber))?.name||'';if(!selectedName)throw Error('Selected device missing');}
+    if(options.payjoy&&turn===1&&stateValue.payjoyByJid?.status!=='awaiting_link_confirmation')throw Error('PayJoy offer state not durable');
+    if(options.payjoy&&turn===2){if(stateValue.payjoyByJid?.status!=='awaiting_result'||!output.includes('https://app.payjoy.com/'))throw Error('PayJoy link state not durable');}
+    if(options.payjoy&&(turn===5||turn===6)){
       const approval=stateValue.payjoyByJid;
       if(approval?.status!=='approved'||approval.approvedAmountCents!==160000||approval.entryPercentBp!==1400)throw Error('PayJoy approval not durable');
       if(!/224,00/.test(output)||!output.includes(selectedName))throw Error('PayJoy calculation or selected-device continuity failed');
     }
-    summary.push({channel,turn,messages:response.messages.length,statePersisted:true,...(options.payjoy&&turn>=4?{payjoyApprovalPersisted:true,entryCents:22400,selectedDevicePreserved:true}:{}),responseSha256:digest(JSON.stringify(response.messages))});
+    summary.push({channel,turn,messages:response.messages.length,statePersisted:true,...(options.payjoy&&turn>=5?{payjoyApprovalPersisted:true,entryCents:22400,selectedDevicePreserved:true}:{}),responseSha256:digest(JSON.stringify(response.messages))});
    }
   }
   const fs=require('node:fs');

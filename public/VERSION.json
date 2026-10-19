@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.655-meta-payjoy-prints",
+  "version": "v1.2.656-meta-payjoy-contexto",
   "date": "2026-10-19",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.655-meta-payjoy-prints",
-  "release_vps": "/var/www/mdv-site/releases/20261019-171500-v12655-meta-payjoy",
+  "tag": "v1.2.656-meta-payjoy-contexto",
+  "release_vps": "/var/www/mdv-site/releases/20261019-175000-v12656-meta-payjoy",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Instagram e Messenger leem prints PayJoy no leitor existente, persistem aprovacao e continuam o atendimento com o aparelho escolhido.",
+  "summary": "Leitura de prints PayJoy e continuidade da entrada no Instagram e Messenger, preservando aparelho, cor e atendimento humano.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,27 +14,21 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "deploy-vps-server-only.cjs",
     "scripts/deploy-meta-attendance-replies.cjs",
-    "scripts/deploy-n8n-meta-attendance.cjs",
     "scripts/deploy-n8n-meta-payjoy.cjs",
     "scripts/n8n-meta-payjoy-images.cjs",
-    "scripts/publish-vps-plan.cjs",
     "scripts/validate-meta-attendance-engine.cjs",
     "services/metaAttendanceReplies.cjs",
-    "services/metaAttendanceMedia.cjs",
     "tmp-tests/meta-attendance-replies.test.cjs",
-    "tmp-tests/meta-attendance-media.test.cjs",
-    "tmp-tests/n8n-meta-payjoy-deploy.test.cjs",
     "tmp-tests/n8n-meta-payjoy-images.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-19-v1.2.655-meta-payjoy-prints.md"
+    "docs/versoes/2026-10-19-v1.2.656-meta-payjoy-contexto.md"
   ],
   "validations": [
-    "117 testes comerciais no candidato exato; 46 testes focados de midia, estado, calculo, pausa e publicacao.",
-    "Oito ensaios nativos com modelo real, incluindo print sintetico aprovado e imagem ilegivel.",
-    "Ensaio de publicacao inclui execucoes separadas de catalogo, selecao, link, print, pergunta de entrada e pausa humana nos dois canais."
+    "117 regressoes comerciais no candidato exato; 50 testes focados.",
+    "Oito ensaios nativos do modelo, incluindo print aprovado e ilegivel.",
+    "Validacao do webhook real em sete turnos por canal antes da retomada, com conversas sinteticas e zero envios Meta."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

@@ -193,10 +193,10 @@ test('global/human pause, historical and superseded events prevent image downloa
   }
 });
 
-test('expired/unsupported media asks for readable print or typed approval fields without sending image to OCR',async()=>{
+test('expired/unsupported media delegates to the canonical unavailable branch without image bytes, allowing old approval to be cleared',async()=>{
   const {service,calls}=worker({eventPatch:{text:'',attachments:[{type:'image',url:'https://lookaside.fbsbx.com/expired'}]},mediaResult:{ok:false,code:'media_unavailable'}});
-  await service.tick();assert.equal(calls.media.length,1);assert.equal(calls.engine.length,0);assert.equal(calls.send.length,1);
-  assert.match(calls.send[0].message.text,/valor aprovado.*percentual de entrada/i);
+  await service.tick();assert.equal(calls.media.length,1);assert.equal(calls.engine.length,1);assert.equal(calls.send.length,1);
+  assert.deepEqual(JSON.parse(calls.engine[0].init.body).payjoyImage,{data:'',mimeType:''});
 });
 
 test('manual pause arriving during image download stops before OCR',async()=>{
@@ -204,10 +204,10 @@ test('manual pause arriving during image download stops before OCR',async()=>{
   await service.tick();assert.equal(calls.media.length,1);assert.equal(calls.engine.length,0);assert.equal(calls.send.length,0);
 });
 
-test('multiple images request a single print and non-image files keep text fallback',async()=>{
+test('multiple images use unavailable-image branch without download, and non-image files keep text fallback',async()=>{
   for(const attachments of [[{type:'image'},{type:'image'}],[{type:'file'}]]){
     const {service,calls}=worker({eventPatch:{text:'',attachments}});await service.tick();
-    assert.equal(calls.engine.length,0);assert.equal(calls.media.length,0);assert.equal(calls.send.length,1);
+    assert.equal(calls.engine.length,attachments[0].type==='image'?1:0);assert.equal(calls.media.length,0);assert.equal(calls.send.length,1);
   }
 });
 

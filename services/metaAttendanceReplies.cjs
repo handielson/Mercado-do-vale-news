@@ -205,11 +205,13 @@ function createMetaAttendanceReplies({pool, fetch: fetchImpl = globalThis.fetch,
       let response, payjoyImage;
       const images=(Array.isArray(event.attachments)?event.attachments:[]).filter(a=>a.type==='image');
       const fallback=text=>({eventKey:event.eventKey,conversationKey:event.conversationKey,messages:[{type:'text',text}]});
-      if(images.length>1)response=fallback('Para conferir o resultado da PayJoy, envie um único print legível com o valor aprovado e o percentual de entrada. 😊');
+      // Empty image metadata follows the canonical reader's unavailable branch.
+      // It clears a previous approval instead of letting a later question reuse it.
+      if(images.length>1)payjoyImage={data:'',mimeType:''};
       else if(images.length===1){
         const downloaded=await media.download({event,attachment:images[0]});
         if(downloaded.ok)payjoyImage={data:downloaded.data,mimeType:downloaded.mimeType};
-        else response=fallback('Não consegui abrir esse print com segurança. Pode reenviar uma imagem legível ou informar o valor aprovado pela PayJoy e o percentual de entrada? 😊');
+        else payjoyImage={data:'',mimeType:''};
       }
       if(!response&&!payjoyImage&&!String(event.text||'').trim())response=fallback('Recebi seu arquivo 😊 Para eu conferir direitinho por aqui, pode me mandar sua dúvida também em texto?');
       if(!response){
