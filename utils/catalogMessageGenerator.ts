@@ -279,17 +279,21 @@ export function generateCatalogMessage(
     return message;
 }
 
-function formatSharedProductBlock(item: GroupedProduct, index: number, paymentFees: PaymentFee[], pixDiscountPercent: number): string {
+function formatSharedProductBlock(item: GroupedProduct, index: number, paymentFees: PaymentFee[], pixDiscountPercent: number, spaced = false): string {
     const pixPrice = calculatePixPrice(item.price, pixDiscountPercent);
     const installment = calculateInstallmentFromFees(item.price, paymentFees, 12);
     const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
     const lines = [`${index}. ${item.name}`];
+    if (spaced) lines.push('');
     if (item.featureSummary) lines.push(`   ${item.featureSummary}`);
+    if (spaced && item.featureSummary) lines.push('');
     const memoryLabel = [item.variant.ram, item.variant.storage].filter(Boolean).join('/');
     if (memoryLabel) lines.push(`   📱 ${memoryLabel}`);
+    if (spaced && memoryLabel) lines.push('');
     const detailIndent = memoryLabel ? '      ' : '   ';
     lines.push(`${detailIndent}💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}`);
     lines.push(`${detailIndent}💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})`);
+    if (spaced) lines.push('');
     const colors = normalizeSharedColors(item.colors);
     lines.push(`${detailIndent}🎨 Cores: ${colors.length > 0 ? colors.join(', ') : 'Consultar'}`);
     return lines.join('\n');
@@ -324,14 +328,14 @@ export function generateProductShareMessage(options: {
     });
     if (!priced.length) return 'Nenhum produto disponível no momento.';
     return groupProductsByVariant(priced).map((item, index) => {
-        const lines = [formatSharedProductBlock(item, index + 1, paymentFees, pixDiscountPercent)];
+        const lines = [formatSharedProductBlock(item, index + 1, paymentFees, pixDiscountPercent, true), ''];
         const reais = item.price / 100;
         const coins = cashback?.active && reais >= (cashback.min_purchase_for_coins || 0)
             ? Math.floor(reais * (cashback.coins_per_real || 0)) : 0;
-        if (coins > 0) lines.push(`   Ganhe ${coins.toLocaleString('pt-BR')} Moedas do Vale nessa compra!`);
+        if (coins > 0) lines.push(`   Ganhe ${coins.toLocaleString('pt-BR')} Moedas do Vale nessa compra!`, '');
         lines.push(`   🔗 ${urlForProduct(item.product)}`);
         return lines.join('\n');
-    }).join('\n━━━━━━━━━━━━━━━━━━━━━━\n');
+    }).join('\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n');
 }
 
 /** Split the official catalog at product boundaries for sequential WhatsApp sends. */

@@ -158,6 +158,9 @@ const selectedShare = generateProductShareMessage({ ...shareOptions, selectedVar
 assert.ok(selectedShare.includes('4GB/128GB'));
 assert.ok(selectedShare.includes('Cores: Preto'));
 assert.ok(selectedShare.includes('/produto/note-70-black128'));
+assert.match(selectedShare, /^1\. Realme Note 70\n\n   📱 4GB\/128GB\n\n      💰/);
+assert.match(selectedShare, /total R\$\u00a01\.063,05\)\n\n      🎨 Cores: Preto\n\n   Ganhe 950 Moedas do Vale nessa compra!\n\n   🔗/);
+assert.equal((familyShare.match(/\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n/g) || []).length, 2, 'family configuration blocks need blank lines around separators');
 assert.doesNotMatch(selectedShare, /Dourado|4GB\/256GB|8GB\/256GB|note-70-gold/);
 const selectedSibling = generateProductShareMessage({ ...shareOptions, selectedVariantId: 'gold8' });
 assert.ok(selectedSibling.includes('8GB/256GB'));
@@ -169,6 +172,24 @@ const differingColorPrice = generateProductShareMessage({
 });
 assert.equal((differingColorPrice.match(/^\d+\./gm) || []).length, 2);
 assert.doesNotMatch(differingColorPrice, /Cores: Preto, Dourado/);
+// Production Note 70 inventory: 4/256 colors have different prices.
+const productionNoteVariants = noteVariants.map((row, index) => ({
+    ...row, price_retail: [95000, 95000, 102200, 109000, 109000, 109000][index],
+}));
+const productionFamily = generateProductShareMessage({ ...shareOptions, variants: productionNoteVariants });
+const productionBlocks = productionFamily.split('\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n');
+assert.equal(productionBlocks.length, 4);
+const expectedBlocks = [
+    ['4GB/128GB', '950,00', 'Preto, Dourado'],
+    ['4GB/256GB', '1.022,00', 'Preto'],
+    ['4GB/256GB', '1.090,00', 'Dourado'],
+    ['8GB/256GB', '1.090,00', 'Preto, Dourado'],
+];
+for (const [memory, price, colors] of expectedBlocks) {
+    assert.ok(productionBlocks.some(block => block.includes(`📱 ${memory}\n\n`) &&
+        block.includes(`R$\u00a0${price} à vista no PIX`) && block.includes(`🎨 Cores: ${colors}\n\n`)),
+    `Expected exact production configuration: ${memory}, ${price}, ${colors}`);
+}
 const unavailable = [
     note('empty', '12GB', '512GB', 'Roxo', 200000, { stock_quantity: 0 }),
     note('hidden', '12GB', '512GB', 'Azul', 200000, { hide_from_catalog: true }),

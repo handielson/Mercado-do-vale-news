@@ -58,6 +58,7 @@ export const PublicProductPage: React.FC = () => {
 
     const [product, setProduct] = useState<CatalogProduct | null>(null);
     const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+    const [shareWholeFamily, setShareWholeFamily] = useState(false);
     const [loading, setLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState<string>('');
     const [siblings, setSiblings] = useState<CatalogProduct[]>([]);
@@ -555,6 +556,7 @@ export const PublicProductPage: React.FC = () => {
                     : formattedProduct;
 
                 setSelectedVariantId(String(data.id));
+                setShareWholeFamily(false);
                 setVariationImageSelected(Number(data.is_parent) !== 1);
                 setProduct(displayProduct as unknown as CatalogProduct);
                 criticalProductLoaded = true;
@@ -1095,7 +1097,7 @@ export const PublicProductPage: React.FC = () => {
         return generateProductShareMessage({
             product: product as unknown as Product,
             variants: sellableVariantOptions as unknown as Product[],
-            selectedVariantId,
+            selectedVariantId: shareWholeFamily ? null : selectedVariantId,
             priceForProduct: (item) => {
                 if (String(item.id) === String(product.id)) return Math.round(displayPrice * 100);
                 const price = getEffectivePrice(item, customer);
@@ -1153,6 +1155,7 @@ export const PublicProductPage: React.FC = () => {
         } as CatalogProduct;
 
         setSelectedVariantId(String(sib.id));
+        setShareWholeFamily(false);
         setVariationImageSelected(true);
         setProduct(mergedVariant);
         setSelectedImage(resolveProductFamilyImages(mergedVariant, siblings, true)[0] || '');
@@ -1449,6 +1452,17 @@ export const PublicProductPage: React.FC = () => {
                                 <span className="text-slate-300">|</span>
                                 <div className="flex items-center gap-1.5 border-r border-slate-300 pr-4 mr-0" title="Compartilhar">
                                     <span className="text-sm font-medium">Compartilhar:</span>
+                                    {sellableVariantOptions.length > 1 && (
+                                        <select
+                                            aria-label="O que compartilhar"
+                                            value={shareWholeFamily ? 'family' : 'variation'}
+                                            onChange={(event) => setShareWholeFamily(event.target.value === 'family')}
+                                            className="rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700"
+                                        >
+                                            <option value="variation">Variação selecionada</option>
+                                            <option value="family">Família completa</option>
+                                        </select>
+                                    )}
                                     <button
                                         onClick={handleShareInstagram}
                                         className="text-slate-500 hover:text-pink-600 transition-colors p-1"

@@ -1,3 +1,14 @@
+# v1.2.658-compartilhar-familia-espacamento
+
+Data: 19/10/2026. Branch: main. Tag: v1.2.658-compartilhar-familia-espacamento.
+Release MDV: /var/www/mdv-site/releases/20261019-192539-compartilhar-familia-espacamento.
+
+A area de compartilhamento oferece Variacao selecionada ou Familia completa para todos os canais existentes. Selecionar outra variacao restaura o modo individual. A mensagem inclui linhas em branco entre titulo, caracteristicas, memoria, pagamento, cores, moedas e link, e ao redor dos separadores. Mantem o formatador do catalogo e a separacao por preco, inclusive quando duas cores da mesma memoria custam valores diferentes.
+
+Validacao: testes de comportamento e integracao do seletor; exemplo real do Note 70 com quatro blocos de preco; normalizacao monetaria e build. Publicacao apenas do site.
+
+## Historico anterior
+
 # v1.2.657-compartilhamento-variacao
 
 Data: 19/10/2026. Branch: main. Tag: v1.2.657-compartilhamento-variacao.

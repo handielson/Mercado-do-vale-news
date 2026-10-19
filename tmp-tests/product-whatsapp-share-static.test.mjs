@@ -5,7 +5,10 @@ const page = readFileSync('pages/store/PublicProductPage.tsx', 'utf8');
 const shareBlock = page.slice(page.indexOf('const getShareText'), page.indexOf('const handleShareInstagram'));
 
 assert.match(shareBlock, /generateProductShareMessage\(/, 'PDP must reuse the catalog sharing formatter');
-assert.match(shareBlock, /selectedVariantId,/, 'sharing must respect the selected variation');
+assert.match(shareBlock, /selectedVariantId: shareWholeFamily \? null : selectedVariantId/, 'sharing must respect the explicit family or variation choice');
+assert.match(page, /aria-label="O que compartilhar"/, 'the family mode must be reachable from the actual sharing UI');
+assert.match(page, /onChange=\{\(event\) => setShareWholeFamily\(event.target.value === 'family'\)\}/, 'the share mode control must update the state used by the formatter');
+assert.match(page, /setSelectedVariantId\(String\(sib.id\)\);\s*setShareWholeFamily\(false\)/, 'selecting a variation must return sharing to that variation');
 assert.match(shareBlock, /variants: sellableVariantOptions/, 'family sharing must use the sellable variation pool');
 assert.match(shareBlock, /getPublicProductVariantRouteTarget\(item, variantPool\)/, 'each shared configuration must link to its own unambiguous public route');
 assert.match(shareBlock, /getEffectivePrice\(item, customer\)/, 'family prices must use the current customer context');
