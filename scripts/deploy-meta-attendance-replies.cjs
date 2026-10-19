@@ -2,8 +2,8 @@
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
 const {Client}=require('ssh2');
 const {getVpsSshConfig}=require('../tmp-tests/vps-ssh-config.cjs');
-const FILES=['services/metaAttendanceServer.cjs','services/metaAttendanceReplies.cjs','services/metaAttendanceTransport.cjs'];
-const PILOT_COMMIT='785f4f2754bb6b77a4ea44c03b951f82f4ddf893';
+const FILES=['services/metaAttendanceServer.cjs','services/metaAttendanceReplies.cjs','services/metaAttendanceTransport.cjs','services/metaAttendanceMedia.cjs'];
+const BASELINE_COMMIT='3a2d4db371fa51a0c647c4541bb53e91cced70f0';
 function validateProof(attestation,modules,now=Date.now()){
  const digest=s=>require('node:crypto').createHash('sha256').update(s).digest('hex');
  const age=now-Date.parse(attestation?.at);
@@ -68,7 +68,8 @@ async function remote(bundle){
   const report={apply:bundle.apply,files:staged.map(s=>({file:s.relative,changed:clean(s.before)!==clean(s.after),hash:digest(s.after)})),existingTables:tables.length,outboundEnabled:values.META_ATTENDANCE_REPLIES_ENABLED==='true'};
   if(!bundle.apply){console.log(JSON.stringify(report));return;}
   if(staged.every(s=>clean(s.before)===clean(s.after))&&tables.length===4&&oldEnv===nextEnv){console.log(JSON.stringify({...report,changed:false}));return;}
-  if(values.META_ATTENDANCE_REPLIES_ENABLED==='true')throw Error('Disable replies before upgrading runtime');
+  const [[runtimeBeforeUpgrade]]=await db.query('SELECT enabled FROM meta_attendance_runtime WHERE id=1');
+  if(values.META_ATTENDANCE_REPLIES_ENABLED==='true'&&runtimeBeforeUpgrade?.enabled)throw Error('Pause durable runtime before upgrading; preserve activation cursor');
   const backup=root+'/backups/meta-replies-'+Date.now();fs.mkdirSync(backup+'/services',{recursive:true,mode:0o700});fs.chmodSync(backup,0o700);
   fs.writeFileSync(backup+'/env.before',oldEnv,{mode:0o600});
   for(const s of staged)if(s.before!==null)fs.writeFileSync(backup+'/'+s.relative,s.before,{mode:0o600});
@@ -94,8 +95,12 @@ async function main(){
  const args=process.argv.slice(2);if(args.some(a=>!['--apply','--activate'].includes(a))||args.length>1)throw Error('Use no arguments, --apply or --activate');
  const root=path.resolve(__dirname,'..');
  const key=fs.readFileSync(path.join(root,'.local/meta-n8n-header-secret.txt'),'utf8').trim();if(!/^[a-f0-9]{64}$/.test(key))throw Error('Invalid private key file');
- const before={'services/metaAttendanceServer.cjs':cp.execFileSync('git',['show',PILOT_COMMIT+':services/metaAttendanceServer.cjs'],{cwd:root,encoding:'utf8'})};
- for(const f of FILES.slice(1))before[f]=null;
+ const before={};
+ for(const f of FILES){
+  const previous=cp.spawnSync('git',['show',BASELINE_COMMIT+':'+f],{cwd:root,encoding:'utf8'});
+  if(previous.status!==0&&f!=='services/metaAttendanceMedia.cjs')throw Error('Required deployment baseline missing');
+  before[f]=previous.status===0?previous.stdout:null;
+ }
  let validated=false;
  if(args.includes('--activate')){
   const attestation=JSON.parse(fs.readFileSync(path.join(root,'.local/meta-engine-validation.json'),'utf8'));

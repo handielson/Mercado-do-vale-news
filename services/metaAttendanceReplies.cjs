@@ -2,6 +2,7 @@
 const { createHash } = require('node:crypto');
 const { extractCatalogPreferences } = require('./autoresponderCatalogPreferences.cjs');
 const { createMetaAttendanceTransport } = require('./metaAttendanceTransport.cjs');
+const { createMetaAttendanceMedia } = require('./metaAttendanceMedia.cjs');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const json = value => typeof value === 'string' ? JSON.parse(value) : (value || {});
 const bad = code => Object.assign(new Error(code), { statusCode: 400 });
@@ -41,7 +42,8 @@ function normalizeResponse(response, event) {
   return blocks;
 }
 
-function createMetaAttendanceReplies({pool, fetch: fetchImpl = globalThis.fetch, env = process.env, now = Date.now, transport: suppliedTransport} = {}) {
+function createMetaAttendanceReplies({pool, fetch: fetchImpl = globalThis.fetch, env = process.env, now = Date.now, transport: suppliedTransport, media: suppliedMedia} = {}) {
+  const media = suppliedMedia || createMetaAttendanceMedia({fetch:fetchImpl});
   const transport = suppliedTransport || createMetaAttendanceTransport({ fetch: fetchImpl,
     graphVersion:env.META_GRAPH_API_VERSION,appId:env.META_APP_ID,appSecret:env.META_APP_SECRET,
     encryptionKey:env.META_TOKEN_ENCRYPTION_KEY,now,
@@ -110,7 +112,7 @@ function createMetaAttendanceReplies({pool, fetch: fetchImpl = globalThis.fetch,
     }
     if (operation==='state') {
       const state=json(body.conversationState);
-      if(!state||Array.isArray(state)||typeof state!=='object'||Object.keys(state).some(k=>!['salesPostList','pendingDeviceClarification'].includes(k))
+      if(!state||Array.isArray(state)||typeof state!=='object'||Object.keys(state).some(k=>!['salesPostList','pendingDeviceClarification','payjoyByJid'].includes(k))
         || Buffer.byteLength(JSON.stringify(state))>512*1024)throw bad('invalid_conversation_state');
       const revision=Number(body.expectedRevision),version=Number(body.eventVersion);
       if(!Number.isSafeInteger(revision)||revision<0||!Number.isSafeInteger(version)||version<=0)throw bad('invalid_state_revision');
@@ -200,11 +202,24 @@ function createMetaAttendanceReplies({pool, fetch: fetchImpl = globalThis.fetch,
       if(!insert.affectedRows)return;
       if(!await canSend(row,{},db)){await db.query("UPDATE meta_attendance_jobs SET status='suppressed',error_code='paused_stale_or_disabled' WHERE event_key=?",[event.eventKey]);return;}
       // Group bursts in the event's text using the canonical inbox; newer messages cancel this attempt before send.
-      let response;
-      if(!String(event.text||'').trim())response={eventKey:event.eventKey,conversationKey:event.conversationKey,messages:[{type:'text',text:'Recebi seu arquivo 😊 Para eu conferir direitinho por aqui, pode me mandar sua dúvida também em texto?'}]};
-      else{
+      let response, payjoyImage;
+      const images=(Array.isArray(event.attachments)?event.attachments:[]).filter(a=>a.type==='image');
+      const fallback=text=>({eventKey:event.eventKey,conversationKey:event.conversationKey,messages:[{type:'text',text}]});
+      if(images.length>1)response=fallback('Para conferir o resultado da PayJoy, envie um único print legível com o valor aprovado e o percentual de entrada. 😊');
+      else if(images.length===1){
+        const downloaded=await media.download({event,attachment:images[0]});
+        if(downloaded.ok)payjoyImage={data:downloaded.data,mimeType:downloaded.mimeType};
+        else response=fallback('Não consegui abrir esse print com segurança. Pode reenviar uma imagem legível ou informar o valor aprovado pela PayJoy e o percentual de entrada? 😊');
+      }
+      if(!response&&!payjoyImage&&!String(event.text||'').trim())response=fallback('Recebi seu arquivo 😊 Para eu conferir direitinho por aqui, pode me mandar sua dúvida também em texto?');
+      if(!response){
+        // Recheck after network download: a manual answer/newer event must stop OCR too.
+        if(!await canSend(row,{},db)){
+          await db.query("UPDATE meta_attendance_jobs SET status='suppressed',error_code='paused_stale_or_disabled' WHERE event_key=?",[event.eventKey]);return;
+        }
         const result=await fetchImpl(config.n8nUrl,{method:'POST',headers:{'Content-Type':'application/json','x-mdv-meta-key':config.n8nKey},
-          body:JSON.stringify({metaAttendance:event,conversationEventVersion:ms(row.received_at)*1000+Number(row.id)%1000}),
+          // Signed CDN URLs stay in the trusted inbox; n8n receives only the bounded image.
+          body:JSON.stringify({metaAttendance:{...event,attachments:undefined},...(payjoyImage?{payjoyImage}:{}),conversationEventVersion:ms(row.received_at)*1000+Number(row.id)%1000}),
           signal:AbortSignal.timeout(150000),redirect:'error'});
         if(!result.ok)throw Error('engine_unavailable');
         response=await result.json();normalizeResponse(response,event);

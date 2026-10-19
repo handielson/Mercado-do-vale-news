@@ -8,7 +8,7 @@ const path = require('node:path');
 const API_PATTERNS = [
   /^scripts\/deploy-meta-attendance\.cjs$/,
   /^scripts\/deploy-meta-attendance-replies\.cjs$/,
-  /^services\/metaAttendanceCore\.cjs$/,
+  /^services\/metaAttendance(?:Core|Replies|Transport|Media)\.cjs$/,
   /^vps_server\.(?:js|cjs)$/,
   /^server\.js$/,
   /^deploy-vps-server-only\.cjs$/,
@@ -53,6 +53,7 @@ const SITE_PATTERNS = [
 
 const N8N_WORKFLOW_PATTERNS = [
   /^scripts\/(?:build|deploy)-n8n-meta-attendance\.cjs$/,
+  /^scripts\/(?:deploy-n8n-meta-payjoy|n8n-meta-payjoy-images)\.cjs$/,
   /^tmp-tests\/n8n-(?!.*(?:readonly|native.*smoke|\.test\.cjs$)).*\.cjs$/,
 ];
 
@@ -166,6 +167,7 @@ function classifyFiles(files) {
 }
 
 function n8nDeployCommands(files) {
+  if(files.includes('scripts/deploy-n8n-meta-payjoy.cjs')||files.includes('scripts/n8n-meta-payjoy-images.cjs'))return ['node scripts/deploy-n8n-meta-payjoy.cjs --apply'];
   if(files.includes('scripts/deploy-n8n-meta-attendance.cjs')) return ['node scripts/deploy-n8n-meta-attendance.cjs --apply'];
   if(files.includes('tmp-tests/n8n-attendance-flow-contract.cjs')) return ['node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --attendance-fixes --apply --model-test-evidence .local/n8n-attendance-composed-native-evidence.private.json'];
   if(files.includes('tmp-tests/n8n-sales-model-configuration.cjs')){

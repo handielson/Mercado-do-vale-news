@@ -12,10 +12,10 @@ const event = extra => ({ eventKey: KEY, conversationKey: 'instagram:ig:user:dm'
 const response = (e = event()) => ({ eventKey: e.eventKey, conversationKey: e.conversationKey, messages: [{ type: 'text', text: 'Temos estas opções.' }] });
 const enabledEnv = { META_ATTENDANCE_REPLIES_ENABLED: 'true', META_ATTENDANCE_N8N_URL: 'https://n8n.mercadodovale.com.br/webhook/meta-attendance', META_ATTENDANCE_N8N_KEY: 'synthetic-key-for-tests-only-1234567890' };
 
-function worker({ enabled = true, paused = false, echo = false, conversationPaused = false, newer = false, ready = false, planning = false, sendResult } = {}) {
-  const e = event(echo ? { isEcho: true, eventType: 'message_echo', status: 'ignored' } : {});
+function worker({ enabled = true, paused = false, echo = false, conversationPaused = false, newer = false, ready = false, planning = false, sendResult, eventPatch = {}, mediaResult, pauseDuringDownload = false } = {}) {
+  const e = event({...eventPatch,...(echo ? { isEcho: true, eventType: 'message_echo', status: 'ignored' } : {})});
   const row = { id: 11, event_key: KEY, received_at: stamp(-9000), normalized_event: JSON.stringify(e) };
-  const calls = { send: [], engine: [], sql: [], unknownSql: [], released: 0 };
+  const calls = { send: [], engine: [], media: [], sql: [], unknownSql: [], released: 0 };
   const jobs = new Map();
   if (ready || planning) jobs.set(KEY, { status: ready ? 'ready' : 'planning', response_json: JSON.stringify(response(e)) });
   const blocks = [];
@@ -53,6 +53,7 @@ function worker({ enabled = true, paused = false, echo = false, conversationPaus
     },
   };
   const service = createMetaAttendanceReplies({ pool: { ...db, getConnection: async () => db }, env: enabledEnv, now: () => NOW,
+    media: { download: async input => { calls.media.push(input); if(pauseDuringDownload)conversationPaused=true; return mediaResult || {ok:true,data:'c3ludGhldGlj',mimeType:'image/png'}; } },
     fetch: async (url, init) => { calls.engine.push({ url, init }); return { ok: true, json: async () => response(e) }; },
     transport: { send: async input => { calls.send.push(input); return sendResult || { ok: true, status: 'sent', providerMessageId: 'outbound' }; } },
   });
@@ -170,4 +171,62 @@ test('orphaned planning after process restart receives terminal failure instead 
   assert.deepEqual(calls.unknownSql, []);
   assert.equal(calls.send.length, 0);
   assert.equal(jobs.get(KEY).status, 'failed');
+});
+
+test('image-only Meta message reaches shared engine with downloaded print and no signed URL in its payload', async () => {
+  for(const channel of ['instagram','messenger']){
+    const {service,calls,jobs}=worker({eventPatch:{channel,text:'',attachments:[{type:'image',url:'https://lookaside.fbsbx.com/image?secret=synthetic'}]}});
+    await service.tick();await service.tick();
+    assert.equal(calls.media.length,1);assert.equal(calls.engine.length,1);assert.equal(calls.send.length,1);
+    const body=JSON.parse(calls.engine[0].init.body);
+    assert.deepEqual(body.payjoyImage,{data:'c3ludGhldGlj',mimeType:'image/png'});
+    assert.doesNotMatch(calls.engine[0].init.body,/lookaside|secret=/);
+    assert.equal(jobs.get(KEY).status,'completed');assert.deepEqual(calls.unknownSql,[]);
+  }
+});
+
+test('global/human pause, historical and superseded events prevent image download and OCR', async () => {
+  for(const config of [{paused:true},{conversationPaused:true},{newer:true},{enabled:false},{eventPatch:{occurredAt:stamp(-61000)}}]){
+    const eventPatch={text:'',attachments:[{type:'image',url:'https://lookaside.fbsbx.com/image'}],...config.eventPatch};
+    const {service,calls}=worker({...config,eventPatch});await service.tick();
+    assert.equal(calls.media.length,0);assert.equal(calls.engine.length,0);assert.equal(calls.send.length,0);
+  }
+});
+
+test('expired/unsupported media asks for readable print or typed approval fields without sending image to OCR',async()=>{
+  const {service,calls}=worker({eventPatch:{text:'',attachments:[{type:'image',url:'https://lookaside.fbsbx.com/expired'}]},mediaResult:{ok:false,code:'media_unavailable'}});
+  await service.tick();assert.equal(calls.media.length,1);assert.equal(calls.engine.length,0);assert.equal(calls.send.length,1);
+  assert.match(calls.send[0].message.text,/valor aprovado.*percentual de entrada/i);
+});
+
+test('manual pause arriving during image download stops before OCR',async()=>{
+  const {service,calls}=worker({eventPatch:{text:'',attachments:[{type:'image',url:'https://lookaside.fbsbx.com/x'}]},pauseDuringDownload:true});
+  await service.tick();assert.equal(calls.media.length,1);assert.equal(calls.engine.length,0);assert.equal(calls.send.length,0);
+});
+
+test('multiple images request a single print and non-image files keep text fallback',async()=>{
+  for(const attachments of [[{type:'image'},{type:'image'}],[{type:'file'}]]){
+    const {service,calls}=worker({eventPatch:{text:'',attachments}});await service.tick();
+    assert.equal(calls.engine.length,0);assert.equal(calls.media.length,0);assert.equal(calls.send.length,1);
+  }
+});
+
+test('PayJoy approval state is accepted only for its claimed Meta conversation and uses existing revision CAS',async()=>{
+  const updates=[];const e=event();
+  const db={query:async(sql,args)=>{
+    if(sql.startsWith('SELECT * FROM meta_attendance_events'))return [[{event_key:KEY,normalized_event:e}]];
+    if(sql.startsWith('SELECT status FROM meta_attendance_jobs'))return [[{status:'planning'}]];
+    if(sql.startsWith('INSERT IGNORE INTO meta_attendance_conversations'))return [{affectedRows:1}];
+    if(sql.startsWith('UPDATE meta_attendance_conversations SET conversation_state=')){updates.push(args);return [{affectedRows:1}];}
+    if(sql.startsWith('SELECT * FROM meta_attendance_conversations'))return [[{conversation_state:JSON.parse(updates.at(-1)?.[0]||'{}'),state_revision:1,state_event_version:99,sales_preferences:{}}]];
+    if(sql.startsWith('SELECT normalized_event')||sql.startsWith('SELECT o.message_json'))return [[]];
+    if(sql.startsWith('SELECT paused FROM'))return [[{paused:0}]];
+    throw Error('Unexpected SQL');
+  }};
+  const service=createMetaAttendanceReplies({pool:db,transport:{}});
+  const state={payjoyByJid:{status:'approved',approvedAmountCents:160000,entryPercentBp:1400,updatedAt:NOW,expiresAt:NOW+10000}};
+  const saved=await service.operate('state',KEY,{conversationState:state,expectedRevision:0,eventVersion:99});
+  assert.equal(saved.conversationStateWrite.applied,true);assert.deepEqual(saved.control.conversation_state,state);
+  assert.equal(updates[0][2],require('node:crypto').createHash('sha256').update(e.conversationKey).digest('hex'));
+  await assert.rejects(service.operate('state',KEY,{conversationState:{foreignKey:{}},expectedRevision:1,eventVersion:100}),/invalid_conversation_state/);
 });

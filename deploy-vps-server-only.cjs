@@ -20,7 +20,7 @@ const localServerCjs = path.join(__dirname, 'vps_server.cjs');
 const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim();
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
-const metaAttendanceServicePaths = ['services/metaAttendanceCore.cjs', 'services/metaAttendanceServer.cjs', 'services/metaAttendanceReplies.cjs', 'services/metaAttendanceTransport.cjs'];
+const metaAttendanceServicePaths = ['services/metaAttendanceCore.cjs', 'services/metaAttendanceServer.cjs', 'services/metaAttendanceReplies.cjs', 'services/metaAttendanceTransport.cjs', 'services/metaAttendanceMedia.cjs'];
 const phonePriceListServicePaths = [
   'services/socialStoryPriceListBatches.cjs',
   'services/phonePriceListArtwork.cjs',

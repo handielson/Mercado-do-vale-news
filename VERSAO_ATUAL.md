@@ -1,3 +1,12 @@
+# v1.2.655-meta-payjoy-prints
+
+Data: 19/10/2026. Branch: main. Tag: v1.2.655-meta-payjoy-prints.
+Release MDV: /var/www/mdv-site/releases/20261019-171500-v12655-meta-payjoy.
+
+O Instagram e o Messenger encaminham prints PayJoy ao leitor nativo existente. O resultado persiste por conversa, com revisao e validade, para calcular a entrada sobre o valor aprovado e continuar com o aparelho escolhido. Downloads limitados a PNG/JPEG/WebP de CDNs permitidas, sem redirecionamento e ate 8 MiB. Pausas humanas e globais prevalecem; imagens ilegíveis ou indisponíveis pedem confirmacao, sem inventar valores. Sem reenvio de conversas antigas ou alteracao do estado WhatsApp.
+
+## Historico anterior
+
 # v1.2.654-atendimento-n8n
 
 Data: 19/10/2026. Branch: main. Tag: v1.2.654-atendimento-n8n.

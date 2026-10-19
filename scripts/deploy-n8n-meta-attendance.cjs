@@ -18,7 +18,7 @@ function assertAligned(snapshot){
  assert.equal(snapshot.workflow.versionId,snapshot.workflow.activeVersionId,'Unpublished draft exists; preserve it');
  assert.equal(fingerprint(snapshot.entity),fingerprint(snapshot.workflow),'Entity/history drift; preserve draft');
 }
-function validateGraph(w,credentialId){
+function validateGraph(w,credentialId,{normalizeCode=NORMALIZE}={}){
  const names=new Set(w.nodes.map(n=>n.name));assert.equal(names.size,w.nodes.length,'Duplicate node names');
  for(const [name,outputs]of Object.entries(w.connections)){assert.ok(names.has(name),'Unknown source node');
   for(const groups of Object.values(outputs))for(const group of groups)for(const e of group){assert.ok(names.has(e.node),'Unknown target node');assert.ok(Number.isInteger(e.index)&&e.index>=0,'Invalid edge index');}}
@@ -26,7 +26,7 @@ function validateGraph(w,credentialId){
  assert.deepEqual(get(NAMES.webhook).parameters,{httpMethod:'POST',path:'meta-attendance',authentication:'headerAuth',responseMode:'responseNode',options:{}},'Webhook schema drift');
  assert.equal(get(NAMES.webhook).credentials?.httpHeaderAuth?.id,credentialId,'Inbound credential binding drift');
  assert.equal(get(NAMES.respond).parameters.respondWith,'firstIncomingItem','Response contract drift');
- assert.equal(get(NAMES.normalize).parameters.jsCode,NORMALIZE,'Normalizer drift');
+ assert.equal(get(NAMES.normalize).parameters.jsCode,normalizeCode,'Normalizer drift');
  assert.equal(get(NAMES.aggregate).parameters.jsCode,AGGREGATE,'Aggregator drift');
  assert.equal(get(NAMES.blocked).parameters.jsCode,BLOCKED,'Blocked contract drift');
  assert.ok(w.nodes.some(n=>n.name===ACK_NAME),'WhatsApp immediate ACK missing');
@@ -131,6 +131,9 @@ function callRemote(connection,request){
  const program=`(${remoteProgram.toString()})(${JSON.stringify(request)}).then(value=>process.stdout.write(JSON.stringify(value))).catch(()=>{process.stderr.write('remote operation failed; sensitive output omitted');process.exitCode=1;});`;
  return new Promise((resolve,reject)=>connection.exec('node',(error,stream)=>{
   if(error)return reject(Error('SSH command could not start'));
+  // ssh2 chunks may split a multibyte code point inside embedded node source.
+  // Decode across chunk boundaries before comparing or publishing exact artifacts.
+  stream.setEncoding('utf8');
   let output='';stream.on('data',chunk=>{output+=chunk;});stream.stderr.on('data',()=>{});
   stream.on('close',code=>{if(code!==0)return reject(Error('Remote '+request.mode+' failed; sensitive output omitted'));try{resolve(JSON.parse(output));}catch{reject(Error('Invalid sanitized remote response'));}});stream.end(program);
  }));
@@ -174,12 +177,12 @@ async function waitFor(check,label,{attempts=35,delay=2000,sleep=pause}={}){
  for(let i=0;i<attempts;i++){try{if(await check())return;}catch{}if(i+1<attempts)await sleep(delay);}
  throw Error(label+' readiness timeout');
 }
-async function deploy({apply=false,remote,validate=runValidation,wait=waitFor,report=()=>{}}){
+async function deploy({apply=false,remote,validate=runValidation,buildPlan=createPlan,wait=waitFor,report=()=>{}}){
  let snapshot,plan,backupPath,stopped=false,mayHaveChanged=false;
  const scale=async(service,replicas)=>{await remote({mode:'scale',service,replicas});await wait(async()=>{const s=await remote({mode:'replicas',service});return s.desired===replicas&&s.running===replicas;},service);};
  const start=async()=>{await scale(MAIN,1);await wait(async()=>(await remote({mode:'ready'})).status===200,'n8n health');await scale(RUNNER,1);};
  try{
-  snapshot=await remote({mode:'inspect'});plan=createPlan(snapshot);
+  snapshot=await remote({mode:'inspect'});plan=buildPlan(snapshot);
   for(const service of [MAIN,RUNNER])assert.equal(snapshot.services?.[service]?.replicas,1,'Expected one existing service replica');
   validate(snapshot,plan);
   const summary={apply,workflowId:WORKFLOW_ID,credential:plan.credential,beforeSha256:plan.beforeSha256,afterSha256:plan.afterSha256,nodes:plan.candidate.nodes.length,alreadyApplied:plan.alreadyApplied};
@@ -215,7 +218,7 @@ async function deploy({apply=false,remote,validate=runValidation,wait=waitFor,re
   failure.report={failed:true,apply,backupPath:backupPath||null,rollbackAttempted:stopped,rollbackErrors};throw failure;
  }
 }
-module.exports={WORKFLOW_ID,MAIN,RUNNER,CREDENTIAL_NAME,fingerprint,assertAligned,validateGraph,createPlan,casSql,remoteProgram,runValidation,waitFor,deploy};
+module.exports={WORKFLOW_ID,MAIN,RUNNER,CREDENTIAL_NAME,fingerprint,assertAligned,validateGraph,createPlan,casSql,remoteProgram,callRemote,runValidation,waitFor,deploy};
 if(require.main===module)(async()=>{
  const args=process.argv.slice(2);assert.ok(args.every(v=>v==='--apply')&&args.length<=1,'Only --apply is supported');
  const {Client}=require('ssh2'),{getVpsSshConfig}=require('../tmp-tests/vps-ssh-config.cjs');
