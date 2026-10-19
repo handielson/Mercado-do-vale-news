@@ -14295,7 +14295,26 @@ async function loadPrint3dSeoProductByRouteTarget(routeTarget) {
   };
 }
 
-async function loadSeoProductImages(product, baseUrl) {
+async function loadSeoProductImages(product, baseUrl, { socialPreview = false } = {}) {
+  let parent;
+  if (socialPreview) {
+  // Social previews represent the family, even when the URL resolves a child.
+  const [parents] = await pool.query(
+    `SELECT parent.id, parent.images, parent.image_url
+     FROM products child
+     INNER JOIN products parent ON parent.id = child.parent_id
+     WHERE child.id = ? AND parent.is_parent = 1
+     LIMIT 1`,
+    [product.id]
+  );
+  parent = parents[0];
+  const parentImages = normalizeSeoPublicImages([
+    ...normalizeSeoImages(parent?.images),
+    parent?.image_url,
+  ], baseUrl);
+  if (parentImages.length) return parentImages;
+  }
+
   const specs = parsePublicJson(product?.specs, {});
   const color = String(specs?.color || specs?.cor || '').trim();
   let modelColorImages = [];
@@ -14313,15 +14332,32 @@ async function loadSeoProductImages(product, baseUrl) {
       [product.model_id, color, color, product.company_id, product.company_id]
     );
     if (rows[0]) {
-      modelColorImages = [...normalizeSeoImages(rows[0].images), ...normalizeSeoImages(rows[0].image_url)];
+      modelColorImages = [...normalizeSeoImages(rows[0].images), rows[0].image_url];
     }
   }
 
-  return normalizeSeoPublicImages([
+  const variationImages = normalizeSeoPublicImages([
     ...modelColorImages,
     ...normalizeSeoImages(product?.images),
-    ...normalizeSeoImages(product?.image_url),
+    product?.image_url,
   ], baseUrl);
+  if (variationImages.length || !parent) return variationImages;
+
+  const [siblings] = await pool.query(
+    `SELECT images, image_url FROM products
+     WHERE parent_id = ?
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND (status IN ('active', 'Ativo') OR status IS NULL)
+       AND (hide_from_catalog = 0 OR hide_from_catalog IS NULL)
+       AND (exclude_from_seo = 0 OR exclude_from_seo IS NULL)
+       AND (offer_type IS NULL OR offer_visibility IS NULL OR offer_visibility != 'hidden')
+     ORDER BY id ASC`,
+    [parent.id]
+  );
+  return normalizeSeoPublicImages(siblings.flatMap(row => [
+    ...normalizeSeoImages(row.images),
+    row.image_url,
+  ]), baseUrl);
 }
 
 function readSeoIndexHtml() {
@@ -14436,7 +14472,8 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     const description = cleanDescription.slice(0, 155) || `Compre ${product.name} no Mercado do Vale com o melhor preco.`;
     const canonicalSlug = product.seo_route_target || product.slug || slug;
     const url = `${baseUrl}/produto/${encodeURIComponent(canonicalSlug)}`;
-    const image = await require('./services/socialPreviewImage.cjs').resolveSocialPreviewImage(publicImages[0] || `${baseUrl}/og-cover.jpg`, { uploadsDir: UPLOADS_DIR });
+    const socialImages = await loadSeoProductImages(product, baseUrl, { socialPreview: true });
+    const image = await require('./services/socialPreviewImage.cjs').resolveSocialPreviewImage(socialImages[0] || `${baseUrl}/og-cover.jpg`, { uploadsDir: UPLOADS_DIR });
     const imageMetadata = await loadSeoImageMetadata(image);
     const stockQuantity = product.computed_stock_quantity ?? product.stock_quantity ?? 0;
     const availability = Number(stockQuantity) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';

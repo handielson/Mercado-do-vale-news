@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.652-whatsapp-webhook-ack",
-  "date": "2026-10-18",
+  "version": "v1.2.653-orcamento-familia-seo",
+  "date": "2026-10-19",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.652-whatsapp-webhook-ack",
-  "release_vps": "/var/www/mdv-site/releases/20261018-152433-v12652-whatsapp-ack",
+  "tag": "v1.2.653-orcamento-familia-seo",
+  "release_vps": "/var/www/mdv-site/releases/20261019-134500-v12653-orcamento-familia-seo",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Preserva o ACK imediato do WhatsApp ao compor o atendimento Meta e bloqueia candidatos sem o contrato de resposta.",
+  "summary": "Orcamento do produto pai com variacoes, parcelas de 1x a 12x e imagem social do pai, preservando a imagem estruturada da variacao.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,22 +14,30 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "scripts/build-n8n-meta-attendance.cjs",
-    "scripts/deploy-n8n-meta-attendance.cjs",
-    "scripts/n8n-whatsapp-webhook-ack.cjs",
-    "tmp-tests/n8n-meta-attendance-patch.test.cjs",
-    "tmp-tests/n8n-meta-attendance-deploy.test.cjs",
-    "tmp-tests/n8n-whatsapp-webhook-ack.test.cjs",
+    "components/catalog/ModernProductCard.tsx",
+    "components/catalog/modernProductCardState.js",
+    "contexts/CartContext.tsx",
+    "pages/store/CartPage.tsx",
+    "types/catalog.ts",
+    "utils/cartShareUtils.ts",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/assert-catalog-media-contract.cjs",
+    "scripts/deploy-catalog-media.cjs",
+    "tmp-tests/catalog-message-family.test.mjs",
+    "tmp-tests/seo-family-preview-image.test.cjs",
+    "tmp-tests/social-preview-image.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-18-v1.2.652-whatsapp-webhook-ack.md"
+    "docs/versoes/2026-10-19-v1.2.653-orcamento-familia-seo.md"
   ],
   "validations": [
-    "31 testes focados de composicao Meta/WhatsApp, ACK e publicador aprovados.",
-    "87 testes do gate comercial versionado aprovados no checkout isolado, sem mudancas locais de outros trabalhos.",
-    "Preflight oficial do publicador aprovado com baseline recuperado de backup criptografado e hash exato; alreadyApplied=true e remoteWrites=false.",
-    "Gate comercial do checkout local: 107 aprovados e 9 falhas preexistentes identicas no baseline e no candidato; fora deste escopo.",
-    "Recuperacao emergencial anterior confirmada pela execucao natural 50937 e DELIVERY_ACK das quatro mensagens; sem reexecucao de clientes."
+    "Testes focados de familia, parcelas, SEO, Open Graph e publicacao seletiva.",
+    "Normalizacao monetaria e sintaxe dos entrypoints.",
+    "Build com travas contra segredos e runtime Supabase.",
+    "Preflight remoto da API seletiva aprovado sem escritas.",
+    "Falha preexistente da comparacao integral do publicador antigo de midia confirmada em HEAD; modo seletivo SEO possui teste proprio."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

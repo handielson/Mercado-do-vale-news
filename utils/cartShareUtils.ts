@@ -128,7 +128,7 @@ function pluralizeSpecLabel(key: string): string {
 
 function getProductBudgetGroupKey(product: any): string {
     const { ram, storage } = getMemorySpecs(product);
-    const base = product?.model_id || product?.model || product?.name || product?.id || 'produto';
+    const base = product?.parent_id || product?.model_id || product?.model || product?.name || product?.id || 'produto';
     return [base, ram, storage].map(value => String(value || '').toLowerCase().trim()).join('|');
 }
 
@@ -148,7 +148,7 @@ function getBudgetVariantColor(product: any): string {
 
 function getBudgetVariantName(product: any): string {
     const name = stripSharedProductColorVariation(
-        product?.model || product?.name || 'Produto',
+        product?.parent_name || product?.model || product?.name || 'Produto',
         getBudgetVariantColor(product)
     );
     const specLine = getBudgetVariantSpecLine(product);
@@ -228,7 +228,7 @@ export async function fetchSiblingVariations(product: any): Promise<VariationSum
 
 export async function fetchSiblingBudgetVariantGroups(product: any): Promise<BudgetVariantGroup[]> {
     const modelId = product.model_id;
-    const rows = modelId
+    const rows = product.catalog_quote_variants || (modelId
         ? await vpsApiService.getProducts({
             model_id: modelId,
             status: 'active',
@@ -236,16 +236,17 @@ export async function fetchSiblingBudgetVariantGroups(product: any): Promise<Bud
             compact: true,
             noCache: true,
         }).catch(() => null)
-        : null;
+        : null);
 
     const candidates = (rows && rows.length > 0 ? rows : [product]).filter((row: any) => {
+        if (row.hide_from_catalog === true) return false;
         if (row?.offer_type && row?.offer_visibility === 'hidden') return false;
         if (row?.track_inventory === false) return true;
         const stock = row?.stock_quantity ?? row?.stock ?? row?.available_stock;
         return Number(stock || 0) > 0;
     });
 
-    const currentBaseKey = getProductBudgetGroupKey(product).split('|')[0];
+    const currentBaseKey = getProductBudgetGroupKey(product.catalog_quote_variants?.[0] || product).split('|')[0];
     const groups = new Map<string, BudgetVariantGroup>();
 
     for (const row of candidates) {
@@ -526,7 +527,7 @@ export async function generateBudgetText(
     for (const item of items) {
         const { product, unit_price, quantity } = item;
 
-        const budgetVariants = options.expandSiblingVariants === false
+        const budgetVariants = options.expandSiblingVariants === false && !product.catalog_quote_variants
             ? []
             : await fetchSiblingBudgetVariantGroups(product);
         if (budgetVariants.length > 0) {
@@ -535,7 +536,7 @@ export async function generateBudgetText(
                     name: variant.name,
                     specLine: variant.specLine,
                     price: variant.price || unit_price,
-                    quantity: 1,
+                    quantity: product.catalog_quote_variants ? quantity : 1,
                     colors: variant.colors,
                     url: getProductUrl(variant.products[0] || product),
                     product: variant.products[0] || product,
@@ -577,7 +578,6 @@ export async function generateBudgetText(
         const total = row.price * row.quantity;
         const plans = await calculateInstallments(total, 12);
         const pixPlan = plans[0];
-        const plan12 = plans.find(plan => plan.installments === 12);
         const qtyLabel = row.quantity > 1 ? ` (${row.quantity}x)` : '';
         const featureSummary = buildSharedPhoneFeatureSummary(row.product);
         const colors = normalizeSharedColors(row.colors);
@@ -614,8 +614,16 @@ export async function generateBudgetText(
                 if (lines.length >= paymentStartIndex + 3) {
                     lines.splice(lines.length - 3, 3);
                 }
-            } else if (plan12) {
-                lines.push(`   💳 Cartão: 12x de ${brl(plan12.value)} (total ${brl(plan12.total)})`);
+            } else {
+                const installmentOptions = rowMixedPaymentState?.cardOptions?.length
+                    ? rowMixedPaymentState.cardOptions
+                    : plans.filter(plan => plan.installments > 0).map(plan => ({
+                        installments: plan.installments,
+                        monthlyValue: plan.value,
+                        totalWithFee: plan.total,
+                    }));
+                lines.push('   💳 Cartão:');
+                installmentOptions.forEach(option => lines.push(`   ${formatInstallmentLine(option)}`));
             }
         }
         lines.push(`   🎨 Cores: ${colors.length > 0 ? colors.join(', ') : 'Consultar'}`);

@@ -18,7 +18,8 @@ function assertCatalogMediaContract(read){
    if(route==='/products'&&!s.includes("${productFamilyNameSelectSql('products', true)}"))throw Error(file+': compact parent cover missing');
   }
   const seo=block(source,"fastify.get('/api/seo-produto',");
-  if(!seo.includes("require('./services/socialPreviewImage.cjs').resolveSocialPreviewImage(publicImages[0]"))throw Error(file+': social preview disconnected');
+  if(!/require\('\.\/services\/socialPreviewImage\.cjs'\)\.resolveSocialPreviewImage\((?:publicImages|socialImages)\[0\]/.test(seo))throw Error(file+': social preview disconnected');
+  if(seo.includes('socialImages[0]') && (!seo.includes('socialPreview: true') || !seo.includes('image: publicImages.length')))throw Error(file+': social and structured images disconnected');
  }
  return {entries:ENTRIES.length,readRoutes:ROUTES.length,sharedProjection:true};
 }

@@ -778,6 +778,15 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--seo-family-only') || process.argv.includes('--seo-family-check')) {
+    await require('./scripts/deploy-catalog-media.cjs').deploySeoFamily({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--seo-family-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--catalog-media-only') || process.argv.includes('--catalog-media-check')) {
     await require('./scripts/deploy-catalog-media.cjs').deploy({appDir,apiProc,exec,root:__dirname,
       checkOnly:process.argv.includes('--catalog-media-check'),

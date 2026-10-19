@@ -1,3 +1,14 @@
+# v1.2.653-orcamento-familia-seo
+
+Data: 19/10/2026. Branch: main. Tag: v1.2.653-orcamento-familia-seo.
+Release MDV: /var/www/mdv-site/releases/20261019-134500-v12653-orcamento-familia-seo.
+
+Orcar sem escolher cor preserva a familia e suas variacoes. A mensagem inclui todas as parcelas quando nenhuma foi escolhida. A previa social prioriza a imagem do pai; os dados estruturados preservam a imagem da variacao.
+
+API publicada seletivamente pelos blocos de imagens SEO e HTML do produto, preservando integracoes remotas. Sem migracoes ou mudancas de dados comerciais.
+
+## Historico anterior
+
 # v1.2.652-whatsapp-webhook-ack
 
 Data: 18/10/2026. Branch: main. Tag: v1.2.652-whatsapp-webhook-ack.

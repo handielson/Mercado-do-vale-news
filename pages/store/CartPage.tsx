@@ -558,6 +558,9 @@ function CartPageContent() {
                             const sku = item.product.sku;
                             return (
                                 <div className="flex flex-wrap gap-1 mt-1">
+                                    {item.product.catalog_quote_variants && (
+                                        <span className="text-[11px] text-gray-500">Produto com suas variações disponíveis</span>
+                                    )}
                                     {color && (
                                         <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
                                             🎨 {color}

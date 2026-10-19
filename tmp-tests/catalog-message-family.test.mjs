@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import * as grouping from '../services/productGroupingCore.js';
 import * as formatting from '../utils/sharedMessageFormatting.js';
+import { buildCatalogQuoteProduct } from '../components/catalog/modernProductCardState.js';
 
 // Keep the real grouping, memory, formatting and price logic; no API access.
 function loadTypeScript(path, dependencies = {}) {
@@ -121,3 +122,59 @@ const filtered = generateCatalogMessage([...products, hidden, empty]);
 assert.ok(!filtered.includes('Azul'));
 assert.ok(!filtered.includes('Roxo'));
 console.log('catalog message family grouping: ok');
+
+const cartShare = loadTypeScript('utils/cartShareUtils.ts', {
+    '@/services/installmentCalculator': {
+        calculateInstallments: async total => Array.from({ length: 13 }, (_, installments) => ({
+            installments, total, value: Math.round(total / (installments || 1)),
+        })),
+        formatPrice: cents => String(cents),
+    },
+    '@/services/vpsApiService': { vpsApiService: { getProducts: () => { throw new Error('Family budget must use its own catalog options'); } } },
+    '@/utils/productSpecUtils': loadTypeScript('utils/productSpecUtils.ts'),
+    '@/utils/sharedMessageFormatting': formatting,
+});
+const quoteProduct = buildCatalogQuoteProduct({
+    product: products[0], currentProduct: products[0], currentColorIndex: -1,
+    productGroup: { variants: [{ products: [...products, hidden, empty] }] },
+});
+assert.equal(quoteProduct.name, 'Poco X8 Pró');
+assert.equal(quoteProduct.specs.color, undefined);
+assert.equal(products[0].specs.color, 'Preto', 'Original catalog data must remain intact');
+assert.equal(buildCatalogQuoteProduct({ product: products[0], currentProduct: products[1], currentColorIndex: 1 }), products[1]);
+const familyBudget = await cartShare.generateBudgetText([{ product: quoteProduct, unit_price: 266000, quantity: 2 }], {
+    expandSiblingVariants: false, includeInstallments: false, includeCalculatorLink: false,
+});
+assert.match(familyBudget, /Cores: Preto, Branco, Verde, Amarelo/);
+assert.match(familyBudget, /Poco X8 Pró \(2x\)/);
+assert.ok(!familyBudget.includes('Azul'));
+assert.ok(!familyBudget.includes('Roxo'));
+const selectedBudget = await cartShare.generateBudgetText([{ product: products[0], unit_price: 266000, quantity: 1 }], {
+    expandSiblingVariants: false, includeInstallments: false, includeCalculatorLink: false,
+});
+assert.match(selectedBudget, /Cores: Preto/);
+assert.ok(!selectedBudget.includes('Branco'));
+console.log('cart family budget and explicit color selection: ok');
+
+const budgetItems = [{ product: products[0], unit_price: 12000, quantity: 1 }];
+const budgetOptions = { expandSiblingVariants: false, includeCalculatorLink: false };
+const allInstallments = await cartShare.generateBudgetText(budgetItems, budgetOptions);
+assert.equal((allInstallments.match(/x de /g) || []).length, 12);
+assert.match(allInstallments, /1️⃣x de 12000 = 12000/);
+assert.match(allInstallments, /1️⃣2️⃣x de 1000 = 12000/);
+const cardOptions = Array.from({ length: 12 }, (_, index) => ({
+    installments: index + 1, monthlyValue: Math.round(6000 / (index + 1)), totalWithFee: 6000, feePercent: 0,
+}));
+const mixedPaymentState = { cashCents: 6000, cardCents: 6000, selectedInstallment: null, cardOptions };
+const withEntry = await cartShare.generateBudgetText(budgetItems, { ...budgetOptions, mixedPaymentState });
+assert.equal((withEntry.match(/x de /g) || []).length, 12);
+assert.match(withEntry, /Entrada Pix\/Dinheiro: 6000/);
+assert.match(withEntry, /1️⃣2️⃣x de 500 = 6000/);
+const chosenInstallment = await cartShare.generateBudgetText(budgetItems, {
+    ...budgetOptions, mixedPaymentState: { ...mixedPaymentState, selectedInstallment: 3, cardOption: cardOptions[2] },
+});
+assert.equal((chosenInstallment.match(/x de /g) || []).length, 1);
+assert.match(chosenInstallment, /3️⃣x de 2000 = 6000/);
+const withoutInstallments = await cartShare.generateBudgetText(budgetItems, { ...budgetOptions, includeInstallments: false });
+assert.ok(!withoutInstallments.includes('x de '));
+console.log('cart budget installments: all options, selected option, Pix entry and hidden options: ok');

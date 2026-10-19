@@ -30,9 +30,10 @@ for(const entry of ['server.js','vps_server.js','vps_server.cjs'])test(entry+': 
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'mdv-social-')),app=fastify();
  try{
   await sharp({create:{width:1000,height:1000,channels:3,background:'#ffffff'}}).webp().toFile(path.join(root,'support.webp'));
+  await sharp({create:{width:1000,height:1000,channels:3,background:'#ff0000'}}).webp().toFile(path.join(root,'parent.webp'));
   const source=fs.readFileSync(entry,'utf8'),context={fastify:app,require:id=>id==='./services/socialPreviewImage.cjs'?{resolveSocialPreviewImage}:require(id),UPLOADS_DIR:root,
    readSeoIndexHtml:()=>'<html><head></head><body>App</body></html>',loadSeoProductBySlug:async()=>({images:['https://api.xiaomipetrolina.com.br/images/support.webp'],name:'Suporte Carona',slug:'suporte-carona',sku:'SUPORTE',price_retail:1500,stock_quantity:1}),
-   buildSeoBaseUrl:()=> 'https://www.mercadodovale.com.br',loadSeoProductImages:async()=>['https://api.xiaomipetrolina.com.br/images/support.webp'],normalizeSeoImages:value=>value||[],normalizeSeoPublicImages:value=>value,normalizeSeoKeywords:()=>[],stripSeoHtml:value=>String(value||''),
+   buildSeoBaseUrl:()=> 'https://www.mercadodovale.com.br',loadSeoProductImages:async(_product,_base,options)=>[options?.socialPreview ? 'https://api.xiaomipetrolina.com.br/images/parent.webp' : 'https://api.xiaomipetrolina.com.br/images/support.webp'],normalizeSeoImages:value=>value||[],normalizeSeoPublicImages:value=>value,normalizeSeoKeywords:()=>[],stripSeoHtml:value=>String(value||''),
    formatSeoPrice:()=> '15.00',escapeSeoHtml:value=>String(value).replace(/&/g,'&amp;').replace(/"/g,'&quot;'),removeExistingSeoHeadTags:value=>value,
    loadSeoImageMetadata:async url=>{const meta=await sharp(path.join(root,decodeURIComponent(new URL(url).pathname.slice('/images/'.length)))).metadata();return {type:'image/'+meta.format,width:meta.width,height:meta.height};},buildCopyableDebug:(_,detail)=>detail.rawMessage};
   vm.runInNewContext(block(source,"fastify.get('/api/seo-produto',"),context);
@@ -40,6 +41,7 @@ for(const entry of ['server.js','vps_server.js','vps_server.cjs'])test(entry+': 
   assert.equal(response.statusCode,200,response.body);
   const image=response.body.match(/property="og:image" content="([^"]+)"/)[1];
   assert.match(image,/-social-[a-f0-9]{16}\.jpg$/);
+  if(entry !== 'server.js') assert.match(image,/parent-social-/);
   if(source.includes('async function loadSeoImageMetadata(')){assert.match(response.body,/property="og:image:type" content="image\/jpeg"/);assert.match(response.body,/property="og:image:width" content="1000"/);}
   assert.match(response.body,/rel="canonical" href="https:\/\/www.mercadodovale.com.br\/produto\/suporte-carona"/);
   assert.match(response.body,/"image":\["https:\/\/api.xiaomipetrolina.com.br\/images\/support.webp"\]/);

@@ -29,4 +29,25 @@ async function deploy(options){
  for(const v of choices)if(normalize(patch(v.before,choices))!==v.after)throw Error('Unaccounted local media API delta: '+v.file);
  return require('./deploy-openai-finance.cjs').deploy({...options,moduleFiles:['services/socialPreviewImage.cjs'],backupSlug:'catalog-media',patchSource:source=>patch(source,choices)});
 }
-module.exports={BASELINE,versions,patch,deploy};
+const SEO_BASELINE='f3a9c68313e6c7f3b8817f59111d2c1b08c25ea2';
+function seoVersions(root){return ['vps_server.js','vps_server.cjs'].map(file=>({
+ file,before:normalize(execFileSync('git',['show',SEO_BASELINE+':'+file],{cwd:root,encoding:'utf8',maxBuffer:15e6})),
+ after:normalize(fs.readFileSync(path.join(root,file),'utf8')),
+}));}
+function patchSeoFamily(source,choices){
+ let out=normalize(source);
+ for(const [anchor,end] of [['async function loadSeoProductImages(', '\n}'], ["fastify.get('/api/seo-produto',", '\n});']]){
+  const found=block(out,anchor,end);
+  if(choices.some(v=>block(v.after,anchor,end)===found))continue;
+  const match=choices.find(v=>block(v.before,anchor,end)===found);
+  if(!match)throw Error('Remote SEO family drift: '+anchor);
+  out=out.replace(found,()=>block(match.after,anchor,end));
+ }
+ return source.includes('\r\n')?out.replace(/\n/g,'\r\n'):out;
+}
+async function deploySeoFamily(options){
+ const choices=seoVersions(options.root);
+ for(const choice of choices)if(normalize(patchSeoFamily(choice.before,choices))!==choice.after)throw Error('Unaccounted SEO delta: '+choice.file);
+ return require('./deploy-openai-finance.cjs').deploy({...options,moduleFiles:[],backupSlug:'seo-family-preview',patchSource:source=>patchSeoFamily(source,choices)});
+}
+module.exports={BASELINE,versions,patch,deploy,SEO_BASELINE,seoVersions,patchSeoFamily,deploySeoFamily};

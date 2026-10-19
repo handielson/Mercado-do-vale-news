@@ -22,6 +22,7 @@ import { getCacheBustedUrl } from '@/utils/cache-buster';
 import { buildResponsiveImageSources } from '@/utils/responsive-image-sources.js';
 import { CATALOG_RETURN_STORAGE_KEY, createCatalogReturnState } from '../../pages/catalog/catalogPagination.js';
 import {
+    buildCatalogQuoteProduct,
     formatCatalogVariationLabel,
     getCatalogCardDisplayName,
     selectCatalogCardImageProduct,
@@ -285,8 +286,8 @@ export function ModernProductCard({
     const handleCardClick = async (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
 
-        // Admin budget can use the representative product and list all available variations in the copied quote.
-        addToCartContext(currentProduct);
+        const quoteProduct = buildCatalogQuoteProduct({ product, productGroup, currentProduct, currentColorIndex, relatedProducts });
+        addToCartContext(quoteProduct, selectedKitQty);
         
         // Visual feedback
         toast.success('Adicionado ao carrinho!');
@@ -570,7 +571,7 @@ export function ModernProductCard({
                     )}
                     {/* Botão Comprar/Orçar */}
                     <button
-                        onClick={(e) => { e.stopPropagation(); handleAddToCart(e); }}
+                        onClick={isAdmin ? handleCardClick : handleAddToCart}
                         className="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-900 text-white hover:bg-slate-700 active:scale-95 transition-all"
                     >
                         {addedToCart ? '✓' : isAdmin ? 'Orçar' : 'Comprar'}

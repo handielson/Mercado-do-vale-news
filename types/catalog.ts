@@ -112,6 +112,8 @@ export interface ShareOptions {
 
 // Extended Product type with catalog fields
 export interface CatalogProduct extends Product {
+    /** Presentation-only family selected by the admin for a budget. */
+    catalog_quote_variants?: CatalogProduct[];
     parent_name?: string | null;
     parent_images?: string[];
     parent_image_url?: string | null;

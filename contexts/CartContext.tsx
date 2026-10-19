@@ -148,7 +148,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const nextComboSelections = options?.comboSelections || (product as any).comboSelections;
         const nextComboKey = comboSelectionKey(nextComboSelections);
         setItems(prev => {
-            const existing = prev.find(i => i.product.id === product.id && comboSelectionKey(i.comboSelections) === nextComboKey);
+            const existing = prev.find(i => i.product.id === product.id
+                && Boolean(i.product.catalog_quote_variants) === Boolean(product.catalog_quote_variants)
+                && comboSelectionKey(i.comboSelections) === nextComboKey);
             let newItems: CartItem[];
             if (existing) {
                 const totalWanted = existing.quantity + quantity;
@@ -158,7 +160,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 }
                 const newUnitPrice = calculateUnitPrice(product, totalWanted);
                 newItems = prev.map(i =>
-                    i.product.id === product.id
+                    i.id === existing.id
                         ? { ...i, quantity: totalWanted, unit_price: newUnitPrice }
                         : i
                 );

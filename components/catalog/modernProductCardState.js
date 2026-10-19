@@ -1,4 +1,26 @@
 import { getCatalogFamilyName } from '../../services/productGroupingCore.js';
+import { resolveProductFamilyImages } from '../../services/productFamilyImages.js';
+
+// A family quote keeps its options without pretending that a color was selected.
+export function buildCatalogQuoteProduct({ product, productGroup, currentProduct, currentColorIndex, relatedProducts = [] }) {
+  if (currentColorIndex >= 0) return currentProduct;
+  const products = productGroup?.variants?.flatMap(variant => variant.products) || [product, ...relatedProducts];
+  if (products.length < 2) return currentProduct;
+  const specs = { ...currentProduct.specs };
+  for (const key of Object.keys(specs)) {
+    if (['color', 'cor', 'colour', 'ram', 'storage', 'armazenamento', 'material'].includes(key.toLowerCase())) delete specs[key];
+  }
+  const name = getCatalogCardDisplayName({ product, productGroup });
+  return {
+    ...currentProduct,
+    name,
+    model: name,
+    sku: '',
+    specs,
+    images: resolveProductFamilyImages(product, products, false, { parentFirst: true }),
+    catalog_quote_variants: products,
+  };
+}
 
 export function productHasCatalogMedia(product) {
   if (!product || typeof product !== 'object') return false;
