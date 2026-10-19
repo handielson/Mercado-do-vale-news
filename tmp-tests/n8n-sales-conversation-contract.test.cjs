@@ -9,6 +9,14 @@ const originalBeforeTransform = structuredClone(original);
 const workflow = patchWorkflow(original);
 const nodeCode = (name) => workflow.nodes.find((node) => node.name === name).parameters.jsCode;
 const JID = '5500000000000@s.whatsapp.net';
+function syntheticValidCpf() {
+  const digits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  for (const length of [9, 10]) {
+    const remainder = digits.reduce((sum, digit, index) => sum + digit * (length + 1 - index), 0) % 11;
+    digits.push(remainder < 2 ? 0 : 11 - remainder);
+  }
+  return digits.join('');
+}
 function state(step, extra = {}) {
   return { flow: 'sales_post_list', step, expiresAt: Date.now() + 3600000,
     categoryId: '8b7c4852-c195-4527-8fd7-c3cc2debda42', options: [{ number: 1, name: 'Fixture Smartphone', memory: '8GB/256GB', colors: [{ productId: 'fixture-phone', color: 'Preto' }] }],
@@ -94,7 +102,7 @@ test('canonical resolver routes a product interruption to search, never back to 
 test('valid registration full name and CPF continue the existing owner', async () => {
   const name = await post('awaiting_customer_full_name', 'Cliente Teste Exemplo', { decision: 'field_value', confidence: 0.95 });
   assert.equal(name.state.step, 'awaiting_customer_cpf');
-  const cpf = await post('awaiting_customer_cpf', '00000000000', { decision: 'field_value', confidence: 0.95 });
+  const cpf = await post('awaiting_customer_cpf', syntheticValidCpf(), { decision: 'field_value', confidence: 0.95 });
   assert.equal(cpf.state.step, 'awaiting_customer_birthdate');
 });
 test('failed and stale state writes never reach sending', () => {
@@ -145,7 +153,7 @@ test('rebased response exits retry route only after accepted persistence', () =>
 });
 test('FIFO name then CPF rebases the newer field without reusing semantics of the older stage', async () => {
   const first = await post('awaiting_customer_full_name', 'Cliente Teste Exemplo', { decision: 'field_value', confidence: 0.95 });
-  const newer = { remoteJid: JID, conversation: '00000000000', conversationStateEventVersion: 1700000000000002,
+  const newer = { remoteJid: JID, conversation: syntheticValidCpf(), conversationStateEventVersion: 1700000000000002,
     collectionReply: { decision: 'other', confidence: 0.95 }, salesConversationState: { etapa: 'awaiting_customer_full_name' } };
   const rebased = restore({ control: { conversation_state_revision: 2, conversation_state: { salesPostList: first.state } },
     conversationStateWrite: { applied: false, reason: 'revision_conflict' } }, newer);
@@ -159,7 +167,7 @@ test('rejected terminal attempt cannot hand off stale summary after rebase requi
   const orderContract = require('./n8n-sales-order-contract.cjs');
   const combined = orderContract.patchWorkflow(workflow);
   const canonical = state('awaiting_customer_cpf');
-  const staleAttempt = { remoteJid: JID, conversation: '00000000000', orderDraft: { productId: 'obsolete-phone' },
+  const staleAttempt = { remoteJid: JID, conversation: syntheticValidCpf(), orderDraft: { productId: 'obsolete-phone' },
     salesOrderNeedsHandoff: true, salesOrderSummary: 'obsolete summary', salesOrderHandoffConfirmed: true,
     requiresSpecialistHandoff: true, handoffRequested: true, productSpecialistHandoffRequested: true,
     salesPostListStep: 'awaiting_team_confirmation', output: 'obsolete confirmation' };

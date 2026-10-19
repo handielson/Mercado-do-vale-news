@@ -14,7 +14,12 @@ test('parse usa contexto da origem, enum fechado e confianca numerica; JSON inva
  assert.deepEqual(parse({decision:'accept',confidence:0.99}).payjoyLinkReply,{decision:'accept',confidence:0.99});
  for(const reply of [null,{decision:'send',confidence:1},{decision:'accept',confidence:'1'},{decision:'accept',confidence:0.79},{decision:'accept',confidence:1.1}])assert.equal(parse(reply).payjoyLinkReply,null);
  assert.equal(parse({decision:'accept',confidence:1},{...source,payjoyLinkContext:{ativo:false}}).payjoyLinkReply,null);
- const malformed=new Function('$json','$',code('Parse Classificacao'))({output:'{not-json'},()=>({first:()=>({json:source})}))[0].json;assert.equal(malformed.payjoyLinkReply,null);
+ const malformed=new Function('$json','$',code('Parse Classificacao'))({output:'{not-json'},()=>({first:()=>({json:source})}))[0].json;
+ if(code('Parse Classificacao').includes('attendance-classifier-recovery-v1')) {
+  assert.equal(malformed.classifierRecovery,true);
+  assert.equal(malformed.payjoyLinkReply,undefined);
+  assert.match(malformed.output,/tentar novamente/i);
+ } else assert.equal(malformed.payjoyLinkReply,null);
 });
 test('IA recebe oferta pendente apenas dentro do prazo e pergunta anterior mais recente',async()=>{
  const jid='fixture',src={remoteJid:jid,recentMessages:[{direction:'outbound',text:'Oferta antiga',created_at:'2026-10-10T10:00:00Z'},{direction:'outbound',text:'Quer o link oficial PayJoy?',created_at:'2026-10-12T10:00:00Z'}]};

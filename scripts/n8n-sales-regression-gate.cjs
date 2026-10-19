@@ -12,11 +12,15 @@ function runGate(snapshot,{stdio='inherit'}={}){
   const workflow=JSON.parse(fs.readFileSync(absolute,'utf8'));
   if(!Array.isArray(workflow.nodes)||!workflow.connections)throw new Error('Snapshot de workflow invalido');
   const digest=fingerprint(workflow);
+  const attendance=workflow.nodes.some(n=>JSON.stringify(n).includes('attendance-'));
+  const selectedTests=attendance?[...tests,'tmp-tests/n8n-attendance-flow-contract.test.cjs',
+    'tmp-tests/n8n-attendance-policy-fixes.test.cjs','tmp-tests/n8n-attendance-sales-fixes.test.cjs',
+    'tmp-tests/n8n-attendance-recovery-fixes.test.cjs','tmp-tests/n8n-attendance-multiturn.test.cjs']:tests;
   const continuity=workflow.nodes.some(n=>JSON.stringify(n).includes('payjoy-link-continuity-v1'));
   const configuration=workflow.nodes.some(n=>JSON.stringify(n).includes('sales-model-configuration-v1'));
-  const candidateTests=[...tests,...(continuity?['tmp-tests/n8n-payjoy-link-continuity.test.cjs']:[]),...(configuration?['tmp-tests/n8n-sales-model-configuration.test.cjs']:[])];
+  const candidateTests=[...selectedTests,...(continuity?['tmp-tests/n8n-payjoy-link-continuity.test.cjs']:[]),...(configuration?['tmp-tests/n8n-sales-model-configuration.test.cjs']:[])];
   const result=spawnSync(process.execPath,['--test',...candidateTests],{cwd:root,stdio,
-    env:{...process.env,MDV_MODEL_CONFIGURATION_EXACT:'1',MDV_PAYJOY_CONTINUITY_EXACT:'1',MDV_N8N_SALES_SNAPSHOT:absolute,MDV_SALES_VARIANT_SNAPSHOT:absolute,MDV_PAYJOY_WORKFLOW_SNAPSHOT:absolute}});
+    env:{...process.env,MDV_MODEL_CONFIGURATION_EXACT:'1',MDV_PAYJOY_CONTINUITY_EXACT:'1',MDV_ATTENDANCE_SNAPSHOT:absolute,MDV_N8N_SALES_SNAPSHOT:absolute,MDV_SALES_VARIANT_SNAPSHOT:absolute,MDV_PAYJOY_WORKFLOW_SNAPSHOT:absolute}});
   if(result.error)throw result.error;
   if(result.status!==0)throw new Error('Regressao detectada no candidato '+digest+'; publicacao bloqueada.');
   if(fingerprint(JSON.parse(fs.readFileSync(absolute,'utf8')))!==digest)throw new Error('Candidato mudou durante os testes; execute a suite novamente.');

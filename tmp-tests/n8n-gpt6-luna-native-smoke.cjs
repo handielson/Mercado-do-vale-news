@@ -36,6 +36,8 @@ const fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const parent='/usr/local/lib/node_modules/n8n/node_modules/.pnpm';
 const pkg=fs.readdirSync(parent).find(p=>p.startsWith('@n8n+n8n-nodes-langchain@'));
 const root=path.join(parent,pkg,'node_modules/@n8n/n8n-nodes-langchain/dist/nodes');
+const moduleRequire=require('node:module').createRequire(root+'/llms/LMChatOpenAi/LmChatOpenAi.node.js');
+const syntheticEgressFilter=moduleRequire('@n8n/backend-network/egress').passthroughEgressFilter;
 const nodes=PAYLOAD_NODES,images=PAYLOAD_IMAGES,continuityMode=PAYLOAD_CONTINUITY,configurationMode=PAYLOAD_CONFIGURATION;
 const get=name=>nodes.find(n=>n.name===name);let current='setup',diagnostic=null;const results=[],continuityResults=[],configurationResults=[];
 const logger={debug(){},warn(){},error(){},info(){}};
@@ -48,7 +50,7 @@ const dollar=()=>({first:()=>({json:source}),all:()=>[{json:source}]});
 function render(text){if(typeof text!=='string')return '';return text.startsWith('={{')?new Function('$json','$','return ('+text.slice(3,-2)+')')(source,dollar):text;}
 function clean(text){return String(text).replace(/^\s*[\x60]{3}(?:json)?\s*/,'').replace(/\s*[\x60]{3}\s*$/,'');}
 function runCalc(response){const state={payjoyByJid:{},salesPostList:{}};return new Function('$json','$','$getWorkflowStaticData',get('PayJoy - Calcular entrada do print').parameters.jsCode)(response,dollar,()=>state)[0].json;}
-const context=node=>({getNode:()=>node,getNodeParameter:(name,i,f)=>name.split('.').reduce((value,key)=>value?.[key],node.parameters)??f,getCredentials:async()=>({apiKey}),getWorkflow:()=>({id:'isolated-model-test',name:'Synthetic model test'}),getExecutionId:()=> 'isolated',getMode:()=> 'manual',getWorkflowSettings:()=>({}),logger,addInputData(){},addOutputData(){},getInputConnectionData:async()=>null});
+const context=node=>({getNode:()=>node,getNodeParameter:(name,i,f)=>name.split('.').reduce((value,key)=>value?.[key],node.parameters)??f,getCredentials:async()=>({apiKey}),getWorkflow:()=>({id:'isolated-model-test',name:'Synthetic model test'}),getExecutionId:()=> 'isolated',getMode:()=> 'manual',getWorkflowSettings:()=>({}),logger,addInputData:()=>({index:0}),addOutputData(){},getInputConnectionData:async()=>null,helpers:{getSecureEgressFilter:()=>syntheticEgressFilter}});
 async function model(name){const lm=new(require(root+'/llms/LMChatOpenAi/LmChatOpenAi.node.js').LmChatOpenAi)();const supplied=await lm.supplyData.call(context(get(name)),0);supplied.response.callbacks=[];return supplied.response;}
 async function invoke(m,agent,conversation){source.conversation=conversation;const p=get(agent).parameters;return await invokeAgent(m,get(agent),source,render(p.options.systemMessage),render(p.text));}
 (async()=>{
@@ -233,7 +235,7 @@ async function invoke(m,agent,conversation){source.conversation=conversation;con
  console.log(JSON.stringify({passed:true,cases:results,responsesApi:true,nativeAgentExecution:true,
   ...(continuityMode?{payjoyContinuityCases:continuityResults}:{}),
   ...(configurationMode?{salesModelConfigurationCases:configurationResults}:{})}));
-})().catch(e=>{console.log(JSON.stringify({passed:false,failedCase:current,errorName:e.name,diagnostic,cases:results,
+})().catch(e=>{const safeReason=String(e.message||'').replaceAll(apiKey,'[REDACTED]').replace(/sk-[A-Za-z0-9_-]+/g,'[REDACTED]').slice(0,180);console.log(JSON.stringify({passed:false,failedCase:current,errorName:e.name,errorReason:safeReason,diagnostic,cases:results,
  ...(continuityMode?{payjoyContinuityCases:continuityResults}:{}),
  ...(configurationMode?{salesModelConfigurationCases:configurationResults}:{})}));process.exitCode=1});
 `.replace('PAYLOAD_NODES',()=>JSON.stringify(nodes)).replace('PAYLOAD_IMAGES',()=>JSON.stringify(images)).replace('PAYLOAD_CONTINUITY',()=>JSON.stringify(continuityMode)).replace('PAYLOAD_CONFIGURATION',()=>JSON.stringify(configurationMode)).replace('NATIVE_AGENT_INVOKE',()=>invokeNativeAgent.toString());
@@ -260,7 +262,7 @@ async function invoke(m,agent,conversation){source.conversation=conversation;con
     .filter(line=>line.length>0&&line.length<300&&!/api.?key|authorization|bearer|secret|password|sk-|eyJ|\bconst\b|\brequire\b|\bprocess\b|^at |^File |Traceback|^[\s^]+$/i.test(line))
     .map(line=>line.replace(/https?:\/\/\S+/g,'[URL]').replace(/[A-Za-z0-9_=-]{24,}/g,'[REDACTED]')).slice(-3);
    const builtinFrames=stderr.split(/\r?\n/).map(line=>line.trim()).filter(line=>/^at [A-Za-z0-9 ._]+\(node:internal\/[A-Za-z0-9_/.:-]+\)$/.test(line)).slice(0,4);
-   const safeOutput=decoded?JSON.stringify({failedCase:decoded.failedCase,errorName:decoded.errorName,diagnostic:decoded.diagnostic,
+   const safeOutput=decoded?JSON.stringify({failedCase:decoded.failedCase,errorName:decoded.errorName,errorReason:decoded.errorReason,diagnostic:decoded.diagnostic,
     passedBaseCases:decoded.cases?.filter(item=>item.passed).length,payjoyContinuityCases:decoded.payjoyContinuityCases,
     salesModelConfigurationCases:decoded.salesModelConfigurationCases}):out.slice(-700);
    reject(Error('Native tests failed (exit '+code+', stderrBytes '+stderr.length+', classes '+errorClasses.join(',')+', causes '+knownCauses.join(',')+'); '+safeOutput+(safeErrors.length?' '+safeErrors.join('; '):' '+safeSummaries.join('; '))+' '+builtinFrames.join('; ')));

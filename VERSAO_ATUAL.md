@@ -1,3 +1,12 @@
+# v1.2.654-atendimento-n8n
+
+Data: 19/10/2026. Branch: main. Tag: v1.2.654-atendimento-n8n.
+Release MDV: /var/www/mdv-site/releases/20261019-123700-v12654-atendimento-n8n.
+
+O atendimento n8n passa a recuperar falhas do classificador com resposta segura, sem consumir confirmação de compra ou cadastro. A política de aparelhos usados, a interpretação do resultado PayJoy, a validação de cadastro e a escolha de entrega/retirada receberam correções e testes de regressão. O candidato foi composto sobre a versão ativa de 119 nós, validado com 117 testes e ensaios nativos do n8n 2.43.8 com dados sintéticos.
+
+## Historico anterior
+
 # v1.2.653-orcamento-familia-seo
 
 Data: 19/10/2026. Branch: main. Tag: v1.2.653-orcamento-familia-seo.

@@ -28,9 +28,9 @@ async function invokeNativeAgent(m, agentNode, source, renderedSystem, renderedT
     logger: { debug() {}, info() {}, warn() {}, error() {} },
     customData: { set() {} },
     setMetadata() {},
-    addInputData() {},
+    addInputData() { return { index: 0 }; },
     addOutputData() {},
-    helpers: {},
+    helpers: { getSecureEgressFilter: () => syntheticEgressFilter },
   };
   const response = await execute.call(ctx);
   const result = response?.[0]?.[0]?.json;

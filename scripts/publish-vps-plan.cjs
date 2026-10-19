@@ -53,7 +53,7 @@ const SITE_PATTERNS = [
 
 const N8N_WORKFLOW_PATTERNS = [
   /^scripts\/(?:build|deploy)-n8n-meta-attendance\.cjs$/,
-  /^tmp-tests\/n8n-(?!.*(?:readonly|\.test\.cjs$)).*\.cjs$/,
+  /^tmp-tests\/n8n-(?!.*(?:readonly|native.*smoke|\.test\.cjs$)).*\.cjs$/,
 ];
 
 const VERSION_FILES = [
@@ -167,6 +167,7 @@ function classifyFiles(files) {
 
 function n8nDeployCommands(files) {
   if(files.includes('scripts/deploy-n8n-meta-attendance.cjs')) return ['node scripts/deploy-n8n-meta-attendance.cjs --apply'];
+  if(files.includes('tmp-tests/n8n-attendance-flow-contract.cjs')) return ['node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --attendance-fixes --apply --model-test-evidence .local/n8n-attendance-composed-native-evidence.private.json'];
   if(files.includes('tmp-tests/n8n-sales-model-configuration.cjs')){
     return ['node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --model-configuration --apply --model-test-evidence .local/n8n-sales-model-configuration-native-evidence.json'];
   }
@@ -199,10 +200,12 @@ function buildReleaseName(options, now = new Date()) {
 
 function existingChecks(files) {
   const checks = [];
-  const configuration=files.includes('tmp-tests/n8n-sales-model-configuration.cjs');
-  const models = !configuration && files.some(file => /^tmp-tests\/n8n-gpt6-luna-/.test(file));
-  const sales = !configuration && files.some(file => /^tmp-tests\/n8n-sales-/.test(file));
+  const attendance=files.includes('tmp-tests/n8n-attendance-flow-contract.cjs');
+  const configuration=!attendance && files.includes('tmp-tests/n8n-sales-model-configuration.cjs');
+  const models = !attendance && !configuration && files.some(file => /^tmp-tests\/n8n-gpt6-luna-/.test(file));
+  const sales = !attendance && !configuration && files.some(file => /^tmp-tests\/n8n-sales-/.test(file));
   const changedTests = files.filter((file) => /^tmp-tests\/.*\.test\.(?:mjs|cjs|js)$/.test(file)
+    && !(attendance && /^tmp-tests\/n8n-attendance-/.test(file))
     && !(configuration && /^tmp-tests\/n8n-(?:sales-|gpt6-luna-)/.test(file))
     && !(sales && /^tmp-tests\/n8n-sales-/.test(file))
     && !(models && /^tmp-tests\/n8n-gpt6-luna-/.test(file)));
@@ -210,6 +213,7 @@ function existingChecks(files) {
     checks.push(`node ${testFile}`);
   }
   if (sales) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract');
+  if (attendance) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --attendance-fixes');
   if (configuration) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --model-configuration');
   if(files.includes('scripts/deploy-catalog-media.cjs'))checks.push('node scripts/assert-catalog-media-contract.cjs','node deploy-vps-server-only.cjs --catalog-media-check');
   if (files.includes('scripts/deploy-shopee-filelink.cjs')) checks.push('node deploy-vps-server-only.cjs --shopee-filelink-check');
@@ -385,6 +389,10 @@ function runSelfTest() {
   assert(n8n.needs.n8n === true, 'n8n workflow publication need failed');
   const n8nTest = classifyFiles(['tmp-tests/n8n-phone-price-list-cards.test.cjs']);
   assert(n8nTest.target === 'docs-only', 'n8n regression test must not be treated as a workflow deploy');
+  const attendanceFiles=['tmp-tests/n8n-fix-payjoy-link-confirmation.cjs','tmp-tests/n8n-attendance-flow-contract.cjs','tmp-tests/n8n-attendance-native-recovery-smoke.cjs','tmp-tests/n8n-attendance-flow-contract.test.cjs'];
+  assert(n8nDeployCommands(attendanceFiles).length===1 && n8nDeployCommands(attendanceFiles)[0].includes('--attendance-fixes --apply --model-test-evidence'),'attendance composition must have one canonical deploy command');
+  assert(existingChecks(attendanceFiles).includes('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --attendance-fixes'),'attendance preflight must validate the exact candidate');
+  assert(!classifyFiles(['tmp-tests/n8n-attendance-native-recovery-smoke.cjs']).needs.n8n,'native smoke is validation, not a workflow mutation');
   const salesFiles=['tmp-tests/n8n-fix-payjoy-link-confirmation.cjs','tmp-tests/n8n-sales-flow-contract.cjs','tmp-tests/n8n-sales-end-to-end.test.cjs'];
   assert(JSON.stringify(n8nDeployCommands(salesFiles)) === JSON.stringify(['node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract --apply']), 'sales composition must have one canonical deploy command with its explicit mode');
   assert(existingChecks(salesFiles).includes('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract'), 'sales preflight must validate the exact generated candidate');
