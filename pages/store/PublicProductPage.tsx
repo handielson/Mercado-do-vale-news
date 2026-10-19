@@ -41,6 +41,8 @@ import { getPublicProductDisambiguatedRouteTarget, getPublicProductRouteTarget, 
 import { buildCategoryBreadcrumb } from './categoryBreadcrumb.js';
 import { customFieldsService } from '@/services/custom-fields';
 import ProductDeadlineRequest, { productDeadlineLabel } from '@/components/catalog/ProductDeadlineRequest';
+import { generateProductShareMessage } from '@/utils/catalogMessageGenerator';
+import type { Product } from '@/types/product';
 /**
  * PublicProductPage
  * A dedicated SEO-friendly landing page for a single product.
@@ -719,8 +721,6 @@ export const PublicProductPage: React.FC = () => {
     const pixPrice = pixPriceCents / 100;
     const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
     const installment12x = calculateInstallmentFromFees(Math.round(displayPrice * 100), paymentFees, 12);
-    const value12x = installment12x.value / 100;
-    const total12x = installment12x.total / 100;
     const installment12xLabel = `ou no cartão em até 12x de ${formatCurrency(installment12x.value)} (total ${formatCurrency(installment12x.total)})`;
 
     // Descrições salvas via admin podem ser texto puro (com \n) — vira bloco único
@@ -1092,25 +1092,20 @@ export const PublicProductPage: React.FC = () => {
     });
 
     const getShareText = () => {
-        const shareableVariants = sellableVariantOptions;
-        const variantNames = shareableVariants.map(v => (v as any)._displayLabel).join(', ');
-        const shareUrl = publicProductUrl;
-        
-        let text = `*${publicProductTitle}*\n`;
-        if (variantNames) {
-            text += `Disponível: ${variantNames}\n`;
-        }
-        text += `À vista no PIX: R$ ${pixPrice.toFixed(2).replace('.', ',')}${pixDiscountLabel}\n`;
-        text += `Cartão: 12x de R$ ${value12x.toFixed(2).replace('.', ',')} (total R$ ${total12x.toFixed(2).replace('.', ',')})\n\n`;
-
-        if (estimatedCoins > 0) {
-            text += `Ganhe ${estimatedCoins} Moedas do Vale nessa compra!\n\n`;
-        }
-
-        text += `${shareUrl}\n\n`;
-        text += `Visite o nosso site para ver essa e muitas outras opções de produtos!\n`;
-        text += `_www.mercadodovale.com.br_`;
-        return text;
+        return generateProductShareMessage({
+            product: product as unknown as Product,
+            variants: sellableVariantOptions as unknown as Product[],
+            selectedVariantId,
+            priceForProduct: (item) => {
+                if (String(item.id) === String(product.id)) return Math.round(displayPrice * 100);
+                const price = getEffectivePrice(item, customer);
+                return Math.round(price * (1 - Number((item as unknown as CatalogProduct).discount_percentage || 0) / 100));
+            },
+            urlForProduct: (item) => `https://www.mercadodovale.com.br/produto/${encodeURIComponent(getPublicProductVariantRouteTarget(item, variantPool))}`,
+            paymentFees,
+            pixDiscountPercent,
+            cashback: cashbackSettings,
+        });
     };
 
     const handleShareWhatsapp = () => {

@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.656-meta-payjoy-contexto",
+  "version": "v1.2.657-compartilhamento-variacao",
   "date": "2026-10-19",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.656-meta-payjoy-contexto",
-  "release_vps": "/var/www/mdv-site/releases/20261019-175000-v12656-meta-payjoy",
+  "tag": "v1.2.657-compartilhamento-variacao",
+  "release_vps": "/var/www/mdv-site/releases/20261019-191847-compartilhamento-variacao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Leitura de prints PayJoy e continuidade da entrada no Instagram e Messenger, preservando aparelho, cor e atendimento humano.",
+  "summary": "Compartilhamento da variacao selecionada ou da familia com configuracoes, precos e cores separados no padrao do catalogo.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,21 +14,18 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "scripts/deploy-meta-attendance-replies.cjs",
-    "scripts/deploy-n8n-meta-payjoy.cjs",
-    "scripts/n8n-meta-payjoy-images.cjs",
-    "scripts/validate-meta-attendance-engine.cjs",
-    "services/metaAttendanceReplies.cjs",
-    "tmp-tests/meta-attendance-replies.test.cjs",
-    "tmp-tests/n8n-meta-payjoy-images.test.cjs",
+    "pages/store/PublicProductPage.tsx",
+    "utils/catalogMessageGenerator.ts",
+    "tmp-tests/catalog-message-family.test.mjs",
+    "tmp-tests/product-whatsapp-share-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-19-v1.2.656-meta-payjoy-contexto.md"
+    "docs/versoes/2026-10-19-v1.2.657-compartilhamento-variacao.md"
   ],
   "validations": [
-    "117 regressoes comerciais no candidato exato; 50 testes focados.",
-    "Oito ensaios nativos do modelo, incluindo print aprovado e ilegivel.",
-    "Validacao do webhook real em sete turnos por canal antes da retomada, com conversas sinteticas e zero envios Meta."
+    "Seis suites focadas de compartilhamento, familia, cores, rotas e precos.",
+    "Normalizacao monetaria e verificacao do diff.",
+    "Build com travas contra segredos n8n e runtime Supabase."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

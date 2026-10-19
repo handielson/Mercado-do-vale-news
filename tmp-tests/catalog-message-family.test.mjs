@@ -17,7 +17,7 @@ function loadTypeScript(path, dependencies = {}) {
     });
     return exports;
 }
-const { generateCatalogMessage, splitCatalogMessageForWhatsApp } = loadTypeScript('utils/catalogMessageGenerator.ts', {
+const { generateCatalogMessage, splitCatalogMessageForWhatsApp, generateProductShareMessage } = loadTypeScript('utils/catalogMessageGenerator.ts', {
     '@/services/productGroupingCore.js': grouping,
     '@/utils/sharedMessageFormatting': formatting,
     '@/utils/cartShareUtils': loadTypeScript('utils/cartShareUtils.ts', {
@@ -122,6 +122,72 @@ const filtered = generateCatalogMessage([...products, hidden, empty]);
 assert.ok(!filtered.includes('Azul'));
 assert.ok(!filtered.includes('Roxo'));
 console.log('catalog message family grouping: ok');
+
+// PDP: selected variation stays isolated; family uses the same priced catalog blocks.
+const note = (id, ram, storage, color, price = 95000, extra = {}) => ({
+    id, name: 'Realme Note 70', parent_id: 'note-family', parent_name: 'Note 70',
+    brand: 'Realme', slug: `note-70-${id}`, price_retail: price,
+    stock_quantity: 1, track_inventory: true, status: 'active',
+    specs: { ram, storage, color }, ...extra,
+});
+const noteVariants = [
+    note('black128', '4GB', '128GB', 'Preto'),
+    note('gold128', '4GB', '128GB', 'Dourado'),
+    note('black256', '4GB', '256GB', 'Preto', 105000),
+    note('gold256', '4GB', '256GB', 'Dourado', 105000),
+    note('black8', '8GB', '256GB', 'Preto', 120000),
+    note('gold8', '8GB', '256GB', 'Dourado', 120000),
+];
+const shareOptions = {
+    product: noteVariants[0], variants: noteVariants, selectedVariantId: null,
+    priceForProduct: item => item.price_retail,
+    urlForProduct: item => `https://www.mercadodovale.com.br/produto/${item.slug}`,
+    paymentFees: [{ channel: 'presencial', installments: 12, applied_fee_pct: 11.9 }],
+    pixDiscountPercent: 0,
+    cashback: { active: true, coins_per_real: 1 },
+};
+const beforeShare = JSON.stringify(noteVariants);
+const familyShare = generateProductShareMessage(shareOptions);
+assert.equal((familyShare.match(/^\d+\. Realme Note 70/gm) || []).length, 3);
+for (const configuration of ['4GB/128GB', '4GB/256GB', '8GB/256GB']) assert.ok(familyShare.includes(configuration));
+assert.equal((familyShare.match(/Cores: Preto, Dourado/g) || []).length, 3);
+for (const price of ['950,00', '1.050,00', '1.200,00', '1.063,05']) assert.ok(familyShare.includes(price));
+assert.ok(familyShare.includes('12x de R$\u00a088,59'));
+assert.ok(familyShare.includes('Ganhe 1.200 Moedas'));
+const selectedShare = generateProductShareMessage({ ...shareOptions, selectedVariantId: 'black128' });
+assert.ok(selectedShare.includes('4GB/128GB'));
+assert.ok(selectedShare.includes('Cores: Preto'));
+assert.ok(selectedShare.includes('/produto/note-70-black128'));
+assert.doesNotMatch(selectedShare, /Dourado|4GB\/256GB|8GB\/256GB|note-70-gold/);
+const selectedSibling = generateProductShareMessage({ ...shareOptions, selectedVariantId: 'gold8' });
+assert.ok(selectedSibling.includes('8GB/256GB'));
+assert.ok(selectedSibling.includes('Cores: Dourado'));
+assert.ok(selectedSibling.includes('/produto/note-70-gold8'));
+assert.doesNotMatch(selectedSibling, /Preto|4GB\/128GB/);
+const differingColorPrice = generateProductShareMessage({
+    ...shareOptions, variants: [noteVariants[0], { ...noteVariants[1], price_retail: 99000 }],
+});
+assert.equal((differingColorPrice.match(/^\d+\./gm) || []).length, 2);
+assert.doesNotMatch(differingColorPrice, /Cores: Preto, Dourado/);
+const unavailable = [
+    note('empty', '12GB', '512GB', 'Roxo', 200000, { stock_quantity: 0 }),
+    note('hidden', '12GB', '512GB', 'Azul', 200000, { hide_from_catalog: true }),
+    note('inactive', '12GB', '512GB', 'Verde', 200000, { status: 'inactive' }),
+    note('parent', '12GB', '512GB', 'Branco', 200000, { is_parent: 1 }),
+    note('offer', '12GB', '512GB', 'Vermelho', 200000, { offer_type: 'quantity_kit', offer_visibility: 'hidden' }),
+];
+const filteredShare = generateProductShareMessage({ ...shareOptions, variants: [...noteVariants, ...unavailable] });
+assert.doesNotMatch(filteredShare, /Roxo|Azul|Verde|Branco|Vermelho|512GB/);
+assert.equal(generateProductShareMessage({ ...shareOptions, variants: [], selectedVariantId: 'missing' }), 'Nenhum produto disponível no momento.');
+const discountedShare = generateProductShareMessage({
+    ...shareOptions, selectedVariantId: 'black128', priceForProduct: () => 90000,
+    pixDiscountPercent: 5, cashback: { active: false },
+});
+assert.match(discountedShare, /855,00[^\n]+5% de desconto/);
+assert.ok(discountedShare.includes('1.007,10'));
+assert.doesNotMatch(discountedShare, /Moedas/);
+assert.equal(JSON.stringify(noteVariants), beforeShare, 'sharing must not mutate catalog records');
+console.log('PDP sharing: selected variation, family memory/price/colors, visibility, payments and cashback: ok');
 
 const cartShare = loadTypeScript('utils/cartShareUtils.ts', {
     '@/services/installmentCalculator': {

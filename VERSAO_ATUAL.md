@@ -1,3 +1,14 @@
+# v1.2.657-compartilhamento-variacao
+
+Data: 19/10/2026. Branch: main. Tag: v1.2.657-compartilhamento-variacao.
+Release MDV: /var/www/mdv-site/releases/20261019-191847-compartilhamento-variacao.
+
+O compartilhamento da pagina do produto respeita a variacao selecionada e seu link. Sem selecao, separa a familia por memoria e preco, agrupando as cores correspondentes. Reutiliza os blocos do catalogo e o formatador monetario em reais, com parcelas e moedas vinculadas ao valor de cada configuracao.
+
+Validacao: seis suites de compartilhamento, familia, cores, rotas e precos; normalizacao monetaria; build com travas de segredos e runtime legado. Publicacao apenas do site, sem alterar API ou dados comerciais.
+
+## Historico anterior
+
 # v1.2.656-meta-payjoy-contexto
 
 Data: 19/10/2026. Branch: main. Tag: v1.2.656-meta-payjoy-contexto.

@@ -36,6 +36,7 @@ export interface FilteredCatalogShareData {
 }
 
 interface GroupedProduct {
+    product: Product;
     name: string;
     brand: string;
     model: string;
@@ -103,6 +104,7 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
         } else {
             // Create new variant entry
             grouped.set(key, {
+                product,
                 name,
                 brand,
                 model: product.model || cleanName,
@@ -262,22 +264,7 @@ export function generateCatalogMessage(
 
     const brandBlocks = groupedByBrand.map(({ brand, items }) => {
         const productBlocks = items.map((item) => {
-            const pixPrice = calculatePixPrice(item.price, pixDiscountPercent);
-            const installment = calculateInstallmentFromFees(item.price, paymentFees, 12);
-            const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
-
-            const lines = [`${productIndex++}. ${item.name}`];
-            if (item.featureSummary) lines.push(`   ${item.featureSummary}`);
-            const memoryLabel = [item.variant.ram, item.variant.storage].filter(Boolean).join('/');
-            if (memoryLabel) {
-                lines.push(`   📱 ${memoryLabel}`);
-            }
-            const detailIndent = memoryLabel ? '      ' : '   ';
-            lines.push(`${detailIndent}💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}`);
-            lines.push(`${detailIndent}💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})`);
-            const colors = normalizeSharedColors(item.colors);
-            lines.push(`${detailIndent}🎨 Cores: ${colors.length > 0 ? colors.join(', ') : 'Consultar'}`);
-            return lines.join('\n');
+            return formatSharedProductBlock(item, productIndex++, paymentFees, pixDiscountPercent);
         });
 
         return [`*${brand}*`, productBlocks.join('\n━━━━━━━━━━━━━━━━━━━━━━\n')].join('\n\n');
@@ -290,6 +277,61 @@ export function generateCatalogMessage(
     message += `Veja no site: ${catalogUrl}`;
 
     return message;
+}
+
+function formatSharedProductBlock(item: GroupedProduct, index: number, paymentFees: PaymentFee[], pixDiscountPercent: number): string {
+    const pixPrice = calculatePixPrice(item.price, pixDiscountPercent);
+    const installment = calculateInstallmentFromFees(item.price, paymentFees, 12);
+    const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
+    const lines = [`${index}. ${item.name}`];
+    if (item.featureSummary) lines.push(`   ${item.featureSummary}`);
+    const memoryLabel = [item.variant.ram, item.variant.storage].filter(Boolean).join('/');
+    if (memoryLabel) lines.push(`   📱 ${memoryLabel}`);
+    const detailIndent = memoryLabel ? '      ' : '   ';
+    lines.push(`${detailIndent}💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}`);
+    lines.push(`${detailIndent}💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})`);
+    const colors = normalizeSharedColors(item.colors);
+    lines.push(`${detailIndent}🎨 Cores: ${colors.length > 0 ? colors.join(', ') : 'Consultar'}`);
+    return lines.join('\n');
+}
+
+/** PDP sharing uses the same configuration, price and color blocks as the catalog. */
+export function generateProductShareMessage(options: {
+    product: Product;
+    variants: Product[];
+    selectedVariantId: string | null;
+    priceForProduct: (product: Product) => number;
+    urlForProduct: (product: Product) => string;
+    paymentFees: PaymentFee[];
+    pixDiscountPercent: number;
+    cashback?: { active?: boolean; min_purchase_for_coins?: number; coins_per_real?: number } | null;
+}): string {
+    const { product, variants, selectedVariantId, priceForProduct, urlForProduct, paymentFees, pixDiscountPercent, cashback } = options;
+    const candidates = selectedVariantId
+        ? [...variants, product].filter(row => String(row.id) === String(selectedVariantId))
+        : variants.length ? variants : [product];
+    const unique = Array.from(new Map(candidates.map(row => [String(row.id), row])).values());
+    const available = unique.filter(row =>
+        Number(row.is_parent) !== 1 && !row.hide_from_catalog &&
+        !['inactive', 'Inativo'].includes(String(row.status)) &&
+        !(row.offer_type && row.offer_visibility === 'hidden') &&
+        (row.track_inventory === false || Number(row.stock_quantity || 0) > 0)
+    );
+    // Preserve the current PDP record over a potentially stale sibling copy.
+    const priced = available.map(row => {
+        const current = String(row.id) === String(product.id) ? product : row;
+        return { ...current, price_retail: Math.round(priceForProduct(current)) };
+    });
+    if (!priced.length) return 'Nenhum produto disponível no momento.';
+    return groupProductsByVariant(priced).map((item, index) => {
+        const lines = [formatSharedProductBlock(item, index + 1, paymentFees, pixDiscountPercent)];
+        const reais = item.price / 100;
+        const coins = cashback?.active && reais >= (cashback.min_purchase_for_coins || 0)
+            ? Math.floor(reais * (cashback.coins_per_real || 0)) : 0;
+        if (coins > 0) lines.push(`   Ganhe ${coins.toLocaleString('pt-BR')} Moedas do Vale nessa compra!`);
+        lines.push(`   🔗 ${urlForProduct(item.product)}`);
+        return lines.join('\n');
+    }).join('\n━━━━━━━━━━━━━━━━━━━━━━\n');
 }
 
 /** Split the official catalog at product boundaries for sequential WhatsApp sends. */
