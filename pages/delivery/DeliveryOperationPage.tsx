@@ -348,6 +348,9 @@ const DeliveryOperationPage: React.FC = () => {
                 <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h2 className="text-base font-semibold text-slate-900">Finalizar</h2>
                     {job.delivery_status === 'pending' && <p className="mt-2 text-sm text-slate-600">Registre a saída para entrega antes de confirmar o recebimento pelo cliente.</p>}
+                    {(!job.delivery_route_url || !job.delivery_address_text || job.delivery_address_text === 'Endereco de entrega nao informado') && (
+                        <p className="mt-2 text-sm text-amber-700">Sem endereço ou rota cadastrados, informe na observação como a entrega foi realizada para poder concluir.</p>
+                    )}
                     <textarea className="mt-3 w-full rounded-xl border border-slate-200 p-3 text-sm" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Observacao do entregador apenas para uso interno" />
                     <button className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60" disabled={busy || !canComplete} onClick={handleComplete}>
                         {job.delivery_status === 'delivered' ? <CheckCircle2 className="h-5 w-5" /> : null}

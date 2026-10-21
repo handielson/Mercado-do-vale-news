@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.658-compartilhar-familia-espacamento",
-  "date": "2026-10-19",
+  "version": "v1.2.659-entrega-observacao",
+  "date": "2026-10-20",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.658-compartilhar-familia-espacamento",
-  "release_vps": "/var/www/mdv-site/releases/20261019-192539-compartilhar-familia-espacamento",
+  "tag": "v1.2.659-entrega-observacao",
+  "release_vps": "/var/www/mdv-site/releases/20261021-000700-entrega-observacao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Escolha explicita de familia completa ou variacao no compartilhamento, com linhas em branco entre informacoes e precos por configuracao e cor.",
+  "summary": "Observacao do entregador justifica endereco e rota pendentes, mantendo bloqueios de pagamento, responsavel e saida.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,19 +14,20 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "pages/store/PublicProductPage.tsx",
-    "utils/catalogMessageGenerator.ts",
-    "tmp-tests/catalog-message-family.test.mjs",
-    "tmp-tests/catalog-share-spacing-static.test.mjs",
-    "tmp-tests/product-whatsapp-share-static.test.mjs",
+    "pages/delivery/DeliveryOperationPage.tsx",
+    "vps_server.js",
+    "vps_server.cjs",
+    "tmp-tests/delivery-transition-regression.test.cjs",
+    "scripts/deploy-sales-delivery.cjs",
+    "deploy-vps-server-only.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-19-v1.2.658-compartilhar-familia-espacamento.md"
+    "docs/versoes/2026-10-20-v1.2.659-entrega-observacao.md"
   ],
   "validations": [
-    "Testes focados de compartilhamento, familia, cores, rotas, precos e espacamento; cenario Note 70 com quatro blocos comerciais.",
-    "Normalizacao monetaria e verificacao do diff.",
-    "Build com travas contra segredos n8n e runtime Supabase."
+    "33 testes do fluxo de entrega e publicacao seletiva, incluindo justificativa vazia, preservacao da observacao e bloqueios restantes.",
+    "Sintaxe dos entrypoints e publicador; build com travas de segredos e runtime Supabase.",
+    "Preflight remoto seletivo da API, backup e readback dos blocos alterados."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

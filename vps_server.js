@@ -4649,8 +4649,9 @@ function getCustomerDeliveryCompletionBlockers(job, proof, options = {}) {
   if (!String(job?.buyer_phone || '').trim()) blockers.push('Telefone do cliente pendente');
   if (!String(job?.delivery_person_customer_id || '').trim()) blockers.push('Entregador pendente');
   if (deliveryAmount <= 0) blockers.push('Valor da entrega pendente');
-  if (!addressText || addressText === 'Endereco de entrega nao informado') blockers.push('Endereco da entrega pendente');
-  if (!routeUrl) blockers.push('Rota da entrega pendente');
+  const hasDeliveryJustification = Boolean(String(options.deliveryPersonNote || '').trim());
+  if (!hasDeliveryJustification && (!addressText || addressText === 'Endereco de entrega nao informado')) blockers.push('Endereco da entrega pendente');
+  if (!hasDeliveryJustification && !routeUrl) blockers.push('Rota da entrega pendente');
   if (!options?.adminOverride && job?.payment_status !== 'approved' && job?.payment_status !== 'not_required') blockers.push('Pagamento da entrega ainda nao confirmado');
   return blockers;
 }
@@ -4663,7 +4664,7 @@ async function completeCustomerDeliveryJob(connection, job, note, options = {}) 
   const [proofs] = await connection.query('SELECT * FROM customer_delivery_proofs WHERE job_id = ? ORDER BY created_at DESC LIMIT 1', [job.id]);
   const proof = proofs?.[0];
   if (isAdminCompletion && !adminReason) throw Object.assign(new Error('Motivo da baixa administrativa obrigatorio'), { statusCode: 400 });
-  const completionBlockers = getCustomerDeliveryCompletionBlockers(job, proof, { adminOverride: isAdminCompletion });
+  const completionBlockers = getCustomerDeliveryCompletionBlockers(job, proof, { adminOverride: isAdminCompletion, deliveryPersonNote: note });
   if (completionBlockers.length > 0) {
     throw Object.assign(new Error(`Entrega nao pode ser concluida: ${completionBlockers.join('; ')}`), {
       statusCode: 409,

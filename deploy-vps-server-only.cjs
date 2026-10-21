@@ -796,6 +796,15 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--delivery-note-only') || process.argv.includes('--delivery-note-check')) {
+    await require('./scripts/deploy-sales-delivery.cjs').deployCompletionNote({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--delivery-note-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--sales-delivery-only') || process.argv.includes('--sales-delivery-check')) {
     await require('./scripts/deploy-sales-delivery.cjs').deploy({appDir,apiProc,exec,root:__dirname,
       checkOnly:process.argv.includes('--sales-delivery-check'),

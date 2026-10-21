@@ -48,4 +48,14 @@ async function deploy(options){
   if(![normalize(baseline(moduleFile)),normalize(fs.readFileSync(path.join(options.root,moduleFile),'utf8'))].includes(normalize(remoteModule)))throw Error('Remote handoff module drift');
   return require('./deploy-openai-finance.cjs').deploy({...options,moduleFiles:[moduleFile],backupSlug:'sales-delivery',patchSource:remote=>patch(remote,oldEntry,current)});
 }
-module.exports={BASELINE,SPECS,block,patch,deploy};
+const COMPLETION_NOTE_BASELINE='4f15d2d1';
+async function deployCompletionNote(options){
+  const choices=['vps_server.js','vps_server.cjs'].map(file=>({
+    before:execFileSync('git',['show',COMPLETION_NOTE_BASELINE+':'+file],{cwd:options.root,encoding:'utf8',maxBuffer:15e6}),
+    after:fs.readFileSync(path.join(options.root,file),'utf8'),
+  }));
+  for(const choice of choices)patch(choice.before,choice.before,choice.after);
+  return require('./deploy-openai-finance.cjs').deploy({...options,moduleFiles:[],backupSlug:'delivery-completion-note',
+    patchSource:remote=>patch(remote,choices[0].before,choices[0].after)});
+}
+module.exports={BASELINE,SPECS,block,patch,deploy,COMPLETION_NOTE_BASELINE,deployCompletionNote};

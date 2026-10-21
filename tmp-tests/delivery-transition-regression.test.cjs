@@ -3,6 +3,18 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
+test('completion note selective deployment preserves unrelated remote code, is idempotent and rejects drift',()=>{
+  const {patch,COMPLETION_NOTE_BASELINE}=require('../scripts/deploy-sales-delivery.cjs');
+  for(const file of ['vps_server.js','vps_server.cjs']){
+    const before=require('node:child_process').execFileSync('git',['show',COMPLETION_NOTE_BASELINE+':'+file],{encoding:'utf8',maxBuffer:15e6});
+    const after=fs.readFileSync(file,'utf8');
+    const remote='// Preserve production customizations\n'+before;
+    const result=patch(remote,before,after);
+    assert.equal(result.replace(/\r\n/g,'\n'),'// Preserve production customizations\n'+after.replace(/\r\n/g,'\n'));
+    assert.equal(patch(result,before,after),result);
+    assert.throws(()=>patch(remote.replace("blockers.push('Rota da entrega pendente')","blockers.push('drift')"),before,after),/drift/);
+  }
+});
 for(const file of ['vps_server.cjs','vps_server.js']) {
   const source=fs.readFileSync(file,'utf8');
   const fn=name=>{const start=source.indexOf('async function '+name+'(')>=0?source.indexOf('async function '+name+'('):source.indexOf('function '+name+'(');
@@ -85,6 +97,37 @@ for(const file of ['vps_server.cjs','vps_server.js']) {
     assert.equal(context.getCustomerDeliveryCompletionBlockers({...state,delivery_status:'pending'},null).some(s=>s.includes('saida')),true);
     assert.equal(context.getCustomerDeliveryCompletionBlockers(state,null).length,0);
     assert.equal(context.getCustomerDeliveryCompletionBlockers({...state,delivery_status:'pending'},null,{adminOverride:true}).length,0);
+  });
+  test(file+': delivery note justifies missing address and route without bypassing other blockers',()=>{
+    const {context,state}=harness({delivery_address_text:'Endereco de entrega nao informado',delivery_route_url:null});
+    for(const deliveryPersonNote of ['', '   ']) {
+      const blockers=context.getCustomerDeliveryCompletionBlockers(state,null,{deliveryPersonNote});
+      assert.ok(blockers.includes('Endereco da entrega pendente'));
+      assert.ok(blockers.includes('Rota da entrega pendente'));
+    }
+    const options={deliveryPersonNote:'Cliente recebeu no local combinado por telefone'};
+    assert.equal(context.getCustomerDeliveryCompletionBlockers(state,null,options).length,0);
+    const blocked=context.getCustomerDeliveryCompletionBlockers({...state,delivery_status:'pending',payment_status:'pending',delivery_person_customer_id:'',buyer_name:'Cliente',buyer_phone:'',delivery_amount:0},null,options);
+    for(const text of ['saida','Pagamento','Entregador','Cliente','Telefone','Valor'])assert.ok(blocked.some(value=>value.includes(text)),text);
+    assert.ok(context.getCustomerDeliveryCompletionBlockers({...state,delivery_person_customer_id:'store:unassigned'},null,options).length>0);
+  });
+  test(file+': completion uses submitted justification and preserves it in delivery ledger',async()=>{
+    const {context,state}=harness({delivery_address_text:'',delivery_route_url:null,delivery_person_customer_id:'test-worker'});
+    const writes=[];
+    Object.assign(context,{crypto:require('node:crypto'),isCustomerDeliveryWorkerJob:()=>true});
+    const connection={query:async(sql,params)=>{
+      if(sql.includes('SELECT * FROM customer_delivery_proofs'))return [[]];
+      if(sql.includes('SELECT * FROM customer_delivery_jobs'))return [[{...state,delivery_status:'delivered'}]];
+      writes.push({sql,params});return [{affectedRows:1}];
+    }};
+    await assert.rejects(context.completeCustomerDeliveryJob(connection,state,'   '),/Endereco da entrega pendente/);
+    assert.equal(writes.length,0);
+    const note='Cliente recebeu no local combinado por telefone';
+    const result=await context.completeCustomerDeliveryJob(connection,state,note);
+    assert.equal(result.delivery_status,'delivered');
+    assert.ok(writes.find(write=>write.sql.includes('INSERT INTO customer_delivery_ledger')).params.includes(note));
+    assert.equal(state.delivery_address_text,'');
+    assert.equal(state.delivery_route_url,null);
   });
   test(file+': starting a route never completes the order and exposes a failed notice',async()=>{
     const h=harness({delivery_status:'pending'});const events=[];let handler;

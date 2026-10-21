@@ -1,3 +1,14 @@
+# v1.2.659-entrega-observacao
+
+Data: 20/10/2026. Branch: main. Tag: v1.2.659-entrega-observacao.
+Release: /var/www/mdv-site/releases/20261021-000700-entrega-observacao.
+
+A conclusao da entrega aceita observacao preenchida como justificativa para endereco e rota pendentes. Mantem exigencias de saida registrada, entregador, cliente, telefone, valor e pagamento. A justificativa segue registrada no lancamento do entregador.
+
+API publicada seletivamente com backup dos entrypoints e preservacao dos demais blocos. Sem concluir entregas reais ou enviar mensagens nos testes.
+
+## Historico anterior
+
 # v1.2.658-compartilhar-familia-espacamento
 
 Data: 19/10/2026. Branch: main. Tag: v1.2.658-compartilhar-familia-espacamento.
