@@ -71,6 +71,11 @@ for (const file of serverFiles) {
   }, { strict: true });
   assert.equal(active.salesPostList.step, 'awaiting_quantity');
   assert.equal(active.pendingDeviceClarification.brand, 'Poco');
+  const payjoy = { status: 'approved', approvedAmountCents: 160000, entryPercentBp: 2000, updatedAt: Date.now(), expiresAt: future };
+  assert.deepEqual(normalize({ payjoyByJid: payjoy }, { strict: true }).payjoyByJid, payjoy,
+    `${file} must round-trip canonical PayJoy continuation without modifying approval cents`);
+  assert.deepEqual(normalize({ payjoyByJid: { ...payjoy, expiresAt: Date.now()-1 } }, { strict: true }), {});
+  assert.throws(() => normalize({ payjoyByJid: 'invalid' }, { strict: true }), /deve ser um objeto/);
 
   const expired = normalize({ salesPostList: { expiresAt: Date.now() - 1 } }, { strict: true });
   assert.deepEqual(expired, {}, `${file} must discard expired entries while hydrating or saving`);

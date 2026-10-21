@@ -2911,6 +2911,7 @@ const N8N_BOT_CONVERSATION_STATE_KEYS = new Set([
   'salesPostList',
   'pendingDeviceClarification',
   'optionalCustomerName',
+  'payjoyByJid',
 ]);
 const N8N_BOT_CONVERSATION_STATE_MAX_BYTES = 512 * 1024;
 

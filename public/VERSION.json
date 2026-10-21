@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.659-entrega-observacao",
-  "date": "2026-10-20",
+  "version": "v1.2.660-payjoy-foto-contexto",
+  "date": "2026-10-21",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.659-entrega-observacao",
-  "release_vps": "/var/www/mdv-site/releases/20261021-000700-entrega-observacao",
+  "tag": "v1.2.660-payjoy-foto-contexto",
+  "release_vps": "/var/www/mdv-site/releases/20261021-223650-payjoy-foto-contexto",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Observacao do entregador justifica endereco e rota pendentes, mantendo bloqueios de pagamento, responsavel e saida.",
+  "summary": "Fotos PayJoy recuperam contexto persistido antes do roteamento e recebem resposta segura quando falta contexto ou leitura, preservando pausas humanas.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,20 +14,22 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "pages/delivery/DeliveryOperationPage.tsx",
+    "scripts/n8n-whatsapp-payjoy-images.cjs",
+    "scripts/deploy-n8n-whatsapp-payjoy.cjs",
+    "scripts/deploy-n8n-payjoy-state.cjs",
     "vps_server.js",
     "vps_server.cjs",
-    "tmp-tests/delivery-transition-regression.test.cjs",
-    "scripts/deploy-sales-delivery.cjs",
+    "tmp-tests/n8n-whatsapp-payjoy-images.test.cjs",
+    "tmp-tests/n8n-conversation-state-api-static.test.mjs",
     "deploy-vps-server-only.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-20-v1.2.659-entrega-observacao.md"
+    "docs/versoes/2026-10-21-v1.2.660-payjoy-foto-contexto.md"
   ],
   "validations": [
-    "33 testes do fluxo de entrega e publicacao seletiva, incluindo justificativa vazia, preservacao da observacao e bloqueios restantes.",
+    "117 regressoes comerciais e 13 testes focados de contexto PayJoy, imagem, fallback, persistencia e pausa humana.",
     "Sintaxe dos entrypoints e publicador; build com travas de segredos e runtime Supabase.",
-    "Preflight remoto seletivo da API, backup e readback dos blocos alterados."
+    "Oito ensaios nativos isolados, incluindo print aprovado e ilegivel, sem disparar webhook ou enviar WhatsApp; candidato d415a838c4f6296a595f50a1fa6a5c1f4808cd8f8f73c8b38d50cfc8bb914ebe."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

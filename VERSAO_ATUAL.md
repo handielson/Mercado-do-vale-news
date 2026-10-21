@@ -1,3 +1,14 @@
+# v1.2.660-payjoy-foto-contexto
+
+Data: 21/10/2026. Branch: main. Tag: v1.2.660-payjoy-foto-contexto.
+Release: /var/www/mdv-site/releases/20261021-223650-payjoy-foto-contexto.
+
+O WhatsApp preserva a nova imagem antes de hidratar o contexto da API. A decisao PayJoy ocorre depois da verificacao de pausa. O contrato existente passa a persistir PayJoy tambem para WhatsApp, com revisao e ordem do evento. Sem contexto, o bot pede esclarecimento; falhas de conversao ou leitura chegam ao fallback existente. Historico recente autoriza somente ler a nova imagem, nunca recuperar valores financeiros.
+
+Validacao: 117 regressoes comerciais, 13 testes focados e oito ensaios nativos do modelo com dados sinteticos e sem envio de WhatsApp. Publicacao seletiva da chave de estado na API e patch guardado do workflow; pausa manual do atendimento investigado conferida sem altera-la.
+
+## Historico anterior
+
 # v1.2.659-entrega-observacao
 
 Data: 20/10/2026. Branch: main. Tag: v1.2.659-entrega-observacao.
