@@ -17,6 +17,8 @@ function runValidation(snapshot,plan){
  const evidence=JSON.parse(fs.readFileSync(path.join(root,'.local/whatsapp-payjoy-native-evidence.private.json'),'utf8'));
  assert.equal(evidence.sha256,plan.afterSha256,'Native model evidence must match exact candidate');assert.equal(evidence.passed,true);
  assert.ok(evidence.cases.length>=8);assert.ok(Date.now()-Date.parse(evidence.testedAt)<3600000,'Native evidence expired');
+ for(const id of ['selected-photo','selected-Quanto fica a entrada desse aparelho?','selected-Vou retirar na loja','selected-Qual o valor da entrada?','selected-Quanto eu preciso pagar de entrada?'])
+  assert.ok(evidence.cases.some(c=>c.case===id&&c.passed),'Missing cold-execution selected-device evidence: '+id);
  for(const args of [['scripts/n8n-sales-regression-gate.cjs','--snapshot',targetPath],['--test','tmp-tests/n8n-whatsapp-payjoy-images.test.cjs','tmp-tests/n8n-conversation-state-api-static.test.mjs']]){
   const r=spawnSync(process.execPath,args,{cwd:root,encoding:'utf8',maxBuffer:16e6,env:{...process.env,MDV_WA_PAYJOY_SOURCE:sourcePath,MDV_WA_PAYJOY_CANDIDATE:targetPath}});
   fs.writeFileSync(path.join(root,'.local/whatsapp-payjoy-'+(args[0]==='--test'?'focused':'commercial')+'.log'),r.stdout+r.stderr,{mode:0o600});

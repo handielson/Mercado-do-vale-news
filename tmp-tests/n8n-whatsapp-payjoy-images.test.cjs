@@ -22,7 +22,7 @@ const approved={isPayjoyResult:true,legible:true,approvalStatus:'approved',appro
 
 test('patch is idempotent, restricted to image/state boundaries, preserves pause gates and native reader',()=>{
  assert.equal(validate(w),true);assert.deepEqual(patchWhatsAppPayjoyWorkflow(w),w);
- const changed=new Set(['Dados','Controle Bot - Aplicar Controle','Estado Conversa - Preparar','Estado Conversa - Restaurar','PayJoy - Preparar imagem','PayJoy - Ler aprovacao']);
+ const changed=new Set(['Dados','Controle Bot - Aplicar Controle','Estado Conversa - Preparar','Estado Conversa - Restaurar','PayJoy - Preparar imagem','PayJoy - Ler aprovacao','Vendas - Verificar Pos Lista','Resolver Acao de Conversacao','Pagamento - Politica']);
  for(const n of source.nodes){const after=w.nodes.find(x=>x.name===n.name);assert.deepEqual(n.credentials,after.credentials,n.name);if(!changed.has(n.name))assert.deepEqual(after,n,n.name);}
  for(const [name,edges] of Object.entries(source.connections))if(name!=='Meta - Preparar contato?')assert.deepEqual(w.connections[name],edges,name);
  assert.equal(w.nodes.length,source.nodes.length+(source.nodes.some(n=>n.name===NAMES.prepare)?0:2));
@@ -61,6 +61,52 @@ test('partial print survives fresh execution then text percentage completes the 
  const second={},text=hydrate(base({whatsappImageReceived:false,conversation:'20%'}),saved.payjoyByJid,second);
  const result=one('Pagamento - Politica',{},second,{'Resolver Acao de Conversacao':text});
  assert.equal(result.payjoyCalculation.entryCents,32000);
+});
+
+test('cold execution reuses photo approval before sales collection and renders outbound without restarting the device',async()=>{
+ const first={},loaded=hydrate(base(),entry(),first);
+ const variant={productId:'fixture-note70-black',color:'Preto',memory:'8GB/256GB',price:'R$ 1.090,00',priceCents:109000};
+ first.salesPostList={[jid]:{flow:'sales_post_list',step:'awaiting_fulfillment',selectedOptionNumber:1,selectedColor:'Preto',
+  options:[{number:1,name:'Realme Note 70',memory:variant.memory,colors:[variant]}],
+  orderDraft:{productId:variant.productId,name:'Realme Note 70',memory:variant.memory,color:'Preto',unitPriceCents:109000,quantity:1},expiresAt:Date.now()+86400000}};
+ const photo=vision(loaded,first,{...approved,entryPercent:14});
+ const saved=structuredClone(persist(photo,first).conversationState);
+ for(const step of ['awaiting_color','awaiting_fulfillment','awaiting_pickup_time']){
+  const second={},canonical={...saved,salesPostList:{...saved.salesPostList,step}};
+  const incoming=base({whatsappImageReceived:false,conversation:'Quanto fica a entrada desse aparelho?'});
+  const current=hydrate(incoming,canonical.payjoyByJid,second,{conversation_state:canonical});
+  const before=structuredClone(second.salesPostList[jid]);
+  const parsed={...current,intencao:'formas_pagamento',salesFlowAction:'indefinido',collectionInterruption:'question'};
+  const post=(await run('Vendas - Verificar Pos Lista',{},second,{'Parse Classificacao':parsed}))[0].json;
+  assert.equal(post.salesPostListHandled,false);
+  const routed=one('Resolver Acao de Conversacao',post,second,{'switc Mensagens':current});
+  assert.equal(routed.conversationAction,'responder_politica_pagamento');
+  const reply=one('Pagamento - Politica',{},second,{'Resolver Acao de Conversacao':routed});
+  assert.equal(reply.payjoyCalculation.entryCents,22400);assert.equal(reply.payjoyCalculation.amountCents,160000);
+  assert.deepEqual(second.salesPostList[jid],before);assert.deepEqual(second.payjoyByJid[jid],saved.payjoyByJid);
+  const parts=run('Dividir mensagens',reply,second,{'Resolver Acao de Conversacao':routed,'switc Mensagens':current,'Contato - Resolver':{},'Contato - Preparar':{}});
+  const text=parts.map(p=>p.json.message).join('\n');
+  assert.match(text,/224,00/);assert.match(text,/Realme Note 70/);
+  assert.doesNotMatch(text,/envie.{0,20}print|qual aparelho|valor aprovado\?|qual percentual/i);
+  // Render the HTTP body as data only. Never execute the sending node.
+  const fields=w.nodes.find(n=>n.name==='Enviar WhatsApp').parameters.bodyParameters.parameters;
+  for(const part of parts){const body=Object.fromEntries(fields.map(({name,value})=>[name,new Function('$json','return ('+value.slice(3,-2)+')')(part.json)]));assert.equal(body.number,jid.split('@')[0]);assert.equal(body.text,part.json.message);}
+ }
+});
+
+test('approval recall rejects invalid context and explicit new amounts; zero percent stays valid',()=>{
+ const {ENTRY_QUESTION}=require('../scripts/n8n-meta-payjoy-images.cjs');
+ const check=new Function(ENTRY_QUESTION+';return isPayjoyEntryQuestionV2;')();
+ const valid=entry({status:'approved',approvedAmountCents:160000,entryPercentBp:1400});
+ for(const state of [null,entry(),{...valid,status:'denied'},{...valid,status:'declined'},
+  {...valid,entryPercentBp:null},{...valid,updatedAt:Date.now()+60000},{...valid,expiresAt:1},{...valid,approvedAmountCents:-1}])
+  assert.equal(check('Quanto fica a entrada?',state),false);
+ for(const text of ['Quanto fica a entrada com 30%?','Quanto fica a entrada com trinta por cento?','Quanto fica a entrada com trinta porcento?','Aprovado 2000, quanto fica a entrada?',
+  'Qual a entrada USB?','Quanto de entrada no cartão?','Qual entrada com juros?',
+  'Quero atendente para saber a entrada','Não quero pagar entrada'])assert.equal(check(text,valid),false,text);
+ const state={payjoyByJid:{[jid]:{...valid,entryPercentBp:0}}};
+ const reply=one('Pagamento - Politica',{},state,{'Resolver Acao de Conversacao':base({conversation:'Quanto fica a entrada?'})});
+ assert.equal(reply.payjoyCalculation.entryCents,0);assert.match(reply.output,/0,00/);
 });
 test('legacy recent store context authorizes only this new image, never reconstructs approval',()=>{
  const state={},loaded=hydrate(base(),null,state,{}, {recentMessages:[{direction:'outbound',text:'Envie o print do resultado da PayJoy: aprovado R$ 9.999',created_at:new Date().toISOString()}]});

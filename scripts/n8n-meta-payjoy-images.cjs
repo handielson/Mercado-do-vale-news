@@ -6,7 +6,7 @@ const MARKER='meta-payjoy-images-continuity-v1';
 const YIELD_MARKER='meta-payjoy-pos-list-yield-v2';
 const NAMES={prepare:'Meta - Preparar print PayJoy',fallback:'Meta - Imagem sem contexto?',
  contact:'Meta - Contato apos imagem?',unavailable:'Meta - Print indisponivel?'};
-const ENTRY_QUESTION=String.raw`function isMetaPayjoyEntryQuestionV1(meta,text,state){
+const LEGACY_ENTRY_QUESTION=String.raw`function isMetaPayjoyEntryQuestionV1(meta,text,state){
  if(!meta || state?.status!=='approved')return false;
  const current=Date.now(),updated=Number(state.updatedAt || 0);
  if(!Number.isFinite(updated)||updated<=0||current<updated||current-updated>=30*86400000
@@ -17,9 +17,13 @@ const ENTRY_QUESTION=String.raw`function isMetaPayjoyEntryQuestionV1(meta,text,s
  return /\bentrada\b/.test(n) && /\b(?:quanto|qual|valor|fica|preciso|pagar|dar|custa)\b/.test(n)
   && !/\b(?:nao|reprovad[oa]s?|negad[oa]s?|atendente|humano|vendedor|cartao|juros|desconto|taxa|usb|p2|hdmi|fone|carregador|cabo|porta)\b/.test(n);
 }`;
-const POSLIST_YIELD_CODE=String.raw`
+const ENTRY_QUESTION=LEGACY_ENTRY_QUESTION
+ .replace('isMetaPayjoyEntryQuestionV1(meta,text,state)','isPayjoyEntryQuestionV2(text,state)')
+ .replace("if(!meta || state?.status", "if(state?.status")
+ .replace("return /\\bentrada\\b/.test(n)", "return !/\\d|\\bpor\\s*cento\\b/.test(n) && /\\bentrada\\b/.test(n)");
+const LEGACY_POSLIST_YIELD_CODE=String.raw`
 // ${YIELD_MARKER}: let the canonical payment resolver handle grounded PayJoy turns.
-${ENTRY_QUESTION}
+${LEGACY_ENTRY_QUESTION}
 if(source.metaAttendance){
  const currentText=String(source.conversation || source.mensagem || '');
  const reply=source.payjoyLinkReply,context=source.payjoyLinkContext || {};
@@ -32,6 +36,12 @@ if(source.metaAttendance){
   return [{json:{...source,salesPostListHandled:false,output:'',needsDeliveryCepLookup:false,needsPaymentOptionsLookup:false,metaPayjoyYield:true}}];
 }
 `;
+// One approval-recall predicate for all channels. Link consent keeps its existing Meta scope.
+const POSLIST_YIELD_CODE=LEGACY_POSLIST_YIELD_CODE
+ .replace(LEGACY_ENTRY_QUESTION,()=>ENTRY_QUESTION)
+ .replace('if(source.metaAttendance){','{')
+ .replace('const validReply=reply &&', 'const validReply=source.metaAttendance && reply &&')
+ .replace('isMetaPayjoyEntryQuestionV1(true,currentText,payjoy)','isPayjoyEntryQuestionV2(currentText,payjoy)');
 const LEGACY_PREPARE=String.raw`// ${MARKER}: the canonical durable context has already been hydrated.
 const source=$json || {};
 const state=$getWorkflowStaticData('global').payjoyByJid?.[source.remoteJid];
@@ -106,6 +116,7 @@ function patchMetaPayjoyWorkflow(input){
   const result=structuredClone(input),prepare=result.nodes.find(n=>n.name===NAMES.prepare);
   if(prepare.parameters.jsCode===LEGACY_PREPARE)prepare.parameters.jsCode=PREPARE;
   else assert.equal(prepare.parameters.jsCode,PREPARE,'Unknown Meta PayJoy preparation drift');
+  upgradeEntryRecall(result);
   validateMetaPayjoyWorkflow(result,{requireYield:false});
   patchPostListYield(result);validateMetaPayjoyWorkflow(result);return result;
  }
@@ -147,14 +158,14 @@ return [{ json: {
   for (const key of ['salesPostList', 'pendingDeviceClarification', ...(prepared.metaAttendance ? ['payjoyByJid'] : [])]) {`);
  const resolver=get('Resolver Acao de Conversacao');
  resolver.parameters.jsCode=once(resolver.parameters.jsCode,'const deterministicPayjoyV1 = ',
-  `// ${MARKER}: approved durable result grounds an entry-only follow-up.\n${ENTRY_QUESTION}\nconst metaPayjoyEntryQuestionV1=isMetaPayjoyEntryQuestionV1(source.metaAttendance,text,payjoyStateV1);\nconst deterministicPayjoyV1 = `);
+  `// ${MARKER}: approved durable result grounds an entry-only follow-up.\n${ENTRY_QUESTION}\nconst payjoyEntryQuestionV2=isPayjoyEntryQuestionV2(text,payjoyStateV1);\nconst deterministicPayjoyV1 = `);
  resolver.parameters.jsCode=once(resolver.parameters.jsCode,'&& (payjoyTypedResultV4 || (payjoyExplicitV1',
-  '&& (metaPayjoyEntryQuestionV1 || payjoyTypedResultV4 || (payjoyExplicitV1');
+  '&& (payjoyEntryQuestionV2 || payjoyTypedResultV4 || (payjoyExplicitV1');
  const payment=get('Pagamento - Politica');
  payment.parameters.jsCode=once(payment.parameters.jsCode,'const inputPayjoyV4=parsePayjoyTextV4(text,active?.awaiting);',
   `// ${MARKER}: reuse the same calculation and reply without re-requesting a print.
 ${ENTRY_QUESTION}
-if(isMetaPayjoyEntryQuestionV1(source.metaAttendance,text,active)){
+if(isPayjoyEntryQuestionV2(text,active)){
  const values=calculatePayjoyEntryV4({},active);
  const selectedState=staticData.salesPostList?.[remoteJid];
  const selected=selectedState?.options?.find(item=>Number(item.number)===Number(selectedState.selectedOptionNumber));
@@ -180,8 +191,23 @@ const inputPayjoyV4=parsePayjoyTextV4(text,active?.awaiting);`);
 }
 function patchPostListYield(w){
  const node=w.nodes.find(n=>n.name==='Vendas - Verificar Pos Lista');assert.ok(node,'Missing canonical post-list owner');
+ if(node.parameters.jsCode.includes(LEGACY_POSLIST_YIELD_CODE))node.parameters.jsCode=once(node.parameters.jsCode,LEGACY_POSLIST_YIELD_CODE,POSLIST_YIELD_CODE);
  if(node.parameters.jsCode.includes(YIELD_MARKER)){assert.ok(node.parameters.jsCode.includes(POSLIST_YIELD_CODE),'Post-list precedence drift');return;}
  node.parameters.jsCode=once(node.parameters.jsCode,'staticData.salesPostList = staticData.salesPostList || {};',
   'staticData.salesPostList = staticData.salesPostList || {};'+POSLIST_YIELD_CODE);
+}
+function upgradeEntryRecall(w){
+ for(const name of ['Resolver Acao de Conversacao','Pagamento - Politica']){
+  const node=w.nodes.find(n=>n.name===name);assert.ok(node);
+  if(node.parameters.jsCode.includes(LEGACY_ENTRY_QUESTION)){
+   let code=once(node.parameters.jsCode,LEGACY_ENTRY_QUESTION,ENTRY_QUESTION);
+   code=code.replace('isMetaPayjoyEntryQuestionV1(source.metaAttendance,text,payjoyStateV1)','isPayjoyEntryQuestionV2(text,payjoyStateV1)')
+    .replace('isMetaPayjoyEntryQuestionV1(source.metaAttendance,text,active)','isPayjoyEntryQuestionV2(text,active)')
+    .replaceAll('metaPayjoyEntryQuestionV1','payjoyEntryQuestionV2');
+   node.parameters.jsCode=code;
+  }
+  assert.ok(node.parameters.jsCode.includes(ENTRY_QUESTION),'Approval recall drift: '+name);
+  assert.ok(!node.parameters.jsCode.includes('isMetaPayjoyEntryQuestionV1'),'Legacy channel gate remains');
+ }
 }
 module.exports={MARKER,YIELD_MARKER,NAMES,PREPARE,LEGACY_PREPARE,ENTRY_QUESTION,POSLIST_YIELD_CODE,patchMetaPayjoyWorkflow,patchMetaNormalizerCode,validateMetaPayjoyWorkflow};

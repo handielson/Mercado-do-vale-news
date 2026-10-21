@@ -11,6 +11,8 @@ async function main(){
  const evidencePath=arg('--evidence');
  const continuityMode=process.argv.includes('--payjoy-continuity');
  const configurationMode=process.argv.includes('--model-configuration');
+ const selectedDeviceMode=process.argv.includes('--payjoy-selected-device');
+ assert.ok([continuityMode,configurationMode,selectedDeviceMode].filter(Boolean).length<=1,'Choose one extended mode');
  assert.ok(!(continuityMode&&configurationMode),'Choose only one extended native smoke mode');
  const names=['OpenAI Chat Model','OpenAI Classificador','OpenAI Vendas','Agente Geral - Atendimento','Agente Inicial - Classificador','Especialista - Vendas','PayJoy - Ler aprovacao','PayJoy - Calcular entrada do print'];
  if(continuityMode){
@@ -29,6 +31,7 @@ async function main(){
     'Model/configuration candidate missing patch: '+name);
   }
  }
+ if(selectedDeviceMode)names.push('Controle Bot - Aplicar Controle','Estado Conversa - Preparar','Dividir mensagens','Vendas - Verificar Pos Lista','Vendas - Preparar Contexto IA','Parse Classificacao','Resolver Acao de Conversacao','Pagamento - Politica');
  const nodes=workflow.nodes.filter(n=>names.includes(n.name));
  const images=['approval','unreadable'].map(kind=>({kind,data:fs.readFileSync(path.join(__dirname,'fixtures','payjoy-model-test-'+kind+'.png')).toString('base64')}));
  const script=String.raw`
@@ -38,14 +41,14 @@ const pkg=fs.readdirSync(parent).find(p=>p.startsWith('@n8n+n8n-nodes-langchain@
 const root=path.join(parent,pkg,'node_modules/@n8n/n8n-nodes-langchain/dist/nodes');
 const moduleRequire=require('node:module').createRequire(root+'/llms/LMChatOpenAi/LmChatOpenAi.node.js');
 const syntheticEgressFilter=moduleRequire('@n8n/backend-network/egress').passthroughEgressFilter;
-const nodes=PAYLOAD_NODES,images=PAYLOAD_IMAGES,continuityMode=PAYLOAD_CONTINUITY,configurationMode=PAYLOAD_CONFIGURATION;
+const nodes=PAYLOAD_NODES,images=PAYLOAD_IMAGES,continuityMode=PAYLOAD_CONTINUITY,configurationMode=PAYLOAD_CONFIGURATION,selectedDeviceMode=PAYLOAD_SELECTED;
 const get=name=>nodes.find(n=>n.name===name);let current='setup',diagnostic=null;const results=[],continuityResults=[],configurationResults=[];
 const logger={debug(){},warn(){},error(){},info(){}};
 const invokeAgent=NATIVE_AGENT_INVOKE;
 const nativeFetch=global.fetch;
 const responseRequests=[];
 global.fetch=async(url,options)=>{if(/\/(?:responses|chat\/completions)(?:\?|$)/.test(String(url))){const body=JSON.parse(options.body);assert.ok(String(url).includes('/responses'),'Native agent must use the configured Responses API');assert.equal(body.model,'gpt-6-luna','Native model resolution must match candidate');if(!current.startsWith('vision-')){assert.equal(body.reasoning_effort,undefined);assert.equal(body.reasoning?.effort,'none');assert.equal(body.temperature,0);}assert.ok(!('max_tokens' in body));responseRequests.push(current);}return nativeFetch(url,options);};
-const source={remoteJid:'synthetic-model-eval',conversation:'',saudacaoDetectada:false,payjoyLinkContext:{ativo:true},salesConversationState:{ativo:false},conversationHistory:'Loja: Quer que eu envie o link oficial da PayJoy para sua análise?',storeHoursContext:'HORARIO_OFICIAL_INDISPONIVEL'};
+let source={remoteJid:'synthetic-model-eval',conversation:'',saudacaoDetectada:false,payjoyLinkContext:{ativo:true},salesConversationState:{ativo:false},conversationHistory:'Loja: Quer que eu envie o link oficial da PayJoy para sua análise?',storeHoursContext:'HORARIO_OFICIAL_INDISPONIVEL'};
 const dollar=()=>({first:()=>({json:source}),all:()=>[{json:source}]});
 function render(text){if(typeof text!=='string')return '';return text.startsWith('={{')?new Function('$json','$','return ('+text.slice(3,-2)+')')(source,dollar):text;}
 function clean(text){return String(text).replace(/^\s*[\x60]{3}(?:json)?\s*/,'').replace(/\s*[\x60]{3}\s*$/,'');}
@@ -67,15 +70,58 @@ async function invoke(m,agent,conversation){source.conversation=conversation;con
  current='sales-unavailable';source.aiResponseGuidance='';source.conversationHistory='';source.requestedDeviceModelQuery='Modelo Sintetico XYZ';source.salesAvailabilityStatus='requested_model_not_confirmed_with_stock';source.productsContext='Nenhum produto confirmado para esta consulta';source.deterministicCatalogOutput='';
  const sales=await model('OpenAI Vendas');const salesReply=await invoke(sales,'Especialista - Vendas','Tem o Modelo Sintetico XYZ?');diagnostic={salesReply};
  assert.doesNotMatch(salesReply,/R\$|https?:\/\/|(?:temos|tenho).{0,25}(?:dispon[ií]vel|em estoque)/i);results.push({case:current,passed:true});
- const params=get('PayJoy - Ler aprovacao').parameters;
+ let approvedNative;const params=get('PayJoy - Ler aprovacao').parameters;
  for(const fixture of images){current='vision-'+fixture.kind;
   const ctx={...context(get('PayJoy - Ler aprovacao')),getNodeParameter:(name,i,f)=>name==='modelId'?params.modelId.value:params[name]??f,helpers:{assertBinaryData:()=>({fileName:'synthetic.png',mimeType:'image/png'}),getBinaryDataBuffer:async()=>Buffer.from(fixture.data,'base64'),binaryToBuffer:async x=>x,requestWithAuthentication:async(credential,opts)=>{
    assert.equal(credential,'openAiApi');assert.equal(opts.body.model,'gpt-6-luna');assert.equal(opts.body.max_output_tokens,1600);assert.ok(!('max_tokens' in opts.body));
    const r=await fetch(opts.uri,{method:opts.method,headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},body:JSON.stringify(opts.body),signal:AbortSignal.timeout(60000)});const j=await r.json();assert.equal(r.status,200,'Vision API rejected native request');return j;
   }}};
   const output=await require(root+'/vendors/OpenAi/v2/actions/image/analyze.operation.js').execute.call(ctx,0);const actual=runCalc(output[0].json);
-  if(fixture.kind==='approval'){assert.equal(actual.payjoyCalculation?.amountCents,160000);assert.equal(actual.payjoyCalculation?.percentBp,1400);assert.equal(actual.payjoyCalculation?.entryCents,22400);}else{assert.ok(!actual.payjoyCalculation);assert.match(actual.output,/n[aã]o consegui ler|n[aã]o confirma/i);}
+  if(fixture.kind==='approval'){approvedNative=output[0].json;assert.equal(actual.payjoyCalculation?.amountCents,160000);assert.equal(actual.payjoyCalculation?.percentBp,1400);assert.equal(actual.payjoyCalculation?.entryCents,22400);}else{assert.ok(!actual.payjoyCalculation);assert.match(actual.output,/n[aã]o consegui ler|n[aã]o confirma/i);}
   results.push({case:current,passed:true,status:output[0].json.status});
+ }
+ if(selectedDeviceMode){
+  const jid='synthetic-selected-device@s.whatsapp.net',now=Date.now();
+  const variant={productId:'fixture-note70-black',color:'Preto',memory:'8GB/256GB',price:'R$ 1.090,00',priceCents:109000};
+  let canonical={payjoyByJid:{status:'awaiting_result',updatedAt:now,expiresAt:now+86400000},salesPostList:{flow:'sales_post_list',step:'awaiting_fulfillment',selectedOptionNumber:1,selectedColor:'Preto',selectedMemoryExactV1:variant.memory,
+   options:[{number:1,name:'Realme Note 70',memory:variant.memory,price:variant.price,colors:[variant]}],
+   orderDraft:{productId:variant.productId,name:'Realme Note 70',memory:variant.memory,color:variant.color,price:variant.price,unitPriceCents:109000,quantity:1},expiresAt:now+86400000}};
+  const code=async(name,input,state,lookup={})=>{
+   const dollar=n=>{assert.ok(Object.hasOwn(lookup,n),'Missing selected-device fixture node '+n);return {first:()=>({json:lookup[n]}),all:()=>[{json:lookup[n]}]};};
+   return await new Function('$json','$input','$','$getWorkflowStaticData','$execution','$runIndex','fetch',get(name).parameters.jsCode)(input,{first:()=>({json:input}),all:()=>[{json:input}]},dollar,()=>state,{id:'isolated-selected-device'},0,async()=>({ok:false,json:async()=>({})}));
+  };
+  const load=async(inbound,state)=>(await code('Controle Bot - Aplicar Controle',{control:{conversation_state_revision:1,conversation_state:structuredClone(canonical)}},state,{'Controle Bot - Verificar Cliente':inbound}))[0].json;
+  const save=async(reply,loaded,state)=>{canonical=structuredClone((await code('Estado Conversa - Preparar',reply,state,{'Controle Bot - Aplicar Controle':loaded}))[0].json.conversationStatePersistRequest.conversationState);};
+  const inbound={remoteJid:jid,Instancia:'synthetic',conversation:'[Imagem recebida]',messageType:'conversation',whatsappImageReceived:true};
+  const first={},loaded=await load(inbound,first);
+  const photo=(await code('PayJoy - Calcular entrada do print',approvedNative,first,{'Controle Bot - Aplicar Controle':loaded}))[0].json;
+  assert.equal(photo.payjoyCalculation.entryCents,22400);assert.match(photo.output,/Seguimos com o Realme Note 70/);await save(photo,loaded,first);
+  results.push({case:'selected-photo',passed:true,entryCents:22400});
+  let previous=photo.output;
+  for(const text of ['Quanto fica a entrada desse aparelho?','Vou retirar na loja','Qual o valor da entrada?','Quanto eu preciso pagar de entrada?']){
+   current='selected-'+text;
+   const state={},incoming={remoteJid:jid,Instancia:'synthetic',conversation:text,messageType:'conversation',recentMessages:[{direction:'outbound',text:previous,created_at:new Date().toISOString()}],conversationHistory:'Cliente: escolhi Realme Note 70 8GB/256GB Preto. Loja: '+previous};
+   const hydrated=await load(incoming,state),before=structuredClone(state.salesPostList[jid]);
+   const ctx=(await code('Vendas - Preparar Contexto IA',hydrated,state))[0].json;source=ctx;
+   const raw=await invoke(classifier,'Agente Inicial - Classificador',text);
+   const parsed=(await code('Parse Classificacao',{output:raw},state,{'Vendas - Preparar Contexto IA':ctx}))[0].json;
+   const post=(await code('Vendas - Verificar Pos Lista',{},state,{'Parse Classificacao':parsed}))[0].json;
+   let final=post,routed=post;
+   if(!post.salesPostListHandled){
+    routed=(await code('Resolver Acao de Conversacao',post,state,{'switc Mensagens':hydrated}))[0].json;
+    assert.equal(routed.conversationAction,'responder_politica_pagamento','Entry recall must use canonical payment route');
+    final=(await code('Pagamento - Politica',{},state,{'Resolver Acao de Conversacao':routed}))[0].json;
+   }
+   assert.equal(state.salesPostList[jid].orderDraft.productId,variant.productId);
+   assert.equal(state.salesPostList[jid].orderDraft.memory,variant.memory);assert.equal(state.salesPostList[jid].orderDraft.color,'Preto');
+   if(/entrada/.test(text)){assert.equal(final.payjoyCalculation?.entryCents,22400);assert.deepEqual(state.salesPostList[jid],before);}
+   if(text==='Vou retirar na loja'){assert.equal(state.salesPostList[jid].step,'awaiting_pickup_time');assert.equal(state.salesPostList[jid].orderDraft.fulfillment,'pickup');}
+   const split=await code('Dividir mensagens',final,state,{'Resolver Acao de Conversacao':routed,'switc Mensagens':hydrated,'Contato - Resolver':{},'Contato - Preparar':{}});
+   previous=split.map(item=>item.json.message).join('\n');assert.ok(previous);assert.doesNotMatch(previous,/qual aparelho|envie.{0,20}print|informe.{0,25}percentual/i);
+   if(/entrada/.test(text)){assert.match(previous,/224,00/);assert.match(previous,/Realme Note 70/);}
+   await save(final,hydrated,state);
+   results.push({case:current,passed:true,entryCents:final.payjoyCalculation?.entryCents,step:state.salesPostList[jid].step,selectedSku:variant.productId,outboundMessages:split.length});
+  }
  }
  if(continuityMode){
   const fixtureUrl='https://payjoy.com/mdv-synthetic-test';
@@ -231,14 +277,14 @@ async function invoke(m,agent,conversation){source.conversation=conversation;con
    preferences=structuredClone(prepared.salesFilters||{});previousReply=reply;
   }
  }
- for(const item of results)assert.ok(responseRequests.includes(item.case),'No Responses request captured for '+item.case);
+ for(const item of results)if(item.case!=='selected-photo')assert.ok(responseRequests.includes(item.case),'No Responses request captured for '+item.case);
  console.log(JSON.stringify({passed:true,cases:results,responsesApi:true,nativeAgentExecution:true,
   ...(continuityMode?{payjoyContinuityCases:continuityResults}:{}),
   ...(configurationMode?{salesModelConfigurationCases:configurationResults}:{})}));
 })().catch(e=>{const safeReason=String(e.message||'').replaceAll(apiKey,'[REDACTED]').replace(/sk-[A-Za-z0-9_-]+/g,'[REDACTED]').slice(0,180);console.log(JSON.stringify({passed:false,failedCase:current,errorName:e.name,errorReason:safeReason,diagnostic,cases:results,
  ...(continuityMode?{payjoyContinuityCases:continuityResults}:{}),
  ...(configurationMode?{salesModelConfigurationCases:configurationResults}:{})}));process.exitCode=1});
-`.replace('PAYLOAD_NODES',()=>JSON.stringify(nodes)).replace('PAYLOAD_IMAGES',()=>JSON.stringify(images)).replace('PAYLOAD_CONTINUITY',()=>JSON.stringify(continuityMode)).replace('PAYLOAD_CONFIGURATION',()=>JSON.stringify(configurationMode)).replace('NATIVE_AGENT_INVOKE',()=>invokeNativeAgent.toString());
+`.replace('PAYLOAD_NODES',()=>JSON.stringify(nodes)).replace('PAYLOAD_IMAGES',()=>JSON.stringify(images)).replace('PAYLOAD_CONTINUITY',()=>JSON.stringify(continuityMode)).replace('PAYLOAD_CONFIGURATION',()=>JSON.stringify(configurationMode)).replace('PAYLOAD_SELECTED',()=>JSON.stringify(selectedDeviceMode)).replace('NATIVE_AGENT_INVOKE',()=>invokeNativeAgent.toString());
  // Code-node source may contain $&, $` or $' replacement tokens. Functional
  // substitutions preserve their literal bytes; compile before any remote call.
  new Function(script);

@@ -1,5 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict');
+const {patchMetaPayjoyWorkflow}=require('./n8n-meta-payjoy-images.cjs');
 const MARKER='whatsapp-payjoy-durable-image-v1';
 const NAMES={prepare:'WhatsApp - Preparar print PayJoy',fallback:'WhatsApp - Imagem sem contexto?'};
 const edge=node=>({node,type:'main',index:0});
@@ -41,7 +42,7 @@ if(result.whatsappImageNeedsContext)result.output='Recebi sua imagem 😊 Ela é
 return [{json:result}];`;
 
 function patchWhatsAppPayjoyWorkflow(input){
- const w=structuredClone(input),get=name=>{const n=w.nodes.find(n=>n.name===name);assert.ok(n,'Missing node '+name);return n;};
+ const w=patchMetaPayjoyWorkflow(input),get=name=>{const n=w.nodes.find(n=>n.name===name);assert.ok(n,'Missing node '+name);return n;};
  if(w.nodes.some(n=>n.name===NAMES.prepare)){validate(w);return w;}
  const dados=get('Dados');
  const start=dados.parameters.jsCode.indexOf('// payjoy-approval-entry-v4: only customer images');

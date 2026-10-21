@@ -1,3 +1,14 @@
+# v1.2.661-payjoy-reutilizar-entrada
+
+Data: 21/10/2026. Branch: main. Tag: v1.2.661-payjoy-reutilizar-entrada.
+Release: /var/www/mdv-site/releases/20261021-225631-payjoy-reutilizar-entrada.
+
+Perguntas sobre entrada usam o valor aprovado e o percentual ja lidos da PayJoy tambem no WhatsApp. O fluxo prioriza a calculadora existente antes da coleta de cor/retirada, preservando o SKU, memoria, cor e etapa. Reutilizacao exige aprovacao valida e nao ignora novos valores explicitos.
+
+Validacao: 117 regressoes comerciais, 14 testes WhatsApp, 20 Meta, contrato da API e ensaio nativo isolado com fotografia sintetica e turnos separados. Publicacao seletiva de tres nos do workflow, com backup e verificacao do estado publicado. Nenhuma mensagem real enviada; pausa manual protegida preservada.
+
+## Historico anterior
+
 # v1.2.660-payjoy-foto-contexto
 
 Data: 21/10/2026. Branch: main. Tag: v1.2.660-payjoy-foto-contexto.

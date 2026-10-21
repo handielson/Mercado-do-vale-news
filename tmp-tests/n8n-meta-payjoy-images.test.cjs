@@ -171,13 +171,13 @@ test('post-list precedence requires grounded valid semantics and never preempts 
 });
 test('entry question guard excludes missing/expired approval, human requests and unrelated payment/device questions',()=>{
  const {ENTRY_QUESTION}=require('../scripts/n8n-meta-payjoy-images.cjs');
- const check=new Function(ENTRY_QUESTION+';return isMetaPayjoyEntryQuestionV1;')();
+ const check=new Function(ENTRY_QUESTION+';return isPayjoyEntryQuestionV2;')();
  const approved=entry({status:'approved',approvedAmountCents:224000,entryPercentBp:1000});
- assert.equal(check(true,'Quanto fica a entrada?',approved),true);assert.equal(check(false,'Quanto fica a entrada?',approved),false);
+ assert.equal(check('Quanto fica a entrada?',approved),true);
  for(const state of [null,entry(),{...approved,entryPercentBp:null},{...approved,expiresAt:now-1},{...approved,approvedAmountCents:-1}])
-  assert.equal(check(true,'Quanto fica a entrada?',state),false);
+  assert.equal(check('Quanto fica a entrada?',state),false);
  for(const text of ['Qual a entrada USB desse carregador?','Quanto fica a entrada no cartão?','Quero falar com atendente sobre a entrada','Não quero pagar a entrada'])
-  assert.equal(check(true,text,approved),false,text);
+  assert.equal(check(text,approved),false,text);
 });
 test('OCR denial, illegible image and provider error use existing safe parser without fabricated approved amount',()=>{
  const base=normalized();for(const result of [{isPayjoyResult:true,approvalStatus:'denied',legible:true,approvedAmount:null,entryPercent:null},

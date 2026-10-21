@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.660-payjoy-foto-contexto",
+  "version": "v1.2.661-payjoy-reutilizar-entrada",
   "date": "2026-10-21",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.660-payjoy-foto-contexto",
-  "release_vps": "/var/www/mdv-site/releases/20261021-223650-payjoy-foto-contexto",
+  "tag": "v1.2.661-payjoy-reutilizar-entrada",
+  "release_vps": "/var/www/mdv-site/releases/20261021-225631-payjoy-reutilizar-entrada",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Fotos PayJoy recuperam contexto persistido antes do roteamento e recebem resposta segura quando falta contexto ou leitura, preservando pausas humanas.",
+  "summary": "Perguntas sobre entrada no WhatsApp reutilizam a aprovacao PayJoy persistida e preservam aparelho, configuracao e etapa da compra.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,22 +14,20 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
+    "scripts/n8n-meta-payjoy-images.cjs",
     "scripts/n8n-whatsapp-payjoy-images.cjs",
     "scripts/deploy-n8n-whatsapp-payjoy.cjs",
-    "scripts/deploy-n8n-payjoy-state.cjs",
-    "vps_server.js",
-    "vps_server.cjs",
+    "tmp-tests/n8n-gpt6-luna-native-smoke.cjs",
+    "tmp-tests/n8n-meta-payjoy-images.test.cjs",
     "tmp-tests/n8n-whatsapp-payjoy-images.test.cjs",
-    "tmp-tests/n8n-conversation-state-api-static.test.mjs",
-    "deploy-vps-server-only.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-21-v1.2.660-payjoy-foto-contexto.md"
+    "docs/versoes/2026-10-21-v1.2.661-payjoy-reutilizar-entrada.md"
   ],
   "validations": [
-    "117 regressoes comerciais e 13 testes focados de contexto PayJoy, imagem, fallback, persistencia e pausa humana.",
-    "Sintaxe dos entrypoints e publicador; build com travas de segredos e runtime Supabase.",
-    "Oito ensaios nativos isolados, incluindo print aprovado e ilegivel, sem disparar webhook ou enviar WhatsApp; candidato d415a838c4f6296a595f50a1fa6a5c1f4808cd8f8f73c8b38d50cfc8bb914ebe."
+    "117 regressoes comerciais, 14 testes focados WhatsApp, 20 Meta e contrato de estado da API.",
+    "Ensaio nativo isolado de foto aprovada/ilegivel, perguntas subsequentes e retirada em execucoes com estado recarregado, sem envio real.",
+    "Build, hash do workflow ativo e pausa manual protegida verificados antes/depois."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
