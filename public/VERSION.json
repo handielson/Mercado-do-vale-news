@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.664-selecao-campos-foto",
+  "version": "v1.2.665-painel-precos-modelo",
   "date": "2026-10-22",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.664-selecao-campos-foto",
-  "release_vps": "/var/www/mdv-site/releases/20261022-174127-selecao-campos-foto",
+  "tag": "v1.2.665-painel-precos-modelo",
+  "release_vps": "/var/www/mdv-site/releases/20261022-183347-painel-precos-modelo",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Campos de texto do cadastro por foto selecionam todo o conteudo ao clicar ou receber foco.",
+  "summary": "Editor de precos por configuracao abre mesmo apos falha na consulta inicial do modelo, com recarga e erro explicito.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,14 +14,14 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
-    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
+    "pages/admin/settings/ModelsPage.tsx",
+    "tmp-tests/smartphone-price-groups-wiring-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-22-v1.2.664-selecao-campos-foto.md"
+    "docs/versoes/2026-10-22-v1.2.665-painel-precos-modelo.md"
   ],
   "validations": [
-    "Guarda de selecao de texto por foco e clique e regressoes do cadastro por foto.",
+    "Guarda do editor em estado desconhecido e regressoes dos grupos de precos.",
     "Build de producao com travas de segredos e runtime legado.",
     "Verificacoes publicas registradas na nota da entrega."
   ],

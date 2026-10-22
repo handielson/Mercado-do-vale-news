@@ -392,7 +392,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                         </div>
 
                         {/* Variações */}
-                        {phoneModel ? <ModelPricesPanel modelId={model.id} modelName={model.name} inline onClose={() => setExpanded(false)} onSaved={() => void loadPrices()} /> : (
+                        {phoneModel !== false ? <ModelPricesPanel modelId={model.id} modelName={model.name} inline onClose={() => setExpanded(false)} onSaved={() => void loadPrices()} /> : (
                         <div className="w-full mt-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                             <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
                                 <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide">Composição de Preços (Variações)</h4>

@@ -7,6 +7,10 @@ const migration = readFileSync('migrations/vps-smartphone-price-groups.sql', 'ut
 const intake = readFileSync('services/smartphonePhotoIntakeServer.cjs', 'utf8');
 const productService = readFileSync('services/products.ts', 'utf8');
 const panel = readFileSync('components/settings/ModelPricesPanel.tsx', 'utf8');
+const modelsPage = readFileSync('pages/admin/settings/ModelsPage.tsx', 'utf8');
+// Estado desconhecido apos falha de rede deve abrir o mesmo editor indicado pelo link.
+assert.match(modelsPage, /phoneModel !== false \? <ModelPricesPanel/, 'falha na consulta inicial nao pode abrir a tabela antiga vazia; o editor deve consultar novamente e exibir erro/recarregar');
+assert.match(panel, /setError\(e.message[\s\S]*Recarregar[\s\S]*role="alert"/, 'editor deve permitir recarga e mostrar falha de consulta');
 
 assert.match(migration, /CREATE TABLE IF NOT EXISTS smartphone_price_groups/);
 assert.match(migration, /price_retail INT NOT NULL[\s\S]*price_reseller INT NOT NULL[\s\S]*price_wholesale INT NOT NULL/);

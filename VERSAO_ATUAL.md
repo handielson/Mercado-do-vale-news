@@ -1,3 +1,14 @@
+# v1.2.665-painel-precos-modelo
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.665-painel-precos-modelo.
+Release: /var/www/mdv-site/releases/20261022-183347-painel-precos-modelo.
+
+O link de precos por configuracao abre o editor mesmo quando a consulta inicial falhou e o tipo do modelo ainda e desconhecido. O editor consulta novamente e permite recarregar em caso de erro; a tabela antiga vazia fica restrita a modelos confirmados como nao celulares.
+
+Validacao: guarda de regressao do estado desconhecido, testes dos grupos de precos e build. Somente site, sem gravacao de precos ou restart de API. Validacoes publicas na nota da entrega.
+
+## Historico anterior
+
 # v1.2.664-selecao-campos-foto
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.664-selecao-campos-foto.
