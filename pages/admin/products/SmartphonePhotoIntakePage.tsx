@@ -40,6 +40,7 @@ function hasSamePriceGroup(left: SmartphonePhotoIntake, right: SmartphonePhotoIn
     && left.matched_color_id === right.matched_color_id
     && normalizeGroupValue(left.detected_ram) === normalizeGroupValue(right.detected_ram)
     && normalizeGroupValue(left.detected_storage) === normalizeGroupValue(right.detected_storage)
+    && normalizeGroupValue(left.detected_version) === normalizeGroupValue(right.detected_version)
     && GROUPABLE_STATUSES.has(right.status);
 }
 

@@ -3,6 +3,7 @@ import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Save, Sparkles, Trash2 
 import { Link } from 'react-router-dom';
 import { CurrencyInput } from '../../ui/CurrencyInput';
 import { SearchableSelect } from '../../ui/SearchableSelect';
+import { VersionSelect } from '../selectors/VersionSelect';
 import { ProtectedIntakePhoto } from './ProtectedIntakePhoto';
 import { PhotoIntakeBlingMapping } from './PhotoIntakeBlingMapping';
 import type { Color } from '../../../types/color';
@@ -50,6 +51,7 @@ function buildDraft(intake: SmartphonePhotoIntake): SmartphonePhotoIntakeUpdate 
     detected_color: intake.detected_color || '',
     detected_ram: intake.detected_ram || '',
     detected_storage: intake.detected_storage || '',
+    detected_version: intake.detected_version || '',
     detected_serial: intake.detected_serial || '',
     detected_imei_1: intake.detected_imei_1 || '',
     detected_imei_2: intake.detected_imei_2 || '',
@@ -96,12 +98,12 @@ export function PhotoIntakeReviewCard({
     let cancelled = false;
     setLoadingPriceReference(true); setPriceReferenceError('');
     smartphonePriceGroups.reference(intake.matched_model_id, { company_id: intake.company_id,
-      specs: { ram: draft.detected_ram, storage: draft.detected_storage } }).then(result => {
+      specs: { ram: draft.detected_ram, storage: draft.detected_storage, version: draft.detected_version || '' } }).then(result => {
       if (!cancelled) setPriceReference(result);
     }).catch(error => { if (!cancelled) { setPriceReference(null); setPriceReferenceError(error.message); } })
       .finally(() => { if (!cancelled) setLoadingPriceReference(false); });
     return () => { cancelled = true; };
-  }, [intake.id, intake.matched_model_id, intake.company_id, draft.detected_ram, draft.detected_storage]);
+  }, [intake.id, intake.matched_model_id, intake.company_id, draft.detected_ram, draft.detected_storage, draft.detected_version]);
   useEffect(() => {
     const prices = priceReference?.prices;
     if (!prices || loadingPriceReference) return;
@@ -160,6 +162,7 @@ export function PhotoIntakeReviewCard({
     await onUpdate({ ...draft, review_confirmed: true });
   };
   const canFinalize = intake.status === 'ready_to_finalize' && Boolean(intake.matched_color_id)
+    && Boolean(draft.prices_confirmed) && (draft.detected_version || '') === (intake.detected_version || '')
     && !loadingPriceReference && !priceReferenceError && !priceReference?.divergent;
 
   return (
@@ -261,6 +264,17 @@ export function PhotoIntakeReviewCard({
                   />
                 </label>
               ))}
+              <fieldset disabled={busy} className="min-w-0">
+                <legend className="mb-1 text-xs font-medium text-slate-500">Versão comercial</legend>
+                <VersionSelect value={draft.detected_version || ''} onChange={version => {
+                  setPriceReference(null);
+                  setLoadingPriceReference(Boolean(intake.matched_model_id));
+                  setDraft(current => ({ ...current, detected_version: version,
+                    price_retail: 0, price_reseller: 0, price_wholesale: 0,
+                    prices_confirmed: false, review_confirmed: false }));
+                }} />
+                <p className="mt-1 text-xs text-slate-500">Selecione a versão do aparelho para consultar o preço da configuração correta.</p>
+              </fieldset>
               <label className="block min-w-0">
                 <span className="mb-1 block text-xs font-medium text-slate-500">Cor do sistema</span>
                 <select

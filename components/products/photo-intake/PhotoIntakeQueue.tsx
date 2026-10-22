@@ -48,7 +48,7 @@ export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loadin
     <div className="space-y-2">
       {items.map(item => {
         const title = [item.detected_brand, item.detected_model].filter(Boolean).join(' ') || 'Aguardando leitura';
-        const details = [item.detected_ram, item.detected_storage, item.detected_color].filter(Boolean).join(' · ');
+        const details = [item.detected_ram, item.detected_storage, item.detected_version, item.detected_color].filter(Boolean).join(' · ');
         const selected = selectedId === item.id;
         const groupSize = groupSizeById[item.id] || 1;
         return (

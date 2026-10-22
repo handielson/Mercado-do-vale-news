@@ -53,5 +53,6 @@ export function photoQueueGroupKey(item) {
   const ram = normalizeMappingMemory(item.detected_ram);
   const storage = normalizeMappingMemory(item.detected_storage);
   if (!model || !color || !ram || !storage || (!item.matched_model_id && (!item.detected_brand || !item.detected_model))) return `item:${item.id}`;
-  return JSON.stringify([item.company_id || '', model, ram, storage, color]);
+  const version = normalizeMappingText(item.detected_version);
+  return JSON.stringify([item.company_id || '', model, ram, storage, color, ...(version ? [version] : [])]);
 }

@@ -39,6 +39,7 @@ export interface SmartphonePhotoIntake {
   detected_color?: string | null;
   detected_ram?: string | null;
   detected_storage?: string | null;
+  detected_version?: string | null;
   detected_serial?: string | null;
   detected_imei_1?: string | null;
   detected_imei_2?: string | null;
@@ -83,6 +84,7 @@ export interface SmartphoneBrandPriceMargin {
 }
 
 export interface SmartphonePhotoIntakeUpdate {
+  detected_version?: string | null;
   detected_brand?: string | null;
   detected_model?: string | null;
   detected_color?: string | null;

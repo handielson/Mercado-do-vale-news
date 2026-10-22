@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.666-pesquisa-modelo-foto",
+  "version": "v1.2.667-versao-cadastro-foto",
   "date": "2026-10-22",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.666-pesquisa-modelo-foto",
-  "release_vps": "/var/www/mdv-site/releases/20261022-185448-pesquisa-modelo-foto",
+  "tag": "v1.2.667-versao-cadastro-foto",
+  "release_vps": "/var/www/mdv-site/releases/20261022-192328-versao-cadastro-foto",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Pesquisa por nome no seletor Modelo do sistema do cadastro por foto, com selecao por teclado e associacao explicita.",
+  "summary": "Versao comercial selecionavel no cadastro por foto, com preco correto na conferencia e finalizacao.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -15,15 +15,23 @@
   "site_source_base": "main",
   "changed_files": [
     "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
-    "components/ui/SearchableSelect.tsx",
-    "tmp-tests/filament-color-select.test.mjs",
+    "components/products/photo-intake/PhotoIntakeQueue.tsx",
+    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
+    "services/smartphonePhotoIntakeCore.cjs",
+    "services/smartphonePhotoIntakeServer.cjs",
+    "services/modelBlingMapping.mjs",
+    "types/smartphone-photo-intake.ts",
+    "tmp-tests/model-bling-mapping.test.mjs",
+    "tmp-tests/photo-intake-bling-routes.test.mjs",
+    "tmp-tests/smartphone-photo-intake-server-static.test.mjs",
+    "tmp-tests/smartphone-price-groups.test.cjs",
     "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-22-v1.2.666-pesquisa-modelo-foto.md"
+    "docs/versoes/2026-10-22-v1.2.667-versao-cadastro-foto.md"
   ],
   "validations": [
-    "Nove testes de pesquisa, selecao por ID, nomes duplicados, cores e navegacao aprovados.",
+    "Regressoes de versao, persistencia, preco Global, finalizacao e agrupamento, mais suites do cadastro por foto.",
     "Build de producao com travas de segredos e runtime legado.",
     "Verificacoes publicas registradas na nota da entrega."
   ],

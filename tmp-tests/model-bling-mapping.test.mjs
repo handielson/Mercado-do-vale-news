@@ -6,6 +6,13 @@ const parent = { id: 100, codigo: 'PAI', nome: 'Modelo' };
 const children = [{ id: 101, codigo: 'ROXO', nome: '8GB 256GB Roxo', situacao: 'A' }, { id: 102, codigo: 'VERDE', nome: '8GB 256GB Verde', situacao: 'A' }];
 const intake = { id: 'one', company_id: 'company', matched_model_id: 'model', matched_color_id: 'purple', detected_color: 'Roxo', detected_ram: '8GB', detected_storage: '256GB', status: 'ready_to_finalize' };
 
+test('fila separa versoes comerciais e mantem juntas grafias equivalentes', () => {
+  const global = { ...intake, detected_version: 'Global' };
+  assert.notEqual(photoQueueGroupKey(global), photoQueueGroupKey(intake));
+  assert.notEqual(photoQueueGroupKey(global), photoQueueGroupKey({ ...intake, detected_version: 'India' }));
+  assert.equal(photoQueueGroupKey(global), photoQueueGroupKey({ ...global, detected_version: ' GLOBAL ' }));
+});
+
 test('family loads only real children; rejects a child, empty or malformed response', () => {
   for (const payload of [children, { data: children }, { variacoes: children }, { data: { variacoes: children } }]) {
     assert.equal(buildBlingFamily(parent, payload).children[0].sku, 'ROXO');

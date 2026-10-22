@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const Fastify = require('fastify');
 const core = require('../services/smartphonePriceGroupsCore.cjs');
+const { photoIntakePriceSpecs } = require('../services/smartphonePhotoIntakeCore.cjs');
 const { registerSmartphonePriceGroupRoutes, withSmartphonePriceWrite, insertProductRecordsWithGroupPrices, patchProductWithGroupPrices } = require('../services/smartphonePriceGroupsServer.cjs');
 
 const sale = { price_retail: 113200, price_reseller: 108200, price_wholesale: 103200 };
@@ -11,7 +12,7 @@ const phone = (id, extra = {}) => ({ id, sku: id, name: model.name, model_id: mo
   specs: { ram: '8GB', storage: '256GB', color: id }, status: 'active', stock_quantity: 1, price_cost: 93200, ...sale, ...extra });
 
 function fixture(t, options = {}) {
-  let state = { model: structuredClone(model), products: options.products || [phone('R15C8256A', { price_cost: 98200 }), phone('R15C8256L'), phone('R15C8256V', { status: 'inactive', stock_quantity: 0 })], groups: [], history: [], writes: [] };
+  let state = { model: structuredClone(options.model || model), products: options.products || [phone('R15C8256A', { price_cost: 98200 }), phone('R15C8256L'), phone('R15C8256V', { status: 'inactive', stock_quantity: 0 })], groups: [], history: [], writes: [] };
   let snapshot;
   const query = async (sql, params = []) => {
     const q = sql.replace(/\s+/g, ' ').trim();
@@ -65,6 +66,21 @@ test('colors, numeric memory and physical RAM identify the same configuration', 
   assert.equal(core.configuration(phone('1', { specs: { ram: '8GB', storage: '1TB' } }), model).id,
     core.configuration(phone('2', { specs: { ram: '8GB', storage: '1024GB' } }), model).id);
   assert.equal(core.configuration(phone('A'), { ...model, template_values: { ram_fisica: '12GB' } }).ram, '8GB');
+});
+
+test('conferencia por foto consulta o preco Global confirmado e nao o grupo legado sem versao', async t => {
+  const f = fixture(t, { model: { ...model, template_values: { rede_operadora: '5G' } }, products: [
+    phone('global', { specs: { ram: '12GB', storage: '512GB', version: 'Global' } }),
+    phone('legacy', { specs: { ram: '12GB', storage: '512GB' } }),
+  ] });
+  const global = (await f.list()).groups.find(g => g.version === 'global');
+  assert.equal((await f.save(global, { price_retail: 286000, price_reseller: 282000, price_wholesale: 276000 })).statusCode, 200);
+  const intake = { detected_ram: '12GB', detected_storage: '512GB', extracted_data: JSON.stringify({ commercial_version: 'Global' }) };
+  const response = await f.request('POST', `/models/${model.id}/smartphone-price-reference`, { specs: photoIntakePriceSpecs(intake) });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().group_id, global.id);
+  assert.equal(response.json().prices.price_retail, 286000);
+  assert.equal(f.state().products.find(p => p.id === 'legacy').price_retail, sale.price_retail);
 });
 
 test('3D products never inherit or change phone group prices even with inherited phone specs', async t => {

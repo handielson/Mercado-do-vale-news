@@ -10,6 +10,8 @@ const {
   buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
   getBlockingPhotoIntakeErrors,
+  getPhotoIntakeVersion,
+  photoIntakePriceSpecs,
   normalizeMemory,
   resolvePhotoIntakeStatus,
   translateColorToPtBr,
@@ -77,6 +79,7 @@ function parseIntakeRow(row) {
   if (!row) return row;
   return {
     ...row,
+    detected_version: getPhotoIntakeVersion(row),
     extracted_data: safeJson(row.extracted_data, {}),
     validation_errors: safeJson(row.validation_errors, []),
     validation_warnings: safeJson(row.validation_warnings, []),
@@ -99,6 +102,7 @@ function productMatchesIntakeConfiguration(product, intake) {
   return Boolean(wantedRam && wantedStorage && intake?.detected_color)
     && productRam === wantedRam
     && productStorage === wantedStorage
+    && (!getPhotoIntakeVersion(intake) || slugify(specs.version || specs.versao) === slugify(getPhotoIntakeVersion(intake)))
     && colorMatches;
 }
 
@@ -315,7 +319,8 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         const specs = safeJson(candidate.specs, {});
         return (!extraction.ram || String(specs.ram || '').replace(/\s/g, '').toUpperCase() === extraction.ram)
           && (!extraction.storage || String(specs.storage || '').replace(/\s/g, '').toUpperCase() === extraction.storage)
-          && (!extraction.color || slugify(specs.color || specs.cor) === slugify(extraction.color));
+          && (!extraction.color || slugify(specs.color || specs.cor) === slugify(extraction.color))
+          && (!extraction.version || slugify(specs.version || specs.versao) === slugify(extraction.version));
       }) || null;
     }
     return { model, product };
@@ -337,6 +342,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         color: color.name,
         ram: intake.detected_ram,
         storage: intake.detected_storage,
+        version: getPhotoIntakeVersion(intake),
       }, companyId);
       const status = resolvePhotoIntakeStatus({
         validationErrors: intake.validation_errors || [],
@@ -407,7 +413,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     const validation = validatePhotoExtraction(parsed);
     const color = await resolveCatalogColor(validation.value.color, intake.company_id);
     validation.value.color = color.name;
-    const catalog = await matchCatalog(validation.value, intake.company_id);
+    const catalog = await matchCatalog({ ...validation.value, version: getPhotoIntakeVersion(intake) }, intake.company_id);
     const duplicateValues = [validation.value.imei1, validation.value.imei2, validation.value.serial].filter(Boolean);
     if (duplicateValues.length > 0) {
       const placeholders = duplicateValues.map(() => '?').join(',');
@@ -441,7 +447,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         validation.value.ean, validation.value.product_code, catalog.model?.brand_id || null, catalog.model?.id || null,
         color.id, catalog.product?.id || null, catalog.product?.price_cost ?? null, catalog.product?.price_retail ?? null,
         catalog.product?.price_reseller ?? null, catalog.product?.price_wholesale ?? null,
-        JSON.stringify({ ...validation.value, color_original: color.original }),
+        JSON.stringify({ ...validation.value, color_original: color.original, commercial_version: getPhotoIntakeVersion(intake) }),
         JSON.stringify(validation.errors), JSON.stringify(validation.warnings), inputTokens, outputTokens, cost,
         inputRate, outputRate, intake.id]
     );
@@ -562,6 +568,20 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     if (!intake) return reply.code(404).send({ error: 'Pré-cadastro não encontrado' });
     if (['cancelled', 'completed'].includes(intake.status)) return reply.code(409).send({ error: 'Selecione um registro pendente da fila' });
     const body = { ...(request.body || {}) };
+    let commercialVersion = getPhotoIntakeVersion(intake);
+    if ('detected_version' in body) {
+      const requested = String(body.detected_version ?? '').trim();
+      if (requested) {
+        const [versions] = await pool.query('SELECT name FROM versions WHERE name=? AND active=1 LIMIT 1', [requested]);
+        if (!versions[0]) return reply.code(409).send({ error: 'Selecione uma versão comercial cadastrada e ativa' });
+        commercialVersion = versions[0].name;
+      } else commercialVersion = '';
+      body.detected_version = commercialVersion;
+      if (commercialVersion !== getPhotoIntakeVersion(intake)) {
+        body.prices_confirmed = false;
+        body.matched_product_id = null;
+      }
+    }
     if ('matched_model_id' in body && body.matched_model_id) {
       const [modelRows] = await pool.query('SELECT id,brand_id,name FROM models WHERE id=? AND active=1 LIMIT 1', [body.matched_model_id]);
       if (!modelRows[0]) return reply.code(409).send({ error: 'O modelo selecionado não está mais disponível' });
@@ -601,7 +621,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       ean: body.detected_ean ?? intake.detected_ean,
       product_code: body.detected_product_code ?? intake.detected_product_code,
     });
-    const catalog = await matchCatalog(validation.value, intake.company_id);
+    const catalog = await matchCatalog({ ...validation.value, version: commercialVersion }, intake.company_id);
     if (catalog.model && (!body.matched_model_id || body.matched_model_id === catalog.model.id)) {
       body.matched_brand_id = catalog.model.brand_id || body.matched_brand_id || intake.matched_brand_id || null;
       body.matched_model_id = catalog.model.id;
@@ -612,12 +632,13 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         }
       }
     }
+    if (commercialVersion !== getPhotoIntakeVersion(intake)) body.matched_product_id = null;
     const allowed = ['matched_brand_id', 'matched_model_id', 'matched_product_id', 'detected_brand', 'detected_model',
       'matched_color_id', 'detected_color', 'detected_ram', 'detected_storage', 'detected_serial', 'detected_imei_1', 'detected_imei_2',
       'detected_ean', 'detected_product_code', 'price_cost', 'price_retail', 'price_reseller', 'price_wholesale', 'prices_confirmed', 'reviewed_by'];
     const sets = []; const values = [];
     for (const field of allowed) if (field in body) { sets.push(`${field}=?`); values.push(body[field] ?? null); }
-    if (!sets.length) return reply.code(400).send({ error: 'Nenhum campo permitido' });
+    if (!sets.length && !('detected_version' in body)) return reply.code(400).send({ error: 'Nenhum campo permitido' });
     const identifiers = [validation.value.imei1, validation.value.imei2, validation.value.serial].filter(Boolean);
     if (identifiers.length > 0) {
       const placeholders = identifiers.map(() => '?').join(',');
@@ -629,10 +650,10 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       if (duplicates.length > 0) validation.errors.push({ field: 'identifiers', code: 'already_registered', message: 'IMEI ou serial já cadastrado' });
     }
     sets.push('extracted_data=?', 'validation_errors=?', 'validation_warnings=?');
-    values.push(JSON.stringify(validation.value), JSON.stringify(validation.errors), JSON.stringify(validation.warnings));
+    values.push(JSON.stringify({ ...validation.value, commercial_version: commercialVersion }), JSON.stringify(validation.errors), JSON.stringify(validation.warnings));
     const validationFields = ['detected_brand', 'detected_model', 'detected_color', 'detected_ram', 'detected_storage',
       'detected_serial', 'detected_imei_1', 'detected_imei_2', 'detected_ean', 'detected_product_code',
-      'matched_model_id', 'matched_color_id'];
+      'matched_model_id', 'matched_color_id', 'detected_version'];
     const validationDataChanged = validationFields.some((field) => field in body
       && String(body[field] ?? '') !== String(intake[field] ?? ''));
     const requestedReviewConfirmation = 'review_confirmed' in body
@@ -678,7 +699,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     try {
       await connection.beginTransaction();
       const [groupRows] = await connection.query(
-        `SELECT id,matched_model_id,price_cost,validation_errors,validation_warnings,review_confirmed FROM smartphone_photo_intakes
+        `SELECT id,matched_model_id,price_cost,validation_errors,validation_warnings,review_confirmed,extracted_data FROM smartphone_photo_intakes
           WHERE company_id <=> ? AND matched_model_id=? AND matched_color_id=?
             AND UPPER(REPLACE(COALESCE(detected_ram,''),' ',''))=?
             AND UPPER(REPLACE(COALESCE(detected_storage,''),' ',''))=?
@@ -686,11 +707,12 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
           FOR UPDATE`,
         [intake.company_id || null, intake.matched_model_id, intake.matched_color_id, normalizedRam, normalizedStorage]
       );
-      if (!groupRows.some(row => row.id === intake.id)) {
+      const versionRows = groupRows.filter(row => slugify(getPhotoIntakeVersion(row)) === slugify(getPhotoIntakeVersion(intake)));
+      if (!versionRows.some(row => row.id === intake.id)) {
         await connection.rollback();
         return reply.code(409).send({ error: 'O aparelho selecionado saiu da fila ou mudou de grupo' });
       }
-      for (const row of groupRows) {
+      for (const row of versionRows) {
         const hasConfirmedCost = Number(row.id === intake.id ? prices.price_cost : row.price_cost) > 0;
         const status = resolvePhotoIntakeStatus({
           validationErrors: safeJson(row.validation_errors, []),
@@ -708,7 +730,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       await connection.commit();
       return {
         intake: toPublicIntake(await loadIntake(intake.id)),
-        updated_count: groupRows.length,
+        updated_count: versionRows.length,
       };
     } catch (error) {
       await connection.rollback();
@@ -883,7 +905,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       const priceModel = await loadPriceModel(connection, intake.matched_model_id, true);
       const inherited = await inheritSmartphonePrices(connection, {
         model_id: intake.matched_model_id, company_id: intake.company_id,
-        specs: { ram: intake.detected_ram, storage: intake.detected_storage },
+        specs: photoIntakePriceSpecs(intake),
         price_retail: intake.price_retail, price_reseller: intake.price_reseller, price_wholesale: intake.price_wholesale,
       }, priceModel);
       Object.assign(intake, {
@@ -932,6 +954,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
             color_id: intake.matched_color_id || undefined,
             ram: intake.detected_ram || undefined,
             storage: intake.detected_storage || undefined,
+            version: getPhotoIntakeVersion(intake) || undefined,
           };
           delete specs.bling_family;
           let images = [];

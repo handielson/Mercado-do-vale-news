@@ -273,7 +273,20 @@ function filterSmartphonesByFeatures(products, filters = {}) {
   });
 }
 
+// Manual commercial version lives in the existing intake JSON, not in AI output.
+function getPhotoIntakeVersion(intake) {
+  let data = intake?.extracted_data || {};
+  if (typeof data === 'string') { try { data = JSON.parse(data); } catch { data = {}; } }
+  return String(intake?.detected_version ?? data?.commercial_version ?? '').trim();
+}
+
+function photoIntakePriceSpecs(intake) {
+  return { ram: intake.detected_ram, storage: intake.detected_storage, version: getPhotoIntakeVersion(intake) };
+}
+
 module.exports = {
+  getPhotoIntakeVersion,
+  photoIntakePriceSpecs,
   PHOTO_INTAKE_STATUS,
   PHOTO_INTAKE_STATUS_LABEL,
   buildSmartphoneVariantSkuBase,

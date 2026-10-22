@@ -1,3 +1,14 @@
+# v1.2.667-versao-cadastro-foto
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.667-versao-cadastro-foto.
+Release: /var/www/mdv-site/releases/20261022-192328-versao-cadastro-foto.
+
+Cadastro por foto permite selecionar a versao comercial cadastrada e usa esse valor na consulta de precos, confirmacao e finalizacao. Global e sem versao continuam separados. Trocar versao invalida a confirmacao anterior; o produto final conserva a versao escolhida. Dados ficam no JSON existente, sem coluna nova.
+
+Validacao: suites de cadastro por foto, grupos de precos e finalizacao, sintaxe e build com travas. API seletiva --photo-intake-only antes do site, sem migration ou teste com gravacao comercial. Conferencias publicas e backup na nota da entrega.
+
+## Historico anterior
+
 # v1.2.666-pesquisa-modelo-foto
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.666-pesquisa-modelo-foto.

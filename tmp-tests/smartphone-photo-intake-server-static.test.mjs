@@ -28,7 +28,7 @@ assert.match(source, /SELECT id FROM units WHERE \(imei_1 IN[\s\S]*intake_id IS 
 assert.match(source, /const duplicateValues = \[validation\.value\.imei1[\s\S]*intake_id IS NULL OR intake_id <> \?[\s\S]*duplicateValues, intake\.id/, 'nova leitura deve ignorar unidades do próprio pré-cadastro');
 assert.match(source, /beginTransaction\(\)[\s\S]*FOR UPDATE[\s\S]*commit\(\)/, 'finalização deve ser transacional e bloquear a pendência');
 assert.match(source, /confirm-group-prices[\s\S]*matched_model_id=\?[\s\S]*matched_color_id=\?[\s\S]*detected_ram[\s\S]*detected_storage[\s\S]*FOR UPDATE/, 'confirmação em grupo deve usar a combinação exata e bloquear as linhas');
-assert.match(source, /updated_count: groupRows\.length/, 'confirmação em grupo deve informar quantos aparelhos foram atualizados');
+assert.match(source, /updated_count: versionRows\.length/, 'confirmação em grupo deve contar apenas aparelhos da mesma versão');
 assert.doesNotMatch(source, /budget|spending[_A-Za-z]*limit|monthly[_A-Za-z]*limit/i, 'a leitura não deve ser bloqueada por limite financeiro');
 
 assert.match(frontendService, /getCompanyId\(\)[\s\S]*company_id: companyId/, 'frontend deve informar a empresa ao salvar margens');
