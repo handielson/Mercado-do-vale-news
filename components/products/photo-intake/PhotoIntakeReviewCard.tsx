@@ -252,6 +252,8 @@ export function PhotoIntakeReviewCard({
                   <span className="mb-1 block text-xs font-medium text-slate-500">{field.label}</span>
                   <input
                     value={String(draft[field.key] ?? '')}
+                    onFocus={event => event.currentTarget.select()}
+                    onClick={event => event.currentTarget.select()}
                     onChange={event => setDraft(current => ({ ...current, [field.key]: event.target.value, review_confirmed: false }))}
                     className={`h-10 min-w-0 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 ${field.mono ? 'font-mono' : ''}`}
                   />
@@ -379,6 +381,8 @@ export function PhotoIntakeReviewCard({
               <span className="mb-1 block text-xs font-bold text-slate-700">SKU da nova variação (opcional)</span>
               <input
                 value={sku}
+                onFocus={event => event.currentTarget.select()}
+                onClick={event => event.currentTarget.select()}
                 onChange={event => setSku(event.target.value)}
                 placeholder="Deixe em branco para gerar automaticamente"
                 className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"

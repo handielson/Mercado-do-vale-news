@@ -1,3 +1,14 @@
+# v1.2.664-selecao-campos-foto
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.664-selecao-campos-foto.
+Release: /var/www/mdv-site/releases/20261022-174127-selecao-campos-foto.
+
+Campos de texto da conferencia do cadastro por foto, incluindo IMEIs, serie, EAN e SKU opcional, selecionam todo o conteudo ao clicar ou receber foco pelo teclado.
+
+Validacao: guarda de selecao no teste existente de navegacao, regressoes do cadastro por foto e build com travas. Publicacao somente do site; nenhum dado comercial alterado. Resultados publicos na nota da entrega.
+
+## Historico anterior
+
 # v1.2.663-catalogo-sem-timeout
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.663-catalogo-sem-timeout.

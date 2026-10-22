@@ -6,6 +6,13 @@ const quickAccess = fs.readFileSync(new URL('../components/admin/dashboard/Admin
 const routes = fs.readFileSync(new URL('../routes/index.tsx', import.meta.url), 'utf8');
 const intakePage = fs.readFileSync(new URL('../pages/admin/products/SmartphonePhotoIntakePage.tsx', import.meta.url), 'utf8');
 const reviewCard = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeReviewCard.tsx', import.meta.url), 'utf8');
+// Guarda de UI acoplada ao JSX: ao mover os campos, mover esta verificacao com eles.
+for (const input of reviewCard.matchAll(/<input\b[\s\S]*?\/>/g)) {
+  if (/type="checkbox"/.test(input[0])) continue;
+  for (const event of ['onFocus', 'onClick']) {
+    assert.match(input[0], new RegExp(`${event}=\\{event => event\\.currentTarget\\.select\\(\\)\\}`), `campos de texto devem selecionar todo o conteudo em ${event}`);
+  }
+}
 assert.match(reviewCard, /SKU da nova variação \(opcional\)/, 'SKU manual deve ser opcional');
 assert.match(reviewCard, /Deixe em branco para gerar automaticamente/, 'deve explicar a geração automática');
 assert.doesNotMatch(reviewCard, /setSku\(intake\.detected_product_code/, 'codigo do fabricante nao pode virar SKU comercial');
