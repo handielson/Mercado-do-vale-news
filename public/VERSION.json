@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.662-payjoy-runtime-ativo",
+  "version": "v1.2.663-catalogo-sem-timeout",
   "date": "2026-10-22",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.662-payjoy-runtime-ativo",
-  "release_vps": "/var/www/mdv-site/releases/20261022-111018-payjoy-runtime-ativo",
+  "tag": "v1.2.663-catalogo-sem-timeout",
+  "release_vps": "/var/www/mdv-site/releases/20261022-135000-v12663-catalogo-sem-timeout",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Corrige persistencia PayJoy no entrypoint realmente executado pela API, preservando atendimento manual.",
+  "summary": "Lista oficial de celulares segue direto ao envio quando pronta, em tres mensagens, sem aguardar a IA de vendas.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,17 +14,17 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "scripts/deploy-n8n-payjoy-state.cjs",
-    "scripts/deploy-n8n-whatsapp-payjoy.cjs",
-    "tmp-tests/n8n-payjoy-runtime-entry.test.cjs",
+    "tmp-tests/n8n-sales-catalog-timeout-guard.cjs",
+    "tmp-tests/n8n-sales-catalog-timeout-guard.test.cjs",
+    "tmp-tests/n8n-deploy-sales-catalog-timeout-guard.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-22-v1.2.662-payjoy-runtime-ativo.md"
+    "docs/versoes/2026-10-22-v1.2.663-catalogo-sem-timeout.md"
   ],
   "validations": [
-    "Runtime PM2 real e allowlist conferidos; regressao do falso positivo coberta por tres testes.",
-    "Contrato de estado e continuidade PayJoy em execucoes frias testados sem envio.",
-    "Build, publicacao seletiva e validacoes finais na nota da entrega."
+    "Quatro testes focados do desvio e cenario real 57171 renderizado sem envio de teste.",
+    "117 regressoes comerciais aprovadas no candidato exato.",
+    "Build, publicacao do workflow ativo e verificacoes finais na nota da entrega."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

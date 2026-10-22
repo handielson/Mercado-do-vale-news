@@ -1,3 +1,14 @@
+# v1.2.663-catalogo-sem-timeout
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.663-catalogo-sem-timeout.
+Release: /var/www/mdv-site/releases/20261022-135000-v12663-catalogo-sem-timeout.
+
+Pedidos de lista completa de celulares com estoque, precos e parcelas ja confirmados seguem direto ao envio em tres mensagens, sem depender do Especialista - Vendas. Consultas que exigem interpretacao continuam na IA. A falha do cliente final 0750 foi causada por timeout de 10 minutos no modelo depois de o catalogo estar pronto; a lista foi enviada manualmente e confirmada em tres partes, com estado de escolha por numero preservado.
+
+Validacao: quatro testes focados, reproducao da execucao 57171 ate os tres payloads de envio e 117 regressoes comerciais do candidato exato. Workflow ativo, site versionado e saude publica conferidos na nota da entrega.
+
+## Historico anterior
+
 # v1.2.662-payjoy-runtime-ativo
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.662-payjoy-runtime-ativo.
