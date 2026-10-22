@@ -1,3 +1,14 @@
+# v1.2.662-payjoy-runtime-ativo
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.662-payjoy-runtime-ativo.
+Release: /var/www/mdv-site/releases/20261022-111018-payjoy-runtime-ativo.
+
+Correcao da falta de resposta sobre boleto: o workflow gerava a resposta, mas a API ativa server.js rejeitava payjoyByJid. O publicador anterior atualizava somente vps_server.js/cjs e a prova verificava cjs inativo. Agora inclui os tres entrypoints autorizados e prova consulta o pm_exec_path real do processo mdv-api.
+
+Delta de producao restrito a uma chave na allowlist do server.js, com backup, sintaxe e restart pelo publicador existente. Sem mudar mensagem, divisao do link, workflow, memoria ou pausa manual. Testes reproduzem o falso positivo e verificam runtime, idempotencia e preservacao. Validacao HTTP usa revisao impossivel para assegurar rollback sem gravar conversa.
+
+## Historico anterior
+
 # v1.2.661-payjoy-reutilizar-entrada
 
 Data: 21/10/2026. Branch: main. Tag: v1.2.661-payjoy-reutilizar-entrada.
