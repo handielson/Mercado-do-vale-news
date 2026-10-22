@@ -25,7 +25,7 @@ function fixture(t, options = {}) {
     if (q.startsWith('SELECT') && q.includes('FROM products')) {
       return [structuredClone(state.products.filter(p => q.includes('WHERE model_id=?') ? p.model_id === params[0] : q.includes('WHERE sku=?') || q.includes('WHERE `sku`=?') ? p.sku === params[0] : p.id === params[0]))];
     }
-    if (q.includes('FROM units u')) return [[{ product_id: 'R15C8256A', cost_price: 98000 }, { product_id: 'R15C8256A', cost_price: 99000 }]];
+    if (q.includes('FROM units u')) return [options.units || [{ product_id: 'R15C8256A', cost_price: 98000 }, { product_id: 'R15C8256A', cost_price: 99000 }]];
     if (q.startsWith('INSERT INTO smartphone_price_groups')) {
       const old = state.groups.find(g => g.id === params[0]);
       const saved = { id: params[0], model_id: params[1], company_id: params[2], configuration: params[3], price_retail: params[4], price_reseller: params[5], price_wholesale: params[6], revision: (old?.revision || 0) + 1 };
@@ -123,6 +123,40 @@ test('listing is read-only, includes empty stock and shows actual unit costs wit
   assert.equal(f.state().groups.length, 0);
   assert.doesNotMatch(JSON.stringify(result), /imei|serial|photo_private/);
   assert.equal((await f.app.inject({ url: `/models/${model.id}/smartphone-price-groups` })).statusCode, 401);
+});
+
+test('stock average uses individual costs and weights legacy products by stock, without writing prices', async t => {
+  const f = fixture(t, { products: [
+    phone('units', { stock_quantity: 2, price_cost: 500000 }),
+    phone('legacy', { stock_quantity: 3, price_cost: 100000 }),
+    phone('empty', { stock_quantity: 0, price_cost: 900000 }),
+    phone('unknown', { stock_quantity: 5, price_cost: null }),
+  ], units: [{ product_id: 'units', cost_price: 99000 }, { product_id: 'units', cost_price: 123000 }] });
+  const before = structuredClone(f.state());
+  const [group] = (await f.list()).groups;
+  assert.equal(group.cost_average_in_stock, 104400);
+  assert.deepEqual(f.state().products, before.products);
+  assert.deepEqual(f.state().history, []);
+  assert.deepEqual(f.state().groups, []);
+});
+
+test('stock average shows the screenshot example and rounds to cents', async t => {
+  const f = fixture(t, { products: [phone('units', { stock_quantity: 2 })], units: [
+    { product_id: 'units', cost_price: 99000 }, { product_id: 'units', cost_price: 123000 },
+  ] });
+  assert.equal((await f.list()).groups[0].cost_average_in_stock, 111000);
+  f.state().products[0].price_cost = 101;
+  f.state().products.push(phone('legacy', { price_cost: 100, stock_quantity: 2 }));
+  f.state().products[0].id = 'no-units';
+  f.state().products[0].stock_quantity = 1;
+  assert.equal((await f.list()).groups[0].cost_average_in_stock, 100);
+});
+
+test('stock average is unavailable without stock or known costs; zero cost is valid', async t => {
+  const f = fixture(t, { products: [phone('empty', { stock_quantity: 0 }), phone('unknown', { price_cost: null })], units: [] });
+  assert.equal((await f.list()).groups[0].cost_average_in_stock, null);
+  f.state().products.push(phone('free', { price_cost: 0, stock_quantity: 2 }));
+  assert.equal((await f.list()).groups[0].cost_average_in_stock, 0);
 });
 
 test('divergence requires a choice; save updates every color, preserves cost and writes history', async t => {

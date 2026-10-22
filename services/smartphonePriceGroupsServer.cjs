@@ -129,10 +129,27 @@ async function withSmartphonePriceWrite(pool, incoming, write, { transactional =
 function presentGroup(config, saved, products, model) {
   const salePrices = saved ? core.prices(saved) : core.unanimousPrices(products);
   const costs = products.flatMap(p => p.unit_costs?.length ? p.unit_costs : p.price_cost == null ? [] : [Number(p.price_cost)]).filter(Number.isFinite);
+  let stockCost = 0;
+  let costedStock = 0;
+  for (const product of products) {
+    const quantity = Number(product.stock_quantity || 0);
+    if (quantity <= 0) continue;
+    if (product.unit_costs?.length) {
+      for (const cost of product.unit_costs) {
+        if (!Number.isSafeInteger(cost) || cost < 0) continue;
+        stockCost += cost;
+        costedStock += 1;
+      }
+    } else if (product.price_cost != null && Number.isSafeInteger(Number(product.price_cost)) && Number(product.price_cost) >= 0) {
+      stockCost += Number(product.price_cost) * quantity;
+      costedStock += quantity;
+    }
+  }
   return {
     ...config, model_name: model.name, revision: core.revision(saved, products), prices: salePrices,
     confirmed: Boolean(saved), divergent: !salePrices || products.some(p => !core.samePrices(p, salePrices)),
     cost_min: costs.length ? Math.min(...costs) : null, cost_max: costs.length ? Math.max(...costs) : null,
+    cost_average_in_stock: costedStock > 0 ? Math.round(stockCost / costedStock) : null,
     products: products.map(p => ({ id: p.id, sku: p.sku, name: p.name, color: core.object(p.specs).color || core.object(p.specs).cor || '',
       stock_quantity: Number(p.stock_quantity || 0), price_cost: p.price_cost == null ? null : Number(p.price_cost), unit_costs: p.unit_costs || [],
       ...Object.fromEntries(core.SALE_FIELDS.map(f => [f, p[f] == null ? null : Number(p[f])])) })),

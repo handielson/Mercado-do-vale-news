@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.667-versao-cadastro-foto",
+  "version": "v1.2.668-custo-medio-estoque",
   "date": "2026-10-22",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.667-versao-cadastro-foto",
-  "release_vps": "/var/www/mdv-site/releases/20261022-192328-versao-cadastro-foto",
+  "tag": "v1.2.668-custo-medio-estoque",
+  "release_vps": "/var/www/mdv-site/releases/20261022-194036-custo-medio-estoque",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Versao comercial selecionavel no cadastro por foto, com preco correto na conferencia e finalizacao.",
+  "summary": "Custo medio em estoque no resumo de precos por configuracao do modelo.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,24 +14,17 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
-    "components/products/photo-intake/PhotoIntakeQueue.tsx",
-    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
-    "services/smartphonePhotoIntakeCore.cjs",
-    "services/smartphonePhotoIntakeServer.cjs",
-    "services/modelBlingMapping.mjs",
-    "types/smartphone-photo-intake.ts",
-    "tmp-tests/model-bling-mapping.test.mjs",
-    "tmp-tests/photo-intake-bling-routes.test.mjs",
-    "tmp-tests/smartphone-photo-intake-server-static.test.mjs",
+    "components/settings/ModelPricesPanel.tsx",
+    "services/smartphonePriceGroups.ts",
+    "services/smartphonePriceGroupsServer.cjs",
+    "tmp-tests/smartphone-price-groups-ui.test.mjs",
     "tmp-tests/smartphone-price-groups.test.cjs",
-    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-22-v1.2.667-versao-cadastro-foto.md"
+    "docs/versoes/2026-10-22-v1.2.668-custo-medio-estoque.md"
   ],
   "validations": [
-    "Regressoes de versao, persistencia, preco Global, finalizacao e agrupamento, mais suites do cadastro por foto.",
+    "19 testes de grupos, media ponderada, arredondamento, estoque vazio, custo zero e renderizacao no navegador.",
     "Build de producao com travas de segredos e runtime legado.",
     "Verificacoes publicas registradas na nota da entrega."
   ],

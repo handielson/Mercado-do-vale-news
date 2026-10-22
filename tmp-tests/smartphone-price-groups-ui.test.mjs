@@ -9,7 +9,7 @@ import { join } from 'node:path';
 const prices = { price_retail: 113200, price_reseller: 108200, price_wholesale: 103200 };
 const group = { id: 'example', model_id: 'redmi15c', model_name: 'Redmi 15c', company_id: null,
   ram: '8GB', storage: '256GB', version: 'global', network: '4g', condition: 'new', revision: 'r1',
-  confirmed: false, divergent: false, prices, cost_min: 93200, cost_max: 105000,
+  confirmed: false, divergent: false, prices, cost_min: 93200, cost_max: 105000, cost_average_in_stock: 101600,
   products: ['A', 'L', 'V'].map((suffix, i) => ({ id: suffix, sku: `R15C8256${suffix}`, color: ['Azul', 'Laranja', 'Verde'][i], name: 'Redmi 15c',
     stock_quantity: i === 2 ? 0 : 1, price_cost: i ? 93200 : 98200, unit_costs: i ? [] : [98200, 105000], ...prices })) };
 let saved;
@@ -43,6 +43,7 @@ try {
   try { await page.getByText('R15C8256A · Azul', { exact: true }).waitFor(); }
   catch (error) { console.log(JSON.stringify({ errors, body: (await page.locator('body').innerText()).slice(0, 1500) })); throw error; }
   assert.equal(await page.getByRole('textbox').count(), 3, 'cost must not have a bulk editor');
+  assert.match(await page.locator('section').innerText(), /Custo médio em estoque: R\$\s*1\.016,00/);
   assert.equal(await page.locator('section strong').first().innerText(), '8GB · 256GB · global', 'historical financial network must not appear as a model characteristic');
   await page.getByText('Só divergências', { exact: false }).click();
   await page.getByText('Nenhum grupo divergente.').waitFor();

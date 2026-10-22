@@ -7,6 +7,7 @@ export type SmartphonePriceGroup = {
     ram: string; storage: string; version: string; network: string; condition: string;
     revision: string; confirmed: boolean; divergent: boolean;
     prices: SmartphoneSalePrices | null; cost_min: number | null; cost_max: number | null;
+    cost_average_in_stock: number | null;
     products: Array<SmartphoneSalePrices & { id: string; sku: string; name: string; color: string; stock_quantity: number; price_cost: number | null; unit_costs?: number[] }>;
 };
 export type SmartphonePriceReference = { controlled: boolean; prices?: SmartphoneSalePrices | null; divergent?: boolean; incomplete?: boolean; established?: boolean };

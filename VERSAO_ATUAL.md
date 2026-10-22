@@ -1,3 +1,14 @@
+# v1.2.668-custo-medio-estoque
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.668-custo-medio-estoque.
+Release: /var/www/mdv-site/releases/20261022-194036-custo-medio-estoque.
+
+Resumo dos grupos de precos exibe Custo medio em estoque, usando os custos individuais disponiveis ou o custo do produto ponderado pela quantidade para estoque sem unidades individuais. Sem estoque ou custo conhecido, mostra Nao informado. Nao altera custos, precos ou quantidades.
+
+Validacao: 19 testes de grupos, teste de navegador, wiring, sintaxe e build. API seletiva antes do site; resultados publicos registrados na nota da entrega.
+
+## Historico anterior
+
 # v1.2.667-versao-cadastro-foto
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.667-versao-cadastro-foto.

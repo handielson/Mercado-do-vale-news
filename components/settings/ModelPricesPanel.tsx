@@ -62,7 +62,7 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved 
                 return <section key={group.id} className="border border-slate-200 rounded-lg p-4 space-y-3 bg-white">
                     <div className="flex flex-wrap gap-2 items-center"><strong>{[group.ram, group.storage, group.version, group.condition !== 'new' ? group.condition : ''].filter(Boolean).join(' · ')}</strong>
                         <span className={group.divergent ? 'text-amber-700' : 'text-green-700'}>{group.divergent ? 'Preços divergentes — revisar' : group.confirmed ? 'Preço do grupo definido' : 'Preço atual uniforme — confirmar grupo'}</span></div>
-                    <p className="text-xs text-slate-600">{group.products.length} variações · Custos: {fmt(group.cost_min)} a {fmt(group.cost_max)}</p>
+                    <p className="text-xs text-slate-600">{group.products.length} variações · Custos: {fmt(group.cost_min)} a {fmt(group.cost_max)} · Custo médio em estoque: {fmt(group.cost_average_in_stock ?? null)}</p>
                     {!group.prices && <p className="text-amber-700 text-xs">Escolha os três preços abaixo. Nenhum valor foi selecionado automaticamente.</p>}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{fields.map(f => <label key={f.key} className="text-xs">{f.label}
                         <CurrencyInput value={values[f.key] ?? 0} disabled={!!saving} onChange={value => setInputs(prev => ({ ...prev, [group.id]: { ...prev[group.id], [f.key]: value } }))} />
