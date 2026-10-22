@@ -2,6 +2,8 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const Fastify = require('fastify');
+const fs = require('node:fs');
+const vm = require('node:vm');
 const core = require('../services/smartphonePriceGroupsCore.cjs');
 const { photoIntakePriceSpecs } = require('../services/smartphonePhotoIntakeCore.cjs');
 const { registerSmartphonePriceGroupRoutes, withSmartphonePriceWrite, insertProductRecordsWithGroupPrices, patchProductWithGroupPrices } = require('../services/smartphonePriceGroupsServer.cjs');
@@ -10,6 +12,42 @@ const sale = { price_retail: 113200, price_reseller: 108200, price_wholesale: 10
 const model = { id: 'redmi15c', company_id: 'store', name: 'Redmi 15c', category_name: 'Smartphones', template_values: { version: 'Global', rede_operadora: '4G' } };
 const phone = (id, extra = {}) => ({ id, sku: id, name: model.name, model_id: model.id, company_id: null,
   specs: { ram: '8GB', storage: '256GB', color: id }, status: 'active', stock_quantity: 1, price_cost: 93200, ...sale, ...extra });
+
+test('existing unit update route changes only the selected purchase cost and preserves sale prices', async t => {
+  for (const entry of ['vps_server.cjs', 'vps_server.js', 'server.js']) {
+    const source = fs.readFileSync(entry, 'utf8');
+    const start = source.indexOf("fastify.put('/units/:id'");
+    const end = source.indexOf("fastify.delete('/units/:id'", start);
+    assert.ok(start > 0 && end > start);
+    const app = Fastify(); t.after(() => app.close());
+    const units = [{ id: 'one', product_id: 'phone', cost_price: 99000, imei_1: 'fixture-one', status: 'available' },
+      { id: 'two', product_id: 'phone', cost_price: 123000, imei_1: 'fixture-two', status: 'available' }];
+    const product = { ...sale, price_cost: 99000 };
+    const queries = [];
+    vm.runInNewContext(source.slice(start, end), { fastify: app, requireSyncKey: async () => {},
+      collectUnitSerializedIdentifiers: () => [], findUnitSerializedIdentifierConflict: async () => null,
+      syncProductStock: async id => assert.equal(id, 'phone'),
+      pool: { query: async (sql, params) => {
+        queries.push(sql);
+        if (sql.startsWith('UPDATE units SET')) {
+          assert.equal(sql, 'UPDATE units SET cost_price = ? WHERE id = ?');
+          units.find(u => u.id === params[1]).cost_price = params[0];
+          return [{ affectedRows: 1 }];
+        }
+        if (sql.startsWith('SELECT * FROM units')) return [[units.find(u => u.id === params[0])]];
+        throw new Error('Unexpected write: ' + sql);
+      } },
+    });
+    const response = await app.inject({ method: 'PUT', url: '/units/one', payload: { cost_price: 111000 } });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(units[0].cost_price, 111000);
+    assert.equal(units[1].cost_price, 123000);
+    assert.equal(units[0].imei_1, 'fixture-one');
+    assert.equal(units[0].status, 'available');
+    assert.deepEqual(product, { ...sale, price_cost: 99000 });
+    assert.equal(queries.length, 2);
+  }
+});
 
 function fixture(t, options = {}) {
   let state = { model: structuredClone(options.model || model), products: options.products || [phone('R15C8256A', { price_cost: 98200 }), phone('R15C8256L'), phone('R15C8256V', { status: 'inactive', stock_quantity: 0 })], groups: [], history: [], writes: [] };

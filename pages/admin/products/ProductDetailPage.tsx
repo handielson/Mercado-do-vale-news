@@ -509,6 +509,11 @@ export const ProductDetailPage: React.FC = () => {
                                 units={units}
                                 isLoading={isLoadingUnits}
                                 onDelete={handleDeleteUnit}
+                                onUpdateCost={async (unit, costPrice) => {
+                                    const updated = await unitService.updateCost(unit.id, costPrice);
+                                    setUnits(current => current.map(item => item.id === updated.id ? updated : item));
+                                    toast.success('Valor de compra atualizado. Preços de venda preservados.');
+                                }}
                             />
                         </div>
                     )}

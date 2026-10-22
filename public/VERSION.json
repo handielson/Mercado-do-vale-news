@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.668-custo-medio-estoque",
+  "version": "v1.2.669-compra-por-imei",
   "date": "2026-10-22",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.668-custo-medio-estoque",
-  "release_vps": "/var/www/mdv-site/releases/20261022-194036-custo-medio-estoque",
+  "tag": "v1.2.669-compra-por-imei",
+  "release_vps": "/var/www/mdv-site/releases/20261022-201639-compra-por-imei",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Custo medio em estoque no resumo de precos por configuracao do modelo.",
+  "summary": "Editar compra de cada aparelho por IMEI, atualizando a media sem alterar os precos de venda.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -15,16 +15,17 @@
   "site_source_base": "main",
   "changed_files": [
     "components/settings/ModelPricesPanel.tsx",
-    "services/smartphonePriceGroups.ts",
-    "services/smartphonePriceGroupsServer.cjs",
+    "components/units/UnitList.tsx",
+    "pages/admin/products/ProductDetailPage.tsx",
+    "services/units.ts",
     "tmp-tests/smartphone-price-groups-ui.test.mjs",
     "tmp-tests/smartphone-price-groups.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-22-v1.2.668-custo-medio-estoque.md"
+    "docs/versoes/2026-10-22-v1.2.669-compra-por-imei.md"
   ],
   "validations": [
-    "19 testes de grupos, media ponderada, arredondamento, estoque vazio, custo zero e renderizacao no navegador.",
+    "20 testes de grupos e rota de unidades; navegador com pesquisa por IMEI, edicao de compra, cancelamento, falha e atualizacao da media.",
     "Build de producao com travas de segredos e runtime legado.",
     "Verificacoes publicas registradas na nota da entrega."
   ],

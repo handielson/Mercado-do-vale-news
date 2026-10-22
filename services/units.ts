@@ -86,7 +86,17 @@ async function loadSwapLogs(): Promise<any[]> {
 
 async function listByProduct(productId: string): Promise<Unit[]> {
     const data = await vpsApiService.getUnitsByProduct(productId);
+    if (!data) throw new Error('Não foi possível carregar os aparelhos. Tente novamente.');
     return (data || []).map(transformFromDB);
+}
+
+async function updateCost(id: string, costPrice: number): Promise<Unit> {
+    if (!Number.isSafeInteger(costPrice) || costPrice < 0 || costPrice > 2147483647) {
+        throw new Error('Informe um valor de compra válido.');
+    }
+    const row = await vpsClient.put<any>(`/units/${encodeURIComponent(id)}`, { cost_price: costPrice });
+    vpsApiService.invalidateProductCache();
+    return transformFromDB(row);
 }
 
 async function create(input: UnitInput): Promise<Unit> {
@@ -127,6 +137,7 @@ export const unitService = {
     listByProduct,
     create,
     updateStatus,
+    updateCost,
     async setVisibility(id: string, hidden: boolean, reason: string): Promise<Unit> {
         const row = await vpsClient.put<any>(`/units/${encodeURIComponent(id)}`, {
             visibility_action: hidden ? 'hide' : 'restore', reason,

@@ -1,3 +1,14 @@
+# v1.2.669-compra-por-imei
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.669-compra-por-imei.
+Release: /var/www/mdv-site/releases/20261022-201639-compra-por-imei.
+
+Botao Editar compra por IMEI no painel de precos dos modelos e Editar compra na lista de unidades do produto. Permite pesquisar IMEI/serial, corrigir somente o custo da unidade e atualizar a media. Preserva os precos de venda e rascunhos nao salvos.
+
+Validacao: 20 testes de grupos/rota de unidades, navegador com fixtures e build com travas. Publicacao apenas do site, usando PUT /units/:id existente, sem restart, migration ou gravacao comercial durante validacao.
+
+## Historico anterior
+
 # v1.2.668-custo-medio-estoque
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.668-custo-medio-estoque.

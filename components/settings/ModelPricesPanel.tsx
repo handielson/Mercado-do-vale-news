@@ -3,6 +3,9 @@ import { Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { smartphonePriceGroups, SmartphonePriceGroup, SmartphoneSalePrices } from '../../services/smartphonePriceGroups';
+import { unitService } from '../../services/units';
+import { UnitList } from '../units/UnitList';
+import { Unit } from '../../types/unit';
 
 const fields = [{ key: 'price_retail', label: 'Varejo' }, { key: 'price_reseller', label: 'Revenda' }, { key: 'price_wholesale', label: 'Atacado' }] as const;
 const fmt = (cents: number | null) => cents === null ? 'Não informado' : (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -18,16 +21,31 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved 
     const [error, setError] = useState('');
     const [onlyDivergent, setOnlyDivergent] = useState(false);
     const [minimumMargin, setMinimumMargin] = useState(10);
-    const load = useCallback(async () => {
+    const [costProduct, setCostProduct] = useState<{ id: string; sku: string } | null>(null);
+    const [units, setUnits] = useState<Unit[]>([]);
+    const [unitsLoading, setUnitsLoading] = useState(false);
+    const [unitsError, setUnitsError] = useState('');
+    const load = useCallback(async (preserveInputs = false) => {
         setLoading(true); setError('');
         try {
             const result = await smartphonePriceGroups.list(modelId);
             setGroups(result.groups); setUnresolved(result.unresolved);
-            setInputs(Object.fromEntries(result.groups.map(g => [g.id, g.prices || {}])));
-        } catch (e: any) { setError(e.message || 'Falha ao carregar preços'); }
+            if (!preserveInputs) setInputs(Object.fromEntries(result.groups.map(g => [g.id, g.prices || {}])));
+            return true;
+        } catch (e: any) { setError(e.message || 'Falha ao carregar preços'); return false; }
         finally { setLoading(false); }
     }, [modelId]);
     useEffect(() => { void load(); }, [load]);
+    useEffect(() => {
+        let active = true;
+        setUnits([]); setUnitsError('');
+        if (!costProduct) return;
+        setUnitsLoading(true);
+        unitService.listByProduct(costProduct.id).then(result => { if (active) setUnits(result); })
+            .catch(e => { if (active) setUnitsError(e.message || 'Falha ao carregar aparelhos.'); })
+            .finally(() => { if (active) setUnitsLoading(false); });
+        return () => { active = false; };
+    }, [costProduct]);
 
     async function save(group: SmartphonePriceGroup) {
         const values = inputs[group.id];
@@ -74,10 +92,23 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved 
                             const retail = values.price_retail;
                             const margin = maxCost !== null && retail !== undefined && retail > 0 ? (retail - maxCost) / retail * 100 : null;
                             return <tr key={p.id} className="border-t border-slate-100"><td className="p-2">{p.sku} · {p.color}</td><td className="p-2">{p.stock_quantity}</td>
-                                <td className="p-2">{costs.length ? costs.map((cost, i) => <div key={i}>{costs.length > 1 ? `Aparelho ${i + 1}: ` : ''}{fmt(cost)}</div>) : 'Não informado'}</td>
+                                <td className="p-2">{costs.length ? costs.map((cost, i) => <div key={i}>{costs.length > 1 ? `Aparelho ${i + 1}: ` : ''}{fmt(cost)}</div>) : 'Não informado'}
+                                    <button type="button" className="mt-2 text-blue-700 underline" onClick={() => setCostProduct(current => current?.id === p.id ? null : { id: p.id, sku: p.sku })}>Editar compra por IMEI</button>
+                                </td>
                                 {fields.map(f => <td key={f.key} className="p-2 whitespace-nowrap">{fmt(p[f.key])}</td>)}
                                 <td className={`p-2 ${margin !== null && margin < minimumMargin ? 'text-red-700 font-semibold' : ''}`}>{margin === null ? '—' : `${margin.toFixed(1)}%${margin < minimumMargin ? ' · revisar margem' : ''}`}{costs.length > 1 && <div className="font-normal">Menor margem entre os aparelhos</div>}</td></tr>;
                         })}</tbody></table></div>
+                    {costProduct && group.products.some(p => p.id === costProduct.id) && <div className="space-y-2 rounded border border-blue-200 bg-blue-50 p-3">
+                        <div className="flex items-center justify-between gap-2"><strong>Compra por aparelho — {costProduct.sku}</strong><button type="button" onClick={() => setCostProduct(null)} className="text-blue-700 underline">Fechar aparelhos</button></div>
+                        {unitsError ? <p role="alert" className="text-red-700">{unitsError}</p> : <UnitList units={units} isLoading={unitsLoading} onUpdateCost={async (unit, costPrice) => {
+                            const updated = await unitService.updateCost(unit.id, costPrice);
+                            setUnits(current => current.map(item => item.id === updated.id ? updated : item));
+                            const refreshed = await load(true);
+                            onSaved?.();
+                            if (refreshed) toast.success('Compra atualizada e custo médio recalculado. Preços de venda preservados.');
+                            else toast.warning('Compra salva. Recarregue o painel para consultar o custo médio atualizado.');
+                        }} />}
+                    </div>}
                     <button type="button" disabled={!!saving} onClick={() => void save(group)} className="bg-green-700 text-white rounded px-4 py-2 disabled:opacity-50">{saving === group.id ? 'Salvando...' : `Salvar preço para todas as cores (${group.products.length})`}</button>
                 </section>;
             })}

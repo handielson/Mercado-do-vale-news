@@ -14,6 +14,10 @@ const group = { id: 'example', model_id: 'redmi15c', model_name: 'Redmi 15c', co
     stock_quantity: i === 2 ? 0 : 1, price_cost: i ? 93200 : 98200, unit_costs: i ? [] : [98200, 105000], ...prices })) };
 let saved;
 let divergent = false;
+const unitRows = [{ id: 'unit-one', product_id: 'A', imei_1: 'TEST-IMEI-ONE', imei_2: 'TEST-SECOND-ONE', status: 'available', cost_price: 98200 },
+  { id: 'unit-two', product_id: 'A', imei_1: 'TEST-IMEI-TWO', status: 'available', cost_price: 105000 }];
+const costWrites = [];
+let failCostSave = false;
 const out = mkdtempSync(join(tmpdir(), 'mdv-smartphone-price-ui-'));
 await build({ configFile: 'vite.config.ts', root: process.cwd(), build: { outDir: out, emptyOutDir: true,
   rollupOptions: { input: 'tmp-tests/smartphone-price-groups-preview.html' } } });
@@ -27,6 +31,19 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/*', async route => {
     const url = decodeURIComponent(route.request().url());
+    if (url.includes('/units?')) return route.fulfill({ json: unitRows });
+    if (url.includes('/units/unit-')) {
+      assert.equal(route.request().method(), 'PUT');
+      const data = route.request().postDataJSON();
+      costWrites.push(data);
+      assert.deepEqual(Object.keys(data), ['cost_price'], 'unit edits must never submit sale prices, identifiers or status');
+      if (failCostSave) return route.fulfill({ status: 500, json: { message: 'Falha simulada ao salvar compra' } });
+      const unit = unitRows.find(u => url.includes('/units/' + u.id));
+      unit.cost_price = data.cost_price;
+      group.products[0].unit_costs = unitRows.map(u => u.cost_price);
+      group.cost_average_in_stock = Math.round((unitRows.reduce((total, u) => total + u.cost_price, 0) + 93200) / 3);
+      return route.fulfill({ json: unit });
+    }
     if (url.includes('/models/') && url.includes('/smartphone-price-groups')) {
       if (route.request().method() === 'PUT') {
         saved = route.request().postDataJSON();
@@ -45,6 +62,30 @@ try {
   assert.equal(await page.getByRole('textbox').count(), 3, 'cost must not have a bulk editor');
   assert.match(await page.locator('section').innerText(), /Custo médio em estoque: R\$\s*1\.016,00/);
   assert.equal(await page.locator('section strong').first().innerText(), '8GB · 256GB · global', 'historical financial network must not appear as a model characteristic');
+  await page.getByRole('textbox').first().fill('1250,00');
+  await page.getByRole('button', { name: 'Editar compra por IMEI', exact: true }).first().click();
+  await page.getByText('TEST-IMEI-ONE', { exact: true }).waitFor();
+  await page.getByRole('textbox', { name: 'Pesquisar aparelho por IMEI ou serial' }).fill('SECOND-ONE');
+  assert.equal(await page.getByText('TEST-IMEI-TWO', { exact: true }).count(), 0, 'IMEI 2 must filter the correct unit');
+  await page.getByRole('button', { name: 'Editar compra', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Valor de compra do aparelho' }).fill('1200,00');
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  assert.equal(costWrites.length, 0, 'cancel must not persist costs');
+  await page.getByRole('button', { name: 'Editar compra', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Valor de compra do aparelho' }).fill('1200,00');
+  failCostSave = true;
+  await page.getByRole('button', { name: 'Salvar compra', exact: true }).click();
+  await page.getByRole('alert').filter({ hasText: 'Falha simulada' }).waitFor();
+  assert.equal(unitRows[0].cost_price, 98200, 'failed save must preserve cost');
+  failCostSave = false;
+  await page.getByRole('button', { name: 'Salvar compra', exact: true }).click();
+  await page.getByText(/Custo médio em estoque: R\$\s*1\.060,67/).waitFor();
+  assert.equal(unitRows[0].cost_price, 120000);
+  assert.equal(unitRows[1].cost_price, 105000, 'another IMEI must keep its own cost');
+  assert.equal(saved, undefined, 'saving unit cost must not save the sale-price group');
+  assert.deepEqual(group.products[0].price_retail, prices.price_retail);
+  assert.match(await page.getByRole('textbox').first().inputValue(), /1\.250,00|1250,00/);
+  await page.getByRole('button', { name: 'Fechar aparelhos', exact: true }).click();
   await page.getByText('Só divergências', { exact: false }).click();
   await page.getByText('Nenhum grupo divergente.').waitFor();
   await page.getByText('Só divergências', { exact: false }).click();
