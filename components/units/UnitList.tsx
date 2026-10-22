@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Trash2, Package } from 'lucide-react';
+import { Trash2, Package, Pencil } from 'lucide-react';
 import { Unit } from '../../types/unit';
 import { UnitStatus } from '../../utils/field-standards';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -112,7 +112,8 @@ export const UnitList: React.FC<UnitListProps> = ({
                 {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
             </div>}
             <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[640px] table-fixed">
+                    <colgroup><col className="w-[20%]" /><col className="w-[20%]" /><col className="w-[20%]" /><col className="w-[14%]" /><col />{onDelete && <col className="w-[10%]" />}</colgroup>
                     <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
@@ -130,37 +131,39 @@ export const UnitList: React.FC<UnitListProps> = ({
                             <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                                 Custo
                             </th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            {onDelete && <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
                                 Ações
-                            </th>
+                            </th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                         {visibleUnits.map((unit) => (
                             <tr key={unit.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-4 py-3 text-sm font-mono text-slate-900">
+                                <td className="px-2 py-3 text-xs font-mono text-slate-900 break-all">
                                     {unit.imei_1}
                                 </td>
-                                <td className="px-4 py-3 text-sm font-mono text-slate-600">
+                                <td className="px-2 py-3 text-xs font-mono text-slate-600 break-all">
                                     {unit.imei_2 || '-'}
                                 </td>
-                                <td className="px-4 py-3 text-sm font-mono text-slate-600">
+                                <td className="px-2 py-3 text-xs font-mono text-slate-600 break-all">
                                     {unit.serial_number || '-'}
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="px-2 py-3">
                                     {getStatusBadge(unit.status)}
                                 </td>
-                                <td className="px-4 py-3 text-sm font-semibold text-slate-900">
-                                    {editingId === unit.id ? <div className="min-w-48 space-y-2">
+                                <td className="px-2 py-3 text-sm font-semibold text-slate-900">
+                                    {editingId === unit.id ? <div className="min-w-0 space-y-2">
                                         <CurrencyInput label="Valor de compra do aparelho" value={cost} disabled={saving} onChange={setCost} />
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-wrap gap-2">
                                             <button type="button" disabled={saving} onClick={() => void saveCost(unit)} className="rounded bg-blue-600 px-3 py-2 text-xs text-white disabled:opacity-50">{saving ? 'Salvando compra...' : 'Salvar compra'}</button>
                                             <button type="button" disabled={saving} onClick={() => { setEditingId(null); setError(''); }} className="text-xs text-slate-600">Cancelar</button>
                                         </div>
-                                    </div> : formatPrice(unit.cost_price)}
+                                    </div> : <div className="flex flex-wrap items-center gap-1">
+                                        <span>{formatPrice(unit.cost_price)}</span>
+                                        {onUpdateCost && <button type="button" aria-label="Editar compra" title="Editar valor de compra" disabled={saving} onClick={() => { setEditingId(unit.id); setCost(unit.cost_price ?? 0); setError(''); }} className="rounded p-1.5 text-blue-700 hover:bg-blue-50 disabled:opacity-50"><Pencil size={16} /></button>}
+                                    </div>}
                                 </td>
-                                <td className="px-4 py-3 text-right">
-                                    {onUpdateCost && <button type="button" disabled={saving} onClick={() => { setEditingId(unit.id); setCost(unit.cost_price ?? 0); setError(''); }} className="px-2 py-1 text-xs text-blue-700 disabled:opacity-50">Editar compra</button>}
+                                {onDelete && <td className="px-2 py-3 text-right">
                                     {onDelete && unit.status === UnitStatus.AVAILABLE && (
                                         <button
                                             disabled={saving}
@@ -172,7 +175,7 @@ export const UnitList: React.FC<UnitListProps> = ({
                                             Excluir
                                         </button>
                                     )}
-                                </td>
+                                </td>}
                             </tr>
                         ))}
                     </tbody>

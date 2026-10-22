@@ -1,3 +1,14 @@
+# v1.2.670-layout-compra-imei
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.670-layout-compra-imei.
+Release: /var/www/mdv-site/releases/20261022-203119-layout-compra-imei.
+
+Removida a barra horizontal superior dos modelos e a largura minima de 1500 px; a tabela usa colunas ajustadas ao espaco disponivel. Na lista de aparelhos, lapis ao lado do custo abre o editor no proprio campo, sem coluna de acoes vazia. Identificadores quebram linha e botoes se acomodam ao espaco.
+
+Validacao: guarda de layout, 20 testes de grupos/rota, navegador verificando editor dentro da celula de custo e build com travas. Somente site; dados comerciais preservados.
+
+## Historico anterior
+
 # v1.2.669-compra-por-imei
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.669-compra-por-imei.

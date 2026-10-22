@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud, DownloadCloud, RefreshCw, Sparkles } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
@@ -233,7 +233,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                 </td>
 
                 {/* Marca */}
-                <td className="px-4 py-2.5 text-sm font-medium text-slate-600 whitespace-nowrap">
+                <td className="px-2 py-2.5 text-sm font-medium text-slate-600 break-words">
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => setExpanded(!expanded)}
@@ -246,8 +246,8 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                 </td>
 
                 {/* Modelo */}
-                <td className="px-4 py-2.5 text-sm font-semibold text-slate-800 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
+                <td className="px-2 py-2.5 text-sm font-semibold text-slate-800 break-words">
+                    <div className="flex flex-wrap items-center gap-2">
                         {model.name}
                         {hasSeo && (
                             <div title="SEO preenchido" className="flex items-center text-purple-600 bg-purple-50 p-1 rounded">
@@ -273,7 +273,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                             <CurrencyInput
                                 value={prices[key]}
                                 onChange={cents => setPrices(prev => ({ ...prev, [key]: cents }))}
-                                className="h-7 w-28 text-xs py-1"
+                                className="h-7 w-full min-w-0 text-xs py-1"
                                 onKeyDown={(e: React.KeyboardEvent) => {
                                     if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
                                 }}
@@ -318,7 +318,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
 
                 {/* Ações */}
                 <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 z-[1] ${actionCellBg} shadow-[-10px_0_18px_-18px_rgba(15,23,42,0.55)]`}>
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex flex-wrap items-center justify-end gap-1">
                         <button
                             onClick={handlePullBling}
                             disabled={pullingBling || syncingBling || reimporting}
@@ -459,8 +459,6 @@ export function ModelsPage() {
     const [editingModel, setEditingModel] = useState<Model | null>(null);
     const [deleteError, setDeleteError] = useState('');
     const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
-    const tableScrollRef = useRef<HTMLDivElement | null>(null);
-    const topScrollRef = useRef<HTMLDivElement | null>(null);
 
     // ── Filtros ──
     const [search, setSearch] = useState('');
@@ -528,18 +526,6 @@ export function ModelsPage() {
             if (sortOrder === 'za') return b.name.localeCompare(a.name, 'pt-BR');
             return 0;
         });
-
-    const syncModelTableScroll = (source: 'top' | 'table') => {
-        const top = topScrollRef.current;
-        const table = tableScrollRef.current;
-        if (!top || !table) return;
-
-        if (source === 'top') {
-            table.scrollLeft = top.scrollLeft;
-        } else {
-            top.scrollLeft = table.scrollLeft;
-        }
-    };
 
     const toggleSelectAll = () => {
         if (selectedModelIds.size === filtered.length && filtered.length > 0) {
@@ -702,21 +688,13 @@ export function ModelsPage() {
             </div>
 
             {/* Tabela */}
-            <div
-                ref={topScrollRef}
-                id="models-table-scroll-top"
-                className="models-table-scroll-top sticky top-0 z-20 -mb-1 overflow-x-auto overflow-y-hidden rounded-t-xl border border-slate-200 bg-white/95 shadow-sm backdrop-blur"
-                onScroll={() => syncModelTableScroll('top')}
-                aria-label="Rolagem horizontal da tabela de modelos"
-            >
-                <div className="h-4 min-w-[1500px]" />
-            </div>
-            <div
-                ref={tableScrollRef}
-                className="bg-white rounded-b-xl border border-slate-200 shadow-sm overflow-x-auto overflow-y-auto max-h-[65vh]"
-                onScroll={() => syncModelTableScroll('table')}
-            >
-                <table className="w-full min-w-[1500px] relative">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-y-auto max-h-[65vh]">
+                <table className="w-full table-fixed relative">
+                    <colgroup>
+                        <col className="w-[4%]" /><col className="w-[11%]" /><col className="w-[22%]" />
+                        <col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" />
+                        <col className="w-[4%]" /><col className="w-[8%]" /><col className="w-[15%]" />
+                    </colgroup>
                     <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
                         <tr>
                             <th className="px-4 py-3 text-left w-10">

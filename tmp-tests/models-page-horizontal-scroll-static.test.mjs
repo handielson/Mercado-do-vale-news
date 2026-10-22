@@ -7,26 +7,26 @@ const source = fs.readFileSync(filePath, 'utf8');
 
 assert.match(
   source,
-  /className="[^"]*overflow-x-auto[^"]*overflow-y-auto[^"]*max-h-\[65vh\][^"]*"/,
-  'A tabela de modelos deve ter rolagem horizontal e vertical explicitas no container.'
+  /className="[^"]*overflow-y-auto[^"]*max-h-\[65vh\][^"]*"/,
+  'A tabela deve manter a rolagem vertical.'
 );
 
 assert.match(
   source,
-  /<table className="[^"]*min-w-\[1500px\][^"]*"/,
-  'A tabela de modelos deve ter largura minima maior que o container para ativar a rolagem lateral.'
+  /<table className="[^"]*w-full table-fixed[^"]*"/,
+  'A tabela deve respeitar a largura disponivel sem ser alargada pelas tabelas de aparelhos.'
 );
 
-assert.match(
+assert.doesNotMatch(
   source,
-  /models-table-scroll-top/,
-  'A tabela de modelos deve expor uma rolagem horizontal superior sempre visivel perto do cabecalho.'
+  /models-table-scroll-top|min-w-\[1500px\]/,
+  'A barra horizontal superior e a largura minima que a provocava foram removidas a pedido do operador.'
 );
 
-assert.match(
+assert.doesNotMatch(
   source,
   /syncModelTableScroll/,
-  'A rolagem horizontal superior deve ser sincronizada com o container real da tabela.'
+  'Nao deve restar sincronizacao de uma barra removida.'
 );
 
 assert.match(

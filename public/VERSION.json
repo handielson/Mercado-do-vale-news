@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.669-compra-por-imei",
+  "version": "v1.2.670-layout-compra-imei",
   "date": "2026-10-22",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.669-compra-por-imei",
-  "release_vps": "/var/www/mdv-site/releases/20261022-201639-compra-por-imei",
+  "tag": "v1.2.670-layout-compra-imei",
+  "release_vps": "/var/www/mdv-site/releases/20261022-203119-layout-compra-imei",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Editar compra de cada aparelho por IMEI, atualizando a media sem alterar os precos de venda.",
+  "summary": "Tabela de modelos sem barra superior e edicao da compra pelo lapis ao lado do custo.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,18 +14,16 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/settings/ModelPricesPanel.tsx",
     "components/units/UnitList.tsx",
-    "pages/admin/products/ProductDetailPage.tsx",
-    "services/units.ts",
+    "pages/admin/settings/ModelsPage.tsx",
+    "tmp-tests/models-page-horizontal-scroll-static.test.mjs",
     "tmp-tests/smartphone-price-groups-ui.test.mjs",
-    "tmp-tests/smartphone-price-groups.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-22-v1.2.669-compra-por-imei.md"
+    "docs/versoes/2026-10-22-v1.2.670-layout-compra-imei.md"
   ],
   "validations": [
-    "20 testes de grupos e rota de unidades; navegador com pesquisa por IMEI, edicao de compra, cancelamento, falha e atualizacao da media.",
+    "Guarda da tabela sem barra superior, 20 testes de grupos e navegador com editor de compra dentro da celula de custo.",
     "Build de producao com travas de segredos e runtime legado.",
     "Verificacoes publicas registradas na nota da entrega."
   ],

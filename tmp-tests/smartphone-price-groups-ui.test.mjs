@@ -68,6 +68,12 @@ try {
   await page.getByRole('textbox', { name: 'Pesquisar aparelho por IMEI ou serial' }).fill('SECOND-ONE');
   assert.equal(await page.getByText('TEST-IMEI-TWO', { exact: true }).count(), 0, 'IMEI 2 must filter the correct unit');
   await page.getByRole('button', { name: 'Editar compra', exact: true }).click();
+  const purchaseButton = page.getByRole('button', { name: 'Cancelar', exact: true });
+  assert.equal(await purchaseButton.isVisible(), true);
+  const purchaseField = page.getByRole('textbox', { name: 'Valor de compra do aparelho' });
+  const costCell = purchaseField.locator('xpath=ancestor::td');
+  assert.equal(await costCell.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'purchase editor must fit its cost cell');
+  await page.screenshot({ path: join(out, 'purchase-editor.png'), fullPage: true });
   await page.getByRole('textbox', { name: 'Valor de compra do aparelho' }).fill('1200,00');
   await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
   assert.equal(costWrites.length, 0, 'cancel must not persist costs');
