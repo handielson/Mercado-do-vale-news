@@ -1,3 +1,14 @@
+# v1.2.666-pesquisa-modelo-foto
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.666-pesquisa-modelo-foto.
+Release: /var/www/mdv-site/releases/20261022-185448-pesquisa-modelo-foto.
+
+Modelo do sistema no cadastro por foto permite pesquisar pelo nome, ignorando acentos e caixa, e selecionar com mouse ou teclado. Mantem o ID do cadastro e exige Associar modelo para efetivar. Reutiliza SearchableSelect, preservando seletores existentes de cores e filamentos.
+
+Validacao: nove testes focados e build com travas; verificacao publica registrada na nota. Somente site, sem API, migration ou gravacao comercial nesta publicacao.
+
+## Historico anterior
+
 # v1.2.665-painel-precos-modelo
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.665-painel-precos-modelo.

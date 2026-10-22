@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Save, Sparkles, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CurrencyInput } from '../../ui/CurrencyInput';
+import { SearchableSelect } from '../../ui/SearchableSelect';
 import { ProtectedIntakePhoto } from './ProtectedIntakePhoto';
 import { PhotoIntakeBlingMapping } from './PhotoIntakeBlingMapping';
 import type { Color } from '../../../types/color';
@@ -120,6 +121,7 @@ export function PhotoIntakeReviewCard({
     () => [...models].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR')),
     [models],
   );
+  const modelNames = useMemo(() => new Map(models.map(model => [model.id, model.name])), [models]);
 
   const updateCost = (cost: number) => {
     const activeMargin = !groupPriceLocked && margin && Boolean(margin.active) ? margin : null;
@@ -315,14 +317,20 @@ export function PhotoIntakeReviewCard({
               </div>
             )}
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <select
-                value={selectedModelId}
-                onChange={event => setSelectedModelId(event.target.value)}
-                className="h-10 min-w-0 flex-1 rounded-lg border border-violet-200 bg-white px-3 text-sm"
-              >
-                <option value="">Selecione um modelo cadastrado</option>
-                {sortedModels.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
-              </select>
+              <div className="min-w-0 flex-1">
+                <label htmlFor={`intake-model-${intake.id}`} className="sr-only">Modelo do sistema</label>
+                <SearchableSelect
+                  key={intake.id}
+                  id={`intake-model-${intake.id}`}
+                  value={selectedModelId}
+                  options={sortedModels.map(model => model.id)}
+                  getOptionLabel={id => modelNames.get(id) || ''}
+                  onChange={setSelectedModelId}
+                  disabled={busy}
+                  placeholder="Pesquisar modelo cadastrado..."
+                  className="h-10 w-full min-w-0 rounded-lg border border-violet-200 bg-white px-3 text-sm"
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => selectedModelId && void onAttachModel(selectedModelId)}

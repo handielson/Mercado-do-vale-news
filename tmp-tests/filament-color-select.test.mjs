@@ -38,6 +38,27 @@ function nodes(tree, type) {
   if (Array.isArray(tree)) return tree.flatMap(child => nodes(child, type));
   return [...(tree.type === type ? [tree] : []), ...nodes(tree.props?.children, type)];
 }
+test('pesquisa por nome ignora acentos e caixa, mas selecao entrega ID cadastrado', () => {
+  const labels = { phone: 'Poco X8 Pró', cover: 'Capa para Poco X8' };
+  const select = harness({ value: 'phone', options: Object.keys(labels), getOptionLabel: id => labels[id] || '' });
+  assert.equal(nodes(select.render(), 'input')[0].props.value, 'Poco X8 Pró');
+  nodes(select.render(), 'input')[0].props.onFocus();
+  nodes(select.render(), 'input')[0].props.onChange({ target: { value: 'X8 PRO' } });
+  const tree = select.render();
+  assert.equal(nodes(tree, 'button').length, 1);
+  nodes(tree, 'input')[0].props.onKeyDown({ key: 'Enter', preventDefault() {} });
+  assert.deepEqual(select.changes, ['', 'phone']);
+});
+test('nomes iguais nao escolhem um ID arbitrario e texto livre nao vira modelo', () => {
+  const select = harness({ options: ['first', 'second'], getOptionLabel: () => 'Modelo igual' });
+  nodes(select.render(), 'input')[0].props.onFocus();
+  nodes(select.render(), 'input')[0].props.onChange({ target: { value: 'Modelo igual' } });
+  assert.deepEqual(select.changes, ['']);
+  const tree = select.render();
+  assert.equal(nodes(tree, 'button').length, 2);
+  nodes(tree, 'button')[1].props.onClick();
+  assert.deepEqual(select.changes, ['', 'second']);
+});
 const leading = name => React.createElement('i', {
   'data-swatch': name, style: filamentColorStyle(name, undefined, () => '#123456')
 });

@@ -6,6 +6,8 @@ const quickAccess = fs.readFileSync(new URL('../components/admin/dashboard/Admin
 const routes = fs.readFileSync(new URL('../routes/index.tsx', import.meta.url), 'utf8');
 const intakePage = fs.readFileSync(new URL('../pages/admin/products/SmartphonePhotoIntakePage.tsx', import.meta.url), 'utf8');
 const reviewCard = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeReviewCard.tsx', import.meta.url), 'utf8');
+assert.match(reviewCard, /<SearchableSelect[\s\S]*options=\{sortedModels\.map\(model => model.id\)\}[\s\S]*onChange=\{setSelectedModelId\}[\s\S]*placeholder="Pesquisar modelo cadastrado/, 'modelo do sistema deve pesquisar por nome e preservar o ID selecionado');
+assert.match(reviewCard, /onClick=\{\(\) => selectedModelId && void onAttachModel\(selectedModelId\)\}/, 'associacao continua explicita no botao');
 // Guarda de UI acoplada ao JSX: ao mover os campos, mover esta verificacao com eles.
 for (const input of reviewCard.matchAll(/<input\b[\s\S]*?\/>/g)) {
   if (/type="checkbox"/.test(input[0])) continue;

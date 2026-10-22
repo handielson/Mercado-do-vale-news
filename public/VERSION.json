@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.665-painel-precos-modelo",
+  "version": "v1.2.666-pesquisa-modelo-foto",
   "date": "2026-10-22",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.665-painel-precos-modelo",
-  "release_vps": "/var/www/mdv-site/releases/20261022-183347-painel-precos-modelo",
+  "tag": "v1.2.666-pesquisa-modelo-foto",
+  "release_vps": "/var/www/mdv-site/releases/20261022-185448-pesquisa-modelo-foto",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Editor de precos por configuracao abre mesmo apos falha na consulta inicial do modelo, com recarga e erro explicito.",
+  "summary": "Pesquisa por nome no seletor Modelo do sistema do cadastro por foto, com selecao por teclado e associacao explicita.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,14 +14,16 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "pages/admin/settings/ModelsPage.tsx",
-    "tmp-tests/smartphone-price-groups-wiring-static.test.mjs",
+    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
+    "components/ui/SearchableSelect.tsx",
+    "tmp-tests/filament-color-select.test.mjs",
+    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-22-v1.2.665-painel-precos-modelo.md"
+    "docs/versoes/2026-10-22-v1.2.666-pesquisa-modelo-foto.md"
   ],
   "validations": [
-    "Guarda do editor em estado desconhecido e regressoes dos grupos de precos.",
+    "Nove testes de pesquisa, selecao por ID, nomes duplicados, cores e navegacao aprovados.",
     "Build de producao com travas de segredos e runtime legado.",
     "Verificacoes publicas registradas na nota da entrega."
   ],
