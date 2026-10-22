@@ -40,7 +40,7 @@ assert.match(
 );
 assert.match(
   search,
-  /onAddToCart\(pendingSerializedConfirmation\.product, 1, selectedUnit\.unitData\)/,
+  /const product = pendingSerializedConfirmation\.product;[\s\S]*const unitData = \{ \.\.\.selectedUnit\.unitData,[\s\S]*onAddToCart\(product, 1, unitData\)/,
   'cart insertion must use only the unit explicitly confirmed in the modal',
 );
 assert.match(

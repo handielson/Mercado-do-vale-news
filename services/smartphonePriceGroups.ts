@@ -8,9 +8,11 @@ export type SmartphonePriceGroup = {
     revision: string; confirmed: boolean; divergent: boolean;
     prices: SmartphoneSalePrices | null; cost_min: number | null; cost_max: number | null;
     cost_average_in_stock: number | null;
+    moving_average_cost?: number | null; moving_average_quantity?: number;
+    moving_average_initialized?: boolean; moving_average_unknown_costs?: number;
     products: Array<SmartphoneSalePrices & { id: string; sku: string; name: string; color: string; stock_quantity: number; price_cost: number | null; unit_costs?: number[]; available_unit_count?: number }>;
 };
-export type SmartphonePriceReference = { controlled: boolean; prices?: SmartphoneSalePrices | null; divergent?: boolean; incomplete?: boolean; established?: boolean };
+export type SmartphonePriceReference = { controlled: boolean; prices?: SmartphoneSalePrices | null; divergent?: boolean; incomplete?: boolean; established?: boolean; moving_average_cost?: number | null };
 export const smartphonePriceGroups = {
     list: (modelId: string) => vpsClient.get<{ enabled: boolean; groups: SmartphonePriceGroup[]; unresolved: Array<{ id: string; sku: string; name: string }> }>(`/models/${encodeURIComponent(modelId)}/smartphone-price-groups`),
     reference: (modelId: string, product: object) => vpsClient.post<SmartphonePriceReference>(`/models/${encodeURIComponent(modelId)}/smartphone-price-reference`, product),

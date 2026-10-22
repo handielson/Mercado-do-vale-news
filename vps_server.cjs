@@ -42437,7 +42437,9 @@ async function syncSerializedProductStockFromUnits(productId, db = pool) {
 
 // Recalcula products.stock_quantity a partir das unidades serializadas disponiveis.
 async function syncProductStock(productId, db = pool) {
-  return syncSerializedProductStockFromUnits(productId, db);
+  const stock = await syncSerializedProductStockFromUnits(productId, db);
+  await require('./services/smartphoneMovingAverageServer.cjs').synchronizeProduct(pool, productId, db === pool ? null : db);
+  return stock;
 }
 
 // ─── Recibos Avulsos ────────────────────────────────────────────────────────

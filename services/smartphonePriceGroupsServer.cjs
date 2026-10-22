@@ -137,19 +137,21 @@ async function withSmartphonePriceWrite(pool, incoming, write, { transactional =
 
 function presentGroup(config, saved, products, model) {
   const salePrices = saved ? core.prices(saved) : core.unanimousPrices(products);
-  const costs = products.flatMap(p => p.unit_costs?.length ? p.unit_costs : p.price_cost == null ? [] : [Number(p.price_cost)]).filter(Number.isFinite);
+  const costs = [];
   let stockCost = 0;
   let costedStock = 0;
   for (const product of products) {
     const quantity = Number(product.stock_quantity || 0);
-    if (quantity <= 0) continue;
-    if (product.unit_costs?.length) {
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
+    if (product.has_serialized_units) {
       for (const cost of product.unit_costs) {
         if (!Number.isSafeInteger(cost) || cost < 0) continue;
+        costs.push(cost);
         stockCost += cost;
         costedStock += 1;
       }
     } else if (product.price_cost != null && Number.isSafeInteger(Number(product.price_cost)) && Number(product.price_cost) >= 0) {
+      costs.push(Number(product.price_cost));
       stockCost += Number(product.price_cost) * quantity;
       costedStock += quantity;
     }
@@ -165,7 +167,37 @@ function presentGroup(config, saved, products, model) {
   };
 }
 
-function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey }) {
+function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey, inventoryCosts = require('./smartphoneMovingAverageServer.cjs').preview }) {
+  fastify.addHook('onRequest', async (req, reply) => {
+    const path = decodeURIComponent(String(req.url || '').split('?')[0]);
+    if (/^\/table-data\/smartphone_(inventory_cost_state|inventory_cost_events|sale_cost_basis)(?:\/|$)/i.test(path)) {
+      return reply.code(403).send({ error: 'Saldo e histórico de custo são controlados pelas vendas.' });
+    }
+  });
+  fastify.get('/sales/:id/cost-basis', { preHandler: requireSyncKey }, async req =>
+    require('./smartphoneMovingAverageServer.cjs').saleCostBasisInfo(pool, req.params.id));
+  fastify.addHook('preHandler', async (req, reply) => {
+    const path = decodeURIComponent(String(req.url || '').split('?')[0]);
+    const saleMatch = path.match(/^\/table-data\/sales\/([^/]+)$/);
+    if (req.method === 'PATCH' && saleMatch && ['cost_total','profit'].some(key => Object.hasOwn(req.body || {},key))) {
+      const [[sale]] = await pool.query(`SELECT cost_total,profit,created_at < (SELECT MIN(initialized_at) FROM smartphone_inventory_cost_state) AS historical FROM sales WHERE id=?`,[saleMatch[1]]);
+      if (Number(sale?.historical) && ['cost_total','profit'].some(key => Object.hasOwn(req.body || {},key) && Number(req.body[key]) !== Number(sale[key]))) {
+        return reply.code(409).send({error:'Os custos e o lucro das vendas anteriores à ativação são preservados.'});
+      }
+    }
+    const match = path.match(/^\/table-data\/sale_items\/([^/]+)$/);
+    if (req.method !== 'PATCH' || !match || !Object.hasOwn(req.body || {}, 'unit_cost')) return;
+    const [[old]] = await pool.query(`SELECT i.unit_cost,s.created_at < (SELECT MIN(initialized_at) FROM smartphone_inventory_cost_state) AS historical
+      FROM sale_items i JOIN sales s ON s.id=i.sale_id WHERE i.id=?`, [match[1]]);
+    if (Number(old?.historical) && Number(req.body.unit_cost) !== Number(old.unit_cost)) {
+      return reply.code(409).send({error:'O custo das vendas anteriores à ativação é preservado.'});
+    }
+    const [[basis]] = await pool.query(`SELECT b.unit_cost FROM sale_items i JOIN smartphone_sale_cost_basis b
+      ON b.sale_id=i.sale_id AND b.unit_id=i.serialized_unit_id WHERE i.id=?`, [match[1]]);
+    if (basis && (basis.unit_cost == null || Number(req.body.unit_cost) !== Number(basis.unit_cost))) {
+      return reply.code(409).send({ error: 'O custo médio registrado nesta venda é imutável.' });
+    }
+  });
   fastify.post('/models/:id/smartphone-price-reference', { preHandler: requireSyncKey }, async (req) => {
     await ensureSmartphonePriceGroupsSchema(pool);
     const model = await loadModel(pool, req.params.id);
@@ -175,7 +207,9 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey }) {
     const saved = await loadGroup(pool, config.id);
     const peers = await loadPeers(pool, config, model);
     const salePrices = saved ? core.prices(saved) : core.unanimousPrices(peers);
-    return { controlled: true, prices: salePrices, divergent: peers.length > 0 && !salePrices, group_id: config.id, established: Boolean(saved || peers.length) };
+    const valuations = await inventoryCosts(pool, model);
+    return { controlled: true, prices: salePrices, divergent: peers.length > 0 && !salePrices, group_id: config.id, established: Boolean(saved || peers.length),
+      moving_average_cost: valuations[config.id]?.moving_average_cost ?? null };
   });
   fastify.get('/models/:id/smartphone-price-groups', { preHandler: requireSyncKey }, async (req, reply) => {
     await ensureSmartphonePriceGroupsSchema(pool);
@@ -186,11 +220,14 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey }) {
     const [products] = await pool.query(`SELECT id,model_id,company_id,name,sku,specs,is_print3d,is_parent,is_combo,offer_type,status,stock_quantity,
       price_cost,price_retail,price_reseller,price_wholesale FROM products WHERE model_id=? AND COALESCE(is_parent,0)=0 AND COALESCE(is_combo,0)=0 AND offer_type IS NULL`, [model.id]);
     const [saved] = await pool.query('SELECT * FROM smartphone_price_groups WHERE model_id=?', [model.id]);
-    const [units] = await pool.query(`SELECT u.product_id,u.cost_price FROM units u JOIN products p ON p.id=u.product_id
-      WHERE p.model_id=? AND u.status='available' ORDER BY u.product_id,u.cost_price`, [model.id]);
+    const [units] = await pool.query(`SELECT u.product_id,u.cost_price,u.status FROM units u JOIN products p ON p.id=u.product_id
+      WHERE p.model_id=? ORDER BY u.product_id,u.cost_price`, [model.id]);
     const unitCosts = new Map();
     const unitCounts = new Map();
+    const serializedProducts = new Set();
     for (const unit of units) {
+      serializedProducts.add(unit.product_id);
+      if (unit.status !== 'available') continue;
       unitCounts.set(unit.product_id, (unitCounts.get(unit.product_id) || 0) + 1);
       if (!unitCosts.has(unit.product_id)) unitCosts.set(unit.product_id, []);
       if (unit.cost_price != null) unitCosts.get(unit.product_id).push(Number(unit.cost_price));
@@ -198,6 +235,7 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey }) {
     for (const product of products) {
       product.unit_costs = unitCosts.get(product.id) || [];
       product.available_unit_count = unitCounts.get(product.id) || 0;
+      product.has_serialized_units = serializedProducts.has(product.id);
     }
     const groups = new Map();
     const unresolved = [];
@@ -208,7 +246,10 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey }) {
       if (!groups.has(config.id)) groups.set(config.id, { config, products: [] });
       groups.get(config.id).products.push(p);
     }
-    return { enabled: true, unresolved, groups: [...groups.values()].map(g => presentGroup(g.config, saved.find(s => s.id === g.config.id), g.products, model)) };
+    const valuations = await inventoryCosts(pool, model);
+    return { enabled: true, unresolved, groups: [...groups.values()].map(g => ({
+      ...presentGroup(g.config, saved.find(s => s.id === g.config.id), g.products, model), ...valuations[g.config.id],
+    })) };
   });
 
   fastify.put('/models/:id/smartphone-price-groups/:groupId', { preHandler: requireSyncKey }, async (req, reply) => {

@@ -91,7 +91,11 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved 
                 return <section key={group.id} className="border border-slate-200 rounded-lg p-4 space-y-3 bg-white">
                     <div className="flex flex-wrap gap-2 items-center"><strong>{groupLabel(group)}</strong>
                         <span className={group.divergent ? 'text-amber-700' : 'text-green-700'}>{group.divergent ? 'Preços divergentes — revisar' : group.confirmed ? 'Preço do grupo definido' : 'Preço atual uniforme — confirmar grupo'}</span></div>
-                    <p className="text-xs text-slate-600">{group.products.length} variações · Custos: {fmt(group.cost_min)} a {fmt(group.cost_max)} · Custo médio em estoque: {fmt(group.cost_average_in_stock ?? null)}</p>
+                    <p className="text-xs text-slate-600">{group.products.length} variações · Custos em estoque: {fmt(group.cost_min)} a {fmt(group.cost_max)} · Compra média dos IMEIs em estoque: {fmt(group.cost_average_in_stock ?? null)}</p>
+                    <p className="rounded bg-blue-50 p-3 text-blue-900"><strong>Custo médio móvel para vendas: {fmt(group.moving_average_cost ?? null)}</strong>
+                        <span className="block text-xs mt-1">A compra de cada IMEI é preservada. Novas entradas recalculam a média; vendas mantêm a média e guardam o custo usado no lucro.</span>
+                        {!!group.moving_average_unknown_costs && <span className="block text-xs mt-1">Confira os valores de compra não informados antes de vender.</span>}
+                    </p>
                     {!group.version && <p className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Versão não informada no cadastro. Este grupo permanece separado até a versão ser conferida.</p>}
                     {group.products.some(p => p.available_unit_count !== undefined && p.available_unit_count > 0 && p.available_unit_count !== p.stock_quantity) && <p role="alert" className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Estoque divergente: a quantidade cadastrada difere dos aparelhos disponíveis por IMEI. Confira os aparelhos antes de usar o custo médio desta configuração.</p>}
                     <h4 className="border-t pt-3 font-semibold text-slate-800">Preços de venda desta configuração</h4>

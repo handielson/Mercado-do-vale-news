@@ -18,7 +18,7 @@ assert.match(
 
 assert.match(
   modal,
-  /Os custos salvos desta venda serao substituidos pelos custos atuais/,
+  /O custo médio registrado na venda é preservado/,
   'sale modal must warn that current catalog costs replace saved sale costs',
 );
 
@@ -35,7 +35,7 @@ assert.match(
 );
 assert.match(
   modal,
-  /Custos recalculados com os valores atuais dos produtos/,
+  /Custos atualizados; o custo médio registrado nas vendas foi preservado/,
   'manual refresh must explain that current product costs were applied',
 );
 

@@ -5,8 +5,15 @@ const vm = require('node:vm');
 const ts = require('typescript');
 const Fastify = require('fastify');
 const { finalizeSerializedSale } = require('../services/serializedSaleFinalization.cjs');
-function fixture(failure) {
+function fixture(failure, smartphone = false) {
   let state = { sales: [], items: [], units: ['u1', 'u2'].map(id => ({ id, product_id: 'p1', status: 'available', sale_id: null, order_id: null })), stock: 2 };
+  const model = { id:'m1',name:'Phone',company_id:'store',category_name:'Smartphones' };
+  const product = { id:'p1',model_id:'m1',specs:{ram:'4GB',storage:'256GB',version:'Global'},price_retail:97200,price_wholesale:78200,price_reseller:92200 };
+  state.costStates = {}; state.basis = [];
+  if (smartphone) {
+    state.units = [92500,99900,117000].map((cost_price,i)=>({id:'u'+(i+1),product_id:'p1',cost_price,status:'available',sale_id:null,order_id:null}));
+    state.stock=3;
+  }
   let working; let releaseLock; let tail = Promise.resolve(); const events = [];
   const pool = { getConnection: async () => {
     let local;
@@ -19,9 +26,25 @@ function fixture(failure) {
         local = { unlock }; working = structuredClone(state); events.push('begin');
       },
       query: async (sql, args) => {
+        if (sql.startsWith('SET TRANSACTION ISOLATION')) return [{}];
         if (sql.startsWith('SELECT * FROM sales')) return [working.sales.filter(row => row.id === args[0])];
         if (sql.startsWith('SELECT * FROM sale_items')) return [working.items.filter(row => row.sale_id === args[0])];
-        if (sql.startsWith('SELECT id FROM products')) return [[{ id: args[0] }]];
+        if (sql.startsWith('SELECT * FROM products')) return [[smartphone ? product : { id: args[0] }]];
+        if (sql.includes('SELECT DISTINCT m.id')) return [smartphone ? [model] : []];
+        if (sql.includes('FROM models WHERE id=')) return [[model]];
+        if (sql.includes('FROM smartphone_inventory_cost_state')) return [[working.costStates[args[0]]].filter(Boolean)];
+        if (sql.includes('FROM unit_journal_events')) return [[]];
+        if (sql.includes('FROM units u')) return [working.units];
+        if (sql.includes('FROM smartphone_sale_cost_basis')) return [working.basis.filter(b=>b.sale_id===args[0])];
+        if (sql.startsWith('INSERT INTO smartphone_inventory_cost_state')) {
+          if (failure === 'cost-ledger') throw Error('cost ledger write failed');
+          working.costStates[args[0]]={state:args[1],initialized_at:'2026-10-22'};return [{}];
+        }
+        if (sql.startsWith('INSERT IGNORE INTO smartphone_sale_cost_basis')) {
+          const [sale_id,unit_id,configuration_id,unit_cost,purchase_cost]=args;
+          if(!working.basis.some(b=>b.sale_id===sale_id&&b.unit_id===unit_id)) working.basis.push({sale_id,unit_id,configuration_id,unit_cost,purchase_cost});
+          return [{}];
+        }
         if (sql.startsWith('SELECT * FROM units')) return [working.units.filter(row => row.id === args[0])];
         if (sql.startsWith('SELECT id, status, sale_id FROM units')) return [working.units.filter(row => row.sale_id === args[0])];
         if (sql.startsWith('INSERT INTO')) {
@@ -63,6 +86,28 @@ test('sale/items/units commit together and identical retry is idempotent', async
   const retry = await finalizeSerializedSale({ ...f, ...f.body });
   assert.equal(retry.replay, true); assert.equal(f.state().items.length, 2);
 });
+test('retry compares database decimals and canonical JSON by value',async()=>{
+  const f=fixture(),body={sale:{...f.body.sale,payment_methods:[{operator_fee_amount:100,method:'pix',amount:20000}]},items:f.body.items.map(i=>({...i,unit_cost:5000,total:10000}))};
+  await finalizeSerializedSale({...f,...body});
+  const original=f.pool.getConnection;
+  f.pool.getConnection=async()=>{
+    const db=await original(),query=db.query;
+    db.query=async(sql,args)=>{
+      const result=await query(sql,args);
+      if(sql.startsWith('SELECT * FROM sales'))return [result[0].map(r=>({...r,total:Number(r.total).toFixed(2),payment_methods:[{amount:20000,method:'pix',operator_fee_amount:100}]}))];
+      if(sql.startsWith('SELECT * FROM sale_items'))return [result[0].map(r=>({...r,unit_price:Number(r.unit_price).toFixed(2),unit_cost:Number(r.unit_cost).toFixed(2),total:Number(r.total).toFixed(2)}))];
+      return result;
+    };return db;
+  };
+  assert.equal((await finalizeSerializedSale({...f,...body})).replay,true);
+});
+test('a database deadlock retries the complete transaction without duplicating a sale',async()=>{
+  const f=fixture(undefined,true);let attempts=0;
+  const sync=async(...args)=>{if(attempts++===0)throw Object.assign(Error('retry fixture'),{code:'ER_LOCK_DEADLOCK'});return f.syncProductStock(...args);};
+  await finalizeSerializedSale({...f,...f.body,syncProductStock:sync});
+  assert.equal(attempts,2);assert.equal(f.state().sales.length,1);
+  assert.equal(f.state().items.length,2);assert.equal(f.state().basis.length,2);
+});
 for (const failure of ['items', 'second-unit', 'sync']) test('rollback preserves entire original state after ' + failure, async () => {
   const f = fixture(failure); const original = f.state();
   await assert.rejects(finalizeSerializedSale({ ...f, ...f.body }));
@@ -73,6 +118,40 @@ test('concurrent sales cannot sell the same units twice', async () => {
   const results = await Promise.allSettled([finalizeSerializedSale({ ...f, ...f.body }), finalizeSerializedSale({ ...f, ...other })]);
   assert.equal(results.filter(row => row.status === 'fulfilled').length, 1);
   assert.equal(f.state().sales.length, 1); assert.equal(f.state().items.length, 2);
+});
+test('smartphone sale persists authoritative average, immutable basis and real purchase in the same commit', async () => {
+  const f=fixture(undefined,true);
+  const body={sale:{id:'sale1',payment_status:'paid',total:97200,cost_total:92500,profit:4700,payment_methods:[{operator_fee_amount:100}],delivery_total:200},
+    items:[{sale_id:'sale1',product_id:'p1',serialized_unit_id:'u1',quantity:1,unit_price:97200,unit_cost:92500,total:97200}]};
+  const result=await finalizeSerializedSale({...f,...body});
+  assert.equal(result.sale.cost_total,103133);
+  assert.equal(result.sale.profit,-6233);
+  assert.equal(f.state().items[0].unit_cost,103133);
+  assert.equal(f.state().units[0].cost_price,92500);
+  assert.equal(f.state().basis[0].purchase_cost,92500);
+  assert.equal(f.state().basis[0].unit_cost,103133);
+  assert.equal((await finalizeSerializedSale({...f,...body})).replay,true);
+  assert.equal(f.state().basis.length,1);
+  const second={sale:{...body.sale,id:'sale2'},items:[{...body.items[0],sale_id:'sale2',serialized_unit_id:'u2',unit_cost:99900}]};
+  await finalizeSerializedSale({...f,...second});
+  assert.equal(f.state().items[1].unit_cost,103134);
+  const ledger=JSON.parse(f.state().costStates.m1.state);
+  const g=Object.values(ledger.groups)[0];
+  assert.equal(require('../services/smartphoneMovingAverageCore.cjs').average(g),103133);
+  assert.equal(g.quantity,1);
+});
+test('failed cost ledger persistence rolls back sale, financial totals and IMEI stock',async()=>{
+  const f=fixture('cost-ledger',true),before=f.state();
+  await assert.rejects(finalizeSerializedSale({...f,...f.body}),/ledger/);
+  assert.deepEqual(f.state(),before);
+});
+test('concurrent different IMEIs share the configuration balance instead of using purchase costs',async()=>{
+  const f=fixture(undefined,true);
+  const saleFor=(id,unitId)=>({sale:{id,payment_status:'paid',total:97200},items:[{sale_id:id,product_id:'p1',serialized_unit_id:unitId,quantity:1,unit_price:97200,unit_cost:1}]});
+  const results=await Promise.all([finalizeSerializedSale({...f,...saleFor('first','u1')}),finalizeSerializedSale({...f,...saleFor('second','u2')})]);
+  assert.deepEqual(results.map(r=>r.sale.cost_total),[103133,103134]);
+  assert.equal(f.state().stock,1);
+  assert.deepEqual(f.state().units.map(u=>u.cost_price),[92500,99900,117000]);
 });
 test('duplicate unit, quantity and mismatched product/status fail without completed sale', async () => {
   for (const variant of ['duplicate', 'quantity', 'product', 'hidden']) {
@@ -113,10 +192,10 @@ test('canonical serialized balance writer uses the transaction for all product/l
       return [{ affectedRows: 1 }];
     } };
     let balanceDb;
-    const sync = new Function('pool', 'getDefaultStockCompanyId', 'ensureDefaultStockLocation', 'upsertStockLocationBalance',
+    const sync = new Function('pool', 'getDefaultStockCompanyId', 'ensureDefaultStockLocation', 'upsertStockLocationBalance', 'require',
       source.slice(start, end) + ';return syncProductStock;')(
       { query: () => { throw Error('escaped transaction'); } }, () => 'company', () => ({ depositId: 'deposit', locationId: 'location' }),
-      async input => { balanceDb = input.db; });
+      async input => { balanceDb = input.db; }, () => ({ synchronizeProduct: async (_pool, _id, transaction) => assert.equal(transaction, db) }));
     assert.equal(await sync('p1', db), 1);
     assert.equal(balanceDb, db);
     assert.ok(calls.some(sql => sql.startsWith('DELETE FROM product_stock_locations')));

@@ -76,7 +76,7 @@ async function fixture(t, options = {}) {
   };
   const connection = { query, beginTransaction: async () => { snapshot = structuredClone(state); }, commit: async () => {},
     rollback: async () => { state = snapshot; }, release() {} };
-  registerSmartphonePhotoIntakeRoutes(app, { pool: { query, getConnection: async () => connection }, requireSyncKey: async () => {}, baseDir: mkdtempSync(join(tmpdir(), 'mdv-bling-test-')) });
+  registerSmartphonePhotoIntakeRoutes(app, { pool: { query, getConnection: async () => connection }, inventoryCostSync: async () => {}, requireSyncKey: async () => {}, baseDir: mkdtempSync(join(tmpdir(), 'mdv-bling-test-')) });
   app.get('/api/bling', async (request, reply) => {
     assert.equal(request.headers.authorization, undefined, 'app session token must not be sent as a Bling token');
     return options.outage ? reply.code(503).send({ error: 'unavailable' }) :

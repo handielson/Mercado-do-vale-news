@@ -66,7 +66,7 @@ export interface SaleItem {
     product_sku?: string;
     quantity: number;
     unit_price: number; // em centavos
-    unit_cost: number; // em centavos (price_cost do produto)
+    unit_cost: number; // centavos; nas vendas controladas, custo médio registrado na finalização
     discount: number; // desconto por unidade em centavos
     subtotal: number; // unit_price * quantity
     total: number; // subtotal - (discount * quantity)

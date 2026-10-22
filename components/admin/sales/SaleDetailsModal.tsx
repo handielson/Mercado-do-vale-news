@@ -571,7 +571,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
         try {
             const updated = await updateSaleCostsAndProfit(sale.id);
             setRealProfit(buildCurrentSaleProfitData(updated));
-            toast.success('Custos recalculados com os valores atuais dos produtos');
+            toast.success('Custos atualizados; o custo médio registrado nas vendas foi preservado');
             onStatusChange();
         } catch (error: any) {
             console.error('Erro ao atualizar custos/lucro:', error);
@@ -973,7 +973,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                     <span>{isLoadingProfit ? 'Atualizando...' : formatCurrency(costTotal)}</span>
                                 </div>
                                 <p className="text-xs leading-5 text-amber-700">
-                                    Os custos salvos desta venda serao substituidos pelos custos atuais dos produtos ao abrir ou atualizar.
+                                    O custo médio registrado na venda é preservado. Vendas anteriores à ativação também são preservadas. Para os demais itens de vendas novas, a atualização usa a compra atual do aparelho ou produto.
                                 </p>
 
                                 <div className="pt-3 mt-3 border-t border-slate-100 flex justify-between text-sm font-medium">

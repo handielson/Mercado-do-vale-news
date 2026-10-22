@@ -38,6 +38,8 @@ const smartphonePhotoIntakeServiceFiles = [
   'services/smartphonePhotoIntakeServer.cjs',
   'services/smartphonePriceGroupsCore.cjs',
   'services/smartphonePriceGroupsServer.cjs',
+  'services/smartphoneMovingAverageCore.cjs',
+  'services/smartphoneMovingAverageServer.cjs',
   'services/smartphoneModelSpecs.mjs',
   'services/modelBlingMapping.mjs',
 ];
@@ -250,6 +252,19 @@ async function uploadSmartphonePhotoIntakeFiles(appDir) {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }
+}
+
+async function assertSmartphoneMovingAverageSchema(appDir) {
+  if (!/^\/var\/www\/[a-zA-Z0-9_-]+$/.test(appDir)) throw new Error('Unexpected API target');
+  const script = `require('dotenv').config({quiet:true});(async()=>{
+    const db=await require('mysql2/promise').createConnection({host:process.env.DB_HOST,user:process.env.DB_USER,password:process.env.DB_PASS,database:process.env.DB_NAME});
+    try {
+      for(const table of ['smartphone_inventory_cost_state','smartphone_inventory_cost_events','smartphone_sale_cost_basis','unit_journal_events']) await db.query('SELECT 1 FROM '+table+' LIMIT 0');
+      const [[row]]=await db.query("SELECT COUNT(*) total FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND TRIGGER_NAME IN ('mdv_unit_journal_insert','mdv_unit_journal_update','mdv_unit_journal_delete','mdv_unit_journal_product_update','mdv_unit_journal_product_delete')");
+      if(Number(row.total)!==5) throw Error('Diario de aparelhos incompleto');
+    } finally {await db.end();}
+  })().catch(()=>{console.error('Custo medio movel: instale e valide migrations/vps-smartphone-moving-average.sql e o diario antes de publicar a API.');process.exitCode=1;});`;
+  await exec(`cd ${appDir} && node -e "eval(Buffer.from('${Buffer.from(script).toString('base64')}','base64').toString())"`);
 }
 
 async function uploadMercadoLivreFiles(appDir) {
@@ -945,8 +960,15 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--moving-average-only')) {
+    if (apiProc.name !== 'mdv-api') throw new Error('Unexpected API target');
+    await require('./scripts/deploy-smartphone-moving-average.cjs').deploy({ exec, upload, appDir });
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--photo-intake-only')) {
     if (apiProc.name !== 'mdv-api' || !/^\/var\/www\/[a-zA-Z0-9_-]+$/.test(appDir)) throw new Error('Unexpected API target');
+    await assertSmartphoneMovingAverageSchema(appDir);
     const backupDir = `${appDir}/backups/photo-intake-${Date.now()}`;
     await exec(`mkdir -p ${backupDir}`);
     for (const file of smartphonePhotoIntakeServiceFiles) {
@@ -959,6 +981,7 @@ async function main() {
     conn.end();
     return;
   }
+  await assertSmartphoneMovingAverageSchema(appDir);
   console.log(`Uploading server to ${appDir}`);
   await exec(`mkdir -p ${appDir}/services`);
   await upload(path.join(__dirname, 'services/whatsappStatusHealth.cjs'), remotePathJoin(appDir, 'services/whatsappStatusHealth.cjs'));

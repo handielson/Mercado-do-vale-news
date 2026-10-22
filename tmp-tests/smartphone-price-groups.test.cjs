@@ -64,7 +64,10 @@ function fixture(t, options = {}) {
     if (q.startsWith('SELECT') && q.includes('FROM products')) {
       return [structuredClone(state.products.filter(p => q.includes('WHERE model_id=?') ? p.model_id === params[0] : q.includes('WHERE sku=?') || q.includes('WHERE `sku`=?') ? p.sku === params[0] : p.id === params[0]))];
     }
-    if (q.includes('FROM units u')) return [options.units || [{ product_id: 'R15C8256A', cost_price: 98000 }, { product_id: 'R15C8256A', cost_price: 99000 }]];
+    if (q.includes('FROM units u')) {
+      const rows = (options.units || [{ product_id: 'R15C8256A', cost_price: 98000 }, { product_id: 'R15C8256A', cost_price: 99000 }]).map(u => ({ status: 'available', ...u }));
+      return [q.includes("u.status='available'") ? rows.filter(u => u.status === 'available') : rows];
+    }
     if (q.startsWith('INSERT INTO smartphone_price_groups')) {
       const old = state.groups.find(g => g.id === params[0]);
       const saved = { id: params[0], model_id: params[1], company_id: params[2], configuration: params[3], price_retail: params[4], price_reseller: params[5], price_wholesale: params[6], revision: (old?.revision || 0) + 1 };
@@ -91,7 +94,7 @@ function fixture(t, options = {}) {
   const connection = { query, beginTransaction: async () => { snapshot = structuredClone(state); }, commit: async () => {}, rollback: async () => { state = snapshot; }, release() {} };
   const pool = { query, getConnection: async () => connection };
   const app = Fastify(); t.after(() => app.close());
-  registerSmartphonePriceGroupRoutes(app, { pool, requireSyncKey: async (req, reply) => { if (req.headers['x-sync-key'] !== 'test') return reply.code(401).send({ error: 'unauthorized' }); } });
+  registerSmartphonePriceGroupRoutes(app, { pool, inventoryCosts: async () => ({}), requireSyncKey: async (req, reply) => { if (req.headers['x-sync-key'] !== 'test') return reply.code(401).send({ error: 'unauthorized' }); } });
   const request = (method, url, payload) => app.inject({ method, url, payload, headers: { 'x-sync-key': 'test' } });
   const list = async () => { const r = await request('GET', `/models/${model.id}/smartphone-price-groups`); assert.equal(r.statusCode, 200, r.body); return r.json(); };
   const save = (g, prices = sale) => request('PUT', `/models/${model.id}/smartphone-price-groups/${g.id}`, { product_id: g.products[0].id, revision: g.revision, prices });
@@ -177,6 +180,42 @@ test('stock average uses individual costs and weights legacy products by stock, 
   assert.deepEqual(f.state().products, before.products);
   assert.deepEqual(f.state().history, []);
   assert.deepEqual(f.state().groups, []);
+});
+
+test('stock cost range excludes sold-out colors and uses the same available costs as the average', async t => {
+  const f = fixture(t, { products: [
+    phone('sold-out', { stock_quantity: 0, price_cost: 77200 }),
+    phone('green', { price_cost: 99000 }),
+    phone('blue', { stock_quantity: 2, price_cost: 99900 }),
+  ], units: [
+    { product_id: 'sold-out', status: 'sold', cost_price: 77200 },
+    { product_id: 'green', status: 'sold', cost_price: 99000 },
+    { product_id: 'green', status: 'reserved', cost_price: 10000 },
+    { product_id: 'green', status: 'hidden', cost_price: 500000 },
+    { product_id: 'green', status: 'available', cost_price: 92500 },
+    { product_id: 'blue', status: 'available', cost_price: 99900 },
+    { product_id: 'blue', status: 'available', cost_price: 117000 },
+  ] });
+  const before = structuredClone(f.state().products);
+  const [group] = (await f.list()).groups;
+  assert.equal(group.cost_average_in_stock, 103133);
+  assert.equal(group.cost_min, 92500);
+  assert.equal(group.cost_max, 117000);
+  assert.equal(group.products.find(p => p.id === 'sold-out').available_unit_count, 0);
+  assert.deepEqual(f.state().products, before);
+  assert.deepEqual(f.state().history, []);
+});
+
+test('serialized products never fall back to a historic product cost when available costs are missing', async t => {
+  const f = fixture(t, { products: [phone('sold', { stock_quantity: 1 }), phone('unknown')], units: [
+    { product_id: 'sold', status: 'sold', cost_price: 77200 },
+    { product_id: 'unknown', status: 'available', cost_price: null },
+  ] });
+  const [group] = (await f.list()).groups;
+  assert.equal(group.cost_average_in_stock, null);
+  assert.equal(group.cost_min, null);
+  assert.equal(group.cost_max, null);
+  assert.deepEqual(f.state().history, []);
 });
 
 test('API write fills Global when smartphone payload has no version, without depending on browser defaults', async t => {

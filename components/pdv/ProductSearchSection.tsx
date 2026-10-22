@@ -3,6 +3,7 @@ import { Search, Plus, Package, Smartphone } from 'lucide-react';
 import { Product } from '../../types/product';
 import { toast } from 'sonner';
 import { unitService } from '../../services/units';
+import { smartphonePriceGroups } from '../../services/smartphonePriceGroups';
 import type { Unit } from '../../types/unit';
 import { isLocalCatalogPreviewRuntime } from '../../services/localCatalogPreview';
 import { UnitStatus } from '../../utils/field-standards';
@@ -19,7 +20,7 @@ import { formatReferenceNumber } from '../../utils/referenceNumber';
 
 interface ProductSearchSectionProps {
     customer?: unknown;
-    onAddToCart: (product: Product, quantity: number, unitData?: { unitId?: string; imei1?: string; imei2?: string; serial?: string }) => void;
+    onAddToCart: (product: Product, quantity: number, unitData?: { unitId?: string; imei1?: string; imei2?: string; serial?: string; movingAverageCost?: number }) => void;
 }
 
 type SearchMode = 'product' | 'imei';
@@ -73,6 +74,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
     const [isImeiSearching, setIsImeiSearching] = useState(false);
     const imeiInputRef = useRef<HTMLInputElement>(null);
     const [pendingSerializedConfirmation, setPendingSerializedConfirmation] = useState<PendingSerializedConfirmation | null>(null);
+    const [isConfirmingUnit, setIsConfirmingUnit] = useState(false);
     const [soldUnitNotices, setSoldUnitNotices] = useState<SoldUnitNotice[]>([]);
     const [hiddenUnitNotice, setHiddenUnitNotice] = useState<{ unit: Unit & { product_name?: string }; source: SearchMode } | null>(null);
     const [isReactivating, setIsReactivating] = useState(false);
@@ -149,8 +151,8 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
         setPendingSerializedConfirmation({ product, unitOptions, selectedOptionId, source });
     };
 
-    const confirmSerializedUnit = () => {
-        if (!pendingSerializedConfirmation) return;
+    const confirmSerializedUnit = async () => {
+        if (!pendingSerializedConfirmation || isConfirmingUnit) return;
         const selectedUnit = pendingSerializedConfirmation.unitOptions.find(
             option => option.id === pendingSerializedConfirmation.selectedOptionId,
         );
@@ -159,18 +161,26 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
             return;
         }
 
-        onAddToCart(pendingSerializedConfirmation.product, 1, selectedUnit.unitData);
-        toast.success(`${pendingSerializedConfirmation.product.name} adicionado com o IMEI confirmado`);
-        const source = pendingSerializedConfirmation.source;
-        setPendingSerializedConfirmation(null);
-        setImeiQuery('');
-        setSearchCards([]);
-        setSearchTerm('');
-        setTimeout(() => {
-            const input = source === 'imei' ? imeiInputRef.current : searchInputRef.current;
-            input?.focus();
-            input?.select();
-        }, 50);
+        setIsConfirmingUnit(true);
+        try {
+            const product = pendingSerializedConfirmation.product;
+            const quote = product.model_id ? await smartphonePriceGroups.reference(product.model_id, product) : null;
+            if (quote?.controlled && quote.moving_average_cost == null) throw new Error('Confira os custos e a configuração do aparelho antes de vender.');
+            const unitData = { ...selectedUnit.unitData, ...(quote?.controlled ? { movingAverageCost: quote.moving_average_cost! } : {}) };
+            onAddToCart(product, 1, unitData);
+            toast.success(`${product.name} adicionado com o IMEI confirmado`);
+            const source = pendingSerializedConfirmation.source;
+            setPendingSerializedConfirmation(null);
+            setImeiQuery('');
+            setSearchCards([]);
+            setSearchTerm('');
+            setTimeout(() => {
+                const input = source === 'imei' ? imeiInputRef.current : searchInputRef.current;
+                input?.focus();
+                input?.select();
+            }, 50);
+        } catch (error: any) { toast.error(error.message || 'Não foi possível conferir o custo do aparelho.'); }
+        finally { setIsConfirmingUnit(false); }
     };
 
     const addCardToCart = async (card: PdvSearchCard, preferredUnit?: PdvSerializedUnitOption) => {
@@ -640,6 +650,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                             type="radio"
                                             name="confirmed-serialized-unit"
                                             checked={pendingSerializedConfirmation.selectedOptionId === option.id}
+                                            disabled={isConfirmingUnit}
                                             onChange={() => setPendingSerializedConfirmation(current => current ? {
                                                 ...current,
                                                 selectedOptionId: option.id,
@@ -656,6 +667,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                             <button
                                 type="button"
                                 onClick={() => setPendingSerializedConfirmation(null)}
+                                disabled={isConfirmingUnit}
                                 className="rounded-lg border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
                             >
                                 Cancelar
@@ -663,6 +675,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                             <button
                                 type="button"
                                 onClick={confirmSerializedUnit}
+                                disabled={isConfirmingUnit}
                                 className="rounded-lg bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700"
                             >
                                 Confirmar este IMEI

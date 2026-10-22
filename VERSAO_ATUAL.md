@@ -1,3 +1,14 @@
+# v1.2.672-custo-medio-movel
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.672-custo-medio-movel.
+Release: /var/www/mdv-site/releases/20261022-223048-custo-medio-movel.
+
+Custo medio movel por configuracao para novas vendas, mantendo compra individual do IMEI. Entradas recalculam o saldo; vendas conservam a media e congelam a base de custo. Devolucoes recuperam a base retirada. Precos de venda preservados. Custos e lucro das vendas anteriores a ativacao nao sao recalculados ao abrir o painel.
+
+Validado em MySQL 8.0.46 isolado com estrutura real e triggers, incluindo concorrencia, retry e rollback. A API recebe somente os modulos do escopo e o hook de estoque, com backup completo e hashes dos registros originais antes/depois da migration e inicializacao.
+
+## Historico anterior
+
 # v1.2.671-origem-versao-global
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.671-origem-versao-global.

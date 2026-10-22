@@ -24337,6 +24337,7 @@ async function syncProductStock(productId, db = pool) {
     [productId, productId]
   );
   const [rows] = await db.query('SELECT stock_quantity FROM products WHERE id = ? LIMIT 1', [productId]);
+  await require('./services/smartphoneMovingAverageServer.cjs').synchronizeProduct(pool, productId, db === pool ? null : db);
   return rows?.[0]?.stock_quantity ?? null;
 }
 

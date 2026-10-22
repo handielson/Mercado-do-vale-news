@@ -1020,6 +1020,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         `UPDATE smartphone_photo_intakes SET status=?,matched_product_id=?,unit_id=?,price_retail=?,price_reseller=?,price_wholesale=?,completed_at=NOW() WHERE id=?`,
         [PHOTO_INTAKE_STATUS.COMPLETED, productId, unitId, intake.price_retail, intake.price_reseller, intake.price_wholesale, intake.id]
       );
+      await (dependencies.inventoryCostSync || require('./smartphoneMovingAverageServer.cjs').synchronizeProduct)(pool, productId, connection);
       await connection.commit();
       return { intake: toPublicIntake(await loadIntake(intake.id)), product_id: productId, parent_id: localFamily.parent_id, unit_id: unitId, idempotent: false };
     } catch (error) {

@@ -999,6 +999,9 @@ export const updateSaleCostsAndProfit = async (saleId: string): Promise<SaleWith
 
     const productIds = [...new Set((sale.items || []).map(item => String(item.product_id || '')).filter(Boolean))];
     const serializedUnitIds = [...new Set((sale.items || []).map(item => String((item as any).serialized_unit_id || (item as any).serialized_unit?.unitId || '')).filter(Boolean))];
+    const basis = await vpsClient.get<{ historical?: boolean; rows: Array<{ unit_id: string; unit_cost: number | null }> }>(`/sales/${encodeURIComponent(saleId)}/cost-basis`);
+    if (basis.historical) return sale;
+    const fixedCosts = new Map(basis.rows.map(row => [row.unit_id, row.unit_cost]));
 
     const [products, units] = await Promise.all([
         productIds.length ? vpsApiService.getProductsByIds(productIds) : Promise.resolve([]),
@@ -1016,6 +1019,11 @@ export const updateSaleCostsAndProfit = async (saleId: string): Promise<SaleWith
 
     const updatedItems = (sale.items || []).map((item) => {
         const serializedUnitId = String((item as any).serialized_unit_id || (item as any).serialized_unit?.unitId || '');
+        if (fixedCosts.has(serializedUnitId)) {
+            const fixed = fixedCosts.get(serializedUnitId);
+            if (fixed == null) throw new Error('Custo médio desta venda exige conferência.');
+            return { ...item, unit_cost: fixed } as SaleItem;
+        }
         const currentCost = moneyToCents(item.unit_cost || 0);
         const unitCost = serializedUnitId ? unitCostById.get(serializedUnitId) || 0 : 0;
         const productCost = productCostById.get(String(item.product_id || '')) || 0;
