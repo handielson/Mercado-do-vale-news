@@ -14,6 +14,7 @@ const group = { id: 'example', model_id: 'redmi15c', model_name: 'Redmi 15c', co
     stock_quantity: i === 2 ? 0 : 1, price_cost: i ? 93200 : 98200, unit_costs: i ? [] : [98200, 105000], ...prices })) };
 let saved;
 let divergent = false;
+let additionalGroups = [];
 const unitRows = [{ id: 'unit-one', product_id: 'A', imei_1: 'TEST-IMEI-ONE', imei_2: 'TEST-SECOND-ONE', status: 'available', cost_price: 98200 },
   { id: 'unit-two', product_id: 'A', imei_1: 'TEST-IMEI-TWO', status: 'available', cost_price: 105000 }];
 const costWrites = [];
@@ -51,7 +52,7 @@ try {
         group.products.forEach(p => Object.assign(p, saved.prices));
         return route.fulfill({ json: { ok: true, updated: 3 } });
       }
-      return route.fulfill({ json: { enabled: true, unresolved: [], groups: [{ ...group, ...(divergent ? { prices: null, divergent: true } : {}) }] } });
+      return route.fulfill({ json: { enabled: true, unresolved: [], groups: [{ ...group, ...(divergent ? { prices: null, divergent: true } : {}) }, ...additionalGroups] } });
     }
     if (new URL(route.request().url()).hostname !== '127.0.0.1') return route.abort();
     return route.continue();
@@ -113,6 +114,20 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: join(out, 'mobile.png'), fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'table should scroll inside the panel');
+  divergent = false;
+  additionalGroups = [{ ...structuredClone(group), id: 'no-version', ram: '4GB', version: '',
+    products: [{ ...group.products[0], id: 'other-phone', sku: 'OTHER-CONFIG', stock_quantity: 1, available_unit_count: 4 }] }];
+  await page.getByRole('button', { name: 'Recarregar', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Configuração do aparelho' }).selectOption('no-version');
+  await page.getByText('OTHER-CONFIG · Azul', { exact: true }).waitFor();
+  assert.equal(await page.locator('section').count(), 1, 'only the selected configuration must be displayed');
+  assert.equal(await page.getByText('R15C8256L · Laranja', { exact: true }).count(), 0, 'another memory/version must not appear mixed in');
+  await page.getByText(/Versão não informada no cadastro/).waitFor();
+  await page.getByRole('alert').filter({ hasText: 'Estoque divergente' }).waitFor();
+  await page.getByText('4 disponíveis por IMEI · conferir', { exact: true }).waitFor();
+  await page.getByRole('combobox', { name: 'Configuração do aparelho' }).selectOption('example');
+  await page.getByText('R15C8256L · Laranja', { exact: true }).waitFor();
+  assert.equal(await page.getByText('OTHER-CONFIG · Azul', { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
   console.log(`Smartphone price panel browser checks passed. Screenshots: ${out}`);
 } finally { await browser?.close(); await server.close(); }

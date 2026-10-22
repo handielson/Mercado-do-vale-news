@@ -59,6 +59,7 @@ function fixture(t, options = {}) {
       return [{}];
     }
     if (q.includes('FROM models m')) return [[structuredClone(state.model)].filter(m => m.id === params[0])];
+    if (q.startsWith('SELECT name FROM versions')) return [[...(params[0] === 'india-version' ? [{name:'India'}] : [])]];
     if (q.startsWith('SELECT * FROM smartphone_price_groups')) return [structuredClone(state.groups.filter(g => q.includes('WHERE model_id') ? g.model_id === params[0] : g.id === params[0]))];
     if (q.startsWith('SELECT') && q.includes('FROM products')) {
       return [structuredClone(state.products.filter(p => q.includes('WHERE model_id=?') ? p.model_id === params[0] : q.includes('WHERE sku=?') || q.includes('WHERE `sku`=?') ? p.sku === params[0] : p.id === params[0]))];
@@ -178,6 +179,22 @@ test('stock average uses individual costs and weights legacy products by stock, 
   assert.deepEqual(f.state().groups, []);
 });
 
+test('API write fills Global when smartphone payload has no version, without depending on browser defaults', async t => {
+  const f = fixture(t, { products: [], model: {...model,template_values:{}} });
+  let written;
+  await withSmartphonePriceWrite(f.pool, phone('new'), async (_db, p) => { written = p; });
+  assert.equal(written.specs.version, 'Global');
+});
+
+test('API write preserves existing India on blank input and resolves a legacy version id', async t => {
+  const f = fixture(t, { products: [phone('india',{specs:{ram:'8GB',storage:'256GB',version:'India'}})], model:{...model,template_values:{}} });
+  let written;
+  await withSmartphonePriceWrite(f.pool, {id:'india',specs:{ram:'8GB',storage:'256GB',version:''}}, async (_db,p)=>{written=p;});
+  assert.equal(written.specs.version,'India');
+  await withSmartphonePriceWrite(f.pool, phone('legacy',{specs:{ram:'8GB',storage:'256GB',versao:'india-version'}}), async (_db,p)=>{written=p;});
+  assert.equal(written.specs.version,'India');
+});
+
 test('stock average shows the screenshot example and rounds to cents', async t => {
   const f = fixture(t, { products: [phone('units', { stock_quantity: 2 })], units: [
     { product_id: 'units', cost_price: 99000 }, { product_id: 'units', cost_price: 123000 },
@@ -195,6 +212,19 @@ test('stock average is unavailable without stock or known costs; zero cost is va
   assert.equal((await f.list()).groups[0].cost_average_in_stock, null);
   f.state().products.push(phone('free', { price_cost: 0, stock_quantity: 2 }));
   assert.equal((await f.list()).groups[0].cost_average_in_stock, 0);
+});
+
+test('listing exposes stock disagreement without changing stock and counts units with unknown cost', async t => {
+  const f = fixture(t, { products: [phone('green', { stock_quantity: 1 })], units: [
+    { product_id: 'green', cost_price: 93200 }, { product_id: 'green', cost_price: null },
+    { product_id: 'green', cost_price: 94700 }, { product_id: 'green', cost_price: 98200 },
+  ] });
+  const [group] = (await f.list()).groups;
+  assert.equal(group.products[0].available_unit_count, 4);
+  assert.equal(group.products[0].stock_quantity, 1);
+  assert.deepEqual(group.products[0].unit_costs, [93200, 94700, 98200]);
+  assert.equal(f.state().products[0].stock_quantity, 1);
+  assert.deepEqual(f.state().history, []);
 });
 
 test('divergence requires a choice; save updates every color, preserves cost and writes history', async t => {

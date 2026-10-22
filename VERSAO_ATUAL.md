@@ -1,3 +1,14 @@
+# v1.2.671-origem-versao-global
+
+Data: 22/10/2026. Branch: main. Tag: v1.2.671-origem-versao-global.
+Release: /var/www/mdv-site/releases/20261022-205131-origem-versao-global.
+
+Global agora e persistido na origem do cadastro por foto e na escrita de smartphones. Versoes explicitas sao preservadas. Registros antigos sem versao exigem salvar a conferencia e reconfirmar precos. Painel mostra uma configuracao por vez, separa venda e compra e avisa divergencias entre estoque e IMEIs.
+
+Validacao: suites de foto, grupos, reparo de versoes, formulario e build. API seletiva antes do site; sem migration ou reaplicacao do reparo de dados nesta publicacao.
+
+## Historico anterior
+
 # v1.2.670-layout-compra-imei
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.670-layout-compra-imei.

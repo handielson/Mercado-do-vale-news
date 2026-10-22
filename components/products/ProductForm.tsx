@@ -14,6 +14,7 @@ import { ColorSelect } from './selectors/ColorSelect';
 import { SalesUnitSelect } from './selectors/SalesUnitSelect';
 import { CapacitySelect } from './selectors/CapacitySelect';
 import { VersionSelect } from './selectors/VersionSelect';
+import { DEFAULT_PRODUCT_VERSION } from '../../services/smartphoneModelSpecs.mjs';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { IMEIInput } from '../ui/IMEIInput';
 import { EANInput } from '../ui/EANInput';
@@ -89,7 +90,6 @@ type ProductSaveResult = Product & {
     };
 };
 
-const DEFAULT_PRODUCT_VERSION = 'Global';
 const DEFAULT_BATTERY_HEALTH = '100';
 type FormSection = 'basic' | 'specs' | 'media' | 'channels' | 'commercial' | 'files' | 'production' | 'fiscal' | 'variations';
 

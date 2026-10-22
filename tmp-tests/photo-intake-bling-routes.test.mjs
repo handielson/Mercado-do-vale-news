@@ -10,20 +10,27 @@ import priceCore from '../services/smartphonePriceGroupsCore.cjs';
 
 async function fixture(t, options = {}) {
   const app = Fastify();
+  if (options.upload) app.addHook('onRequest', async req => {
+    req.file = async () => ({ filename:'fixture.jpg',mimetype:'image/jpeg',fields:{company_id:{value:'company'}},toBuffer:async()=>Buffer.from('fixture-photo') });
+  });
   t.after(() => app.close());
   const intake = { id: 'intake', company_id: 'company', matched_model_id: 'model', matched_color_id: 'purple', detected_color: 'Roxo',
     detected_ram: '8GB', detected_storage: '256GB', status: 'ready_to_finalize', prices_confirmed: 1,
     price_cost: 10000, price_retail: 15000, price_reseller: 14000, price_wholesale: 13000, validation_errors: '[]',
-    ...(options.version ? { extracted_data: JSON.stringify({ commercial_version: options.version }) } : {}) };
+    ...(!options.missingVersion ? { extracted_data: JSON.stringify({ commercial_version: options.version || 'Global' }) } : {}) };
   let family = buildBlingFamily({ id: 100, codigo: 'PAI', nome: 'Modelo' }, [{ id: 101, codigo: 'FILHO', nome: 'Roxo' }]);
   if (options.mapped !== false) family = saveIntakeBlingMapping(family, intake, 101);
   let state = { intake, model: { id: 'model', name: 'Modelo', template_values: JSON.stringify({ unrelated: true, ...(options.legacy ? {} : { bling_family: family }) }) },
     products: options.products || [], units: [] };
   state.products.forEach(product => { product.company_id ||= 'company'; });
+  state.products.forEach(product => { if (product.specs && !product.specs.version) product.specs.version = 'Global'; });
   let snapshot;
   const query = async (sql, params = []) => {
     const q = sql.replace(/\s+/g, ' ').trim();
     if (/^(CREATE|ALTER|SHOW)/.test(q)) return [[]];
+    if (q.startsWith('INSERT INTO smartphone_photo_intakes')) {
+      state.intake = {id:params[0],company_id:params[1],status:'uploaded',extracted_data:params[5]}; return [{}];
+    }
     if (q.startsWith('SELECT name FROM versions')) return [[...(['Global', 'India'].includes(params[0]) ? [{ name: params[0] }] : [])]];
     if (q.includes('FROM smartphone_price_groups')) return [(options.priceGroups || []).filter(g => g.id === params[0])];
     if (q.includes('FROM smartphone_photo_intakes') && q.includes('WHERE status IN')) return [[]];
@@ -95,6 +102,15 @@ test('save one mapping then finalize uses exact child and parent; retry does not
   assert.equal(f.state().units.length, 1);
 });
 
+test('photo upload persists Global before AI extraction or price confirmation', async t => {
+  const f = await fixture(t,{upload:true});
+  const response=await f.app.inject({method:'POST',url:'/smartphone-photo-intakes'});
+  assert.equal(response.statusCode,201,response.body);
+  assert.equal(response.json().detected_version,'Global');
+  assert.equal(JSON.parse(f.state().intake.extracted_data).commercial_version,'Global');
+  assert.equal(response.json().prices_confirmed,false);
+});
+
 test('existing exact product keeps local SKU and receives link without a duplicate product', async t => {
   const f = await fixture(t, { products: [{ id: 'existing', model_id: 'model', sku: 'LOCAL', specs: { ram: '8GB', storage: '256GB', color_id: 'purple' } }] });
   const response = await f.finalize();
@@ -147,7 +163,7 @@ test('finalizacao herda o preco Global e persiste a versao no produto, sem usar 
 });
 
 test('versao escolhida e persistida no JSON, invalida confirmacao e sobrevive ao recarregar', async t => {
-  const f = await fixture(t, { legacy: true });
+  const f = await fixture(t, { legacy: true, missingVersion: true });
   const saved = await f.app.inject({ method: 'PATCH', url: '/smartphone-photo-intakes/intake', payload: { detected_version: 'Global' } });
   assert.equal(saved.statusCode, 200, saved.body);
   assert.equal(saved.json().detected_version, 'Global');
@@ -156,6 +172,26 @@ test('versao escolhida e persistida no JSON, invalida confirmacao e sobrevive ao
   const invalid = await f.app.inject({ method: 'PATCH', url: '/smartphone-photo-intakes/intake', payload: { detected_version: 'inventada' } });
   assert.equal(invalid.statusCode, 409);
   assert.equal(JSON.parse(f.state().intake.extracted_data).commercial_version, 'Global');
+});
+
+test('legacy photo entry without version cannot finalize; saving defaults to Global and resets prices', async t => {
+  const f = await fixture(t, { legacy: true, missingVersion: true });
+  const blocked = await f.finalize();
+  assert.equal(blocked.statusCode, 409);
+  assert.match(blocked.body, /versão comercial/);
+  assert.equal(f.state().units.length, 0);
+  const saved = await f.app.inject({ method: 'PATCH', url: '/smartphone-photo-intakes/intake', payload: { detected_version: '' } });
+  assert.equal(saved.statusCode, 200, saved.body);
+  assert.equal(saved.json().detected_version, 'Global');
+  assert.equal(saved.json().prices_confirmed, false);
+  assert.equal(JSON.parse(f.state().intake.extracted_data).commercial_version, 'Global');
+});
+
+test('empty version cannot erase an explicitly selected India version', async t => {
+  const f = await fixture(t, { legacy: true, version: 'India' });
+  const saved = await f.app.inject({ method: 'PATCH', url: '/smartphone-photo-intakes/intake', payload: { detected_version: '' } });
+  assert.equal(saved.statusCode, 200, saved.body);
+  assert.equal(saved.json().detected_version, 'India');
 });
 
 test('aparelho Global nao reutiliza produto de outra versao', async t => {

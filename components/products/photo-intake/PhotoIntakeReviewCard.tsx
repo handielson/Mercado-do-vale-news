@@ -16,6 +16,7 @@ import type {
 } from '../../../types/smartphone-photo-intake';
 import { SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS } from '../../../types/smartphone-photo-intake';
 import { smartphonePriceGroups, SmartphonePriceReference } from '../../../services/smartphonePriceGroups';
+import { DEFAULT_PRODUCT_VERSION } from '../../../services/smartphoneModelSpecs.mjs';
 
 interface PhotoIntakeReviewCardProps {
   intake: SmartphonePhotoIntake;
@@ -51,7 +52,7 @@ function buildDraft(intake: SmartphonePhotoIntake): SmartphonePhotoIntakeUpdate 
     detected_color: intake.detected_color || '',
     detected_ram: intake.detected_ram || '',
     detected_storage: intake.detected_storage || '',
-    detected_version: intake.detected_version || '',
+    detected_version: intake.detected_version || DEFAULT_PRODUCT_VERSION,
     detected_serial: intake.detected_serial || '',
     detected_imei_1: intake.detected_imei_1 || '',
     detected_imei_2: intake.detected_imei_2 || '',

@@ -5,8 +5,8 @@ const form = readFileSync('components/products/ProductForm.tsx', 'utf8');
 
 assert.match(
   form,
-  /const DEFAULT_PRODUCT_VERSION = 'Global';/,
-  'ProductForm must define Global as the default product version',
+  /import \{ DEFAULT_PRODUCT_VERSION \} from '..\/..\/services\/smartphoneModelSpecs.mjs';/,
+  'ProductForm must use the same commercial-version default as photo intake and API writes',
 );
 
 assert.match(

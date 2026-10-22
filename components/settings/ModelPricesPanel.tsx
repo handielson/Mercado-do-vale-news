@@ -21,6 +21,7 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved 
     const [error, setError] = useState('');
     const [onlyDivergent, setOnlyDivergent] = useState(false);
     const [minimumMargin, setMinimumMargin] = useState(10);
+    const [selectedGroupId, setSelectedGroupId] = useState('');
     const [costProduct, setCostProduct] = useState<{ id: string; sku: string } | null>(null);
     const [units, setUnits] = useState<Unit[]>([]);
     const [unitsLoading, setUnitsLoading] = useState(false);
@@ -61,6 +62,11 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved 
         finally { setSaving(null); }
     }
 
+    const filteredGroups = groups.filter(g => !onlyDivergent || g.divergent).sort((a, b) =>
+        `${a.ram} ${a.storage} ${a.version || '~'}`.localeCompare(`${b.ram} ${b.storage} ${b.version || '~'}`, 'pt-BR', { numeric: true }));
+    const activeGroup = filteredGroups.find(g => g.id === selectedGroupId) || filteredGroups[0];
+    const groupLabel = (group: SmartphonePriceGroup) => [group.ram, group.storage, group.version || 'Versão não informada', group.condition !== 'new' ? group.condition : ''].filter(Boolean).join(' · ');
+
     const body = <div className="p-4 space-y-4 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h3 className="font-semibold">Preços por configuração — {modelName}</h3>
@@ -75,23 +81,35 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved 
         {error && <p role="alert" className="text-red-700">{error}</p>}
         {loading ? <Loader2 className="animate-spin" aria-label="Carregando grupos" /> : !error && <>
             {unresolved.length > 0 && <div className="bg-amber-50 border border-amber-200 rounded p-3">Sem grupo: corrija RAM e armazenamento no cadastro de {unresolved.map(p => p.sku || p.name).join(', ')}.</div>}
-            {groups.filter(g => !onlyDivergent || g.divergent).map(group => {
+            {filteredGroups.length > 0 && <label className="block text-sm font-medium text-slate-700">Configuração do aparelho
+                <select aria-label="Configuração do aparelho" value={activeGroup?.id || ''} onChange={e => { setSelectedGroupId(e.target.value); setCostProduct(null); }} className="mt-2 block w-full rounded-lg border border-slate-300 bg-white p-3">
+                    {filteredGroups.map(group => <option key={group.id} value={group.id}>{groupLabel(group)}</option>)}
+                </select>
+            </label>}
+            {filteredGroups.filter(g => g.id === activeGroup?.id).map(group => {
                 const values = inputs[group.id] || {};
                 return <section key={group.id} className="border border-slate-200 rounded-lg p-4 space-y-3 bg-white">
-                    <div className="flex flex-wrap gap-2 items-center"><strong>{[group.ram, group.storage, group.version, group.condition !== 'new' ? group.condition : ''].filter(Boolean).join(' · ')}</strong>
+                    <div className="flex flex-wrap gap-2 items-center"><strong>{groupLabel(group)}</strong>
                         <span className={group.divergent ? 'text-amber-700' : 'text-green-700'}>{group.divergent ? 'Preços divergentes — revisar' : group.confirmed ? 'Preço do grupo definido' : 'Preço atual uniforme — confirmar grupo'}</span></div>
                     <p className="text-xs text-slate-600">{group.products.length} variações · Custos: {fmt(group.cost_min)} a {fmt(group.cost_max)} · Custo médio em estoque: {fmt(group.cost_average_in_stock ?? null)}</p>
+                    {!group.version && <p className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Versão não informada no cadastro. Este grupo permanece separado até a versão ser conferida.</p>}
+                    {group.products.some(p => p.available_unit_count !== undefined && p.available_unit_count > 0 && p.available_unit_count !== p.stock_quantity) && <p role="alert" className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Estoque divergente: a quantidade cadastrada difere dos aparelhos disponíveis por IMEI. Confira os aparelhos antes de usar o custo médio desta configuração.</p>}
+                    <h4 className="border-t pt-3 font-semibold text-slate-800">Preços de venda desta configuração</h4>
                     {!group.prices && <p className="text-amber-700 text-xs">Escolha os três preços abaixo. Nenhum valor foi selecionado automaticamente.</p>}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{fields.map(f => <label key={f.key} className="text-xs">{f.label}
                         <CurrencyInput value={values[f.key] ?? 0} disabled={!!saving} onChange={value => setInputs(prev => ({ ...prev, [group.id]: { ...prev[group.id], [f.key]: value } }))} />
                     </label>)}</div>
+                    <button type="button" disabled={!!saving} onClick={() => void save(group)} className="bg-green-700 text-white rounded px-4 py-2 disabled:opacity-50">{saving === group.id ? 'Salvando...' : `Salvar preço para todas as cores (${group.products.length})`}</button>
+                    <h4 className="border-t pt-3 font-semibold text-slate-800">Cores, estoque e compra por aparelho</h4>
                     <div className="overflow-x-auto"><table className="w-full text-xs text-left"><thead><tr>{['SKU / cor', 'Estoque', 'Custo', 'Varejo atual', 'Revenda atual', 'Atacado atual', 'Margem com preço informado'].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead>
                         <tbody>{group.products.map(p => {
                             const costs = p.unit_costs?.length ? p.unit_costs : p.price_cost !== null ? [p.price_cost] : [];
                             const maxCost = costs.length ? Math.max(...costs) : null;
                             const retail = values.price_retail;
                             const margin = maxCost !== null && retail !== undefined && retail > 0 ? (retail - maxCost) / retail * 100 : null;
-                            return <tr key={p.id} className="border-t border-slate-100"><td className="p-2">{p.sku} · {p.color}</td><td className="p-2">{p.stock_quantity}</td>
+                            return <tr key={p.id} className="border-t border-slate-100"><td className="p-2">{p.sku} · {p.color}</td><td className="p-2">{p.stock_quantity}
+                                {p.available_unit_count !== undefined && p.available_unit_count > 0 && p.available_unit_count !== p.stock_quantity && <div className="text-amber-800">{p.available_unit_count} disponíveis por IMEI · conferir</div>}
+                            </td>
                                 <td className="p-2">{costs.length ? costs.map((cost, i) => <div key={i}>{costs.length > 1 ? `Aparelho ${i + 1}: ` : ''}{fmt(cost)}</div>) : 'Não informado'}
                                     <button type="button" className="mt-2 text-blue-700 underline" onClick={() => setCostProduct(current => current?.id === p.id ? null : { id: p.id, sku: p.sku })}>Editar compra por IMEI</button>
                                 </td>
@@ -109,7 +127,6 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved 
                             else toast.warning('Compra salva. Recarregue o painel para consultar o custo médio atualizado.');
                         }} />}
                     </div>}
-                    <button type="button" disabled={!!saving} onClick={() => void save(group)} className="bg-green-700 text-white rounded px-4 py-2 disabled:opacity-50">{saving === group.id ? 'Salvando...' : `Salvar preço para todas as cores (${group.products.length})`}</button>
                 </section>;
             })}
             {!groups.some(g => !onlyDivergent || g.divergent) && <p className="text-slate-500">{onlyDivergent ? 'Nenhum grupo divergente.' : 'Nenhuma configuração disponível.'}</p>}

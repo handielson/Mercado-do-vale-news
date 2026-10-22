@@ -413,7 +413,9 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     const validation = validatePhotoExtraction(parsed);
     const color = await resolveCatalogColor(validation.value.color, intake.company_id);
     validation.value.color = color.name;
-    const catalog = await matchCatalog({ ...validation.value, version: getPhotoIntakeVersion(intake) }, intake.company_id);
+    const { DEFAULT_PRODUCT_VERSION } = await import('./smartphoneModelSpecs.mjs');
+    const commercialVersion = getPhotoIntakeVersion(intake) || DEFAULT_PRODUCT_VERSION;
+    const catalog = await matchCatalog({ ...validation.value, version: commercialVersion }, intake.company_id);
     const duplicateValues = [validation.value.imei1, validation.value.imei2, validation.value.serial].filter(Boolean);
     if (duplicateValues.length > 0) {
       const placeholders = duplicateValues.map(() => '?').join(',');
@@ -447,7 +449,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         validation.value.ean, validation.value.product_code, catalog.model?.brand_id || null, catalog.model?.id || null,
         color.id, catalog.product?.id || null, catalog.product?.price_cost ?? null, catalog.product?.price_retail ?? null,
         catalog.product?.price_reseller ?? null, catalog.product?.price_wholesale ?? null,
-        JSON.stringify({ ...validation.value, color_original: color.original, commercial_version: getPhotoIntakeVersion(intake) }),
+        JSON.stringify({ ...validation.value, color_original: color.original, commercial_version: commercialVersion }),
         JSON.stringify(validation.errors), JSON.stringify(validation.warnings), inputTokens, outputTokens, cost,
         inputRate, outputRate, intake.id]
     );
@@ -479,10 +481,11 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
     await fs.promises.writeFile(absolutePath, buffer, { flag: 'wx' });
     try {
+      const { DEFAULT_PRODUCT_VERSION } = await import('./smartphoneModelSpecs.mjs');
       await pool.query(
-        `INSERT INTO smartphone_photo_intakes (id, company_id, batch_id, photo_private_path, photo_sha256, status)
-         VALUES (?,?,?,?,?,'uploaded')`,
-        [id, companyId, batchId, relativePath, hash]
+        `INSERT INTO smartphone_photo_intakes (id, company_id, batch_id, photo_private_path, photo_sha256, status, extracted_data)
+         VALUES (?,?,?,?,?,'uploaded',?)`,
+        [id, companyId, batchId, relativePath, hash, JSON.stringify({ commercial_version: DEFAULT_PRODUCT_VERSION })]
       );
     } catch (error) {
       await fs.promises.unlink(absolutePath).catch(() => {});
@@ -568,19 +571,21 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     if (!intake) return reply.code(404).send({ error: 'Pré-cadastro não encontrado' });
     if (['cancelled', 'completed'].includes(intake.status)) return reply.code(409).send({ error: 'Selecione um registro pendente da fila' });
     const body = { ...(request.body || {}) };
-    let commercialVersion = getPhotoIntakeVersion(intake);
+    const { DEFAULT_PRODUCT_VERSION } = await import('./smartphoneModelSpecs.mjs');
+    let commercialVersion = getPhotoIntakeVersion(intake) || DEFAULT_PRODUCT_VERSION;
     if ('detected_version' in body) {
-      const requested = String(body.detected_version ?? '').trim();
+      const requested = String(body.detected_version ?? '').trim() || commercialVersion;
       if (requested) {
         const [versions] = await pool.query('SELECT name FROM versions WHERE name=? AND active=1 LIMIT 1', [requested]);
         if (!versions[0]) return reply.code(409).send({ error: 'Selecione uma versão comercial cadastrada e ativa' });
         commercialVersion = versions[0].name;
-      } else commercialVersion = '';
-      body.detected_version = commercialVersion;
-      if (commercialVersion !== getPhotoIntakeVersion(intake)) {
-        body.prices_confirmed = false;
-        body.matched_product_id = null;
       }
+      body.detected_version = commercialVersion;
+    }
+    if (commercialVersion !== getPhotoIntakeVersion(intake)) {
+      body.detected_version = commercialVersion;
+      body.prices_confirmed = false;
+      body.matched_product_id = null;
     }
     if ('matched_model_id' in body && body.matched_model_id) {
       const [modelRows] = await pool.query('SELECT id,brand_id,name FROM models WHERE id=? AND active=1 LIMIT 1', [body.matched_model_id]);
@@ -693,6 +698,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       if (!Number.isFinite(value) || value <= 0) return reply.code(400).send({ error: 'Informe todos os preços do grupo' });
       prices[field] = Math.round(value);
     }
+    if (!getPhotoIntakeVersion(intake)) return reply.code(409).send({ error: 'Confira e salve a versão comercial antes de confirmar os preços.' });
     const normalizedRam = String(intake.detected_ram).replace(/\s+/g, '').toUpperCase();
     const normalizedStorage = String(intake.detected_storage).replace(/\s+/g, '').toUpperCase();
     const connection = await pool.getConnection();
@@ -863,6 +869,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       if (!intake.matched_model_id) { await connection.rollback(); return reply.code(409).send({ error: 'Cadastre ou vincule o modelo primeiro' }); }
       const defaultCompanyId = await resolvePhotoIntakeCompanyId('default', connection);
       if (!intake.matched_color_id) { await connection.rollback(); return reply.code(409).send({ error: 'Selecione ou cadastre a cor antes de salvar' }); }
+      if (!getPhotoIntakeVersion(intake)) { await connection.rollback(); return reply.code(409).send({ error: 'Confira e salve a versão comercial antes de confirmar os preços e finalizar.' }); }
       if (!intake.prices_confirmed) { await connection.rollback(); return reply.code(409).send({ error: 'Confirme os preços antes de salvar' }); }
       const requiredPrices = ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale'];
       if (requiredPrices.some((field) => intake[field] == null || !Number.isFinite(Number(intake[field])) || Number(intake[field]) < 0)) {

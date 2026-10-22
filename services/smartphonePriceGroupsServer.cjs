@@ -4,15 +4,24 @@ const crypto = require('crypto');
 const core = require('./smartphonePriceGroupsCore.cjs');
 const schemaPromises = new WeakMap();
 const modelSpecsSanitized = Symbol('modelSpecsSanitized');
-async function sanitizeModelSpecifications(product, model, existing = null) {
+async function sanitizeModelSpecifications(product, model, existing = null, db) {
   if (!core.isSmartphoneCategory(model?.category_name) || Number(product.is_print3d) === 1 || Number(product.is_combo) === 1 || product.offer_type) return product;
-  const { stripModelOwnedSpecs, stripModelTechnicalCustomFields } = await import('./smartphoneModelSpecs.mjs');
+  const { stripModelOwnedSpecs, stripModelTechnicalCustomFields, DEFAULT_PRODUCT_VERSION } = await import('./smartphoneModelSpecs.mjs');
   const template = core.object(model.template_values);
   // Financial metadata comes from locked DB state; a client cannot move its group.
   const reference = stripModelOwnedSpecs(existing ? existing.specs : {}, template);
   const mergedSpecs = { ...core.object(existing?.specs), ...core.object(product.specs) };
   delete mergedSpecs._price_group_network;
   const specs = stripModelOwnedSpecs(mergedSpecs, undefined, false);
+  if (Number(product.is_parent) !== 1 && !String(specs.version || '').trim()) {
+    const previousVersion = String(core.object(existing?.specs).version || '').trim();
+    if (previousVersion) specs.version = previousVersion;
+    else if (String(specs.versao || '').trim()) {
+      const [versions] = await db.query('SELECT name FROM versions WHERE id=? OR name=? LIMIT 1', [specs.versao, specs.versao]);
+      if (!versions[0]?.name) throw conflict('Confira a versão comercial deste aparelho antes de salvar.');
+      specs.version = versions[0].name;
+    } else specs.version = DEFAULT_PRODUCT_VERSION;
+  }
   specs._price_group_network = reference._price_group_network;
   return { ...product, specs,
     custom_fields: stripModelTechnicalCustomFields({ ...core.object(existing?.custom_fields), ...core.object(product.custom_fields) }, template, mergedSpecs),
@@ -117,7 +126,7 @@ async function withSmartphonePriceWrite(pool, incoming, write, { transactional =
       current = rows[0];
       if (!current || current.model_id !== existing.model_id) throw conflict('Produto alterado por outra operação. Recarregue e tente novamente.');
     }
-    const prepared = await sanitizeModelSpecifications({ ...current, ...incoming, model_id: candidate.model_id }, lockedModel, current);
+    const prepared = await sanitizeModelSpecifications({ ...current, ...incoming, model_id: candidate.model_id }, lockedModel, current, connection);
     const result = await inheritSmartphonePrices(connection, prepared, lockedModel, current);
     const output = await write(connection, result.product);
     await connection.commit();
@@ -151,7 +160,7 @@ function presentGroup(config, saved, products, model) {
     cost_min: costs.length ? Math.min(...costs) : null, cost_max: costs.length ? Math.max(...costs) : null,
     cost_average_in_stock: costedStock > 0 ? Math.round(stockCost / costedStock) : null,
     products: products.map(p => ({ id: p.id, sku: p.sku, name: p.name, color: core.object(p.specs).color || core.object(p.specs).cor || '',
-      stock_quantity: Number(p.stock_quantity || 0), price_cost: p.price_cost == null ? null : Number(p.price_cost), unit_costs: p.unit_costs || [],
+      stock_quantity: Number(p.stock_quantity || 0), price_cost: p.price_cost == null ? null : Number(p.price_cost), unit_costs: p.unit_costs || [], available_unit_count: p.available_unit_count || 0,
       ...Object.fromEntries(core.SALE_FIELDS.map(f => [f, p[f] == null ? null : Number(p[f])])) })),
   };
 }
@@ -178,13 +187,18 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey }) {
       price_cost,price_retail,price_reseller,price_wholesale FROM products WHERE model_id=? AND COALESCE(is_parent,0)=0 AND COALESCE(is_combo,0)=0 AND offer_type IS NULL`, [model.id]);
     const [saved] = await pool.query('SELECT * FROM smartphone_price_groups WHERE model_id=?', [model.id]);
     const [units] = await pool.query(`SELECT u.product_id,u.cost_price FROM units u JOIN products p ON p.id=u.product_id
-      WHERE p.model_id=? AND u.status='available' AND u.cost_price IS NOT NULL ORDER BY u.product_id,u.cost_price`, [model.id]);
+      WHERE p.model_id=? AND u.status='available' ORDER BY u.product_id,u.cost_price`, [model.id]);
     const unitCosts = new Map();
+    const unitCounts = new Map();
     for (const unit of units) {
+      unitCounts.set(unit.product_id, (unitCounts.get(unit.product_id) || 0) + 1);
       if (!unitCosts.has(unit.product_id)) unitCosts.set(unit.product_id, []);
-      unitCosts.get(unit.product_id).push(Number(unit.cost_price));
+      if (unit.cost_price != null) unitCosts.get(unit.product_id).push(Number(unit.cost_price));
     }
-    for (const product of products) product.unit_costs = unitCosts.get(product.id) || [];
+    for (const product of products) {
+      product.unit_costs = unitCosts.get(product.id) || [];
+      product.available_unit_count = unitCounts.get(product.id) || 0;
+    }
     const groups = new Map();
     const unresolved = [];
     for (const p of products) {

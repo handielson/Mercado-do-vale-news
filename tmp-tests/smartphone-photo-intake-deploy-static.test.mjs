@@ -10,6 +10,7 @@ for (const relativePath of [
   'services/smartphonePhotoIntakeServer.cjs',
   'services/smartphonePriceGroupsCore.cjs',
   'services/smartphonePriceGroupsServer.cjs',
+  'services/smartphoneModelSpecs.mjs',
   'services/modelBlingMapping.mjs',
 ]) {
   assert.ok(source.includes(relativePath), `o deploy da API deve enviar ${relativePath}`);

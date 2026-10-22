@@ -1,5 +1,6 @@
 // Technical characteristics belong to the model. Product specs store only
 // configuration, physical-unit data and operational metadata for smartphones.
+export const DEFAULT_PRODUCT_VERSION = 'Global';
 const VARIATION_KEYS = new Set(['ram', 'ram_fisica', 'physical_ram', 'memoria_ram', 'memoria_ram_fisica', 'memory_ram', 'storage', 'armazenamento', 'memoria', 'capacity', 'color', 'cor', 'colour', 'color_id', 'version', 'versao', 'imei1', 'imei2', 'imei_1', 'imei_2', 'serial', 'serial_number', 'battery_health', 'saude_bateria', 'ean', 'gtin', 'sku', 'condition', 'condicao']);
 const OPERATIONAL_KEYS = new Set(['mercado_livre', 'bling_family', 'ncm', 'cest', 'origin', 'origem', 'inmetro', 'certificado_inmetro', 'weight_kg', 'dimensions', 'slug', 'meta_title', 'meta_description', 'keywords', 'has_video', 'model', 'model_id', 'brand', 'brand_id', 'category_id', 'featured', 'inherit_parent_cost']);
 const normalizeKey = key => String(key).replace(/^specs\./, '');

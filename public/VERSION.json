@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.670-layout-compra-imei",
+  "version": "v1.2.671-origem-versao-global",
   "date": "2026-10-22",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.670-layout-compra-imei",
-  "release_vps": "/var/www/mdv-site/releases/20261022-203119-layout-compra-imei",
+  "tag": "v1.2.671-origem-versao-global",
+  "release_vps": "/var/www/mdv-site/releases/20261022-205131-origem-versao-global",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Tabela de modelos sem barra superior e edicao da compra pelo lapis ao lado do custo.",
+  "summary": "Global persistido na origem do cadastro; conferencia de versao e painel por configuracao.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,18 +14,30 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/units/UnitList.tsx",
-    "pages/admin/settings/ModelsPage.tsx",
-    "tmp-tests/models-page-horizontal-scroll-static.test.mjs",
+    "components/products/ProductForm.tsx",
+    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
+    "components/settings/ModelPricesPanel.tsx",
+    "deploy-vps-server-only.cjs",
+    "services/smartphoneModelSpecs.mjs",
+    "services/smartphonePhotoIntakeServer.cjs",
+    "services/smartphonePriceGroups.ts",
+    "services/smartphonePriceGroupsServer.cjs",
+    "tmp-tests/photo-intake-bling-routes.test.mjs",
+    "tmp-tests/product-form-default-specs-static.test.mjs",
+    "tmp-tests/smartphone-photo-intake-deploy-static.test.mjs",
     "tmp-tests/smartphone-price-groups-ui.test.mjs",
+    "tmp-tests/smartphone-price-groups.test.cjs",
+    "scripts/repair-smartphone-global-versions.cjs",
+    "tmp-tests/smartphone-global-versions-repair.test.cjs",
+    "docs/operacional/2026-10-22-global-redmi15c.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-22-v1.2.670-layout-compra-imei.md"
+    "docs/versoes/2026-10-22-v1.2.671-origem-versao-global.md"
   ],
   "validations": [
-    "Guarda da tabela sem barra superior, 20 testes de grupos e navegador com editor de compra dentro da celula de custo.",
-    "Build de producao com travas de segredos e runtime legado.",
-    "Verificacoes publicas registradas na nota da entrega."
+    "Suites de cadastro por foto, grupos de precos, reparo de versoes e formulario.",
+    "Build com travas de segredos e runtime legado.",
+    "Resultados de publicacao e verificacoes publicas na nota da entrega."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
