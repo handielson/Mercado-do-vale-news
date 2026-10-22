@@ -1,6 +1,6 @@
 # Custo medio movel de smartphones
 
-Implementacao local solicitada em 22/10/2026. Nao publicada e nenhuma migration aplicada em producao nesta tarefa.
+Implementacao solicitada e publicada em 22/10/2026, v1.2.672-custo-medio-movel, commit 44244f60. Migration validada em MySQL isolado e aplicada em producao com backup e hashes operacionais preservados. Resultados na nota da versao.
 
 ## Regra e fontes
 
@@ -20,18 +20,18 @@ A finalizacao serializada trava modelos em ordem estavel antes dos produtos/unid
 
 Repetir a mesma requisicao devolve a venda ja confirmada, sem refazer a media. Falha em itens, unidades, estoque ou saldo de custo desfaz a transacao inteira. A confirmacao de IMEI no PDV consulta a media na referencia de precos existente para a previa do carrinho; a finalizacao confere novamente no servidor.
 
-Abrir/atualizar os custos de uma venda consulta a base congelada e nao troca a media pelo custo atual do IMEI ou produto. A API bloqueia edicao generica do custo congelado e acesso generico as tres tabelas de controle. Vendas sem base anterior mantem o fluxo legado; o controle novo nao reconstitui ou reprecifica vendas anteriores a ativacao.
+Abrir/atualizar os custos de uma venda consulta a base congelada e nao troca a media pelo custo atual do IMEI ou produto. A API bloqueia edicao generica do custo congelado e acesso generico as tres tabelas de controle. Vendas anteriores a ativacao retornam os valores registrados, sem atualizacao automatica ou manual de custo/lucro pela tela. A API bloqueia essas alteracoes financeiras genericas, preservando os fluxos de cancelamento e estorno. Itens de vendas novas sem base media conservam o tratamento de custo convencional.
 
 Retorno de uma unidade vendida repoe o valor gerencial retirado, mesmo que tenha havido nova compra ou correcao posterior do custo real. Correcao da compra de um IMEI ainda em estoque ajusta o saldo atual pela diferenca; a correcao de um vendido nao altera o lucro registrado. Compra desconhecida impede finalizar uma nova venda da configuracao; zero conhecido e valido.
 
 Os escritores de unidades sincronizam o saldo pelo helper canonico de estoque nos tres entrypoints. A finalizacao por foto sincroniza antes do commit. Demais saidas com vinculo a venda sao consumidas pelo diario; custos/totais de vendas novas existentes sao atualizados pelo controle, preservando vendas anteriores a ativacao.
 
-## Ativacao futura
+## Protocolo de ativacao
 
 1. Seguir `publish-vps` mediante pedido de publicacao. Fazer backup de banco/codigo e suspender escritas operacionais durante a migration e a base inicial.
 2. Conferir diario/triggers instalados. Aplicar explicitamente `migrations/vps-smartphone-moving-average.sql` no MySQL operacional. Ela cria tres tabelas vazias; nao altera precos, compras ou vendas.
 3. Disponibilizar os dois modulos `smartphoneMovingAverage*`, dependencias canônicas e `scripts/initialize-smartphone-moving-average.cjs` na API. Do diretorio da API, rodar o inicializador primeiro em dry-run e depois `--apply`. Ele preserva modelos ja inicializados e nao reaplica base. Conferir quantidades e custos ausentes antes de retomar vendas.
-4. Publicar `serializedSaleFinalization.cjs`, `smartphonePhotoIntakeServer.cjs`, `smartphonePriceGroupsServer.cjs` e as alteracoes de `syncProductStock` nos entrypoints efetivos. `--photo-intake-only` isolado nao atualiza esses hooks nem a finalizacao de vendas; nao basta para esta entrega.
+4. O modo `node deploy-vps-server-only.cjs --moving-average-only` executa backup, migration e base inicial com a API pausada, verifica hashes completos dos registros existentes, publica modulos revisados e aplica somente o hook de estoque nos tres entrypoints. Verifica drift e sintaxe antes de retomar a API. A implementacao esta em `scripts/deploy-smartphone-moving-average.cjs`. Publicar `serializedSaleFinalization.cjs`, `smartphonePhotoIntakeServer.cjs`, `smartphonePriceGroupsServer.cjs` e as alteracoes de `syncProductStock` nos entrypoints efetivos. `--photo-intake-only` isolado nao atualiza esses hooks nem a finalizacao de vendas; nao basta para esta entrega.
 5. Publicar o frontend apos API/schema e validar consultas e previas sem gravar vendas reais de teste. Nao remover tabelas de custo ou diario em rollback de codigo.
 
 ## Validacao local
@@ -40,4 +40,4 @@ Testes de media/entradas/devolucao/arredondamento/custos desconhecidos; transaca
 
 Comando focado: `node --test tmp-tests/smartphone-moving-average.test.cjs tmp-tests/smartphone-moving-average-server.test.cjs tmp-tests/serialized-sale-transaction.test.cjs tmp-tests/sale-moving-average-refresh.test.cjs tmp-tests/pdv-moving-average-preview.test.cjs`. Tambem executar `npm.cmd run test:smartphone-price-groups`, `npm.cmd run test:smartphone-photo-intake`, `npm.cmd run test:money` e `npm.cmd run build`. O deploy verifica as tres tabelas e os cinco triggers relevantes do diario antes de qualquer upload desta API; recusa publicar se faltar a migration.
 
-MySQL real local nao estava disponivel: o Docker CLI existe, mas o daemon estava desligado. Os testes de banco desta tarefa usam fixtures transacionais, sem acesso ou escrita em producao. Validacao da migration em MySQL isolado fica obrigatoria antes de ativar em producao.
+MySQL real validado por `node scripts/validate-smartphone-moving-average-mysql.cjs`: schema descartavel na VPS, criado por LIKE sem copiar registros operacionais e com triggers reais do diario. Testou migration idempotente, venda atomica, retry decimal/JSON, concorrencia, entrada, devolucao, rollback e preservacao de compras/precos/vendas antigas. O schema foi removido ao final. Producao foi alterada somente no corte autorizado: tres tabelas e base inicial; nenhum registro original mudou. Backup: /var/www/mdv-api/backups/moving-average-1792708888795/before.sql.gz.
