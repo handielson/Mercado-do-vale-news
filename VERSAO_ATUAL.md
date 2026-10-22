@@ -7,6 +7,8 @@ Correcao da falta de resposta sobre boleto: o workflow gerava a resposta, mas a 
 
 Delta de producao restrito a uma chave na allowlist do server.js, com backup, sintaxe e restart pelo publicador existente. Sem mudar mensagem, divisao do link, workflow, memoria ou pausa manual. Testes reproduzem o falso positivo e verificam runtime, idempotencia e preservacao. Validacao HTTP usa revisao impossivel para assegurar rollback sem gravar conversa.
 
+Publicacao concluida: commit funcional 51f0a4e7/tag enviados; somente server.js remoto alterado. Estado PayJoy aceito pelo runtime ativo, API/MySQL saudaveis, pausa manual e hash do workflow preservados. 17 testes focados, contrato de API e117 comerciais aprovados; site/build/version/navegador validados. Dez preexistentes preservados; limpeza0 removidos/35 bloqueadas detalhadas na nota.
+
 ## Historico anterior
 
 # v1.2.661-payjoy-reutilizar-entrada
