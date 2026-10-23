@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -37,6 +37,14 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
 
   const [search, setSearch] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('mdv-admin-sidebar-collapsed');
+      return saved === null ? location.pathname.startsWith('/admin/settings/models') : saved === 'true';
+    } catch {
+      return location.pathname.startsWith('/admin/settings/models');
+    }
+  });
   const [appVersion, setAppVersion] = useState<AppVersionInfo | null>(null);
   const [botHealth, setBotHealth] = useState<BotHealth | null>(null);
   const [certificateAlerts, setCertificateAlerts] = useState<Array<FiscalCertificateStatus & { companyId: string; companyName: string }>>([]);
@@ -96,6 +104,13 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   function handleMenuSearchChange(event: React.ChangeEvent<HTMLInputElement>) {
     const nextSearch = event.target.value;
     setSearch(isLikelyCredentialAutofill(nextSearch) ? '' : nextSearch);
+  }
+
+  function toggleSidebar() {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    if (next) setSearch('');
+    try { window.localStorage.setItem('mdv-admin-sidebar-collapsed', String(next)); } catch { /* Storage may be unavailable. */ }
   }
 
   const menuGroups = useMemo(() => [
@@ -258,11 +273,15 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         </div>
       )}
       <aside className={cn(
-        "w-full md:w-64 bg-slate-900 text-white p-6 space-y-4 md:sticky md:top-0 md:h-screen flex flex-col z-50 shadow-2xl overflow-y-auto",
+        "w-full bg-slate-900 text-white p-6 space-y-4 md:sticky md:top-0 md:h-screen md:flex-none flex flex-col z-50 shadow-2xl overflow-y-auto transition-[width,padding] duration-200",
+        sidebarCollapsed ? "md:w-[72px] md:p-3" : "md:w-64",
         DEV_MODE ? "md:top-10 md:h-[calc(100vh-2.5rem)]" : ""
       )}>
-        <div className="px-2 pb-2">
-          <div className="flex items-center gap-3">
+        <div className={cn("px-2 pb-2", sidebarCollapsed && "md:px-0")}>
+          <button type="button" onClick={toggleSidebar} aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} className={cn("hidden md:flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white mb-3", sidebarCollapsed ? "mx-auto" : "ml-auto")}>
+            {sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+          </button>
+          <div className={cn("flex items-center gap-3", sidebarCollapsed && "md:hidden")}>
             <Link to="/" target="_blank" title="Abrir site Mercado do Vale" className="block min-w-0 hover:opacity-80 transition-opacity">
               {settings.logo_dark || settings.logo_main ? (
                 <img src={settings.logo_dark || settings.logo_main} alt={settings.company_name} className="h-10 max-w-[78px] object-contain object-left" />
@@ -284,15 +303,19 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
               <span className="text-sm font-extrabold tracking-tight">3DMV</span>
             </Link>
           </div>
-          <p className="mt-1 text-[9px] font-medium text-violet-300/80">Área reservada para a logomarca 3DMV</p>
-          <div className="flex items-center gap-1.5 mt-2 mb-4">
+          <div className={cn("hidden flex-col items-center gap-2", sidebarCollapsed && "md:flex")}>
+            <Link to="/" target="_blank" title="Abrir site Mercado do Vale" aria-label="Abrir site Mercado do Vale" className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 font-bold text-white">M</Link>
+            <Link to="/loja-3d" target="_blank" title="Abrir site 3DMV" aria-label="Abrir site 3DMV" className="flex h-10 w-10 items-center justify-center rounded-lg border border-violet-300/70 text-violet-200"><Printer size={18} /></Link>
+          </div>
+          <p className={cn("mt-1 text-[9px] font-medium text-violet-300/80", sidebarCollapsed && "md:hidden")}>Área reservada para a logomarca 3DMV</p>
+          <div className={cn("flex items-center gap-1.5 mt-2 mb-4", sidebarCollapsed && "md:hidden")}>
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
               Painel: {customer?.customer_type || 'ADMIN'}
             </p>
           </div>
           
-          <div className="relative mt-2">
+          <div className={cn("relative mt-2", sidebarCollapsed && "md:hidden")}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input 
               type="text" 
@@ -308,15 +331,15 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
         </div>
 
-        <nav className="space-y-1 flex-1 overflow-y-auto pr-2 -mr-2 pb-4">
+        <nav aria-label="Menu administrativo" className={cn("space-y-1 flex-1 overflow-y-auto pr-2 -mr-2 pb-4", sidebarCollapsed && "md:pr-0 md:mr-0")}>
           {filteredGroups.length === 0 ? (
             <div className="text-center py-6 text-slate-500 text-xs">
               Nenhuma página encontrada.
             </div>
           ) : (
             filteredGroups.map((group, groupIndex) => (
-              <div key={groupIndex} className="mb-4">
-                <div className={cn("pt-2 pb-2 px-3 text-[10px] font-bold uppercase tracking-widest", group.title === 'Loja 3D' ? 'text-violet-200 bg-violet-500/10 rounded-lg border-l-2 border-violet-400' : 'text-slate-400 bg-transparent')}>
+              <div key={groupIndex} className={cn("mb-4", sidebarCollapsed && "md:mb-2 md:border-t md:border-slate-800 md:pt-2")}>
+                <div className={cn("pt-2 pb-2 px-3 text-[10px] font-bold uppercase tracking-widest", group.title === 'Loja 3D' ? 'text-violet-200 bg-violet-500/10 rounded-lg border-l-2 border-violet-400' : 'text-slate-400 bg-transparent', sidebarCollapsed && "md:hidden")}>
                   {group.title}
                 </div>
                 {group.items.map((item, itemIndex) => {
@@ -329,6 +352,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                       icon={item.icon} 
                       label={item.label} 
                       active={activeItemPath === item.to} 
+                      collapsed={sidebarCollapsed}
                     />
                   );
                 })}
@@ -340,7 +364,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         {appVersion?.version && (
           <div
             title={appVersionTooltip}
-            className="mx-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-[10px] text-slate-400"
+            className={cn("mx-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-[10px] text-slate-400", sidebarCollapsed && "md:hidden")}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold uppercase tracking-widest text-slate-500">Versao</span>
@@ -356,25 +380,27 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
         {user && (
           <div className="pt-4 border-t border-slate-800">
-            <div className="flex items-center gap-3 mb-4 px-2">
+            <div className={cn("flex items-center gap-3 mb-4 px-2", sidebarCollapsed && "md:justify-center md:px-0")}>
               <div className={cn("w-9 h-9 rounded-xl bg-gradient-to-br flex items-center justify-center text-xs font-bold shadow-lg", isPrint3dArea ? "from-violet-500 to-violet-700" : "from-blue-500 to-blue-700")}>
                 {customer?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
               </div>
-              <div className="flex-1 overflow-hidden">
+              <div className={cn("flex-1 overflow-hidden", sidebarCollapsed && "md:hidden")}>
                 <p className="text-sm font-bold truncate leading-none text-white">{customer?.name || user?.email || 'Usuário'}</p>
                 <p className="text-[10px] text-slate-500 truncate mt-1">{user?.email}</p>
               </div>
             </div>
             <button
               onClick={signOut}
-              className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-all"
+              title="Sair com segurança"
+              aria-label="Sair com segurança"
+              className={cn("w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-all", sidebarCollapsed && "md:justify-center md:px-2")}
             >
-              <LogOut size={16} /> Sair com Segurança
+              <LogOut size={16} /> <span className={cn(sidebarCollapsed && "md:hidden")}>Sair com Segurança</span>
             </button>
           </div>
         )}
       </aside>
-      <main className="flex-1 p-4 md:p-10 overflow-y-auto w-full md:w-auto overflow-x-hidden">
+      <main className={cn("flex-1 min-w-0 p-4 overflow-y-auto w-full md:w-auto overflow-x-hidden", location.pathname.startsWith('/admin/settings/models') ? "md:p-6" : "md:p-10")}>
         {isPrint3dArea && <div className="mb-5 flex items-center gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 text-violet-900"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-700"><Printer size={20} /></span><div><p className="text-sm font-bold">3DMV</p><p className="text-xs text-violet-700">Área de gestão da 3DMV · estoque central compartilhado</p></div></div>}
         {!isPrint3dArea && botHealth?.status === 'offline' && (
           <div role="alert" className="mb-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 shadow-sm">
@@ -394,11 +420,14 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 };
 
-const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; active?: boolean }> = ({ to, icon, label, active }) => (
+const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; active?: boolean; collapsed?: boolean }> = ({ to, icon, label, active, collapsed }) => (
   <Link
     to={to}
+    title={collapsed ? label : undefined}
+    aria-label={label}
     className={cn(
       "flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 group",
+      collapsed && "md:justify-center md:px-2",
       active
         ? to.startsWith('/admin/loja-3d/') ? "bg-violet-700 text-white shadow-lg shadow-violet-700/20" : "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
         : to.startsWith('/admin/loja-3d/') ? "hover:bg-violet-500/15 text-violet-200 hover:text-white" : "hover:bg-slate-800 text-slate-400 hover:text-white"
@@ -407,6 +436,6 @@ const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; acti
     <span className={cn("transition-transform group-hover:scale-110", active ? "text-white" : to.startsWith('/admin/loja-3d/') ? "text-violet-300 group-hover:text-violet-100" : "text-slate-500 group-hover:text-blue-400")}>
       {icon}
     </span>
-    <span className="font-semibold text-sm tracking-tight">{label}</span>
+    <span className={cn("font-semibold text-sm tracking-tight", collapsed && "md:hidden")}>{label}</span>
   </Link>
 );

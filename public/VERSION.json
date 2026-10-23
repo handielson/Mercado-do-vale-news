@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.675-catalogo-pergunta-separada",
+  "version": "v1.2.676-menu-modelos-compacto",
   "date": "2026-10-23",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.675-catalogo-pergunta-separada",
-  "release_vps": "/var/www/mdv-site/releases/20261023-190417-catalogo-pergunta-separada",
+  "tag": "v1.2.676-menu-modelos-compacto",
+  "release_vps": "/var/www/mdv-site/releases/20261023-193701-menu-modelos-compacto",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "A pergunta de escolha do modelo e enviada em mensagem separada apos a lista de celulares no WhatsApp.",
+  "summary": "O menu administrativo pode recolher para icones e a tabela de modelos preserva a leitura de precos e acoes.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,17 +14,16 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "tmp-tests/n8n-sales-catalog-timeout-guard.cjs",
-    "tmp-tests/n8n-sales-catalog-timeout-guard.test.cjs",
-    "scripts/n8n-sales-regression-gate.cjs",
-    "scripts/deploy-n8n-catalog-choice-separate.cjs",
+    "layouts/AdminLayout.tsx",
+    "pages/admin/settings/ModelsPage.tsx",
+    "tmp-tests/admin-models-responsive-layout.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-23-v1.2.675-catalogo-pergunta-separada.md"
+    "docs/versoes/2026-10-23-v1.2.676-menu-modelos-compacto.md"
   ],
   "validations": [
-    "Catalogo em tres partes e pergunta final isolada no emissor WhatsApp; gate comercial completo.",
-    "Build do site e verificacao publica do site, VERSION.json, API e n8n."
+    "Teste focado do menu compacto e da largura minima da tabela; regressões de navegacao administrativa.",
+    "Build do site e verificacao publica do site, VERSION.json e API."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

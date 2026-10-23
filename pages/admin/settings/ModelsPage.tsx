@@ -688,8 +688,8 @@ export function ModelsPage() {
             </div>
 
             {/* Tabela */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-y-auto max-h-[65vh]">
-                <table className="w-full table-fixed relative">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-auto max-h-[65vh]">
+                <table className="w-full min-w-[1200px] table-fixed relative">
                     <colgroup>
                         <col className="w-[4%]" /><col className="w-[11%]" /><col className="w-[22%]" />
                         <col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" />

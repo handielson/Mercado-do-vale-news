@@ -1,3 +1,14 @@
+# v1.2.676-menu-modelos-compacto
+
+Data: 23/10/2026. Branch: main. Tag: v1.2.676-menu-modelos-compacto.
+Release: /var/www/mdv-site/releases/20261023-193701-menu-modelos-compacto.
+
+Na Gestao de Modelos, o menu administrativo inicia compacto em desktop quando ainda nao ha preferencia salva; o operador pode expandir ou recolher e a escolha persiste. Os icones mantem nome acessivel e a tabela conserva largura minima, com rolagem horizontal apenas quando necessario.
+
+Validacao: teste focado de responsividade, testes de navegacao do painel, build com travas e verificacao publica do site. Somente o site recebe deploy; API e n8n permanecem como estao.
+
+## Historico anterior
+
 # v1.2.675-catalogo-pergunta-separada
 
 Data: 23/10/2026. Branch: main. Tag: v1.2.675-catalogo-pergunta-separada.
