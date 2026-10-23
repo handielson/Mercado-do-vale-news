@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import tailwind from 'tailwindcss';
+import postcss from 'postcss';
 
 const layout = readFileSync(new URL('../layouts/AdminLayout.tsx', import.meta.url), 'utf8');
 const models = readFileSync(new URL('../pages/admin/settings/ModelsPage.tsx', import.meta.url), 'utf8');
@@ -17,4 +19,16 @@ test('precos e acoes dos modelos nao sao comprimidos quando falta largura', () =
   assert.match(layout, /flex-1 min-w-0 p-4/);
   assert.match(models, /overflow-auto max-h-\[65vh\]/);
   assert.match(models, /w-full min-w-\[1200px\] table-fixed/);
+});
+
+test('Tailwind gera as classes de largura e flexibilidade do menu compacto', async () => {
+  const { default: config } = await import('../tailwind.config.js');
+  const result = await postcss([tailwind(config)]).process('@tailwind utilities;', { from: undefined });
+  const rule = selector => {
+    const start = result.css.indexOf(selector);
+    assert.ok(start >= 0, `regra ${selector} ausente no CSS gerado`);
+    return result.css.slice(start, result.css.indexOf('}', start));
+  };
+  assert.match(rule(String.raw`.md\:w-\[72px\]`), /width:\s*72px/);
+  assert.match(rule(String.raw`.md\:flex-none`), /flex:\s*none/);
 });

@@ -1,3 +1,14 @@
+# v1.2.677-menu-modelos-css
+
+Data: 23/10/2026. Branch: main. Tag: v1.2.677-menu-modelos-css.
+Release: /var/www/mdv-site/releases/20261023-194553-menu-modelos-css.
+
+Corrigida a largura do menu compacto em desktop. A pasta `layouts/` agora participa da geracao do Tailwind, garantindo que a classe de 72 px realmente exista no CSS publicado. Uma regressao compila o CSS e falha se essa classe desaparecer.
+
+Validacao: teste de CSS gerado, build com travas e medicao do menu e da area de Modelos no navegador apos a publicacao. Somente o site recebe deploy.
+
+## Historico anterior
+
 # v1.2.676-menu-modelos-compacto
 
 Data: 23/10/2026. Branch: main. Tag: v1.2.676-menu-modelos-compacto.
