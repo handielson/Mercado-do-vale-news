@@ -20,7 +20,7 @@ export function ModelParentImages({ modelId, onBusyChange, onSaveReady }: { mode
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState('');
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(true);
     const pendingVideo = useRef<{ file: File; id?: string; url?: string } | null>(null);
     const operation = useRef(false);
     useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
@@ -100,7 +100,7 @@ export function ModelParentImages({ modelId, onBusyChange, onSaveReady }: { mode
     }
     return <section aria-label="Fotos do produto pai" className="mb-5 rounded-xl border border-slate-200 bg-white p-4 space-y-3">
         <button type="button" disabled={busy || dirty} aria-expanded={expanded} aria-controls={`parent-media-${modelId}`} onClick={() => setExpanded(value => !value)} className="flex w-full items-center justify-between gap-3 text-left">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900"><ImageIcon size={18} className="text-blue-600" />Fotos e vídeo do produto pai</h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900"><ImageIcon size={18} className="text-blue-600" />Fotos do produto pai (capa da família) e vídeo</h3>
             <span className="flex items-center gap-2 text-xs text-slate-500">{parent ? `${parent.images?.length || 0} fotos · ${parent.video_url ? '1 vídeo' : 'sem vídeo'}` : ''}<ChevronDown size={18} className={expanded ? 'rotate-180' : ''}/></span>
         </button>
         <p className="text-xs text-slate-500">Até 5 fotos e 1 vídeo do pai. Clique acima para editar. As fotos de cada cor continuam abaixo.</p>

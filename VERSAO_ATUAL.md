@@ -1,3 +1,14 @@
+# v1.2.681-foto-produto-pai-visivel
+
+Data: 23/10/2026. Branch: main. Tag: v1.2.681-foto-produto-pai-visivel.
+Release: /var/www/mdv-site/releases/20261023-205546-foto-produto-pai-visivel.
+
+Na etapa Variacoes do cadastro da familia, as fotos do produto pai ficam visiveis antes dos filhos, com a primeira imagem identificada como capa. Sao as mesmas fotos da aba Fotos e descricao. Na aba de fotos do modelo, o quadro de fotos do pai inicia aberto quando a familia ja existe.
+
+Validacao: testes focados de cadastro pai e familia, build do site e consulta publica apos deploy. Somente o site recebe deploy.
+
+## Historico anterior
+
 # v1.2.680-variacoes-por-fotos-modelo
 
 Data: 23/10/2026. Branch: main. Tag: v1.2.680-variacoes-por-fotos-modelo.

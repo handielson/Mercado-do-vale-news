@@ -27,4 +27,15 @@ test('the registration path rechecks the family and returns to the saved parent'
   assert.match(modelsPage, /Produto pai, fotos e variaç[õo]es/);
   assert.match(productForm, /if \(savedProduct\?\.is_parent && savedProduct\.id\)/);
   assert.match(modelPhotos, /Criar produto pai e variaç[õo]es/);
+  assert.match(modelPhotos, /const \[expanded, setExpanded\] = useState\(true\)/);
+});
+
+test('parent photo upload is visible at the start of the variations step', () => {
+  const form = readFileSync(new URL('../components/products/ProductForm.tsx', import.meta.url), 'utf8');
+  const section = form.slice(form.indexOf('id="product-variations-section"'), form.indexOf('{isPrint3d && <section', form.indexOf('id="product-variations-section"')));
+  assert.match(section, /aria-label="Foto do produto pai"/);
+  assert.match(section, /title="Fotos do produto pai \(capa da família\)"/);
+  assert.match(section, /handleImageUpload=\{handleImageUpload\}/);
+  assert.match(section, /imagePreviews=\{imagePreviews\}/);
+  assert.match(section, /<ProductFamilyEditor/);
 });

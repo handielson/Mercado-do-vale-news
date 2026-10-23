@@ -2349,6 +2349,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             <div id="product-media-section" className={activeSection === 'media' ? 'scroll-mt-20' : 'hidden'}>
             {isParentProduct && <p className="mb-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">Fotos da família: a primeira será a capa no site (por exemplo, todas as cores juntas). Cada variação mantém suas próprias fotos. Sem foto do pai, o site usa uma foto disponível de uma variação.</p>}
             <ProductImages
+                title={isParentProduct ? 'Fotos do produto pai (capa da família)' : undefined}
                 imagePreviews={imagePreviews}
                 isCompressing={isCompressing}
                 handleImageUpload={handleImageUpload}
@@ -2693,7 +2694,14 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             </div>
 
             {!variationDraftMode && isParentProduct && <div id="product-variations-section" className={activeSection === 'variations' ? 'space-y-4 scroll-mt-20' : 'hidden'}>
-                <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Última etapa: confira primeiro o cadastro completo do pai nas abas anteriores. Depois adicione as variações e seus dados próprios. O pai e os filhos serão salvos juntos em Salvar família e variações.</p>
+                <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Última etapa: adicione abaixo a foto do produto pai, que será a capa da família no site. Cada cor conserva suas próprias fotos nas variações. Confira os demais dados e salve o pai e os filhos juntos em Salvar família e variações.</p>
+                <section aria-label="Foto do produto pai" className="rounded-xl border border-blue-200 bg-white p-4 space-y-2">
+                    <ProductImages compact title="Fotos do produto pai (capa da família)" imagePreviews={imagePreviews} isCompressing={isCompressing}
+                        handleImageUpload={handleImageUpload} removeImage={removeImage}
+                        onReorder={newImages => { setValue('images', newImages); setImagePreviews(newImages); }}
+                        updatedAt={initialData?.updated || initialData?.created} />
+                    <p className="text-xs text-slate-600">A primeira foto é a capa. Esta área mostra as mesmas fotos do pai da aba Fotos e descrição.</p>
+                </section>
                 {familyLoadError && <p role="alert" className="text-red-700">{familyLoadError}</p>}
                 {familyPhotoLoading && <p role="status" className="text-sm text-blue-700">Preparando variações das cores com fotos...</p>}
                 {familyModelId && !familyPhotoLoading && !familyPhotoError && <button type="button" className="text-sm text-blue-700 underline" onClick={() => setFamilyPhotoRetry(value => value + 1)}>Atualizar variações pelas fotos do modelo</button>}
