@@ -1,3 +1,14 @@
+# v1.2.678-modelo-produto-pai
+
+Data: 23/10/2026. Branch: main. Tag: v1.2.678-modelo-produto-pai.
+Release: /var/www/mdv-site/releases/20261023-201140-modelo-produto-pai.
+
+Na Gestao de Modelos, a acao de produto pai abre o cadastro ja vinculado ao modelo e sua marca. Antes de criar, confere se a familia ja existe e abre a ficha atual quando existir. A aba de fotos do modelo mostra como iniciar a familia. Ao salvar o pai, a ficha abre para adicionar as variacoes e suas fotos.
+
+Validacao: teste focado de cadastro pai, testes de familia, build do site e consulta publica de homepage e VERSION.json. Somente o site recebe deploy.
+
+## Historico anterior
+
 # v1.2.677-menu-modelos-css
 
 Data: 23/10/2026. Branch: main. Tag: v1.2.677-menu-modelos-css.

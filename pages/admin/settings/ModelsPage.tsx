@@ -1,8 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud, DownloadCloud, RefreshCw, Sparkles } from 'lucide-react';
+import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud, DownloadCloud, RefreshCw, Sparkles, Layers } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
+import { productService } from '../../../services/products';
+import { buildModelParentPrefill } from '../../../services/modelParentPrefill.js';
 import { brandService } from '../../../services/brands';
 import { ModelModal } from '../../../components/settings/ModelModal';
 import { BulkSeoModal } from '../../../components/settings/BulkSeoModal';
@@ -64,9 +67,11 @@ interface ModelRowProps {
     onEdit: (m: Model) => void;
     onDelete: (m: Model) => void;
     onRefresh: () => void;
+    onOpenParent: (m: Model) => void;
+    openingParent: boolean;
 }
 
-function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit, onDelete, onRefresh }: ModelRowProps) {
+function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit, onDelete, onRefresh, onOpenParent, openingParent }: ModelRowProps) {
     const [products, setProducts] = useState<ProductRow[]>([]);
     const [loadingPrices, setLoadingPrices] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -320,6 +325,16 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                 <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 z-[1] ${actionCellBg} shadow-[-10px_0_18px_-18px_rgba(15,23,42,0.55)]`}>
                     <div className="flex flex-wrap items-center justify-end gap-1">
                         <button
+                            type="button"
+                            onClick={() => onOpenParent(model)}
+                            disabled={openingParent}
+                            className="p-2 text-violet-700 hover:bg-violet-50 rounded-lg transition-colors"
+                            title="Produto pai, fotos e variações deste modelo"
+                            aria-label={`Produto pai e variações de ${model.name}`}
+                        >
+                            {openingParent ? <Loader2 size={16} className="animate-spin" /> : <Layers size={16} />}
+                        </button>
+                        <button
                             onClick={handlePullBling}
                             disabled={pullingBling || syncingBling || reimporting}
                             className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors disabled:opacity-50"
@@ -366,6 +381,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                 <tr className={`border-b border-slate-200 ${rowBg} ${selectedRowClass}`}>
                     <td colSpan={10} className="px-6 py-2.5">
                         <div className="flex flex-wrap items-center gap-6">
+                            <button type="button" onClick={() => onOpenParent(model)} disabled={openingParent} className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60"><Layers size={15} />Produto pai, fotos e variações</button>
                             {/* Slug */}
                             <div className="flex items-center gap-2">
                                 <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Slug:</span>
@@ -451,6 +467,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function ModelsPage() {
+    const navigate = useNavigate();
     const [models, setModels] = useState<Model[]>([]);
     const [brands, setBrands] = useState<Brand[]>([]);
     const [loading, setLoading] = useState(true);
@@ -459,6 +476,7 @@ export function ModelsPage() {
     const [editingModel, setEditingModel] = useState<Model | null>(null);
     const [deleteError, setDeleteError] = useState('');
     const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
+    const [openingParentId, setOpeningParentId] = useState<string | null>(null);
 
     // ── Filtros ──
     const [search, setSearch] = useState('');
@@ -486,6 +504,23 @@ export function ModelsPage() {
 
     const handleEdit = (model: Model) => { setEditingModel(model); setModalOpen(true); };
     const handleAdd = () => { setEditingModel(null); setModalOpen(true); };
+    const handleOpenParent = async (model: Model) => {
+        if (openingParentId) return;
+        setOpeningParentId(model.id);
+        try {
+            const parents = await productService.listParentsByModel(model.id);
+            if (parents.length) {
+                navigate(`/admin/products/${parents[0].id}`);
+                return;
+            }
+            const brand = brands.find(item => item.id === model.brand_id);
+            navigate('/admin/products/new', { state: { cloneProduct: buildModelParentPrefill(model, brand?.name) } });
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Não foi possível abrir o produto pai.');
+        } finally {
+            setOpeningParentId(null);
+        }
+    };
 
     const handleDelete = async (model: Model) => {
         if (!confirm(`Excluir o modelo "${model.name}"?`)) return;
@@ -736,6 +771,8 @@ export function ModelsPage() {
                                     onEdit={handleEdit}
                                     onDelete={handleDelete}
                                     onRefresh={loadData}
+                                    onOpenParent={handleOpenParent}
+                                    openingParent={openingParentId === model.id}
                                 />
                             ))
                         )}

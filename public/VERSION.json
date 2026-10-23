@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.677-menu-modelos-css",
+  "version": "v1.2.678-modelo-produto-pai",
   "date": "2026-10-23",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.677-menu-modelos-css",
-  "release_vps": "/var/www/mdv-site/releases/20261023-194553-menu-modelos-css",
+  "tag": "v1.2.678-modelo-produto-pai",
+  "release_vps": "/var/www/mdv-site/releases/20261023-201140-modelo-produto-pai",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Corrige a largura do menu administrativo compacto ao incluir o layout na geracao de CSS.",
+  "summary": "Liga o modelo comercial ao cadastro do produto pai, suas fotos e variacoes sem duplicar familias existentes.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,15 +14,19 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "tailwind.config.js",
-    "tmp-tests/admin-models-responsive-layout.test.mjs",
+    "components/settings/ModelParentImages.tsx",
+    "pages/admin/products/ModelProductAggregatorPage.tsx",
+    "pages/admin/products/ProductFormPage.tsx",
+    "pages/admin/settings/ModelsPage.tsx",
+    "services/modelParentPrefill.js",
+    "tmp-tests/model-parent-registration.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-23-v1.2.677-menu-modelos-css.md"
+    "docs/versoes/2026-10-23-v1.2.678-modelo-produto-pai.md"
   ],
   "validations": [
-    "Teste que compila Tailwind e confirma a classe de 72 px no CSS gerado; build do site.",
-    "Medicao visual da largura do menu e conteudo no navegador, VERSION.json e API."
+    "Teste focado do pre-preenchimento e da protecao contra duplicacao; testes de familias e build do site.",
+    "Validacao publica do site e VERSION.json apos deploy; API sem reinicio."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

@@ -3,7 +3,9 @@ import { ArrowLeft, CopyPlus, ExternalLink, FileText, Loader2, MapPin, Pencil, R
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { modelService } from '../../../services/models';
+import { brandService } from '../../../services/brands';
 import { categoryService } from '../../../services/categories';
+import { productService } from '../../../services/products';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { vpsClient } from '../../../services/vpsClient';
 import { unitService } from '../../../services/units';
@@ -11,6 +13,7 @@ import { isLocalCatalogPreviewRuntime } from '../../../services/localCatalogPrev
 import { stockLocationService } from '../../../services/stockLocationService';
 import { aggregateModelProducts, getModelIdentifierSections } from '../../../services/modelProductAggregator.js';
 import { getProductCloneState } from '../../../services/productClonePrefill.js';
+import { buildModelParentPrefill } from '../../../services/modelParentPrefill.js';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 import { PAYJOY_SALE_NOTE } from '../../../utils/saleInformation.js';
 
@@ -72,6 +75,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
     const [visibilityUnit, setVisibilityUnit] = useState<any | null>(null);
     const [visibilityReason, setVisibilityReason] = useState('');
     const [savingVisibility, setSavingVisibility] = useState(false);
+    const [openingParentForm, setOpeningParentForm] = useState(false);
     const requestVisibility = (unit: any) => {
         setVisibilityUnit(unit);
         setVisibilityReason(unit.status === 'hidden' ? 'Aparelho localizado e conferido.' : 'Aparelho não localizado no estoque.');
@@ -153,6 +157,24 @@ export const ModelProductAggregatorPage: React.FC = () => {
             toast.error('Não foi possível copiar o SKU.');
         }
     };
+    const openParentForm = async () => {
+        if (!modelId || !data?.model || openingParentForm) return;
+        setOpeningParentForm(true);
+        try {
+            // Recheck before opening a new registration: another operator may have created the parent.
+            const parents = await productService.listParentsByModel(modelId);
+            if (parents.length) {
+                navigate(`/admin/products/${parents[0].id}`);
+                return;
+            }
+            const brand = await brandService.getById(data.model.brand_id);
+            navigate('/admin/products/new', { state: { cloneProduct: buildModelParentPrefill(data.model, brand?.name) } });
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Não foi possível abrir o cadastro do pai.');
+        } finally {
+            setOpeningParentForm(false);
+        }
+    };
 
     return (
         <div className="space-y-6 print:bg-white">
@@ -201,6 +223,16 @@ export const ModelProductAggregatorPage: React.FC = () => {
 
             {data && (
                 <>
+                    {!data.parentProducts?.length && (
+                        <section className="rounded-xl border border-blue-200 bg-blue-50 p-4 print:hidden">
+                            <h2 className="font-semibold text-blue-950">Este modelo ainda não tem produto pai</h2>
+                            <p className="mt-1 text-sm text-blue-800">Crie a família do {modelName} para cadastrar a imagem principal e organizar as variações de memória e cor. O cadastro abrirá com este modelo selecionado.</p>
+                            <button type="button" onClick={() => void openParentForm()} disabled={openingParentForm} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">
+                                {openingParentForm ? <Loader2 className="h-4 w-4 animate-spin" /> : <CopyPlus className="h-4 w-4" />}
+                                Criar produto pai e variações
+                            </button>
+                        </section>
+                    )}
                     {data.parentProducts?.length > 0 && (
                         <details className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
                             <summary className="cursor-pointer font-semibold">Cadastros de família vinculados ao modelo ({data.parentProducts.length})</summary>

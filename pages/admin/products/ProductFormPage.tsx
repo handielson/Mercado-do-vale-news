@@ -194,11 +194,11 @@ export const ProductFormPage: React.FC = () => {
             if (savedProduct?.id && !isEditMode) navigate(`/admin/products/${savedProduct.id}`);
             return;
         }
+        if (savedProduct?.is_parent && savedProduct.id) {
+            navigate(`/admin/products/${savedProduct.id}`);
+            return;
+        }
         if (savedProduct?.is_print3d && savedProduct.id) {
-            if (savedProduct.is_parent) {
-                navigate(`/admin/products/${savedProduct.id}`);
-                return;
-            }
             navigate(`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(savedProduct.id)}#ficha-producao-3d`);
             return;
         }

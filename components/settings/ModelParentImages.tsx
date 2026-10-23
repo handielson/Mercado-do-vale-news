@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Image as ImageIcon, Loader2, Save, ChevronDown } from 'lucide-react';
 import { productService } from '../../services/products';
 import { uploadProductImages } from '../../services/productImageUpload';
@@ -104,7 +105,7 @@ export function ModelParentImages({ modelId, onBusyChange, onSaveReady }: { mode
         </button>
         <p className="text-xs text-slate-500">Até 5 fotos e 1 vídeo do pai. Clique acima para editar. As fotos de cada cor continuam abaixo.</p>
         {loading ? <p role="status" className="flex items-center gap-2 py-3 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" />Carregando mídias do pai...</p>
-            : !parents.length ? <>{error ? <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-red-600">{error}<button type="button" onClick={() => setRetry(value => value + 1)} className="underline">Tentar novamente</button></div> : <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">Este modelo ainda não possui um produto pai vinculado. Cadastre o pai antes de adicionar suas mídias.</p>}</>
+            : !parents.length ? <>{error ? <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-red-600">{error}<button type="button" onClick={() => setRetry(value => value + 1)} className="underline">Tentar novamente</button></div> : <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900"><p>Este modelo ainda não possui um produto pai. Crie a família para adicionar a imagem principal; depois cadastre as variações.</p><Link to={`/admin/products/models/${encodeURIComponent(modelId)}`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700">Criar produto pai e variações ↗</Link></div>}</>
             : expanded && <fieldset id={`parent-media-${modelId}`} disabled={busy} className="space-y-4 min-w-0">
                 {parents.length > 1 ? <label className="block text-sm text-slate-600">Produto pai
                     <select disabled={dirty || busy} value={selectedId} onChange={event => selectParent(parents.find(item => item.id === event.target.value))} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm">
