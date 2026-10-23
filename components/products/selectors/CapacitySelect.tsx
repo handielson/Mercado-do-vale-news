@@ -91,6 +91,9 @@ export const CapacitySelect: React.FC<CapacitySelectProps> = ({
                     className="min-w-0 w-full flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
                 >
                     <option value="">{placeholder}</option>
+                    {value && !capacities.some(capacity => capacity.label === value) && (
+                        <option value={value}>{value} (valor do rascunho)</option>
+                    )}
                     {capacities.map((c) => (
                         <option key={c.id} value={c.label}>
                             {c.label}

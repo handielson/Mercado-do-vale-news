@@ -6,6 +6,14 @@ import postcss from 'postcss';
 
 const layout = readFileSync(new URL('../layouts/AdminLayout.tsx', import.meta.url), 'utf8');
 const models = readFileSync(new URL('../pages/admin/settings/ModelsPage.tsx', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+
+test('menu lateral oculta a barra visual sem bloquear a rolagem', () => {
+  assert.match(layout, /admin-sidebar-scroll[^"\n]*overflow-y-auto/);
+  assert.match(layout, /<nav aria-label="Menu administrativo" className=\{cn\("admin-sidebar-scroll[^"\n]*overflow-y-auto/);
+  assert.match(css, /\.admin-sidebar-scroll\s*\{[^}]*scrollbar-width:\s*none/s);
+  assert.match(css, /\.admin-sidebar-scroll::-webkit-scrollbar\s*\{[^}]*display:\s*none/s);
+});
 
 test('menu de modelos abre compacto e permite recuperar o menu completo', () => {
   assert.match(layout, /saved === null \? location\.pathname\.startsWith\('\/admin\/settings\/models'\)/);

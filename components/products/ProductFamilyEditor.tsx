@@ -5,6 +5,7 @@ import { ProductForm } from './ProductForm';
 import { Product, ProductInput } from '../../types/product';
 import { buildAttributeVariationDraft, FAMILY_VARIATION_ATTRIBUTES } from './familyRegistration.js';
 import { ColorSelect } from './selectors/ColorSelect';
+import { CapacitySelect } from './selectors/CapacitySelect';
 import { MaterialSelect } from './selectors/MaterialSelect';
 import { EANInput } from '../ui/EANInput';
 import { VariationMedia } from './VariationMedia';
@@ -76,6 +77,12 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, onBusyCh
                 </label>
                 <fieldset disabled={disabled || busy} className="min-w-0"><legend className="text-sm mb-1">{FAMILY_VARIATION_ATTRIBUTES.find(item => item.key === attribute.key)?.label}</legend>
                     {attribute.key === 'color' ? <ColorSelect value={attribute.value} onChange={value => setAttributes(attributes.map((item, i) => i === index ? { ...item, value } : item))} />
+                        : attribute.key === 'ram' || attribute.key === 'storage' ? <CapacitySelect
+                            type={attribute.key} value={attribute.value}
+                            label={attribute.key === 'ram' ? 'Memória RAM' : 'Armazenamento'}
+                            placeholder={attribute.key === 'ram' ? 'Selecione a memória RAM' : 'Selecione o armazenamento'}
+                            onChange={value => setAttributes(attributes.map((item, i) => i === index ? { ...item, value } : item))}
+                        />
                         : attribute.key === 'material' ? <MaterialSelect label="Valor do material" value={attribute.value} onChange={value => setAttributes(attributes.map((item, i) => i === index ? { ...item, value } : item))} />
                         : <input aria-label={`Valor de ${FAMILY_VARIATION_ATTRIBUTES.find(item => item.key === attribute.key)?.label}`} value={attribute.value} maxLength={80}
                             onChange={e => setAttributes(attributes.map((item, i) => i === index ? { ...item, value: e.target.value } : item))}

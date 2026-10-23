@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Menu administrativo rolavel sem barra visual. */
+.admin-sidebar-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.admin-sidebar-scroll::-webkit-scrollbar {
+    display: none;
+}
+
 /* Identidade da loja 3D. Cores semânticas de erro, aviso e sucesso são preservadas. */
 :root {
     --print3d-accent: #6d28d9;

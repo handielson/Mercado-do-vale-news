@@ -1,3 +1,14 @@
+# v1.2.679-menu-sem-barra-variacoes
+
+Data: 23/10/2026. Branch: main. Tag: v1.2.679-menu-sem-barra-variacoes.
+Release: /var/www/mdv-site/releases/20261023-202019-menu-sem-barra-variacoes.
+
+O menu lateral administrativo continua rolavel, mas sem barra visivel. No cadastro dos filhos de uma familia, RAM e armazenamento usam as opcoes cadastradas para escolha, preservando valores ja presentes em um rascunho.
+
+Validacao: testes focados do menu, seletores e familias, build do site e consulta publica apos deploy. Somente o site recebe deploy.
+
+## Historico anterior
+
 # v1.2.678-modelo-produto-pai
 
 Data: 23/10/2026. Branch: main. Tag: v1.2.678-modelo-produto-pai.

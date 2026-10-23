@@ -273,7 +273,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         </div>
       )}
       <aside className={cn(
-        "w-full bg-slate-900 text-white p-6 space-y-4 md:sticky md:top-0 md:h-screen md:flex-none flex flex-col z-50 shadow-2xl overflow-y-auto transition-[width,padding] duration-200",
+        "admin-sidebar-scroll w-full bg-slate-900 text-white p-6 space-y-4 md:sticky md:top-0 md:h-screen md:flex-none flex flex-col z-50 shadow-2xl overflow-y-auto transition-[width,padding] duration-200",
         sidebarCollapsed ? "md:w-[72px] md:p-3" : "md:w-64",
         DEV_MODE ? "md:top-10 md:h-[calc(100vh-2.5rem)]" : ""
       )}>
@@ -331,7 +331,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
         </div>
 
-        <nav aria-label="Menu administrativo" className={cn("space-y-1 flex-1 overflow-y-auto pr-2 -mr-2 pb-4", sidebarCollapsed && "md:pr-0 md:mr-0")}>
+        <nav aria-label="Menu administrativo" className={cn("admin-sidebar-scroll space-y-1 flex-1 overflow-y-auto pr-2 -mr-2 pb-4", sidebarCollapsed && "md:pr-0 md:mr-0")}>
           {filteredGroups.length === 0 ? (
             <div className="text-center py-6 text-slate-500 text-xs">
               Nenhuma página encontrada.
