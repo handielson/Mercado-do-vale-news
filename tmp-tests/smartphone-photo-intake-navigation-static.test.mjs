@@ -53,6 +53,12 @@ assert.match(queue, /groupSize > 1[\s\S]*\{groupSize\} aparelhos/, 'fila deve mo
 assert.match(queue, /Produto encontrado/, 'fila deve distinguir produto encontrado de aparelho concluído');
 assert.doesNotMatch(queue, /truncate text-sm font-bold|mt-0\.5 truncate text-xs/, 'fila nao deve truncar modelo, memoria ou cor');
 assert.match(queue, /break-words text-sm[\s\S]*break-words text-xs/, 'fila deve permitir quebra de linha para mostrar todos os dados');
+assert.match(queue, /grid-cols-\[repeat\(auto-fill,minmax\(min\(100%,190px\),1fr\)\)\]/, 'fila deve quebrar os cards em novas linhas sem rolagem horizontal');
+assert.match(queue, /onRequestRemove\(item\)[\s\S]*disabled=\{busy \|\| item\.status === 'analyzing'\}/, 'cada card deve oferecer exclusão individual sem interromper uma análise');
+assert.match(intakePage, /role="alertdialog"[\s\S]*removeFromQueue\(pendingRemoval\)/, 'o X deve confirmar a exclusão do aparelho escolhido');
+assert.match(intakePage, /setFinalizedNotice\(updated\)[\s\S]*setSelectedId\(nextPending\?\.id \|\| updated\.id\)/, 'a confirmação do aparelho salvo deve persistir ao avançar para o próximo');
+assert.match(intakePage, /role="status" aria-live="polite"[\s\S]*Ver aparelho salvo/, 'aparelho cadastrado deve aparecer em aviso acessível com acesso ao registro concluído');
+assert.doesNotMatch(intakePage, /lg:grid-cols-\[390px_minmax\(0,1fr\)\]/, 'a conferência não deve voltar para uma coluna lateral estreita');
 assert.match(marginEditor, /type="search"[\s\S]*onChange=\{event => setSearch\(event\.target\.value\)\}/, 'margens devem filtrar automaticamente enquanto o usuario digita');
 assert.match(marginEditor, /normalize\('NFD'\)[\s\S]*filteredBrands/, 'pesquisa deve ignorar acentos e caixa');
 assert.match(marginEditor, /ACTIVE_FILTERS[\s\S]*INACTIVE_FILTERS[\s\S]*CONFIGURED_FILTERS[\s\S]*PENDING_FILTERS/, 'pesquisa inteligente deve reconhecer estados das margens');

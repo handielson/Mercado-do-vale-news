@@ -246,22 +246,64 @@ console.log('cart family budget and explicit color selection: ok');
 const budgetItems = [{ product: products[0], unit_price: 12000, quantity: 1 }];
 const budgetOptions = { expandSiblingVariants: false, includeCalculatorLink: false };
 const allInstallments = await cartShare.generateBudgetText(budgetItems, budgetOptions);
-assert.equal((allInstallments.match(/x de /g) || []).length, 12);
-assert.match(allInstallments, /1️⃣x de 12000 = 12000/);
-assert.match(allInstallments, /1️⃣2️⃣x de 1000 = 12000/);
+assert.equal((allInstallments.match(/x de /g) || []).length, 1);
+assert.match(allInstallments, /💰 12000 à vista no PIX/);
+assert.match(allInstallments, /💳 Cartão: 12x de 1000 \(total 12000\)/);
 const cardOptions = Array.from({ length: 12 }, (_, index) => ({
     installments: index + 1, monthlyValue: Math.round(6000 / (index + 1)), totalWithFee: 6000, feePercent: 0,
 }));
 const mixedPaymentState = { cashCents: 6000, cardCents: 6000, selectedInstallment: null, cardOptions };
 const withEntry = await cartShare.generateBudgetText(budgetItems, { ...budgetOptions, mixedPaymentState });
-assert.equal((withEntry.match(/x de /g) || []).length, 12);
+assert.equal((withEntry.match(/x de /g) || []).length, 13);
+assert.match(withEntry, /💳 Cartão: 12x de 1000 \(total 12000\)/);
+assert.match(withEntry, /Simulação de pagamento combinado \(opcional\)/);
 assert.match(withEntry, /Entrada Pix\/Dinheiro: 6000/);
 assert.match(withEntry, /1️⃣2️⃣x de 500 = 6000/);
 const chosenInstallment = await cartShare.generateBudgetText(budgetItems, {
     ...budgetOptions, mixedPaymentState: { ...mixedPaymentState, selectedInstallment: 3, cardOption: cardOptions[2] },
 });
-assert.equal((chosenInstallment.match(/x de /g) || []).length, 1);
+assert.equal((chosenInstallment.match(/x de /g) || []).length, 2);
+assert.match(chosenInstallment, /💳 Cartão: 12x de 1000 \(total 12000\)/);
 assert.match(chosenInstallment, /3️⃣x de 2000 = 6000/);
 const withoutInstallments = await cartShare.generateBudgetText(budgetItems, { ...budgetOptions, includeInstallments: false });
 assert.ok(!withoutInstallments.includes('x de '));
-console.log('cart budget installments: all options, selected option, Pix entry and hidden options: ok');
+console.log('cart budget installments: standard 12x, selected option, Pix entry and hidden options: ok');
+
+const pricedCartShare = loadTypeScript('utils/cartShareUtils.ts', {
+    '@/services/installmentCalculator': {
+        calculateInstallments: async total => {
+            const cardTotal = Math.round(total * 1.119);
+            return [
+                { installments: 1, total, value: total },
+                { installments: 12, total: cardTotal, value: Math.round(cardTotal / 12) },
+            ];
+        },
+        formatPrice: cents => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100),
+    },
+    '@/services/vpsApiService': { vpsApiService: {} },
+    '@/utils/productSpecUtils': loadTypeScript('utils/productSpecUtils.ts'),
+    '@/utils/sharedMessageFormatting': formatting,
+});
+const multiMemoryBudget = await pricedCartShare.generateBudgetText([
+    { product: noteVariants[0], unit_price: 95000, quantity: 1 },
+    { product: noteVariants[2], unit_price: 105000, quantity: 1 },
+], { expandSiblingVariants: false, includeCalculatorLink: false });
+assert.match(multiMemoryBudget, /📱 4GB\/128GB\n   💰 R\$\s*950,00 à vista no PIX\n   💳 Cartão: 12x de R\$\s*88,59 \(total R\$\s*1\.063,05\)/);
+assert.match(multiMemoryBudget, /📱 4GB\/256GB\n   💰 R\$\s*1\.050,00 à vista no PIX\n   💳 Cartão: 12x de R\$\s*97,91 \(total R\$\s*1\.174,95\)/);
+assert.equal((multiMemoryBudget.match(/💳 Cartão: 12x de /g) || []).length, 2);
+
+const unavailableCardShare = loadTypeScript('utils/cartShareUtils.ts', {
+    '@/services/installmentCalculator': {
+        calculateInstallments: async total => [{ installments: 1, total, value: total }],
+        formatPrice: cents => String(cents),
+    },
+    '@/services/vpsApiService': { vpsApiService: {} },
+    '@/utils/productSpecUtils': loadTypeScript('utils/productSpecUtils.ts'),
+    '@/utils/sharedMessageFormatting': formatting,
+});
+await assert.rejects(
+    unavailableCardShare.generateBudgetText(budgetItems, budgetOptions),
+    /taxa de cartão em 12x/,
+    'a cart quote must not be copied with Pix alone when card fees are unavailable',
+);
+console.log('cart budget keeps Pix and verified 12x/total for every memory configuration: ok');

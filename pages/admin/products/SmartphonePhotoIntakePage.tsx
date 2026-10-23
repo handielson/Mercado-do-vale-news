@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Layers3, ListChecks, Loader2, RefreshCw, Settings2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, CheckCircle2, Layers3, ListChecks, Loader2, RefreshCw, Settings2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { BrandMarginEditor } from '../../../components/products/photo-intake/BrandMarginEditor';
@@ -61,6 +61,14 @@ export function SmartphonePhotoIntakePage() {
   const [busy, setBusy] = useState(false);
   const [groupQueue, setGroupQueue] = useState(true);
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState<SmartphonePhotoIntake | null>(null);
+  const [finalizedNotice, setFinalizedNotice] = useState<SmartphonePhotoIntake | null>(null);
+  const finalizedNoticeRef = useRef<HTMLDivElement>(null);
+  const reviewRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (finalizedNotice) finalizedNoticeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [finalizedNotice]);
 
   const upsertItem = useCallback((item: SmartphonePhotoIntake, select = true) => {
     setItems(current => {
@@ -74,7 +82,7 @@ export function SmartphonePhotoIntakePage() {
     const rows = await smartphonePhotoIntakeService.list();
     const sortedRows = sortPhotoIntakeQueue(rows).filter(item => item.status !== 'cancelled');
     setItems(sortedRows);
-    setSelectedId(current => current || sortedRows[0]?.id || null);
+    setSelectedId(current => sortedRows.some(item => item.id === current) ? current : sortedRows[0]?.id || null);
   }, []);
 
   const loadReferences = useCallback(async () => {
@@ -205,12 +213,12 @@ export function SmartphonePhotoIntakePage() {
     );
   };
 
-  const removeSelectedFromQueue = async () => {
-    if (!selected || busy) return;
+  const removeFromQueue = async (target: SmartphonePhotoIntake) => {
+    if (busy) return;
     setBusy(true);
     try {
-      await smartphonePhotoIntakeService.removeFromQueue(selected.id);
-      setSelectedId(null);
+      await smartphonePhotoIntakeService.removeFromQueue(target.id);
+      setPendingRemoval(null);
       await loadQueue();
       toast.success('Registro excluído da fila. Produto, aparelho e estoque foram preservados.');
     } catch (error: any) {
@@ -263,6 +271,7 @@ export function SmartphonePhotoIntakePage() {
         ...items.filter(item => item.id !== updated.id),
       ]);
       setItems(nextItems);
+      setFinalizedNotice(updated);
       const nextPending = nextItems.find(
         item => item.id !== updated.id && item.status !== 'completed',
       );
@@ -276,7 +285,7 @@ export function SmartphonePhotoIntakePage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1500px] p-4 sm:p-6">
+    <div className="w-full min-w-0 p-4 sm:p-6">
       <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <button
@@ -324,54 +333,59 @@ export function SmartphonePhotoIntakePage() {
       ) : (
         <div className="space-y-5">
           <PhotoCapturePanel onProcessed={upsertItem} />
-          <div className="grid items-start gap-5 lg:grid-cols-[390px_minmax(0,1fr)]">
-            <aside className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-24">
-              <div className="mb-2 flex items-center justify-between px-1">
+          {finalizedNotice && (
+            <div ref={finalizedNoticeRef} role="status" aria-live="polite" className="scroll-mt-5 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-950 shadow-sm">
+              <div className="flex min-w-0 items-start gap-3">
+                <CheckCircle2 size={22} className="mt-0.5 shrink-0 text-emerald-700" />
+                <div>
+                  <p className="font-bold">Celular cadastrado com sucesso e disponível para venda.</p>
+                  <p className="mt-1 text-sm">
+                    {[finalizedNotice.detected_brand, finalizedNotice.detected_model, finalizedNotice.detected_ram && finalizedNotice.detected_storage
+                      ? `${finalizedNotice.detected_ram}/${finalizedNotice.detected_storage}` : finalizedNotice.detected_ram || finalizedNotice.detected_storage,
+                    finalizedNotice.detected_color].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => {
+                  setHideCompleted(false);
+                  setSelectedId(finalizedNotice.id);
+                  requestAnimationFrame(() => reviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                }} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100">
+                  Ver aparelho salvo
+                </button>
+                <button type="button" onClick={() => setFinalizedNotice(null)} aria-label="Fechar confirmação de cadastro" className="rounded-lg p-2 text-emerald-700 hover:bg-emerald-100"><X size={17} /></button>
+              </div>
+            </div>
+          )}
+          <div className="space-y-5">
+            <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm" aria-label="Fila de conferência">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
                 <h2 className="font-bold text-slate-800">Fila de conferência</h2>
                 <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
                   {groupQueue ? `${groupedQueue.items.length} grupos · ${visibleItems.length} aparelhos` : `${visibleItems.length} aparelhos`}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={toggleQueueGrouping}
-                aria-pressed={groupQueue}
-                className={`mb-2 flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-colors ${groupQueue
-                  ? 'border-blue-200 bg-blue-50 text-blue-800'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-              >
-                <span className="inline-flex items-center gap-2 text-sm font-bold">
-                  <Layers3 size={17} /> Agrupar iguais
-                </span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${groupQueue ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                  {groupQueue ? 'Ativado' : 'Desativado'}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setHideCompleted(current => !current)}
-                aria-pressed={hideCompleted}
-                className={`mb-3 flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-colors ${hideCompleted
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-              >
-                <span className="text-sm font-bold">Ocultar já disponíveis</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${hideCompleted ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                  {hideCompleted ? 'Ativado' : 'Desativado'}
-                </span>
-              </button>
-              <div className="max-h-[70vh] overflow-y-auto pr-1">
-                <PhotoIntakeQueue
-                  items={groupedQueue.items}
-                  groupSizeById={groupedQueue.groupSizeById}
-                  selectedId={selectedId}
-                  loading={loading}
-                  onSelect={item => setSelectedId(item.id)}
-                />
+              <div className="mb-3 flex flex-wrap gap-2">
+                <button type="button" onClick={toggleQueueGrouping} aria-pressed={groupQueue} className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold ${groupQueue ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  <Layers3 size={16} /> Agrupar iguais <span className="text-xs">{groupQueue ? 'Ativado' : 'Desativado'}</span>
+                </button>
+                <button type="button" onClick={() => setHideCompleted(current => !current)} aria-pressed={hideCompleted} className={`rounded-xl border px-3 py-2 text-sm font-bold ${hideCompleted ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  Ocultar já disponíveis · {hideCompleted ? 'Ativado' : 'Desativado'}
+                </button>
               </div>
-            </aside>
+              <PhotoIntakeQueue
+                items={groupedQueue.items}
+                groupSizeById={groupedQueue.groupSizeById}
+                selectedId={selectedId}
+                loading={loading}
+                busy={busy}
+                onSelect={item => setSelectedId(item.id)}
+                onRequestRemove={setPendingRemoval}
+              />
+            </section>
 
-            <main className="min-w-0">
+            <main ref={reviewRef} className="min-w-0 scroll-mt-5">
               {selected ? (
                 <PhotoIntakeReviewCard
                   intake={selected}
@@ -392,7 +406,7 @@ export function SmartphonePhotoIntakePage() {
                   )}
                   onRefreshColors={refreshColors}
                   onFinalize={finalizeSelected}
-                  onRemoveFromQueue={removeSelectedFromQueue}
+                  onRemoveFromQueue={() => removeFromQueue(selected)}
                 />
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center text-sm text-slate-500">
@@ -400,6 +414,20 @@ export function SmartphonePhotoIntakePage() {
                 </div>
               )}
             </main>
+          </div>
+        </div>
+      )}
+      {pendingRemoval && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" role="presentation">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="photo-intake-remove-title" aria-describedby="photo-intake-remove-description" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 id="photo-intake-remove-title" className="text-lg font-bold text-slate-900">Excluir aparelho da fila?</h2>
+            <p id="photo-intake-remove-description" className="mt-2 text-sm text-slate-600">
+              {[pendingRemoval.detected_brand, pendingRemoval.detected_model, pendingRemoval.detected_ram, pendingRemoval.detected_storage, pendingRemoval.detected_color].filter(Boolean).join(' · ') || 'Este aparelho'} sairá da fila. Produto, aparelho já cadastrado e estoque serão preservados. Os demais aparelhos do grupo continuam na fila.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => setPendingRemoval(null)} disabled={busy} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-50">Cancelar</button>
+              <button type="button" onClick={() => void removeFromQueue(pendingRemoval)} disabled={busy} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy ? 'Excluindo...' : 'Excluir da fila'}</button>
+            </div>
           </div>
         </div>
       )}

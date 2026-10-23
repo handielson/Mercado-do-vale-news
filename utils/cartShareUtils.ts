@@ -470,7 +470,7 @@ function appendMixedPaymentLines(
     const options = mixedPaymentState.cardOptions || [];
 
     lines.push('');
-    lines.push('   Pagamento');
+    lines.push('   💡 Simulação de pagamento combinado (opcional)');
     lines.push(`   📊 Valor do orçamento: ${brl(totalBudgetCents)}`);
     lines.push(`   💵 Entrada Pix/Dinheiro: ${brl(cashCents)}`);
     if (cardCents > 0) lines.push(`   💳 Restante no cartão: ${brl(cardCents)}`);
@@ -591,7 +591,12 @@ export async function generateBudgetText(
         if (featureSummary) lines.push(`   ${featureSummary}`);
         if (row.specLine && row.specLine !== 'Opcao disponivel') lines.push(`   📱 ${row.specLine}`);
         lines.push(`   💰 ${brl(pixPlan?.total ?? total)} à vista no PIX`);
-        if (!shouldTotalize && includeInstallments) {
+        if (includeInstallments) {
+            const standardCardPlan = plans.find(plan => plan.installments === 12);
+            if (!standardCardPlan) {
+                throw new Error('Não foi possível consultar a taxa de cartão em 12x para o orçamento.');
+            }
+            lines.push(`   💳 Cartão: 12x de ${brl(standardCardPlan.value)} (total ${brl(standardCardPlan.total)})`);
             const rowMixedPaymentState = buildRowMixedPaymentState(
                 options.mixedPaymentState,
                 total,
@@ -599,9 +604,10 @@ export async function generateBudgetText(
             );
             const hasCustomPayment = Boolean(
                 rowMixedPaymentState?.selectedInstallment
-                || Number(rowMixedPaymentState?.cashCents || 0) > 0
+                || (Number(rowMixedPaymentState?.cashCents || 0) > 0
+                    && Number(rowMixedPaymentState?.cashCents || 0) < total)
             );
-            if (hasCustomPayment) {
+            if (hasCustomPayment && !shouldTotalize) {
                 const paymentStartIndex = lines.length;
                 appendMixedPaymentLines(
                     lines,
@@ -614,16 +620,6 @@ export async function generateBudgetText(
                 if (lines.length >= paymentStartIndex + 3) {
                     lines.splice(lines.length - 3, 3);
                 }
-            } else {
-                const installmentOptions = rowMixedPaymentState?.cardOptions?.length
-                    ? rowMixedPaymentState.cardOptions
-                    : plans.filter(plan => plan.installments > 0).map(plan => ({
-                        installments: plan.installments,
-                        monthlyValue: plan.value,
-                        totalWithFee: plan.total,
-                    }));
-                lines.push('   💳 Cartão:');
-                installmentOptions.forEach(option => lines.push(`   ${formatInstallmentLine(option)}`));
             }
         }
         lines.push(`   🎨 Cores: ${colors.length > 0 ? colors.join(', ') : 'Consultar'}`);
@@ -660,9 +656,20 @@ export async function generateBudgetText(
         lines.push('Resumo somado');
         lines.push(`💰 Total à vista no PIX: ${brl(pixPlan?.total ?? totalBudgetCents)}`);
         if (includeInstallments) {
-            appendMixedPaymentLines(lines, totalBudgetCents, options.mixedPaymentState, 'Orcamento somado', `${categoryRows.length} aparelho(s)`, calculatorItems);
-            if (!includeCalculatorLink && lines.length >= 3) {
-                lines.splice(lines.length - 3, 3);
+            const standardCardPlan = plans.find(plan => plan.installments === 12);
+            if (!standardCardPlan) {
+                throw new Error('Não foi possível consultar a taxa de cartão em 12x para o orçamento.');
+            }
+            lines.push(`💳 Cartão: 12x de ${brl(standardCardPlan.value)} (total ${brl(standardCardPlan.total)})`);
+            if (options.mixedPaymentState?.selectedInstallment
+                || Number(options.mixedPaymentState?.cashCents || 0) > 0
+                    && Number(options.mixedPaymentState?.cashCents || 0) < totalBudgetCents) {
+                appendMixedPaymentLines(lines, totalBudgetCents, options.mixedPaymentState, 'Orcamento somado', `${categoryRows.length} aparelho(s)`, calculatorItems);
+                if (!includeCalculatorLink && lines.length >= 3) {
+                    lines.splice(lines.length - 3, 3);
+                }
+            } else if (includeCalculatorLink) {
+                appendCalculatorLink(lines, totalBudgetCents, 0, null, 'Orcamento somado', `${categoryRows.length} aparelho(s)`, calculatorItems);
             }
         } else if (includeCalculatorLink) {
             appendCalculatorLink(

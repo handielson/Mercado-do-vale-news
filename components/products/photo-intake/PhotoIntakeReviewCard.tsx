@@ -180,8 +180,8 @@ export function PhotoIntakeReviewCard({
         </span>
       </div>
 
-      <div className="grid gap-6 p-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <div className="min-w-0 max-w-xl space-y-4 xl:max-w-none">
+      <div className="space-y-6 p-5">
+        <div className="min-w-0 max-w-xl space-y-4">
           <ProtectedIntakePhoto intakeId={intake.id} />
           <div className="rounded-xl border border-slate-200 p-3">
             {confirmRemoval ? (

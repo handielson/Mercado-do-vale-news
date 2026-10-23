@@ -42,7 +42,7 @@ assert.match(cartShare, /filter\(line => !line\.startsWith\('Modo: '\)\)/, 'cart
 assert.match(cartShare, /Resumo somado/, 'cart budget sharing must support a totalized multi-device summary');
 assert.match(cartShare, /options\.forEach/, 'cart budget sharing must list 1-12 installments when no installment is selected');
 assert.match(cartShare, /formatInstallmentLine/, 'cart budget sharing must use one consistent installment line format');
-assert.doesNotMatch(cartShare, /Cartão(?: total)?: 12x de/, 'cart budget sharing must not prepend a fixed 12x line before the selected option');
+assert.match(cartShare, /Cartão: 12x de/, 'cart budget sharing must always include a standard verified 12x quote');
 assert.match(cartShare, /map\(char => \/\\d\/\.test\(char\)/, 'cart budget sharing must build installment emoji digit by digit');
 assert.match(cartShare, /buildRowMixedPaymentState/, 'separated cart budgets must derive Pix/card simulation for each device');
 assert.match(cartShare, /appendCalculatorLink\([\s\S]*calculatorItems,[\s\S]*''[\s\S]*\)/, 'separated cart budgets must append one shared calculator link after all devices');
@@ -58,7 +58,7 @@ assert.match(cartShare, /params\.set\('q'[\s\S]*compactItems/, 'cart budget calc
 assert.match(cartShare, /return `\$\{SITE_BASE\}\/c\?\$\{params\.toString\(\)\}`/, 'cart budget calculator links must use the short calculator route');
 assert.match(cartShare, /calculatorItems:\s*QuoteCalculatorItem\[\]\s*=\s*categoryRows\.map/, 'cart budget sharing must build calculator item cards from budget rows');
 assert.match(cartPage, /budgetMode/, 'cart page must let admins choose separated or totalized budget mode');
-assert.match(cartPage, /budgetIncludeInstallments/, 'cart page must let admins choose whether to send installments');
+assert.doesNotMatch(cartPage, /budgetIncludeInstallments/, 'cart page must not let admins omit card prices from the copied budget');
 assert.match(cartPage, /budgetIncludeCalculator/, 'cart page must let admins choose whether to send the calculator link');
 assert.match(cartPage, /<MixedPaymentSimulator[\s\S]*totalPrice=\{selectedBudgetTotalCents\}/, 'cart page must show the installment table directly in the sharing panel');
 assert.match(cartPage, /Parcelamento para compartilhar/, 'cart page must identify the visible sharing table');
@@ -67,10 +67,11 @@ assert.match(cartPage, /items\.map\(item => \([\s\S]*<option key=\{item\.id\} va
 assert.match(cartPage, /selectedBudgetItems\.map\(i => \(\{ product: i\.product/, 'copied budgets must include only the selected scope');
 assert.match(cartPage, /totalBudgetCents:\s*selectedBudgetTotalCents/, 'copied budgets must calculate installments from the selected scope total');
 assert.match(cartPage, /expandSiblingVariants:\s*false/, 'cart sharing must not expand one selected cart item into sibling products');
-assert.match(cartPage, /Incluir parcelas na mensagem/, 'cart page must let admins include the selected installment in the message');
+assert.doesNotMatch(cartPage, /Incluir parcelas na mensagem/, 'cart page must always include the card quote');
 assert.match(cartPage, /Incluir calculadora/, 'cart page must let admins include the calculator link');
 assert.match(cartPage, /mixedPaymentState:\s*cartMixedPaymentState/, 'cart page copied budget must use the current Pix/card simulation');
-assert.match(cartPage, /includeInstallments:\s*budgetIncludeInstallments/, 'cart page copied budget must pass the installment toggle');
+assert.match(cartPage, /includeInstallments:\s*true/, 'cart page copied budget must always request the card quote');
+assert.match(cartPage, /budgetCopyError/, 'cart page must show a visible error if the card quote cannot be calculated');
 assert.match(cartPage, /includeCalculatorLink:\s*budgetIncludeCalculator/, 'cart page copied budget must pass the calculator toggle');
 assert.match(quoteModal, /onMixedPaymentChange\?\.\(mixedPaymentState\)/, 'QuoteModal inline simulator must expose mixed payment state to CartPage');
 assert.match(calculatorPage, /Produto da simulação/, 'public calculator must show product and variation context');

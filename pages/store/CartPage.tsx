@@ -67,8 +67,8 @@ function CartPageContent() {
     const [budgetCopied, setBudgetCopied] = useState(false);
     const [generatingBudget, setGeneratingBudget] = useState(false);
     const [budgetMode, setBudgetMode] = useState<BudgetTextMode>('separate');
-    const [budgetIncludeInstallments, setBudgetIncludeInstallments] = useState(true);
     const [budgetIncludeCalculator, setBudgetIncludeCalculator] = useState(true);
+    const [budgetCopyError, setBudgetCopyError] = useState('');
     const [budgetScope, setBudgetScope] = useState<string>('all');
     const [cartMixedPaymentState, setCartMixedPaymentState] = useState<MixedPaymentState | null>(null);
     const [showNewOrderModal, setShowNewOrderModal] = useState(false);
@@ -115,6 +115,7 @@ function CartPageContent() {
 
     const handleCopyBudget = async () => {
         setGeneratingBudget(true);
+        setBudgetCopyError('');
         try {
             const text = await generateBudgetText(
                 selectedBudgetItems.map(i => ({ product: i.product, unit_price: i.unit_price, quantity: i.quantity })),
@@ -122,7 +123,7 @@ function CartPageContent() {
                     mode: selectedBudgetItems.length > 1 ? budgetMode : 'separate',
                     totalBudgetCents: selectedBudgetTotalCents,
                     mixedPaymentState: cartMixedPaymentState,
-                    includeInstallments: budgetIncludeInstallments,
+                    includeInstallments: true,
                     includeCalculatorLink: budgetIncludeCalculator,
                     expandSiblingVariants: false,
                 }
@@ -132,6 +133,7 @@ function CartPageContent() {
             setTimeout(() => setBudgetCopied(false), 2500);
         } catch (e) {
             console.error(e);
+            setBudgetCopyError('Não foi possível confirmar o preço no cartão. Confira a conexão e tente novamente.');
         } finally {
             setGeneratingBudget(false);
         }
@@ -869,16 +871,7 @@ function CartPageContent() {
                 onChange={setCartMixedPaymentState}
             />
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-                    <input
-                        type="checkbox"
-                        checked={budgetIncludeInstallments}
-                        onChange={(event) => setBudgetIncludeInstallments(event.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    Incluir parcelas na mensagem
-                </label>
+            <div className="grid grid-cols-1 gap-2">
                 <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
                     <input
                         type="checkbox"
@@ -897,6 +890,7 @@ function CartPageContent() {
                 {budgetCopied ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardCopy className="h-4 w-4" />}
                 {generatingBudget ? 'Gerando...' : budgetCopied ? 'Copiado!' : '📋 Copiar opção para o cliente'}
             </button>
+            {budgetCopyError && <p role="alert" className="text-xs font-semibold text-red-700">{budgetCopyError}</p>}
         </div>
     );
 

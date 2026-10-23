@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2, Clock3, Loader2, Smartphone } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, Loader2, Smartphone, X } from 'lucide-react';
 import type { SmartphonePhotoIntake } from '../../../types/smartphone-photo-intake';
 import { SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS } from '../../../types/smartphone-photo-intake';
 
@@ -9,6 +9,8 @@ interface PhotoIntakeQueueProps {
   selectedId?: string | null;
   loading?: boolean;
   onSelect: (item: SmartphonePhotoIntake) => void;
+  onRequestRemove: (item: SmartphonePhotoIntake) => void;
+  busy?: boolean;
 }
 const STATUS_STYLE: Record<string, string> = {
   uploaded: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -29,7 +31,7 @@ function StatusIcon({ status }: { status: SmartphonePhotoIntake['status'] }) {
   return <Clock3 size={14} />;
 }
 
-export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loading, onSelect }: PhotoIntakeQueueProps) {
+export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loading, onSelect, onRequestRemove, busy = false }: PhotoIntakeQueueProps) {
   if (loading && items.length === 0) {
     return <div className="flex justify-center py-12 text-slate-400"><Loader2 className="animate-spin" /></div>;
   }
@@ -45,22 +47,25 @@ export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loadin
   }
 
   return (
-    <div className="space-y-2">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,190px),1fr))] gap-2">
       {items.map(item => {
         const title = [item.detected_brand, item.detected_model].filter(Boolean).join(' ') || 'Aguardando leitura';
         const details = [item.detected_ram, item.detected_storage, item.detected_version, item.detected_color].filter(Boolean).join(' · ');
         const selected = selectedId === item.id;
         const groupSize = groupSizeById[item.id] || 1;
         return (
-          <button
+          <div
             key={item.id}
-            type="button"
-            onClick={() => onSelect(item)}
-            className={`w-full rounded-xl border p-3 text-left transition-all ${selected
+            className={`relative min-w-0 rounded-xl border transition-all ${selected
               ? 'border-blue-400 bg-blue-50 shadow-sm'
               : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50'}`}
           >
-            <div>
+            <button
+              type="button"
+              onClick={() => onSelect(item)}
+              aria-current={selected ? 'true' : undefined}
+              className="block h-full w-full rounded-xl p-3 pr-10 text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
               <p className="break-words text-sm font-bold leading-5 text-slate-800">{title}</p>
               <p className="mt-1 break-words text-xs leading-5 text-slate-600">{details || 'Dados ainda não confirmados'}</p>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -79,11 +84,21 @@ export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loadin
                 {SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS[item.status] || item.status}
                 </span>
               </div>
-            </div>
-            <p className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-slate-400">
-              {new Date(item.created_at).toLocaleString('pt-BR')}
-            </p>
-          </button>
+              <p className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-slate-400">
+                {new Date(item.created_at).toLocaleString('pt-BR')}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onRequestRemove(item)}
+              disabled={busy || item.status === 'analyzing'}
+              aria-label={`Excluir ${title} da fila`}
+              title="Excluir este aparelho da fila"
+              className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <X size={16} />
+            </button>
+          </div>
         );
       })}
     </div>

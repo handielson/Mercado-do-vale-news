@@ -1,3 +1,14 @@
+# v1.2.673-foto-poco-cartao
+
+Data: 23/10/2026. Branch: main. Tag: v1.2.673-foto-poco-cartao.
+Release: /var/www/mdv-site/releases/20261023-103000-v12673-foto-poco-cartao.
+
+Cadastro por foto exibe fila de celulares em cards que quebram linha acima dos dados, oferece exclusao por aparelho com confirmacao e avisa qual aparelho foi cadastrado antes de avancar. O orcamento copiado do carrinho inclui PIX, 12 parcelas e total verificados para cada configuracao. No bot, pedido de fotos de dois modelos POCO segue atendimento de vendas, consulta cada modelo separadamente e mostra o preco no cartao somente com taxa confirmada.
+
+Validacao: suites de cadastro e remocao, orcamento, oito casos focados do bot, gate comercial de 117 cenarios e build com travas. O workflow do n8n requer backup e conferencia do historico ativo antes da aplicacao.
+
+## Historico anterior
+
 # v1.2.672-custo-medio-movel
 
 Data: 22/10/2026. Branch: main. Tag: v1.2.672-custo-medio-movel.
