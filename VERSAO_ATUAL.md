@@ -1,3 +1,14 @@
+# v1.2.675-catalogo-pergunta-separada
+
+Data: 23/10/2026. Branch: main. Tag: v1.2.675-catalogo-pergunta-separada.
+Release: /var/www/mdv-site/releases/20261023-190417-catalogo-pergunta-separada.
+
+No catalogo de celulares enviado pelo WhatsApp, a pergunta "Qual modelo voce quer ver em mais detalhes? 😊" segue em uma mensagem propria, apos os blocos da lista. A mesma separacao vale para a pergunta de escolha de fotos. Os preços e as configurações permanecem nos blocos de produtos.
+
+Validacao: teste da saida final do emissor e gate comercial completo; publicacao seletiva do workflow n8n e do site para atualizar VERSION.json.
+
+## Historico anterior
+
 # v1.2.674-foto-atalho-campos
 
 Data: 23/10/2026. Branch: main. Tag: v1.2.674-foto-atalho-campos.

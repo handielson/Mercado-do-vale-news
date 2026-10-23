@@ -17,6 +17,12 @@ if (source.salesAvailabilityStatus !== 'confirmed_products_available' || !catalo
   throw new Error('Catalogo direto sem consulta confirmada');
 }
 const parts = catalog.split('[[MSG]]').filter(Boolean);
+// catalog-choice-separate-message-v1: the selection question is sent after the grouped list.
+const choicePrompt = [
+  'Qual modelo voce quer ver em mais detalhes? 😊',
+  'De qual modelo você quer ver fotos? Pode me dizer o número ou o nome. 😊',
+].includes(parts[parts.length - 1] || '')
+  ? parts.pop() : '';
 const desired = parts.length > 3 ? 3 : parts.length;
 const groups = [];
 for (let i = 0; i < desired; i++) {
@@ -25,7 +31,7 @@ for (let i = 0; i < desired; i++) {
   groups.push(parts.slice(from, until).join('[[BR]][[BR]]'));
 }
 const bounded = groups.every(part => part.length <= 3300);
-const body = (bounded ? groups : parts).join('[[MSG]]');
+const body = [...(bounded ? groups : parts), ...(choicePrompt ? [choicePrompt] : [])].join('[[MSG]]');
 const intro = 'Segue a lista atualizada de celulares disponíveis. 📱[[BR]][[BR]]';
 return [{ json: { ...source, output: intro + body, requiresSpecialistHandoff: false } }];`;
 
@@ -72,6 +78,23 @@ function patchWorkflow(workflow) {
   return {changed:true};
 }
 
+function patchDirectCatalogPrompt(workflow) {
+  assert.ok(Array.isArray(workflow.nodes) && workflow.connections);
+  const direct = workflow.nodes.find(node => node.name === DIRECT);
+  assert.ok(direct, 'Direct catalog node missing');
+  const previous = String(direct.parameters?.jsCode || '');
+  if (previous === DIRECT_CODE) return { changed: false };
+  const oldParts = "const parts = catalog.split('[[MSG]]').filter(Boolean);\nconst desired = parts.length > 3 ? 3 : parts.length;";
+  const oldBody = "const body = (bounded ? groups : parts).join('[[MSG]]');";
+  assert.ok(previous.includes(oldParts) && previous.includes(oldBody), 'Direct catalog grouping changed');
+  const updatedParts = DIRECT_CODE.slice(DIRECT_CODE.indexOf("const parts = catalog.split('[[MSG]]')"), DIRECT_CODE.indexOf('const groups = [];')).trimEnd();
+  const expected = previous.replace(oldParts, updatedParts)
+    .replace(oldBody, "const body = [...(bounded ? groups : parts), ...(choicePrompt ? [choicePrompt] : [])].join('[[MSG]]');");
+  assert.equal(expected, DIRECT_CODE, 'Direct catalog node drifted');
+  direct.parameters.jsCode = DIRECT_CODE;
+  return { changed: true };
+}
+
 function validate(workflow) {
   const gate=workflow.nodes.find(n=>n.name===GATE),direct=workflow.nodes.find(n=>n.name===DIRECT);
   assert.ok(gate && direct);
@@ -84,4 +107,4 @@ function validate(workflow) {
   assert.deepEqual(workflow.connections[AGENT].main[0],[{node:'Vendas - Compor Resposta IA',type:'main',index:0}]);
 }
 
-module.exports={MARKER,SOURCE,GATE,DIRECT,AGENT,NEXT,DIRECT_CODE,hasDirectCatalog,patchWorkflow,validate};
+module.exports={MARKER,SOURCE,GATE,DIRECT,AGENT,NEXT,DIRECT_CODE,hasDirectCatalog,patchWorkflow,patchDirectCatalogPrompt,validate};

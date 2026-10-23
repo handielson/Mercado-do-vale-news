@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{spawnSync}=require('node:child_process');
 const root=path.resolve(__dirname,'..');
 const tests=['tmp-tests/n8n-sales-end-to-end.test.cjs','tmp-tests/n8n-sales-variant-contract.test.cjs',
+  'tmp-tests/n8n-sales-catalog-timeout-guard.test.cjs',
   'tmp-tests/n8n-sales-conversation-contract.test.cjs','tmp-tests/n8n-sales-order-contract.test.cjs',
   'tmp-tests/n8n-conversation-state-api-static.test.mjs','tmp-tests/n8n-admin-handoff-relay-static.test.mjs',
   'tmp-tests/n8n-payjoy-contextual-intent.test.cjs','tmp-tests/n8n-payjoy-knowledge.test.cjs'];
