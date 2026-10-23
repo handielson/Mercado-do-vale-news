@@ -69,6 +69,26 @@ export function buildAttributeVariationDraft(parent, attributes, rows = [], iden
   return data;
 }
 
+// Photos registered on the commercial model imply sellable color drafts. Keep
+// existing family configurations (including multiple memories per color) intact.
+export function buildModelPhotoVariationRows(parent, rows, colors, imageRows) {
+  if (!parent?.name?.trim() || !parent?.model_id) return [];
+  const names = new Map(colors.map(color => [color.id, color.name]));
+  const knownColors = new Set(rows.map(row => String(row.data.specs?.color || '').trim().toLocaleLowerCase('pt-BR')));
+  const drafts = [];
+  for (const imageRow of imageRows) {
+    const color = names.get(imageRow.color_id);
+    const key = String(color || '').trim().toLocaleLowerCase('pt-BR');
+    if (!key || knownColors.has(key) || !imageRow.images?.length) continue;
+    const data = buildAttributeVariationDraft(parent, [{ key: 'color', value: color }], [...rows, ...drafts], {
+      inheritImages: false, images: imageRow.images,
+    });
+    drafts.push({ key: `model-color:${imageRow.color_id}`, data, inheritImages: false });
+    knownColors.add(key);
+  }
+  return drafts;
+}
+
 export function productUnitCondition(specs = {}) {
   const value = String(specs.condition || specs.condicao || 'new').toLowerCase();
   return ['used', 'usado', 'seminovo'].includes(value) ? 'used' : value === 'open_box' ? 'open_box' : 'new';

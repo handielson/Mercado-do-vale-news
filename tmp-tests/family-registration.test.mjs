@@ -43,7 +43,7 @@ test('nova variação e filhos existentes têm mídia inline e salvamento aguard
   assert.equal((editor.match(/<VariationMedia\b/g)||[]).length,2);
   assert.match(editor,/disabled=\{disabled \|\| busy\}/);
   const form=fs.readFileSync('components/products/ProductForm.tsx','utf8');
-  assert.match(form,/if \(familyMediaBusy\)/); assert.match(form,/onBusyChange=\{setFamilyMediaBusy\}/);
+  assert.match(form,/if \(familyMediaBusy \|\| \(isParentProduct && familyPhotoLoading\)\)/); assert.match(form,/onBusyChange=\{setFamilyMediaBusy\}/);
 });
 
 test('cada filho mantém SKU e EAN próprios; o pai não empresta seus códigos', async () => {

@@ -19,8 +19,8 @@ export type FamilyEditorDraft = {
     draftKey: string;
 };
 
-export function ProductFamilyEditor({ parent, rows, onChange, disabled, onBusyChange, initialDraft, captureDraftRef, productionSetups, onProductionChange }: {
-    parent: ProductInput; rows: FamilyRow[]; onChange: (rows: FamilyRow[]) => void; disabled: boolean;
+export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartphone = false, onBusyChange, initialDraft, captureDraftRef, productionSetups, onProductionChange }: {
+    parent: ProductInput; rows: FamilyRow[]; onChange: (rows: FamilyRow[]) => void; disabled: boolean; smartphone?: boolean;
     onBusyChange?: (busy: boolean) => void;
     initialDraft?: FamilyEditorDraft;
     captureDraftRef?: React.MutableRefObject<(() => FamilyEditorDraft) | undefined>;
@@ -76,7 +76,7 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, onBusyCh
                     </select>
                 </label>
                 <fieldset disabled={disabled || busy} className="min-w-0"><legend className="text-sm mb-1">{FAMILY_VARIATION_ATTRIBUTES.find(item => item.key === attribute.key)?.label}</legend>
-                    {attribute.key === 'color' ? <ColorSelect value={attribute.value} onChange={value => setAttributes(attributes.map((item, i) => i === index ? { ...item, value } : item))} />
+                    {attribute.key === 'color' ? <ColorSelect modelId={parent.model_id || undefined} value={attribute.value} onChange={value => setAttributes(attributes.map((item, i) => i === index ? { ...item, value } : item))} />
                         : attribute.key === 'ram' || attribute.key === 'storage' ? <CapacitySelect
                             type={attribute.key} value={attribute.value}
                             label={attribute.key === 'ram' ? 'Memória RAM' : 'Armazenamento'}
@@ -117,6 +117,18 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, onBusyCh
                 <p className="text-xs text-slate-500">{row.data.sku || 'SKU automático ao salvar'} · {row.data.specs?.condition === 'used' ? 'Usado' : 'Novo'} · Estoque: {row.data.stock_quantity ?? 0}</p></div>
             <button type="button" disabled={disabled || busy} onClick={() => setEditing(row)} className="text-blue-700 underline">Editar detalhes</button>
             {!row.data.id && <button type="button" disabled={disabled || busy} onClick={() => onChange(rows.filter(r => r.key !== row.key))} className="text-red-700">Remover rascunho</button>}
+            {smartphone && !row.data.id && <fieldset disabled={disabled || busy} className="grid w-full gap-3 sm:grid-cols-2" aria-label={`Memória da variação ${row.data.specs?.color || row.data.name}`}>
+                {(['ram', 'storage'] as const).map(type => <CapacitySelect key={type} type={type} value={String(row.data.specs?.[type] || '')}
+                    label={type === 'ram' ? 'Memória RAM' : 'Armazenamento'}
+                    placeholder={type === 'ram' ? 'Selecione a memória RAM' : 'Selecione o armazenamento'}
+                    onChange={value => onChange(rows.map(item => {
+                        if (item.key !== row.key) return item;
+                        const specs = { ...item.data.specs, [type]: value };
+                        const name = `${parent.name} - ${[specs.color, specs.ram, specs.storage].filter(Boolean).join(' / ')}`;
+                        return { ...item, data: { ...item.data, specs, name } };
+                    }))} />)}
+                {(!row.data.specs?.ram || !row.data.specs?.storage) && <p className="text-xs text-amber-800 sm:col-span-2">Complete RAM e armazenamento antes de salvar esta variação de celular.</p>}
+            </fieldset>}
             <fieldset disabled={disabled || busy} className="grid w-full gap-4">
                 <label className="text-sm">SKU da variação
                     <input aria-label={`SKU da variação ${row.data.name}`} readOnly={Boolean(row.data.id)} value={row.data.sku || ''}

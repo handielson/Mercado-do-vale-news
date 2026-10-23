@@ -36,8 +36,10 @@ import { Model } from '../../types/model';
 import { modelService } from '../../services/models';
 import { averagePriceService } from '../../services/averagePriceService';
 import { modelColorImagesService } from '../../services/model-color-images';
-import { getModelImageWithCache } from '../../services/modelImageCache';
 import { colorService } from '../../services/colors';
+import { buildModelPhotoVariationRows } from './familyRegistration.js';
+import { isSmartphoneModel } from '../../services/smartphoneModelSpecs.mjs';
+import { getModelImageWithCache } from '../../services/modelImageCache';
 import { getAuthSessionToken } from '../../services/authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
@@ -109,7 +111,11 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
     const singleSaveCheckpoint = useRef<Product | undefined>(initialDraft?.singleSaveCheckpoint || (initialData?.id ? initialData : undefined));
     const [familyMediaBusy, setFamilyMediaBusy] = useState(false);
     const [familyLoadError, setFamilyLoadError] = useState('');
-    const [familyLoading, setFamilyLoading] = useState(false);
+    const [familyLoading, setFamilyLoading] = useState(Boolean(initialData?.id && initialData.is_parent && !initialDraft && !variationDraftMode));
+    const [familyPhotoLoading, setFamilyPhotoLoading] = useState(false);
+    const [familyPhotoError, setFamilyPhotoError] = useState('');
+    const [familyPhotoRetry, setFamilyPhotoRetry] = useState(0);
+    const familyPhotoHydratedKey = useRef('');
     const familyCheckpoint = useRef<any>(initialDraft?.familyCheckpoint || { parent: initialData?.id ? initialData : null, children: {} });
     useEffect(() => {
         if (initialDraft || !initialData?.id || !initialData.is_parent || variationDraftMode) return;
@@ -352,6 +358,25 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
 
     const isPrint3d = Boolean(watch('is_print3d'));
     const isParentProduct = Boolean(watch('is_parent'));
+    const familyModelId = watch('model_id');
+    const familyParentName = watch('name');
+    useEffect(() => {
+        if (!isParentProduct || isPrint3d || !familyModelId || !familyParentName?.trim() || familyLoading || familyLoadError || variationDraftMode) return;
+        const hydrationKey = `${familyModelId}:${familyPhotoRetry}`;
+        if (familyPhotoHydratedKey.current === hydrationKey) return;
+        let active = true;
+        setFamilyPhotoLoading(true); setFamilyPhotoError('');
+        Promise.all([colorService.list(), modelColorImagesService.getByModel(familyModelId)]).then(([colors, imageRows]) => {
+            if (!active) return;
+            setFamilyRows(current => {
+                const drafts = buildModelPhotoVariationRows({ ...getValues(), images: imagePreviews }, current, colors, imageRows) as FamilyRow[];
+                return drafts.length ? [...current, ...drafts] : current;
+            });
+            familyPhotoHydratedKey.current = hydrationKey;
+        }).catch(() => { if (active) setFamilyPhotoError('Não foi possível carregar as cores com fotos deste modelo. Tente novamente antes de salvar a família.'); })
+            .finally(() => { if (active) setFamilyPhotoLoading(false); });
+        return () => { active = false; };
+    }, [isParentProduct, isPrint3d, familyModelId, familyParentName, familyLoading, familyLoadError, familyPhotoRetry, variationDraftMode]);
     const isVendablePrint3d = isPrint3d && !isParentProduct;
     useEffect(() => {
         if (isParentProduct && !isPrint3d && activeSection === 'commercial') setActiveSection('basic');
@@ -1466,7 +1491,8 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
     // Wrapper para onSubmit que mostra toast de erro e calcula preço médio
     const handleFormSubmit = handleSubmit(
         async (data) => {
-            if (familyMediaBusy) { toast.warning('Aguarde o envio das fotos das variações antes de salvar.'); return; }
+            if (familyMediaBusy || (isParentProduct && familyPhotoLoading)) { toast.warning('Aguarde o carregamento das cores e fotos das variações antes de salvar.'); return; }
+            if (isParentProduct && familyPhotoError) { toast.error(familyPhotoError); return; }
             if (parentTemplateLoading || copyingParent || parentTemplateError) { toast.warning(parentTemplateError || 'Aguarde a recuperação da base de impressão.'); return; }
             if (saveInFlightRef.current) return;
             const totalToSave = Math.max(1, serialList.length || 1);
@@ -1555,6 +1581,14 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             const baseSetup = mergedData.is_print3d ? productionSetups[isParent ? 'parent' : 'single'] : undefined;
             if (baseSetup) mergedData = withPrint3dCost(mergedData, baseSetup);
             const rowsToSave = familyRows.map(row => mergedData.is_print3d && productionSetups[row.key] ? { ...row, data:withPrint3dCost(row.data, productionSetups[row.key]!) } : row);
+            if (isParent && rowsToSave.some(row => !row.data.id)) {
+                const familyCategoryName = categoryConfig?.__category_id === mergedData.category_id
+                    ? categoryConfig.__category_name
+                    : (mergedData.category_id ? (await categoryService.getById(mergedData.category_id))?.name : '');
+                if (isSmartphoneModel({ category_name: familyCategoryName }) && rowsToSave.some(row => !row.data.id && (!row.data.specs?.ram || !row.data.specs?.storage))) {
+                    throw new Error('Complete memória RAM e armazenamento de cada nova variação de celular antes de salvar.');
+                }
+            }
             if (isParent && familyRows.length > 0) {
                 if (familyLoading || familyLoadError) throw new Error(familyLoadError || 'Aguarde o carregamento dos filhos.');
                 if (isLocalCatalogPreviewRuntime() && familyRows.some(row => !row.data.id && hasSerializedIdentity(row.data.specs || {}))) {
@@ -2661,7 +2695,10 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             {!variationDraftMode && isParentProduct && <div id="product-variations-section" className={activeSection === 'variations' ? 'space-y-4 scroll-mt-20' : 'hidden'}>
                 <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Última etapa: confira primeiro o cadastro completo do pai nas abas anteriores. Depois adicione as variações e seus dados próprios. O pai e os filhos serão salvos juntos em Salvar família e variações.</p>
                 {familyLoadError && <p role="alert" className="text-red-700">{familyLoadError}</p>}
-                <ProductFamilyEditor initialDraft={initialDraft?.familyEditor} captureDraftRef={familyEditorDraftRef} productionSetups={productionSetups} onProductionChange={(key,setup) => setProductionSetups(current => ({ ...current, [key]:setup }))} parent={{ ...getValues(), images: imagePreviews }} rows={familyRows} onChange={setFamilyRows} onBusyChange={setFamilyMediaBusy} disabled={Boolean(isSavingOperation || familyLoading || familyLoadError)} />
+                {familyPhotoLoading && <p role="status" className="text-sm text-blue-700">Preparando variações das cores com fotos...</p>}
+                {familyModelId && !familyPhotoLoading && !familyPhotoError && <button type="button" className="text-sm text-blue-700 underline" onClick={() => setFamilyPhotoRetry(value => value + 1)}>Atualizar variações pelas fotos do modelo</button>}
+                {familyPhotoError && <p role="alert" className="text-sm text-red-700">{familyPhotoError} <button type="button" className="underline" onClick={() => setFamilyPhotoRetry(value => value + 1)}>Tentar novamente</button></p>}
+                <ProductFamilyEditor initialDraft={initialDraft?.familyEditor} captureDraftRef={familyEditorDraftRef} productionSetups={productionSetups} onProductionChange={(key,setup) => setProductionSetups(current => ({ ...current, [key]:setup }))} parent={{ ...getValues(), images: imagePreviews }} smartphone={isSmartphoneModel({ category_name: categoryConfig?.__category_name })} rows={familyRows} onChange={setFamilyRows} onBusyChange={setFamilyMediaBusy} disabled={Boolean(isSavingOperation || familyLoading || familyPhotoLoading || familyLoadError)} />
             </div>}
 
             {isPrint3d && <section className={['files','production'].includes(activeSection) ? 'rounded-xl border border-violet-200 bg-violet-50 p-5 space-y-3' : 'hidden'}>

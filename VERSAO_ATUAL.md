@@ -1,3 +1,14 @@
+# v1.2.680-variacoes-por-fotos-modelo
+
+Data: 23/10/2026. Branch: main. Tag: v1.2.680-variacoes-por-fotos-modelo.
+Release: /var/www/mdv-site/releases/20261023-204627-variacoes-por-fotos-modelo.
+
+As cores com fotos cadastradas no modelo preparam automaticamente rascunhos de variacoes quando o produto pai e aberto. Cada filho usa as fotos de sua cor e herda os dados comuns do pai; cores ja existentes nao sao duplicadas. Novas variacoes de celular exigem RAM e armazenamento antes de salvar. O seletor tambem destaca as cores fotografadas, inclusive se inativas no cadastro geral.
+
+Validacao: testes focados, sintaxe dos servidores, build do site e consulta publica apos deploy. Somente o site recebe deploy.
+
+## Historico anterior
+
 # v1.2.679-menu-sem-barra-variacoes
 
 Data: 23/10/2026. Branch: main. Tag: v1.2.679-menu-sem-barra-variacoes.
