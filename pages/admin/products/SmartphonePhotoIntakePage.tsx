@@ -65,6 +65,12 @@ export function SmartphonePhotoIntakePage() {
   const [finalizedNotice, setFinalizedNotice] = useState<SmartphonePhotoIntake | null>(null);
   const finalizedNoticeRef = useRef<HTMLDivElement>(null);
   const reviewRef = useRef<HTMLElement>(null);
+  const fieldsRef = useRef<HTMLDivElement>(null);
+
+  const goToSelectedFields = () => {
+    fieldsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    fieldsRef.current?.focus({ preventScroll: true });
+  };
 
   useEffect(() => {
     if (finalizedNotice) finalizedNoticeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -381,6 +387,7 @@ export function SmartphonePhotoIntakePage() {
                 loading={loading}
                 busy={busy}
                 onSelect={item => setSelectedId(item.id)}
+                onGoToFields={goToSelectedFields}
                 onRequestRemove={setPendingRemoval}
               />
             </section>
@@ -407,6 +414,7 @@ export function SmartphonePhotoIntakePage() {
                   onRefreshColors={refreshColors}
                   onFinalize={finalizeSelected}
                   onRemoveFromQueue={() => removeFromQueue(selected)}
+                  fieldsRef={fieldsRef}
                 />
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center text-sm text-slate-500">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2, Clock3, Loader2, Smartphone, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, CheckCircle2, Clock3, Loader2, Smartphone, X } from 'lucide-react';
 import type { SmartphonePhotoIntake } from '../../../types/smartphone-photo-intake';
 import { SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS } from '../../../types/smartphone-photo-intake';
 
@@ -9,6 +9,7 @@ interface PhotoIntakeQueueProps {
   selectedId?: string | null;
   loading?: boolean;
   onSelect: (item: SmartphonePhotoIntake) => void;
+  onGoToFields: () => void;
   onRequestRemove: (item: SmartphonePhotoIntake) => void;
   busy?: boolean;
 }
@@ -31,7 +32,7 @@ function StatusIcon({ status }: { status: SmartphonePhotoIntake['status'] }) {
   return <Clock3 size={14} />;
 }
 
-export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loading, onSelect, onRequestRemove, busy = false }: PhotoIntakeQueueProps) {
+export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loading, onSelect, onGoToFields, onRequestRemove, busy = false }: PhotoIntakeQueueProps) {
   if (loading && items.length === 0) {
     return <div className="flex justify-center py-12 text-slate-400"><Loader2 className="animate-spin" /></div>;
   }
@@ -64,7 +65,7 @@ export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loadin
               type="button"
               onClick={() => onSelect(item)}
               aria-current={selected ? 'true' : undefined}
-              className="block h-full w-full rounded-xl p-3 pr-10 text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="block w-full rounded-xl p-3 pr-10 text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <p className="break-words text-sm font-bold leading-5 text-slate-800">{title}</p>
               <p className="mt-1 break-words text-xs leading-5 text-slate-600">{details || 'Dados ainda não confirmados'}</p>
@@ -88,6 +89,15 @@ export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loadin
                 {new Date(item.created_at).toLocaleString('pt-BR')}
               </p>
             </button>
+            {selected && (
+              <button
+                type="button"
+                onClick={onGoToFields}
+                className="mx-3 mb-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <ArrowDown size={14} /> Ir aos campos de preenchimento
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onRequestRemove(item)}

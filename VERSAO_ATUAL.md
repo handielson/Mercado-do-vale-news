@@ -1,3 +1,14 @@
+# v1.2.674-foto-atalho-campos
+
+Data: 23/10/2026. Branch: main. Tag: v1.2.674-foto-atalho-campos.
+Release: /var/www/mdv-site/releases/20261023-142655-foto-atalho-campos.
+
+Na fila do cadastro por foto, o card selecionado mostra o botao Ir aos campos de preenchimento. Ele desce diretamente para Dados identificados e posiciona o foco, sem parar no bloco da foto.
+
+Validacao: teste de navegacao do cadastro por foto e build com travas. Publicacao somente do site.
+
+## Historico anterior
+
 # v1.2.673-foto-poco-cartao
 
 Data: 23/10/2026. Branch: main. Tag: v1.2.673-foto-poco-cartao.

@@ -55,6 +55,10 @@ assert.doesNotMatch(queue, /truncate text-sm font-bold|mt-0\.5 truncate text-xs/
 assert.match(queue, /break-words text-sm[\s\S]*break-words text-xs/, 'fila deve permitir quebra de linha para mostrar todos os dados');
 assert.match(queue, /grid-cols-\[repeat\(auto-fill,minmax\(min\(100%,190px\),1fr\)\)\]/, 'fila deve quebrar os cards em novas linhas sem rolagem horizontal');
 assert.match(queue, /onRequestRemove\(item\)[\s\S]*disabled=\{busy \|\| item\.status === 'analyzing'\}/, 'cada card deve oferecer exclusão individual sem interromper uma análise');
+assert.match(queue, /\{selected && \([\s\S]*onClick=\{onGoToFields\}[\s\S]*Ir aos campos de preenchimento/, 'somente o aparelho selecionado deve oferecer o atalho para os campos');
+assert.match(intakePage, /onGoToFields=\{goToSelectedFields\}[\s\S]*fieldsRef=\{fieldsRef\}/, 'o atalho da fila deve apontar para os campos do aparelho em conferência');
+assert.match(intakePage, /fieldsRef\.current\?\.scrollIntoView\(\{ behavior: 'smooth', block: 'start' \}\)[\s\S]*fieldsRef\.current\?\.focus\(\{ preventScroll: true \}\)/, 'o atalho deve rolar e posicionar o foco nos campos');
+assert.match(reviewCard, /ref=\{fieldsRef\} tabIndex=\{-1\} className="scroll-mt-24[\s\S]*Dados identificados/, 'o destino do atalho deve ser a seção de preenchimento, depois da foto');
 assert.match(intakePage, /role="alertdialog"[\s\S]*removeFromQueue\(pendingRemoval\)/, 'o X deve confirmar a exclusão do aparelho escolhido');
 assert.match(intakePage, /setFinalizedNotice\(updated\)[\s\S]*setSelectedId\(nextPending\?\.id \|\| updated\.id\)/, 'a confirmação do aparelho salvo deve persistir ao avançar para o próximo');
 assert.match(intakePage, /role="status" aria-live="polite"[\s\S]*Ver aparelho salvo/, 'aparelho cadastrado deve aparecer em aviso acessível com acesso ao registro concluído');

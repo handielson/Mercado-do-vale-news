@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.673-foto-poco-cartao",
+  "version": "v1.2.674-foto-atalho-campos",
   "date": "2026-10-23",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.673-foto-poco-cartao",
-  "release_vps": "/var/www/mdv-site/releases/20261023-103000-v12673-foto-poco-cartao",
+  "tag": "v1.2.674-foto-atalho-campos",
+  "release_vps": "/var/www/mdv-site/releases/20261023-142655-foto-atalho-campos",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Cadastro por foto em largura total com fila em cards e confirmacao; orcamento com PIX e 12x; fotos POCO por modelo no bot.",
+  "summary": "Atalho no card selecionado do cadastro por foto leva diretamente aos campos de preenchimento.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -17,22 +17,14 @@
     "components/products/photo-intake/PhotoIntakeQueue.tsx",
     "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
     "pages/admin/products/SmartphonePhotoIntakePage.tsx",
-    "pages/store/CartPage.tsx",
-    "utils/cartShareUtils.ts",
-    "tmp-tests/catalog-message-family.test.mjs",
-    "tmp-tests/quote-calculator-static.test.mjs",
     "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
-    "tmp-tests/n8n-fix-photo-model-requests-0642.cjs",
-    "tmp-tests/n8n-fix-photo-model-requests-0642.test.cjs",
-    "scripts/deploy-n8n-photo-model-0642.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-23-v1.2.673-foto-poco-cartao.md"
+    "docs/versoes/2026-10-23-v1.2.674-foto-atalho-campos.md"
   ],
   "validations": [
-    "Cadastro por foto e exclusao de fila; orcamento PIX/cartao; 8 testes de foto POCO e gate comercial n8n 117/117.",
-    "Build com travas Supabase e segredos; publicacao do workflow mediante backup, CAS e validacao do ativo.",
-    "Validacoes publicas do site, versao e n8n registradas na nota da entrega."
+    "Suite de cadastro por foto e guarda do atalho para a secao Dados identificados.",
+    "Build com travas e verificacao publica do site e VERSION.json."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

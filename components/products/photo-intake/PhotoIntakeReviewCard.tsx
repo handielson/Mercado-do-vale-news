@@ -32,6 +32,7 @@ interface PhotoIntakeReviewCardProps {
   onRefreshColors: () => Promise<void>;
   onFinalize: (sku?: string) => Promise<void>;
   onRemoveFromQueue: () => Promise<void>;
+  fieldsRef: React.Ref<HTMLDivElement>;
 }
 
 const TEXT_FIELDS: Array<{ key: keyof SmartphonePhotoIntakeUpdate; label: string; mono?: boolean }> = [
@@ -84,6 +85,7 @@ export function PhotoIntakeReviewCard({
   onRefreshColors,
   onFinalize,
   onRemoveFromQueue,
+  fieldsRef,
 }: PhotoIntakeReviewCardProps) {
   const [confirmRemoval, setConfirmRemoval] = useState(false);
   useEffect(() => { setConfirmRemoval(false); }, [intake.id]);
@@ -240,7 +242,7 @@ export function PhotoIntakeReviewCard({
         </div>
 
         <div className="min-w-0 space-y-6">
-          <div>
+          <div ref={fieldsRef} tabIndex={-1} className="scroll-mt-24 focus:outline-none">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h3 className="font-bold text-slate-800">Dados identificados</h3>
               <button
