@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.686-rascunho-auto-salvo",
+  "version": "v1.2.687-ean-digitacao-rascunho",
   "date": "2026-10-24",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.686-rascunho-auto-salvo",
-  "release_vps": "/var/www/mdv-site/releases/20261024-162150-rascunho-auto-salvo",
+  "tag": "v1.2.687-ean-digitacao-rascunho",
+  "release_vps": "/var/www/mdv-site/releases/20261024-163000-ean-digitacao-rascunho",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Salva automaticamente o rascunho do cadastro, incluindo fotos, variacoes e precos.",
+  "summary": "Corrige a digitacao do EAN das variacoes durante o salvamento automatico do rascunho.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,16 +14,17 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/products/ProductFamilyEditor.tsx",
     "components/products/ProductForm.tsx",
-    "pages/admin/products/ProductFormPage.tsx",
+    "tmp-tests/product-family-ean-browser.test.mjs",
+    "tmp-tests/product-family-ean-preview.html",
+    "tmp-tests/product-family-ean-preview.tsx",
     "tmp-tests/product-form-drafts.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-24-v1.2.686-rascunho-auto-salvo.md"
+    "docs/versoes/2026-10-24-v1.2.687-ean-digitacao-rascunho.md"
   ],
   "validations": [
-    "Teste de rascunhos, grupos de precos e cadastro por foto; build do site.",
+    "Teste de digitacao do EAN no navegador, teste de rascunhos e build do site.",
     "Validacao publica da pagina inicial e VERSION.json apos deploy."
   ],
   "android_entregas": {

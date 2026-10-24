@@ -1,3 +1,12 @@
+# v1.2.687-ean-digitacao-rascunho
+
+Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.687-ean-digitacao-rascunho.
+Release: /var/www/mdv-site/releases/20261024-163000-ean-digitacao-rascunho.
+
+Corrige o campo EAN das variações, que apagava cada dígito durante a edição do rascunho. A detecção de alterações continua ativa para o salvamento automático. Teste de digitação no navegador, teste de rascunhos e build do site passaram. Somente site publicado.
+
+## Histórico anterior
+
 # v1.2.686-rascunho-auto-salvo
 
 Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.686-rascunho-auto-salvo.

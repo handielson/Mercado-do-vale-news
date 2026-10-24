@@ -2175,7 +2175,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
     };
 
     return (
-        <form onInputCapture={markDraftEdited} onChangeCapture={markDraftEdited}
+        <form onChangeCapture={markDraftEdited}
             onClickCapture={event => { const button = (event.target as HTMLElement).closest('button'); if (button?.type === 'button' && !button.closest('nav')) markDraftEdited(); }}
             onSubmit={event => { event.stopPropagation(); if (!savingDraftRef.current) void handleFormSubmit(event); }} className="space-y-6 pb-20">
             <nav id={variationDraftMode ? 'variation-form-sections' : 'product-form-sections'} aria-label="Seções do cadastro" className="sticky top-0 z-20 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur scroll-mt-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">

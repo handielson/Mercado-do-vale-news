@@ -111,6 +111,7 @@ test('salvamento automático mantém a URL recuperável sem remontar o formulár
   assert.match(page,/search\.set\('draft', draft\.id\)/);
   assert.match(page,/window\.history\.replaceState/);
   assert.match(form,/setImagePreviews\(initialData\.images \|\| \[\]\)/);
+  assert.doesNotMatch(form, /onInputCapture=\{markDraftEdited\}/, 'Capturar input antes de onChange apaga o EAN controlado a cada tecla');
 });
 test('rascunhos e arquivos exigem administrador; concluir/arquivar remove apenas da fila e preserva conteúdo',async()=>{
   const ctx=await appFixture();try {
