@@ -1,3 +1,14 @@
+# v1.2.683-eans-por-variacao
+
+Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.683-eans-por-variacao.
+Release: /var/www/mdv-site/releases/20261024-153307-eans-por-variacao.
+
+Cada variacao aceita ate 20 EANs reais da mesma configuracao. No cadastro por imagem, um EAN novo e acrescentado ao produto existente sem substituir os anteriores nem criar outro produto; repeticoes sao ignoradas. Uma falha posterior reverte a atualizacao junto com a finalizacao. O campo da variacao nao oferece gerar um codigo aleatorio.
+
+Validacao: testes de cadastro por foto, Bling e familia, verificacao de sintaxe da API, build do site e verificacao publica apos deploy. Site e API publicados.
+
+## Historico anterior
+
 # v1.2.682-menu-modelos
 
 Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.682-menu-modelos.

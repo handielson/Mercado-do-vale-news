@@ -62,7 +62,7 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
     return <section className="rounded-xl border border-blue-200 bg-white p-5 space-y-4" aria-label="Variações da família">
         <div className="flex justify-between gap-3"><h3 className="font-semibold">Variações ({rows.length})</h3>
             <button type="button" disabled={disabled || busy || adding || !parent.name?.trim()} onClick={add} className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50">Adicionar variação</button></div>
-        <p className="text-sm text-slate-600">Adicione os filhos aqui. Escolha dados próprios ou herdados do pai. Cada novo SKU complementa o código do pai; códigos já salvos não mudam. Os filhos são gravados ao salvar a família.</p>
+        <p className="text-sm text-slate-600">Adicione os filhos aqui. Escolha dados próprios ou herdados do pai. Cada novo SKU complementa o código do pai; códigos já salvos não mudam. Cada variação pode ter vários EANs da mesma configuração, por exemplo quando muda a fábrica. Use “Adicionar EAN” para registrar outro código. Os filhos são gravados ao salvar a família.</p>
         {adding && <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4 space-y-3" aria-label="Atributos da nova variação">
             <h4 className="font-medium">Defina a variação</h4>
             <div className="grid gap-4 xl:grid-cols-2 items-start">
@@ -97,7 +97,7 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
                     <input aria-label="SKU da nova variação" value={variationSku} onChange={e => setVariationSku(e.target.value)} placeholder={parent.sku ? nextVariationSku(parent.sku, rows.map(row => row.data.sku)) : 'SKU do pai + complemento (ex.: MINI0001-01)'} className="mt-1 w-full rounded-lg border p-2" />
                     <span className="mt-1 block text-xs text-slate-500">Deixe vazio para reservar o complemento numérico ao salvar. O pai será salvo primeiro. SKUs existentes nunca mudam.</span>
                 </label>
-                <EANInput label="EAN da variação" value={variationEans} onChange={setVariationEans} />
+                <EANInput label="EANs da variação" value={variationEans} onChange={setVariationEans} maxEANs={20} allowGenerate={false} />
             </fieldset>
             </div>
             <VariationMedia key={draftKey} productId={draftKey} sku={variationSku} name="nova variação" parentImages={parent.images || []} parentVideo={parent.video_url || ''} {...media} disabled={disabled || busy}
@@ -136,7 +136,7 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
                         placeholder="Automático ao salvar" className="mt-1 w-full rounded-lg border p-2 read-only:bg-slate-100" />
                     {row.data.id && <span className="mt-1 block text-xs text-slate-500">SKU do sistema: não pode ser alterado.</span>}
                 </label>
-                <EANInput label={`EAN da variação ${row.data.name}`} value={row.data.eans || []}
+                <EANInput label={`EANs da variação ${row.data.name}`} value={row.data.eans || []} maxEANs={20} allowGenerate={false}
                     onChange={eans => onChange(rows.map(item => item.key === row.key ? { ...item, data: { ...item.data, eans } } : item))} />
             </fieldset>
             <VariationMedia productId={row.data.id || row.key} sku={row.data.sku} name={row.data.name} images={row.data.images || []} parentImages={parent.images || []}

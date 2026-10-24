@@ -945,6 +945,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         }
         if (!productId && linked.length === 1) productId = linked[0].id;
       }
+      const existingProductId = productId;
       if (!productId) {
         const sku = blingChild?.sku || await reserveAvailableSku(connection, request.body?.sku, intake, model);
         if (!sku) { await connection.rollback(); return reply.code(409).send({ error: 'Informe o SKU para criar esta variação' }); }
@@ -988,6 +989,27 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
               model.brand_name || intake.detected_brand || null, model.id, JSON.stringify(images), JSON.stringify(specs),
               intake.company_id || null]
           );
+        }
+      }
+      // The same model/color/memory can arrive with different factory GTINs.
+      // Keep its original barcode and append the reviewed photo barcode to this
+      // exact variation; never create a second product just for a new EAN.
+      if (existingProductId && intake.detected_ean) {
+        const [barcodeRows] = await connection.query(
+          'SELECT ean,alternative_eans FROM products WHERE id=? LIMIT 1 FOR UPDATE', [productId]
+        );
+        const barcodeRow = barcodeRows[0];
+        if (!barcodeRow) throw new Error('A variação selecionada não existe mais.');
+        const alternatives = safeJson(barcodeRow.alternative_eans, []);
+        const knownEans = [...new Set([
+          barcodeRow.ean,
+          ...(Array.isArray(alternatives) ? alternatives : []),
+        ].map(value => String(value || '').trim()).filter(Boolean))];
+        const detectedEan = String(intake.detected_ean).trim();
+        if (detectedEan && !knownEans.includes(detectedEan)) {
+          knownEans.push(detectedEan);
+          await connection.query('UPDATE products SET ean=?,alternative_eans=? WHERE id=?',
+            [barcodeRow.ean || knownEans[0], JSON.stringify(knownEans), productId]);
         }
       }
       if (blingChild) {

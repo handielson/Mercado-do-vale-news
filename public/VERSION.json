@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.682-menu-modelos",
+  "version": "v1.2.683-eans-por-variacao",
   "date": "2026-10-24",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.682-menu-modelos",
-  "release_vps": "/var/www/mdv-site/releases/20261024-145834-menu-modelos",
+  "tag": "v1.2.683-eans-por-variacao",
+  "release_vps": "/var/www/mdv-site/releases/20261024-153307-eans-por-variacao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Organiza as acoes da tabela de modelos com Editar visivel e menu descritivo para as demais opcoes.",
+  "summary": "Permite varios EANs por variacao e acrescenta o codigo lido por foto sem perder os anteriores.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,18 +14,18 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "pages/admin/settings/ModelsPage.tsx",
-    "components/settings/ModelActionsMenu.tsx",
-    "tmp-tests/model-actions-preview.html",
-    "tmp-tests/model-actions-preview.tsx",
-    "tmp-tests/model-actions-ui.test.mjs",
+    "components/products/ProductFamilyEditor.tsx",
+    "components/ui/EANInput.tsx",
+    "services/smartphonePhotoIntakeServer.cjs",
+    "tmp-tests/family-registration.test.mjs",
+    "tmp-tests/photo-intake-bling-routes.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-24-v1.2.682-menu-modelos.md"
+    "docs/versoes/2026-10-24-v1.2.683-eans-por-variacao.md"
   ],
   "validations": [
-    "Teste de navegador do menu: callbacks, bloqueios, teclado, foco e limites da tela; guardas de precos e cadastro pai; build do site.",
-    "Validacao publica do site e VERSION.json apos deploy; API sem reinicio."
+    "Testes de cadastro por foto, vinculacao Bling e familia; sintaxe da API e build do site.",
+    "Validacao publica do site, VERSION.json e status da API apos deploy."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

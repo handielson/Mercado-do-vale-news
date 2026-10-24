@@ -15,7 +15,7 @@ async function fixture(t, options = {}) {
   });
   t.after(() => app.close());
   const intake = { id: 'intake', company_id: 'company', matched_model_id: 'model', matched_color_id: 'purple', detected_color: 'Roxo',
-    detected_ram: '8GB', detected_storage: '256GB', status: 'ready_to_finalize', prices_confirmed: 1,
+    detected_ram: '8GB', detected_storage: '256GB', detected_ean: options.detectedEan || null, status: 'ready_to_finalize', prices_confirmed: 1,
     price_cost: 10000, price_retail: 15000, price_reseller: 14000, price_wholesale: 13000, validation_errors: '[]',
     ...(!options.missingVersion ? { extracted_data: JSON.stringify({ commercial_version: options.version || 'Global' }) } : {}) };
   let family = buildBlingFamily({ id: 100, codigo: 'PAI', nome: 'Modelo' }, [{ id: 101, codigo: 'FILHO', nome: 'Roxo' }]);
@@ -52,13 +52,16 @@ async function fixture(t, options = {}) {
         state.products.push({ id: params[0], name: params[1], sku: params[2], model_id: params[3], company_id: params[4], is_parent: 1 });
         return [{}];
       }
-      state.products.push({ id: params[0], name: params[1], sku: params[3], price_retail: params[6], price_wholesale: params[7], price_reseller: params[9], model_id: params[12], specs: JSON.parse(params[14]), company_id: params[15] }); return [{}];
+      state.products.push({ id: params[0], name: params[1], sku: params[3], ean: params[4], alternative_eans: params[5], price_retail: params[6], price_wholesale: params[7], price_reseller: params[9], model_id: params[12], specs: JSON.parse(params[14]), company_id: params[15] }); return [{}];
     }
     if (q.startsWith('UPDATE products SET bling_id')) {
       Object.assign(state.products.find(p => p.id === params[2]), { bling_id: params[0], bling_parent_id: params[1] }); return [{}];
     }
     if (q.startsWith('UPDATE products SET parent_id')) {
       state.products.find(p => p.id === params[1]).parent_id = params[0]; return [{ affectedRows: 1 }];
+    }
+    if (q.startsWith('UPDATE products SET ean=')) {
+      Object.assign(state.products.find(p => p.id === params[2]), { ean: params[0], alternative_eans: params[1] }); return [{ affectedRows: 1 }];
     }
     if (q.startsWith('INSERT INTO units')) { state.units.push({ id: params[0], product_id: params[1] }); return [{}]; }
     if (q.startsWith('UPDATE products SET price_cost')) return [{}];
@@ -120,6 +123,37 @@ test('existing exact product keeps local SKU and receives link without a duplica
   assert.equal(f.state().products[0].parent_id, response.json().parent_id);
   assert.equal(f.state().products[0].sku, 'LOCAL');
   assert.equal(f.state().products[0].bling_id, 101);
+});
+
+test('cadastro por imagem acrescenta EAN de outra fabricação na mesma variação sem apagar os anteriores', async t => {
+  const f = await fixture(t, { detectedEan: '7890000000031', products: [{ id: 'existing', model_id: 'model', sku: 'LOCAL',
+    ean: '7890000000017', alternative_eans: JSON.stringify(['7890000000017', '7890000000024']),
+    specs: { ram: '8GB', storage: '256GB', color_id: 'purple' } }] });
+  const response = await f.finalize();
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(response.json().product_id, 'existing');
+  assert.equal(f.state().products[0].ean, '7890000000017');
+  assert.deepEqual(JSON.parse(f.state().products[0].alternative_eans), ['7890000000017', '7890000000024', '7890000000031']);
+  assert.equal((await f.finalize()).json().idempotent, true);
+  assert.deepEqual(JSON.parse(f.state().products[0].alternative_eans), ['7890000000017', '7890000000024', '7890000000031']);
+});
+
+test('EAN já conhecido não é duplicado na variação encontrada por foto', async t => {
+  const f = await fixture(t, { detectedEan: '7890000000024', products: [{ id: 'existing', model_id: 'model', sku: 'LOCAL',
+    ean: '7890000000017', alternative_eans: JSON.stringify(['7890000000017', '7890000000024']),
+    specs: { ram: '8GB', storage: '256GB', color_id: 'purple' } }] });
+  const response = await f.finalize();
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(JSON.parse(f.state().products[0].alternative_eans), ['7890000000017', '7890000000024']);
+});
+
+test('falha no vínculo da variação preserva seus EANs e não conclui o aparelho', async t => {
+  const f = await fixture(t, { detectedEan: '7890000000031', products: [{ id: 'existing', model_id: 'model', sku: 'LOCAL',
+    bling_id: 999, ean: '7890000000017', alternative_eans: JSON.stringify(['7890000000017']),
+    specs: { ram: '8GB', storage: '256GB', color_id: 'purple' } }] });
+  assert.equal((await f.finalize()).statusCode, 409);
+  assert.deepEqual(JSON.parse(f.state().products[0].alternative_eans), ['7890000000017']);
+  assert.equal(f.state().intake.status, 'ready_to_finalize');
 });
 
 for (const options of [{ stale: true }, { outage: true }, { products: [{ id: 'other', sku: 'FILHO', model_id: 'another' }] },

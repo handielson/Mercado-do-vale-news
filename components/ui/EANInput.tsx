@@ -9,6 +9,7 @@ interface EANInputProps {
     label?: string;
     className?: string;
     maxEANs?: number;
+    allowGenerate?: boolean;
 }
 
 /**
@@ -46,7 +47,8 @@ export const EANInput: React.FC<EANInputProps> = ({
     onSearch,
     label = 'Códigos de Barras (EAN-13)',
     className,
-    maxEANs = 5
+    maxEANs = 5,
+    allowGenerate = true
 }) => {
     const handleEANChange = (index: number, newValue: string) => {
         // Only allow numbers
@@ -78,9 +80,6 @@ export const EANInput: React.FC<EANInputProps> = ({
             const updated = [...currentEANs, newEAN];
             onChange(updated);
             if (onSearch) onSearch(newEAN);
-        } else {
-            // Se já atingiu o máximo, substitui o primeiro para garantir feedback
-            handleEANChange(0, newEAN);
         }
     };
 
@@ -174,7 +173,7 @@ export const EANInput: React.FC<EANInputProps> = ({
                         <Plus size={16} />
                         Adicionar EAN
                     </button>
-                    {(eans.some(e => e === '' || e.length !== 13) || eans.length > 0) && (
+                    {allowGenerate && (
                         <button
                             type="button"
                             onClick={handleGenerateEAN}
@@ -188,24 +187,7 @@ export const EANInput: React.FC<EANInputProps> = ({
                 </div>
             )}
 
-            {eans.length >= maxEANs && (
-                <div className="flex items-center justify-between mt-1">
-                    <p className="text-xs text-slate-500">
-                        Máximo de {maxEANs} códigos de barras atingido
-                    </p>
-                    {eans.length > 0 && (
-                        <button
-                            type="button"
-                            onClick={handleGenerateEAN}
-                            className="flex items-center gap-1.5 text-sm text-emerald-600 hover:text-emerald-700 font-medium px-2 py-0.5 rounded-md hover:bg-emerald-50 transition-colors"
-                            title="Substituir por código EAN-13 Brasil (789...)"
-                        >
-                            <Wand2 size={16} />
-                            Gerar Novo EAN (BR)
-                        </button>
-                    )}
-                </div>
-            )}
+            {eans.length >= maxEANs && <p className="mt-1 text-xs text-slate-500">Máximo de {maxEANs} códigos de barras atingido</p>}
         </div>
     );
 };

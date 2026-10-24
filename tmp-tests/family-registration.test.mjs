@@ -58,7 +58,9 @@ test('cada filho mantém SKU e EAN próprios; o pai não empresta seus códigos'
   assert.deepEqual(parent.eans,['7890000000017']);
   const source=fs.readFileSync('components/products/ProductFamilyEditor.tsx','utf8');
   assert.match(source,/readOnly=\{Boolean\(row.data.id\)\}/);
-  assert.match(source,/EANInput label="EAN da variação"/);
+  assert.match(source,/EANInput label="EANs da variação"/);
+  assert.match(source,/maxEANs=\{20\}/);
+  assert.match(source,/allowGenerate=\{false\}/);
 });
 test('códigos duplicados na família ou EAN incompleto são rejeitados antes de gravar', async () => {
   const parent={name:'Pai',sku:'PAI0001'};
