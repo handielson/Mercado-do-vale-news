@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { MODEL_SEO_BATCH_SIZE, selectFirstModelIds } from './modelBulkSelection.js';
 import { ModelPricesPanel } from '../../../components/settings/ModelPricesPanel';
 import { smartphonePriceGroups } from '../../../services/smartphonePriceGroups';
+import { ModelActionsMenu } from '../../../components/settings/ModelActionsMenu';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -323,55 +324,26 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
 
                 {/* Ações */}
                 <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 z-[1] ${actionCellBg} shadow-[-10px_0_18px_-18px_rgba(15,23,42,0.55)]`}>
-                    <div className="flex flex-wrap items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-2">
                         <button
                             type="button"
-                            onClick={() => onOpenParent(model)}
-                            disabled={openingParent}
-                            className="p-2 text-violet-700 hover:bg-violet-50 rounded-lg transition-colors"
-                            title="Produto pai, fotos e variações deste modelo"
-                            aria-label={`Produto pai e variações de ${model.name}`}
-                        >
-                            {openingParent ? <Loader2 size={16} className="animate-spin" /> : <Layers size={16} />}
-                        </button>
-                        <button
-                            onClick={handlePullBling}
-                            disabled={pullingBling || syncingBling || reimporting}
-                            className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors disabled:opacity-50"
-                            title="Puxar medidas do Bling para o Sistema"
-                        >
-                            {pullingBling ? <Loader2 size={16} className="animate-spin" /> : <DownloadCloud size={16} />}
-                        </button>
-                        <button
-                            onClick={handleSyncBling}
-                            disabled={syncingBling || pullingBling || reimporting}
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
-                            title="Enviar medidas do Sistema para o Bling"
-                        >
-                            {syncingBling ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
-                        </button>
-                        <button
-                            onClick={handleReimportBling}
-                            disabled={reimporting || syncingBling || pullingBling}
-                            className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors disabled:opacity-50"
-                            title="Re-sincronizar SKUs (Bling -> Sistema)"
-                        >
-                            {reimporting ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                        </button>
-                        <button
                             onClick={() => onEdit(model)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Editar"
+                            aria-label={`Editar ${model.name}`}
+                            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
-                            <Pencil size={16} />
+                            <Pencil size={14} /> Editar
                         </button>
-                        <button
-                            onClick={() => onDelete(model)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Excluir"
-                        >
-                            <Trash2 size={16} />
-                        </button>
+                        <ModelActionsMenu modelName={model.name} actions={[
+                            { section: 'Produto', label: 'Produto pai, fotos e variações', onClick: () => onOpenParent(model), disabled: openingParent,
+                                icon: openingParent ? <Loader2 size={16} className="animate-spin" /> : <Layers size={16} /> },
+                            { section: 'Integração Bling', label: 'Trazer medidas do Bling', onClick: handlePullBling, disabled: pullingBling || syncingBling || reimporting,
+                                icon: pullingBling ? <Loader2 size={16} className="animate-spin" /> : <DownloadCloud size={16} /> },
+                            { label: 'Enviar medidas para o Bling', onClick: handleSyncBling, disabled: pullingBling || syncingBling || reimporting,
+                                icon: syncingBling ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} /> },
+                            { label: 'Re-sincronizar SKUs do Bling', onClick: handleReimportBling, disabled: pullingBling || syncingBling || reimporting,
+                                icon: reimporting ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} /> },
+                            { section: 'Modelo', label: 'Excluir modelo', onClick: () => onDelete(model), destructive: true, icon: <Trash2 size={16} /> },
+                        ]} />
                     </div>
                 </td>
             </tr>
@@ -726,9 +698,9 @@ export function ModelsPage() {
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-auto max-h-[65vh]">
                 <table className="w-full min-w-[1200px] table-fixed relative">
                     <colgroup>
-                        <col className="w-[4%]" /><col className="w-[11%]" /><col className="w-[22%]" />
+                        <col className="w-12" /><col className="w-[11%]" /><col />
                         <col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" />
-                        <col className="w-[4%]" /><col className="w-[8%]" /><col className="w-[15%]" />
+                        <col className="w-16" /><col className="w-24" /><col className="w-40" />
                     </colgroup>
                     <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
                         <tr>

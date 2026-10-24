@@ -1,3 +1,14 @@
+# v1.2.682-menu-modelos
+
+Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.682-menu-modelos.
+Release: /var/www/mdv-site/releases/20261024-145834-menu-modelos.
+
+Na Gestao de Modelos, Editar fica visivel e as demais acoes ficam em um menu com nomes completos, organizado por produto, integracao Bling e exclusao. As colunas de salvar, status e acoes recebem larguras reservadas. O menu abre fora da tabela rolavel, com navegacao por teclado e ajuste aos limites da tela.
+
+Validacao: teste de navegador do menu, guardas de precos e cadastro pai, build com travas e consulta publica apos deploy. Publicacao somente do site; sem mudancas em dados comerciais ou API.
+
+## Historico anterior
+
 # v1.2.681-foto-produto-pai-visivel
 
 Data: 23/10/2026. Branch: main. Tag: v1.2.681-foto-produto-pai-visivel.
