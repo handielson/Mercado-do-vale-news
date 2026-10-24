@@ -75,6 +75,7 @@ export const ProductFormPage: React.FC = () => {
     const [loadedDraft, setLoadedDraft] = useState<ProductFormDraft | null>(null);
     const [draftError, setDraftError] = useState('');
     const draftMeta = useRef<{ id: string; revision: number } | null>(null);
+    const draftSaveQueue = useRef<Promise<void>>(Promise.resolve());
     const resumeDraftId = new URLSearchParams(location.search).get('draft');
 
     const editingProductId = (id && id !== 'new' ? id : undefined) || loadedDraft?.snapshot.data.id;
@@ -172,10 +173,24 @@ export const ProductFormPage: React.FC = () => {
         }
     };
 
-    const handleSaveDraft = async (snapshot: ProductFormSnapshot) => {
-        draftMeta.current ||= { id: crypto.randomUUID(), revision: 0 };
-        const draft = await productFormDraftsService.save(draftMeta.current.id, draftMeta.current.revision, snapshot);
-        draftMeta.current = { id: draft.id, revision: draft.revision }; setSavedDraft(draft);
+    const handleSaveDraft = (snapshot: ProductFormSnapshot, options?: { linkToDraft?: boolean }): Promise<void> => {
+        const pending = draftSaveQueue.current.then(async () => {
+            draftMeta.current ||= { id: crypto.randomUUID(), revision: 0 };
+            const draft = await productFormDraftsService.save(draftMeta.current.id, draftMeta.current.revision, snapshot);
+            draftMeta.current = { id: draft.id, revision: draft.revision };
+            setSavedDraft(draft);
+            // Preserve the current form while the user keeps typing. The draft ID
+            // in the address bar makes a later reload recover this exact snapshot.
+            if (options?.linkToDraft && window.location.pathname === location.pathname) {
+                const search = new URLSearchParams(window.location.search);
+                if (!search.has('draft') || search.get('draft') === draft.id) {
+                    search.set('draft', draft.id);
+                    window.history.replaceState(window.history.state, '', `${window.location.pathname}?${search}${window.location.hash}`);
+                }
+            }
+        });
+        draftSaveQueue.current = pending.catch(() => {});
+        return pending;
     };
 
     const handleBatchComplete = async (savedProduct?: Product, snapshot?: ProductFormSnapshot) => {
@@ -246,7 +261,7 @@ export const ProductFormPage: React.FC = () => {
             </div>
 
             {print3dEntry && <p className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">A opção de impressão 3D já está marcada. Confira o cadastro e salve para continuar. Produtos vendáveis seguem para a ficha e os arquivos; produtos pai organizam as variações.</p>}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p>{savedDraft ? `Rascunho salvo em ${new Date(savedDraft.updated_at).toLocaleString('pt-BR')}. Salve novamente para guardar as próximas alterações.` : 'Cadastro incompleto? Salve como rascunho para continuar depois, sem disponibilizar o anúncio para venda.'}</p><Link to="/admin/products/drafts" className="font-semibold text-blue-700 underline">Rascunhos de anúncios</Link></div>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p>{savedDraft ? `Rascunho salvo em ${new Date(savedDraft.updated_at).toLocaleString('pt-BR')}. As próximas alterações são salvas automaticamente.` : 'O cadastro será salvo automaticamente como rascunho ao começar a preencher, sem disponibilizar o anúncio para venda.'}</p><Link to="/admin/products/drafts" className="font-semibold text-blue-700 underline">Rascunhos de anúncios</Link></div>
 
             {isEditMode && product?.id && product.sku && (
                 <ProductWorkspaceNav productId={product.id} sku={product.sku} active="product" />

@@ -1,3 +1,14 @@
+# v1.2.686-rascunho-auto-salvo
+
+Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.686-rascunho-auto-salvo.
+Release: /var/www/mdv-site/releases/20261024-162150-rascunho-auto-salvo.
+
+O cadastro de produtos salva automaticamente o rascunho após alterações, incluindo foto do pai, imagens e dados das variações. O formulário mostra o estado do salvamento, avisa se falhar e mantém o identificador do rascunho na URL para retomada após recarregar a página. O botão de salvar manualmente continua disponível.
+
+Validação: teste de rascunhos, grupos de preços e cadastro por foto; build do site e verificação pública. Apenas site publicado.
+
+## Histórico anterior
+
 # v1.2.685-precos-variacoes-juntos
 
 Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.685-precos-variacoes-juntos.

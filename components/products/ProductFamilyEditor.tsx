@@ -21,9 +21,10 @@ export type FamilyEditorDraft = {
     draftKey: string;
 };
 
-export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartphone = false, onBusyChange, initialDraft, captureDraftRef, productionSetups, onProductionChange }: {
+export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartphone = false, onBusyChange, onDraftChange, initialDraft, captureDraftRef, productionSetups, onProductionChange }: {
     parent: ProductInput; rows: FamilyRow[]; onChange: (rows: FamilyRow[]) => void; disabled: boolean; smartphone?: boolean;
     onBusyChange?: (busy: boolean) => void;
+    onDraftChange?: () => void;
     initialDraft?: FamilyEditorDraft;
     captureDraftRef?: React.MutableRefObject<(() => FamilyEditorDraft) | undefined>;
     productionSetups?: Record<string,Print3dSetup | undefined>;
@@ -38,6 +39,11 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
     const [media, setMedia] = useState(initialDraft?.media || { images: [] as string[], inheritImages: true, videoUrl: '', inheritVideo: false, listing: {} as Partial<ProductInput>, videoFile: null as File | null });
     const [draftKey, setDraftKey] = useState(initialDraft?.draftKey || '');
     if (captureDraftRef) captureDraftRef.current = () => ({ adding, attributes, variationSku, variationEans, media, draftKey });
+    const mountedDraftRef = React.useRef(false);
+    useEffect(() => {
+        if (mountedDraftRef.current) onDraftChange?.();
+        else mountedDraftRef.current = true;
+    }, [adding, attributes, variationSku, variationEans, media, draftKey]);
     const [busyKeys, setBusyKeys] = useState<string[]>([]);
     const [priceReferences, setPriceReferences] = useState<Record<string, SmartphonePriceReference>>({});
     const [priceReferenceError, setPriceReferenceError] = useState('');

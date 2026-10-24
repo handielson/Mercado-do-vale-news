@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.685-precos-variacoes-juntos",
+  "version": "v1.2.686-rascunho-auto-salvo",
   "date": "2026-10-24",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.685-precos-variacoes-juntos",
-  "release_vps": "/var/www/mdv-site/releases/20261024-160334-precos-variacoes-juntos",
+  "tag": "v1.2.686-rascunho-auto-salvo",
+  "release_vps": "/var/www/mdv-site/releases/20261024-162150-rascunho-auto-salvo",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Permite cadastrar variacoes e precos de celulares na mesma etapa, sem preco obrigatorio no pai.",
+  "summary": "Salva automaticamente o rascunho do cadastro, incluindo fotos, variacoes e precos.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -16,17 +16,14 @@
   "changed_files": [
     "components/products/ProductFamilyEditor.tsx",
     "components/products/ProductForm.tsx",
-    "components/products/VariationListing.tsx",
-    "components/products/familyRegistration.js",
-    "components/settings/ModelPricesPanel.tsx",
-    "pages/admin/settings/ModelsPage.tsx",
-    "tmp-tests/family-registration.test.mjs",
+    "pages/admin/products/ProductFormPage.tsx",
+    "tmp-tests/product-form-drafts.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-24-v1.2.685-precos-variacoes-juntos.md"
+    "docs/versoes/2026-10-24-v1.2.686-rascunho-auto-salvo.md"
   ],
   "validations": [
-    "Testes de familia, grupos de precos e cadastro por foto; build do site.",
+    "Teste de rascunhos, grupos de precos e cadastro por foto; build do site.",
     "Validacao publica da pagina inicial e VERSION.json apos deploy."
   ],
   "android_entregas": {

@@ -10,7 +10,7 @@ const { File } = require('node:buffer');
 const { registerProductFormDraftRoutes, validateSnapshot, PREFIX } = require('../services/productFormDraftsServer.cjs');
 const ID = '00000000-0000-0000-0000-000000000001';
 const FILE_ID = '00000000-0000-0000-0000-000000000002';
-const snapshot = () => ({ schemaVersion:1, data:{ name:'', price_retail:0, specs:{ ncm:'392690' }, is_parent:true }, activeSection:'fiscal', activeSalesChannel:'mercado-livre', familyRows:[{ key:'child', data:{ name:'Roxo', specs:{ color:'Roxo' } } }], familyEditor:{ adding:true, attributes:[{ key:'color',value:'Azul' }] }, productionSetups:{}, productionRowKey:'', serialList:[], familyCheckpoint:{parent:null,children:{}} });
+const snapshot = () => ({ schemaVersion:1, data:{ name:'', price_retail:0, images:['https://example.com/parent.webp'], specs:{ ncm:'392690' }, is_parent:true }, activeSection:'fiscal', activeSalesChannel:'mercado-livre', familyRows:[{ key:'child', data:{ name:'Roxo', images:['https://example.com/child.webp'], eans:['7891234567895'], price_retail:109000, specs:{ color:'Roxo',ram:'8GB',storage:'256GB' } } }], familyEditor:{ adding:true, attributes:[{ key:'color',value:'Azul' }] }, productionSetups:{}, productionRowKey:'', serialList:[], familyCheckpoint:{parent:null,children:{}} });
 function fixture() {
   const records = new Map(); let backup;
   const queries = [];
@@ -89,6 +89,9 @@ test('cadastro incompleto e família são salvos fora do catálogo e retomados s
     assert.equal(result.statusCode,200);assert.equal(result.json().revision,1);
     result=await ctx.app.inject({url:`/admin/product-form-drafts/${ID}`,headers});
     assert.deepEqual(result.json().snapshot,snapshot());
+    assert.deepEqual(result.json().snapshot.data.images,['https://example.com/parent.webp']);
+    assert.deepEqual(result.json().snapshot.familyRows[0].data.images,['https://example.com/child.webp']);
+    assert.equal(result.json().snapshot.familyRows[0].data.price_retail,109000);
     result=await ctx.app.inject({url:'/admin/product-form-drafts',headers});
     assert.equal(result.json().drafts[0].title,'Anúncio sem título');assert.equal(result.json().drafts[0].is_parent,true);
     assert.equal(result.json().drafts[0].snapshot,undefined,'List does not return heavy snapshots or private identifiers');
@@ -96,6 +99,18 @@ test('cadastro incompleto e família são salvos fora do catálogo e retomados s
     result=await ctx.app.inject({method:'PUT',url:`/admin/product-form-drafts/${ID}`,headers,payload:{revision:0,snapshot:{...snapshot(),data:{name:'stale'}}}});
     assert.equal(result.statusCode,409);assert.equal(ctx.records.get(PREFIX+ID).snapshot.data.name,'');
   } finally {await ctx.close();}
+});
+test('salvamento automático mantém a URL recuperável sem remontar o formulário durante a edição',()=>{
+  const page=fs.readFileSync('pages/admin/products/ProductFormPage.tsx','utf8');
+  const form=fs.readFileSync('components/products/ProductForm.tsx','utf8');
+  assert.match(form,/window\.setTimeout\(\(\) => \{/);
+  assert.match(form,/void persistDraft\(snapshot, signature\)/);
+  assert.match(form,/familyMediaBusy \|\| isCompressing \|\| familyLoading \|\| familyPhotoLoading/);
+  assert.match(form,/draftSaveStatus === 'error'/);
+  assert.match(page,/draftSaveQueue\.current\.then/);
+  assert.match(page,/search\.set\('draft', draft\.id\)/);
+  assert.match(page,/window\.history\.replaceState/);
+  assert.match(form,/setImagePreviews\(initialData\.images \|\| \[\]\)/);
 });
 test('rascunhos e arquivos exigem administrador; concluir/arquivar remove apenas da fila e preserva conteúdo',async()=>{
   const ctx=await appFixture();try {

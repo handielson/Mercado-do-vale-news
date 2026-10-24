@@ -75,7 +75,7 @@ interface ProductFormProps {
     parentProductionSetup?: Print3dSetup;
     onProductionSetupChange?: (setup:Print3dSetup | undefined) => void;
     initialDraft?: ProductFormSnapshot;
-    onSaveDraft?: (snapshot: ProductFormSnapshot) => Promise<void>;
+    onSaveDraft?: (snapshot: ProductFormSnapshot, options?: { linkToDraft?: boolean }) => Promise<void>;
     variationDraftMode?: boolean;
     initialData?: Product;
     defaultIsPrint3d?: boolean;
@@ -95,11 +95,29 @@ type ProductSaveResult = Product & {
 
 const DEFAULT_BATTERY_HEALTH = '100';
 type FormSection = 'basic' | 'specs' | 'media' | 'channels' | 'commercial' | 'files' | 'production' | 'fiscal' | 'variations';
+const draftFileIdentity = new WeakMap<File, number>();
+let nextDraftFileIdentity = 1;
+function draftFingerprint(snapshot: ProductFormSnapshot): string {
+    return JSON.stringify({ ...snapshot, activeSection: undefined, activeSalesChannel: undefined }, (_key, value) => {
+        if (typeof File !== 'undefined' && value instanceof File) {
+            if (!draftFileIdentity.has(value)) draftFileIdentity.set(value, nextDraftFileIdentity++);
+            return { draftFileIdentity: draftFileIdentity.get(value), name: value.name, size: value.size, lastModified: value.lastModified };
+        }
+        return value;
+    });
+}
 
 export function ProductForm({ initialData, initialDraft, onSaveDraft, initialProductionSetup, parentProductionSetup, onProductionSetupChange, defaultIsPrint3d = false, onSubmit, onCancel, onBatchComplete, isLoading, variationDraftMode = false }: ProductFormProps) {
     const isNewRegistration = !initialData || Boolean(initialDraft && !initialData.id);
     const [savingDraft, setSavingDraft] = useState(false);
     const savingDraftRef = useRef(false);
+    const [draftSaveStatus, setDraftSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
+    const [draftEditTick, setDraftEditTick] = useState(0);
+    const [draftRetryTick, setDraftRetryTick] = useState(0);
+    const userEditedDraftRef = useRef(false);
+    const lastSavedDraftSignatureRef = useRef<string | null>(null);
+    const failedDraftSignatureRef = useRef<string | null>(null);
+    const markDraftEdited = () => { userEditedDraftRef.current = true; setDraftEditTick(value => value + 1); };
     const familyEditorDraftRef = useRef<(() => FamilyEditorDraft) | undefined>(undefined);
     const registrationCompletedRef = useRef<{ savedProductId?: string } | undefined>(initialDraft?.completion);
     const [familyRows, setFamilyRows] = useState<FamilyRow[]>(initialDraft?.familyRows || []);
@@ -450,6 +468,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 product_format: initialData.is_parent ? 'parent' : initialData.parent_id ? 'variation' : 'simple',
                 ...initialData,
             });
+            setImagePreviews(initialData.images || []);
 
             // 🔥 CRITICAL: Update external IDs state when initialData arrives asynchronously
             setBlingId(initialData.bling_id || undefined);
@@ -2082,7 +2101,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
 
     const hasValidationErrors = Object.keys(errors).length > 0;
     const validationErrorList = hasValidationErrors ? extractValidationErrors(errors) : [];
-    const isSavingOperation = isLoading || isSavingForm || savingDraft || parentTemplateLoading || copyingParent;
+    const isSavingOperation = isLoading || isSavingForm || parentTemplateLoading || copyingParent;
     const saveProgressPercent = getProductSaveProgressPercent(saveProgress);
 
     function captureDraftSnapshot(): ProductFormSnapshot {
@@ -2091,22 +2110,74 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             familyCheckpoint: familyCheckpoint.current, singleSaveCheckpoint: singleSaveCheckpoint.current, completion: registrationCompletedRef.current };
     }
 
+    // Subscribe to all form fields; the fingerprint also covers state kept outside
+    // react-hook-form (images, family rows, files and production setup).
+    watch();
+    const currentDraftSignature = draftFingerprint(captureDraftSnapshot());
+    if (lastSavedDraftSignatureRef.current === null) lastSavedDraftSignatureRef.current = currentDraftSignature;
+
+    const persistDraft = async (snapshot: ProductFormSnapshot, signature: string, manual = false) => {
+        if (!onSaveDraft || savingDraftRef.current) return;
+        savingDraftRef.current = true; setSavingDraft(true); setDraftSaveStatus('saving');
+        try {
+            await onSaveDraft(snapshot, { linkToDraft: true });
+            lastSavedDraftSignatureRef.current = signature;
+            failedDraftSignatureRef.current = null;
+            setDraftSaveStatus('saved');
+            if (manual) toast.success('Rascunho salvo no sistema. Você pode continuar em qualquer computador.');
+        } catch (error) {
+            failedDraftSignatureRef.current = signature;
+            setDraftSaveStatus('error');
+            toast.error(error instanceof Error ? error.message : 'Não foi possível salvar o rascunho. Seus dados continuam nesta tela.');
+        } finally {
+            savingDraftRef.current = false; setSavingDraft(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!onSaveDraft || variationDraftMode || !userEditedDraftRef.current ||
+            currentDraftSignature === lastSavedDraftSignatureRef.current ||
+            currentDraftSignature === failedDraftSignatureRef.current) return;
+        if (!savingDraftRef.current) setDraftSaveStatus('pending');
+        if (
+            savingDraftRef.current || saveInFlightRef.current || isLoading || isSavingForm ||
+            familyMediaBusy || isCompressing || familyLoading || familyPhotoLoading ||
+            batchImageUploadingId || marketingUploadKind || parentTemplateLoading || copyingParent ||
+            parentTemplateError || familyLoadError || familyPhotoError) return;
+        const timer = window.setTimeout(() => {
+            const snapshot = captureDraftSnapshot();
+            const signature = draftFingerprint(snapshot);
+            if (signature !== lastSavedDraftSignatureRef.current && signature !== failedDraftSignatureRef.current) {
+                void persistDraft(snapshot, signature);
+            }
+        }, 1000);
+        return () => window.clearTimeout(timer);
+    }, [currentDraftSignature, draftEditTick, draftRetryTick, savingDraft, onSaveDraft, variationDraftMode,
+        isLoading, isSavingForm, familyMediaBusy, isCompressing, familyLoading, familyPhotoLoading,
+        batchImageUploadingId, marketingUploadKind, parentTemplateLoading, copyingParent,
+        parentTemplateError, familyLoadError, familyPhotoError]);
+
+    useEffect(() => {
+        if (!['pending', 'saving', 'error'].includes(draftSaveStatus)) return;
+        const warnBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+        window.addEventListener('beforeunload', warnBeforeUnload);
+        return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+    }, [draftSaveStatus]);
+
     const saveDraft = async () => {
         if (!onSaveDraft || savingDraftRef.current || isSavingOperation) return;
         if (parentTemplateError) { toast.warning(parentTemplateError); return; }
         if (familyMediaBusy || isCompressing || familyLoading || batchImageUploadingId || marketingUploadKind) {
             toast.warning('Aguarde o envio dos arquivos antes de salvar o rascunho.'); return;
         }
-        savingDraftRef.current = true; setSavingDraft(true);
-        try {
-            await onSaveDraft(captureDraftSnapshot());
-            toast.success('Rascunho salvo no sistema. Você pode continuar em qualquer computador.');
-        } catch (error) { toast.error(error instanceof Error ? error.message : 'Não foi possível salvar o rascunho. Seus dados continuam nesta tela.'); }
-        finally { savingDraftRef.current = false; setSavingDraft(false); }
+        const snapshot = captureDraftSnapshot();
+        await persistDraft(snapshot, draftFingerprint(snapshot), true);
     };
 
     return (
-        <form onSubmit={event => { event.stopPropagation(); if (!savingDraftRef.current) void handleFormSubmit(event); }} className="space-y-6 pb-20">
+        <form onInputCapture={markDraftEdited} onChangeCapture={markDraftEdited}
+            onClickCapture={event => { const button = (event.target as HTMLElement).closest('button'); if (button?.type === 'button' && !button.closest('nav')) markDraftEdited(); }}
+            onSubmit={event => { event.stopPropagation(); if (!savingDraftRef.current) void handleFormSubmit(event); }} className="space-y-6 pb-20">
             <nav id={variationDraftMode ? 'variation-form-sections' : 'product-form-sections'} aria-label="Seções do cadastro" className="sticky top-0 z-20 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur scroll-mt-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {([
                     ['basic', 'Dados básicos'],
@@ -2717,7 +2788,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 {familyPhotoLoading && <p role="status" className="text-sm text-blue-700">Preparando variações das cores com fotos...</p>}
                 {familyModelId && !familyPhotoLoading && !familyPhotoError && <button type="button" className="text-sm text-blue-700 underline" onClick={() => setFamilyPhotoRetry(value => value + 1)}>Atualizar variações pelas fotos do modelo</button>}
                 {familyPhotoError && <p role="alert" className="text-sm text-red-700">{familyPhotoError} <button type="button" className="underline" onClick={() => setFamilyPhotoRetry(value => value + 1)}>Tentar novamente</button></p>}
-                <ProductFamilyEditor initialDraft={initialDraft?.familyEditor} captureDraftRef={familyEditorDraftRef} productionSetups={productionSetups} onProductionChange={(key,setup) => setProductionSetups(current => ({ ...current, [key]:setup }))} parent={{ ...getValues(), images: imagePreviews }} smartphone={isSmartphoneModel({ category_name: categoryConfig?.__category_name })} rows={familyRows} onChange={setFamilyRows} onBusyChange={setFamilyMediaBusy} disabled={Boolean(isSavingOperation || familyLoading || familyPhotoLoading || familyLoadError)} />
+                <ProductFamilyEditor initialDraft={initialDraft?.familyEditor} captureDraftRef={familyEditorDraftRef} onDraftChange={markDraftEdited} productionSetups={productionSetups} onProductionChange={(key,setup) => setProductionSetups(current => ({ ...current, [key]:setup }))} parent={{ ...getValues(), images: imagePreviews }} smartphone={isSmartphoneModel({ category_name: categoryConfig?.__category_name })} rows={familyRows} onChange={rows => { markDraftEdited(); setFamilyRows(rows); }} onBusyChange={setFamilyMediaBusy} disabled={Boolean(isSavingOperation || familyLoading || familyPhotoLoading || familyLoadError)} />
             </div>}
 
             {isPrint3d && <section className={['files','production'].includes(activeSection) ? 'rounded-xl border border-violet-200 bg-violet-50 p-5 space-y-3' : 'hidden'}>
@@ -2747,7 +2818,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 </>
             </section>}
             <div className="sticky bottom-0 z-20 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
-                {isSavingOperation && (
+                {isSavingOperation && !savingDraft && (
                     <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
                         <div className="flex items-center justify-between gap-3 text-sm">
                             <span className="font-medium text-blue-900">{saveProgress?.message || 'Salvando...'}</span>
@@ -2763,15 +2834,21 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                         </div>
                     </div>
                 )}
+                {!variationDraftMode && onSaveDraft && draftSaveStatus !== 'idle' && <div className={`text-sm ${draftSaveStatus === 'error' ? 'text-red-700' : 'text-slate-600'}`} role="status" aria-live="polite">
+                    {draftSaveStatus === 'pending' ? 'Alterações pendentes; salvamento automático em instantes…' :
+                        draftSaveStatus === 'saving' ? 'Salvando rascunho automaticamente…' :
+                        draftSaveStatus === 'saved' ? 'Rascunho salvo automaticamente.' :
+                        <>Não foi possível salvar as últimas alterações. <button type="button" className="font-semibold underline" onClick={() => { failedDraftSignatureRef.current = null; setDraftRetryTick(value => value + 1); }}>Tentar novamente</button></>}
+                </div>}
                 <div className="flex justify-end gap-3">
                 <button type="button" onClick={onCancel} disabled={isSavingOperation} className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50">
                     Cancelar
                 </button>
-                {!variationDraftMode && onSaveDraft && <button type="button" onClick={() => void saveDraft()} disabled={Boolean(isSavingOperation || familyMediaBusy || isCompressing || familyLoading)} className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50">{savingDraft ? 'Salvando rascunho...' : 'Salvar rascunho'}</button>}
+                {!variationDraftMode && onSaveDraft && <button type="button" onClick={() => void saveDraft()} disabled={Boolean(isSavingOperation || savingDraft || familyMediaBusy || isCompressing || familyLoading)} className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50">{savingDraft ? 'Salvando rascunho...' : 'Salvar rascunho'}</button>}
                 {!variationDraftMode && isParentProduct && activeSection !== 'variations' && <button type="button" onClick={() => selectSection('variations')} disabled={isSavingOperation} className="rounded-md border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50">Continuar para variações</button>}
                 <button
                     type="submit"
-                    disabled={isSavingOperation || isCompressing || blocksSubmitForDuplicateEAN}
+                    disabled={isSavingOperation || savingDraft || isCompressing || blocksSubmitForDuplicateEAN}
                     className={`px-4 py-2 text-white text-sm font-medium rounded-md shadow-lg transition-colors ${blocksSubmitForDuplicateEAN
                         ? 'bg-gray-400 cursor-not-allowed'
                         : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
