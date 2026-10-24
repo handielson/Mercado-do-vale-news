@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.683-eans-por-variacao",
+  "version": "v1.2.684-restaura-rascunhos-api",
   "date": "2026-10-24",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.683-eans-por-variacao",
-  "release_vps": "/var/www/mdv-site/releases/20261024-153307-eans-por-variacao",
+  "tag": "v1.2.684-restaura-rascunhos-api",
+  "release_vps": "/var/www/mdv-site/releases/20261024-154247-restaura-rascunhos-api",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Permite varios EANs por variacao e acrescenta o codigo lido por foto sem perder os anteriores.",
+  "summary": "Restaura a rota de rascunhos de produtos em todos os entrypoints da API.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,18 +14,16 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/products/ProductFamilyEditor.tsx",
-    "components/ui/EANInput.tsx",
-    "services/smartphonePhotoIntakeServer.cjs",
-    "tmp-tests/family-registration.test.mjs",
-    "tmp-tests/photo-intake-bling-routes.test.mjs",
+    "server.js",
+    "vps_server.js",
+    "tmp-tests/product-form-drafts.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-24-v1.2.683-eans-por-variacao.md"
+    "docs/versoes/2026-10-24-v1.2.684-restaura-rascunhos-api.md"
   ],
   "validations": [
-    "Testes de cadastro por foto, vinculacao Bling e familia; sintaxe da API e build do site.",
-    "Validacao publica do site, VERSION.json e status da API apos deploy."
+    "Teste da rota de rascunhos e registro em todos os entrypoints; sintaxe da API e build do site.",
+    "GET e PUT sem autenticacao deixam de retornar 404; validacao publica do site, VERSION.json e API."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

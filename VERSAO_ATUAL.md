@@ -1,3 +1,14 @@
+# v1.2.684-restaura-rascunhos-api
+
+Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.684-restaura-rascunhos-api.
+Release: /var/www/mdv-site/releases/20261024-154247-restaura-rascunhos-api.
+
+A rota de rascunhos do cadastro de produtos foi restaurada na API publicada e seu registro agora consta nos tres arquivos de entrada do repositorio. Um teste falha se qualquer entrypoint perder o registro. O GET e PUT sem sessao retornam 401, comprovando que a rota existe e permanece protegida.
+
+Validacao: teste de rascunhos, sintaxe dos entrypoints, build do site e verificacao publica. Recuperacao seletiva da API; site publicado para registrar a versao.
+
+## Historico anterior
+
 # v1.2.683-eans-por-variacao
 
 Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.683-eans-por-variacao.

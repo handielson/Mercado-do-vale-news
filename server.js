@@ -1255,6 +1255,8 @@ fastify.get('/admin/navigation-log', { preHandler: requireSyncKeyOrAdmin }, asyn
 });
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+require('./services/productFormDraftsServer.cjs').registerProductFormDraftRoutes(fastify, { pool, requireAdminBearerToken });
+
 fastify.get('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const key = normalizeAdminPreferenceKey(req.params?.key);
   if (!key) return reply.code(400).send({ error: 'Invalid preference key' });

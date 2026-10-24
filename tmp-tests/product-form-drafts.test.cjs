@@ -41,6 +41,14 @@ async function appFixture() {
 }
 const headers = {authorization:'Bearer test'};
 
+test('todos os entrypoints da API registram a rota de rascunhos exatamente uma vez',()=>{
+  const hook = "require('./services/productFormDraftsServer.cjs').registerProductFormDraftRoutes(fastify, { pool, requireAdminBearerToken });";
+  for (const file of ['server.js','vps_server.js','vps_server.cjs']) {
+    const source = fs.readFileSync(file,'utf8');
+    assert.equal(source.split(hook).length - 1,1,`${file} precisa registrar GET e PUT dos rascunhos`);
+  }
+});
+
 test('lista leve preserva UUID, textos semelhantes a JSON, booleanos e revisao com mysql2',async()=>{
   const ctx=await appFixture();try {
     for (const title of ['Produto 3D','123','true','null','"Texto entre aspas"','[1,2]','Peça azul 🟦']) {
