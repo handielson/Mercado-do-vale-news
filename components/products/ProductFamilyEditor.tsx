@@ -3,13 +3,15 @@ import type { Print3dSetup } from '../../services/print3dRegistration';
 import { createPortal } from 'react-dom';
 import { ProductForm } from './ProductForm';
 import { Product, ProductInput } from '../../types/product';
-import { buildAttributeVariationDraft, FAMILY_VARIATION_ATTRIBUTES } from './familyRegistration.js';
+import { buildAttributeVariationDraft, FAMILY_VARIATION_ATTRIBUTES, setSmartphoneFamilyConfigurationPrice, smartphoneFamilyConfigurationKey } from './familyRegistration.js';
 import { ColorSelect } from './selectors/ColorSelect';
 import { CapacitySelect } from './selectors/CapacitySelect';
 import { MaterialSelect } from './selectors/MaterialSelect';
 import { EANInput } from '../ui/EANInput';
 import { VariationMedia } from './VariationMedia';
 import { VariationListing } from './VariationListing';
+import { CurrencyInput } from '../ui/CurrencyInput';
+import { smartphonePriceGroups, type SmartphonePriceReference } from '../../services/smartphonePriceGroups';
 import { nextVariationSku } from '@mdv/product-sku';
 
 export type FamilyRow = { key: string; data: ProductInput & { id?: string }; inheritImages: boolean; videoFile?: File | null };
@@ -37,6 +39,8 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
     const [draftKey, setDraftKey] = useState(initialDraft?.draftKey || '');
     if (captureDraftRef) captureDraftRef.current = () => ({ adding, attributes, variationSku, variationEans, media, draftKey });
     const [busyKeys, setBusyKeys] = useState<string[]>([]);
+    const [priceReferences, setPriceReferences] = useState<Record<string, SmartphonePriceReference>>({});
+    const [priceReferenceError, setPriceReferenceError] = useState('');
     const busy = busyKeys.length > 0;
     useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
     const mediaBusy = (key: string, active: boolean) => setBusyKeys(keys => active ? [...new Set([...keys, key])] : keys.filter(item => item !== key));
@@ -59,6 +63,35 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
             setAttributeError(error instanceof Error ? error.message : 'Confira os atributos.');
         }
     };
+    const priceGroups = new Map<string, FamilyRow[]>();
+    if (smartphone) for (const row of rows.filter(item => !item.data.id)) {
+        const key = smartphoneFamilyConfigurationKey(row.data);
+        if (key) priceGroups.set(key, [...(priceGroups.get(key) || []), row]);
+    }
+    const priceGroupSignature = JSON.stringify([...priceGroups.keys()]);
+    useEffect(() => {
+        if (!smartphone || !parent.model_id || !priceGroups.size) return;
+        let active = true;
+        setPriceReferenceError('');
+        const entries = [...priceGroups.entries()];
+        Promise.all(entries.map(async ([key, groupRows]) => [key, await smartphonePriceGroups.reference(parent.model_id!, groupRows[0].data)] as const))
+            .then(references => {
+                if (!active) return;
+                setPriceReferences(Object.fromEntries(references));
+                let nextRows = rows;
+                for (const [key, reference] of references) {
+                    if (!reference.established || !reference.prices) continue;
+                    const source = priceGroups.get(key)?.[0];
+                    if (!source) continue;
+                    for (const field of ['price_retail', 'price_reseller', 'price_wholesale'] as const) {
+                        nextRows = setSmartphoneFamilyConfigurationPrice(nextRows, source.key, field, reference.prices[field]);
+                    }
+                }
+                if (nextRows !== rows) onChange(nextRows);
+            })
+            .catch(error => { if (active) setPriceReferenceError(error instanceof Error ? error.message : 'Não foi possível consultar os preços existentes.'); });
+        return () => { active = false; };
+    }, [smartphone, parent.model_id, priceGroupSignature]);
     return <section className="rounded-xl border border-blue-200 bg-white p-5 space-y-4" aria-label="Variações da família">
         <div className="flex justify-between gap-3"><h3 className="font-semibold">Variações ({rows.length})</h3>
             <button type="button" disabled={disabled || busy || adding || !parent.name?.trim()} onClick={add} className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50">Adicionar variação</button></div>
@@ -103,13 +136,31 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
             <VariationMedia key={draftKey} productId={draftKey} sku={variationSku} name="nova variação" parentImages={parent.images || []} parentVideo={parent.video_url || ''} {...media} disabled={disabled || busy}
                 onChange={next => setMedia(current => ({ ...current, ...next }))} onBusyChange={active => mediaBusy(draftKey, active)} />
             </div>
-            <VariationListing fresh parent={parent} data={media.listing || {}} disabled={disabled || busy} onChange={listing => setMedia(current => ({ ...current, listing }))} />
+            <VariationListing fresh hidePrices={smartphone} parent={parent} data={media.listing || {}} disabled={disabled || busy} onChange={listing => setMedia(current => ({ ...current, listing }))} />
             {attributeError && <p role="alert" className="text-sm text-red-700">{attributeError}</p>}
             <div className="flex justify-end gap-3">
                 <button type="button" disabled={disabled || busy} onClick={() => setAdding(false)}>Cancelar variação</button>
                 <button type="button" disabled={disabled || busy} onClick={confirmAttributes} className="rounded-lg bg-blue-600 px-4 py-2 text-white">Incluir variação na família</button>
             </div>
         </div>}
+        {smartphone && rows.some(row => !row.data.id) && <section aria-label="Preços das configurações" className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+            <h4 className="font-semibold text-emerald-950">Preços por configuração</h4>
+            <p className="text-sm text-slate-700">Preencha aqui antes de salvar a família. O pai organiza o modelo e não precisa de preço próprio. Cores com a mesma memória usam os mesmos preços; o custo de cada aparelho será informado no estoque.</p>
+            {priceReferenceError && <p role="alert" className="text-sm text-red-700">Não foi possível conferir os grupos existentes: {priceReferenceError}</p>}
+            {rows.some(row => !row.data.id && !smartphoneFamilyConfigurationKey(row.data)) && <p className="text-sm text-amber-800">Complete RAM e armazenamento nas variações abaixo para liberar os preços.</p>}
+            {[...priceGroups.values()].map(groupRows => {
+                const first = groupRows[0];
+                const specs = first.data.specs || {};
+                const reference = priceReferences[smartphoneFamilyConfigurationKey(first.data)];
+                return <div key={first.key} className="rounded-lg border border-emerald-200 bg-white p-3 space-y-2">
+                    <p className="font-medium">{specs.ram} / {specs.storage} {specs.version ? `· ${specs.version}` : ''} <span className="text-sm font-normal text-slate-600">· {groupRows.map(row => row.data.specs?.color).filter(Boolean).join(', ')}</span></p>
+                    {reference?.established && <p className="text-xs text-blue-800">{reference.prices ? 'Esta configuração já tem preços definidos. Os valores existentes foram carregados e serão mantidos.' : 'Esta configuração tem preços divergentes. Resolva a divergência em Gestão de Modelos antes de incluir outra cor.'}</p>}
+                    <div className="grid gap-3 sm:grid-cols-3">{(['price_retail', 'price_reseller', 'price_wholesale'] as const).map((field, index) =>
+                        <fieldset key={field} disabled={disabled || busy || !reference || !!reference.established || !!priceReferenceError}><CurrencyInput label={['Varejo', 'Revenda', 'Atacado'][index]} value={Number(first.data[field]) || 0}
+                            onChange={value => onChange(setSmartphoneFamilyConfigurationPrice(rows, first.key, field, value))} /></fieldset>)}</div>
+                </div>;
+            })}
+        </section>}
         {rows.map(row => <div key={row.key} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
             {(row.inheritImages ? parent.images : row.data.images)?.[0] && <img src={(row.inheritImages ? parent.images : row.data.images)?.[0]} alt="" className="h-12 w-12 object-contain" />}
             <div className="flex-1"><p className="font-medium">{row.data.name}</p>
@@ -144,7 +195,7 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
                 onBusyChange={active => mediaBusy(row.key, active)} onChange={next => onChange(rows.map(item => item.key === row.key ? {
                     ...item, inheritImages: next.inheritImages, videoFile: next.videoFile === undefined ? item.videoFile : next.videoFile, data: { ...item.data, images: next.images, video_url: next.videoUrl, specs: { ...item.data.specs, _inherit_parent_video: next.inheritVideo ?? item.data.specs?._inherit_parent_video } },
                 } : item))} />
-            <VariationListing parent={parent} data={row.data} disabled={disabled || busy} onChange={next => onChange(rows.map(item => item.key === row.key ? { ...item, data: { ...item.data, ...next } } : item))} />
+            <VariationListing hidePrices={smartphone} parent={parent} data={row.data} disabled={disabled || busy} onChange={next => onChange(rows.map(item => item.key === row.key ? { ...item, data: { ...item.data, ...next } } : item))} />
         </div>)}
         {editing && createPortal(<div className="fixed inset-0 z-[100] bg-slate-950/60 p-4 overflow-y-auto" onKeyDown={e => { if (e.key === 'Escape') setEditing(null); }}>
             <div role="dialog" aria-modal="true" aria-label="Detalhes da variação" className="mx-auto max-w-6xl rounded-xl bg-slate-50 p-5">

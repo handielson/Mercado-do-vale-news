@@ -1,3 +1,14 @@
+# v1.2.685-precos-variacoes-juntos
+
+Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.685-precos-variacoes-juntos.
+Release: /var/www/mdv-site/releases/20261024-160334-precos-variacoes-juntos.
+
+O cadastro de smartphones permite informar os precos de varejo, revenda e atacado por configuracao na mesma etapa de variacoes. Cores com a mesma memoria compartilham os valores; o pai pode ser salvo sem preco. Configuracoes ja existentes mostram seus precos protegidos e mudancas concorrentes bloqueiam o salvamento. O painel de modelos oferece atalho direto para essa etapa.
+
+Validacao: testes de familia, precos e cadastro por foto; build do site e verificacao publica. Apenas site publicado.
+
+## Historico anterior
+
 # v1.2.684-restaura-rascunhos-api
 
 Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.684-restaura-rascunhos-api.

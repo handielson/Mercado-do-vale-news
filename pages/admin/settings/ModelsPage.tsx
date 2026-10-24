@@ -380,7 +380,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                         </div>
 
                         {/* Variações */}
-                        {phoneModel !== false ? <ModelPricesPanel modelId={model.id} modelName={model.name} inline onClose={() => setExpanded(false)} onSaved={() => void loadPrices()} /> : (
+                        {phoneModel !== false ? <ModelPricesPanel modelId={model.id} modelName={model.name} inline onClose={() => setExpanded(false)} onSaved={() => void loadPrices()} onCreateConfigurations={() => onOpenParent(model)} /> : (
                         <div className="w-full mt-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                             <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
                                 <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide">Composição de Preços (Variações)</h4>
@@ -482,11 +482,11 @@ export function ModelsPage() {
         try {
             const parents = await productService.listParentsByModel(model.id);
             if (parents.length) {
-                navigate(`/admin/products/${parents[0].id}`);
+                navigate(`/admin/products/${parents[0].id}#variations`);
                 return;
             }
             const brand = brands.find(item => item.id === model.brand_id);
-            navigate('/admin/products/new', { state: { cloneProduct: buildModelParentPrefill(model, brand?.name) } });
+            navigate('/admin/products/new#variations', { state: { cloneProduct: buildModelParentPrefill(model, brand?.name) } });
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Não foi possível abrir o produto pai.');
         } finally {

@@ -10,8 +10,8 @@ import { Unit } from '../../types/unit';
 const fields = [{ key: 'price_retail', label: 'Varejo' }, { key: 'price_reseller', label: 'Revenda' }, { key: 'price_wholesale', label: 'Atacado' }] as const;
 const fmt = (cents: number | null) => cents === null ? 'Não informado' : (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved }: {
-    modelId: string; modelName: string; onClose: () => void; inline?: boolean; onSaved?: () => void;
+export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved, onCreateConfigurations }: {
+    modelId: string; modelName: string; onClose: () => void; inline?: boolean; onSaved?: () => void; onCreateConfigurations?: () => void;
 }) {
     const [groups, setGroups] = useState<SmartphonePriceGroup[]>([]);
     const [unresolved, setUnresolved] = useState<Array<{ id: string; sku: string; name: string }>>([]);
@@ -133,7 +133,10 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved 
                     </div>}
                 </section>;
             })}
-            {!groups.some(g => !onlyDivergent || g.divergent) && <p className="text-slate-500">{onlyDivergent ? 'Nenhum grupo divergente.' : 'Nenhuma configuração disponível.'}</p>}
+            {!groups.some(g => !onlyDivergent || g.divergent) && <div className="space-y-2">
+                <p className="text-slate-500">{onlyDivergent ? 'Nenhum grupo divergente.' : 'Ainda não há configuração com RAM e armazenamento cadastrados neste modelo.'}</p>
+                {!onlyDivergent && onCreateConfigurations && <button type="button" onClick={onCreateConfigurations} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white">Cadastrar variações e preços juntos</button>}
+            </div>}
         </>}
     </div>;
     return inline ? body : <div className="fixed inset-0 z-50 bg-black/40 overflow-y-auto p-6"><div className="max-w-5xl mx-auto bg-white rounded-xl"><button type="button" onClick={onClose} aria-label="Fechar preços" className="float-right p-3"><X /></button>{body}</div></div>;

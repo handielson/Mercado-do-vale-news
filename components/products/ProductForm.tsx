@@ -60,7 +60,8 @@ import { getBlingSkuSpecAutofill } from './blingSkuSpecAutofill.js';
 import { resolveExistingProductImages, resolveSiblingProductImages } from './blingSkuExistingImages.js';
 import { UnitStatus } from '../../utils/field-standards';
 import { productService } from '../../services/products';
-import { productUnitCondition, saveFamilyRegistration } from './familyRegistration.js';
+import { productUnitCondition, saveFamilyRegistration, smartphoneFamilyConfigurationKey, validateNewSmartphoneFamilyPrices } from './familyRegistration.js';
+import { smartphonePriceGroups } from '../../services/smartphonePriceGroups';
 import { uploadProductVideo, validateProductVideo } from '../../services/productVideoUpload';
 import { ProductFamilyEditor, type FamilyRow, type FamilyEditorDraft } from './ProductFamilyEditor';
 import type { ProductFormSnapshot } from '../../services/productFormDrafts';
@@ -127,7 +128,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             .finally(() => { if (active) setFamilyLoading(false); });
         return () => { active = false; };
     }, [initialData?.id, variationDraftMode]);
-    const [activeSection, setActiveSection] = useState<FormSection>(() => initialDraft?.activeSection as FormSection || (window.location.hash === '#production' ? 'production' : window.location.hash === '#fiscal' ? 'fiscal' : window.location.hash === '#commercial' ? 'commercial' : 'basic'));
+    const [activeSection, setActiveSection] = useState<FormSection>(() => initialDraft?.activeSection as FormSection || (window.location.hash === '#variations' ? 'variations' : window.location.hash === '#production' ? 'production' : window.location.hash === '#fiscal' ? 'fiscal' : window.location.hash === '#commercial' ? 'commercial' : 'basic'));
     const [activeSalesChannel, setActiveSalesChannel] = useState<ProductSalesChannel>(initialDraft?.activeSalesChannel as ProductSalesChannel || 'mercado-livre');
     const selectSection = (section: FormSection) => {
         setActiveSection(section);
@@ -1585,8 +1586,18 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 const familyCategoryName = categoryConfig?.__category_id === mergedData.category_id
                     ? categoryConfig.__category_name
                     : (mergedData.category_id ? (await categoryService.getById(mergedData.category_id))?.name : '');
-                if (isSmartphoneModel({ category_name: familyCategoryName }) && rowsToSave.some(row => !row.data.id && (!row.data.specs?.ram || !row.data.specs?.storage))) {
-                    throw new Error('Complete memória RAM e armazenamento de cada nova variação de celular antes de salvar.');
+                if (isSmartphoneModel({ category_name: familyCategoryName })) {
+                    validateNewSmartphoneFamilyPrices(rowsToSave);
+                    const newGroups = new Map<string, FamilyRow>();
+                    for (const row of rowsToSave.filter(item => !item.data.id)) newGroups.set(smartphoneFamilyConfigurationKey(row.data), row);
+                    for (const row of newGroups.values()) {
+                        const reference = await smartphonePriceGroups.reference(mergedData.model_id!, row.data);
+                        if (!reference.established) continue;
+                        if (!reference.prices) throw new Error(`A configuração de ${row.data.name} já existe com preços divergentes. Revise-a em Gestão de Modelos antes de adicionar outra cor.`);
+                        if ((['price_retail', 'price_reseller', 'price_wholesale'] as const).some(field => row.data[field] !== reference.prices?.[field])) {
+                            throw new Error(`Os preços de ${row.data.name} mudaram. Reabra as variações para carregar os valores atuais antes de salvar.`);
+                        }
+                    }
                 }
             }
             if (isParent && familyRows.length > 0) {

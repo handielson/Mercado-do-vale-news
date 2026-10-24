@@ -1,4 +1,5 @@
 import { buildProductVariationPrefill } from '../../services/productClonePrefill.js';
+import { DEFAULT_PRODUCT_VERSION } from '../../services/smartphoneModelSpecs.mjs';
 
 export const FAMILY_VARIATION_ATTRIBUTES = Object.freeze([
   { key: 'color', label: 'Cor' },
@@ -13,6 +14,49 @@ export const FAMILY_INHERITANCE_GROUPS = Object.freeze({
   details: ['brand', 'category_id', 'condition', 'unit'],
   seo: ['meta_title', 'meta_description', 'keywords'],
 });
+
+const FAMILY_SALE_PRICE_FIELDS = FAMILY_INHERITANCE_GROUPS.prices;
+export function smartphoneFamilyConfigurationKey(data) {
+  const specs = data?.specs || {};
+  const clean = value => String(value || '').trim().toLocaleLowerCase('pt-BR').replace(/\s+/g, '');
+  const ram = clean(specs.ram_fisica || specs.ram);
+  const storage = clean(specs.storage);
+  if (!ram || !storage) return '';
+  return [ram, storage, clean(specs.version || specs.versao || DEFAULT_PRODUCT_VERSION), clean(specs._price_group_network || specs.rede_operadora || specs.network), clean(specs.condition || specs.condicao || 'new')].join('|');
+}
+
+export function setSmartphoneFamilyConfigurationPrice(rows, sourceKey, field, value) {
+  if (!FAMILY_SALE_PRICE_FIELDS.includes(field)) throw new Error('Campo de preço inválido.');
+  const source = rows.find(row => row.key === sourceKey);
+  const group = smartphoneFamilyConfigurationKey(source?.data);
+  if (!group) throw new Error('Preencha RAM e armazenamento da variação antes dos preços.');
+  return rows.map(row => {
+    if (row.data.id || smartphoneFamilyConfigurationKey(row.data) !== group) return row;
+    const inherited = row.data.specs?._inherit_parent_fields || [];
+    return { ...row, data: { ...row.data, [field]: value, specs: {
+      ...row.data.specs, _inherit_parent_fields: inherited.filter(name => !FAMILY_SALE_PRICE_FIELDS.includes(name)),
+    } } };
+  });
+}
+
+export function validateNewSmartphoneFamilyPrices(rows) {
+  const groups = new Map();
+  for (const row of rows.filter(item => !item.data.id)) {
+    const key = smartphoneFamilyConfigurationKey(row.data);
+    if (!key) throw new Error(`Complete RAM e armazenamento de ${row.data.name} antes de salvar.`);
+    const values = FAMILY_SALE_PRICE_FIELDS.map(field => row.data[field]);
+    if (values.some(value => !Number.isSafeInteger(value) || value <= 0)) {
+      throw new Error(`Informe varejo, revenda e atacado acima de zero para ${row.data.name}.`);
+    }
+    if (values[0] < values[1] || values[1] < values[2]) {
+      throw new Error(`Confira a ordem dos preços de ${row.data.name}: varejo ≥ revenda ≥ atacado.`);
+    }
+    if (groups.has(key) && groups.get(key).some((value, index) => value !== values[index])) {
+      throw new Error(`Cores da mesma configuração de ${row.data.name} têm preços diferentes.`);
+    }
+    groups.set(key, values);
+  }
+}
 
 export function validateFamilyIdentifiers(parent, rows) {
   const skus = new Set();

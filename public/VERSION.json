@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.684-restaura-rascunhos-api",
+  "version": "v1.2.685-precos-variacoes-juntos",
   "date": "2026-10-24",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.684-restaura-rascunhos-api",
-  "release_vps": "/var/www/mdv-site/releases/20261024-154247-restaura-rascunhos-api",
+  "tag": "v1.2.685-precos-variacoes-juntos",
+  "release_vps": "/var/www/mdv-site/releases/20261024-160334-precos-variacoes-juntos",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Restaura a rota de rascunhos de produtos em todos os entrypoints da API.",
+  "summary": "Permite cadastrar variacoes e precos de celulares na mesma etapa, sem preco obrigatorio no pai.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,16 +14,20 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "server.js",
-    "vps_server.js",
-    "tmp-tests/product-form-drafts.test.cjs",
+    "components/products/ProductFamilyEditor.tsx",
+    "components/products/ProductForm.tsx",
+    "components/products/VariationListing.tsx",
+    "components/products/familyRegistration.js",
+    "components/settings/ModelPricesPanel.tsx",
+    "pages/admin/settings/ModelsPage.tsx",
+    "tmp-tests/family-registration.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-24-v1.2.684-restaura-rascunhos-api.md"
+    "docs/versoes/2026-10-24-v1.2.685-precos-variacoes-juntos.md"
   ],
   "validations": [
-    "Teste da rota de rascunhos e registro em todos os entrypoints; sintaxe da API e build do site.",
-    "GET e PUT sem autenticacao deixam de retornar 404; validacao publica do site, VERSION.json e API."
+    "Testes de familia, grupos de precos e cadastro por foto; build do site.",
+    "Validacao publica da pagina inicial e VERSION.json apos deploy."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

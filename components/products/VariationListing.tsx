@@ -6,8 +6,8 @@ import { CategorySelect } from './CategorySelect';
 import { SalesUnitSelect } from './selectors/SalesUnitSelect';
 import { FAMILY_INHERITANCE_GROUPS as groups } from './familyRegistration.js';
 
-export function VariationListing({ parent, data, onChange, disabled, fresh = false }: {
-    parent: ProductInput; data: Partial<ProductInput>; onChange: (data: Partial<ProductInput>) => void; disabled: boolean; fresh?: boolean;
+export function VariationListing({ parent, data, onChange, disabled, fresh = false, hidePrices = false }: {
+    parent: ProductInput; data: Partial<ProductInput>; onChange: (data: Partial<ProductInput>) => void; disabled: boolean; fresh?: boolean; hidePrices?: boolean;
 }) {
     const flags: string[] = data.specs?._inherit_parent_fields || (fresh ? Object.values(groups).flat() : []);
     const descriptionInherited = data.specs?._inherit_parent_description !== false;
@@ -32,12 +32,12 @@ export function VariationListing({ parent, data, onChange, disabled, fresh = fal
             {descriptionInherited ? <p className="text-xs text-slate-500">Usará a descrição atual do pai, incluindo títulos, listas e conteúdo da embalagem. Edite o pai em Fotos e descrição.</p>
                 : <RichTextEditor disabled={disabled} value={data.description || ''} onChange={description => set({ description })} placeholder="Descrição, aplicações, características e conteúdo da embalagem" />}
         </section>
-        <section className="space-y-3">
+        {!hidePrices && <section className="space-y-3">
             {inheritance('Herdar preços do pai', groups.prices)}
             <fieldset disabled={inherits(groups.prices)} className="grid gap-3 md:grid-cols-3">
                 {(['price_retail', 'price_reseller', 'price_wholesale'] as const).map((field, i) => <CurrencyInput key={field} label={['Preço de venda', 'Preço de revenda', 'Preço de atacado'][i]} value={Number(effective(field, groups.prices)) || 0} onChange={value => set({ [field]: value })} />)}
             </fieldset>
-        </section>
+        </section>}
         <section className="space-y-3">
             {inheritance('Herdar medidas e peso do pai', groups.measurements)}
             <fieldset disabled={inherits(groups.measurements)} className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">

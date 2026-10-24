@@ -1,7 +1,45 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { familyChildPayload, productUnitCondition, saveFamilyRegistration, buildAttributeVariationDraft, validateFamilyIdentifiers } from '../components/products/familyRegistration.js';
+import { familyChildPayload, productUnitCondition, saveFamilyRegistration, buildAttributeVariationDraft, validateFamilyIdentifiers, setSmartphoneFamilyConfigurationPrice, validateNewSmartphoneFamilyPrices } from '../components/products/familyRegistration.js';
+
+test('celular novo recebe preço por memória em todas as cores antes de salvar o pai sem preço', async () => {
+  const parent = { name: 'Poco X8 5G', sku: 'PX8', price_retail: 0, price_reseller: 0, price_wholesale: 0, model_id: 'model' };
+  const child = (key, color, ram) => ({ key, inheritImages: false, data: {
+    name: `${parent.name} ${color}`, specs: { color, ram, storage: '256GB', _inherit_parent_fields: ['price_retail', 'price_reseller', 'price_wholesale', 'brand'] },
+    price_retail: 0, price_reseller: 0, price_wholesale: 0,
+  } });
+  let rows = [child('white', 'Branco', '8GB'), child('black', 'Preto', '8GB'), child('blue', 'Azul', '12GB')];
+  assert.throws(() => validateNewSmartphoneFamilyPrices(rows), /Informe varejo/);
+  for (const [field, value] of [['price_retail', 190000], ['price_reseller', 180000], ['price_wholesale', 170000]]) rows = setSmartphoneFamilyConfigurationPrice(rows, 'white', field, value);
+  assert.equal(rows[1].data.price_retail, 190000);
+  assert.equal(rows[2].data.price_retail, 0);
+  assert.ok(!rows[0].data.specs._inherit_parent_fields.includes('price_retail'));
+  assert.throws(() => validateNewSmartphoneFamilyPrices(rows), /Informe varejo/);
+  for (const [field, value] of [['price_retail', 220000], ['price_reseller', 210000], ['price_wholesale', 200000]]) rows = setSmartphoneFamilyConfigurationPrice(rows, 'blue', field, value);
+  validateNewSmartphoneFamilyPrices(rows);
+  const invalid = setSmartphoneFamilyConfigurationPrice(rows, 'white', 'price_wholesale', 195000);
+  assert.throws(() => validateNewSmartphoneFamilyPrices(invalid), /ordem dos preços/);
+  const saved = [];
+  await saveFamilyRegistration(parent, rows, { parent: null, children: {} }, { create: async data => { saved.push(data); return { ...data, id: `id-${saved.length}` }; } });
+  assert.equal(saved[0].price_retail, 0);
+  assert.deepEqual(saved.slice(1).map(row => row.price_retail), [190000, 190000, 220000]);
+});
+
+test('modelo sem configuração leva direto à etapa única de variações e preços', () => {
+  const panel = fs.readFileSync('components/settings/ModelPricesPanel.tsx', 'utf8');
+  const page = fs.readFileSync('pages/admin/settings/ModelsPage.tsx', 'utf8');
+  const form = fs.readFileSync('components/products/ProductForm.tsx', 'utf8');
+  assert.match(panel, /Cadastrar variações e preços juntos/);
+  assert.match(page, /onCreateConfigurations=\{\(\) => onOpenParent\(model\)\}/);
+  assert.match(page, /\/admin\/products\/new#variations/);
+  assert.match(form, /window\.location\.hash === '#variations'/);
+  assert.match(form, /validateNewSmartphoneFamilyPrices\(rowsToSave\)/);
+  assert.match(form, /smartphonePriceGroups\.reference\(mergedData\.model_id!, row\.data\)/);
+  assert.match(form, /Os preços de .* mudaram\. Reabra as variações/);
+  const editor = fs.readFileSync('components/products/ProductFamilyEditor.tsx', 'utf8');
+  assert.match(editor, /reference\.established \|\| !!priceReferenceError/);
+});
 import { stripModelOwnedSpecs } from '../services/smartphoneModelSpecs.mjs';
 
 test('descrição individual é explícita; herança das demais informações acompanha o pai ao salvar', () => {
