@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.687-ean-digitacao-rascunho",
+  "version": "v1.2.688-variacoes-custo-estoque",
   "date": "2026-10-24",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.687-ean-digitacao-rascunho",
-  "release_vps": "/var/www/mdv-site/releases/20261024-163000-ean-digitacao-rascunho",
+  "tag": "v1.2.688-variacoes-custo-estoque",
+  "release_vps": "/var/www/mdv-site/releases/20261025-015416-variacoes-custo-estoque",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Corrige a digitacao do EAN das variacoes durante o salvamento automatico do rascunho.",
+  "summary": "Simplifica variacoes por cores e memoria, mostra custo medio de compra em estoque e pagina modelos para evitar sobrecarga.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,18 +14,24 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/products/ProductForm.tsx",
+    "components/products/ProductFamilyEditor.tsx",
+    "components/products/familyRegistration.js",
+    "components/products/selectors/CapacitySelect.tsx",
+    "pages/admin/settings/ModelsPage.tsx",
+    "services/smartphonePriceGroups.ts",
+    "tmp-tests/family-model-photo-variations.test.mjs",
+    "tmp-tests/family-registration.test.mjs",
+    "tmp-tests/model-actions-preview.tsx",
+    "tmp-tests/model-actions-ui.test.mjs",
     "tmp-tests/product-family-ean-browser.test.mjs",
-    "tmp-tests/product-family-ean-preview.html",
     "tmp-tests/product-family-ean-preview.tsx",
-    "tmp-tests/product-form-drafts.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-24-v1.2.687-ean-digitacao-rascunho.md"
+    "docs/versoes/2026-10-24-v1.2.688-variacoes-custo-estoque.md"
   ],
   "validations": [
-    "Teste de digitacao do EAN no navegador, teste de rascunhos e build do site.",
-    "Validacao publica da pagina inicial e VERSION.json apos deploy."
+    "Testes de familia, precos, rascunhos, seletores e fotos por modelo; testes no navegador de configuracoes, custo medio, paginacao, pesquisa e recarga.",
+    "Build com trava de runtime legado; validacao publica de pagina inicial, painel e VERSION.json apos deploy."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

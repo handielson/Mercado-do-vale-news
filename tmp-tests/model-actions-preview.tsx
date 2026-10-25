@@ -3,6 +3,31 @@ import { createRoot } from 'react-dom/client';
 import { Layers, DownloadCloud, UploadCloud, RefreshCw, Trash2, Pencil } from 'lucide-react';
 import { ModelActionsMenu } from '../components/settings/ModelActionsMenu';
 import '../index.css';
+import { BrowserRouter } from 'react-router-dom';
+import { ModelsPage } from '../pages/admin/settings/ModelsPage';
+import { modelService } from '../services/models';
+import { brandService } from '../services/brands';
+import { vpsClient } from '../services/vpsClient';
+
+const paginationPreview = new URLSearchParams(location.search).has('pagination');
+if (paginationPreview) {
+    const calls: string[] = [];
+    (window as any).priceCalls = calls;
+    modelService.list = async () => Array.from({ length: 1550 }, (_, i) => ({
+        id: `model-${i}`, name: i === 1549 ? 'Poco X8 5G' : `Modelo ${String(i).padStart(4, '0')}`,
+        slug: `model-${i}`, brand_id: 'test', active: true, created: '2026-10-24', updated: '2026-10-24',
+    }));
+    brandService.list = async () => [{ id: 'test', name: 'Teste', active: true }] as any;
+    vpsClient.get = async (path: string, options?: { timeoutMs?: number }) => {
+        if (path.endsWith('/smartphone-price-groups')) {
+            if (options?.timeoutMs !== 15000) throw new Error('Consulta sem limite de espera');
+            calls.push(path);
+            if ((window as any).failPrices) throw new Error('Falha simulada na consulta. Recarregue.');
+            return { enabled: true, groups: [], unresolved: [] } as any;
+        }
+        return [] as any;
+    };
+}
 
 function Preview() {
     const [result, setResult] = useState('Nenhuma ação');
@@ -32,4 +57,4 @@ function Preview() {
         <button className="mt-4" onClick={() => setResult('Fora')}>Fora da tabela</button>
     </main>;
 }
-createRoot(document.getElementById('root')!).render(<Preview />);
+createRoot(document.getElementById('root')!).render(paginationPreview ? <BrowserRouter><ModelsPage /></BrowserRouter> : <Preview />);

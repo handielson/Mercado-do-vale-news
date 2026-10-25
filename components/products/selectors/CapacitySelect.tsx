@@ -85,6 +85,7 @@ export const CapacitySelect: React.FC<CapacitySelectProps> = ({
             )}
             <div className="flex items-center gap-2 min-w-0">
                 <select
+                    aria-label={label}
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     disabled={isLoading}

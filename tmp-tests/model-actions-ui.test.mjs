@@ -63,5 +63,26 @@ try {
     for (let i = 0; i < 6; i++) await page.keyboard.press('Tab');
     assert.equal(await menu.count(), 0);
     assert.deepEqual(errors, []);
+    await page.goto(`${server.resolvedUrls.local[0]}tmp-tests/model-actions-preview.html?pagination`);
+    await page.getByText('Página 1 de 62', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Preços por configuração · todas as cores', exact: true }).first().waitFor();
+    assert.equal(await page.locator('tbody > tr').count(), 25);
+    assert.equal(await page.evaluate(() => window.priceCalls.length), 25, 'Não consultar os 1550 modelos ao abrir a lista');
+    await page.getByRole('button', { name: 'Próxima', exact: true }).click();
+    await page.getByText('Página 2 de 62', { exact: true }).waitFor();
+    assert.equal(await page.locator('tbody > tr').count(), 25);
+    await page.getByPlaceholder('Pesquisar por nome ou marca…').fill('Poco X8');
+    await page.getByText('Página 1 de 1', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Preços por configuração · todas as cores', exact: true }).click();
+    await page.getByRole('button', { name: 'Cadastrar variações e preços juntos', exact: true }).waitFor();
+    assert.equal(await page.locator('tbody > tr').count(), 2, 'Pesquisa alcança modelo que estava na última página');
+    await page.evaluate(() => { window.failPrices = true; });
+    await page.getByRole('button', { name: 'Recarregar', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'Falha simulada' }).waitFor();
+    await page.evaluate(() => { window.failPrices = false; });
+    await page.getByRole('button', { name: 'Recarregar', exact: true }).click();
+    await page.getByRole('button', { name: 'Cadastrar variações e preços juntos', exact: true }).waitFor();
+    assert.deepEqual(errors, []);
+    console.log('Models pagination, bounded requests, full search and price retry checks passed');
     console.log(`Model actions browser checks passed. Screenshots: ${out}`);
 } finally { await browser?.close(); await server.close(); }

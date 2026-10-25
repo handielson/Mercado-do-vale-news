@@ -113,6 +113,46 @@ export function buildAttributeVariationDraft(parent, attributes, rows = [], iden
   return data;
 }
 
+// Add one real memory configuration to several colors without crossing unrelated
+// RAM/storage pairs or replacing identifiers and media already entered in drafts.
+export function addSmartphoneFamilyConfiguration(parent, rows, { colors, ram, storage }, makeKey) {
+  const clean = value => String(value || '').trim();
+  const normalized = value => clean(value).toLocaleLowerCase('pt-BR').replace(/\s+/g, '');
+  ram = clean(ram); storage = clean(storage);
+  const selected = [...new Map(colors.map(color => [normalized(color), clean(color)])).values()].filter(Boolean);
+  if (!selected.length || !ram || !storage) throw new Error('Selecione as cores, a memória RAM e o armazenamento.');
+  const next = [...rows];
+  let added = 0, completed = 0, skipped = 0;
+  for (const color of selected) {
+    const sameColor = row => normalized(row.data.specs?.color) === normalized(color);
+    if (next.some(row => sameColor(row) && normalized(row.data.specs?.ram_fisica || row.data.specs?.ram) === normalized(ram) && normalized(row.data.specs?.storage) === normalized(storage))) {
+      skipped++; continue;
+    }
+    const incomplete = next.findIndex(row => !row.data.id && sameColor(row) &&
+      (!row.data.specs?.ram || !row.data.specs?.storage) &&
+      (!row.data.specs?.ram || normalized(row.data.specs.ram) === normalized(ram)) &&
+      (!row.data.specs?.storage || normalized(row.data.specs.storage) === normalized(storage)));
+    if (incomplete >= 0) {
+      const row = next[incomplete];
+      const specs = { ...row.data.specs, ram, storage };
+      if (specs.ram_fisica) specs.ram_fisica = ram;
+      const base = buildProductVariationPrefill(parent).name;
+      next[incomplete] = { ...row, data: { ...row.data, specs, name: `${base} - ${[color, ram, storage].join(' / ')}` } };
+      completed++;
+    } else {
+      const source = rows.find(sameColor);
+      const inheritImages = source?.inheritImages ?? true;
+      const data = buildAttributeVariationDraft(parent, [{ key: 'color', value: color }, { key: 'ram', value: ram }, { key: 'storage', value: storage }], next, {
+        inheritImages, images: source?.data.images || [],
+      });
+      if (data.specs.ram_fisica) data.specs.ram_fisica = ram;
+      next.push({ key: makeKey(), data, inheritImages });
+      added++;
+    }
+  }
+  return { rows: next, added, completed, skipped };
+}
+
 // Photos registered on the commercial model imply sellable color drafts. Keep
 // existing family configurations (including multiple memories per color) intact.
 export function buildModelPhotoVariationRows(parent, rows, colors, imageRows) {

@@ -34,7 +34,7 @@ test('celulares exigem completar RAM e armazenamento dos novos filhos antes de s
   const form = readFileSync(new URL('../components/products/ProductForm.tsx', import.meta.url), 'utf8');
   const editor = readFileSync(new URL('../components/products/ProductFamilyEditor.tsx', import.meta.url), 'utf8');
   assert.match(form, /isSmartphoneModel\(\{ category_name: familyCategoryName \}\)/);
-  assert.match(form, /!row\.data\.id && \(!row\.data\.specs\?\.ram \|\| !row\.data\.specs\?\.storage\)/);
+  assert.match(form, /validateNewSmartphoneFamilyPrices\(rowsToSave\)/);
   assert.match(editor, /smartphone && !row\.data\.id/);
   assert.match(editor, /\['ram', 'storage'\]/);
 });

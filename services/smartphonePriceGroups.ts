@@ -12,9 +12,9 @@ export type SmartphonePriceGroup = {
     moving_average_initialized?: boolean; moving_average_unknown_costs?: number;
     products: Array<SmartphoneSalePrices & { id: string; sku: string; name: string; color: string; stock_quantity: number; price_cost: number | null; unit_costs?: number[]; available_unit_count?: number }>;
 };
-export type SmartphonePriceReference = { controlled: boolean; prices?: SmartphoneSalePrices | null; divergent?: boolean; incomplete?: boolean; established?: boolean; moving_average_cost?: number | null };
+export type SmartphonePriceReference = { controlled: boolean; prices?: SmartphoneSalePrices | null; divergent?: boolean; incomplete?: boolean; established?: boolean; group_id?: string; moving_average_cost?: number | null };
 export const smartphonePriceGroups = {
-    list: (modelId: string) => vpsClient.get<{ enabled: boolean; groups: SmartphonePriceGroup[]; unresolved: Array<{ id: string; sku: string; name: string }> }>(`/models/${encodeURIComponent(modelId)}/smartphone-price-groups`),
+    list: (modelId: string) => vpsClient.get<{ enabled: boolean; groups: SmartphonePriceGroup[]; unresolved: Array<{ id: string; sku: string; name: string }> }>(`/models/${encodeURIComponent(modelId)}/smartphone-price-groups`, { timeoutMs: 15000 }),
     reference: (modelId: string, product: object) => vpsClient.post<SmartphonePriceReference>(`/models/${encodeURIComponent(modelId)}/smartphone-price-reference`, product),
     save: async (group: SmartphonePriceGroup, prices: SmartphoneSalePrices) => {
         const result = await vpsClient.put<{ ok: boolean; updated: number }>(`/models/${encodeURIComponent(group.model_id)}/smartphone-price-groups/${group.id}`, { product_id: group.products[0].id, revision: group.revision, prices });

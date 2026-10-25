@@ -1,3 +1,14 @@
+# v1.2.688-variacoes-custo-estoque
+
+Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.688-variacoes-custo-estoque.
+Release: /var/www/mdv-site/releases/20261025-015416-variacoes-custo-estoque.
+
+O cadastro de celulares inclui uma configuração de RAM e armazenamento em várias cores de uma vez, preserva EANs e fotos dos rascunhos e recolhe os detalhes das variações. Cada configuração mostra o custo médio de compra em estoque consultado na API, inclusive nas famílias já cadastradas. A Gestão de Modelos exibe 25 modelos por página, pesquisa em todos os cadastros e limita a espera da consulta de preços a 15 segundos.
+
+Validação: testes de família, preços e rascunhos; testes no navegador de EAN, configurações, custo médio, paginação, pesquisa e recarga; build e validação pública. Somente site publicado; nenhuma alteração de preços, estoque ou API nesta entrega.
+
+## Histórico anterior
+
 # v1.2.687-ean-digitacao-rascunho
 
 Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.687-ean-digitacao-rascunho.

@@ -1,7 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { familyChildPayload, productUnitCondition, saveFamilyRegistration, buildAttributeVariationDraft, validateFamilyIdentifiers, setSmartphoneFamilyConfigurationPrice, validateNewSmartphoneFamilyPrices } from '../components/products/familyRegistration.js';
+import { addSmartphoneFamilyConfiguration, familyChildPayload, productUnitCondition, saveFamilyRegistration, buildAttributeVariationDraft, validateFamilyIdentifiers, setSmartphoneFamilyConfigurationPrice, validateNewSmartphoneFamilyPrices } from '../components/products/familyRegistration.js';
+
+test('configuração em várias cores completa rascunhos sem perder EAN ou foto e não duplica filhos', () => {
+  const parent = { name: 'Poco X8', images: ['pai'] };
+  const original = [{ key: 'black', inheritImages: false, data: { name: 'Poco X8 - Preto', eans: ['7890000000024'], images: ['preto'], specs: { color: 'Preto' } } }];
+  let id = 0;
+  const config = { colors: ['Preto', 'Branco', ' preto '], ram: '8GB', storage: '256GB' };
+  const first = addSmartphoneFamilyConfiguration(parent, original, config, () => `new-${++id}`);
+  assert.throws(() => validateNewSmartphoneFamilyPrices(original), /Complete RAM e armazenamento/);
+  assert.equal(first.completed, 1); assert.equal(first.added, 1); assert.equal(first.rows.length, 2);
+  assert.equal(first.rows[0].key, 'black'); assert.deepEqual(first.rows[0].data.eans, ['7890000000024']);
+  assert.deepEqual(first.rows[0].data.images, ['preto']); assert.equal(original[0].data.specs.ram, undefined);
+  const second = addSmartphoneFamilyConfiguration(parent, first.rows, { ...config, ram: '12GB', storage: '512GB' }, () => `new-${++id}`);
+  assert.equal(second.rows.length, 4); assert.equal(second.added, 2);
+  assert.deepEqual(second.rows.slice(2).map(row => [row.data.specs.ram, row.data.specs.storage]), [['12GB', '512GB'], ['12GB', '512GB']]);
+  assert.deepEqual(second.rows[2].data.images, ['preto']); assert.deepEqual(second.rows[2].data.eans, []);
+  assert.equal(second.rows[2].data.stock_quantity, 0);
+  const retry = addSmartphoneFamilyConfiguration(parent, second.rows, config, () => `new-${++id}`);
+  assert.equal(retry.skipped, 2); assert.equal(retry.rows.length, 4);
+  assert.throws(() => addSmartphoneFamilyConfiguration(parent, original, { ...config, ram: '' }, () => 'x'), /Selecione/);
+});
+
+test('configuração em lote preserva unidades e preços já salvos e rascunhos parcialmente incompatíveis', () => {
+  const saved = { key: 'sold', inheritImages: true, data: { id: 'saved', name: 'Preto 8/256', sku: 'P-01', price_retail: 150000, specs: { color: 'Preto', ram: '8GB', storage: '256GB' } } };
+  const partial = { key: 'partial', data: { specs: { color: 'Branco', ram: '8GB' } } };
+  const result = addSmartphoneFamilyConfiguration({ name: 'Poco' }, [saved, partial], { colors: ['Preto', 'Branco'], ram: '12GB', storage: '512GB' }, (() => { let i=0; return () => `key-${++i}`; })());
+  assert.equal(result.rows[0], saved); assert.equal(result.rows[1], partial); assert.equal(result.added, 2);
+});
 
 test('celular novo recebe preço por memória em todas as cores antes de salvar o pai sem preço', async () => {
   const parent = { name: 'Poco X8 5G', sku: 'PX8', price_retail: 0, price_reseller: 0, price_wholesale: 0, model_id: 'model' };

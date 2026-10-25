@@ -456,6 +456,9 @@ export function ModelsPage() {
     const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
     const [filterSeo, setFilterSeo] = useState<'all' | 'with_seo' | 'without_seo'>('all');
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'az' | 'za'>('newest');
+    const [page, setPage] = useState(1);
+    const pageSize = 25;
+    useEffect(() => { setPage(1); }, [search, filterBrand, filterStatus, filterSeo, sortOrder]);
 
     const loadData = async () => {
         try {
@@ -533,6 +536,11 @@ export function ModelsPage() {
             if (sortOrder === 'za') return b.name.localeCompare(a.name, 'pt-BR');
             return 0;
         });
+
+    const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const currentPage = Math.min(page, pageCount);
+    const pageStart = (currentPage - 1) * pageSize;
+    const visibleModels = filtered.slice(pageStart, pageStart + pageSize);
 
     const toggleSelectAll = () => {
         if (selectedModelIds.size === filtered.length && filtered.length > 0) {
@@ -695,6 +703,14 @@ export function ModelsPage() {
             </div>
 
             {/* Tabela */}
+            <nav aria-label="Páginas dos modelos" className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+                <span>{filtered.length ? `${pageStart + 1}–${Math.min(pageStart + pageSize, filtered.length)}` : '0'} de {filtered.length} modelos · 25 por página</span>
+                <div className="flex items-center gap-3">
+                    <button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">Anterior</button>
+                    <span>Página {currentPage} de {pageCount}</span>
+                    <button type="button" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">Próxima</button>
+                </div>
+            </nav>
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-auto max-h-[65vh]">
                 <table className="w-full min-w-[1200px] table-fixed relative">
                     <colgroup>
@@ -732,7 +748,7 @@ export function ModelsPage() {
                                 </td>
                             </tr>
                         ) : (
-                            filtered.map((model, i) => (
+                            visibleModels.map((model, i) => (
                                 <ModelRow
                                     key={model.id}
                                     model={model}

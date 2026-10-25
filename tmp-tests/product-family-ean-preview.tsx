@@ -1,14 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ProductFamilyEditor, type FamilyRow } from '../components/products/ProductFamilyEditor';
+import { ProductFamilyEditor, type FamilyRow, type FamilyEditorDraft } from '../components/products/ProductFamilyEditor';
+import { ramService } from '../services/rams';
+import { storageService } from '../services/storages';
+import { colorService } from '../services/colors';
+import { smartphonePriceGroups } from '../services/smartphonePriceGroups';
+import { modelColorImagesService } from '../services/model-color-images';
+import '../index.css';
+
+const smartphone = new URLSearchParams(location.search).has('smartphone');
+const saved = new URLSearchParams(location.search).has('saved');
+if (smartphone) {
+    ramService.listActive = async () => [8, 12].map(value => ({ id: String(value), value, label: `${value}GB`, active: true }));
+    storageService.listActive = async () => [256, 512].map(value => ({ id: String(value), value, label: `${value}GB`, active: true }));
+    colorService.list = async () => [];
+    modelColorImagesService.getByModel = async () => [];
+    smartphonePriceGroups.reference = async (_modelId, product: any) => ({ controlled: true, established: saved, group_id: product.specs.ram === '12GB' ? 'group-12' : 'group-8' });
+    smartphonePriceGroups.list = async () => {
+        if ((window as any).fixtureInventoryFailure) throw new Error('Falha de consulta simulada');
+        return { enabled: true, unresolved: [], groups: [
+            { id: 'group-8', cost_average_in_stock: (window as any).fixtureInventoryCost === undefined ? 123450 : (window as any).fixtureInventoryCost },
+            { id: 'group-12', cost_average_in_stock: null },
+            { id: 'other-version', cost_average_in_stock: 999900 },
+        ] } as any;
+    };
+}
 
 function Fixture() {
-    const [rows, setRows] = useState<FamilyRow[]>([{ key: 'preto', data: { name: 'Teste - Preto', eans: [], images: [], specs: { color: 'Preto' } } as FamilyRow['data'], inheritImages: false }]);
+    const [rows, setRows] = useState<FamilyRow[]>([...['Preto', ...(smartphone ? ['Branco'] : [])].map(color => ({ key: color, data: { ...(saved ? { id: color } : {}), name: `${smartphone ? 'Poco X8 5G' : 'Teste'} - ${color}`, eans: [], images: [], specs: { color, ...(saved ? { ram: '8GB', storage: '256GB' } : {}) } } as FamilyRow['data'], inheritImages: false }))]);
     const [tick, setTick] = useState(0);
-    return <form onChangeCapture={() => setTick(value => value + 1)}>
+    const capture = useRef<(() => FamilyEditorDraft) | undefined>(undefined);
+    const [restored, setRestored] = useState<FamilyEditorDraft>();
+    const [generation, setGeneration] = useState(0);
+    return <form className="max-w-5xl mx-auto p-4" onSubmit={e => e.preventDefault()} onChangeCapture={() => setTick(value => value + 1)}>
         <output data-testid="render-tick">{tick}</output>
-        <ProductFamilyEditor parent={{ name: 'Teste', images: [] } as FamilyRow['data']} rows={rows} onChange={setRows} disabled={false} />
+        <ProductFamilyEditor key={generation} initialDraft={restored} captureDraftRef={capture} smartphone={smartphone} parent={{ name: smartphone ? 'Poco X8 5G' : 'Teste', images: [], ...(smartphone ? { model_id: 'fixture' } : {}) } as FamilyRow['data']} rows={rows} onChange={setRows} disabled={false} />
         <output data-testid="ean-state">{JSON.stringify(rows[0].data.eans)}</output>
+        <output data-testid="rows-state" hidden>{JSON.stringify(rows)}</output>
+        <button type="button" onClick={() => { setRestored(capture.current?.()); setGeneration(value => value + 1); }}>Restaurar rascunho de teste</button>
     </form>;
 }
 
