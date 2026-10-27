@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.691-cadastro-unico-familia",
+  "version": "v1.2.692-payjoy-contexto-separado",
   "date": "2026-10-27",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.691-cadastro-unico-familia",
-  "release_vps": "/var/www/mdv-site/releases/20261027-182329-cadastro-unico-familia",
+  "tag": "v1.2.692-payjoy-contexto-separado",
+  "release_vps": "/var/www/mdv-site/releases/20261027-210102-payjoy-contexto-separado",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Centraliza o cadastro da familia por modelo, com retomada do rascunho e preservacao de fotos, EANs e variacoes.",
+  "summary": "Mantem o contexto de PayJoy escrito separado e envia o link oficial quando o cliente pergunta como iniciar a analise.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,28 +14,16 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/settings/ModelParentImages.tsx",
-    "pages/admin/products/ModelProductAggregatorPage.tsx",
-    "pages/admin/products/ProductFormPage.tsx",
-    "pages/admin/settings/ModelsPage.tsx",
-    "services/productFormDrafts.ts",
-    "services/productFormDraftsServer.cjs",
-    "services/modelParentPrefill.mjs",
-    "scripts/deploy-product-registration.cjs",
-    "tmp-tests/deploy-product-registration.test.cjs",
-    "tmp-tests/model-actions-preview.tsx",
-    "tmp-tests/model-actions-ui.test.mjs",
-    "tmp-tests/model-parent-media-persistence.test.cjs",
-    "tmp-tests/model-parent-registration.test.mjs",
-    "tmp-tests/product-family-images.test.mjs",
-    "tmp-tests/product-form-drafts.test.cjs",
+    "scripts/deploy-n8n-payjoy-spaced-context.cjs",
+    "tmp-tests/n8n-payjoy-spaced-context-patch.cjs",
+    "tmp-tests/n8n-payjoy-spaced-context.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-27-v1.2.691-cadastro-unico-familia.md"
+    "docs/versoes/2026-10-27-v1.2.692-payjoy-contexto-separado.md"
   ],
   "validations": [
-    "31 testes de rascunhos, familia e midia; dois testes do deploy seletivo; sintaxe da API.",
-    "Teste de atalhos no navegador, build e validacao publica apos deploy."
+    "21 testes focados de PayJoy e 125 casos do gate comercial no candidato exato.",
+    "Dry-run do workflow ativo; build do site e validacao publica apos deploy."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

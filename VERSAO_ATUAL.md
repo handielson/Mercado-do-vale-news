@@ -1,3 +1,14 @@
+# v1.2.692-payjoy-contexto-separado
+
+Data: 27/10/2026. Status: ready. Branch: main. Tag: v1.2.692-payjoy-contexto-separado.
+Release: /var/www/mdv-site/releases/20261027-210102-payjoy-contexto-separado.
+
+O atendimento PayJoy reconhece a grafia “Pay Joy” e a pergunta imediata “Como que faz” em mensagens separadas. Nesse caso, usa a política existente para enviar uma única URL oficial da análise. Uma dúvida geral, uma recusa ou um assunto interrompido continuam sem disparar link. O workflow mantém o grafo e altera somente Parse Classificacao, Resolver Acao de Conversacao e Pagamento - Politica.
+
+Validação: 21 testes focados de PayJoy, 125 casos do gate comercial e dry-run contra a versão ativa. O site recebe o registro da versão; a API não muda.
+
+## Histórico anterior
+
 # v1.2.691-cadastro-unico-familia
 
 Data: 27/10/2026. Status: ready. Branch: main. Tag: v1.2.691-cadastro-unico-familia.
