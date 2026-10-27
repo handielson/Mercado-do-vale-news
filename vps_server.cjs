@@ -14507,6 +14507,7 @@ function removeExistingSeoHeadTags(html) {
 }
 
 require('./services/legacyCatalogSeo.cjs').registerLegacyCatalogSeo(fastify, { pool });
+require('./services/metaCatalogFeedServer.cjs').registerMetaCatalogFeed(fastify, { pool, comboStockSql, attachCatalogModelColorImages });
 
 fastify.get('/api/seo-produto', async (request, reply) => {
   const slug = String(request.query?.slug || '').trim();

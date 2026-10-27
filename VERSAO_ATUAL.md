@@ -1,3 +1,14 @@
+# v1.2.689-catalogo-meta-dinamico
+
+Data: 27/10/2026. Status: ready. Branch: main. Tag: v1.2.689-catalogo-meta-dinamico.
+Release: /var/www/mdv-site/releases/20261027-121348-catalogo-meta-dinamico.
+
+O endpoint publico `/api/meta-catalog.xml` gera o feed da Meta diretamente dos produtos atuais da VPS/MySQL, reutilizando o calculo de estoque e o resolvedor de imagens por modelo/cor. Aplica visibilidade, preco de varejo em centavos, promocao vigente e agrupamento de variacoes. Falhas de consulta ou feed vazio retornam 503 em vez de substituir o catalogo por uma lista vazia. Nao exporta custos nem dados de unidades/clientes.
+
+Validacao: seis testes, sintaxe e previa somente leitura com 1532 produtos, XML valido e links publicos HTTP 200. Publicacao seletiva da API; site atualizado para registrar a versao. A programacao e o resultado de importacao da Meta precisam ser conferidos no Gerenciador de Comercio.
+
+## Historico anterior
+
 # v1.2.688-variacoes-custo-estoque
 
 Data: 24/10/2026. Status: ready. Branch: main. Tag: v1.2.688-variacoes-custo-estoque.

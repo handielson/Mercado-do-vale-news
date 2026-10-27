@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.688-variacoes-custo-estoque",
-  "date": "2026-10-24",
+  "version": "v1.2.689-catalogo-meta-dinamico",
+  "date": "2026-10-27",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.688-variacoes-custo-estoque",
-  "release_vps": "/var/www/mdv-site/releases/20261025-015416-variacoes-custo-estoque",
+  "tag": "v1.2.689-catalogo-meta-dinamico",
+  "release_vps": "/var/www/mdv-site/releases/20261027-121348-catalogo-meta-dinamico",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Simplifica variacoes por cores e memoria, mostra custo medio de compra em estoque e pagina modelos para evitar sobrecarga.",
+  "summary": "Disponibiliza feed dinamico para o catalogo Meta com produtos, precos, imagens e disponibilidade atuais da VPS.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,24 +14,20 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/products/ProductFamilyEditor.tsx",
-    "components/products/familyRegistration.js",
-    "components/products/selectors/CapacitySelect.tsx",
-    "pages/admin/settings/ModelsPage.tsx",
-    "services/smartphonePriceGroups.ts",
-    "tmp-tests/family-model-photo-variations.test.mjs",
-    "tmp-tests/family-registration.test.mjs",
-    "tmp-tests/model-actions-preview.tsx",
-    "tmp-tests/model-actions-ui.test.mjs",
-    "tmp-tests/product-family-ean-browser.test.mjs",
-    "tmp-tests/product-family-ean-preview.tsx",
+    "services/metaCatalogFeedServer.cjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-meta-catalog-feed.cjs",
+    "tmp-tests/meta-catalog-feed.test.cjs",
+    "tmp-tests/meta-catalog-preview.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-24-v1.2.688-variacoes-custo-estoque.md"
+    "docs/versoes/2026-10-27-v1.2.689-catalogo-meta-dinamico.md"
   ],
   "validations": [
-    "Testes de familia, precos, rascunhos, seletores e fotos por modelo; testes no navegador de configuracoes, custo medio, paginacao, pesquisa e recarga.",
-    "Build com trava de runtime legado; validacao publica de pagina inicial, painel e VERSION.json apos deploy."
+    "Seis testes de feed, privacidade, moeda, promocao, estoque, falhas e registro da rota; sintaxe dos modulos e entrypoints.",
+    "Previa somente leitura gerou 1532 produtos; XML valido e tres links publicos retornaram HTTP 200."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
