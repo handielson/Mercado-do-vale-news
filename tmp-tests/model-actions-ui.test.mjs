@@ -83,6 +83,11 @@ try {
     await page.getByRole('button', { name: 'Recarregar', exact: true }).click();
     await page.getByRole('button', { name: 'Cadastrar variações e preços juntos', exact: true }).waitFor();
     assert.deepEqual(errors, []);
+    await page.getByRole('button', { name: 'Produto pai, fotos e variações', exact: true }).click();
+    assert.equal(new URL(page.url()).pathname, '/admin/products/new');
+    assert.equal(new URL(page.url()).searchParams.get('family_model'), 'model-1549');
+    assert.equal(await page.getByRole('dialog').count(), 0, 'O atalho deve ir ao cadastro único, sem outro seletor de fontes');
+    assert.deepEqual(errors, []);
     console.log('Models pagination, bounded requests, full search and price retry checks passed');
     console.log(`Model actions browser checks passed. Screenshots: ${out}`);
 } finally { await browser?.close(); await server.close(); }

@@ -16,9 +16,12 @@ function fixture() {
   const queries = [];
   const query = async (sql, args) => {
     queries.push(sql);
-    assert(sql.includes('admin_preferences'), 'Saving a draft must never write products, units, stock or offers');
+    assert(sql.includes('admin_preferences') || /^SELECT.*FROM models/.test(sql) || /^SELECT.*FROM products/.test(sql), 'Saving a draft must never write products, units, stock or offers');
+    if (sql.includes('FROM models')) return [[{id:args[0],name:'Poco X8 5G',category_id:'phones',brand_name:'Xiaomi'}]];
+    if (sql.includes('FROM products')) return [[{id:args[0],model_id:FILE_ID,is_parent:1}]];
     if (sql.startsWith('INSERT')) { if (!records.has(args[0])) records.set(args[0], JSON.parse(args[1])); return [{}]; }
     if (sql.startsWith('UPDATE')) { records.set(args[1], JSON.parse(args[0])); return [{}]; }
+    if (sql.includes("$.snapshot.data.model_id")) return [[...[...records.values()].filter(row=>row.status==='pending' && row.snapshot?.data?.is_parent && row.snapshot.data.model_id===args[1]).map(value_json=>({value_json}))]];
     if (sql.includes('$.savedProductId')) return [[...[...records.values()].reverse().filter(row=>row.status==='completed' && row.savedProductId===args[1]).slice(0,1).map(value_json=>({value_json}))]];
     // mysql2 parses JSON-typed columns automatically; CHAR projections stay serialized.
     if (sql.includes('JSON_EXTRACT')) return [[...records.values()].filter(row=>row.status==='pending').map(({snapshot:state,...meta})=>Object.fromEntries(Object.entries({...meta,is_print3d:state.data.is_print3d ?? null,is_parent:state.data.is_parent ?? null}).map(([key,value])=>{
@@ -113,6 +116,70 @@ test('salvamento automático mantém a URL recuperável sem remontar o formulár
   assert.match(form,/setImagePreviews\(initialData\.images \|\| \[\]\)/);
   assert.doesNotMatch(form, /onInputCapture=\{markDraftEdited\}/, 'Capturar input antes de onChange apaga o EAN controlado a cada tecla');
 });
+
+test('todos os atalhos resolvem o mesmo cadastro por ID, sem procurar pelo nome', async () => {
+  const calls = [];
+  let parents=[];
+  const client = { post: async (path,body) => { calls.push({path,body}); return {draftId:ID}; } };
+  const context={exports:{},File,Blob,crypto:require('node:crypto').webcrypto,FormData,console,fetch:()=>{throw Error('Nao baixar arquivos');},require:name=>{
+    if(name.endsWith('/vpsClient'))return {vpsClient:client};
+    if(name.endsWith('/authSession'))return {getAuthSessionToken:async()=> 'test'};
+    if(name.endsWith('/vpsProxyBase'))return {buildVpsUrl:value=>value};
+    if(name.endsWith('/products'))return {productService:{listParentsByModel:async()=>parents}};
+    throw Error(name);
+  }};
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync('services/productFormDrafts.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,context);
+  const service=context.exports.productFormDraftsService;
+  assert.equal(await service.resolveFamilyWorkspace(FILE_ID),`/admin/products/new?draft=${ID}#variations`);
+  assert.equal(calls[0].path,`/admin/product-form-drafts/family/${FILE_ID}`);
+  parents=[{id:ID}]; client.post=async()=>({parentId:ID});
+  assert.equal(await service.resolveFamilyWorkspace(FILE_ID),`/admin/products/${ID}#variations`);
+  parents=[{id:ID},{id:FILE_ID}];
+  await assert.rejects(service.resolveFamilyWorkspace(FILE_ID),/mais de um pai/);
+  parents=[];client.post=async()=>{throw Error('offline');};
+  await assert.rejects(service.resolveFamilyWorkspace(FILE_ID),/offline/);
+});
+
+test('cadastro único reutiliza o rascunho e cria sob trava do modelo sem escrever no catálogo', async()=>{
+  const ctx=await appFixture(); try {
+    const url=`/admin/product-form-drafts/family/${FILE_ID}`;
+    assert.equal((await ctx.app.inject({method:'POST',url,payload:{}})).statusCode,401);
+    const first=await ctx.app.inject({method:'POST',url,headers,payload:{}});
+    assert.equal(first.statusCode,200,first.body);
+    const again=await ctx.app.inject({method:'POST',url,headers,payload:{}});
+    assert.equal(again.json().draftId,first.json().draftId);
+    assert.equal(ctx.records.size,1);
+    const row=ctx.records.get(PREFIX+first.json().draftId);
+    assert.equal(row.canonical_model_id,FILE_ID); assert.equal(row.snapshot.data.model_id,FILE_ID);
+    assert.equal(row.snapshot.data.track_inventory,false);
+    assert(ctx.queries.some(sql=>sql.includes('FROM models')&&sql.includes('FOR UPDATE')));
+    assert(!ctx.queries.some(sql=>/^(UPDATE|INSERT).*products\b/.test(sql)));
+    const saved=await ctx.app.inject({method:'PUT',url:`/admin/product-form-drafts/${row.id}`,headers,payload:{revision:row.revision,snapshot:{...row.snapshot,data:{...row.snapshot.data,images:['https://example.com/pai.webp'],specs:{unit:'UN',production:'third_party'}}}}});
+    assert.equal(saved.statusCode,200,saved.body);
+    const restored=(await ctx.app.inject({url:`/admin/product-form-drafts/${row.id}`,headers})).json();
+    assert.equal(restored.snapshot.data.specs.unit,'UN');assert.equal(restored.snapshot.data.images.length,1);
+    assert.equal((await ctx.app.inject({method:'PATCH',url:`/admin/product-form-drafts/${row.id}`,headers,payload:{revision:saved.json().revision,status:'completed',savedProductId:ID}})).statusCode,200);
+  }finally{await ctx.close();}
+});
+
+test('duplicados antigos exigem base explícita, preservam histórico e links antigos retomam a fonte única', async()=>{
+  const ctx=await appFixture();try {
+    const source={id:ID,revision:1,title:'Poco',status:'pending',snapshot:snapshot()};source.snapshot.data.model_id=FILE_ID;
+    const old={...structuredClone(source),id:FILE_ID};
+    ctx.records.set(PREFIX+ID,source);ctx.records.set(PREFIX+FILE_ID,old);
+    const url=`/admin/product-form-drafts/family/${FILE_ID}`;
+    assert.equal((await ctx.app.inject({method:'POST',url,headers,payload:{}})).statusCode,409);
+    assert.equal((await ctx.app.inject({method:'POST',url,headers,payload:{sourceDraftId:ID,expectedRevision:0}})).statusCode,409);
+    const result=await ctx.app.inject({method:'POST',url,headers,payload:{sourceDraftId:ID,expectedRevision:1}});
+    assert.equal(result.statusCode,200,result.body);assert.equal(result.json().draftId,ID);
+    assert.equal(ctx.records.get(PREFIX+FILE_ID).status,'archived');
+    assert.deepEqual(ctx.records.get(PREFIX+FILE_ID).snapshot,old.snapshot);
+    assert.equal((await ctx.app.inject({url:`/admin/product-form-drafts/${FILE_ID}`,headers})).json().id,ID);
+    const stale=await ctx.app.inject({method:'PUT',url:`/admin/product-form-drafts/${FILE_ID}`,headers,payload:{revision:2,snapshot:old.snapshot}});
+    assert.equal(stale.statusCode,409);
+    assert.deepEqual(ctx.records.get(PREFIX+ID).snapshot,source.snapshot);
+  }finally{await ctx.close();}
+});
 test('rascunhos e arquivos exigem administrador; concluir/arquivar remove apenas da fila e preserva conteúdo',async()=>{
   const ctx=await appFixture();try {
     for(const url of ['/admin/product-form-drafts',`/admin/product-form-drafts/${ID}`,`/admin/product-form-drafts/${ID}/files/${FILE_ID}`])assert.equal((await ctx.app.inject({url})).statusCode,401);
@@ -154,6 +221,7 @@ test('File é serializado separado do JSON e reconstituído em outro computador 
     if(name.endsWith('/vpsClient'))return {vpsClient:{}};
     if(name.endsWith('/authSession'))return {getAuthSessionToken:async()=> 'test'};
     if(name.endsWith('/vpsProxyBase'))return {buildVpsUrl:value=>value};
+    if(name.endsWith('/products'))return {productService:{}};
     throw Error(name);
   }};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('services/productFormDrafts.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,context);

@@ -4,6 +4,9 @@ import { buildVpsUrl } from './vpsProxyBase';
 import type { ProductInput } from '../types/product';
 import type { FamilyRow, FamilyEditorDraft } from '../components/products/ProductFamilyEditor';
 import type { Print3dSetup } from './print3dRegistration';
+import { productService } from './products';
+
+export const familyWorkspacePath = (modelId: string) => `/admin/products/new?family_model=${encodeURIComponent(modelId)}`;
 
 export type ProductFormSnapshot = {
   schemaVersion: 1; data: ProductInput & { id?: string }; activeSection: string; activeSalesChannel: string;
@@ -51,9 +54,17 @@ async function hydrateDraftFiles(value: any, id: string) {
 }
 export const productFormDraftsService = {
   list: () => vpsClient.get<{ drafts: ProductFormDraftSummary[] }>('/admin/product-form-drafts'),
+  async resolveFamilyWorkspace(modelId: string): Promise<string> {
+    const parents = await productService.listParentsByModel(modelId);
+    if (parents.length > 1) throw new Error('Este modelo possui mais de um pai. Confira os vínculos antes de continuar.');
+    const result = await vpsClient.post<{ draftId?: string; parentId?: string }>(`/admin/product-form-drafts/family/${encodeURIComponent(modelId)}`, { parentId: parents[0]?.id });
+    if (result.draftId) return `/admin/products/new?draft=${encodeURIComponent(result.draftId)}#variations`;
+    if (result.parentId) return `/admin/products/${encodeURIComponent(result.parentId)}#variations`;
+    throw new Error('O sistema não confirmou o cadastro único da família.');
+  },
   async get(id: string): Promise<ProductFormDraft> {
     const result = await vpsClient.get<ProductFormDraft>(`/admin/product-form-drafts/${encodeURIComponent(id)}`);
-    result.snapshot = await hydrateDraftFiles(result.snapshot, id);
+    result.snapshot = await hydrateDraftFiles(result.snapshot, result.id);
     return result;
   },
   async getParentTemplate(productId: string): Promise<Print3dSetup | undefined> {

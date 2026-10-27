@@ -1,4 +1,4 @@
-// A commercial model and its catalog parent are separate records. Keep this
+// Shared by the canonical family resolver and its regression tests. Keep this
 // draft explicit so the product form never mistakes the model for a sellable SKU.
 export function buildModelParentPrefill(model, brandName) {
   if (!model?.id || !model?.name || !brandName) throw new Error('Confira o modelo e a marca antes de criar o produto pai.');

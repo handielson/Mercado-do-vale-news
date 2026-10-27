@@ -1,3 +1,16 @@
+# v1.2.691-cadastro-unico-familia
+
+Data: 27/10/2026. Status: ready. Branch: main. Tag: v1.2.691-cadastro-unico-familia.
+Release: /var/www/mdv-site/releases/20261027-182329-cadastro-unico-familia.
+
+Os atalhos da Gestão de Modelos, do agrupador de produtos e das fotos do pai abrem o mesmo cadastro da família por ID do modelo. A API reutiliza o rascunho principal sob trava do modelo, impede duplicação e protege contra gravações de abas antigas. Links de rascunhos substituídos retomam o principal. Modelos com duplicados antigos ainda não conferidos exigem revisão antes de escolher uma base.
+
+Com autorização do operador, o Poco X8 5G foi consolidado em um rascunho com seis variações, o EAN já digitado e a foto mais recente do pai, mantendo unidade UN e produção por terceiros. Oito rascunhos anteriores permanecem arquivados com conteúdo integral e vínculo ao principal. Backup privado na VPS em backups/model-draft-consolidation/. Nenhum preço, estoque, unidade física ou venda foi alterado.
+
+Validação: 31 testes de rascunhos, família e mídia; dois testes do deploy seletivo; sintaxe da API; teste de atalhos no navegador; build e conferência pública. Publicação seletiva do módulo de rascunhos e seu prefill compartilhado antes do site. Alterações locais de outros assuntos ficaram fora do commit.
+
+## Histórico anterior
+
 # v1.2.690-colecoes-whatsapp-dinamicas
 
 Data: 27/10/2026. Status: ready. Branch: main. Tag: v1.2.690-colecoes-whatsapp-dinamicas.

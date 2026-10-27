@@ -31,27 +31,8 @@ test('removing/replacing parent images survives preview server restart without c
   assert.deepEqual(reloaded.images,['new.jpg']);assert.equal(reloaded.image_url,'new.jpg');assert.equal(reloaded.video_url,original.video_url);
   assert.deepEqual(original.images,['old1.jpg','old2.jpg']);
 });
-test('photo remove/upload callbacks commit immediately, without the separate save button',async()=>{
-  const React=require('react'),render=require('react-dom/server').renderToStaticMarkup;
-  const state=[[{id:'p',name:'Pai',images:['old1.jpg','old2.jpg'],video_url:'https://video.test/p.mp4'}],'p',false,'',0,['old1.jpg','old2.jpg'],'https://video.test/p.mp4',null,false,'',true];
-  let index=0, gallery;const writes=[],exports={};
-  const code=ts.transpileModule(fs.readFileSync('components/settings/ModelParentImages.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React,esModuleInterop:true,target:ts.ScriptTarget.ES2022}}).outputText;
-  vm.runInNewContext(code,{exports,console,JSON,require:name=>{
-    if(name==='react')return {...React,useState:()=>{const i=index++;return[state[i],v=>{state[i]=typeof v==='function'?v(state[i]):v;}];},useEffect:()=>{}};
-    if(name==='lucide-react')return require(name);
-    if(name.includes('/products/sections/ProductImages'))return{ProductImages:props=>{gallery=props;return React.createElement('div');}};
-    if(name.endsWith('/products'))return{productService:{saveParentMedia:async(model,id,media)=>{writes.push(JSON.parse(JSON.stringify(media)));return{...state[0][0],images:media.images,video_url:media.video_url};}}};
-    if(name.includes('productImageUpload'))return{uploadProductImages:async()=>['new.jpg']};
-    if(name.includes('productVideoUpload'))return{SynologyUploadError:class extends Error{}};
-    if(name.includes('localCatalogPreview'))return{isLocalCatalogPreviewRuntime:()=>true};
-    if(name.includes('media-url'))return{toBrowserSafeMediaUrl:url=>url};
-    return{};
-  }});
-  const paint=()=>{index=0;render(React.createElement(exports.ModelParentImages,{modelId:'m'}));};
-  const flush=()=>new Promise(resolve=>setImmediate(resolve));
-  paint();gallery.removeImage(0);await flush();paint();gallery.removeImage(0);await flush();paint();
-  gallery.handleImageUpload({target:{files:[{name:'new.png',type:'image/png'}],value:'new.png'}});await flush();
-  assert.deepEqual(writes.map(w=>w.images),[['old2.jpg'],[],['new.jpg']]);
-  assert.ok(writes.every(w=>w.video_url==='https://video.test/p.mp4'));
-  assert.deepEqual(Array.from(state[0][0].images),['new.jpg']);assert.match(state[9],/salvas automaticamente/);
+test('model media has only the canonical link and never issues independent media writes',()=>{
+  const source=fs.readFileSync('components/settings/ModelParentImages.tsx','utf8');
+  assert.match(source,/familyWorkspacePath\(modelId\)/);
+  assert.doesNotMatch(source,/saveParentMedia|uploadProductImages|setImages|type="file"/);
 });

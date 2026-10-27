@@ -27,7 +27,66 @@ function registerProductFormDraftRoutes(app, { pool, requireAdminBearerToken, fi
   const options = { preHandler: admin };
   const key = id => { if (!UUID.test(id || '')) throw Object.assign(Error('Identificador inválido.'), { statusCode: 400 }); return PREFIX + id.toLowerCase(); };
   const filePath = (id, fileId) => { key(id); key(fileId); return path.join(filesRoot, id.toLowerCase(), fileId.toLowerCase()); };
-  const read = async id => { const [rows] = await pool.query('SELECT value_json FROM admin_preferences WHERE preference_key=? LIMIT 1', [key(id)]); if (!rows[0]) throw Object.assign(Error('Rascunho não encontrado.'), { statusCode: 404 }); return parse(rows[0].value_json); };
+  const read = async (id, seen = new Set()) => {
+    if (seen.has(id)) throw Object.assign(Error('Vínculo circular de rascunhos.'), { statusCode: 409 });
+    seen.add(id);
+    const [rows] = await pool.query('SELECT value_json FROM admin_preferences WHERE preference_key=? LIMIT 1', [key(id)]);
+    if (!rows[0]) throw Object.assign(Error('Rascunho não encontrado.'), { statusCode: 404 });
+    const record = parse(rows[0].value_json);
+    return record.superseded_by ? read(record.superseded_by, seen) : record;
+  };
+  const modelDrafts = async (db, modelId) => {
+    const [rows] = await db.query("SELECT value_json FROM admin_preferences WHERE preference_key LIKE ? AND JSON_UNQUOTE(JSON_EXTRACT(value_json,'$.status'))='pending' AND JSON_UNQUOTE(JSON_EXTRACT(value_json,'$.snapshot.data.model_id'))=? AND JSON_UNQUOTE(JSON_EXTRACT(value_json,'$.snapshot.data.is_parent')) IN ('true','1') ORDER BY updated_at DESC", [PREFIX + '%', modelId]);
+    return rows.map(row => parse(row.value_json));
+  };
+  // The model lock serializes every family-draft creation/binding. Drafts remain
+  // in their original storage; the canonical marker is routing metadata only.
+  app.post('/admin/product-form-drafts/family/:modelId', options, async req => {
+    const modelId = req.params.modelId; key(modelId);
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [[model]] = await connection.query('SELECT m.id,m.name,m.category_id,b.name AS brand_name FROM models m LEFT JOIN brands b ON b.id=m.brand_id WHERE m.id=? FOR UPDATE', [modelId]);
+      if (!model) throw Object.assign(Error('Modelo não encontrado.'), { statusCode: 404 });
+      const drafts = await modelDrafts(connection, modelId);
+      const canonical = drafts.filter(draft => draft.canonical_model_id === modelId);
+      if (canonical.length > 1) throw Object.assign(Error('Mais de um rascunho principal para este modelo. Confira os vínculos.'), { statusCode: 409 });
+      let draft = canonical[0] || (drafts.length === 1 ? drafts[0] : null);
+      if (req.body?.sourceDraftId) {
+        draft = drafts.find(item => item.id === req.body.sourceDraftId);
+        if (!draft || draft.revision !== req.body.expectedRevision) throw Object.assign(Error('O rascunho mudou. Confira novamente antes de definir a fonte única.'), { statusCode: 409 });
+        if (canonical[0] && canonical[0].id !== draft.id) throw Object.assign(Error('O modelo já tem um rascunho principal. Não é permitido trocar silenciosamente.'), { statusCode: 409 });
+      }
+      if (!draft && drafts.length) throw Object.assign(Error('Este modelo possui rascunhos antigos duplicados. É necessário conferir e definir o cadastro principal antes de continuar.'), { statusCode: 409 });
+      const parentId = req.body?.parentId;
+      if (parentId) {
+        key(parentId);
+        const [[parent]] = await connection.query('SELECT id,model_id,is_parent FROM products WHERE id=?', [parentId]);
+        if (!parent || Number(parent.is_parent) !== 1 || (parent.model_id && parent.model_id !== modelId)) throw Object.assign(Error('O pai informado não pertence a este modelo.'), { statusCode: 409 });
+        if (!draft) { await connection.commit(); return { parentId }; }
+        if (draft.snapshot.data.id !== parentId && draft.snapshot.familyCheckpoint?.parent?.id !== parentId) throw Object.assign(Error('Há um pai salvo e um rascunho antigo sem vínculo. Confira os dados antes de consolidar.'), { statusCode: 409 });
+      }
+      const now = new Date().toISOString();
+      if (!draft) {
+        const { buildModelParentPrefill } = await import('./modelParentPrefill.mjs');
+        const data = buildModelParentPrefill(model, model.brand_name);
+        draft = { id: crypto.randomUUID(), revision: 1, title: data.name, status: 'pending', created_at: now, updated_at: now, canonical_model_id: modelId,
+          snapshot: { schemaVersion:1, data, activeSection:'variations', activeSalesChannel:'mercado-livre', familyRows:[], productionSetups:{}, productionRowKey:'', serialList:[], useCustomImages:false, nameManuallyEdited:false, familyCheckpoint:{parent:null,children:{}} } };
+        await connection.query('INSERT INTO admin_preferences (preference_key,value_json) VALUES (?,?)', [key(draft.id), JSON.stringify(draft)]);
+      } else if (draft.canonical_model_id !== modelId) {
+        draft = { ...draft, canonical_model_id:modelId, revision:draft.revision+1, updated_at:now };
+        await connection.query('UPDATE admin_preferences SET value_json=?,updated_at=CURRENT_TIMESTAMP WHERE preference_key=?', [JSON.stringify(draft), key(draft.id)]);
+      }
+      // Historical snapshots are retained in full. Old links resolve to the one
+      // active record; stale tabs cannot replace it through another draft UUID.
+      for (const previous of drafts.filter(item => item.id !== draft.id)) {
+        const archived = { ...previous, status:'archived', superseded_by:draft.id, revision:previous.revision+1, updated_at:now };
+        await connection.query('UPDATE admin_preferences SET value_json=?,updated_at=CURRENT_TIMESTAMP WHERE preference_key=?', [JSON.stringify(archived), key(previous.id)]);
+      }
+      await connection.commit(); return { draftId:draft.id };
+    } catch (error) { await connection.rollback(); throw error; }
+    finally { connection.release(); }
+  });
   app.get('/admin/product-form-drafts', options, async () => {
     // Keep the lightweight JSON projections serialized: mysql2 otherwise decodes
     // JSON-typed columns itself and parsing a plain UUID/title again throws.
@@ -52,14 +111,24 @@ function registerProductFormDraftRoutes(app, { pool, requireAdminBearerToken, fi
     const draft = rows[0] ? parse(rows[0].value_json) : null;
     return { draftId: draft?.id || null, setup: draft?.snapshot?.productionSetups?.parent || null };
   });
-  async function mutate(id, expectedRevision, update) {
+  async function mutate(id, expectedRevision, update, familyModelId, snapshotWrite = false) {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw Object.assign(Error('Revisão inválida.'), { statusCode: 400 });
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
+      if (familyModelId) {
+        key(familyModelId);
+        await connection.query('SELECT id FROM models WHERE id=? FOR UPDATE', [familyModelId]);
+        const drafts = await modelDrafts(connection, familyModelId);
+        const canonical = drafts.find(draft => draft.canonical_model_id === familyModelId);
+        if (canonical && canonical.id !== id) throw Object.assign(Error(`Continue no cadastro principal: /admin/products/new?draft=${canonical.id}`), { statusCode:409 });
+        if (!canonical && expectedRevision === 0 && drafts.some(draft => draft.id !== id)) throw Object.assign(Error('Este modelo já tem um rascunho. Abra o cadastro único pela Gestão de Modelos.'), { statusCode:409 });
+      }
       await connection.query('INSERT IGNORE INTO admin_preferences (preference_key,value_json) VALUES (?,?)', [key(id), JSON.stringify({ revision: 0 })]);
       const [rows] = await connection.query('SELECT value_json FROM admin_preferences WHERE preference_key=? FOR UPDATE', [key(id)]);
       const previous = parse(rows[0].value_json);
+      if (previous.superseded_by) throw Object.assign(Error(`Este rascunho é histórico. Continue no cadastro principal: /admin/products/new?draft=${previous.superseded_by}`), { statusCode:409 });
+      if (snapshotWrite && previous.canonical_model_id && previous.canonical_model_id !== familyModelId) throw Object.assign(Error('O modelo do cadastro principal não pode ser trocado ou removido.'), { statusCode:409 });
       if (previous.revision !== expectedRevision) throw Object.assign(Error('Este rascunho foi alterado em outro computador. Abra-o novamente pela lista antes de salvar.'), { statusCode: 409 });
       if (previous.status && previous.status !== 'pending') throw Object.assign(Error('Este rascunho já foi concluído ou arquivado.'), { statusCode: 409 });
       const now = new Date().toISOString();
@@ -75,7 +144,7 @@ function registerProductFormDraftRoutes(app, { pool, requireAdminBearerToken, fi
       let stat; try { stat = await fsp.stat(filePath(req.params.id, file.__productDraftFile)); } catch { throw Object.assign(Error('Arquivo do rascunho não foi confirmado. Tente salvar novamente.'), { statusCode: 409 }); }
       if (stat.size !== file.size) throw Object.assign(Error('Tamanho do arquivo não confere.'), { statusCode: 409 });
     }
-    return mutate(req.params.id, req.body.revision, previous => ({ ...previous, snapshot: req.body.snapshot, title: String(req.body.snapshot.data.name || req.body.snapshot.data.sku || 'Anúncio sem título').slice(0, 200), status: 'pending' }));
+    return mutate(req.params.id, req.body.revision, previous => ({ ...previous, snapshot: req.body.snapshot, title: String(req.body.snapshot.data.name || req.body.snapshot.data.sku || 'Anúncio sem título').slice(0, 200), status: 'pending' }), req.body.snapshot.data.is_parent ? req.body.snapshot.data.model_id : undefined, true);
   });
   app.patch('/admin/product-form-drafts/:id', options, req => {
     if (!['completed', 'archived'].includes(req.body?.status)) throw Object.assign(Error('Situação inválida.'), { statusCode: 400 });

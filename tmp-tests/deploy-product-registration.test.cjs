@@ -5,11 +5,11 @@ const { patchModule, patchEntry, patchDraftEntry, deployProductDrafts, schemaRea
 
 test('draft update accepts the reviewed installed module, retries safely and rejects remote drift',async()=>{
   const module='services/productFormDraftsServer.cjs';
-  const baseline=require('node:child_process').execFileSync('git',['show','v1.2.607-rascunhos-placas-precos:'+module],{encoding:'utf8'});
+  const baseline=require('node:child_process').execFileSync('git',['show','v1.2.690-colecoes-whatsapp-dinamicas:'+module],{encoding:'utf8'});
   const updated=fs.readFileSync(module,'utf8');
   for (const source of [baseline,updated,'']) await deployProductDrafts({
     root:process.cwd(),appDir:'/var/www/mdv-api',apiProc:{name:'mdv-api',pm2_env:{pm_exec_path:'/var/www/mdv-api/server.js'}},checkOnly:true,
-    read:async remote=>remote.endsWith('/'+module) ? source : fs.readFileSync('vps_server.cjs','utf8'),
+    read:async remote=>remote.endsWith('/modelParentPrefill.mjs') ? '' : remote.endsWith('/'+module) ? source : fs.readFileSync('vps_server.cjs','utf8'),
     write:async()=>assert.fail('Preflight must not write'),exec:async()=>assert.fail('Preflight must not restart'),
   });
   await assert.rejects(deployProductDrafts({
@@ -30,7 +30,8 @@ test('draft publisher adds only its authenticated hook and preserves remote inte
   assert.throws(() => patchDraftEntry(before + '\nregisterProductFormDraftRoutes'), /differs/);
   const deploy = fs.readFileSync('scripts/deploy-product-registration.cjs','utf8');
   const drafts = deploy.slice(deploy.indexOf('async function deployProductDrafts('),deploy.indexOf('async function deployProductRegistration('));
-  assert.match(drafts,/files:\[module,\.\.\.ENTRIES\]/);
+  assert.match(drafts,/files:\[module,shared,\.\.\.ENTRIES\]/);
+  assert.match(drafts,/services\/modelParentPrefill.mjs/);
   assert.doesNotMatch(drafts,/activate|setRecipeFlag|migration|uploadPrivate/);
 });
 test('registration publisher rejects unknown drift; accepts only reviewed baseline or its release', () => {

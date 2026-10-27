@@ -8,6 +8,7 @@ import { ModelsPage } from '../pages/admin/settings/ModelsPage';
 import { modelService } from '../services/models';
 import { brandService } from '../services/brands';
 import { vpsClient } from '../services/vpsClient';
+import { productService } from '../services/products';
 
 const paginationPreview = new URLSearchParams(location.search).has('pagination');
 if (paginationPreview) {
@@ -18,7 +19,12 @@ if (paginationPreview) {
         slug: `model-${i}`, brand_id: 'test', active: true, created: '2026-10-24', updated: '2026-10-24',
     }));
     brandService.list = async () => [{ id: 'test', name: 'Teste', active: true }] as any;
+    productService.listParentsByModel = async () => [];
     vpsClient.get = async (path: string, options?: { timeoutMs?: number }) => {
+        const draft = (id: string) => ({ id, title: 'Poco X8 5G', status: 'pending', is_parent: true, updated_at: '2026-10-27T17:55:11Z',
+            snapshot: { data: { model_id: 'model-1549', is_parent: true, images: id === 'filled' ? ['parent.webp'] : [], specs: id === 'filled' ? { unit: 'UN', production: 'third_party' } : {} }, familyRows: [] } });
+        if (path === '/admin/product-form-drafts') return { drafts: [draft('empty'), draft('filled')] } as any;
+        if (path.startsWith('/admin/product-form-drafts/')) return draft(path.split('/').pop()!) as any;
         if (path.endsWith('/smartphone-price-groups')) {
             if (options?.timeoutMs !== 15000) throw new Error('Consulta sem limite de espera');
             calls.push(path);

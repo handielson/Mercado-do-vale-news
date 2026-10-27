@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.690-colecoes-whatsapp-dinamicas",
+  "version": "v1.2.691-cadastro-unico-familia",
   "date": "2026-10-27",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.690-colecoes-whatsapp-dinamicas",
-  "release_vps": "/var/www/mdv-site/releases/20261027-123922-colecoes-whatsapp-dinamicas",
+  "tag": "v1.2.691-cadastro-unico-familia",
+  "release_vps": "/var/www/mdv-site/releases/20261027-182329-cadastro-unico-familia",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Exporta categorias e origem do sistema no feed Meta para colecoes dinamicas do WhatsApp.",
+  "summary": "Centraliza o cadastro da familia por modelo, com retomada do rascunho e preservacao de fotos, EANs e variacoes.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,16 +14,28 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "services/metaCatalogFeedServer.cjs",
-    "tmp-tests/meta-catalog-feed.test.cjs",
-    "tmp-tests/meta-catalog-preview.cjs",
+    "components/settings/ModelParentImages.tsx",
+    "pages/admin/products/ModelProductAggregatorPage.tsx",
+    "pages/admin/products/ProductFormPage.tsx",
+    "pages/admin/settings/ModelsPage.tsx",
+    "services/productFormDrafts.ts",
+    "services/productFormDraftsServer.cjs",
+    "services/modelParentPrefill.mjs",
+    "scripts/deploy-product-registration.cjs",
+    "tmp-tests/deploy-product-registration.test.cjs",
+    "tmp-tests/model-actions-preview.tsx",
+    "tmp-tests/model-actions-ui.test.mjs",
+    "tmp-tests/model-parent-media-persistence.test.cjs",
+    "tmp-tests/model-parent-registration.test.mjs",
+    "tmp-tests/product-family-images.test.mjs",
+    "tmp-tests/product-form-drafts.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-27-v1.2.690-colecoes-whatsapp-dinamicas.md"
+    "docs/versoes/2026-10-27-v1.2.691-cadastro-unico-familia.md"
   ],
   "validations": [
-    "Sete testes de feed, categorias, ciclos na hierarquia, privacidade, moeda, estoque, falhas e registro da rota; sintaxe do modulo.",
-    "Previa somente leitura gerou 1532 produtos; XML valido e tres links publicos retornaram HTTP 200."
+    "31 testes de rascunhos, familia e midia; dois testes do deploy seletivo; sintaxe da API.",
+    "Teste de atalhos no navegador, build e validacao publica apos deploy."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

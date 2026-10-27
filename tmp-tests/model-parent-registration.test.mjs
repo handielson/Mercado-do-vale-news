@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildModelParentPrefill } from '../services/modelParentPrefill.js';
+import { buildModelParentPrefill } from '../services/modelParentPrefill.mjs';
 
 test('a model opens a parent registration with its identity and no sellable stock', () => {
   const draft = buildModelParentPrefill({ id: 'poco-x8-5g', name: 'Poco X8 5G', category_id: 'smartphones' }, 'Xiaomi');
@@ -21,13 +21,14 @@ test('the registration path rechecks the family and returns to the saved parent'
   const productForm = readFileSync(new URL('../pages/admin/products/ProductFormPage.tsx', import.meta.url), 'utf8');
   const modelPhotos = readFileSync(new URL('../components/settings/ModelParentImages.tsx', import.meta.url), 'utf8');
   const modelsPage = readFileSync(new URL('../pages/admin/settings/ModelsPage.tsx', import.meta.url), 'utf8');
-  assert.match(dashboard, /await productService\.listParentsByModel\(modelId\)/);
-  assert.match(dashboard, /buildModelParentPrefill\(data\.model, brand\?\.name\)/);
-  assert.match(modelsPage, /await productService\.listParentsByModel\(model\.id\)/);
+  assert.match(dashboard, /navigate\(familyWorkspacePath\(modelId\)\)/);
+  assert.match(modelsPage, /navigate\(familyWorkspacePath\(model.id\)\)/);
   assert.match(modelsPage, /Produto pai, fotos e variaç[õo]es/);
   assert.match(productForm, /if \(savedProduct\?\.is_parent && savedProduct\.id\)/);
-  assert.match(modelPhotos, /Criar produto pai e variaç[õo]es/);
-  assert.match(modelPhotos, /const \[expanded, setExpanded\] = useState\(true\)/);
+  assert.match(modelPhotos, /to=\{familyWorkspacePath\(modelId\)\}/);
+  assert.match(modelPhotos, /Abrir cadastro único da família/);
+  assert.doesNotMatch(modelPhotos, /saveParentMedia|uploadProductImages|setImages|type="file"/);
+  assert.match(productForm, /resolveFamilyWorkspace\(familyModelId\)/);
 });
 
 test('parent photo upload is visible at the start of the variations step', () => {

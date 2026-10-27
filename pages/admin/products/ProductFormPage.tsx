@@ -9,7 +9,7 @@ import { Product, ProductInput } from '../../../types/product';
 import { productService } from '../../../services/products';
 import { buildProductClonePrefill } from '../../../services/productClonePrefill.js';
 import { isLocalCatalogPreviewRuntime, localCatalogPreviewService, type LocalCatalogDraft } from '../../../services/localCatalogPreview';
-import { productFormDraftsService, type ProductFormDraft, type ProductFormSnapshot } from '../../../services/productFormDrafts';
+import { familyWorkspacePath, productFormDraftsService, type ProductFormDraft, type ProductFormSnapshot } from '../../../services/productFormDrafts';
 
 function LocalPreviewApproval({ productId, revision, onApproved }: { productId: string; revision: number; onApproved: () => void }) {
     const [draft, setDraft] = useState<LocalCatalogDraft | null>(null);
@@ -67,6 +67,7 @@ export const ProductFormPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const location = useLocation();
+    const familyModelId = new URLSearchParams(location.search).get('family_model');
     const [product, setProduct] = useState<Product | undefined>();
     const [isLoading, setIsLoading] = useState(false);
     const [isFetching, setIsFetching] = useState(false);
@@ -89,6 +90,13 @@ export const ProductFormPage: React.FC = () => {
     // Fetch product data if editing
     useEffect(() => {
         setLoadedDraft(null); setSavedDraft(null); draftMeta.current = null;
+        if (familyModelId) {
+            let active = true;
+            setIsFetching(true); setDraftError('');
+            productFormDraftsService.resolveFamilyWorkspace(familyModelId).then(url => { if (active) navigate(url, { replace:true }); })
+                .catch(error => { if (active) { setDraftError(error instanceof Error ? error.message : 'Não foi possível abrir o cadastro único.'); setIsFetching(false); } });
+            return () => { active = false; };
+        }
         if (resumeDraftId) {
             let active = true;
             setIsFetching(true); setDraftError(''); setLoadedDraft(null);
@@ -97,12 +105,19 @@ export const ProductFormPage: React.FC = () => {
                 if (draft.status !== 'pending') throw new Error('Este rascunho já foi concluído ou arquivado.');
                 draftMeta.current = { id: draft.id, revision: draft.revision };
                 setLoadedDraft(draft); setSavedDraft(draft); setProduct(draft.snapshot.data as Product);
+                if (draft.id !== resumeDraftId) {
+                    const search = new URLSearchParams(window.location.search); search.set('draft', draft.id);
+                    window.history.replaceState(window.history.state, '', `${window.location.pathname}?${search}${window.location.hash}`);
+                }
             }).catch(error => { if (active) setDraftError(error instanceof Error ? error.message : 'Não foi possível abrir o rascunho.'); })
                 .finally(() => { if (active) setIsFetching(false); });
             return () => { active = false; };
         } else if (id && id !== 'new') {
             fetchProduct();
         } else if (cloneProductFromState) {
+            if (cloneProductFromState.is_parent && cloneProductFromState.model_id) {
+                navigate(familyWorkspacePath(cloneProductFromState.model_id), { replace:true }); return;
+            }
             const prefill = buildProductClonePrefill(cloneProductFromState);
             setProduct({ ...prefill, ...(print3dEntry ? { is_print3d: true } : {}) } as unknown as Product);
         } else if (eanFromState) {
@@ -111,7 +126,7 @@ export const ProductFormPage: React.FC = () => {
         } else {
             setProduct(undefined);
         }
-    }, [id, eanFromState, cloneProductFromState, print3dEntry, resumeDraftId]);
+    }, [id, familyModelId, eanFromState, cloneProductFromState, print3dEntry, resumeDraftId]);
 
     // Update document title
     useEffect(() => {
@@ -134,6 +149,12 @@ export const ProductFormPage: React.FC = () => {
         try {
             setIsFetching(true);
             const data = await productService.getById(id);
+            if (data.is_parent && data.model_id) {
+                const workspace = await productFormDraftsService.resolveFamilyWorkspace(data.model_id);
+                if (new URL(workspace, window.location.origin).searchParams.has('draft')) {
+                    navigate(workspace, { replace:true }); return;
+                }
+            }
             setProduct(print3dEntry ? { ...data, is_print3d: true } : data);
         } catch (error) {
             console.error('Error fetching product:', error);
@@ -236,6 +257,7 @@ export const ProductFormPage: React.FC = () => {
         );
     }
     if (resumeDraftId && (!loadedDraft || draftError)) return <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-6"><p>{draftError || 'Carregando rascunho...'}</p><Link className="mt-3 inline-block text-blue-700 underline" to="/admin/products/drafts">Voltar aos rascunhos</Link></div>;
+    if (familyModelId && draftError) return <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-6"><p>{draftError}</p><Link className="mt-3 inline-block text-blue-700 underline" to="/admin/settings/models">Voltar aos modelos</Link></div>;
     if (loadedDraft?.snapshot.completion) return <div className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50 p-6"><h1 className="text-xl font-bold">Cadastro já concluído</h1><p>Os produtos deste rascunho já foram salvos. Falta apenas retirar o rascunho da lista de pendentes.</p><button disabled={isLoading} className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50" onClick={async () => { setIsLoading(true); try { await productFormDraftsService.setStatus(loadedDraft.id, loadedDraft.revision, 'completed', loadedDraft.snapshot.completion?.savedProductId); navigate('/admin/products/drafts'); } catch (error) { toast.error(error instanceof Error ? error.message : 'Não foi possível finalizar o rascunho.'); } finally { setIsLoading(false); } }}>Finalizar rascunho</button><Link className="ml-3 text-blue-700 underline" to="/admin/products/drafts">Voltar à lista</Link></div>;
 
     return (

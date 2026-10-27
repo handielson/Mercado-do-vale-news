@@ -4,8 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
-import { productService } from '../../../services/products';
-import { buildModelParentPrefill } from '../../../services/modelParentPrefill.js';
 import { brandService } from '../../../services/brands';
 import { ModelModal } from '../../../components/settings/ModelModal';
 import { BulkSeoModal } from '../../../components/settings/BulkSeoModal';
@@ -19,6 +17,7 @@ import { MODEL_SEO_BATCH_SIZE, selectFirstModelIds } from './modelBulkSelection.
 import { ModelPricesPanel } from '../../../components/settings/ModelPricesPanel';
 import { smartphonePriceGroups } from '../../../services/smartphonePriceGroups';
 import { ModelActionsMenu } from '../../../components/settings/ModelActionsMenu';
+import { familyWorkspacePath } from '../../../services/productFormDrafts';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -448,7 +447,6 @@ export function ModelsPage() {
     const [editingModel, setEditingModel] = useState<Model | null>(null);
     const [deleteError, setDeleteError] = useState('');
     const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
-    const [openingParentId, setOpeningParentId] = useState<string | null>(null);
 
     // ── Filtros ──
     const [search, setSearch] = useState('');
@@ -479,23 +477,7 @@ export function ModelsPage() {
 
     const handleEdit = (model: Model) => { setEditingModel(model); setModalOpen(true); };
     const handleAdd = () => { setEditingModel(null); setModalOpen(true); };
-    const handleOpenParent = async (model: Model) => {
-        if (openingParentId) return;
-        setOpeningParentId(model.id);
-        try {
-            const parents = await productService.listParentsByModel(model.id);
-            if (parents.length) {
-                navigate(`/admin/products/${parents[0].id}#variations`);
-                return;
-            }
-            const brand = brands.find(item => item.id === model.brand_id);
-            navigate('/admin/products/new#variations', { state: { cloneProduct: buildModelParentPrefill(model, brand?.name) } });
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Não foi possível abrir o produto pai.');
-        } finally {
-            setOpeningParentId(null);
-        }
-    };
+    const handleOpenParent = (model: Model) => navigate(familyWorkspacePath(model.id));
 
     const handleDelete = async (model: Model) => {
         if (!confirm(`Excluir o modelo "${model.name}"?`)) return;
@@ -760,7 +742,7 @@ export function ModelsPage() {
                                     onDelete={handleDelete}
                                     onRefresh={loadData}
                                     onOpenParent={handleOpenParent}
-                                    openingParent={openingParentId === model.id}
+                                    openingParent={false}
                                 />
                             ))
                         )}

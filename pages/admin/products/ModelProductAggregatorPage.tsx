@@ -3,9 +3,7 @@ import { ArrowLeft, CopyPlus, ExternalLink, FileText, Loader2, MapPin, Pencil, R
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { modelService } from '../../../services/models';
-import { brandService } from '../../../services/brands';
 import { categoryService } from '../../../services/categories';
-import { productService } from '../../../services/products';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { vpsClient } from '../../../services/vpsClient';
 import { unitService } from '../../../services/units';
@@ -13,7 +11,7 @@ import { isLocalCatalogPreviewRuntime } from '../../../services/localCatalogPrev
 import { stockLocationService } from '../../../services/stockLocationService';
 import { aggregateModelProducts, getModelIdentifierSections } from '../../../services/modelProductAggregator.js';
 import { getProductCloneState } from '../../../services/productClonePrefill.js';
-import { buildModelParentPrefill } from '../../../services/modelParentPrefill.js';
+import { familyWorkspacePath } from '../../../services/productFormDrafts';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 import { PAYJOY_SALE_NOTE } from '../../../utils/saleInformation.js';
 
@@ -162,13 +160,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
         setOpeningParentForm(true);
         try {
             // Recheck before opening a new registration: another operator may have created the parent.
-            const parents = await productService.listParentsByModel(modelId);
-            if (parents.length) {
-                navigate(`/admin/products/${parents[0].id}`);
-                return;
-            }
-            const brand = await brandService.getById(data.model.brand_id);
-            navigate('/admin/products/new', { state: { cloneProduct: buildModelParentPrefill(data.model, brand?.name) } });
+            navigate(familyWorkspacePath(modelId));
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Não foi possível abrir o cadastro do pai.');
         } finally {

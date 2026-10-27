@@ -79,17 +79,17 @@ test('model parent lookup retries a transient failure once and never treats fail
   assert.equal(failures,2);
 });
 
-test('model media editor shows canonical cover, five photo limit, one video and all parent choices', () => {
+test('model media shortcut uses the unique family editor without a second save path', () => {
   const source = readFileSync(new URL('../components/settings/ModelParentImages.tsx', import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true } }).outputText;
   const exports = {};
-  const values = [[{ id: 'p', name: 'Pai', sku: 'P', images: ['cover.jpg', 'back.jpg'], video_url: 'https://video.test/p.mp4' }, { id: 'p2', name: 'Outro pai', images: [] }], 'p', false, '', 0, ['cover.jpg', 'back.jpg'], 'https://video.test/p.mp4', null, false, '', true];
   const gallery = {};
   const galleryCode = ts.transpileModule(readFileSync('components/products/sections/ProductImages.tsx', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true } }).outputText;
   vm.runInNewContext(galleryCode, { exports: gallery, require: name => name === 'react' ? React : name.includes('cache-buster') ? { getCacheBustedUrl: url => url } : require(name) });
-  let state = 0;
   vm.runInNewContext(code, { exports, require: name => {
-    if (name === 'react') return { ...React, useState: () => [values[state++], () => {}], useEffect: () => {} };
+    if (name === 'react') return { ...React, useEffect: () => {} };
+    if (name === 'react-router-dom') return { Link: ({to,children,...props}) => React.createElement('a',{href:to,...props},children) };
+    if (name === '../../services/productFormDrafts') return { familyWorkspacePath: id => `/admin/products/new?family_model=${id}` };
     if (name === '../../services/products') return { productService: {} };
     if (name === '../products/sections/ProductImages') return gallery;
     if (name === '../../services/productImageUpload' || name === '../../services/productVideoUpload') return {};
@@ -98,16 +98,9 @@ test('model media editor shows canonical cover, five photo limit, one video and 
     return require(name);
   } });
   const html = renderToStaticMarkup(React.createElement(exports.ModelParentImages, { modelId: 'm' }));
-  assert.match(html, /CAPA/);
-  assert.match(html, /cover.jpg/);
-  assert.match(html, /back.jpg/);
-  assert.match(html, /Outro pai/);
-  assert.doesNotMatch(html, /Abrir cadastro do pai|href="\/admin\/products\/p"|target="_blank"/);
-  assert.match(html, /type="file"/);
-  assert.match(html, /Vídeo do pai \(1 vídeo\)/);
-  assert.match(html, /Salvar mídias do pai/);
-  assert.match(html, /2 \/ 5 imagens/);
-  assert.match(html, /https:\/\/video.test\/p.mp4/);
+  assert.match(html, /href="\/admin\/products\/new\?family_model=m"/);
+  assert.match(html, /Abrir cadastro único da família/);
+  assert.doesNotMatch(html, /type="file"|Salvar mídias do pai|Outro pai/);
   const modal = readFileSync(new URL('../components/settings/ModelModal.tsx', import.meta.url), 'utf8');
   assert.match(modal, /<ModelParentImages[\s\S]*<ColorImageManager/);
 });
@@ -211,7 +204,7 @@ test('os dois sites conectam a mesma regra à capa e à seleção de cor', () =>
   assert.doesNotMatch(source('components/catalog/ModernProductCard.tsx'), /Cor: <span className="font-semibold"/);
   assert.match(source('pages/store/PublicProductPage.tsx'), /resolveProductFamilyImages\(product, siblings, variationImageSelected\)/);
   assert.match(source('pages/store/PublicProductPage.tsx'), /galleryImages\.map/);
-  assert.match(source('pages/store/PublicProductPage.tsx'), /setSelectedVariantId\(String\(data\.id\)\);\s*setVariationImageSelected\(Number\(data\.is_parent\) !== 1\)/);
+  assert.match(source('pages/store/PublicProductPage.tsx'), /setSelectedVariantId\(String\(data\.id\)\);\s*(?:setShareWholeFamily\(false\);\s*)?setVariationImageSelected\(Number\(data\.is_parent\) !== 1\)/);
   assert.match(source('pages/store/PublicProductPage.tsx'), /resolveProductFamilyImages\(displayProduct, \[\], Number\(data\.is_parent\) !== 1\)/);
   assert.match(source('utils/print3dStorefront.ts'), /product.parent_id \? `family:\$\{product.parent_id\}`/);
   assert.match(source('vps_server.cjs'), /AS parent_images/);
