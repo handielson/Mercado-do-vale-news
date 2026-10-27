@@ -17,7 +17,8 @@ async function read(route) {
     products.push(...rows);
     if (rows.length < 2000) break;
   }
-  const feed = buildMetaCatalogFeed(products, settings);
+  const categories = await read('/categories');
+  const feed = buildMetaCatalogFeed(products, settings, new Date(), categories);
   const target = path.resolve(process.argv[2] || path.join(require('node:os').tmpdir(), 'mdv-meta-catalog-preview.xml'));
   await fs.mkdir(path.dirname(target), { recursive: true });
   await fs.writeFile(target, feed.body);

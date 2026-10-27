@@ -1,3 +1,14 @@
+# v1.2.690-colecoes-whatsapp-dinamicas
+
+Data: 27/10/2026. Status: ready. Branch: main. Tag: v1.2.690-colecoes-whatsapp-dinamicas.
+Release: /var/www/mdv-site/releases/20261027-123922-colecoes-whatsapp-dinamicas.
+
+O feed Meta inclui o caminho da categoria em product_type e a origem sistema_mdv em custom_label_0. Colecoes podem usar filtros automaticos vinculados a classificacao do sistema, em vez de selecoes manuais de IDs antigos. A hierarquia vem de categories da VPS/MySQL e acompanha novos cadastros e mudancas de categoria.
+
+Validacao: sete testes; previa somente leitura com 1532 produtos; sintaxe do modulo. Publicacao seletiva da API e site para registro de versao. Configuracoes e processamento das colecoes na Meta/WhatsApp sao verificados separadamente.
+
+## Historico anterior
+
 # v1.2.689-catalogo-meta-dinamico
 
 Data: 27/10/2026. Status: ready. Branch: main. Tag: v1.2.689-catalogo-meta-dinamico.

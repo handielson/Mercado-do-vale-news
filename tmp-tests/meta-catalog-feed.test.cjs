@@ -45,6 +45,15 @@ test('private, hidden-price and empty catalogs fail closed instead of replacing 
   }
   assert.throws(() => buildMetaCatalogFeed([], settings));
 });
+test('collections use system category hierarchy and a stable source label instead of manual product IDs', () => {
+  const categories = [{ id: 'phones', name: 'Celulares' }, { id: 'smartphones', parent_id: 'phones', name: 'Smartphones' }];
+  const feed = buildMetaCatalogFeed([{ ...product, category_id: 'smartphones' }], settings, new Date(), categories);
+  assert.match(feed.body, /<g:product_type>Celulares &gt; Smartphones<\/g:product_type>/);
+  assert.match(feed.body, /<g:custom_label_0>sistema_mdv<\/g:custom_label_0>/);
+  assert.doesNotMatch(buildMetaCatalogFeed([product], settings).body, /<g:product_type>/);
+  categories[0].parent_id = 'smartphones';
+  assert.equal(buildMetaCatalogFeed([{ ...product, category_id: 'smartphones' }], settings, new Date(), categories).count, 1);
+});
 test('HTTP endpoint serves XML and returns a retryable 503 on source failure', async () => {
   const app = Fastify();
   let broken = false;

@@ -14,7 +14,20 @@ function publicImage(value) {
   } catch { return null; }
 }
 
-function buildMetaCatalogFeed(products, settings, now = new Date()) {
+function categoryPath(categoryId, categories) {
+  const byId = new Map(categories.map(category => [String(category.id), category]));
+  const seen = new Set();
+  const names = [];
+  let category = byId.get(String(categoryId));
+  while (category && !seen.has(String(category.id))) {
+    seen.add(String(category.id));
+    if (text(category.name, 200)) names.unshift(text(category.name, 200));
+    category = byId.get(String(category.parent_id));
+  }
+  return names.join(' > ').slice(0, 750);
+}
+
+function buildMetaCatalogFeed(products, settings, now = new Date(), categories = []) {
   if (!settings || !flag(settings.enable_public_catalog) || flag(settings.require_login) || !flag(settings.show_prices)) {
     throw new Error('O catálogo público com preços precisa estar habilitado.');
   }
@@ -42,6 +55,8 @@ function buildMetaCatalogFeed(products, settings, now = new Date()) {
       link: `${SITE}/produto/${encodeURIComponent(product.id)}`,
       image_link: images[0],
       brand: text(product.brand, 100),
+      custom_label_0: 'sistema_mdv',
+      ...(categoryPath(product.category_id, categories) ? { product_type: categoryPath(product.category_id, categories) } : {}),
       ...(product.parent_id ? { item_group_id: product.parent_id } : {}),
       ...(specs.color || specs.cor ? { color: text(specs.color || specs.cor, 200) } : {}),
     };
@@ -74,7 +89,8 @@ function registerMetaCatalogFeed(fastify, { pool, comboStockSql, attachCatalogMo
       const [[settings]] = await pool.query('SELECT enable_public_catalog, require_login, show_prices, hide_out_of_stock, min_stock_to_show FROM catalog_settings LIMIT 1');
       // Reuse the public catalog's stock calculation and model/color image resolver.
       // Select only public commercial fields; costs, serial numbers and customer data never enter the feed.
-      const [rows] = await pool.query(`SELECT id, company_id, model_id, parent_id, name, description, brand, sku,
+      const [categories] = await pool.query('SELECT id, parent_id, name FROM categories');
+      const [rows] = await pool.query(`SELECT id, company_id, model_id, parent_id, category_id, name, description, brand, sku,
           price_retail, price_promo, promo_start, promo_end, track_inventory, specs, images, image_url, status,
           ${comboStockSql('products')} AS stock_quantity
         FROM products
@@ -86,7 +102,7 @@ function registerMetaCatalogFeed(fastify, { pool, comboStockSql, attachCatalogMo
           AND price_retail > 0
         ORDER BY id`);
       const products = await attachCatalogModelColorImages(rows, SITE);
-      const feed = buildMetaCatalogFeed(products, settings);
+      const feed = buildMetaCatalogFeed(products, settings, new Date(), categories);
       return reply.type('application/xml; charset=utf-8').header('X-Catalog-Product-Count', String(feed.count)).send(feed.body);
     } catch (error) {
       request.log.error(error, 'Falha ao gerar catálogo Meta');
