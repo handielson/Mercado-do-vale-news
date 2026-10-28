@@ -1,13 +1,13 @@
-# v1.2.693-catalogo-whatsapp-bot
+# v1.2.694-mercado-livre-erp-read-key
 
-Data: 28/10/2026. Status: ready. Branch: main. Tag: v1.2.693-catalogo-whatsapp-bot.
-Release: /var/www/mdv-site/releases/20261028-204000-v12693-catalogo-whatsapp-bot.
+Data: 28/10/2026. Status: ready. Branch: main. Tag: v1.2.694-mercado-livre-erp-read-key.
+Release: /var/www/mdv-site/releases/20261028-213500-mercado-livre-erp-read-key.
 
-O compartilhamento de categoria permite ao administrador informar o celular do cliente para envio pelo WhatsApp da loja. O catálogo usa o formato de preços à vista e no cartão e separa até três aparelhos por mensagem. A rota exige autenticação administrativa, registra cada mensagem no histórico do bot e não pausa a conversa. As opções manuais, cópia e PDF permanecem disponíveis.
+O ERP usa uma credencial técnica dedicada, validada em tempo constante, nas consultas GET de status, descoberta de anúncios, leitura de preço vinculado e atributos de categoria do Mercado Livre. O status retorna somente conexão, ID do seller e apelido. Atualização de configuração, vínculo, OAuth, publicação, pedidos, preços e estoque não são autorizados por essa chave; as rotas de escrita mantêm a autenticação e as travas existentes.
 
-No n8n, quando o modelo solicitado está indisponível, o fluxo oferece todas as configurações disponíveis em grupos de até três aparelhos e pergunta o modelo desejado em mensagem separada. Quando o modelo solicitado está disponível, mantém a resposta específica.
+Nenhuma sincronização, alteração de estoque ou anúncio é executada por essa integração de leitura. O segredo é configurado fora do Git, no ambiente do processo da API e na prévia local isolada do ERP.
 
-Validação: teste do agrupamento e do contrato administrativo, teste do candidato exato do n8n e gate comercial, sintaxe da API, build isolado do site e conferência pública após deploy.
+Validação: teste focado de autorização por rota e sanitização do status, suíte Mercado Livre, sintaxe da API, build do site, validação GET pública e status conectado da prévia local.
 
 ## Histórico anterior
 

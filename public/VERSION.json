@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.693-catalogo-whatsapp-bot",
+  "version": "v1.2.694-mercado-livre-erp-read-key",
   "date": "2026-10-28",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.693-catalogo-whatsapp-bot",
-  "release_vps": "/var/www/mdv-site/releases/20261028-204000-v12693-catalogo-whatsapp-bot",
+  "tag": "v1.2.694-mercado-livre-erp-read-key",
+  "release_vps": "/var/www/mdv-site/releases/20261028-213500-mercado-livre-erp-read-key",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Compartilha a categoria pelo WhatsApp da loja e corrige o fluxo de modelo indisponivel para enviar todos os aparelhos em grupos de ate tres.",
+  "summary": "Habilita uma chave técnica dedicada do ERP somente em consultas GET selecionadas do Mercado Livre.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,23 +14,18 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "components/catalog/ShareCatalogButton.tsx",
-    "services/n8nBotControlService.ts",
-    "utils/catalogMessageGenerator.ts",
-    "vps_server.js",
-    "scripts/n8n-unavailable-phone-full-catalog.cjs",
-    "scripts/deploy-n8n-unavailable-phone-full-catalog.cjs",
-    "tmp-tests/catalog-message-family.test.mjs",
-    "tmp-tests/catalog-whatsapp-admin-share-static.test.mjs",
-    "tmp-tests/n8n-unavailable-phone-full-catalog.test.cjs",
+    "services/mercadoLivreServer.cjs",
+    "package.json",
+    "tmp-tests/mercado-livre-erp-read-key.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-28-v1.2.693-catalogo-whatsapp-bot.md"
+    "docs/versoes/2026-10-28-v1.2.694-mercado-livre-erp-read-key.md"
   ],
   "validations": [
-    "Teste de divisao do catalogo em grupos de ate tres aparelhos e contrato de acesso administrativo.",
-    "Ensaio do workflow n8n ativo com teste focado e gate comercial no candidato exato.",
-    "Sintaxe da API, build do site e verificacao publica apos deploy."
+    "npm.cmd run test:mercado-livre (22 tests passed)",
+    "node --check services/mercadoLivreServer.cjs",
+    "npm.cmd run build",
+    "Public API read-only status validation after deployment."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

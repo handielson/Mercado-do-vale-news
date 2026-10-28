@@ -252,6 +252,19 @@ function registerAliases(fastify, method, url, options, handler) {
   fastify[method](`/api${url}`, options, handler);
 }
 
+function matchesMercadoLivreErpReadKey(received, expected = process.env.MERCADO_LIVRE_ERP_READ_KEY || '') {
+  if (typeof received !== 'string' || typeof expected !== 'string') return false;
+  const supplied = Buffer.from(received, 'utf8');
+  const configured = Buffer.from(expected, 'utf8');
+  if (configured.length < 32 || configured.length > 256 || supplied.length !== configured.length) return false;
+  return crypto.timingSafeEqual(supplied, configured);
+}
+
+async function requireMercadoLivreErpRead(request, reply, requireSyncKeyOrAdmin) {
+  if (matchesMercadoLivreErpReadKey(request.headers['x-erp-read-key'])) return;
+  return requireSyncKeyOrAdmin(request, reply, () => {});
+}
+
 async function ensureMercadoLivreTables(pool) {
   await pool.query(`CREATE TABLE IF NOT EXISTS mercado_livre_settings (
     id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
@@ -548,6 +561,8 @@ async function syncMercadoLivreStockFromBlingTargets(pool, stockTargets = []) {
 
 function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin = requireSyncKey, onSale }) {
   const protectedRoute = { preHandler: requireSyncKeyOrAdmin };
+  const erpReadRoute = { preHandler: (request, reply) =>
+    requireMercadoLivreErpRead(request, reply, requireSyncKeyOrAdmin) };
   const { createPublicationHandlers } = require('./mercadoLivrePublication.cjs');
   const publication = createPublicationHandlers({ pool, settings: () => loadSettings(pool), listingRows,
     request: async (resource, options) => {
@@ -564,7 +579,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   registerAliases(fastify, 'get', '/mercado-livre/preparation/snapshot', protectedRoute, publicationRoute(publication.snapshot));
   registerAliases(fastify, 'post', '/mercado-livre/preparation/snapshot-jobs', protectedRoute, publicationRoute(publication.startSnapshot));
   registerAliases(fastify, 'get', '/mercado-livre/preparation/snapshot-jobs/:jobId', protectedRoute, publicationRoute(publication.snapshotStatus));
-  registerAliases(fastify, 'get', '/mercado-livre/preparation/categories/:categoryId', protectedRoute, publicationRoute(publication.category));
+  registerAliases(fastify, 'get', '/mercado-livre/preparation/categories/:categoryId', erpReadRoute, publicationRoute(publication.category));
   registerAliases(fastify, 'post', '/mercado-livre/catalog/products/:productId/attributes', protectedRoute, publicationRoute(publication.saveCatalogAttributes));
   registerAliases(fastify, 'post', '/mercado-livre/catalog/category-discovery', protectedRoute, publicationRoute(publication.discoverCategory));
   registerAliases(fastify, 'get', '/mercado-livre/catalog/categories', protectedRoute, publicationRoute(publication.browseCategories));
@@ -572,7 +587,17 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   registerAliases(fastify, 'post', '/mercado-livre/preparation/pricing', protectedRoute, publicationRoute(publication.pricing));
   registerAliases(fastify, 'post', '/mercado-livre/preparation/publish', protectedRoute, publicationRoute(publication.publish));
 
-  const getSettings = async () => safeStatus(await loadSettings(pool));
+  const getSettings = async (request) => {
+    const settings = await loadSettings(pool);
+    if (matchesMercadoLivreErpReadKey(request.headers['x-erp-read-key'])) {
+      return {
+        connected: Boolean(settings.access_token && settings.refresh_token && settings.user_id),
+        userId: String(settings.user_id || ''),
+        nickname: String(settings.nickname || '').slice(0, 100),
+      };
+    }
+    return safeStatus(settings);
+  };
   const patchSettings = async (request, reply) => {
     const body = request.body || {};
     const updates = [];
@@ -588,7 +613,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
     await pool.query(`UPDATE mercado_livre_settings SET ${updates.join(', ')}, updated_at=CURRENT_TIMESTAMP WHERE id=?`, values);
     return safeStatus(await loadSettings(pool));
   };
-  registerAliases(fastify, 'get', '/mercado-livre/settings', protectedRoute, getSettings);
+  registerAliases(fastify, 'get', '/mercado-livre/settings', erpReadRoute, getSettings);
   registerAliases(fastify, 'patch', '/mercado-livre/settings', protectedRoute, patchSettings);
 
   const oauthAuth = async (_request, reply) => {
@@ -800,9 +825,9 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   const linkProduct = presentListingError(listingHandlers.link);
   const listingPrices = createListingPriceHandlers({ pool, settings: () => loadSettings(pool),
     request: async (path, options) => (await mlRequest(pool, path, options)).json() });
-  registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/price', protectedRoute, presentListingError(listingPrices.read));
+  registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/price', erpReadRoute, presentListingError(listingPrices.read));
   registerAliases(fastify, 'post', '/mercado-livre/products/items/:itemId/price', protectedRoute, presentListingError(listingPrices.update));
-  registerAliases(fastify, 'get', '/mercado-livre/products/discover', protectedRoute, presentListingError(listingHandlers.discover));
+  registerAliases(fastify, 'get', '/mercado-livre/products/discover', erpReadRoute, presentListingError(listingHandlers.discover));
   registerAliases(fastify, 'get', '/mercado-livre/products/candidates', protectedRoute, presentListingError(listingHandlers.candidates));
   registerAliases(fastify, 'post', '/mercado-livre/products/link', protectedRoute, linkProduct);
   registerAliases(fastify, 'get', '/mercado-livre/products/links', protectedRoute, async () => {
@@ -818,6 +843,8 @@ module.exports = {
   listingRows, suggestListingLinks, createListingHandlers,
   ensureMercadoLivreTables,
   registerMercadoLivreRoutes,
+  matchesMercadoLivreErpReadKey,
+  requireMercadoLivreErpRead,
   syncMercadoLivreStockFromBlingTargets,
   parseNotificationResource,
   classifyShipment,
