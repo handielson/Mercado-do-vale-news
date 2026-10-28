@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Share2, MessageCircle, Copy, Check, FileText, ListFilter, Layers3 } from 'lucide-react';
+import { Share2, MessageCircle, Copy, Check, FileText, ListFilter, Layers3, Send } from 'lucide-react';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
+import { n8nBotControlService } from '@/services/n8nBotControlService';
 import {
     generateFullCatalogMessage,
     generateCategoryMessage,
@@ -20,12 +22,17 @@ interface ShareCatalogButtonProps {
 type ShareScope = 'filtered' | 'complete';
 
 export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }: ShareCatalogButtonProps) {
+    const { customer } = useVpsAuth();
+    const isAdmin = customer?.customer_type === 'ADMIN';
     const [isOpen, setIsOpen] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [shareScope, setShareScope] = useState<ShareScope>('filtered');
     const [pendingParts, setPendingParts] = useState<string[]>([]);
     const [nextPartIndex, setNextPartIndex] = useState(0);
+    const [customerPhone, setCustomerPhone] = useState('');
+    const [showBotForm, setShowBotForm] = useState(false);
+    const [sendProgress, setSendProgress] = useState('');
 
     const hasFilteredScope = Boolean(
         filteredScope && (
@@ -79,6 +86,36 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
         } catch (error) {
             console.error('Error sharing catalog:', error);
             toast.error('Erro ao compartilhar catálogo');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSendByBot = async () => {
+        const digits = customerPhone.replace(/\D/g, '');
+        const local = digits.startsWith('55') ? digits.slice(2) : digits;
+        if (!/^\d{2}9?\d{8}$/.test(local)) {
+            toast.error('Informe o celular do cliente com DDD.');
+            return;
+        }
+        setIsLoading(true);
+        let sent = 0;
+        try {
+            const parts = splitCatalogMessageForWhatsApp(await generateSelectedMessage());
+            if (!parts.length || !parts[0].includes('CATÁLOGO')) throw new Error('Catálogo indisponível.');
+            for (const part of parts) {
+                setSendProgress(`Enviando ${sent + 1} de ${parts.length}...`);
+                await n8nBotControlService.sendCatalogSharePart({ phone: `55${local}`, message: part });
+                sent += 1;
+            }
+            toast.success(`${parts.length} mensagem${parts.length > 1 ? 's' : ''} enviada${parts.length > 1 ? 's' : ''} ao cliente.`);
+            setSendProgress('');
+            setShowBotForm(false);
+            setIsOpen(false);
+        } catch (error) {
+            console.error('Error sending catalog by bot:', error);
+            setSendProgress(sent ? `${sent} mensagem${sent > 1 ? 's' : ''} confirmada${sent > 1 ? 's' : ''}. Confira a conversa antes de tentar novamente.` : 'Envio não confirmado. Confira a conversa antes de tentar novamente.');
+            toast.error(sent ? `Envio interrompido após ${sent} mensagem${sent > 1 ? 's' : ''}.` : 'Não foi possível confirmar o envio.');
         } finally {
             setIsLoading(false);
         }
@@ -184,6 +221,22 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
                                 </div>
                             )}
                             {/* Option 1: WhatsApp */}
+                            {isAdmin && (
+                                <div className="rounded-2xl border border-green-100 bg-green-50/50 p-2">
+                                    <button type="button" onClick={() => setShowBotForm(!showBotForm)} className="flex w-full items-center gap-3 rounded-xl p-1 text-left text-sm font-semibold text-green-800">
+                                        <Send className="h-5 w-5" /> Enviar ao cliente pelo bot
+                                    </button>
+                                    {showBotForm && (
+                                        <div className="space-y-2 px-1 pb-1 pt-2">
+                                            <label htmlFor="catalog-customer-phone" className="block text-xs text-slate-600">Celular do cliente com DDD</label>
+                                            <input id="catalog-customer-phone" type="tel" inputMode="tel" autoComplete="tel" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="(87) 99999-9999" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900" />
+                                            <p className="text-xs text-slate-600">O bot envia até 3 aparelhos por mensagem, com os preços à vista e no cartão.</p>
+                                            {sendProgress && <p role="status" className="text-xs text-slate-700">{sendProgress}</p>}
+                                            <button type="button" onClick={handleSendByBot} disabled={isLoading} className="w-full rounded-lg bg-green-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{isLoading ? 'Enviando...' : 'Enviar catálogo'}</button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <button
                                 onClick={handleShareWhatsApp}
                                 disabled={isLoading}
@@ -193,7 +246,7 @@ export function ShareCatalogButton({ categoryId, filteredScope, filteredCount }:
                                     <MessageCircle className="w-5 h-5 text-green-600" />
                                 </div>
                                 <div className="flex-1">
-                                    <div className="text-[13px] font-semibold text-slate-800">{pendingParts.length > 1 ? `Via WhatsApp — parte ${nextPartIndex + 1}/${pendingParts.length}` : 'Via WhatsApp'}</div>
+                                    <div className="text-[13px] font-semibold text-slate-800">{pendingParts.length > 1 ? `Abrir WhatsApp — parte ${nextPartIndex + 1}/${pendingParts.length}` : 'Abrir WhatsApp manualmente'}</div>
                                     <div className="text-[11px] text-slate-400 font-medium">{actionScopeLabel}</div>
                                 </div>
                             </button>

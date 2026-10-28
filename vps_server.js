@@ -32692,6 +32692,39 @@ fastify.get('/n8n-bot/messages/is-current', { preHandler: requireSyncKey }, asyn
   };
 });
 
+fastify.post('/admin/catalog/whatsapp-share', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const rawPhone = String(req.body?.phone || '').replace(/\D/g, '');
+  const localPhone = rawPhone.startsWith('55') ? rawPhone.slice(2) : rawPhone;
+  if (!/^\d{2}9?\d{8}$/.test(localPhone)) {
+    return reply.code(400).send({ error: 'Informe um celular brasileiro com DDD.' });
+  }
+  const message = String(req.body?.message || '').trim();
+  const productCount = (message.match(/^\d+\. [^\n]+/gm) || []).length;
+  if (!message.startsWith('📱 *CATÁLOGO - ') && !message.startsWith('📚 *CATÁLOGO COMPLETO*')) {
+    return reply.code(400).send({ error: 'Formato de catálogo inválido.' });
+  }
+  if (!productCount || productCount > 3 || message.length > 6000) {
+    return reply.code(400).send({ error: 'Cada mensagem deve conter de 1 a 3 produtos e até 6.000 caracteres.' });
+  }
+  const identity = normalizeN8nBotClientIdentity({ phone: `55${localPhone}` });
+  const result = await sendN8nBotEvolutionTextMessage(identity, message);
+  if (!result.ok || result.body?.error === true) {
+    return reply.code(502).send({ error: 'Não foi possível confirmar o envio pelo WhatsApp.' });
+  }
+  const waMessageId = String(result.body?.key?.id || result.body?.messageId || '').slice(0, 160) || null;
+  await insertN8nBotMessage({
+    remoteJid: identity.remoteJid,
+    phone: identity.phone,
+    direction: 'outbound',
+    message,
+    messageType: 'text',
+    sourceNode: 'admin-catalog-share',
+    waMessageId,
+    payload: { manual: true, catalogShare: true },
+  });
+  return { ok: true, phone: identity.phone, waMessageId };
+});
+
 fastify.post('/n8n-bot/messages/manual', { preHandler: requireSyncKey }, async (req, reply) => {
   const body = req.body || {};
   const identity = normalizeN8nBotClientIdentity(body);

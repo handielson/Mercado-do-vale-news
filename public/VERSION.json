@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.692-payjoy-contexto-separado",
-  "date": "2026-10-27",
+  "version": "v1.2.693-catalogo-whatsapp-bot",
+  "date": "2026-10-28",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.692-payjoy-contexto-separado",
-  "release_vps": "/var/www/mdv-site/releases/20261027-210102-payjoy-contexto-separado",
+  "tag": "v1.2.693-catalogo-whatsapp-bot",
+  "release_vps": "/var/www/mdv-site/releases/20261028-204000-v12693-catalogo-whatsapp-bot",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Mantem o contexto de PayJoy escrito separado e envia o link oficial quando o cliente pergunta como iniciar a analise.",
+  "summary": "Compartilha a categoria pelo WhatsApp da loja e corrige o fluxo de modelo indisponivel para enviar todos os aparelhos em grupos de ate tres.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -14,16 +14,23 @@
   "pending_deployments": {},
   "site_source_base": "main",
   "changed_files": [
-    "scripts/deploy-n8n-payjoy-spaced-context.cjs",
-    "tmp-tests/n8n-payjoy-spaced-context-patch.cjs",
-    "tmp-tests/n8n-payjoy-spaced-context.test.cjs",
+    "components/catalog/ShareCatalogButton.tsx",
+    "services/n8nBotControlService.ts",
+    "utils/catalogMessageGenerator.ts",
+    "vps_server.js",
+    "scripts/n8n-unavailable-phone-full-catalog.cjs",
+    "scripts/deploy-n8n-unavailable-phone-full-catalog.cjs",
+    "tmp-tests/catalog-message-family.test.mjs",
+    "tmp-tests/catalog-whatsapp-admin-share-static.test.mjs",
+    "tmp-tests/n8n-unavailable-phone-full-catalog.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-27-v1.2.692-payjoy-contexto-separado.md"
+    "docs/versoes/2026-10-28-v1.2.693-catalogo-whatsapp-bot.md"
   ],
   "validations": [
-    "21 testes focados de PayJoy e 125 casos do gate comercial no candidato exato.",
-    "Dry-run do workflow ativo; build do site e validacao publica apos deploy."
+    "Teste de divisao do catalogo em grupos de ate tres aparelhos e contrato de acesso administrativo.",
+    "Ensaio do workflow n8n ativo com teste focado e gate comercial no candidato exato.",
+    "Sintaxe da API, build do site e verificacao publica apos deploy."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

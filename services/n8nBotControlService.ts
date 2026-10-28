@@ -187,4 +187,10 @@ export const n8nBotControlService = {
       pauseBot: params.pauseBot,
     });
   },
+
+  sendCatalogSharePart(params: { phone: string; message: string }) {
+    return vpsClient.post<{ ok: boolean; phone: string; waMessageId: string | null }>(
+      '/admin/catalog/whatsapp-share', params,
+    );
+  },
 };

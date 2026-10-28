@@ -103,8 +103,12 @@ const longProducts = Array.from({ length: 24 }, (_, index) => variant(`Longo ${i
 }));
 assert.deepEqual(
     splitCatalogMessageForWhatsApp(generateCatalogMessage(longProducts)).map(part => (part.match(/^\d+\. /gm) || []).length),
-    [8, 8, 8],
+    Array(8).fill(3),
 );
+const unevenParts = splitCatalogMessageForWhatsApp(generateCatalogMessage(longProducts.slice(0, 10)));
+assert.deepEqual(unevenParts.map(part => (part.match(/^\d+\. /gm) || []).length), [3, 3, 3, 1]);
+assert.ok(unevenParts[3].includes('*Gostou de algum desses?*'));
+assert.ok(unevenParts.slice(0, 3).every(part => !part.includes('*Gostou de algum desses?*')));
 
 for (const file of [
     'components/catalog/ShareCatalogButton.tsx',

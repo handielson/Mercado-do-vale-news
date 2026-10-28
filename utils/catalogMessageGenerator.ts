@@ -364,12 +364,13 @@ export function splitCatalogMessageForWhatsApp(message: string): string[] {
         }
     }
 
-    if (entries.length < 3) return [message];
+    if (entries.length <= 3) return [message];
     const title = header.split('\n')[0];
     const parts: string[] = [];
-    for (let partIndex = 0; partIndex < 3; partIndex += 1) {
-        const start = Math.floor(partIndex * entries.length / 3);
-        const end = Math.floor((partIndex + 1) * entries.length / 3);
+    const totalParts = Math.ceil(entries.length / 3);
+    for (let partIndex = 0; partIndex < totalParts; partIndex += 1) {
+        const start = partIndex * 3;
+        const end = start + 3;
         const blocks: string[] = [];
         let previousBrand = '';
         for (const entry of entries.slice(start, end)) {
@@ -382,7 +383,7 @@ export function splitCatalogMessageForWhatsApp(message: string): string[] {
             blocks.push(entry.text);
         }
         const partHeader = partIndex === 0 ? header : title;
-        parts.push(`${partHeader} — parte ${partIndex + 1}/3\n\n${separator}\n\n${blocks.join('\n\n')}${partIndex === 2 ? `\n\n${separator}\n\n${footer}` : ''}`);
+        parts.push(`${partHeader} — parte ${partIndex + 1}/${totalParts}\n\n${separator}\n\n${blocks.join('\n\n')}${partIndex === totalParts - 1 ? `\n\n${separator}\n\n${footer}` : ''}`);
     }
     return parts;
 }

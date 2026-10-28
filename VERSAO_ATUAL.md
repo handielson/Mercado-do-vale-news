@@ -1,3 +1,16 @@
+# v1.2.693-catalogo-whatsapp-bot
+
+Data: 28/10/2026. Status: ready. Branch: main. Tag: v1.2.693-catalogo-whatsapp-bot.
+Release: /var/www/mdv-site/releases/20261028-204000-v12693-catalogo-whatsapp-bot.
+
+O compartilhamento de categoria permite ao administrador informar o celular do cliente para envio pelo WhatsApp da loja. O catálogo usa o formato de preços à vista e no cartão e separa até três aparelhos por mensagem. A rota exige autenticação administrativa, registra cada mensagem no histórico do bot e não pausa a conversa. As opções manuais, cópia e PDF permanecem disponíveis.
+
+No n8n, quando o modelo solicitado está indisponível, o fluxo oferece todas as configurações disponíveis em grupos de até três aparelhos e pergunta o modelo desejado em mensagem separada. Quando o modelo solicitado está disponível, mantém a resposta específica.
+
+Validação: teste do agrupamento e do contrato administrativo, teste do candidato exato do n8n e gate comercial, sintaxe da API, build isolado do site e conferência pública após deploy.
+
+## Histórico anterior
+
 # v1.2.692-payjoy-contexto-separado
 
 Data: 27/10/2026. Status: ready. Branch: main. Tag: v1.2.692-payjoy-contexto-separado.
