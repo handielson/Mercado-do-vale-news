@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.695-mercado-livre-pedidos-erp",
+  "version": "v1.2.696-mercado-livre-estoque-leitura",
   "date": "2026-10-29",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.695-mercado-livre-pedidos-erp",
-  "release_vps": "/var/www/mdv-site/releases/20261029-003100-ml-orders-erp",
+  "tag": "v1.2.696-mercado-livre-estoque-leitura",
+  "release_vps": "/var/www/mdv-site/releases/20261029-035627-v1-2-696-mercado-livre-estoque-leitura",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Importa pedidos e detalhes financeiros do Mercado Livre para revisão no ERP, sem dados pessoais e sem escrita no marketplace.",
+  "summary": "Consulta os saldos atuais dos anúncios vinculados no Mercado Livre para reconciliar o ERP sem alterar estoque ou anúncios.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -15,21 +15,22 @@
   "site_source_base": "main",
   "changed_files": [
     "services/mercadoLivreServer.cjs",
+    "services/mercadoLivreListingStock.cjs",
     "deploy-vps-server-only.cjs",
-    "tmp-tests/mercado-livre-erp-read-key.test.cjs",
+    "tmp-tests/mercado-livre-listing-stock-read.test.cjs",
     "tmp-tests/mercado-livre-print-agent.test.cjs",
-    "docs/migracao-bling/evidencias.md",
+    "package.json",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
     "docs/versoes/2026-10-29-v1.2.695-mercado-livre-pedidos-erp.md"
   ],
   "validations": [
-    "npm.cmd run test:mercado-livre (24 tests passed)",
+    "npm.cmd run test:mercado-livre (29 tests passed)",
+    "node --check deploy-vps-server-only.cjs",
     "node --check services/mercadoLivreServer.cjs",
-    "node --check vps_server.js",
-    "node --check vps_server.cjs",
+    "node --check services/mercadoLivreListingStock.cjs",
     "npm.cmd run build",
-    "Public API status and read-only orders endpoint returned HTTP 200; validation requested one order without importing it into the ERP."
+    "Chave técnica desbloqueada localmente via DPAPI; publicação e leitura autenticada de estoque pendentes."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

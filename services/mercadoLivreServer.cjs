@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { createListingPriceHandlers } = require('./mercadoLivreListingPrice.cjs');
+const { createListingStockHandlers } = require('./mercadoLivreListingStock.cjs');
 
 const ML_API_ORIGIN = 'https://api.mercadolibre.com';
 const ML_AUTH_ORIGIN = 'https://auth.mercadolivre.com.br';
@@ -957,8 +958,11 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   const linkProduct = presentListingError(listingHandlers.link);
   const listingPrices = createListingPriceHandlers({ pool, settings: () => loadSettings(pool),
     request: async (path, options) => (await mlRequest(pool, path, options)).json() });
+  const listingStock = createListingStockHandlers({ pool, settings: () => loadSettings(pool),
+    request: async (path, options) => mlRequest(pool, path, options) });
   registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/price', erpReadRoute, presentListingError(listingPrices.read));
   registerAliases(fastify, 'post', '/mercado-livre/products/items/:itemId/price', protectedRoute, presentListingError(listingPrices.update));
+  registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/stock', erpReadRoute, presentListingError(listingStock.read));
   registerAliases(fastify, 'get', '/mercado-livre/products/discover', erpReadRoute, presentListingError(listingHandlers.discover));
   const listErpOrders = async (request, reply) => {
     const query = request.query || {};
