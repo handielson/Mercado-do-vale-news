@@ -4,7 +4,7 @@
   "status": "published",
   "branch": "main",
   "tag": "v1.2.701-mercado-livre-identidade-anuncios",
-  "release_vps": "/var/www/mdv-site/releases/20261029-172812-ml-identidade-anuncios",
+  "release_vps": "/var/www/mdv-site/releases/20261029-173330-ml-identidade-anuncios",
   "api_release": {
     "status": "published",
     "backup": "/var/www/mdv-api/backups/mercado-livre-1793282351390"
@@ -37,13 +37,7 @@
     "docs/versoes/2026-10-29-v1.2.701-mercado-livre-identidade-anuncios.md"
   ],
   "validations": [
-    "42 testes da suíte Mercado Livre e contrato estático aprovados.",
-    "Build de produção aprovado.",
-    "node --check nos módulos alterados e entrypoints: aprovado.",
-    "API reiniciada; /status HTTP 200 com mysql.ok=true.",
-    "Site HTTP 200; release ativa em ",
-    "/var/www/mdv-site/releases/20261029-172812-ml-identidade-anuncios",
-    "."
+    "42 testes da suíte Mercado Livre e contrato estático aprovados. Build de produção aprovado. node --check nos módulos alterados e entrypoints: aprovado. API reiniciada; /status HTTP 200 com mysql.ok=true. Site HTTP 200; release ativa em /var/www/mdv-site/releases/20261029-173330-ml-identidade-anuncios."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

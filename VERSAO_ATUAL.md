@@ -1,6 +1,6 @@
 # v1.2.701-mercado-livre-identidade-anuncios
 
-Data: 29/10/2026. Status: publicado. Branch: `main`. Tag: `v1.2.701-mercado-livre-identidade-anuncios`. Release VPS: `/var/www/mdv-site/releases/20261029-172812-ml-identidade-anuncios`.
+Data: 29/10/2026. Status: publicado. Branch: `main`. Tag: `v1.2.701-mercado-livre-identidade-anuncios`. Release VPS: `/var/www/mdv-site/releases/20261029-173330-ml-identidade-anuncios`.
 
 A revisão manual de anúncios passa a mostrar atributos públicos de identificação do anúncio e da variação para ajudar a conferir vínculos ambíguos. Nada é vinculado automaticamente e não há alteração de preço, estoque ou anúncio remoto. Testes Mercado Livre: 42 aprovados; build aprovado; API e site publicados e validados.
 
