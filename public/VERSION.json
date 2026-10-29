@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.700-payjoy-disponibilidade",
+  "version": "v1.2.701-mercado-livre-identidade-anuncios",
   "date": "2026-10-29",
-  "status": "published",
+  "status": "pending",
   "branch": "main",
-  "tag": "v1.2.700-payjoy-disponibilidade",
-  "release_vps": "/var/www/mdv-site/releases/20261029-141155-v12700-payjoy-disponibilidade",
+  "tag": "v1.2.701-mercado-livre-identidade-anuncios",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "published",
+    "status": "pending",
     "backup": "/var/www/mdv-api/backups/mercado-livre-1793282351390"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Responde à consulta sobre celulares pela PayJoy com análise e elegibilidade, sem encaminhamento indevido nem link antes do aceite.",
+  "summary": "Mostra atributos públicos de identificação dos anúncios Mercado Livre para revisão manual de vínculos no ERP.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -22,22 +22,24 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "site_manifest": "incluído na release do site"
+    "site_manifest": "pendente",
+    "mercado_livre_api": "pendente"
   },
   "site_source_base": "main",
   "changed_files": [
-    "scripts/n8n-sales-regression-gate.cjs",
-    "scripts/deploy-n8n-payjoy-availability.cjs",
-    "tmp-tests/n8n-payjoy-availability-patch.cjs",
-    "tmp-tests/n8n-payjoy-availability-patch.test.cjs",
+    "pages/admin/settings/components/MercadoLivreLinkReview.tsx",
+    "services/mercadoLivreServer.cjs",
+    "services/mercadoLivreService.ts",
+    "tmp-tests/mercado-livre-integration-static.test.mjs",
+    "tmp-tests/mercado-livre-product-links.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-29-v1.2.700-payjoy-disponibilidade.md"
+    "docs/versoes/2026-10-29-v1.2.701-mercado-livre-identidade-anuncios.md"
   ],
   "validations": [
-    "Nó Pagamento - Politica: pergunta de disponibilidade, aceite posterior e dúvida não coberta testados.",
-    "Gate comercial do candidato exato: 128 testes aprovados.",
-    "Build do site aprovado após regenerar o bloco Nginx derivado das rotas atuais; nenhum arquivo Nginx teve diff de conteúdo."
+    "npm.cmd run test:mercado-livre: 42 testes aprovados; contrato estático aprovado.",
+    "npm.cmd run build: aprovado.",
+    "node --check em services/mercadoLivreServer.cjs, vps_server.js e vps_server.cjs: aprovado."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

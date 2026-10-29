@@ -28,6 +28,8 @@ assert.ok(moduleSource.includes('refreshPromise'), 'refresh OAuth precisa de tra
 assert.ok(moduleSource.includes("code_challenge_method', 'S256'"), 'OAuth deve exigir PKCE S256');
 assert.ok(moduleSource.includes('code_verifier: oauthState.code_verifier'), 'callback deve comprovar o PKCE');
 assert.ok(!moduleSource.includes("accessToken: settings.accessToken"), 'status nao pode vazar token');
+assert.ok(moduleSource.includes("include_attributes=all"), 'descoberta deve consultar atributos completos do anuncio');
+assert.ok(moduleSource.includes('identityAttributes'), 'descoberta deve preservar atributos publicos sanitizados para revisao');
 
 for (const source of [vps, legacy]) {
   assert.ok(source.includes('registerMercadoLivreRoutes'), 'servidor sem rotas Mercado Livre');
@@ -47,3 +49,4 @@ const linkReview = fs.readFileSync('pages/admin/settings/components/MercadoLivre
 assert.ok(linkReview.includes('https://produto.mercadolivre.com.br/${row.itemId.replace(/^MLB/, \'MLB-\')}-_JM'), 'conferencia deve abrir o anuncio especifico pelo ID');
 assert.ok(linkReview.includes('Conferir no Mercado Livre'), 'link de conferencia ausente');
 assert.ok(linkReview.includes('target="_blank"') && linkReview.includes('rel="noopener noreferrer"'), 'anuncio deve abrir em nova aba com isolamento');
+assert.ok(linkReview.includes('Atributos de identificação'), 'revisao de vinculos deve mostrar atributos publicos do anuncio');

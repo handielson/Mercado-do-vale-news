@@ -1,7 +1,9 @@
 import { vpsClient } from './vpsClient';
 
 export type MercadoLivreCandidate = { id: string; sku: string; name: string };
+export type MercadoLivreIdentityAttribute = { id: string; name: string; value: string; scope: 'item' | 'variation' };
 export type MercadoLivreListing = { itemId: string; variationId: string; title: string; status: string; sku: string; variation: string;
+  identityAttributes?: MercadoLivreIdentityAttribute[];
   existing: Array<{ productId: string; sku: string | null }>; candidates: MercadoLivreCandidate[];
   match: 'linked' | 'missing_sku' | 'unique' | 'ambiguous' | 'not_found' };
 export type MercadoLivreDiscovery = { items: MercadoLivreListing[]; errors: Array<{ itemId: string; error: string }>; nextCursor: string | null; total: number; sellerId: string };

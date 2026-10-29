@@ -11,6 +11,25 @@ test('cada variação usa seu próprio SKU; nunca herda SKU do pai', () => {
   assert.deepEqual(listingRows(item).map(row => [row.variationId, row.sku]), [['1','AZUL'],['2','VERDE'],['3','']]);
   assert.equal(listingRows({ ...item, variations: [] })[0].sku, 'PAI');
 });
+test('descoberta preserva atributos públicos de identificação do anúncio e da variação', () => {
+  const rows = listingRows({ ...item,
+    attributes: [{ id:'BRAND', name:'Marca', value_name:'Onistek' },
+      { id:'GTIN', name:'Código universal', value_name:'7891234567895' },
+      { id:'MODEL', name:'Modelo', value_name:'MCD123', access_token:'segredo' }],
+    variations: [{ id:1,
+      attributes:[{ id:'GTIN', name:'Código universal', value_name:'7891234567895' }],
+      attribute_combinations:[{ id:'COLOR', name:'Cor', value_name:'Azul' }] },
+    ],
+  });
+  assert.deepEqual(rows[0].identityAttributes, [
+    { id:'BRAND', name:'Marca', value:'Onistek', scope:'item' },
+    { id:'GTIN', name:'Código universal', value:'7891234567895', scope:'item' },
+    { id:'MODEL', name:'Modelo', value:'MCD123', scope:'item' },
+    { id:'GTIN', name:'Código universal', value:'7891234567895', scope:'variation' },
+    { id:'COLOR', name:'Cor', value:'Azul', scope:'variation' },
+  ]);
+  assert.equal(JSON.stringify(rows).includes('segredo'), false);
+});
 test('SKU único, duplicado, ausente e vínculo existente são distintos', () => {
   const rows = listingRows(item);
   const products = [{ id, sku:'AZUL', name:'Azul' }, { id, sku:'VERDE' }, { id:other, sku:'VERDE' }, { id:'parent', sku:'AZUL', is_parent:1 }];

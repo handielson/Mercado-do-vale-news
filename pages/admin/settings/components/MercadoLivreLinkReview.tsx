@@ -73,6 +73,7 @@ export default function MercadoLivreLinkReview({ connected }: { connected: boole
     {errors.length > 0 && <div role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{errors.map((error, index) => <p key={index}>{error}</p>)}</div>}
     <div className="space-y-3">{rows.map(row => {
       const key = keyOf(row), product = choices[key];
+      const identityAttributes = row.identityAttributes || [];
       return <article key={key} className="space-y-2 rounded-lg border p-4 text-sm">
         <h3 className="font-semibold">{row.title} · {row.itemId}</h3>
         {/^(MLB)(\d+)$/.test(row.itemId) && <a
@@ -84,6 +85,14 @@ export default function MercadoLivreLinkReview({ connected }: { connected: boole
         >Conferir no Mercado Livre ↗</a>}
         <p>{row.variation || 'Sem variação'}{row.variationId && ` · ID ${row.variationId}`} · Status no Mercado Livre: {row.status}</p>
         <p>SKU no anúncio: {row.sku || 'não informado'} · <strong>{labels[row.match]}</strong></p>
+        {identityAttributes.length > 0 && <details className="rounded border bg-slate-50 px-3 py-2">
+          <summary className="cursor-pointer font-medium">Atributos de identificação ({identityAttributes.length})</summary>
+          <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+            {identityAttributes.map((attribute, index) => <li key={`${attribute.scope}:${attribute.id}:${index}`}>
+              <strong>{attribute.scope === 'variation' ? 'Variação' : 'Anúncio'} · {attribute.name || attribute.id}:</strong> {attribute.value}
+            </li>)}
+          </ul>
+        </details>}
         {row.existing.length ? <p className="text-green-800">Vínculo preservado: {row.existing.map(link => link.sku || link.productId).join(', ')}</p> : <>
           {row.candidates.length > 1 && <select aria-label={`Escolher correspondência ${row.itemId} ${row.variationId}`} className="w-full rounded border p-2" disabled={busy} value={product?.id || ''} onChange={event => { const item = row.candidates.find(candidate => candidate.id === event.target.value); if (item) setChoices(current => ({ ...current, [key]: item })); setChecked(current => ({ ...current, [key]: false })); }}><option value="" disabled>Selecione o produto correto</option>{row.candidates.map(item => <option key={item.id} value={item.id}>{item.sku} · {item.name}</option>)}</select>}
           <p>Produto local escolhido: <strong>{product ? `${product.sku} · ${product.name}` : 'nenhum'}</strong></p>

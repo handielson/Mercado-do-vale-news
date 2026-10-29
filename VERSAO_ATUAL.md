@@ -1,3 +1,12 @@
+# v1.2.701-mercado-livre-identidade-anuncios
+
+Data: 29/10/2026. Status: pendente de publicação. Branch: `main`. Tag planejada: `v1.2.701-mercado-livre-identidade-anuncios`. Release VPS: pendente.
+
+A revisão manual de anúncios passa a mostrar atributos públicos de identificação do anúncio e da variação para ajudar a conferir vínculos ambíguos. Nada é vinculado automaticamente e não há alteração de preço, estoque ou anúncio remoto. Testes Mercado Livre: 42 aprovados; build e publicação pendentes.
+
+Registro: `docs/versoes/2026-10-29-v1.2.701-mercado-livre-identidade-anuncios.md`.
+
+---
 # v1.2.700-payjoy-disponibilidade
 
 Data: 29/10/2026. Status: publicado. Branch: `main`. Tag: `v1.2.700-payjoy-disponibilidade`. Release planejada do site: `/var/www/mdv-site/releases/20261029-141155-v12700-payjoy-disponibilidade`.

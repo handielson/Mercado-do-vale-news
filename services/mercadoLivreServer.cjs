@@ -9,12 +9,31 @@ let refreshPromise = null;
 
 function listingRows(item) {
   const skuOf = source => String(source?.attributes?.find(a => a.id === 'SELLER_SKU')?.value_name || source?.seller_sku || source?.seller_custom_field || '').trim();
+  const publicAttributes = (source, scope) => (Array.isArray(source) ? source : [])
+    .slice(0, 80)
+    .flatMap(attribute => {
+      if (!attribute || typeof attribute !== 'object' || Array.isArray(attribute)) return [];
+      const field = (value, limit) => (typeof value === 'string' || typeof value === 'number')
+        ? String(value).trim().slice(0, limit) : '';
+      const id = field(attribute.id, 80);
+      const name = field(attribute.name, 100) || id;
+      const value = field(attribute.value_name, 160) || field(attribute.value_id, 160);
+      return id && value ? [{ id, name, value, scope }] : [];
+    });
   const variants = Array.isArray(item.variations) && item.variations.length ? item.variations : [null];
-  return variants.map(variant => ({
-    itemId: String(item.id), variationId: variant ? String(variant.id) : '', title: String(item.title || ''),
-    status: String(item.status || ''), sku: skuOf(variant || item),
-    variation: (variant?.attribute_combinations || []).map(a => `${a.name}: ${a.value_name}`).join(' · '),
-  }));
+  const itemAttributes = publicAttributes(item.attributes, 'item');
+  return variants.map(variant => {
+    const variationAttributes = [
+      ...publicAttributes(variant?.attributes, 'variation'),
+      ...publicAttributes(variant?.attribute_combinations, 'variation'),
+    ];
+    return {
+      itemId: String(item.id), variationId: variant ? String(variant.id) : '', title: String(item.title || ''),
+      status: String(item.status || ''), sku: skuOf(variant || item),
+      variation: (variant?.attribute_combinations || []).map(a => `${a.name}: ${a.value_name}`).join(' · '),
+      identityAttributes: [...itemAttributes, ...variationAttributes].slice(0, 160),
+    };
+  });
 }
 
 function suggestListingLinks(rows, products, links) {
