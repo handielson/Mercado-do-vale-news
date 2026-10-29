@@ -438,12 +438,21 @@ async function loadMercadoLivreErpProducts(pool, options = {}) {
   const selected = rows.slice(0, limit);
   const items = selected.map(row => {
     const id = String(row?.id || '').toLowerCase();
-    const retail = Number(row?.price_retail);
-    const cost = Number(row?.price_cost);
-    if (!ERP_CATALOG_UUID.test(id) || !Number.isSafeInteger(retail) || retail < 0 ||
-        !Number.isSafeInteger(cost) || cost < 0) {
+    if (!ERP_CATALOG_UUID.test(id)) {
       throw Object.assign(new Error('Produto inesperado no catálogo Mercado do Vale.'), { statusCode: 502 });
     }
+    const normalizeCents = (value, field) => {
+      if (value == null || (typeof value === 'string' && !value.trim())) {
+        return { value: null, issue: `${field}_missing` };
+      }
+      const cents = Number(value);
+      if (!Number.isFinite(cents) || cents < 0) return { value: null, issue: `${field}_invalid` };
+      if (!Number.isInteger(cents)) return { value: null, issue: `${field}_fractional_cent` };
+      if (!Number.isSafeInteger(cents)) return { value: null, issue: `${field}_unsafe` };
+      return { value: cents, issue: '' };
+    };
+    const retail = normalizeCents(row.price_retail, 'price_retail');
+    const cost = normalizeCents(row.price_cost, 'price_cost');
     const weight = row.weight_kg == null || row.weight_kg === '' ? null : Number(row.weight_kg);
     const dimensions = parseErpCatalogJson(row.dimensions, {});
     return {
@@ -453,8 +462,9 @@ async function loadMercadoLivreErpProducts(pool, options = {}) {
       description: String(row.description || '').slice(0, 4000),
       brand: String(row.brand || '').trim().slice(0, 120),
       ean: String(row.ean || '').trim().slice(0, 120),
-      price_retail: retail,
-      price_cost: cost,
+      price_retail: retail.value,
+      price_cost: cost.value,
+      price_issues: [retail.issue, cost.issue].filter(Boolean),
       weight_kg: Number.isFinite(weight) && weight >= 0 && weight <= 100_000 ? weight : null,
       dimensions: dimensions && typeof dimensions === 'object' && !Array.isArray(dimensions) ? dimensions : {},
       images: normalizeErpCatalogImageUrls(row.images),

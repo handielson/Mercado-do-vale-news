@@ -101,6 +101,22 @@ test('catálogo ERP pagina por UUID e retorna apenas campos de produto, nunca es
   assert.equal(queries.length,2);
 });
 
+test('catálogo preserva página com preço fracionário em centavos e marca a revisão',async()=>{
+  const rows=[
+    {id:'55555555-5555-4555-8555-555555555555',sku:'SKU-DECIMAL',name:'Produto decimal',
+      price_retail:'1.50',price_cost:'0.00',weight_kg:null,dimensions:null,images:null,status:'active'},
+    {id:'66666666-6666-4666-8666-666666666666',sku:'SKU-NEXT',name:'Próximo produto',
+      price_retail:'2500.00',price_cost:'1200.00',weight_kg:null,dimensions:null,images:null,status:'active'},
+  ];
+  const page=await loadMercadoLivreErpProducts({query:async()=>[rows]},{limit:1});
+  assert.equal(page.items.length,1);
+  assert.equal(page.items[0].price_retail,null);
+  assert.equal(page.items[0].price_cost,0);
+  assert.deepEqual(page.items[0].price_issues,['price_retail_fractional_cent']);
+  assert.equal(page.nextCursor,rows[0].id);
+  assert.equal(Object.hasOwn(page.items[0],'stock_quantity'),false);
+});
+
 test('catálogo ERP exige chave dedicada de leitura nos dois aliases GET',async()=>{
   const app=require('fastify')();
   const previous=process.env.MERCADO_LIVRE_ERP_READ_KEY;

@@ -1,3 +1,14 @@
+# v1.2.699-erp-catalogo-preco-review
+
+Data: 29/10/2026. Status: preparado para publicação seletiva da API. Branch: `main`. Tag: `v1.2.699-erp-catalogo-preco-review`.
+Site: sem alteração; manifesto do site pendente até uma publicação de frontend. API: a publicar.
+
+O catálogo de leitura passa a manter a paginação quando um preço armazenado com fração de centavo não pode ser representado com segurança em centavos inteiros. O endpoint retorna o produto, deixa somente o preço inválido como `null` e informa um código de revisão. A ponte do ERP mostra o valor como pendente, impede sua inclusão no CSV de migração e continua a leitura das páginas seguintes. A rota segue sem campos ou alterações de estoque.
+
+Validação local: suíte Mercado Livre da API (41 testes), ponte do ERP (47 testes), verificações de sintaxe JavaScript/Python aprovadas. O prebuild do site falha em uma verificação preexistente de sincronização da configuração Nginx; esta mudança não altera interface pública e não depende de publicar o site.
+
+---
+
 # v1.2.698-erp-catalogo-readonly
 
 Data: 29/10/2026. Status: publicado. Branch: `codex/erp-readonly-catalog` → `main`. Commit: `69fee468`. Tag: `v1.2.698-erp-catalogo-readonly`.

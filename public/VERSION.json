@@ -1,33 +1,33 @@
 {
-  "version": "v1.2.698-erp-catalogo-readonly",
+  "version": "v1.2.699-erp-catalogo-preco-review",
   "date": "2026-10-29",
   "status": "ready",
-  "branch": "codex/erp-readonly-catalog",
-  "tag": "v1.2.698-erp-catalogo-readonly",
-  "release_vps": "/var/www/mdv-site/releases/20261029-130208-erp-catalogo-readonly-final",
+  "branch": "main",
+  "tag": "v1.2.699-erp-catalogo-preco-review",
+  "release_vps": "pendente (alteração exclusiva da API; site não alterado)",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Expõe catálogo de produtos do Mercado do Vale em rota autenticada somente de leitura para o ERP.",
+  "summary": "Continua a paginação do catálogo quando um preço de origem tem fração de centavo, mantendo o preço pendente de revisão.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
   },
-  "pending_deployments": {},
+  "pending_deployments": {
+    "site_manifest": "pendente; alteração limitada à API"
+  },
   "site_source_base": "main",
   "changed_files": [
     "services/mercadoLivreServer.cjs",
     "tmp-tests/mercado-livre-product-links.test.cjs",
-    "docs/migracao-bling/evidencias.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
     "docs/versoes/2026-10-29-v1.2.698-erp-catalogo-readonly.md"
   ],
   "validations": [
-    "npm.cmd run test:mercado-livre: 40 testes passaram, incluindo paginação do catálogo, projeção sem estoque, autenticação e rejeição de POST.",
-    "node --check services/mercadoLivreServer.cjs: aprovado.",
-    "API publicada; mdv-api online, /status com MySQL saudável, GET anônimo retorna 401 e GET autenticado retorna produtos paginados sem campos de estoque.",
-    "Leitura autenticada real: 10 produtos em duas páginas, sem IDs repetidos; todos tinham fotos e peso, imagens somente HTTPS.",
-    "46 testes do ERP e 5 testes de navegador do catálogo passaram localmente.",
-    "Nenhuma escrita ou alteração de estoque no Mercado do Vale."
+    "npm.cmd run test:mercado-livre: 41 testes passaram, incluindo preço fracionário, paginação, autenticação e projeção sem estoque.",
+    "node --check services/mercadoLivreServer.cjs, vps_server.js e vps_server.cjs: aprovados.",
+    "A ponte do ERP passou 47 testes; py_compile de mercado_livre_bridge.py e server.py aprovado.",
+    "Build do site não executado até o fim: prebuild identificou configuração Nginx gerada fora de sincronia, sem relação com esta alteração API-only.",
+    "A consulta direta confirmou que o próximo produto tem preço de venda com fração de centavo; custo e identidade passaram."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
