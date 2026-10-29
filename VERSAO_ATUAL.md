@@ -1,11 +1,11 @@
 # v1.2.699-erp-catalogo-preco-review
 
-Data: 29/10/2026. Status: preparado para publicação seletiva da API. Branch: `main`. Tag: `v1.2.699-erp-catalogo-preco-review`.
-Site: sem alteração; manifesto do site pendente até uma publicação de frontend. API: a publicar.
+Data: 29/10/2026. Status: API publicada. Branch: `main`. Commit da API: `20f26ef9`. Tag de recuperação: `v1.2.699-erp-catalogo-preco-review`.
+Backup da API: `/var/www/mdv-api/backups/mercado-livre-1793282351390`. Site: sem alteração; manifesto público pendente até um build válido.
 
 O catálogo de leitura passa a manter a paginação quando um preço armazenado com fração de centavo não pode ser representado com segurança em centavos inteiros. O endpoint retorna o produto, deixa somente o preço inválido como `null` e informa um código de revisão. A ponte do ERP mostra o valor como pendente, impede sua inclusão no CSV de migração e continua a leitura das páginas seguintes. A rota segue sem campos ou alterações de estoque.
 
-Validação local: suíte Mercado Livre da API (41 testes), ponte do ERP (47 testes), verificações de sintaxe JavaScript/Python aprovadas. O prebuild do site falha em uma verificação preexistente de sincronização da configuração Nginx; esta mudança não altera interface pública e não depende de publicar o site.
+Validação: 41 testes da API e 47 da ponte do ERP passaram. Em produção, API online, `/status` 200 com MySQL saudável, consulta sem chave 401 e consulta autenticada no cursor problemático 200. A varredura completa leu 2.797 produtos em 56 páginas, sem IDs repetidos. Há 12 grupos de SKU ativo duplicado, 614 custos ausentes, 16 preços de venda ausentes e 2 com fração de centavo. A API não expõe estoque. O prebuild do site parou na verificação de sincronização da configuração Nginx; por isso o site permaneceu na versão anterior.
 
 ---
 
