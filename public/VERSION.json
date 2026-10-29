@@ -1,12 +1,12 @@
 {
   "version": "v1.2.701-mercado-livre-identidade-anuncios",
   "date": "2026-10-29",
-  "status": "pending",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.701-mercado-livre-identidade-anuncios",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261029-172812-ml-identidade-anuncios",
   "api_release": {
-    "status": "pending",
+    "status": "published",
     "backup": "/var/www/mdv-api/backups/mercado-livre-1793282351390"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
@@ -22,8 +22,8 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "site_manifest": "pendente",
-    "mercado_livre_api": "pendente"
+    "mercado_livre_api": "publicada; /status 200, mysql.ok=true",
+    "site_manifest": "incluído na release do site"
   },
   "site_source_base": "main",
   "changed_files": [
@@ -37,9 +37,13 @@
     "docs/versoes/2026-10-29-v1.2.701-mercado-livre-identidade-anuncios.md"
   ],
   "validations": [
-    "npm.cmd run test:mercado-livre: 42 testes aprovados; contrato estático aprovado.",
-    "npm.cmd run build: aprovado.",
-    "node --check em services/mercadoLivreServer.cjs, vps_server.js e vps_server.cjs: aprovado."
+    "42 testes da suíte Mercado Livre e contrato estático aprovados.",
+    "Build de produção aprovado.",
+    "node --check nos módulos alterados e entrypoints: aprovado.",
+    "API reiniciada; /status HTTP 200 com mysql.ok=true.",
+    "Site HTTP 200; release ativa em ",
+    "/var/www/mdv-site/releases/20261029-172812-ml-identidade-anuncios",
+    "."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
