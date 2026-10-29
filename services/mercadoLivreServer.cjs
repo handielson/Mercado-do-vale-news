@@ -398,6 +398,79 @@ function validErpOrderDate(value, endOfDay = false) {
     ? `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}-03:00` : null;
 }
 
+const ERP_CATALOG_UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
+function parseErpCatalogJson(value, fallback) {
+  if (typeof value !== 'string') return value ?? fallback;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function normalizeErpCatalogImageUrls(value) {
+  const images = parseErpCatalogJson(value, []);
+  if (!Array.isArray(images)) return [];
+  return [...new Set(images.filter(image => typeof image === 'string' && image.length <= 2048)
+    .map(image => image.trim()).filter(image => {
+      try {
+        const url = new URL(image);
+        return url.protocol === 'https:' && !url.username && !url.password;
+      } catch { return false; }
+    }))].slice(0, 20);
+}
+
+async function loadMercadoLivreErpProducts(pool, options = {}) {
+  const after = options.after == null ? '' : options.after;
+  const limit = options.limit == null ? 50 : Number(options.limit);
+  if (typeof after !== 'string' || (after && !ERP_CATALOG_UUID.test(after)) ||
+      !Number.isInteger(limit) || limit < 1 || limit > 50) {
+    throw Object.assign(new Error('Paginação de produtos inválida.'), { statusCode: 400 });
+  }
+  const normalizedAfter = after.toLowerCase();
+  const cursorClause = normalizedAfter ? ' WHERE BINARY id > BINARY ?' : '';
+  const args = normalizedAfter ? [normalizedAfter, limit + 1] : [limit + 1];
+  // Deliberately omit stock_quantity and every stock location from the projection.
+  const [rows] = await pool.query(`SELECT id,sku,name,description,brand,ean,price_retail,price_cost,
+    weight_kg,dimensions,images,status,parent_id,is_parent,updated_at
+    FROM products${cursorClause} ORDER BY BINARY id ASC LIMIT ?`, args);
+  if (!Array.isArray(rows) || rows.length > limit + 1) {
+    throw Object.assign(new Error('Resposta inesperada do catálogo de produtos.'), { statusCode: 502 });
+  }
+  const hasMore = rows.length > limit;
+  const selected = rows.slice(0, limit);
+  const items = selected.map(row => {
+    const id = String(row?.id || '').toLowerCase();
+    const retail = Number(row?.price_retail);
+    const cost = Number(row?.price_cost);
+    if (!ERP_CATALOG_UUID.test(id) || !Number.isSafeInteger(retail) || retail < 0 ||
+        !Number.isSafeInteger(cost) || cost < 0) {
+      throw Object.assign(new Error('Produto inesperado no catálogo Mercado do Vale.'), { statusCode: 502 });
+    }
+    const weight = row.weight_kg == null || row.weight_kg === '' ? null : Number(row.weight_kg);
+    const dimensions = parseErpCatalogJson(row.dimensions, {});
+    return {
+      id,
+      sku: String(row.sku || '').trim().slice(0, 120),
+      name: String(row.name || '').trim().slice(0, 500),
+      description: String(row.description || '').slice(0, 4000),
+      brand: String(row.brand || '').trim().slice(0, 120),
+      ean: String(row.ean || '').trim().slice(0, 120),
+      price_retail: retail,
+      price_cost: cost,
+      weight_kg: Number.isFinite(weight) && weight >= 0 && weight <= 100_000 ? weight : null,
+      dimensions: dimensions && typeof dimensions === 'object' && !Array.isArray(dimensions) ? dimensions : {},
+      images: normalizeErpCatalogImageUrls(row.images),
+      status: String(row.status || '').slice(0, 50),
+      parent_id: row.parent_id == null ? '' : String(row.parent_id).slice(0, 100),
+      is_parent: row.is_parent === true || Number(row.is_parent) === 1,
+      updated_at: row.updated_at == null ? '' : String(row.updated_at).slice(0, 50),
+    };
+  });
+  const nextCursor = hasMore && selected.length ? selected[selected.length - 1].id : null;
+  if (nextCursor && nextCursor <= normalizedAfter) {
+    throw Object.assign(new Error('Cursor inesperado no catálogo de produtos.'), { statusCode: 502 });
+  }
+  return { items, after: normalizedAfter, nextCursor };
+}
+
 async function ensureMercadoLivreTables(pool) {
   await pool.query(`CREATE TABLE IF NOT EXISTS mercado_livre_settings (
     id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
@@ -964,6 +1037,21 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   registerAliases(fastify, 'post', '/mercado-livre/products/items/:itemId/price', protectedRoute, presentListingError(listingPrices.update));
   registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/stock', erpReadRoute, presentListingError(listingStock.read));
   registerAliases(fastify, 'get', '/mercado-livre/products/discover', erpReadRoute, presentListingError(listingHandlers.discover));
+  const listErpProducts = async (request, reply) => {
+    const query = request.query || {};
+    const limitRaw = String(query.limit ?? '50');
+    if (!/^\d{1,2}$/.test(limitRaw)) {
+      return reply.code(400).send({ error: 'Paginação de produtos inválida.' });
+    }
+    reply.header('Cache-Control', 'no-store');
+    try {
+      return await loadMercadoLivreErpProducts(pool, { after: query.after ?? '', limit: Number(limitRaw) });
+    } catch (error) {
+      return reply.code(error.statusCode || 502).send({ error: error.statusCode
+        ? error.message : 'Consulta do catálogo de produtos indisponível.' });
+    }
+  };
+  registerAliases(fastify, 'get', '/mercado-livre/erp/products', erpReadRoute, listErpProducts);
   const listErpOrders = async (request, reply) => {
     const query = request.query || {};
     const limitRaw = String(query.limit ?? '50');
@@ -1019,6 +1107,7 @@ module.exports = {
   createPkcePair,
   mercadoLivreOrderToErpReview,
   loadMercadoLivreOrdersForErp,
+  loadMercadoLivreErpProducts,
   validErpOrderDate,
   selectDcePdfDocument,
   isClosedShipment,

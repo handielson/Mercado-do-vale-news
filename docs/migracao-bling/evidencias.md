@@ -521,3 +521,13 @@ Item: F11a, ainda aberto. O teste de integração fiscal passou a instalar a mig
 **Validação:** `npm.cmd run test:mercado-livre` aprovou 24 testes e contrato estático; os testes locais do ERP para ponte e HTTP aprovaram 87 casos, junto com `node --check web/data.js`, `py_compile` e `git diff --check`. A documentação oficial de gerenciamento de vendas lista filtros por data de criação e última atualização: https://developers.mercadolivre.com.br/pt_br/imovel-consulta-de-usuarios/gerenciamento-de-vendas.
 
 **Estado externo:** API publicada em 29/10/2026; o endpoint de status e a consulta autenticada de pedidos responderam HTTP 200. A validação da consulta pediu somente um pedido e não o inseriu no ERP. Site publicado em `/var/www/mdv-site/releases/20261029-003100-ml-orders-erp`; homepage e `/VERSION.json` responderam HTTP 200 com a versão esperada. Nenhuma escrita foi feita no Mercado Livre ou no Mercado do Vale.
+
+## E104 — Catálogo de produtos read-only para o ERP (29/10/2026, não publicado)
+
+**Contrato local:** a branch de trabalho `codex/erp-readonly-catalog`, baseada no `origin/main` atualizado, adiciona GET `/api/mercado-livre/erp/products` com cursor UUID e limite máximo de 50. A rota exige `X-ERP-Read-Key` e retorna somente identidade, SKU, descrição, GTIN, marca, preço de catálogo, peso, dimensões, status, vínculo de variação, datas e URLs HTTPS de imagens. A SQL não seleciona `stock_quantity` nem dados de localização de estoque; a resposta não contém saldo.
+
+**Proteções:** URLs de imagem com esquema diferente de HTTPS, credenciais embutidas ou formato inválido são descartadas. Não existe POST/PATCH/PUT/DELETE neste contrato. A nova rota não consulta nem chama serviços de estoque, não muda preço e não cria vínculo ou produto.
+
+**Validação local:** `npm.cmd run test:mercado-livre` passou com 40 testes; inclui cursor, projeção sem estoque, filtragem de imagens, autenticação nos aliases e rejeição de POST. `node --check services/mercadoLivreServer.cjs` passou.
+
+**Estado:** release `v1.2.698-erp-catalogo-readonly` preparada na branch local isolada, com versão e nota de release; a API continua sem publicação, confirmada por GET público HTTP 404. O reinício da API e a validação autenticada do endpoint publicado continuam pendentes.

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { listingRows, suggestListingLinks, createListingHandlers, registerMercadoLivreRoutes } = require('../services/mercadoLivreServer.cjs');
+const { listingRows, suggestListingLinks, createListingHandlers, loadMercadoLivreErpProducts, registerMercadoLivreRoutes } = require('../services/mercadoLivreServer.cjs');
 const { createListingPriceHandlers } = require('../services/mercadoLivreListingPrice.cjs');
 const id = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
@@ -74,6 +74,54 @@ test('rotas de descoberta, busca manual e confirmação exigem autenticação in
     assert.equal((await app.inject({method,url:`${prefix}/mercado-livre/products/${path}`})).statusCode,401);
   }
   await app.close();
+});
+
+test('catálogo ERP pagina por UUID e retorna apenas campos de produto, nunca estoque',async()=>{
+  const queries=[];
+  const rows=[
+    {id:'33333333-3333-4333-8333-333333333333',sku:'SKU-1',name:'Produto 1',description:'Descrição',brand:'Marca',ean:'7891234567890',price_retail:2590,price_cost:1200,weight_kg:'0.125',dimensions:'{"width_cm":5,"height_cm":4,"depth_cm":3}',images:'["https://api.xiaomipetrolina.com.br/images/p1.webp","http://example.test/a.jpg","data:image/png;base64,AAAA"]',status:'active',parent_id:null,is_parent:0,updated_at:'2026-10-29 10:00:00'},
+    {id:'44444444-4444-4444-8444-444444444444',sku:'SKU-2',name:'Produto 2',description:'',brand:'',ean:'',price_retail:100,price_cost:0,weight_kg:null,dimensions:null,images:null,status:'inactive',parent_id:null,is_parent:1,updated_at:null},
+  ];
+  const pool={query:async(sql,args)=>{queries.push({sql,args});return [queries.length===1?rows:[rows[1]]];}};
+  const first=await loadMercadoLivreErpProducts(pool,{limit:1});
+  assert.equal(first.items.length,1);
+  assert.equal(first.items[0].sku,'SKU-1');
+  assert.equal(first.items[0].weight_kg,0.125);
+  assert.deepEqual(first.items[0].images,['https://api.xiaomipetrolina.com.br/images/p1.webp']);
+  assert.equal(first.nextCursor,rows[0].id);
+  assert.equal(Object.hasOwn(first.items[0],'stock_quantity'),false);
+  assert.doesNotMatch(queries[0].sql,/stock_quantity|stock_locations|stock_quantity/i);
+  assert.deepEqual(queries[0].args,[2]);
+  const next=await loadMercadoLivreErpProducts(pool,{after:first.nextCursor,limit:1});
+  assert.equal(next.after,first.nextCursor);
+  assert.equal(next.nextCursor,null);
+  assert.deepEqual(queries[1].args,[first.nextCursor,2]);
+  await assert.rejects(()=>loadMercadoLivreErpProducts(pool,{after:'invalid',limit:1}),{statusCode:400});
+  await assert.rejects(()=>loadMercadoLivreErpProducts(pool,{limit:51}),{statusCode:400});
+  assert.equal(queries.length,2);
+});
+
+test('catálogo ERP exige chave dedicada de leitura nos dois aliases GET',async()=>{
+  const app=require('fastify')();
+  const previous=process.env.MERCADO_LIVRE_ERP_READ_KEY;
+  const key='r'.repeat(48);
+  process.env.MERCADO_LIVRE_ERP_READ_KEY=key;
+  try {
+    registerMercadoLivreRoutes(app,{pool:{query:async()=>[[]]},requireSyncKeyOrAdmin:async(_req,reply)=>reply.code(401).send({error:'Unauthorized'})});
+    for(const prefix of ['', '/api']) {
+      const unauthorized=await app.inject({method:'GET',url:`${prefix}/mercado-livre/erp/products`});
+      assert.equal(unauthorized.statusCode,401);
+      const authorized=await app.inject({method:'GET',url:`${prefix}/mercado-livre/erp/products?limit=10`,headers:{'x-erp-read-key':key}});
+      assert.equal(authorized.statusCode,200);
+      assert.deepEqual(authorized.json(),{items:[],after:'',nextCursor:null});
+    }
+    const write=await app.inject({method:'POST',url:'/mercado-livre/erp/products',headers:{'x-erp-read-key':key}});
+    assert.notEqual(write.statusCode,200);
+  } finally {
+    if(previous===undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
+    else process.env.MERCADO_LIVRE_ERP_READ_KEY=previous;
+    await app.close();
+  }
 });
 
 

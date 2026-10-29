@@ -1,11 +1,11 @@
-# v1.2.697-mercado-livre-precos-quantidade
+# v1.2.698-erp-catalogo-readonly
 
-Data: 29/10/2026. Status: publicado. Branch: `codex/ml-quantity-price-read` → `main`. Tag: `v1.2.697-mercado-livre-precos-quantidade`.
-Release do site: `/var/www/mdv-site/releases/20261029-080422-v1-2-697-mercado-livre-precos-quantidade`. API: publicação seletiva concluída; backup remoto em `/var/www/mdv-api/backups/mercado-livre-1793260956341`.
+Data: 29/10/2026. Status: pronta para publicação. Branch: `codex/erp-readonly-catalog` → `main`. Tag: `v1.2.698-erp-catalogo-readonly`.
+Release do site: pendente. API: rota read-only preparada; ainda não publicada.
 
-A consulta autenticada pede todos os preços com `show-all-prices: true`, separa faixas por quantidade e retorna o indicador B2B. No anúncio testado `MLB4282518399` (`LJH074`), a API confirmou `quantity_pricing=false`; o preço remoto permanece R$ 59,00 e o ERP R$ 39,90. Como a oferta local continua inativa, o ERP ainda bloqueia alterações de preço. Não houve POST/PUT nem mudança de anúncio, preço ou estoque.
+Adiciona GET `/api/mercado-livre/erp/products`, com chave dedicada do ERP, paginação por cursor e até 50 produtos por página. Retorna SKU, dados cadastrais, preços, peso, dimensões e URLs HTTPS de imagens. A consulta SQL e a resposta não incluem quantidade nem localização de estoque; não há rota de escrita.
 
-Validação: 38 testes da suíte Mercado Livre, 1 teste LF/CRLF do gerador Nginx, self-test do preflight, sintaxe e build aprovados. `mdv-api` online, `/status` HTTP 200 com MySQL saudável; homepage HTTP 200 e `/VERSION.json` confirma esta release.
+Validação local: 40 testes da suíte Mercado Livre, 46 testes da ponte no ERP e 5 testes de navegador passaram. A API ativa ainda respondeu HTTP 404 para a rota, logo a publicação continua pendente. Nenhum saldo ou anúncio foi alterado.
 
 ---
 
