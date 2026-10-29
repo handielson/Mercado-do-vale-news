@@ -887,11 +887,26 @@ async function main() {
   }
   if (process.argv.includes('--mercado-livre-only')) {
     if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+    const erpReadKey = String(process.env.MERCADO_LIVRE_ERP_READ_KEY || '');
+    if (Buffer.byteLength(erpReadKey, 'utf8') < 32 || Buffer.byteLength(erpReadKey, 'utf8') > 256) {
+      throw new Error('MERCADO_LIVRE_ERP_READ_KEY must contain 32 to 256 bytes');
+    }
     const target = `${appDir}/${mercadoLivreServicePath}`;
     const staged = `${target}.next.cjs`;
     const backupDir = `${appDir}/backups/mercado-livre-${Date.now()}`;
     await exec(`mkdir -p ${backupDir}`);
     await exec(`cp -p ${target} ${backupDir}/mercadoLivreServer.cjs`);
+    const remoteEnv = `${appDir}/.env`;
+    const remoteEnvBackup = `${backupDir}/.env`;
+    const remoteSecretDir = `${appDir}/.secrets`;
+    const remoteEnvNext = `${remoteSecretDir}/mercado-livre.env.next`;
+    await exec(`if [ -f ${remoteEnv} ]; then cp -p ${remoteEnv} ${remoteEnvBackup}; fi`);
+    await exec(`mkdir -p ${remoteSecretDir} && chmod 700 ${remoteSecretDir}`);
+    await withSftp(async (sftp) => {
+      const currentEnv = await readRemoteText(sftp, remoteEnv);
+      await writeRemoteText(sftp, remoteEnvNext, upsertEnv(currentEnv, { MERCADO_LIVRE_ERP_READ_KEY: erpReadKey }));
+    });
+    await exec(`chmod 600 ${remoteEnvNext} && mv ${remoteEnvNext} ${remoteEnv} && chmod 600 ${remoteEnv}`);
     const publicationTarget = `${appDir}/${mercadoLivrePublicationPath}`;
     await exec(`if [ -f ${publicationTarget} ]; then cp -p ${publicationTarget} ${backupDir}/mercadoLivrePublication.cjs; fi`);
     await upload(path.join(__dirname, mercadoLivrePublicationPath), `${publicationTarget}.next.cjs`);
@@ -906,7 +921,7 @@ async function main() {
     await exec(`mv ${publicationTarget}.next.cjs ${publicationTarget}`);
     await exec(`mv ${staged} ${target}`);
     console.log((await exec('pm2 restart mdv-api')).trim());
-    console.log(`Mercado Livre backup: ${backupDir}`);
+    console.log(`Mercado Livre read key configured; backup: ${backupDir}`);
     conn.end();
     return;
   }

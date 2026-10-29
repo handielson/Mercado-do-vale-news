@@ -187,5 +187,7 @@ test('publicacao seletiva inclui somente o modulo Mercado Livre antes de reinici
     assert.ok(section.indexOf('node --check') < section.indexOf('pm2 restart'));
     assert.ok(section.includes('mercadoLivreServicePath'));
     assert.ok(section.includes('cp -p'));
+    assert.ok(section.includes('MERCADO_LIVRE_ERP_READ_KEY'));
+    assert.ok(section.includes('chmod 600'));
     assert.ok(!section.includes('localServer'));
 });

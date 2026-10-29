@@ -1,3 +1,14 @@
+# v1.2.695-mercado-livre-pedidos-erp
+
+Data: 29/10/2026. Status: pronto para publicação. Branch de release: `codex/ml-orders-erp-inbox`; destino: `main`. Tag planejada: `v1.2.695-mercado-livre-pedidos-erp`.
+Release do site: pendente até a publicação.
+
+O ERP consulta pedidos do vendedor no Mercado Livre por data de criação ou de última atualização, com paginação e filtros por período. A resposta reduz os dados ao necessário para revisão: status, datas, valores em centavos e itens/SKUs; dados de comprador, endereço, pagador e cartão ficam fora da fila. O ERP atualiza o mesmo pedido pelo par vendedor + ID, evitando duplicação. A rota é GET; nenhuma operação de anúncio, preço ou estoque foi habilitada.
+
+Validação: suíte Mercado Livre (24 testes), testes locais da ponte e HTTP (87), sintaxe dos módulos alterados e build. A publicação da API grava a chave ERP em arquivo protegido, com cópia de segurança do `.env`; consulta real de pedidos e confirmação pública ficam para depois da publicação.
+
+## Histórico anterior
+
 # v1.2.694-mercado-livre-erp-read-key
 
 Data: 28/10/2026. Status: ready. Branch: main. Tag: v1.2.694-mercado-livre-erp-read-key.

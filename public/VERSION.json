@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.694-mercado-livre-erp-read-key",
-  "date": "2026-10-28",
+  "version": "v1.2.695-mercado-livre-pedidos-erp",
+  "date": "2026-10-29",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.694-mercado-livre-erp-read-key",
-  "release_vps": "/var/www/mdv-site/releases/20261028-213500-mercado-livre-erp-read-key",
+  "tag": "v1.2.695-mercado-livre-pedidos-erp",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Habilita uma chave técnica dedicada do ERP somente em consultas GET selecionadas do Mercado Livre.",
+  "summary": "Importa pedidos e detalhes financeiros do Mercado Livre para revisão no ERP, sem dados pessoais e sem escrita no marketplace.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -15,17 +15,21 @@
   "site_source_base": "main",
   "changed_files": [
     "services/mercadoLivreServer.cjs",
-    "package.json",
+    "deploy-vps-server-only.cjs",
     "tmp-tests/mercado-livre-erp-read-key.test.cjs",
+    "tmp-tests/mercado-livre-print-agent.test.cjs",
+    "docs/migracao-bling/evidencias.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-28-v1.2.694-mercado-livre-erp-read-key.md"
+    "docs/versoes/2026-10-29-v1.2.695-mercado-livre-pedidos-erp.md"
   ],
   "validations": [
-    "npm.cmd run test:mercado-livre (22 tests passed)",
+    "npm.cmd run test:mercado-livre (24 tests passed)",
     "node --check services/mercadoLivreServer.cjs",
+    "node --check vps_server.js",
+    "node --check vps_server.cjs",
     "npm.cmd run build",
-    "Public API read-only status validation after deployment."
+    "Public API status and read-only orders endpoint validation after deployment."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

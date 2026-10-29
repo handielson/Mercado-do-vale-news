@@ -511,3 +511,13 @@ Item: F11a, ainda aberto. O teste de integração fiscal passou a instalar a mig
 **Teste no aparelho:** versão instalada 0.13.9/código 66, APK debug assinado, SHA-256 881f9516d5f5281aaead1eeb20ac5ef2457d59ca6784b79baa4e4ac16e131ba. Alerta claramente identificado como teste enviado só ao registro ativo realme RMX5011 na versão 0.13.9; FCM aceitou e dumpsys do Android confirmou título e corpo na notificação do próprio aplicativo. Não criou registro de venda nem enviou para o outro dispositivo ativo.
 
 **Pendências:** próximo webhook de venda real e navegação por toque no alerta com o aparelho desbloqueado. A tela estava bloqueada; solicitada liberação pelo usuário. A revisão automática bloqueou leitura da sessão privada do aparelho; validação adotou o loader existente no servidor e o recebimento do alerta no Android, sem extrair a sessão.
+
+## E103 — Pedidos do Mercado Livre no ERP, consulta local (29/10/2026)
+
+**Contrato:** a rota GET `/api/mercado-livre/erp/orders` aceita `limit`, `offset`, datas locais `start_date`/`end_date` e `date_field=created|updated`. `created` consulta `order.date_created.from/to`; `updated` consulta `order.date_last_updated.from/to`. As datas do calendário de São Paulo são enviadas com o offset ISO 8601 `-03:00`. A paginação impede que o intervalo ultrapasse 10.000 registros.
+
+**Dados:** a resposta contém status, datas, moeda, valores e itens necessários para a revisão da fila. A projeção descarta dados do comprador, endereço, pagador, cartão e autorização de pagamento. A chave dedicada continua somente GET; nenhuma rota de escrita foi adicionada. O ERP persiste apenas o retorno sanitizado na fila local e atualiza pedidos repetidos por vendedor + ID, sem duplicá-los.
+
+**Validação:** `npm.cmd run test:mercado-livre` aprovou 24 testes e contrato estático; os testes locais do ERP para ponte e HTTP aprovaram 87 casos, junto com `node --check web/data.js`, `py_compile` e `git diff --check`. A documentação oficial de gerenciamento de vendas lista filtros por data de criação e última atualização: https://developers.mercadolivre.com.br/pt_br/imovel-consulta-de-usuarios/gerenciamento-de-vendas.
+
+**Estado externo:** implementação preparada em worktree isolado; não publicada, sem consulta real de pedidos e sem escrita no Mercado Livre ou no Mercado do Vale. A fila de testes usou somente dados sintéticos.

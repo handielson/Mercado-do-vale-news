@@ -265,6 +265,138 @@ async function requireMercadoLivreErpRead(request, reply, requireSyncKeyOrAdmin)
   return requireSyncKeyOrAdmin(request, reply, () => {});
 }
 
+function mercadoLivreOrderToErpReview(order = {}) {
+  const orderId = String(order.id || '');
+  const currency = String(order.currency_id || '');
+  if (!/^\d{1,30}$/.test(orderId) || !/^[A-Z]{3}$/.test(currency) ||
+      !Array.isArray(order.order_items) || !order.order_items.length) {
+    throw Object.assign(new Error('Pedido Mercado Livre com estrutura incompleta.'), { statusCode: 502 });
+  }
+  const cents = value => {
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000_000_000) {
+      throw Object.assign(new Error('Valor do pedido Mercado Livre inválido.'), { statusCode: 502 });
+    }
+    return Math.round(amount * 100);
+  };
+  const optionalCents = (value, label, allowNegative = false) => {
+    if (value == null || value === '') return null;
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || Math.abs(amount) > 1_000_000_000_000 || (!allowNegative && amount < 0)) {
+      throw Object.assign(new Error(`Valor de ${label} do pagamento Mercado Livre inválido.`), { statusCode: 502 });
+    }
+    return Math.round(amount * 100);
+  };
+  const paymentDate = (value, label) => {
+    if (value == null || value === '') return '';
+    const result = String(value);
+    if (result.length > 40 || Number.isNaN(Date.parse(result))) {
+      throw Object.assign(new Error(`Data de ${label} do pagamento Mercado Livre inválida.`), { statusCode: 502 });
+    }
+    return result;
+  };
+  if (order.payments != null && (!Array.isArray(order.payments) || order.payments.length > 50)) {
+    throw Object.assign(new Error('Lista de pagamentos do pedido Mercado Livre inválida.'), { statusCode: 502 });
+  }
+  const payments = (order.payments || []).map(payment => {
+    const paymentId = String(payment?.id || '');
+    const paymentStatus = String(payment?.status || 'unknown');
+    const paymentCurrency = String(payment?.currency_id || currency);
+    if (!/^\d{1,30}$/.test(paymentId) || !/^[A-Za-z0-9_-]{1,50}$/.test(paymentStatus) ||
+        !/^[A-Z]{3}$/.test(paymentCurrency)) {
+      throw Object.assign(new Error('Identificação do pagamento Mercado Livre inválida.'), { statusCode: 502 });
+    }
+    return {
+      payment_id: paymentId,
+      status: paymentStatus,
+      currency: paymentCurrency,
+      transaction_amount_cents: optionalCents(payment.transaction_amount, 'valor da transação'),
+      total_paid_amount_cents: optionalCents(payment.total_paid_amount, 'valor pago'),
+      refunded_amount_cents: optionalCents(payment.transaction_amount_refunded, 'valor reembolsado'),
+      marketplace_fee_cents: optionalCents(payment.marketplace_fee, 'tarifa do marketplace', true),
+      shipping_cost_cents: optionalCents(payment.shipping_cost, 'custo de envio'),
+      taxes_amount_cents: optionalCents(payment.taxes_amount, 'impostos'),
+      date_approved: paymentDate(payment.date_approved, 'aprovação'),
+      date_last_modified: paymentDate(payment.date_last_modified, 'última alteração'),
+    };
+  });
+  const items = order.order_items.map(entry => {
+    const quantity = Number(entry?.quantity);
+    const itemId = String(entry?.item?.id || '');
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1_000_000 ||
+        !/^ML[A-Z]\d{1,30}$/.test(itemId)) {
+      throw Object.assign(new Error('Item do pedido Mercado Livre inválido.'), { statusCode: 502 });
+    }
+    return {
+      item_id: itemId,
+      variation_id: entry?.item?.variation_id == null ? '' : String(entry.item.variation_id),
+      title: String(entry?.item?.title || '').slice(0, 500),
+      seller_sku: String(entry?.item?.seller_sku || entry?.item?.seller_custom_field || '').slice(0, 120),
+      quantity,
+      unit_price_cents: cents(entry?.unit_price),
+    };
+  });
+  const createdAt = String(order.date_created || '');
+  const updatedAt = String(order.date_last_updated || '');
+  const closedAt = String(order.date_closed || '');
+  for (const value of [createdAt, updatedAt, closedAt].filter(Boolean)) {
+    if (Number.isNaN(Date.parse(value))) {
+      throw Object.assign(new Error('Data do pedido Mercado Livre inválida.'), { statusCode: 502 });
+    }
+  }
+  return {
+    order_id: orderId,
+    pack_id: order.pack_id == null ? '' : String(order.pack_id),
+    status: String(order.status || 'unknown').slice(0, 50),
+    currency,
+    total_cents: cents(order.total_amount),
+    date_created: createdAt,
+    date_closed: closedAt,
+    date_last_updated: updatedAt,
+    payments,
+    items,
+  };
+}
+
+async function loadMercadoLivreOrdersForErp(pool, options = {}) {
+  const settings = await loadSettings(pool);
+  const sellerId = String(settings.user_id || '').trim();
+  if (!/^\d{1,30}$/.test(sellerId)) {
+    throw Object.assign(new Error('Conecte a conta do Mercado Livre.'), { statusCode: 409 });
+  }
+  const limit = Number(options.limit);
+  const offset = Number(options.offset);
+  const dateField = options.dateField == null ? 'created' : options.dateField;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50 ||
+      !Number.isInteger(offset) || offset < 0 || offset + limit > 10000 ||
+      !['created', 'updated'].includes(dateField)) {
+    throw Object.assign(new Error('Paginação de pedidos inválida.'), { statusCode: 400 });
+  }
+  const query = new URLSearchParams({ seller: sellerId, sort: 'date_desc', limit: String(limit), offset: String(offset) });
+  const dateFilter = dateField === 'updated' ? 'order.date_last_updated' : 'order.date_created';
+  for (const [key, value] of [[`${dateFilter}.from`, options.startDate], [`${dateFilter}.to`, options.endDate]]) {
+    if (value) query.set(key, value);
+  }
+  const payload = await (await mlRequest(pool, `/orders/search?${query.toString()}`)).json();
+  const rows = Array.isArray(payload?.results) ? payload.results : [];
+  const total = Number(payload?.paging?.total);
+  if (!Number.isSafeInteger(total) || total < 0) {
+    throw Object.assign(new Error('Paginação do Mercado Livre inválida.'), { statusCode: 502 });
+  }
+  return { seller_id: sellerId, offset, limit, total,
+    items: rows.map(mercadoLivreOrderToErpReview) };
+}
+
+function validErpOrderDate(value, endOfDay = false) {
+  if (value == null || value === '') return '';
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+    // ERP date filters are calendar days in Brazil; preserve the full local day
+    // when translating them to Mercado Livre's ISO 8601 search parameters.
+    ? `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}-03:00` : null;
+}
+
 async function ensureMercadoLivreTables(pool) {
   await pool.query(`CREATE TABLE IF NOT EXISTS mercado_livre_settings (
     id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
@@ -828,6 +960,36 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/price', erpReadRoute, presentListingError(listingPrices.read));
   registerAliases(fastify, 'post', '/mercado-livre/products/items/:itemId/price', protectedRoute, presentListingError(listingPrices.update));
   registerAliases(fastify, 'get', '/mercado-livre/products/discover', erpReadRoute, presentListingError(listingHandlers.discover));
+  const listErpOrders = async (request, reply) => {
+    const query = request.query || {};
+    const limitRaw = String(query.limit ?? '50');
+    const offsetRaw = String(query.offset ?? '0');
+    const dateField = query.date_field ?? 'created';
+    if (!/^\d{1,2}$/.test(limitRaw) || !/^\d{1,5}$/.test(offsetRaw)) {
+      return reply.code(400).send({ error: 'Paginação de pedidos inválida.' });
+    }
+    if (!['created', 'updated'].includes(dateField)) {
+      return reply.code(400).send({ error: 'Campo de data de pedido inválido.' });
+    }
+    const startDate = validErpOrderDate(query.start_date);
+    const endDate = validErpOrderDate(query.end_date, true);
+    if (startDate === null || endDate === null || (startDate && endDate && startDate > endDate)) {
+      return reply.code(400).send({ error: 'Intervalo de datas inválido.' });
+    }
+    if ((startDate || endDate) && (!startDate || !endDate)) {
+      return reply.code(400).send({ error: 'Informe as duas datas do período.' });
+    }
+    reply.header('Cache-Control', 'no-store');
+    try {
+      return await loadMercadoLivreOrdersForErp(pool, {
+        limit: Number(limitRaw), offset: Number(offsetRaw), startDate, endDate, dateField,
+      });
+    } catch (error) {
+      return reply.code(error.statusCode || 502).send({ error: error.statusCode
+        ? error.message : 'Consulta de pedidos do Mercado Livre indisponível.' });
+    }
+  };
+  registerAliases(fastify, 'get', '/mercado-livre/erp/orders', erpReadRoute, listErpOrders);
   registerAliases(fastify, 'get', '/mercado-livre/products/candidates', protectedRoute, presentListingError(listingHandlers.candidates));
   registerAliases(fastify, 'post', '/mercado-livre/products/link', protectedRoute, linkProduct);
   registerAliases(fastify, 'get', '/mercado-livre/products/links', protectedRoute, async () => {
@@ -851,6 +1013,9 @@ module.exports = {
   normalizeAvailableQuantity,
   buildEventKey,
   createPkcePair,
+  mercadoLivreOrderToErpReview,
+  loadMercadoLivreOrdersForErp,
+  validErpOrderDate,
   selectDcePdfDocument,
   isClosedShipment,
   presentPrintJob,
