@@ -1,13 +1,13 @@
 # v1.2.696-mercado-livre-estoque-leitura
 
-Data: 29/10/2026. Status: pronto para publicação. Branch de release: `codex/ml-orders-erp-inbox`; destino: `main`. Tag planejada: `v1.2.696-mercado-livre-estoque-leitura`.
-Release do site planejada: `/var/www/mdv-site/releases/20261029-035627-v1-2-696-mercado-livre-estoque-leitura`. A API será publicada seletivamente pelo fluxo `--mercado-livre-only`.
+Data: 29/10/2026. Status: API publicada; release do site em publicação. Branch de release: `codex/ml-orders-erp-inbox`; destino: `main`. Tag: `v1.2.696-mercado-livre-estoque-leitura`.
+Release do site: `/var/www/mdv-site/releases/20261029-035627-v1-2-696-mercado-livre-estoque-leitura`. API: publicada seletivamente pelo fluxo `--mercado-livre-only`; backup em `/var/www/mdv-api/backups/mercado-livre-1793246257914`.
 
 O ERP consegue consultar o saldo atual dos anúncios Mercado Livre vinculados ao produto e à família local. Anúncios tradicionais retornam saldo por SKU/variação; contas com `warehouse_management` retornam saldo por localização sem atribuí-lo indevidamente a um SKU. A rota usa a chave técnica somente de leitura. Nenhum saldo do Mercado do Vale ou do Mercado Livre é alterado.
 
 O deploy seletivo agora inclui e valida o módulo da nova rota antes de reiniciar `mdv-api`, preservando cópia de recuperação do módulo anterior quando existir.
 
-Validações concluídas: 29 testes da suíte Mercado Livre, contrato estático, `node --check` dos módulos alterados e build Vite. Publicação e leitura autenticada de estoque ficam pendentes até a release.
+Validações concluídas: 29 testes da suíte Mercado Livre, contrato estático, `node --check` dos módulos alterados e build Vite. `mdv-api` reiniciou online, o status respondeu HTTP 200 e a consulta autenticada GET de estoque retornou um SKU vinculado. Nenhuma gravação de estoque ocorreu. O deploy do site ainda está pendente.
 
 ## Histórico anterior
 

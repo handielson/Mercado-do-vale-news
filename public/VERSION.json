@@ -30,7 +30,8 @@
     "node --check services/mercadoLivreServer.cjs",
     "node --check services/mercadoLivreListingStock.cjs",
     "npm.cmd run build",
-    "Chave técnica desbloqueada localmente via DPAPI; publicação e leitura autenticada de estoque pendentes."
+    "API publicada e mdv-api reiniciada online; status público HTTP 200.",
+    "Consulta autenticada GET de estoque de anúncio vinculado respondeu HTTP 200; nenhuma escrita foi executada."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
