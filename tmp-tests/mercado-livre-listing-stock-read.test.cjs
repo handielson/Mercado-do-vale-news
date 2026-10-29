@@ -104,8 +104,12 @@ test('rejects a listing owned by another Mercado Livre seller', async () => {
   assert.ok(h.calls.every(call => call.method === 'GET'));
 });
 
-test('registers only read-key GET for listing stock; no ERP stock write route is exposed', () => {
+test('registers listing stock writes behind a dedicated key and advertises only implemented stock capabilities', () => {
   const server = fs.readFileSync(path.join(__dirname, '../services/mercadoLivreServer.cjs'), 'utf8');
   assert.match(server, /registerAliases\(fastify, 'get', '\/mercado-livre\/products\/items\/:itemId\/stock', erpReadRoute, presentListingError\(listingStock\.read\)\)/);
-  assert.doesNotMatch(server, /registerAliases\(fastify, 'post', '\/mercado-livre\/products\/items\/:itemId\/stock'/);
+  assert.match(server, /registerAliases\(fastify, 'post', '\/mercado-livre\/products\/items\/:itemId\/stock', erpWriteRoute, presentListingError\(listingStock\.update\)\)/);
+  assert.match(server, /registerAliases\(fastify, 'post', '\/mercado-livre\/products\/user-products\/:userProductId\/stock', erpWriteRoute, presentListingError\(listingStock\.updateWarehouse\)\)/);
+  assert.match(server, /'listing_stock_write_v1'[\s\S]*'user_product_stock_write_v1'/);
+  assert.doesNotMatch(server.match(/const ERP_STOCK_WRITE_CAPABILITIES = Object\.freeze\(\[([\s\S]*?)\]\);/)?.[1] || '', /listing_price_write_v1/);
+  assert.match(server, /request\.headers\['x-erp-write-key'\]/);
 });

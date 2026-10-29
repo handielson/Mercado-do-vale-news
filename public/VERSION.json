@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.701-mercado-livre-identidade-anuncios",
+  "version": "v1.2.702-mercado-livre-erp-readonly",
   "date": "2026-10-29",
-  "status": "published",
+  "status": "prepared",
   "branch": "main",
-  "tag": "v1.2.701-mercado-livre-identidade-anuncios",
-  "release_vps": "/var/www/mdv-site/releases/20261029-173330-ml-identidade-anuncios",
+  "tag": "v1.2.702-mercado-livre-erp-readonly",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "published",
-    "backup": "/var/www/mdv-api/backups/mercado-livre-1793282351390"
+    "status": "pendente",
+    "backup": "pendente"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Mostra atributos públicos de identificação dos anúncios Mercado Livre para revisão manual de vínculos no ERP.",
+  "summary": "Configura a ponte dedicada de leitura do ERP para o Mercado Livre; mantém a escrita de estoque desligada por padrão e bloqueia preço sem endpoint oficial de atualização.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -22,22 +22,40 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "publicada; /status 200, mysql.ok=true",
-    "site_manifest": "incluído na release do site"
+    "mercado_livre_api": "pendente",
+    "site_manifest": "pendente"
   },
   "site_source_base": "main",
   "changed_files": [
-    "pages/admin/settings/components/MercadoLivreLinkReview.tsx",
+    "deploy-vps-server-only.cjs",
+    "package.json",
+    "references/architecture.md",
+    "references/business-rules.md",
+    "references/domain-and-data.md",
+    "references/operations-and-release.md",
+    "references/safety-and-change-control.md",
+    "scripts/system_snapshot.ps1",
+    "services/mercadoLivreListingPrice.cjs",
+    "services/mercadoLivreListingStock.cjs",
     "services/mercadoLivreServer.cjs",
-    "services/mercadoLivreService.ts",
-    "tmp-tests/mercado-livre-integration-static.test.mjs",
+    "tmp-tests/mercado-livre-erp-read-key.test.cjs",
+    "tmp-tests/mercado-livre-listing-stock-read.test.cjs",
+    "tmp-tests/mercado-livre-listing-stock-write.test.cjs",
+    "tmp-tests/mercado-livre-print-agent.test.cjs",
     "tmp-tests/mercado-livre-product-links.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-29-v1.2.701-mercado-livre-identidade-anuncios.md"
+    "docs/versoes/2026-10-29-v1.2.702-mercado-livre-erp-readonly.md",
+    "scripts/publish-vps-plan.cjs"
   ],
   "validations": [
-    "42 testes da suíte Mercado Livre e contrato estático aprovados. Build de produção aprovado. node --check nos módulos alterados e entrypoints: aprovado. API reiniciada; /status HTTP 200 com mysql.ok=true. Site HTTP 200; release ativa em /var/www/mdv-site/releases/20261029-173330-ml-identidade-anuncios."
+    "npm.cmd run test:mercado-livre: 48 testes aprovados; contrato estático OK.",
+    "node scripts/publish-vps-plan.cjs --self-test: aprovado, incluindo seleção de deploy somente Mercado Livre.",
+    "node --check nos módulos alterados e git diff --check: aprovado.",
+    "python -B -m unittest tests.test_mercado_livre_bridge: 51 aprovados.",
+    "npx.cmd playwright test e2e/mercado-livre-preview.spec.ts: 1 aprovado.",
+    "npm.cmd run build: aprovado; aviso conhecido do Vite sobre configLoader/native e __dirname.",
+    "Commit, push, deploy e validações públicas pendentes."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

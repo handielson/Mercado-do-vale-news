@@ -4,6 +4,7 @@ const { matchesMercadoLivreErpReadKey, mercadoLivreOrderToErpReview, validErpOrd
   registerMercadoLivreRoutes } = require('../services/mercadoLivreServer.cjs');
 
 const key = 'erp-read-only-test-key-'.padEnd(40, 'r');
+const writeKey = 'local-test-erp-write-key-at-least-32-chars';
 
 test('a chave de leitura exige de 32 a 256 bytes e comparação segura', () => {
   assert.equal(matchesMercadoLivreErpReadKey(key, key), true);
@@ -110,7 +111,11 @@ test('a rota read-only de pedidos aplica autenticação, filtros e não registra
 
 test('a chave ERP autoriza consultas GET selecionadas e não revela configuração OAuth', async () => {
   const previous = process.env.MERCADO_LIVRE_ERP_READ_KEY;
+  const previousWriteKey = process.env.MDV_ERP_WRITE_KEY;
+  const previousWriteFlag = process.env.MDV_ERP_STOCK_WRITE_ENABLED;
   process.env.MERCADO_LIVRE_ERP_READ_KEY = key;
+  delete process.env.MDV_ERP_WRITE_KEY;
+  delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
   const app = require('fastify')();
   const pool = { query: async () => [[{
     access_token: 'private-access-token', refresh_token: 'private-refresh-token',
@@ -124,9 +129,17 @@ test('a chave ERP autoriza consultas GET selecionadas e não revela configuraç�
     for (const path of ['/mercado-livre/settings', '/api/mercado-livre/settings']) {
       const response = await app.inject({ method: 'GET', url: path, headers: { 'x-erp-read-key': key } });
       assert.equal(response.statusCode, 200);
-      assert.deepEqual(response.json(), { connected: true, userId: '7', nickname: 'Conta de teste' });
+      assert.deepEqual(response.json(), { connected: true, userId: '7', nickname: 'Conta de teste', erpCapabilities: [] });
       assert(!response.body.includes('private-'));
     }
+
+    process.env.MDV_ERP_WRITE_KEY = writeKey;
+    const stillDisabled = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
+    assert.deepEqual(stillDisabled.json().erpCapabilities, []);
+    process.env.MDV_ERP_STOCK_WRITE_ENABLED = '1';
+    const enabledByExplicitFlag = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
+    assert.deepEqual(enabledByExplicitFlag.json().erpCapabilities, ['listing_stock_write_v1', 'user_product_stock_write_v1']);
+    assert.equal(enabledByExplicitFlag.json().erpCapabilities.includes('listing_price_write_v1'), false);
 
     for (const [path, method] of [
       ['/mercado-livre/settings', 'PATCH'],
@@ -156,5 +169,9 @@ test('a chave ERP autoriza consultas GET selecionadas e não revela configuraç�
     await app.close();
     if (previous === undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
     else process.env.MERCADO_LIVRE_ERP_READ_KEY = previous;
+    if (previousWriteKey === undefined) delete process.env.MDV_ERP_WRITE_KEY;
+    else process.env.MDV_ERP_WRITE_KEY = previousWriteKey;
+    if (previousWriteFlag === undefined) delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
+    else process.env.MDV_ERP_STOCK_WRITE_ENABLED = previousWriteFlag;
   }
 });

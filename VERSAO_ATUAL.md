@@ -1,3 +1,13 @@
+# v1.2.702-mercado-livre-erp-readonly
+
+Data: 29/10/2026. Status: preparado para publicação. Branch: `main`.
+Release do site: `/var/www/mdv-site/releases/20261029-210304-v1-2-702-mercado-livre-erp-readonly` (pendente). API: pendente.
+
+Ponte dedicada de leitura do Mercado Livre para o ERP. A escrita de estoque permanece desativada por padrão e requer flag administrativa e chave própria; preço segue bloqueado sem endpoint oficial de atualização.
+
+Registro: `docs/versoes/2026-10-29-v1.2.702-mercado-livre-erp-readonly.md`.
+
+---
 # v1.2.701-mercado-livre-identidade-anuncios
 
 Data: 29/10/2026. Status: publicado. Branch: `main`. Tag: `v1.2.701-mercado-livre-identidade-anuncios`. Release VPS: `/var/www/mdv-site/releases/20261029-173330-ml-identidade-anuncios`.

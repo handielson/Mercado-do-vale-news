@@ -56,26 +56,8 @@ function createListingPriceHandlers({ pool, settings, request }) {
   }
 
   async function update(req) {
-    const input = req.body || {};
-    if (!Number.isSafeInteger(input.priceCents) || input.priceCents <= 0
-        || !Number.isSafeInteger(input.expectedPriceCents)) throw fail('Informe um preço válido em reais.', 400);
-    const current = await read(req);
-    if (!['active', 'paused'].includes(current.status)) throw fail('Este anúncio não está ativo ou pausado para edição.');
-    if (current.quantityPricing) throw fail('Este anúncio tem preço por quantidade/B2B. Gerencie essa regra diretamente no Mercado Livre.');
-    if (current.automation) throw fail('Este anúncio usa automatização de preços no Mercado Livre. Gerencie a regra de preço na plataforma.');
-    if (input.expectedPriceCents !== current.priceCents) throw fail('O preço mudou desde a consulta. Consulte novamente antes de atualizar.');
-    if (current.variations.length > 1 && input.confirmAllVariations !== true) throw fail('Confirme a alteração do preço de todas as opções deste anúncio.');
-    if (current.promotion && input.confirmPromotionEffect !== true) throw fail('Confirme que a alteração do preço padrão pode afetar a promoção do anúncio.');
-    if (String((await settings()).user_id) !== current.sellerId) throw fail('A conta conectada mudou. Consulte o anúncio novamente.');
-    const price = input.priceCents / 100;
-    const payload = current.variations.length
-      ? { variations: current.variations.map(variation => ({ id: Number(variation.id), price })) }
-      : { price };
-    await request(`/items/${current.itemId}`, { method: 'PUT', body: JSON.stringify(payload) });
-    // A successful HTTP response can still ignore price under a remote pricing rule.
-    const actual = standardPrice(await request(`/items/${current.itemId}/prices`));
-    if (actual !== input.priceCents) throw fail('O Mercado Livre não confirmou o preço solicitado. Consulte o anúncio antes de tentar novamente.');
-    return { ok: true, itemId: current.itemId, priceCents: actual, affectedSkus: current.affectedSkus };
+    void req;
+    throw fail('A sincronização de preço está bloqueada: o endpoint oficial para editar preço padrão ainda não está disponível, e PUT de preço em /items pode ser rejeitado ou ignorado. Nenhuma alteração foi enviada.', 409);
   }
   return { read, update };
 }

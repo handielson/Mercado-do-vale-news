@@ -5,7 +5,31 @@ const { createListingStockHandlers } = require('./mercadoLivreListingStock.cjs')
 const ML_API_ORIGIN = 'https://api.mercadolibre.com';
 const ML_AUTH_ORIGIN = 'https://auth.mercadolivre.com.br';
 const DEFAULT_REDIRECT_URL = 'https://www.mercadodovale.com.br/api/mercado-livre/oauth/callback';
+const ERP_STOCK_WRITE_CAPABILITIES = Object.freeze([
+  'listing_stock_write_v1',
+  'user_product_stock_write_v1',
+]);
 let refreshPromise = null;
+
+function erpWriteKeyMatches(candidate, expected) {
+  const expectedValue = String(expected || '').trim();
+  const candidateValue = typeof candidate === 'string' ? candidate.trim() : '';
+  if (expectedValue.length < 32 || expectedValue.length > 256 ||
+      candidateValue.length !== expectedValue.length) return false;
+  const candidateBytes = Buffer.from(candidateValue);
+  const expectedBytes = Buffer.from(expectedValue);
+  return candidateBytes.length === expectedBytes.length && crypto.timingSafeEqual(candidateBytes, expectedBytes);
+}
+
+function isErpWriteKeyConfigured(value) {
+  const key = String(value || '').trim();
+  return key.length >= 32 && key.length <= 256;
+}
+
+function isErpStockWriteEnabled() {
+  return process.env.MDV_ERP_STOCK_WRITE_ENABLED === '1'
+    && isErpWriteKeyConfigured(process.env.MDV_ERP_WRITE_KEY);
+}
 
 function listingRows(item) {
   const skuOf = source => String(source?.attributes?.find(a => a.id === 'SELLER_SKU')?.value_name || source?.seller_sku || source?.seller_custom_field || '').trim();
@@ -796,6 +820,13 @@ async function syncMercadoLivreStockFromBlingTargets(pool, stockTargets = []) {
 
 function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin = requireSyncKey, onSale }) {
   const protectedRoute = { preHandler: requireSyncKeyOrAdmin };
+  const erpWriteRoute = { preHandler: async (request, reply) => {
+    if (!isErpStockWriteEnabled()) {
+      return reply.code(503).send({ error: 'A escrita de estoque do ERP está desabilitada nesta integração.' });
+    }
+    if (erpWriteKeyMatches(request.headers['x-erp-write-key'], process.env.MDV_ERP_WRITE_KEY)) return;
+    return reply.code(401).send({ error: 'Unauthorized' });
+  } };
   const erpReadRoute = { preHandler: (request, reply) =>
     requireMercadoLivreErpRead(request, reply, requireSyncKeyOrAdmin) };
   const { createPublicationHandlers } = require('./mercadoLivrePublication.cjs');
@@ -829,6 +860,8 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         connected: Boolean(settings.access_token && settings.refresh_token && settings.user_id),
         userId: String(settings.user_id || ''),
         nickname: String(settings.nickname || '').slice(0, 100),
+        erpCapabilities: isErpStockWriteEnabled()
+          ? ERP_STOCK_WRITE_CAPABILITIES : [],
       };
     }
     return safeStatus(settings);
@@ -1065,6 +1098,8 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/price', erpReadRoute, presentListingError(listingPrices.read));
   registerAliases(fastify, 'post', '/mercado-livre/products/items/:itemId/price', protectedRoute, presentListingError(listingPrices.update));
   registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/stock', erpReadRoute, presentListingError(listingStock.read));
+  registerAliases(fastify, 'post', '/mercado-livre/products/items/:itemId/stock', erpWriteRoute, presentListingError(listingStock.update));
+  registerAliases(fastify, 'post', '/mercado-livre/products/user-products/:userProductId/stock', erpWriteRoute, presentListingError(listingStock.updateWarehouse));
   registerAliases(fastify, 'get', '/mercado-livre/products/discover', erpReadRoute, presentListingError(listingHandlers.discover));
   const listErpProducts = async (request, reply) => {
     const query = request.query || {};
@@ -1127,6 +1162,9 @@ module.exports = {
   ensureMercadoLivreTables,
   registerMercadoLivreRoutes,
   matchesMercadoLivreErpReadKey,
+  erpWriteKeyMatches,
+  isErpWriteKeyConfigured,
+  isErpStockWriteEnabled,
   requireMercadoLivreErpRead,
   syncMercadoLivreStockFromBlingTargets,
   parseNotificationResource,

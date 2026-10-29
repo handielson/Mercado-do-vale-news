@@ -191,6 +191,7 @@ test('publicacao seletiva inclui somente o modulo Mercado Livre antes de reinici
     assert.ok(section.includes('mercadoLivreListingStock.cjs'));
     assert.ok(section.includes('cp -p'));
     assert.ok(section.includes('MERCADO_LIVRE_ERP_READ_KEY'));
+    assert.ok(section.includes("MDV_ERP_STOCK_WRITE_ENABLED: '0'"), 'publicação de leitura deve manter escrita de estoque desativada');
     assert.ok(section.includes('chmod 600'));
     assert.ok(!section.includes('localServer'));
 });

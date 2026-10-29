@@ -263,16 +263,24 @@ function buildPlan(options) {
   const catalogMedia = allFiles.includes('scripts/deploy-catalog-media.cjs');
   const salesDelivery = allFiles.includes('scripts/deploy-sales-delivery.cjs');
   const shopeeFilelink = allFiles.includes('scripts/deploy-shopee-filelink.cjs');
-  const mercadoLivrePriceOnly = classification.apiFiles.length > 0
-    && classification.apiFiles.every(file => file === 'services/mercadoLivreListingPrice.cjs');
-  if (classification.needs.api && mercadoLivrePriceOnly) deployCommands.push('node deploy-vps-server-only.cjs --mercado-livre-only');
+  const mercadoLivreApiFiles = new Set([
+    'deploy-vps-server-only.cjs',
+    'services/mercadoLivreServer.cjs',
+    'services/mercadoLivrePublication.cjs',
+    'services/mercadoLivreListingPrice.cjs',
+    'services/mercadoLivreListingStock.cjs',
+  ]);
+  const mercadoLivreOnly = classification.apiFiles.length > 0
+    && classification.apiFiles.some(file => file.startsWith('services/mercadoLivre'))
+    && classification.apiFiles.every(file => mercadoLivreApiFiles.has(file));
+  if (classification.needs.api && mercadoLivreOnly) deployCommands.push('node deploy-vps-server-only.cjs --mercado-livre-only');
   if (classification.needs.api && shopeeFilelink) deployCommands.push('node deploy-vps-server-only.cjs --shopee-filelink-only');
   if (classification.needs.api && catalogMedia && !shopeeFilelink) deployCommands.push('node deploy-vps-server-only.cjs --catalog-media-only');
   if (classification.needs.api && salesDelivery && !catalogMedia && !shopeeFilelink) deployCommands.push('node deploy-vps-server-only.cjs --sales-delivery-only');
   if (classification.needs.site) {
     deployCommands.push(`$env:VPS_SITE_RELEASE_NAME='${releaseName}'; npm.cmd run deploy:vps-site`);
   }
-  if (classification.needs.api && !metaAttendance && !salesDelivery && !catalogMedia && !shopeeFilelink && !mercadoLivrePriceOnly) {
+  if (classification.needs.api && !metaAttendance && !salesDelivery && !catalogMedia && !shopeeFilelink && !mercadoLivreOnly) {
     deployCommands.push('node deploy-vps-server-only.cjs');
   }
   deployCommands.push(...n8nDeployCommands(classification.n8nFiles));
@@ -397,6 +405,21 @@ function runSelfTest() {
   });
   assert(listingPricePlan.deployCommands[0] === 'node deploy-vps-server-only.cjs --mercado-livre-only', 'listing price change must use the selective Mercado Livre API deploy first');
   assert(listingPricePlan.deployCommands[1].includes('npm.cmd run deploy:vps-site'), 'listing price release manifest must publish the site after API');
+
+  const mercadoLivreBridgePlan = buildPlan({
+    mockFiles: [
+      'deploy-vps-server-only.cjs',
+      'services/mercadoLivreServer.cjs',
+      'services/mercadoLivreListingPrice.cjs',
+      'services/mercadoLivreListingStock.cjs',
+      'tmp-tests/mercado-livre-listing-stock-write.test.cjs',
+      'public/VERSION.json',
+    ],
+    slug: 'mercado-livre-erp-readonly',
+  });
+  assert(mercadoLivreBridgePlan.deployCommands[0] === 'node deploy-vps-server-only.cjs --mercado-livre-only', 'Mercado Livre bridge must deploy API selectively');
+  assert(mercadoLivreBridgePlan.deployCommands.length === 2, 'Mercado Livre bridge release must deploy API and site only');
+  assert(mercadoLivreBridgePlan.deployCommands[1].includes('npm.cmd run deploy:vps-site'), 'Mercado Livre bridge version manifest must publish the site');
 
   const n8n = classifyFiles(['tmp-tests/n8n-ai-natural-sales-responses.cjs']);
   assert(n8n.target === 'n8n', 'n8n workflow mutator classification failed');

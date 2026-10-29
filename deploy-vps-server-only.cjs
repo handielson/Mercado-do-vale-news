@@ -905,7 +905,10 @@ async function main() {
     await exec(`mkdir -p ${remoteSecretDir} && chmod 700 ${remoteSecretDir}`);
     await withSftp(async (sftp) => {
       const currentEnv = await readRemoteText(sftp, remoteEnv);
-      await writeRemoteText(sftp, remoteEnvNext, upsertEnv(currentEnv, { MERCADO_LIVRE_ERP_READ_KEY: erpReadKey }));
+      await writeRemoteText(sftp, remoteEnvNext, upsertEnv(currentEnv, {
+        MERCADO_LIVRE_ERP_READ_KEY: erpReadKey,
+        MDV_ERP_STOCK_WRITE_ENABLED: '0',
+      }));
     });
     await exec(`chmod 600 ${remoteEnvNext} && mv ${remoteEnvNext} ${remoteEnv} && chmod 600 ${remoteEnv}`);
     const publicationTarget = `${appDir}/${mercadoLivrePublicationPath}`;

@@ -167,7 +167,7 @@ function createListingStockHandlers({ pool, settings, request }) {
 
   async function updateWarehouse(req) {
     const input = req.body || {};
-    const itemId = String(req.params?.itemId || '').toUpperCase();
+    const itemId = String(req.params?.itemId || req.query?.itemId || input.itemId || '').toUpperCase();
     const parentId = String(req.query?.parentId || input.parentId || '');
     const userProductId = String(req.params?.userProductId || input.userProductId || '').toUpperCase();
     if (input.confirm !== true) throw fail('Confirme explicitamente a atualização dos depósitos seller_warehouse.', 400);

@@ -160,7 +160,7 @@ test('catálogo ERP exige chave dedicada de leitura nos dois aliases GET',async(
 });
 
 
-test('consulta todos os preços e protege anúncio com preço por quantidade B2B',async()=>{
+test('consulta todos os preços e bloqueia qualquer escrita sem endpoint oficial de atualização',async()=>{
   const calls=[];
   const handlers=createListingPriceHandlers({
     pool:{query:async()=>[[{id,sku:'SKU-1'}]]},
@@ -182,6 +182,6 @@ test('consulta todos os preços e protege anúncio com preço por quantidade B2B
   assert.equal(read.quantityPricing,true);
   assert.equal(calls.find(call=>call.path==='/items/MLB123/prices').options.headers['show-all-prices'],'true');
   await assert.rejects(()=>handlers.update({params:{itemId:'MLB123'},query:{parentId:id},body:{priceCents:2600,expectedPriceCents:2500}}),
-    {statusCode:409,message:'Este anúncio tem preço por quantidade/B2B. Gerencie essa regra diretamente no Mercado Livre.'});
+    error=>error.statusCode===409&&/endpoint oficial/.test(error.message));
   assert.equal(calls.some(call=>call.options?.method==='PUT'),false);
 });
