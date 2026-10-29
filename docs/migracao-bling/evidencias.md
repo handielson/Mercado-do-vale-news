@@ -520,4 +520,4 @@ Item: F11a, ainda aberto. O teste de integração fiscal passou a instalar a mig
 
 **Validação:** `npm.cmd run test:mercado-livre` aprovou 24 testes e contrato estático; os testes locais do ERP para ponte e HTTP aprovaram 87 casos, junto com `node --check web/data.js`, `py_compile` e `git diff --check`. A documentação oficial de gerenciamento de vendas lista filtros por data de criação e última atualização: https://developers.mercadolivre.com.br/pt_br/imovel-consulta-de-usuarios/gerenciamento-de-vendas.
 
-**Estado externo:** implementação preparada em worktree isolado; não publicada, sem consulta real de pedidos e sem escrita no Mercado Livre ou no Mercado do Vale. A fila de testes usou somente dados sintéticos.
+**Estado externo:** API publicada em 29/10/2026; o endpoint de status e a consulta autenticada de pedidos responderam HTTP 200. A validação da consulta pediu somente um pedido e não o inseriu no ERP. Nenhuma escrita foi feita no Mercado Livre ou no Mercado do Vale. Publicação do site ainda pendente.

@@ -4,7 +4,7 @@
   "status": "ready",
   "branch": "main",
   "tag": "v1.2.695-mercado-livre-pedidos-erp",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261029-003100-ml-orders-erp",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Importa pedidos e detalhes financeiros do Mercado Livre para revisão no ERP, sem dados pessoais e sem escrita no marketplace.",
   "gestao_mdv_android": {
@@ -29,7 +29,7 @@
     "node --check vps_server.js",
     "node --check vps_server.cjs",
     "npm.cmd run build",
-    "Public API status and read-only orders endpoint validation after deployment."
+    "Public API status and read-only orders endpoint returned HTTP 200; validation requested one order without importing it into the ERP."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
