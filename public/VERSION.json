@@ -4,7 +4,7 @@
   "status": "ready",
   "branch": "main",
   "tag": "v1.2.696-mercado-livre-estoque-leitura",
-  "release_vps": "/var/www/mdv-site/releases/20261029-035627-v1-2-696-mercado-livre-estoque-leitura",
+  "release_vps": "/var/www/mdv-site/releases/20261029-040259-v1-2-696-estoque-manifest",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Consulta os saldos atuais dos anúncios vinculados no Mercado Livre para reconciliar o ERP sem alterar estoque ou anúncios.",
   "gestao_mdv_android": {
@@ -22,7 +22,7 @@
     "package.json",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-29-v1.2.695-mercado-livre-pedidos-erp.md"
+    "docs/versoes/2026-10-29-v1.2.696-mercado-livre-estoque-leitura.md"
   ],
   "validations": [
     "npm.cmd run test:mercado-livre (29 tests passed)",

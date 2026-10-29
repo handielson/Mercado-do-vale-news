@@ -1,7 +1,7 @@
 # v1.2.696-mercado-livre-estoque-leitura
 
 Data: 29/10/2026. Status: publicado. Branch de release: `codex/ml-orders-erp-inbox`; destino: `main`. Tag: `v1.2.696-mercado-livre-estoque-leitura`.
-Release do site ativa: `/var/www/mdv-site/releases/20261029-035627-v1-2-696-mercado-livre-estoque-leitura`. API: publicada seletivamente pelo fluxo `--mercado-livre-only`; backup em `/var/www/mdv-api/backups/mercado-livre-1793246257914`.
+Release do site ativa: `/var/www/mdv-site/releases/20261029-040259-v1-2-696-estoque-manifest`. API: publicada seletivamente pelo fluxo `--mercado-livre-only`; backup em `/var/www/mdv-api/backups/mercado-livre-1793246257914`.
 
 O ERP consegue consultar o saldo atual dos anúncios Mercado Livre vinculados ao produto e à família local. Anúncios tradicionais retornam saldo por SKU/variação; contas com `warehouse_management` retornam saldo por localização sem atribuí-lo indevidamente a um SKU. A rota usa a chave técnica somente de leitura. Nenhum saldo do Mercado do Vale ou do Mercado Livre é alterado.
 
