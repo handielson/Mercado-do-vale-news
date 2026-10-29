@@ -1,3 +1,13 @@
+# v1.2.700-payjoy-disponibilidade
+
+Data: 29/10/2026. Status: publicado. Branch: `main`. Tag: `v1.2.700-payjoy-disponibilidade`. Release planejada do site: `/var/www/mdv-site/releases/20261029-141155-v12700-payjoy-disponibilidade`.
+
+O fluxo de atendimento responde quando o cliente pergunta se os celulares podem ser financiados pela PayJoy. Explica que aprovação, condições e elegibilidade do aparelho dependem da análise, oferece o link e aguarda confirmação antes de enviá-lo. A pergunta não deve acionar encaminhamento humano genérico. O cliente do final 5190 recebeu a resposta corrigida em mensagem manual verificada (ID 29094); nenhum link foi enviado nessa correção.
+
+O candidato altera somente o nó `Pagamento - Politica` do workflow `SkrkB4vyKVDnQ68t`, preservando grafo, credenciais e outros nós. O gate comercial passou em 128 testes, incluindo resposta inicial, aceite em turno separado e caso negativo. O build do site passou após regenerar o bloco Nginx derivado; não houve mudança de conteúdo nesses arquivos. O site recebe apenas o manifesto de versão; API sem alteração.
+
+---
+
 # v1.2.699-erp-catalogo-preco-review
 
 Data: 29/10/2026. Status: API publicada. Branch: `main`. Commit da API: `20f26ef9`. Tag de recuperação: `v1.2.699-erp-catalogo-preco-review`.

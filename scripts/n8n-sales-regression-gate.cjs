@@ -19,7 +19,8 @@ function runGate(snapshot,{stdio='inherit'}={}){
     'tmp-tests/n8n-attendance-recovery-fixes.test.cjs','tmp-tests/n8n-attendance-multiturn.test.cjs']:tests;
   const continuity=workflow.nodes.some(n=>JSON.stringify(n).includes('payjoy-link-continuity-v1'));
   const configuration=workflow.nodes.some(n=>JSON.stringify(n).includes('sales-model-configuration-v1'));
-  const candidateTests=[...selectedTests,...(continuity?['tmp-tests/n8n-payjoy-link-continuity.test.cjs']:[]),...(configuration?['tmp-tests/n8n-sales-model-configuration.test.cjs']:[])];
+  const payjoyAvailability=workflow.nodes.some(n=>n.name==='Pagamento - Politica'&&n.parameters?.jsCode?.includes('payjoy-availability-question-v1'));
+  const candidateTests=[...selectedTests,...(continuity?['tmp-tests/n8n-payjoy-link-continuity.test.cjs']:[]),...(configuration?['tmp-tests/n8n-sales-model-configuration.test.cjs']:[]),...(payjoyAvailability?['tmp-tests/n8n-payjoy-availability-patch.test.cjs']:[])];
   const result=spawnSync(process.execPath,['--test',...candidateTests],{cwd:root,stdio,
     env:{...process.env,MDV_MODEL_CONFIGURATION_EXACT:'1',MDV_PAYJOY_CONTINUITY_EXACT:'1',MDV_ATTENDANCE_SNAPSHOT:absolute,MDV_N8N_SALES_SNAPSHOT:absolute,MDV_SALES_VARIANT_SNAPSHOT:absolute,MDV_PAYJOY_WORKFLOW_SNAPSHOT:absolute}});
   if(result.error)throw result.error;
