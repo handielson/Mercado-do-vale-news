@@ -530,4 +530,6 @@ Item: F11a, ainda aberto. O teste de integração fiscal passou a instalar a mig
 
 **Validação local:** `npm.cmd run test:mercado-livre` passou com 40 testes; inclui cursor, projeção sem estoque, filtragem de imagens, autenticação nos aliases e rejeição de POST. `node --check services/mercadoLivreServer.cjs` passou.
 
-**Estado:** release `v1.2.698-erp-catalogo-readonly` preparada na branch local isolada, com versão e nota de release; a API continua sem publicação, confirmada por GET público HTTP 404. O reinício da API e a validação autenticada do endpoint publicado continuam pendentes.
+**Publicação e validação:** commit `69fee468` e tag `v1.2.698-erp-catalogo-readonly` enviados a `main`; release final do site `/var/www/mdv-site/releases/20261029-130208-erp-catalogo-readonly-final`; API seletiva reiniciada online, backup em `/var/www/mdv-api/backups/mercado-livre-1793278811310`. `/status` confirmou MySQL saudável, GET sem chave retornou 401 e GET autenticado retornou 10 produtos em duas páginas sem sobreposição. Todos os 10 produtos da amostra tinham peso e fotos HTTPS; nenhum campo de estoque apareceu. Homepage e `/VERSION.json` retornaram HTTP 200 com a versão esperada.
+
+**Pendência:** confirmar a prévia local do ERP consumindo a rota publicada e revisar/importar somente produtos na base de prévia após conferência. A prévia aberta ainda pode estar em processo antigo. Nenhuma gravação de estoque, preço ou anúncio foi feita no Mercado do Vale.

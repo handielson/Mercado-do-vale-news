@@ -1,11 +1,11 @@
 # v1.2.698-erp-catalogo-readonly
 
-Data: 29/10/2026. Status: pronta para publicação. Branch: `codex/erp-readonly-catalog` → `main`. Tag: `v1.2.698-erp-catalogo-readonly`.
-Release do site: pendente. API: rota read-only preparada; ainda não publicada.
+Data: 29/10/2026. Status: publicado. Branch: `codex/erp-readonly-catalog` → `main`. Commit: `69fee468`. Tag: `v1.2.698-erp-catalogo-readonly`.
+Release final do site: `/var/www/mdv-site/releases/20261029-130208-erp-catalogo-readonly-final`. A primeira release da mesma versão foi substituída para alinhar o manifesto público à validação da API. API: publicação seletiva concluída; backup em `/var/www/mdv-api/backups/mercado-livre-1793278811310`.
 
 Adiciona GET `/api/mercado-livre/erp/products`, com chave dedicada do ERP, paginação por cursor e até 50 produtos por página. Retorna SKU, dados cadastrais, preços, peso, dimensões e URLs HTTPS de imagens. A consulta SQL e a resposta não incluem quantidade nem localização de estoque; não há rota de escrita.
 
-Validação local: 40 testes da suíte Mercado Livre, 46 testes da ponte no ERP e 5 testes de navegador passaram. A API ativa ainda respondeu HTTP 404 para a rota, logo a publicação continua pendente. Nenhum saldo ou anúncio foi alterado.
+Validação: 40 testes da suíte Mercado Livre, 46 testes da ponte no ERP, 5 testes de navegador e build passaram. A API reiniciou online; `/status` confirmou MySQL saudável, a rota sem chave retornou 401 e a consulta autenticada leu 10 produtos em duas páginas sem sobreposição. Os 10 tinham foto e peso; todas as imagens eram HTTPS e nenhum campo de estoque foi retornado. Homepage HTTP 200 e `/VERSION.json` confirmam a release. Nenhum saldo ou anúncio foi alterado.
 
 ---
 

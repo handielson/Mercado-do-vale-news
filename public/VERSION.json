@@ -4,7 +4,7 @@
   "status": "ready",
   "branch": "codex/erp-readonly-catalog",
   "tag": "v1.2.698-erp-catalogo-readonly",
-  "release_vps": "/var/www/mdv-site/releases/20261029-125801-erp-catalogo-readonly",
+  "release_vps": "/var/www/mdv-site/releases/20261029-130208-erp-catalogo-readonly-final",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Expõe catálogo de produtos do Mercado do Vale em rota autenticada somente de leitura para o ERP.",
   "gestao_mdv_android": {
@@ -24,7 +24,8 @@
   "validations": [
     "npm.cmd run test:mercado-livre: 40 testes passaram, incluindo paginação do catálogo, projeção sem estoque, autenticação e rejeição de POST.",
     "node --check services/mercadoLivreServer.cjs: aprovado.",
-    "API ainda não publicada; GET público sem credencial retornou HTTP 404, confirmando a pendência.",
+    "API publicada; mdv-api online, /status com MySQL saudável, GET anônimo retorna 401 e GET autenticado retorna produtos paginados sem campos de estoque.",
+    "Leitura autenticada real: 10 produtos em duas páginas, sem IDs repetidos; todos tinham fotos e peso, imagens somente HTTPS.",
     "46 testes do ERP e 5 testes de navegador do catálogo passaram localmente.",
     "Nenhuma escrita ou alteração de estoque no Mercado do Vale."
   ],
