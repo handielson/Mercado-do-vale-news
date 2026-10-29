@@ -3,11 +3,20 @@ const cents = value => Math.round(Number(value) * 100);
 
 function standardPrice(data) {
   const values = (data?.prices || []).filter(price => price.type === 'standard'
+    && price.conditions?.min_purchase_unit == null
+    && !price.conditions?.context_restrictions?.includes('user_type_business')
     && (!price.conditions?.context_restrictions?.length || price.conditions.context_restrictions.includes('channel_marketplace')));
   const amounts = [...new Set(values.map(price => cents(price.amount)))];
   if (amounts.length !== 1 || !Number.isFinite(amounts[0]) || amounts[0] <= 0
       || values.some(price => price.currency_id !== 'BRL')) throw fail('Não foi possível identificar um preço padrão único em reais para este anúncio.');
   return amounts[0];
+}
+
+function hasQuantityPricing(data) {
+  return (data?.prices || []).some(price => price.type === 'standard'
+    && ((Number.isSafeInteger(Number(price.conditions?.min_purchase_unit))
+      && Number(price.conditions?.min_purchase_unit) > 0)
+      || price.conditions?.context_restrictions?.includes('user_type_business')));
 }
 
 function createListingPriceHandlers({ pool, settings, request }) {
@@ -24,7 +33,7 @@ function createListingPriceHandlers({ pool, settings, request }) {
     const item = await request(`/items/${itemId}?include_attributes=all`);
     if (String(item.seller_id) !== seller || item.id !== itemId) throw fail('Anúncio não pertence à conta conectada.');
     const [prices, salePrice, automation] = await Promise.all([
-      request(`/items/${itemId}/prices`),
+      request(`/items/${itemId}/prices`, { headers: { 'show-all-prices': 'true' } }),
       request(`/items/${itemId}/sale_price?context=channel_marketplace`),
       request(`/pricing-automation/items/${itemId}/automation`).catch(error => {
         if (error.remoteStatus === 404) return null;
@@ -39,7 +48,7 @@ function createListingPriceHandlers({ pool, settings, request }) {
     return { itemId, parentId, sellerId: seller, title: item.title, status: item.status,
       categoryId: item.category_id, listingTypeId: item.listing_type_id,
       shippingMode: item.shipping?.mode, logisticType: item.shipping?.logistic_type,
-      priceCents, salePriceCents: cents(salePrice.amount), currency: 'BRL',
+      priceCents, salePriceCents: cents(salePrice.amount), currency: 'BRL', quantityPricing: hasQuantityPricing(prices),
       automation: Boolean(automation), promotion: salePrice.type === 'promotion' || Boolean(salePrice.metadata?.promotion_id) || cents(salePrice.amount) !== priceCents,
       variations: (item.variations || []).map(variation => ({ id: String(variation.id),
         label: (variation.attribute_combinations || []).map(attribute => attribute.value_name).join(' / ') })),
@@ -52,6 +61,7 @@ function createListingPriceHandlers({ pool, settings, request }) {
         || !Number.isSafeInteger(input.expectedPriceCents)) throw fail('Informe um preço válido em reais.', 400);
     const current = await read(req);
     if (!['active', 'paused'].includes(current.status)) throw fail('Este anúncio não está ativo ou pausado para edição.');
+    if (current.quantityPricing) throw fail('Este anúncio tem preço por quantidade/B2B. Gerencie essa regra diretamente no Mercado Livre.');
     if (current.automation) throw fail('Este anúncio usa automatização de preços no Mercado Livre. Gerencie a regra de preço na plataforma.');
     if (input.expectedPriceCents !== current.priceCents) throw fail('O preço mudou desde a consulta. Consulte novamente antes de atualizar.');
     if (current.variations.length > 1 && input.confirmAllVariations !== true) throw fail('Confirme a alteração do preço de todas as opções deste anúncio.');
@@ -69,4 +79,4 @@ function createListingPriceHandlers({ pool, settings, request }) {
   }
   return { read, update };
 }
-module.exports = { createListingPriceHandlers, standardPrice };
+module.exports = { createListingPriceHandlers, standardPrice, hasQuantityPricing };

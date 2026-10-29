@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { listingRows, suggestListingLinks, createListingHandlers, registerMercadoLivreRoutes } = require('../services/mercadoLivreServer.cjs');
+const { createListingPriceHandlers } = require('../services/mercadoLivreListingPrice.cjs');
 const id = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
 const item = { id: 'MLB123', seller_id: 7, title: 'Produto', status: 'active', seller_custom_field: 'PAI', variations: [
@@ -73,4 +74,31 @@ test('rotas de descoberta, busca manual e confirmação exigem autenticação in
     assert.equal((await app.inject({method,url:`${prefix}/mercado-livre/products/${path}`})).statusCode,401);
   }
   await app.close();
+});
+
+
+test('consulta todos os preços e protege anúncio com preço por quantidade B2B',async()=>{
+  const calls=[];
+  const handlers=createListingPriceHandlers({
+    pool:{query:async()=>[[{id,sku:'SKU-1'}]]},
+    settings:async()=>({user_id:'7'}),
+    request:async(path,options)=>{
+      calls.push({path,options});
+      if(path==='/items/MLB123?include_attributes=all') return {id:'MLB123',seller_id:7,status:'active',title:'Produto',variations:[]};
+      if(path==='/items/MLB123/prices') return {prices:[
+        {type:'standard',amount:25,currency_id:'BRL',conditions:{context_restrictions:['channel_marketplace']}},
+        {type:'standard',amount:22,currency_id:'BRL',conditions:{context_restrictions:['channel_marketplace','user_type_business'],min_purchase_unit:5}},
+      ]};
+      if(path==='/items/MLB123/sale_price?context=channel_marketplace') return {amount:25,currency_id:'BRL',type:'standard'};
+      if(path==='/pricing-automation/items/MLB123/automation') throw Object.assign(new Error('not found'),{remoteStatus:404});
+      throw new Error(`unexpected request ${path}`);
+    },
+  });
+  const read=await handlers.read({params:{itemId:'MLB123'},query:{parentId:id}});
+  assert.equal(read.priceCents,2500);
+  assert.equal(read.quantityPricing,true);
+  assert.equal(calls.find(call=>call.path==='/items/MLB123/prices').options.headers['show-all-prices'],'true');
+  await assert.rejects(()=>handlers.update({params:{itemId:'MLB123'},query:{parentId:id},body:{priceCents:2600,expectedPriceCents:2500}}),
+    {statusCode:409,message:'Este anúncio tem preço por quantidade/B2B. Gerencie essa regra diretamente no Mercado Livre.'});
+  assert.equal(calls.some(call=>call.options?.method==='PUT'),false);
 });

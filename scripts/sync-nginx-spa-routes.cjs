@@ -40,18 +40,24 @@ function spaBlock(source) {
   ].join('\n');
 }
 
+function withSpaBlock(source, block) {
+  const newline = source.includes('\r\n') ? '\r\n' : '\n';
+  const renderedBlock = block.replace(/\r?\n/g, newline);
+  return source.includes('# BEGIN GENERATED SPA ROUTES')
+    ? source.replace(/    # BEGIN GENERATED SPA ROUTES[\s\S]*?    # END GENERATED SPA ROUTES/, renderedBlock)
+    : source.replace('    location / {', `${renderedBlock}${newline}${newline}    location / {`);
+}
+
 if (require.main === module) {
   const root = path.resolve(__dirname, '..');
   const block = spaBlock(fs.readFileSync(path.join(root, 'routes/index.tsx'), 'utf8'));
   for (const name of ['production', 'staging']) {
     const target = path.join(root, `infra/nginx/mdv-site-${name}.conf`);
     const source = fs.readFileSync(target, 'utf8');
-    const updated = source.includes('# BEGIN GENERATED SPA ROUTES')
-      ? source.replace(/    # BEGIN GENERATED SPA ROUTES[\s\S]*?    # END GENERATED SPA ROUTES/, block)
-      : source.replace('    location / {', `${block}\n\n    location / {`);
+    const updated = withSpaBlock(source, block);
     if (process.argv.includes('--check')) {
       if (updated !== source) throw new Error(`Regenerate SPA routes in ${target}`);
     } else fs.writeFileSync(target, updated);
   }
 }
-module.exports = { routePatterns, spaBlock };
+module.exports = { routePatterns, spaBlock, withSpaBlock };
