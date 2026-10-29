@@ -1,7 +1,7 @@
 # v1.2.702-mercado-livre-erp-readonly
 
-Data: 29/10/2026. Status: preparado para publicação. Branch: `main`.
-Release do site: `/var/www/mdv-site/releases/20261029-210304-v1-2-702-mercado-livre-erp-readonly` (pendente). API: pendente.
+Data: 29/10/2026. Status: publicado. Branch: `main`.
+Release do site: `/var/www/mdv-site/releases/20261029-210551-v1-2-702-mercado-livre-erp-readonly`. API: `/var/www/mdv-api/backups/mercado-livre-1793307873300`.
 
 Ponte dedicada de leitura do Mercado Livre para o ERP. A escrita de estoque permanece desativada por padrão e requer flag administrativa e chave própria; preço segue bloqueado sem endpoint oficial de atualização.
 

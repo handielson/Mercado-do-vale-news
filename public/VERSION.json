@@ -1,13 +1,13 @@
 {
   "version": "v1.2.702-mercado-livre-erp-readonly",
   "date": "2026-10-29",
-  "status": "prepared",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.702-mercado-livre-erp-readonly",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261029-210551-v1-2-702-mercado-livre-erp-readonly",
   "api_release": {
-    "status": "pendente",
-    "backup": "pendente"
+    "status": "published",
+    "backup": "/var/www/mdv-api/backups/mercado-livre-1793307873300"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Configura a ponte dedicada de leitura do ERP para o Mercado Livre; mantém a escrita de estoque desligada por padrão e bloqueia preço sem endpoint oficial de atualização.",
@@ -22,8 +22,8 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "pendente",
-    "site_manifest": "pendente"
+    "mercado_livre_api": "publicada; /status HTTP 200, mysql.ok=true; GET /mercado-livre/settings HTTP 200, erpCapabilities=[]",
+    "site_manifest": "publicado; VERSION.json com manifesto final na release ativa"
   },
   "site_source_base": "main",
   "changed_files": [
@@ -55,7 +55,9 @@
     "python -B -m unittest tests.test_mercado_livre_bridge: 51 aprovados.",
     "npx.cmd playwright test e2e/mercado-livre-preview.spec.ts: 1 aprovado.",
     "npm.cmd run build: aprovado; aviso conhecido do Vite sobre configLoader/native e __dirname.",
-    "Commit, push, deploy e validações públicas pendentes."
+    "API publicada seletivamente; /status HTTP 200 com mysql.ok=true; GET /mercado-livre/settings HTTP 200 e erpCapabilities vazio.",
+    "Site publicado; homepage HTTP 200 e VERSION.json conferido na release ativa.",
+    "Nenhuma escrita de anúncio, preço ou estoque foi executada."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
