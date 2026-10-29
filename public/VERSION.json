@@ -4,7 +4,7 @@
   "status": "ready",
   "branch": "main",
   "tag": "v1.2.697-mercado-livre-precos-quantidade",
-  "release_vps": "/var/www/mdv-site/releases/20261029-080115-v1-2-697-mercado-livre-precos-quantidade",
+  "release_vps": "/var/www/mdv-site/releases/20261029-080422-v1-2-697-mercado-livre-precos-quantidade",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Identifica preços por quantidade B2B na leitura e protege anúncios contra atualização simples de preço.",
   "gestao_mdv_android": {
@@ -25,12 +25,14 @@
     "docs/versoes/2026-10-29-v1.2.697-mercado-livre-precos-quantidade.md"
   ],
   "validations": [
-    "npm.cmd run test:mercado-livre: 38 testes aprovados; contrato de preço por quantidade incluído.",
-    "node --test tmp-tests/sync-nginx-spa-routes.test.cjs: 1 teste aprovado; LF/CRLF idempotentes.",
-    "node scripts/publish-vps-plan.cjs --self-test: aprovado; deploy Mercado Livre seletivo antes do site.",
-    "node --check nos módulos alterados e server.js/vps_server.js/vps_server.cjs: aprovado.",
-    "npm.cmd run build: aprovado após guardas n8n, Supabase e rotas Nginx.",
-    "Deploy seletivo da API, publicação do site e validação pública pendentes."
+    "npm.cmd run test:mercado-livre: 38 testes aprovados, incluindo detecção de preço por quantidade e bloqueio sem PUT.",
+    "node --test tmp-tests/sync-nginx-spa-routes.test.cjs: 1 aprovado, cobrindo idempotência LF/CRLF.",
+    "node scripts/publish-vps-plan.cjs --self-test: aprovado; deploy seletivo Mercado Livre precede o site.",
+    "node --check dos módulos alterados e server.js/vps_server.js/vps_server.cjs: aprovado.",
+    "npm.cmd run build: aprovado com guardas n8n, Supabase e Nginx.",
+    "API seletiva publicada; mdv-api online; /status HTTP 200 e mysql.ok=true.",
+    "GET autenticado do ERP ao anúncio MLB4282518399/LJH074 retornou quantity_pricing=false; preço remoto R$ 59,00 e ERP R$ 39,90. Oferta ERP inativa; preço continua bloqueado por essa condição.",
+    "Site: homepage HTTP 200; /VERSION.json confirma a versão e a release publicada. Nenhum POST/PUT, alteração de preço, anúncio ou estoque ocorreu."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

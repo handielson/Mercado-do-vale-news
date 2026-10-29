@@ -1,11 +1,11 @@
 # v1.2.697-mercado-livre-precos-quantidade
 
-Data: 29/10/2026. Status: pronto para publicação. Branch: `codex/ml-quantity-price-read` → `main`. Tag planejada: `v1.2.697-mercado-livre-precos-quantidade`.
-Release do site planejada: `/var/www/mdv-site/releases/20261029-080115-v1-2-697-mercado-livre-precos-quantidade`. A API será publicada seletivamente antes do site.
+Data: 29/10/2026. Status: publicado. Branch: `codex/ml-quantity-price-read` → `main`. Tag: `v1.2.697-mercado-livre-precos-quantidade`.
+Release do site: `/var/www/mdv-site/releases/20261029-080422-v1-2-697-mercado-livre-precos-quantidade`. API: publicação seletiva concluída; backup remoto em `/var/www/mdv-api/backups/mercado-livre-1793260956341`.
 
-A consulta de preço do anúncio pede a lista completa com `show-all-prices: true`, separa o preço base das faixas por quantidade e informa se há regra B2B. A atualização de preço é bloqueada quando o anúncio tem essa regra. A chave dedicada ERP continua somente de leitura.
+A consulta autenticada pede todos os preços com `show-all-prices: true`, separa faixas por quantidade e retorna o indicador B2B. No anúncio testado `MLB4282518399` (`LJH074`), a API confirmou `quantity_pricing=false`; o preço remoto permanece R$ 59,00 e o ERP R$ 39,90. Como a oferta local continua inativa, o ERP ainda bloqueia alterações de preço. Não houve POST/PUT nem mudança de anúncio, preço ou estoque.
 
-Validação: suíte Mercado Livre (38 testes), regressão do gerador Nginx (1), self-test do preflight, sintaxe dos módulos/servidores e build passaram. Faltam commit, push, deploy seletivo da API, publicação do manifesto do site e validação pública. Nenhum anúncio, preço ou estoque foi alterado na implementação.
+Validação: 38 testes da suíte Mercado Livre, 1 teste LF/CRLF do gerador Nginx, self-test do preflight, sintaxe e build aprovados. `mdv-api` online, `/status` HTTP 200 com MySQL saudável; homepage HTTP 200 e `/VERSION.json` confirma esta release.
 
 ---
 
