@@ -12,6 +12,8 @@ interface PhotoIntakeQueueProps {
   onGoToFields: () => void;
   onRequestRemove: (item: SmartphonePhotoIntake) => void;
   busy?: boolean;
+  emptyMessage?: string;
+  emptyHint?: string;
 }
 const STATUS_STYLE: Record<string, string> = {
   uploaded: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -32,7 +34,7 @@ function StatusIcon({ status }: { status: SmartphonePhotoIntake['status'] }) {
   return <Clock3 size={14} />;
 }
 
-export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loading, onSelect, onGoToFields, onRequestRemove, busy = false }: PhotoIntakeQueueProps) {
+export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loading, onSelect, onGoToFields, onRequestRemove, busy = false, emptyMessage = 'Nenhum aparelho na fila.', emptyHint = 'Envie a primeira foto para começar.' }: PhotoIntakeQueueProps) {
   if (loading && items.length === 0) {
     return <div className="flex justify-center py-12 text-slate-400"><Loader2 className="animate-spin" /></div>;
   }
@@ -41,8 +43,8 @@ export function PhotoIntakeQueue({ items, groupSizeById = {}, selectedId, loadin
     return (
       <div className="rounded-xl border border-dashed border-slate-300 px-5 py-12 text-center">
         <Smartphone className="mx-auto text-slate-300" size={36} />
-        <p className="mt-3 text-sm font-medium text-slate-600">Nenhum aparelho na fila.</p>
-        <p className="mt-1 text-xs text-slate-400">Envie a primeira foto para começar.</p>
+        <p className="mt-3 text-sm font-medium text-slate-600">{emptyMessage}</p>
+        <p className="mt-1 text-xs text-slate-400">{emptyHint}</p>
       </div>
     );
   }

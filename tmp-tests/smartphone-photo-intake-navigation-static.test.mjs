@@ -43,10 +43,14 @@ assert.match(reviewCard, /review_confirmed: false/, 'alterar um dado conferido d
 
 assert.match(protectedPhoto, /onClick=\{\(\) => setZoomed\(true\)\}[\s\S]*Abrir foto da etiqueta em tamanho ampliado[\s\S]*ImageZoomModal[\s\S]*imageUrl=\{objectUrl\}/, 'foto protegida deve abrir em visualizacao ampliada sem expor uma URL publica');
 assert.match(intakePage, /Agrupar iguais[\s\S]*groupedQueue\.items[\s\S]*groupSizeById/, 'fila deve oferecer agrupamento visual explicito');
-assert.match(intakePage, /hideCompleted[\s\S]*item\.status !== 'completed'[\s\S]*Ocultar já disponíveis/, 'fila deve permitir ocultar somente os aparelhos já disponíveis para venda');
+assert.match(intakePage, /queueTab, setQueueTab\] = useState<'pending' \| 'completed'>\('pending'\)/, 'fila deve abrir somente com os pendentes');
+assert.match(intakePage, /items\.filter\(item => queueTab === 'completed' \? item\.status === 'completed' : item\.status !== 'completed'\)/, 'abas devem separar concluidos pelo status canonico');
+assert.match(intakePage, /Pendentes \(\{pendingCount\}\)[\s\S]*Disponíveis para venda \(\{completedCount\}\)/, 'abas devem mostrar os totais de aparelhos');
+assert.match(intakePage, /!visibleItems\.some\(item => item\.id === selectedId\)[\s\S]*setSelectedId\(visibleItems\[0\]\?\.id \|\| null\)/, 'selecao deve permanecer dentro da aba ativa, inclusive quando vazia');
+assert.match(intakePage, /setQueueTab\('completed'\);\s*setSelectedId\(finalizedNotice\.id\)/, 'ver aparelho salvo deve abrir a aba de concluidos');
 assert.match(intakePage, /function sortPhotoIntakeQueue[\s\S]*left\.status === 'completed'[\s\S]*right\.status === 'completed'[\s\S]*created_at/, 'itens concluidos devem ficar abaixo dos aparelhos ainda pendentes, preservando a ordem por data');
 assert.match(intakePage, /sortPhotoIntakeQueue\(\[item, \.\.\.without\]\)[\s\S]*sortPhotoIntakeQueue\(rows\)/, 'a prioridade dos pendentes deve valer ao atualizar e ao carregar a fila');
-assert.match(intakePage, /const finalizeSelected = async \(sku\?: string\)[\s\S]*status !== 'completed'[\s\S]*setSelectedId\(nextPending\?\.id \|\| updated\.id\)/, 'ao salvar deve avançar para o próximo aparelho pendente');
+assert.match(intakePage, /const finalizeSelected = async \(sku\?: string\)[\s\S]*status !== 'completed'[\s\S]*setQueueTab\('pending'\);\s*setSelectedId\(nextPending\?\.id \|\| null\)/, 'ao salvar deve avançar para o próximo pendente ou deixar a fila vazia');
 assert.match(intakePage, /sortPhotoIntakeQueue\(\[[\s\S]*updated,[\s\S]*items\.filter\(item => item\.id !== updated\.id\)/, 'aparelhos salvos devem permanecer no final da fila');
 assert.match(intakePage, /function getQueueGroupKey[\s\S]*return photoQueueGroupKey\(item\)/, 'fila deve usar a regra de agrupamento testada com configurações reais');
 assert.match(queue, /groupSize > 1[\s\S]*\{groupSize\} aparelhos/, 'fila deve mostrar a quantidade de aparelhos do grupo');
@@ -60,7 +64,7 @@ assert.match(intakePage, /onGoToFields=\{goToSelectedFields\}[\s\S]*fieldsRef=\{
 assert.match(intakePage, /fieldsRef\.current\?\.scrollIntoView\(\{ behavior: 'smooth', block: 'start' \}\)[\s\S]*fieldsRef\.current\?\.focus\(\{ preventScroll: true \}\)/, 'o atalho deve rolar e posicionar o foco nos campos');
 assert.match(reviewCard, /ref=\{fieldsRef\} tabIndex=\{-1\} className="scroll-mt-24[\s\S]*Dados identificados/, 'o destino do atalho deve ser a seção de preenchimento, depois da foto');
 assert.match(intakePage, /role="alertdialog"[\s\S]*removeFromQueue\(pendingRemoval\)/, 'o X deve confirmar a exclusão do aparelho escolhido');
-assert.match(intakePage, /setFinalizedNotice\(updated\)[\s\S]*setSelectedId\(nextPending\?\.id \|\| updated\.id\)/, 'a confirmação do aparelho salvo deve persistir ao avançar para o próximo');
+assert.match(intakePage, /setFinalizedNotice\(updated\)[\s\S]*setSelectedId\(nextPending\?\.id \|\| null\)/, 'a confirmação do aparelho salvo deve persistir ao avançar para o próximo');
 assert.match(intakePage, /role="status" aria-live="polite"[\s\S]*Ver aparelho salvo/, 'aparelho cadastrado deve aparecer em aviso acessível com acesso ao registro concluído');
 assert.doesNotMatch(intakePage, /lg:grid-cols-\[390px_minmax\(0,1fr\)\]/, 'a conferência não deve voltar para uma coluna lateral estreita');
 assert.match(marginEditor, /type="search"[\s\S]*onChange=\{event => setSearch\(event\.target\.value\)\}/, 'margens devem filtrar automaticamente enquanto o usuario digita');

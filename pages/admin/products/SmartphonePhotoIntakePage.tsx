@@ -60,7 +60,7 @@ export function SmartphonePhotoIntakePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [groupQueue, setGroupQueue] = useState(true);
-  const [hideCompleted, setHideCompleted] = useState(false);
+  const [queueTab, setQueueTab] = useState<'pending' | 'completed'>('pending');
   const [pendingRemoval, setPendingRemoval] = useState<SmartphonePhotoIntake | null>(null);
   const [finalizedNotice, setFinalizedNotice] = useState<SmartphonePhotoIntake | null>(null);
   const finalizedNoticeRef = useRef<HTMLDivElement>(null);
@@ -81,7 +81,10 @@ export function SmartphonePhotoIntakePage() {
       const without = current.filter(candidate => candidate.id !== item.id);
       return sortPhotoIntakeQueue([item, ...without]);
     });
-    if (select) setSelectedId(item.id);
+    if (select) {
+      setQueueTab(item.status === 'completed' ? 'completed' : 'pending');
+      setSelectedId(item.id);
+    }
   }, []);
 
   const loadQueue = useCallback(async () => {
@@ -129,15 +132,17 @@ export function SmartphonePhotoIntakePage() {
   );
 
   const visibleItems = useMemo(
-    () => hideCompleted ? items.filter(item => item.status !== 'completed') : items,
-    [hideCompleted, items],
+    () => items.filter(item => queueTab === 'completed' ? item.status === 'completed' : item.status !== 'completed'),
+    [queueTab, items],
   );
+  const completedCount = items.filter(item => item.status === 'completed').length;
+  const pendingCount = items.length - completedCount;
 
   useEffect(() => {
-    if (hideCompleted && selected?.status === 'completed') {
+    if (!visibleItems.some(item => item.id === selectedId)) {
       setSelectedId(visibleItems[0]?.id || null);
     }
-  }, [hideCompleted, selected, visibleItems]);
+  }, [selectedId, visibleItems]);
 
   const groupedQueue = useMemo(() => {
     if (!groupQueue) {
@@ -281,7 +286,8 @@ export function SmartphonePhotoIntakePage() {
       const nextPending = nextItems.find(
         item => item.id !== updated.id && item.status !== 'completed',
       );
-      setSelectedId(nextPending?.id || updated.id);
+      setQueueTab('pending');
+      setSelectedId(nextPending?.id || null);
       toast.success('Aparelho salvo e disponibilizado para venda.');
     } catch (error: any) {
       toast.error(error?.message || 'Não foi possível disponibilizar o aparelho para venda.');
@@ -354,7 +360,7 @@ export function SmartphonePhotoIntakePage() {
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => {
-                  setHideCompleted(false);
+                  setQueueTab('completed');
                   setSelectedId(finalizedNotice.id);
                   requestAnimationFrame(() => reviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                 }} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100">
@@ -365,22 +371,29 @@ export function SmartphonePhotoIntakePage() {
             </div>
           )}
           <div className="space-y-5">
-            <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm" aria-label="Fila de conferência">
+            <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm" aria-label={queueTab === 'pending' ? 'Fila de conferência' : 'Disponíveis para venda'}>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
-                <h2 className="font-bold text-slate-800">Fila de conferência</h2>
+                <h2 className="font-bold text-slate-800">{queueTab === 'pending' ? 'Fila de conferência' : 'Disponíveis para venda'}</h2>
                 <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
                   {groupQueue ? `${groupedQueue.items.length} grupos · ${visibleItems.length} aparelhos` : `${visibleItems.length} aparelhos`}
                 </span>
+              </div>
+              <div className="mb-3 flex flex-wrap gap-2" role="tablist" aria-label="Situação dos cadastros por foto">
+                <button type="button" role="tab" aria-selected={queueTab === 'pending'} onClick={() => setQueueTab('pending')} className={`rounded-xl border px-3 py-2 text-sm font-bold ${queueTab === 'pending' ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  Pendentes ({pendingCount})
+                </button>
+                <button type="button" role="tab" aria-selected={queueTab === 'completed'} onClick={() => setQueueTab('completed')} className={`rounded-xl border px-3 py-2 text-sm font-bold ${queueTab === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  Disponíveis para venda ({completedCount})
+                </button>
               </div>
               <div className="mb-3 flex flex-wrap gap-2">
                 <button type="button" onClick={toggleQueueGrouping} aria-pressed={groupQueue} className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold ${groupQueue ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                   <Layers3 size={16} /> Agrupar iguais <span className="text-xs">{groupQueue ? 'Ativado' : 'Desativado'}</span>
                 </button>
-                <button type="button" onClick={() => setHideCompleted(current => !current)} aria-pressed={hideCompleted} className={`rounded-xl border px-3 py-2 text-sm font-bold ${hideCompleted ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                  Ocultar já disponíveis · {hideCompleted ? 'Ativado' : 'Desativado'}
-                </button>
               </div>
               <PhotoIntakeQueue
+                emptyMessage={queueTab === 'pending' ? 'Nenhum aparelho pendente de conferência.' : 'Nenhum aparelho disponível para venda neste histórico.'}
+                emptyHint={queueTab === 'pending' ? 'Os aparelhos já salvos ficam na aba Disponíveis para venda.' : 'Os aparelhos aparecerão aqui após concluir o cadastro.'}
                 items={groupedQueue.items}
                 groupSizeById={groupedQueue.groupSizeById}
                 selectedId={selectedId}

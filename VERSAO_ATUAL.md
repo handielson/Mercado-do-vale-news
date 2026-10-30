@@ -1,3 +1,16 @@
+# v1.2.704-foto-fila-concluidos
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.704-foto-fila-concluidos`.
+Release do site: `/var/www/mdv-site/releases/20261030-145831-foto-fila-concluidos`.
+
+O cadastro por foto abre na aba Pendentes. Os aparelhos concluídos ficam na aba Disponíveis para venda, com contadores e acesso pelo aviso de cadastro salvo. Ao finalizar, a tela avança para o próximo pendente ou exibe a fila vazia. A organização é visual, usando o status existente, sem alterar estoque ou registros comerciais.
+
+Validações: suite smartphone-photo-intake, exclusão individual da fila, sintaxe dos servidores e build. Publicação somente do site.
+
+Registro: `docs/versoes/2026-10-30-v1.2.704-foto-fila-concluidos.md`.
+
+---
+
 # v1.2.703-garantia-logomarca
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.703-garantia-logomarca`.

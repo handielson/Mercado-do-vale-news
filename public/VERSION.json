@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.703-garantia-logomarca",
+  "version": "v1.2.704-foto-fila-concluidos",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.703-garantia-logomarca",
-  "release_vps": "/var/www/mdv-site/releases/20261030-143105-garantia-logomarca",
+  "tag": "v1.2.704-foto-fila-concluidos",
+  "release_vps": "/var/www/mdv-site/releases/20261030-145831-foto-fila-concluidos",
   "api_release": {
     "status": "published",
     "backup": "/var/www/mdv-api/backups/mercado-livre-1793307873300"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Aguarda imagens e fontes na impressão do termo e incorpora a logomarca nas duas vias do PDF, bloqueando falhas de carregamento.",
+  "summary": "Separa os aparelhos disponíveis para venda da fila de conferência por foto em abas com contadores, abrindo pelos pendentes.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -27,21 +27,17 @@
   },
   "site_source_base": "main",
   "changed_files": [
-    "utils/documentPrintAssets.ts",
-    "utils/warrantyPdfGenerator.ts",
-    "components/warranty/WarrantyTermModal.tsx",
-    "components/admin/sales/SaleDetailsModal.tsx",
-    "pages/customers/CustomerDetailsPage.tsx",
-    "components/customer/profile/PurchaseHistoryTab.tsx",
-    "tmp-tests/warranty-print-assets.test.mjs",
+    "components/products/photo-intake/PhotoIntakeQueue.tsx",
+    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
+    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.703-garantia-logomarca.md"
+    "docs/versoes/2026-10-30-v1.2.704-foto-fila-concluidos.md"
   ],
   "validations": [
-    "Chrome: imagem lenta acima de três segundos, imagem quebrada/cache, timeout de imagens e fontes; PDF real com duas vias e uma incorporação de logo.",
-    "PDF sintético renderizado por Poppler e conferido visualmente com logo nas duas páginas.",
-    "Contratos estáticos de garantia e PDF WhatsApp; TypeScript do helper e git diff --check.",
+    "Suite smartphone-photo-intake e exclusão individual da fila.",
+    "Navegação: abas por status, seleção na aba ativa e acesso ao aparelho salvo.",
+    "Sintaxe dos servidores e git diff --check.",
     "Build de produção com travas de segredos e de runtime legado."
   ],
   "android_entregas": {
