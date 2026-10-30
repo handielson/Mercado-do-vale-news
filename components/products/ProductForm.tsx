@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { productSchema } from '../../schemas/product';
+import { buildProductFormDefaults } from './productFormDefaults';
 import { Product, ProductInput } from '../../types/product';
 import { CategoryConfig } from '../../types/category';
 import { categoryService } from '../../services/categories';
@@ -350,29 +351,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
         formState: { errors }
     } = useForm<ProductInput>({
         resolver: zodResolver(productSchema) as any,
-        defaultValues: {
-            model_id: '',
-            name: '',
-            sku: '',
-            status: 'active',
-            images: [],
-            specs: {},
-            origin: '0' as any, // Padrão Nacional
-            price_cost: 0,
-            price_retail: 0,
-            price_reseller: 0,
-            price_wholesale: 0,
-            track_inventory: true,
-            stock_quantity: 0,
-            is_parent: false,
-            product_format: initialData?.is_parent ? 'parent' : initialData?.parent_id ? 'variation' : 'simple',
-            is_print3d: defaultIsPrint3d,
-            print3d_preorder_enabled: false,
-            print3d_preorder_limit: null,
-            warranty_type: 'brand', // Default to brand warranty
-            warranty_template_id: '',
-            ...initialData // Spread initialData AFTER defaults to override with actual values
-        }
+        defaultValues: buildProductFormDefaults(initialData, defaultIsPrint3d)
     });
 
     const isPrint3d = Boolean(watch('is_print3d'));
@@ -464,10 +443,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             console.log('📦 specs type:', typeof initialData.specs);
             console.log('📦 specs keys:', initialData.specs ? Object.keys(initialData.specs) : 'NO SPECS');
             console.log('🔄 Resetting form with initialData...');
-            reset({
-                product_format: initialData.is_parent ? 'parent' : initialData.parent_id ? 'variation' : 'simple',
-                ...initialData,
-            });
+            reset(buildProductFormDefaults(initialData, defaultIsPrint3d));
             setImagePreviews(initialData.images || []);
 
             // 🔥 CRITICAL: Update external IDs state when initialData arrives asynchronously
@@ -488,7 +464,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 }).catch(() => {/* silently ignore */ });
             }
         }
-    }, [initialData, reset]);
+    }, [initialData, defaultIsPrint3d, reset]);
 
     // Apply after reset so reopening a draft cannot restore an outdated cost
     // over the cost calculated from its saved plates.

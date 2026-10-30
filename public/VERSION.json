@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.704-foto-fila-concluidos",
+  "version": "v1.2.705-rascunho-valores-iniciais",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.704-foto-fila-concluidos",
-  "release_vps": "/var/www/mdv-site/releases/20261030-145831-foto-fila-concluidos",
+  "tag": "v1.2.705-rascunho-valores-iniciais",
+  "release_vps": "/var/www/mdv-site/releases/20261030-151555-rascunho-valores-iniciais",
   "api_release": {
     "status": "published",
     "backup": "/var/www/mdv-api/backups/mercado-livre-1793307873300"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Separa os aparelhos disponíveis para venda da fila de conferência por foto em abas com contadores, abrindo pelos pendentes.",
+  "summary": "Preserva os valores iniciais de preços e status ao reabrir rascunhos parciais, mantendo os dados já preenchidos e a validação comercial.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -27,17 +27,18 @@
   },
   "site_source_base": "main",
   "changed_files": [
-    "components/products/photo-intake/PhotoIntakeQueue.tsx",
-    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
-    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
+    "components/products/ProductForm.tsx",
+    "components/products/productFormDefaults.ts",
+    "tmp-tests/product-form-partial-draft.test.mjs",
+    "tmp-tests/family-registration.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.704-foto-fila-concluidos.md"
+    "docs/versoes/2026-10-30-v1.2.705-rascunho-valores-iniciais.md"
   ],
   "validations": [
-    "Suite smartphone-photo-intake e exclusão individual da fila.",
-    "Navegação: abas por status, seleção na aba ativa e acesso ao aparelho salvo.",
-    "Sintaxe dos servidores e git diff --check.",
+    "Regressão reproduz os quatro erros e valida preços/status em rascunhos parciais, sem sobrescrever dados explícitos.",
+    "Testes de rascunhos, registro de famílias, variações e normalização monetária.",
+    "TypeScript do helper, sintaxe dos servidores e git diff --check.",
     "Build de produção com travas de segredos e de runtime legado."
   ],
   "android_entregas": {

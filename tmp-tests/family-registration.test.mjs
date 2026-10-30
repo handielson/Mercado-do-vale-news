@@ -59,7 +59,7 @@ test('modelo sem configuração leva direto à etapa única de variações e pre
   const form = fs.readFileSync('components/products/ProductForm.tsx', 'utf8');
   assert.match(panel, /Cadastrar variações e preços juntos/);
   assert.match(page, /onCreateConfigurations=\{\(\) => onOpenParent\(model\)\}/);
-  assert.match(page, /\/admin\/products\/new#variations/);
+  assert.match(page, /handleOpenParent = \(model: Model\) => navigate\(familyWorkspacePath\(model\.id\)\)/, 'modelo deve abrir o cadastro único recuperável, sem criar outra família');
   assert.match(form, /window\.location\.hash === '#variations'/);
   assert.match(form, /validateNewSmartphoneFamilyPrices\(rowsToSave\)/);
   assert.match(form, /smartphonePriceGroups\.reference\(mergedData\.model_id!, row\.data\)/);

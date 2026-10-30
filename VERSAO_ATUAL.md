@@ -1,3 +1,16 @@
+# v1.2.705-rascunho-valores-iniciais
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.705-rascunho-valores-iniciais`.
+Release do site: `/var/www/mdv-site/releases/20261030-151555-rascunho-valores-iniciais`.
+
+O formulário de produtos usa a mesma base de valores ao iniciar e reabrir rascunhos parciais. Preços e status ausentes recebem os valores iniciais já usados no cadastro, sem apagar preços preenchidos nem liberar valores explicitamente inválidos. Corrige os erros NaN de varejo/revenda/atacado e status inválido no cadastro da família a partir do modelo.
+
+Validações: reprodução dos quatro erros com o schema real, rascunhos e famílias, valores monetários, TypeScript do helper, sintaxe dos servidores e build. Publicação somente do site; API e dados comerciais sem alteração.
+
+Registro: `docs/versoes/2026-10-30-v1.2.705-rascunho-valores-iniciais.md`.
+
+---
+
 # v1.2.704-foto-fila-concluidos
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.704-foto-fila-concluidos`.
