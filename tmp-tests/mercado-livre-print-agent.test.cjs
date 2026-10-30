@@ -8,6 +8,7 @@ const { executeMercadoLivreJob, keepFirstPdfPages } = require('../scripts/mercad
 const { createMercadoLivreSummaryPdf, ML_SUMMARY_WIDTH_MM, ML_SUMMARY_HEIGHT_MM,
     ML_SUMMARY_HORIZONTAL_MARGIN_MM } = require('../scripts/mercado-livre-print-core.cjs');
 const { presentPrintJob, classifyShipment, registerMercadoLivreRoutes } = require('../services/mercadoLivreServer.cjs');
+const { mercadoLivreStockWriteDeployEnv } = require('../scripts/mercado-livre-stock-write-deploy.cjs');
 
 async function fixture(t) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-ml-test-'));
@@ -191,7 +192,8 @@ test('publicacao seletiva inclui somente o modulo Mercado Livre antes de reinici
     assert.ok(section.includes('mercadoLivreListingStock.cjs'));
     assert.ok(section.includes('cp -p'));
     assert.ok(section.includes('MERCADO_LIVRE_ERP_READ_KEY'));
-    assert.ok(section.includes("MDV_ERP_STOCK_WRITE_ENABLED: '0'"), 'publicação de leitura deve manter escrita de estoque desativada');
+    assert.deepEqual(mercadoLivreStockWriteDeployEnv(['--mercado-livre-only'], {}),
+        { MDV_ERP_STOCK_WRITE_ENABLED: '0' }, 'publicação de leitura deve manter escrita de estoque desativada');
     assert.ok(section.includes('chmod 600'));
     assert.ok(!section.includes('localServer'));
 });

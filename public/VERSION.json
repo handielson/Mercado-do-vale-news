@@ -1,17 +1,20 @@
 {
-  "version": "v1.2.710-foto-precos-media-compra",
+  "version": "v1.2.711-mercado-livre-erp-stock-write-gate",
   "date": "2026-10-30",
-  "status": "published",
+  "status": "prepared_not_published",
   "branch": "main",
-  "tag": "v1.2.710-foto-precos-media-compra",
-  "release_vps": "/var/www/mdv-site/releases/20261030-163154-foto-precos-media-compra",
+  "tag": "v1.2.711-mercado-livre-erp-stock-write-gate",
+  "release_vps": "pendente_de_aprovacao",
   "api_release": {
-    "status": "published",
-    "module": "services/smartphonePriceGroupsServer.cjs",
-    "backup_prefix": "/var/www/mdv-api/backups/smartphone-price-groups-"
+    "status": "prepared_not_deployed",
+    "module": "services/mercadoLivreServer.cjs",
+    "write_mode": "disabled_by_default",
+    "stock_write_enabled": false,
+    "key_installed": false,
+    "note": "The selective deploy gate is implemented and locally validated. No API deploy, restart, production key installation, or stock write has occurred."
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Editor de preços na conferência por foto, média dos aparelhos disponíveis e sugestão da última compra registrada, preservando custos digitados ou confirmados.",
+  "summary": "Adds an explicit opt-in gate for ERP-to-Mercado-Livre stock writes. Deploys remain stock-write disabled unless the selective Mercado Livre deploy and dedicated key are explicitly supplied.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -28,30 +31,30 @@
   },
   "site_source_base": "main",
   "changed_files": [
-    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
-    "components/settings/ModelPricesPanel.tsx",
-    "services/smartphonePriceGroups.ts",
-    "services/smartphonePriceGroupsServer.cjs",
     "deploy-vps-server-only.cjs",
-    "scripts/deploy-smartphone-price-groups.cjs",
-    "tmp-tests/smartphone-price-groups-deploy.test.cjs",
-    "tmp-tests/photo-intake-price-editor.test.mjs",
-    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
-    "tmp-tests/smartphone-price-groups-preview.tsx",
-    "tmp-tests/smartphone-price-groups.test.cjs",
+    "scripts/mercado-livre-stock-write-deploy.cjs",
+    "tmp-tests/mercado-livre-stock-write-deploy.test.cjs",
+    "tmp-tests/mercado-livre-print-agent.test.cjs",
+    "package.json",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.710-foto-precos-media-compra.md"
+    "docs/versoes/2026-10-30-v1.2.711-mercado-livre-erp-stock-write-gate.md"
   ],
   "validations": [
-    "Chrome: editor canônico de preços, recarga após salvar, média separada da compra, falha/ausência da média e preservação de custo digitado/confirmado.",
-    "API: média exclui unidades vendidas/reservadas/ocultas e produtos inativos; última compra usa registro histórico com custo conhecido.",
-    "Suites de preço e cadastro por foto; deploy seletivo com baseline e proteção contra drift.",
-    "Sintaxe dos servidores e git diff --check.",
-    "Build de produção com travas de segredos e de runtime legado."
+    "npm.cmd run test:mercado-livre — 53 tests passed; static integration contract OK.",
+    "node --check deploy-vps-server-only.cjs and scripts/mercado-livre-stock-write-deploy.cjs — passed.",
+    "git diff --check — passed.",
+    "npm.cmd run build — passed (Vite warning only: native config loader reports existing __dirname use)."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
     "version_code": 9
+  },
+  "deployment_effects": {
+    "site_published": false,
+    "api_published_or_restarted": false,
+    "stock_write_enabled": false,
+    "marketplace_stock_changed": false,
+    "mercado_do_vale_stock_changed": false
   }
 }

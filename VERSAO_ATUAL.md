@@ -1,3 +1,16 @@
+# v1.2.711-mercado-livre-erp-stock-write-gate
+
+Data: 30/10/2026. Branch: `main`. Tag planejada: `v1.2.711-mercado-livre-erp-stock-write-gate`.
+Publicação do site: pendente de aprovação. Publicação/reinício da API: pendente de aprovação.
+
+Prepara um gate explícito para que o ERP possa enviar estoque ao Mercado Livre pelo deploy seletivo. O comportamento padrão mantém a escrita desativada. Habilitar exige a opção dedicada do deploy e uma chave de escrita própria, fora do ambiente de prévia. Este release preparado não instala chave nem ativa escrita.
+
+Validações locais: `npm.cmd run test:mercado-livre` — 53 testes aprovados; `node --check` nos arquivos de deploy — aprovado; `git diff --check` — aprovado. Build de produção passou com o aviso não fatal existente do Vite sobre `__dirname`.
+
+Nenhum anúncio, preço ou estoque foi escrito. Nenhum dado de estoque do Mercado do Vale foi alterado.
+
+---
+
 # v1.2.710-foto-precos-media-compra
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.710-foto-precos-media-compra`.
