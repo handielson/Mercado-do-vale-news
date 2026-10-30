@@ -52,6 +52,18 @@ assert.deepEqual(
   'admin product search should match specs.serial case-insensitively',
 );
 
+const unitBackedProduct = {
+  ...serializedProduct,
+  id: 'product-with-unit',
+  specs: {},
+  available_units: [{ imei_1: '123456789012345', status: 'available' }],
+} as Product;
+assert.deepEqual(
+  filterAdminProducts([unitBackedProduct], { ...baseFilters, search: '123456789012345' }).map(product => product.id),
+  ['product-with-unit'],
+  'admin product search should retain a variation hydrated from its physical unit',
+);
+
 console.log('admin product filter serialized search ok');
 
 const categories = ['3d', 'key', 'mini', 'phone'].map(category_id => ({ ...serializedProduct, id: category_id, model_id: '', sku: category_id, specs: {}, category_id }));

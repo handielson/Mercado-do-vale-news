@@ -1,3 +1,16 @@
+# v1.2.713-busca-imei-admin
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.713-busca-imei-admin`.
+Release do site: `/var/www/mdv-site/releases/20261030-190000-v12713-busca-imei-admin`.
+
+A busca no catálogo administrativo encontra o produto pelo IMEI da unidade cadastrada mesmo depois de uma atualização geral da lista. Durante a consulta, a tela informa que a busca ainda está em andamento; no cartão da família, destaca a variação correspondente ao IMEI.
+
+Validações: testes focados de busca por identificador, proteção contra perda do resultado na recarga, build do site e verificação pública da release. Publicação somente do site; API e n8n preservados.
+
+Registro: `docs/versoes/2026-10-30-v1.2.713-busca-imei-admin.md`.
+
+---
+
 # v1.2.710-foto-precos-media-compra
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.710-foto-precos-media-compra`.

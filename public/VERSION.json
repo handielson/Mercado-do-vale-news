@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.712-meta-atendimento-paridade",
+  "version": "v1.2.713-busca-imei-admin",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.712-meta-atendimento-paridade",
-  "release_vps": "/var/www/mdv-site/releases/20261030-154100-meta-atendimento-paridade",
+  "tag": "v1.2.713-busca-imei-admin",
+  "release_vps": "/var/www/mdv-site/releases/20261030-190000-v12713-busca-imei-admin",
   "api_release": {
     "status": "published",
     "module": "services/smartphonePriceGroupsServer.cjs",
     "backup_prefix": "/var/www/mdv-api/backups/smartphone-price-groups-"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Atendimento do Facebook/Messenger alinhado ao WhatsApp para catálogo, promoções e continuidade da compra.",
+  "summary": "Busca administrativa por IMEI preserva o aparelho encontrado após a atualização do catálogo e destaca sua variação.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -26,26 +26,21 @@
     "mercado_livre_api": "publicada; /status HTTP 200, mysql.ok=true; GET /mercado-livre/settings HTTP 200, erpCapabilities=[]",
     "site_manifest": "publicado; VERSION.json com manifesto final na release ativa"
   },
-  "site_source_base": "2fa01b7abc975d79c9973876c881622e09e82b17",
+  "site_source_base": "02b007646286da5ada553b2e624a355f7c690934",
   "changed_files": [
-    "scripts/build-n8n-meta-parity.cjs",
-    "scripts/deploy-n8n-meta-parity.cjs",
-    "scripts/n8n-meta-catalog-intent-parity.cjs",
-    "scripts/n8n-meta-multibrand-promos.cjs",
-    "scripts/n8n-meta-sales-parity.cjs",
-    "tmp-tests/n8n-meta-catalog-intent-parity.test.cjs",
-    "tmp-tests/n8n-meta-multibrand-promos.test.cjs",
-    "tmp-tests/n8n-meta-parity-composition.test.cjs",
-    "tmp-tests/n8n-meta-sales-parity.test.cjs",
+    "components/products/ProductList.tsx",
+    "hooks/useProducts.ts",
+    "pages/admin/products/ProductListPage.tsx",
+    "tmp-tests/admin-product-filter-serialized-search.test.ts",
+    "tmp-tests/admin-products-imei-unit-hydration-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.712-meta-atendimento-paridade.md"
+    "docs/versoes/2026-10-30-v1.2.713-busca-imei-admin.md"
   ],
   "validations": [
-    "Candidato montado sobre o n8n ativo com verificação de histórico, credencial e integridade dos 128 nós.",
-    "Gate comercial: 17 arquivos de testes; mais 16 testes de paridade Meta e 51 testes Meta existentes.",
-    "Implantação com backup, espera de execuções, comparação do hash e verificação do webhook.",
-    "Build do site e verificação do VERSION.json publicado."
+    "Consulta de leitura confirmou IMEI cadastrado em unidade disponível e variação ativa na API de produção.",
+    "Testes focados de busca por IMEI e preservação do resultado após recarga do catálogo.",
+    "Build do site e validação pública da página e de VERSION.json."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

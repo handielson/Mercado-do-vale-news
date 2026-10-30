@@ -56,6 +56,7 @@ export const ProductListPage: React.FC = () => {
         products,
         isLoading,
         isRefreshing,
+        isRemoteSearching,
         error,
         handleFilterChange,
         deleteProduct,
@@ -82,6 +83,7 @@ export const ProductListPage: React.FC = () => {
     );
     const totalPages = familyPagination.totalPages;
     const visibleFamilyGroups = familyPagination.groups;
+    const searchPending = Boolean(filters.search.trim().length >= 2 && (isRemoteSearching || isRefreshing));
     const visibleProducts = visibleFamilyGroups.flatMap(group => group.selectionProducts);
     const visibleProductIdsKey = Array.from(new Set(
         visibleProducts.flatMap((product) => [product.id, product.parent_id].filter(Boolean) as string[]),
@@ -458,6 +460,8 @@ export const ProductListPage: React.FC = () => {
 
             {/* Filters */}
             <ProductFilters onFilterChange={handleFilterChange} showParentVisibility={false} />
+            {searchPending && familyGroups.length === 0 &&
+                <p role="status" className="mt-3 text-sm text-slate-600">Buscando produtos e IMEIs cadastrados…</p>}
             {channelLoading && <p role="status" className="mt-3 text-sm text-slate-600">Consultando situação dos produtos no canal…</p>}
             {channelError && <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{channelError}</p>}
 
@@ -485,7 +489,7 @@ export const ProductListPage: React.FC = () => {
                 <ProductList
                     products={products}
                     groups={visibleFamilyGroups}
-                    isLoading={isLoading}
+                    isLoading={isLoading || (searchPending && familyGroups.length === 0)}
                     onEditProduct={handleEditProduct}
                     onDeleteProduct={handleDeleteProduct}
                     selectionMode={selectionMode}
@@ -496,7 +500,7 @@ export const ProductListPage: React.FC = () => {
             ) : (
                 <ProductFamilyList
                     groups={visibleFamilyGroups}
-                    isLoading={isLoading}
+                    isLoading={isLoading || (searchPending && familyGroups.length === 0)}
                     searchActive={Boolean(filters.search.trim())}
                     selectionMode={selectionMode}
                     selectedIds={selectedIds}
@@ -531,7 +535,7 @@ export const ProductListPage: React.FC = () => {
             />
 
             {/* Results Count and Pagination Controls */}
-            {!isLoading && (
+            {!isLoading && !searchPending && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200">
                     <div className="text-sm text-slate-500">
                         {familyGroups.length === 0 ? (

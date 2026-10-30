@@ -179,6 +179,8 @@ export const useProducts = () => {
     const [familyFilteredProducts, setFamilyFilteredProducts] = useState<Product[]>(cached || []);
     const [isLoading, setIsLoading] = useState(!cached); // só mostra loading se não tem cache
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isRemoteSearching, setIsRemoteSearching] = useState(false);
+    const [searchDataRevision, setSearchDataRevision] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [cacheAge, setCacheAge] = useState<string | null>(getCacheAge);
     useEffect(() => {
@@ -274,6 +276,9 @@ export const useProducts = () => {
             setFilteredProducts(data);
             saveToCache(data);
             setCacheAge('agora');
+            // A recarga substitui a lista hidratada com IMEIs. Refaça a busca
+            // remota ativa depois dela para não perder o aparelho encontrado.
+            setSearchDataRevision(revision => revision + 1);
 
             // Pré-aquece cache de imagens
             const modelIds = data
@@ -350,9 +355,10 @@ export const useProducts = () => {
     // list was loaded are still discoverable.
     useEffect(() => {
         const term = filters.search.trim();
+        const requestId = ++searchRequestSeq.current;
+        setIsRemoteSearching(term.length >= 2);
         if (term.length < 2) return;
 
-        const requestId = ++searchRequestSeq.current;
         const since = titleRevision.current;
         const looksLikeSku = /^[a-z0-9._-]+$/i.test(term);
 
@@ -406,8 +412,11 @@ export const useProducts = () => {
                 if (requestId === searchRequestSeq.current) {
                     console.warn('[useProducts] Falha ao enriquecer busca na VPS:', error);
                 }
+            })
+            .finally(() => {
+                if (requestId === searchRequestSeq.current) setIsRemoteSearching(false);
             });
-    }, [filters.search]);
+    }, [filters.search, searchDataRevision]);
 
     // Apply filters whenever they change
     useEffect(() => {
@@ -430,6 +439,7 @@ export const useProducts = () => {
         channelError: needsChannel && channelState.channel === channel ? channelState.error : null,
         isLoading,
         isRefreshing,
+        isRemoteSearching,
         error,
         filters,
         handleFilterChange,

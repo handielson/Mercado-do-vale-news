@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Copy, Package, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
@@ -31,7 +31,11 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
 }) {
     const variants = group.familyProducts.filter(product => String(product.id) !== String(group.parent?.id));
     const familyProduct = group.parent || group.representative;
-    const [selectedId, setSelectedId] = useState(variants[0]?.id || group.representative.id);
+    const matchedVariantId = variants.find(variant => group.matchedProducts.some(product => product.id === variant.id))?.id;
+    const [selectedId, setSelectedId] = useState(matchedVariantId || variants[0]?.id || group.representative.id);
+    useEffect(() => {
+        if (matchedVariantId) setSelectedId(matchedVariantId);
+    }, [matchedVariantId]);
     const selected = variants.find(product => product.id === selectedId) || variants[0] || group.representative;
     const label = (product: Product) => {
         const { color } = getProductVariationSpecs(product);
