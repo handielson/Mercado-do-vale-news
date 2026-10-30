@@ -31,6 +31,9 @@ test('cash cutoff is enforced on server routes and visible in PDV', () => {
   }
   const serialized = fs.readFileSync(path.join(root, 'services/serializedSaleFinalization.cjs'), 'utf8');
   assert.match(serialized, /if \(sale\.cash_session_id\)[\s\S]*?cashSessionCutoff\(cashRows\[0\]\.opened_at\)/);
+  const deploy = fs.readFileSync(path.join(root, 'deploy-vps-server-only.cjs'), 'utf8');
+  assert.match(deploy, /await upload\(path\.join\(__dirname, 'services\/cashSessionCutoff\.cjs'\)/);
+  assert.match(deploy, /node --check \$\{appDir\}\/services\/cashSessionCutoff\.cjs/);
   const pdv = fs.readFileSync(path.join(root, 'pages/pdv/PDVPage.tsx'), 'utf8');
   assert.match(pdv, /activeCashSession\.requires_closing/);
   assert.match(pdv, /cashSession && !cashSession\.requires_closing/);

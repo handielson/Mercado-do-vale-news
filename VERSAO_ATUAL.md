@@ -1,3 +1,16 @@
+# v1.2.717-caixa-fechamento-diario
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.717-caixa-fechamento-diario`.
+Release do site: `/var/www/mdv-site/releases/20261030-203600-v12717-caixa-diario`.
+
+Caixas abertos ficam bloqueados para novas vendas e movimentos a partir das 20h de Petrolina. O operador confere e fecha a sessao anterior antes da proxima abertura. A API corrige o resumo do fechamento usando `payment_status` real das vendas e evita deduzir duas vezes estornos da mesma sessao.
+
+Validacoes: testes focados de caixa, sintaxe dos servidores, build, resumo em leitura contra o banco de producao, deploy da API e site e verificacao publica.
+
+Registro: `docs/versoes/2026-10-30-v1.2.717-caixa-fechamento-diario.md`.
+
+---
+
 # v1.2.716-mercado-livre-erp-price-write-gate
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.716-mercado-livre-erp-price-write-gate`.

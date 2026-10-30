@@ -1031,6 +1031,8 @@ async function main() {
   await upload(path.join(__dirname, 'services/whatsappStatusSender.cjs'), remotePathJoin(appDir, 'services/whatsappStatusSender.cjs'));
   await upload(path.join(__dirname, 'services/productReadPrivacy.cjs'), remotePathJoin(appDir, 'services/productReadPrivacy.cjs'));
   await upload(path.join(__dirname, 'services/serializedSaleFinalization.cjs'), remotePathJoin(appDir, 'services/serializedSaleFinalization.cjs'));
+  await upload(path.join(__dirname, 'services/cashSessionCutoff.cjs'), remotePathJoin(appDir, 'services/cashSessionCutoff.cjs'));
+  await exec(`node --check ${appDir}/services/cashSessionCutoff.cjs`);
   await upload(path.join(__dirname, 'services/unitVisibility.cjs'), remotePathJoin(appDir, 'services/unitVisibility.cjs'));
   await upload(path.join(__dirname, 'services/unitStatusSchema.cjs'), remotePathJoin(appDir, 'services/unitStatusSchema.cjs'));
   await upload(path.join(__dirname, 'services/openAiFinanceServer.cjs'), remotePathJoin(appDir, 'services/openAiFinanceServer.cjs'));

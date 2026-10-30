@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.716-mercado-livre-erp-price-write-gate",
+  "version": "v1.2.717-caixa-fechamento-diario",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.716-mercado-livre-erp-price-write-gate",
-  "release_vps": "/var/www/mdv-site/releases/20261030-202646-mercado-livre-price-gate",
+  "tag": "v1.2.717-caixa-fechamento-diario",
+  "release_vps": "/var/www/mdv-site/releases/20261030-203600-v12717-caixa-diario",
   "api_release": {
     "status": "published",
-    "module": "services/mercadoLivreListingPrice.cjs",
-    "backup_prefix": "/var/www/mdv-api/backups/mercado-livre-"
+    "module": "vps_server.cjs, vps_server.js e services/cashSessionCutoff.cjs",
+    "backup_prefix": "/var/www/mdv-api/backups/"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Adiciona atualização controlada de preço do ERP para anúncios Mercado Livre, com gate independente publicado desligado por padrão.",
+  "summary": "Bloqueia o uso do caixa apos as 20h e corrige o resumo financeiro do fechamento.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -29,27 +29,34 @@
   },
   "pending_deployments": {
     "mercado_livre_api": "publicada com preço e estoque desligados; validar status de capacidades",
-    "site_manifest": "publicado; VERSION.json v1.2.716 na release ativa"
+    "site_manifest": "publicado; VERSION.json v1.2.717 na release ativa"
   },
-  "site_source_base": "dfe061e8c55f1285a0974edcb8e6d42b0a3ba91b",
+  "site_source_base": "e5bbc8a0",
   "changed_files": [
-    "services/mercadoLivreListingPrice.cjs",
-    "services/mercadoLivreServer.cjs",
-    "scripts/mercado-livre-stock-write-deploy.cjs",
+    "hooks/useCashSession.ts",
+    "pages/admin/financial/CashRegisterPage.tsx",
+    "pages/pdv/PDVPage.tsx",
+    "services/cashSessionCutoff.cjs",
+    "services/serializedSaleFinalization.cjs",
     "deploy-vps-server-only.cjs",
-    "tmp-tests/mercado-livre-listing-price.test.cjs",
-    "tmp-tests/mercado-livre-stock-write-deploy.test.cjs",
-    "docs/operacional/mercado-livre-erp-sync.md",
+    "types/cashRegister.ts",
+    "vps_server.cjs",
+    "vps_server.js",
+    "tmp-tests/cash-closing-flow.test.cjs",
+    "tmp-tests/cash-daily-cutoff.test.cjs",
+    "tmp-tests/cash-register-linking-static.test.mjs",
+    "tmp-tests/cash-register-pdv-gate-static.test.mjs",
+    "tmp-tests/cash-summary-payment-status.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.716-mercado-livre-erp-price-write-gate.md"
+    "docs/versoes/2026-10-30-v1.2.717-caixa-fechamento-diario.md"
   ],
   "validations": [
-    "Testes focados do serviço de preço Mercado Livre e do deploy seletivo",
-    "node --check nos serviços e script de deploy",
+    "Testes focados do corte diario, resumo e fechamento de caixa",
+    "node --check nos servidores",
     "git diff --check",
     "npm.cmd run build",
-    "Deploy seletivo da API e validação pública do status",
+    "Deploy da API e validação pública do status e resumo do caixa",
     "Release do site e validação do VERSION.json"
   ],
   "android_entregas": {
