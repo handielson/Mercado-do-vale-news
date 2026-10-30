@@ -20,6 +20,7 @@ import { getCustomerFinancialSummary, type CustomerFinancialSummary } from '../.
 import { DeliveryWorkerTab } from '../../components/customer/profile/DeliveryWorkerTab';
 import { formatBrazilDate, formatBrazilDateTime } from '../../utils/brazilDateTime';
 import { getSaleItemRecordedIdentifier, getWarrantySaleItems } from '../../utils/warrantySaleItems';
+import { printDocumentWhenReady } from '../../utils/documentPrintAssets';
 
 /**
  * Customer Details Page
@@ -258,9 +259,10 @@ export default function CustomerDetailsPage() {
             const pw = window.open('', '_blank');
             if (!pw) { toast.error('Permita popups para imprimir'); return; }
             pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termos de Garantia</title><style>body{font-family:Arial,sans-serif;padding:20px;line-height:1.6}.warranty-copy{page-break-after:always;margin-bottom:40px}.warranty-copy:last-child{page-break-after:auto}</style></head><body>${sections.join('')}</body></html>`);
-            pw.document.close(); pw.print();
+            pw.document.close();
+            await printDocumentWhenReady(pw);
         } catch (e) {
-            console.error(e); toast.error('Erro ao gerar o termo');
+            console.error(e); toast.error(e instanceof Error ? e.message : 'Erro ao gerar o termo');
         } finally {
             setPrintingSaleId(null);
         }

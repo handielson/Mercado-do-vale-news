@@ -37,6 +37,7 @@ import { formatBrazilDateTime } from '../../../utils/brazilDateTime';
 import { getSaleItemRecordedIdentifier, getWarrantySaleItems } from '../../../utils/warrantySaleItems';
 import { SaleItemInventoryInfo } from './SaleItemInventoryInfo';
 import { SaleStockReconciliation } from './SaleStockReconciliation';
+import { printDocumentWhenReady } from '../../../utils/documentPrintAssets';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -517,10 +518,10 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
             if (!printWindow) { toast.error('Permita popups para imprimir'); return; }
             printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termos de Garantia (${sections.length / 2} aparelho(s) × 2 vias)</title><style>body{font-family:Arial,sans-serif;padding:20px;line-height:1.6}.warranty-copy{page-break-after:always;margin-bottom:40px}.warranty-copy:last-child{page-break-after:auto}</style></head><body>${sections.join('')}</body></html>`);
             printWindow.document.close();
-            printWindow.print();
+            await printDocumentWhenReady(printWindow);
         } catch (e) {
             console.error(e);
-            toast.error('Erro ao gerar o termo de garantia');
+            toast.error(e instanceof Error ? e.message : 'Erro ao gerar o termo de garantia');
         } finally {
             setIsPrintingWarranty(false);
         }

@@ -7,6 +7,8 @@
 import React, { useState } from 'react';
 import { FileText, Printer, Receipt, X, Save } from 'lucide-react';
 import { renderWarrantyBothCopies } from '../../utils/warrantyTagReplacement';
+import { printDocumentWhenReady } from '../../utils/documentPrintAssets';
+import { toast } from 'sonner';
 
 interface WarrantyTermModalProps {
     isOpen: boolean;
@@ -30,6 +32,7 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
     onPrintReceipt,
 }) => {
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isPrinting, setIsPrinting] = useState(false);
 
     if (!isOpen) return null;
     if (!warrantyContents || warrantyContents.length === 0) return null;
@@ -43,9 +46,10 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
         }
     };
 
-    const handlePrintWarranty = () => {
+    const handlePrintWarranty = async () => {
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
+        setIsPrinting(true);
 
         // Para cada termo, gera as 2 vias (cliente + empresa). Total = 2N páginas.
         const sections: string[] = [];
@@ -80,7 +84,14 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
             </html>
         `);
         printWindow.document.close();
-        printWindow.print();
+        try {
+            await printDocumentWhenReady(printWindow);
+        } catch (error) {
+            printWindow.close();
+            toast.error(error instanceof Error ? error.message : 'Erro ao preparar a impressão do termo');
+        } finally {
+            setIsPrinting(false);
+        }
     };
 
     return (
@@ -111,10 +122,11 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
                             )}
                             <button
                                 onClick={handlePrintWarranty}
-                                className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                                disabled={isPrinting}
+                                className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
                             >
                                 <Printer size={16} />
-                                {warrantyContents.length > 1
+                                {isPrinting ? 'Preparando impressão...' : warrantyContents.length > 1
                                     ? `Imprimir ${warrantyContents.length} Termos (${warrantyContents.length * 2} vias)`
                                     : 'Imprimir Garantia'}
                             </button>

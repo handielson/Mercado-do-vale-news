@@ -26,6 +26,7 @@ import {
 } from '../../../services/customerDebtService';
 import { toast } from 'sonner';
 import { toBrowserSafeMediaUrl } from '../../../utils/media-url';
+import { printDocumentWhenReady } from '../../../utils/documentPrintAssets';
 
 const fmt = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v / 100);
@@ -306,8 +307,9 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                 }
             }
 
-            printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termo de Garantia</title><style>body{font-family:Arial,sans-serif;padding:20px;line-height:1.6}.warranty-copy{page-break-after:always;margin-bottom:40px}.warranty-copy:last-child{page-break-after:auto}</style></head><body>${sections.join('')}<script>window.onload=function(){window.print();};<\/script></body></html>`);
+            printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termo de Garantia</title><style>body{font-family:Arial,sans-serif;padding:20px;line-height:1.6}.warranty-copy{page-break-after:always;margin-bottom:40px}.warranty-copy:last-child{page-break-after:auto}</style></head><body>${sections.join('')}</body></html>`);
             printWindow.document.close();
+            await printDocumentWhenReady(printWindow);
         } catch (error) {
             console.error(error);
             printWindow.close();

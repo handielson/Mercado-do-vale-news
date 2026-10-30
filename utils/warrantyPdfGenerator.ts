@@ -1,6 +1,7 @@
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { renderWarrantyBothCopies } from './warrantyTagReplacement';
+import { embedDocumentImages, waitForDocumentAssets } from './documentPrintAssets';
 
 type WarrantyPdfInput = {
     warrantyContents: string[];
@@ -15,19 +16,6 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
         image.onerror = () => reject(new Error('Falha ao renderizar pagina do termo de garantia'));
         image.src = dataUrl;
     });
-}
-
-async function waitForEmbeddedImages(root: HTMLElement): Promise<void> {
-    const images = Array.from(root.querySelectorAll('img'));
-    await Promise.all(images.map((image) => {
-        if (image.complete) return Promise.resolve();
-        return new Promise<void>((resolve) => {
-            const finish = () => resolve();
-            image.addEventListener('load', finish, { once: true });
-            image.addEventListener('error', finish, { once: true });
-            window.setTimeout(finish, 3000);
-        });
-    }));
 }
 
 export async function generateExistingWarrantyTermPdfBase64(input: WarrantyPdfInput): Promise<string> {
@@ -62,15 +50,16 @@ export async function generateExistingWarrantyTermPdfBase64(input: WarrantyPdfIn
     document.body.appendChild(host);
 
     try {
+        const imageCache = new Map<string, Promise<string>>();
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
         for (let index = 0; index < copies.length; index += 1) {
             if (index > 0) pdf.addPage('a4', 'portrait');
             host.innerHTML = copies[index];
-            await document.fonts?.ready;
-            await waitForEmbeddedImages(host);
+            await embedDocumentImages(host, imageCache);
+            await waitForDocumentAssets(host);
             const png = await toPng(host, {
                 backgroundColor: '#ffffff',
-                cacheBust: true,
+                cacheBust: false,
                 pixelRatio: 2,
                 width: 794,
                 style: {

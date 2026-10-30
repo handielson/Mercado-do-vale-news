@@ -1,3 +1,16 @@
+# v1.2.703-garantia-logomarca
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.703-garantia-logomarca`.
+Release do site: `/var/www/mdv-site/releases/20261030-143105-garantia-logomarca`.
+
+A impressão dos termos no PDV, vendas e histórico do cliente aguarda imagens decodificadas e fontes. Imagens quebradas ou sem resposta interrompem a impressão automática com aviso. O PDF incorpora a logomarca uma vez e reutiliza o conteúdo nas duas vias, sem buscar novamente a mesma imagem durante a captura.
+
+Validações: teste em Chrome com imagem lenta acima de três segundos, imagem quebrada e timeout; PDF real com duas páginas e logomarca conferida visualmente; contratos de garantia/WhatsApp, TypeScript do helper e build. Publicação somente do site; API e dados comerciais sem alteração.
+
+Registro: `docs/versoes/2026-10-30-v1.2.703-garantia-logomarca.md`.
+
+---
+
 # v1.2.702-mercado-livre-erp-readonly
 
 Data: 29/10/2026. Status: publicado. Branch: `main`.
