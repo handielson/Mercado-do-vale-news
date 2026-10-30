@@ -61,7 +61,7 @@ import { getBlingSkuSpecAutofill } from './blingSkuSpecAutofill.js';
 import { resolveExistingProductImages, resolveSiblingProductImages } from './blingSkuExistingImages.js';
 import { UnitStatus } from '../../utils/field-standards';
 import { productService } from '../../services/products';
-import { productUnitCondition, saveFamilyRegistration, smartphoneFamilyConfigurationKey, validateNewSmartphoneFamilyPrices } from './familyRegistration.js';
+import { productUnitCondition, saveFamilyRegistration, smartphoneFamilyConfigurationKey, partitionSmartphoneFamilyRowsForSave, validateNewSmartphoneFamilyPrices } from './familyRegistration.js';
 import { smartphonePriceGroups } from '../../services/smartphonePriceGroups';
 import { uploadProductVideo, validateProductVideo } from '../../services/productVideoUpload';
 import { ProductFamilyEditor, type FamilyRow, type FamilyEditorDraft } from './ProductFamilyEditor';
@@ -1576,12 +1576,23 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             if (!isParent && familyRows.length > 0) throw new Error('Esta tela tem variações configuradas. Volte ao formato Com variações para salvar a família ou remova os rascunhos antes de mudar o formato.');
             const baseSetup = mergedData.is_print3d ? productionSetups[isParent ? 'parent' : 'single'] : undefined;
             if (baseSetup) mergedData = withPrint3dCost(mergedData, baseSetup);
-            const rowsToSave = familyRows.map(row => mergedData.is_print3d && productionSetups[row.key] ? { ...row, data:withPrint3dCost(row.data, productionSetups[row.key]!) } : row);
+            let rowsToSave = familyRows.map(row => mergedData.is_print3d && productionSetups[row.key] ? { ...row, data:withPrint3dCost(row.data, productionSetups[row.key]!) } : row);
+            let pendingPriceRows: FamilyRow[] = [];
             if (isParent && rowsToSave.some(row => !row.data.id)) {
                 const familyCategoryName = categoryConfig?.__category_id === mergedData.category_id
                     ? categoryConfig.__category_name
                     : (mergedData.category_id ? (await categoryService.getById(mergedData.category_id))?.name : '');
                 if (isSmartphoneModel({ category_name: familyCategoryName })) {
+                    const partition = partitionSmartphoneFamilyRowsForSave(rowsToSave);
+                    rowsToSave = partition.ready;
+                    pendingPriceRows = partition.pending;
+                    if (pendingPriceRows.length && !onSaveDraft) throw new Error('Salve este cadastro como rascunho para manter as configurações sem preço antes de continuar.');
+                    if (!rowsToSave.length) {
+                        await onSaveDraft!(captureDraftSnapshot(), { linkToDraft: true });
+                        setDraftSaveStatus('saved');
+                        toast.info('Configurações mantidas no rascunho. Preencha os três preços da configuração que deseja salvar.');
+                        return;
+                    }
                     validateNewSmartphoneFamilyPrices(rowsToSave);
                     const newGroups = new Map<string, FamilyRow>();
                     for (const row of rowsToSave.filter(item => !item.data.id)) newGroups.set(smartphoneFamilyConfigurationKey(row.data), row);
@@ -1597,7 +1608,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             }
             if (isParent && familyRows.length > 0) {
                 if (familyLoading || familyLoadError) throw new Error(familyLoadError || 'Aguarde o carregamento dos filhos.');
-                if (isLocalCatalogPreviewRuntime() && familyRows.some(row => !row.data.id && hasSerializedIdentity(row.data.specs || {}))) {
+                if (isLocalCatalogPreviewRuntime() && rowsToSave.some(row => !row.data.id && hasSerializedIdentity(row.data.specs || {}))) {
                     throw new Error('A prévia local de famílias ainda não grava unidades com IMEI/serial. Nenhum produto foi salvo. Cadastre a unidade física pelo fluxo de estoque após aprovação.');
                 }
                 if (initialData?.id && !familyCheckpoint.current.parent) familyCheckpoint.current.parent = initialData;
@@ -1622,9 +1633,21 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                     }),
                     checkVideo: (sku: string) => vpsApiService.checkVideoBySku(sku, { noCache: true }),
                 });
-                setFamilyRows(familyRows.map(row => ({ ...row, videoFile: null, data: { ...row.data, ...familyCheckpoint.current.children[row.key] } })));
+                const confirmedRows = familyRows.map(row => {
+                    const confirmed = familyCheckpoint.current.children[row.key];
+                    return confirmed ? { ...row, videoFile: null, data: { ...row.data, ...confirmed } } : row;
+                });
+                setFamilyRows(confirmedRows);
                 setProductionSetups({});
                 setProductionSavedVersion(current => current + 1);
+                if (pendingPriceRows.length) {
+                    const snapshot = { ...captureDraftSnapshot(), familyRows: confirmedRows, completion: undefined };
+                    await onSaveDraft!(snapshot, { linkToDraft: true });
+                    lastSavedDraftSignatureRef.current = draftFingerprint(snapshot);
+                    setDraftSaveStatus('saved');
+                    toast.success(`Configurações com preço salvas. ${pendingPriceRows.length} variação(ões) sem preço continuam no rascunho.`);
+                    return;
+                }
                 toast.success('Família e variações salvas.');
                 registrationCompletedRef.current = { savedProductId: saved?.id };
                 await onBatchComplete?.(saved, captureDraftSnapshot());

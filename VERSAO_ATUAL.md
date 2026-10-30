@@ -1,3 +1,16 @@
+# v1.2.706-familia-configuracoes-individuais
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.706-familia-configuracoes-individuais`.
+Release do site: `/var/www/mdv-site/releases/20261030-152411-familia-configuracoes-individuais`.
+
+O cadastro de smartphones salva cada configuração que já tem varejo, revenda e atacado completos. Configurações sem preço permanecem no rascunho, sem bloquear as demais nem criar produtos com preço zero. O rascunho preserva os IDs confirmados para retomar depois sem duplicar a família e só é concluído quando não há pendências.
+
+Validações: salvamento e retomada de configurações com API simulada, preços inválidos, rascunhos, famílias, fotos por cor, valores monetários e build. Publicação somente do site.
+
+Registro: `docs/versoes/2026-10-30-v1.2.706-familia-configuracoes-individuais.md`.
+
+---
+
 # v1.2.705-rascunho-valores-iniciais
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.705-rascunho-valores-iniciais`.

@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.705-rascunho-valores-iniciais",
+  "version": "v1.2.706-familia-configuracoes-individuais",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.705-rascunho-valores-iniciais",
-  "release_vps": "/var/www/mdv-site/releases/20261030-151555-rascunho-valores-iniciais",
+  "tag": "v1.2.706-familia-configuracoes-individuais",
+  "release_vps": "/var/www/mdv-site/releases/20261030-152411-familia-configuracoes-individuais",
   "api_release": {
     "status": "published",
     "backup": "/var/www/mdv-api/backups/mercado-livre-1793307873300"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Preserva os valores iniciais de preços e status ao reabrir rascunhos parciais, mantendo os dados já preenchidos e a validação comercial.",
+  "summary": "Salva as configurações de celular com preços completos e mantém as demais no rascunho para conclusão posterior, sem criar produtos com preço zero.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -28,17 +28,17 @@
   "site_source_base": "main",
   "changed_files": [
     "components/products/ProductForm.tsx",
-    "components/products/productFormDefaults.ts",
-    "tmp-tests/product-form-partial-draft.test.mjs",
+    "components/products/ProductFamilyEditor.tsx",
+    "components/products/familyRegistration.js",
     "tmp-tests/family-registration.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.705-rascunho-valores-iniciais.md"
+    "docs/versoes/2026-10-30-v1.2.706-familia-configuracoes-individuais.md"
   ],
   "validations": [
-    "Regressão reproduz os quatro erros e valida preços/status em rascunhos parciais, sem sobrescrever dados explícitos.",
-    "Testes de rascunhos, registro de famílias, variações e normalização monetária.",
-    "TypeScript do helper, sintaxe dos servidores e git diff --check.",
+    "Regressão salva uma configuração e retoma a outra sem duplicar pai ou filhos; preços incompletos não geram produtos.",
+    "Testes de rascunhos, registro de famílias, fotos por cor e normalização monetária.",
+    "Regressão dos valores iniciais, sintaxe dos servidores e git diff --check.",
     "Build de produção com travas de segredos e de runtime legado."
   ],
   "android_entregas": {

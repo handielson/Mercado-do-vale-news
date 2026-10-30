@@ -1,7 +1,50 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { addSmartphoneFamilyConfiguration, familyChildPayload, productUnitCondition, saveFamilyRegistration, buildAttributeVariationDraft, validateFamilyIdentifiers, setSmartphoneFamilyConfigurationPrice, validateNewSmartphoneFamilyPrices } from '../components/products/familyRegistration.js';
+import { addSmartphoneFamilyConfiguration, familyChildPayload, productUnitCondition, saveFamilyRegistration, buildAttributeVariationDraft, validateFamilyIdentifiers, setSmartphoneFamilyConfigurationPrice, validateNewSmartphoneFamilyPrices, partitionSmartphoneFamilyRowsForSave } from '../components/products/familyRegistration.js';
+
+test('salva a configuração com preços e retoma a outra depois sem criar duplicados', async () => {
+  const parent = { name: 'Poco X8', model_id: 'model', price_retail: 0, price_reseller: 0, price_wholesale: 0 };
+  let count = 0;
+  let rows = addSmartphoneFamilyConfiguration(parent, [], { colors: ['Preto', 'Branco'], ram: '8GB', storage: '256GB' }, () => `row-${++count}`).rows;
+  rows = addSmartphoneFamilyConfiguration(parent, rows, { colors: ['Preto', 'Branco'], ram: '12GB', storage: '512GB' }, () => `row-${++count}`).rows;
+  for (const [field, value] of [['price_retail', 199900], ['price_reseller', 194900], ['price_wholesale', 190000]]) rows = setSmartphoneFamilyConfigurationPrice(rows, rows[0].key, field, value);
+  const before = JSON.stringify(rows);
+  const first = partitionSmartphoneFamilyRowsForSave(rows);
+  assert.equal(JSON.stringify(rows), before, 'planejar não altera o rascunho');
+  assert.equal(first.ready.length, 2); assert.equal(first.pending.length, 2);
+  const created = [], updated = [];
+  const checkpoint = { parent: null, children: {} };
+  const api = {
+    create: async data => { const saved = { ...data, id: `id-${created.length}`, sku: `SKU-${created.length}` }; created.push(saved); return saved; },
+    update: async (id, data) => { updated.push(id); return { ...data, id }; },
+  };
+  await saveFamilyRegistration(parent, first.ready, checkpoint, api);
+  assert.equal(created.length, 3, 'somente pai e duas cores 8/256');
+  assert.ok(created.slice(1).every(item => item.specs.ram === '8GB' && item.price_retail === 199900));
+  const snapshot = JSON.parse(JSON.stringify({ rows: rows.map(row => checkpoint.children[row.key] ? { ...row, data: checkpoint.children[row.key] } : row), checkpoint }));
+  assert.ok(snapshot.rows.slice(2).every(row => !row.data.id && row.data.price_retail === 0));
+  let resumed = snapshot.rows;
+  for (const [field, value] of [['price_retail', 240000], ['price_reseller', 230000], ['price_wholesale', 220000]]) resumed = setSmartphoneFamilyConfigurationPrice(resumed, resumed[2].key, field, value);
+  const second = partitionSmartphoneFamilyRowsForSave(resumed);
+  assert.equal(second.pending.length, 0);
+  await saveFamilyRegistration(parent, second.ready, snapshot.checkpoint, api);
+  assert.equal(created.length, 5, 'retomada cria apenas as duas cores 12/512');
+  assert.equal(new Set(updated).size, 3, 'pai e cores já salvas usam update');
+  const form = fs.readFileSync('components/products/ProductForm.tsx', 'utf8');
+  assert.match(form, /rowsToSave = partition.ready/);
+  assert.match(form, /pendingPriceRows.length\) \{[\s\S]*familyRows: confirmedRows, completion: undefined[\s\S]*await onSaveDraft![\s\S]*return;\s*\}[\s\S]*onBatchComplete/, 'rascunho parcial deve persistir e retornar antes de concluir/navegar');
+});
+
+test('preço incompleto mantém o grupo todo no rascunho; valores inválidos continuam bloqueados', () => {
+  const row = (key, prices = {}) => ({ key, data: { name: key, specs: { ram: '12GB', storage: '512GB', color: key }, price_retail: 0, price_reseller: 0, price_wholesale: 0, ...prices } });
+  const rows = [row('Preto', { price_retail: 240000, price_reseller: 230000, price_wholesale: 220000 }), row('Branco', { price_retail: 240000 })];
+  const partial = partitionSmartphoneFamilyRowsForSave(rows);
+  assert.equal(partial.ready.length, 0); assert.equal(partial.pending.length, 2);
+  for (const value of [NaN, -1, Infinity, 1.2, '240000']) assert.throws(() => partitionSmartphoneFamilyRowsForSave([row('Preto', { price_retail: value })]), /Confira os preços/);
+  assert.throws(() => partitionSmartphoneFamilyRowsForSave([row('Preto', { price_retail: 200000, price_reseller: 230000, price_wholesale: 220000 })]), /ordem dos preços/);
+  assert.equal(partitionSmartphoneFamilyRowsForSave([{ key: 'sem-memoria', data: { name: 'pendente' } }]).pending.length, 1);
+});
 
 test('configuração em várias cores completa rascunhos sem perder EAN ou foto e não duplica filhos', () => {
   const parent = { name: 'Poco X8', images: ['pai'] };

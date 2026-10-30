@@ -58,6 +58,24 @@ export function validateNewSmartphoneFamilyPrices(rows) {
   }
 }
 
+// Publish complete configurations independently; unfinished groups remain private.
+export function partitionSmartphoneFamilyRowsForSave(rows) {
+  const pendingGroups = new Set();
+  for (const row of rows.filter(item => !item.data.id)) {
+    const group = smartphoneFamilyConfigurationKey(row.data);
+    const values = FAMILY_SALE_PRICE_FIELDS.map(field => row.data[field]);
+    if (values.some(value => value != null && value !== '' && (!Number.isSafeInteger(value) || value < 0))) {
+      throw new Error(`Confira os preços de ${row.data.name}: use valores válidos acima de zero.`);
+    }
+    if (!group || values.some(value => !Number.isSafeInteger(value) || value <= 0)) pendingGroups.add(group);
+  }
+  const pending = rows.filter(row => !row.data.id && pendingGroups.has(smartphoneFamilyConfigurationKey(row.data)));
+  const pendingKeys = new Set(pending.map(row => row.key));
+  const ready = rows.filter(row => !pendingKeys.has(row.key));
+  validateNewSmartphoneFamilyPrices(ready);
+  return { ready, pending };
+}
+
 export function validateFamilyIdentifiers(parent, rows) {
   const skus = new Set();
   if (parent.sku?.trim()) skus.add(parent.sku.trim().toLocaleUpperCase('pt-BR'));
