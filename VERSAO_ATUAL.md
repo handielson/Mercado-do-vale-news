@@ -1,3 +1,16 @@
+# v1.2.707-titulo-modelo-sem-sku
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.707-titulo-modelo-sem-sku`.
+Release do site: `/var/www/mdv-site/releases/20261030-153834-titulo-modelo-sem-sku`.
+
+O título público da família remove o sufixo do SKU interno quando ele corresponde ao pai. Exemplo: Poco X8 5G - POCO0001 passa a Poco X8 5G; o SKU da variação POCO0001-03 continua na linha própria. O nome gravado, os identificadores e os complementos descritivos permanecem preservados.
+
+Validações: nomes públicos, nomes da família, complementos de catálogo, sintaxe dos servidores e build. Publicação somente do site.
+
+Registro: `docs/versoes/2026-10-30-v1.2.707-titulo-modelo-sem-sku.md`.
+
+---
+
 # v1.2.706-familia-configuracoes-individuais
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.706-familia-configuracoes-individuais`.

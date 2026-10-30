@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.706-familia-configuracoes-individuais",
+  "version": "v1.2.707-titulo-modelo-sem-sku",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.706-familia-configuracoes-individuais",
-  "release_vps": "/var/www/mdv-site/releases/20261030-152411-familia-configuracoes-individuais",
+  "tag": "v1.2.707-titulo-modelo-sem-sku",
+  "release_vps": "/var/www/mdv-site/releases/20261030-153834-titulo-modelo-sem-sku",
   "api_release": {
     "status": "published",
     "backup": "/var/www/mdv-api/backups/mercado-livre-1793307873300"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Salva as configurações de celular com preços completos e mantém as demais no rascunho para conclusão posterior, sem criar produtos com preço zero.",
+  "summary": "Remove o SKU interno do final do nome da família no título público, preservando o SKU da variação na linha abaixo.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -27,18 +27,16 @@
   },
   "site_source_base": "main",
   "changed_files": [
-    "components/products/ProductForm.tsx",
-    "components/products/ProductFamilyEditor.tsx",
-    "components/products/familyRegistration.js",
-    "tmp-tests/family-registration.test.mjs",
+    "pages/store/publicProductName.js",
+    "tmp-tests/public-product-name.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.706-familia-configuracoes-individuais.md"
+    "docs/versoes/2026-10-30-v1.2.707-titulo-modelo-sem-sku.md"
   ],
   "validations": [
-    "Regressão salva uma configuração e retoma a outra sem duplicar pai ou filhos; preços incompletos não geram produtos.",
-    "Testes de rascunhos, registro de famílias, fotos por cor e normalização monetária.",
-    "Regressão dos valores iniciais, sintaxe dos servidores e git diff --check.",
+    "Regressão do título público sem SKU, preservando SKU da variação e sufixos descritivos.",
+    "Testes do nome da família e complemento de catálogo.",
+    "Sintaxe dos servidores e git diff --check.",
     "Build de produção com travas de segredos e de runtime legado."
   ],
   "android_entregas": {
