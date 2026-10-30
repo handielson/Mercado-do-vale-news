@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CopyPlus, ExternalLink, FileText, Loader2, MapPin, Pencil, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CopyPlus, ExternalLink, FileText, ImageOff, Loader2, MapPin, Pencil, RefreshCw } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { modelService } from '../../../services/models';
@@ -14,8 +14,25 @@ import { getProductCloneState } from '../../../services/productClonePrefill.js';
 import { familyWorkspacePath } from '../../../services/productFormDrafts';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 import { PAYJOY_SALE_NOTE } from '../../../utils/saleInformation.js';
+import { productImageList, resolveProductFamilyImages } from '../../../services/productFamilyImages.js';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+function ModelVariationImage({ products, color }: { products: any[]; color: string }) {
+    const [failedSource, setFailedSource] = useState('');
+    const candidates = products.map(product => product.raw || product);
+    const representative = candidates.find(product => productImageList(product.images, product.image_url).length) || candidates[0];
+    const source = resolveProductFamilyImages(representative, candidates, true)[0] || '';
+    return (
+        <div className="flex h-44 w-full shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-white p-2 sm:h-48 sm:w-40">
+            {source && failedSource !== source ? (
+                <img src={source} alt={`Imagem principal · ${color}`} loading="lazy" className="h-full w-full object-contain" onError={() => setFailedSource(source)} />
+            ) : (
+                <div className="flex flex-col items-center gap-2 text-sm text-slate-400"><ImageOff size={32} /><span>Sem imagem</span></div>
+            )}
+        </div>
+    );
+}
 
 function money(cents: number): string {
     return currency.format(Number(cents || 0) / 100);
@@ -296,27 +313,16 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                     </div>}
                                 </div>
 
-                                <div className="mt-4 overflow-x-auto">
-                                    <table className="min-w-full text-left text-sm">
-                                        <thead className="border-b border-slate-100 text-xs font-bold uppercase text-slate-400">
-                                            <tr>
-                                                <th className="px-3 py-3">Cor</th>
-                                                <th className="px-3 py-3">SKU</th>
-                                                <th className="px-3 py-3 text-right">Estoque</th>
-                                                <th className="px-3 py-3 text-right">Vendidos</th>
-                                                {showFinancials && <th className="px-3 py-3 text-right">Valor estoque</th>}
-                                                {showFinancials && <th className="px-3 py-3 text-right">Custo médio</th>}
-                                                <th className="px-3 py-3 print:hidden">Ações</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
+                                <div className="mt-4 space-y-5">
                                             {memoryGroup.colors.map((colorGroup: any) => (
-                                                <React.Fragment key={colorGroup.key}>
-                                                    <tr className="align-top">
-                                                        <td className="px-3 py-4">
-                                                            <div className="font-bold text-slate-900">{colorGroup.color}</div>
-                                                        </td>
-                                                        <td className="px-3 py-4">
+                                                <section key={colorGroup.key} aria-label={`Variação ${colorGroup.color}`} className="min-w-0 overflow-hidden rounded-xl border border-slate-200">
+                                                    <div className="flex flex-col gap-5 p-4 sm:flex-row">
+                                                        <ModelVariationImage products={colorGroup.products} color={colorGroup.color} />
+                                                        <div className="min-w-0 flex-1 space-y-4">
+                                                        <h3 className="text-base font-bold text-slate-900">{colorGroup.color}</h3>
+                                                        <div className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                                                        <div className="min-w-0">
+                                                            <p className="mb-1 text-xs font-semibold uppercase text-slate-400">SKU</p>
                                                             <div className="space-y-1">
                                                                 {(colorGroup.skuGroups || colorGroup.products).map((product: any) => (
                                                                     <div key={product.key || product.id} className="font-mono text-xs text-slate-700">
@@ -332,20 +338,21 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                     </div>
                                                                 ))}
                                                             </div>
-                                                        </td>
-                                                        <td className="px-3 py-4 text-right">
+                                                        </div>
+                                                        <div>
+                                                            <p className="mb-1 text-xs font-semibold uppercase text-slate-400">Estoque</p>
                                                             <p className="font-bold text-slate-900">{colorGroup.availableCount} un.</p>
                                                             <details className="mt-2 max-w-56 text-left text-xs text-slate-600">
                                                                 <summary className="cursor-pointer text-emerald-700">Locais de estoque</summary>
                                                                 <p className="mt-1 leading-5">{locationText(colorGroup.locations)}</p>
                                                             </details>
                                                             {colorGroup.stockDivergences?.length > 0 && <p className="mt-2 max-w-56 text-left text-xs font-semibold text-amber-700">Conferir locais: quantidades e IMEIs divergem.</p>}
-                                                        </td>
-                                                        <td className="px-3 py-4 text-right">{colorGroup.soldCount} un.</td>
-                                                        {showFinancials && <td className="px-3 py-4 text-right font-semibold text-slate-900">{money(colorGroup.stockCostValue)}</td>}
-                                                        {showFinancials && <td className="px-3 py-4 text-right font-semibold text-slate-900">{money(colorGroup.averageStockCost)}</td>}
-                                                        <td className="px-3 py-4 print:hidden">
-                                                            <div className="space-y-2">
+                                                        </div>
+                                                        <div><p className="mb-1 text-xs font-semibold uppercase text-slate-400">Vendidos</p><p>{colorGroup.soldCount} un.</p></div>
+                                                        {showFinancials && <div><p className="mb-1 text-xs font-semibold uppercase text-slate-400">Valor estoque</p><p className="font-semibold text-slate-900">{money(colorGroup.stockCostValue)}</p></div>}
+                                                        {showFinancials && <div><p className="mb-1 text-xs font-semibold uppercase text-slate-400">Custo médio</p><p className="font-semibold text-slate-900">{money(colorGroup.averageStockCost)}</p></div>}
+                                                        </div>
+                                                            <div className="space-y-2 print:hidden">
                                                                 {(colorGroup.skuGroups || colorGroup.products).map((product: any) => (
                                                                     <ProductActions
                                                                         key={product.key || product.id}
@@ -358,19 +365,16 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                     />
                                                                 ))}
                                                             </div>
-                                                        </td>
-                                                    </tr>
-                                                    <tr className="bg-emerald-50/40">
-                                                        <td colSpan={showFinancials ? 7 : 5} className="px-3 py-3">
+                                                        </div>
+                                                    </div>
+                                                        <div className="min-w-0 bg-emerald-50/40 px-3 py-3">
                                                             <IdentifierTable title="Disponíveis em estoque" records={getModelIdentifierSections(colorGroup).available} colorGroup={colorGroup} onNavigate={navigate} onVisibility={requestVisibility} tone="stock" />
                                                             {showHidden && getModelIdentifierSections(colorGroup).hidden.length > 0 && <IdentifierTable title="Ocultos / não localizados" records={getModelIdentifierSections(colorGroup).hidden} colorGroup={colorGroup} onNavigate={navigate} onVisibility={requestVisibility} tone="hidden" />}
                                                             {getModelIdentifierSections(colorGroup).other.length > 0 && <IdentifierTable title="Reservados / assistência / outras situações" records={getModelIdentifierSections(colorGroup).other} colorGroup={colorGroup} onNavigate={navigate} tone="other" />}
                                                             {getModelIdentifierSections(colorGroup).unconfirmed.length > 0 && <IdentifierTable title="IMEIs do cadastro sem situação confirmada" records={getModelIdentifierSections(colorGroup).unconfirmed} colorGroup={colorGroup} onNavigate={navigate} tone="unknown" />}
-                                                        </td>
-                                                    </tr>
+                                                        </div>
                                                     {colorGroup.units.filter((unit: any) => unit.status === 'sold').length > 0 && (
-                                                        <tr className="bg-slate-50/70">
-                                                            <td colSpan={showFinancials ? 7 : 5} className="px-3 py-3">
+                                                        <div className="min-w-0 bg-slate-50/70 px-3 py-3">
                                                                 <details>
                                                                     <summary className="cursor-pointer text-sm font-semibold text-slate-700">
                                                                         Vendidos — fora do estoque ({colorGroup.units.filter((unit: any) => unit.status === 'sold').length})
@@ -428,13 +432,10 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                         </table>
                                                                     </div>
                                                                 </details>
-                                                            </td>
-                                                        </tr>
+                                                        </div>
                                                     )}
-                                                </React.Fragment>
+                                                </section>
                                             ))}
-                                        </tbody>
-                                    </table>
                                 </div>
                             </article>
                         ))}

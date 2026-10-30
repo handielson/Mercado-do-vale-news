@@ -1,3 +1,16 @@
+# v1.2.709-painel-modelo-imagens
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.709-painel-modelo-imagens`.
+Release do site: `/var/www/mdv-site/releases/20261030-160209-painel-modelo-imagens`.
+
+O painel do modelo apresenta a imagem principal da variação à esquerda e cor, SKU, estoque, vendidos, custos opcionais e ações ao lado. As listas de aparelhos permanecem abaixo. No celular, o resumo fica abaixo da imagem. A imagem usa o resolvedor existente e mostra uma indicação quando não há foto.
+
+Validações: painel real renderizado com dados sintéticos em Chrome desktop/celular, conferência visual, testes das imagens familiares, guarda de runtime, sintaxe dos servidores e build. Publicação somente do site.
+
+Registro: `docs/versoes/2026-10-30-v1.2.709-painel-modelo-imagens.md`.
+
+---
+
 # v1.2.708-nome-familia-fonte-unica
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.708-nome-familia-fonte-unica`.

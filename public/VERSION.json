@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.708-nome-familia-fonte-unica",
+  "version": "v1.2.709-painel-modelo-imagens",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.708-nome-familia-fonte-unica",
-  "release_vps": "/var/www/mdv-site/releases/20261030-154534-nome-familia-fonte-unica",
+  "tag": "v1.2.709-painel-modelo-imagens",
+  "release_vps": "/var/www/mdv-site/releases/20261030-160209-painel-modelo-imagens",
   "api_release": {
     "status": "published",
     "backup": "/var/www/mdv-api/backups/mercado-livre-1793307873300"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Centraliza o nome público da família para agrupamento, cards e página, mantendo o SKU da variação separado.",
+  "summary": "Organiza o painel do modelo por variação com imagem principal à esquerda, dados ao lado e aparelhos abaixo, adaptando o layout ao celular.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -27,17 +27,15 @@
   },
   "site_source_base": "main",
   "changed_files": [
-    "pages/store/publicProductName.js",
-    "services/productGroupingCore.js",
-    "components/catalog/ProductCard.tsx",
-    "tmp-tests/catalog-family-name.test.mjs",
+    "pages/admin/products/ModelProductAggregatorPage.tsx",
+    "tmp-tests/model-panel-variation-image.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.708-nome-familia-fonte-unica.md"
+    "docs/versoes/2026-10-30-v1.2.709-painel-modelo-imagens.md"
   ],
   "validations": [
-    "Regressão de fonte única entre cards e página para cores e memórias, preservando dados e SKU.",
-    "Testes de nomes públicos, agrupamento genérico, seções de famílias e complemento de catálogo.",
+    "Renderização do painel real com dados sintéticos em Chrome 1280px e 390px: imagem, resumo, ausência de foto e ausência de overflow.",
+    "Testes da fonte canônica das imagens e guarda contra runtime legado do painel.",
     "Sintaxe dos servidores e git diff --check.",
     "Build de produção com travas de segredos e de runtime legado."
   ],
