@@ -23,13 +23,13 @@ assert.match(
 
 assert.match(
   source,
-  /const\s+shareableVariants\s*=\s*sellableVariantOptions[\s\S]*?const\s+variantNames\s*=\s*shareableVariants\.map/,
+  /generateProductShareMessage\(\{[\s\S]*?variants:\s*sellableVariantOptions/,
   'Product share text must list only in-stock variants as available',
 );
 
 assert.doesNotMatch(
   source,
-  /const\s+variantNames\s*=\s*uniqueVariants\.map/,
+  /generateProductShareMessage\(\{[\s\S]*?variants:\s*uniqueVariants/,
   'Product share text must not use all active variants as available',
 );
 

@@ -1,3 +1,16 @@
+# v1.2.721-variantes-caixa-sangria
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.721-variantes-caixa-sangria`.
+Release do site: `/var/www/mdv-site/releases/20261030-211139-v12721-variantes-caixa-sangria`.
+
+As opções do produto são ordenadas por RAM e depois por armazenamento. Os detalhes de cada fechamento mostram as formas e os valores gravados naquele fechamento. O caixa destaca o registro de sangria, com destino e identificação, e a auditoria indica onde fazê-lo.
+
+Validações: testes focados de catálogo e caixa, build, verificação do diff e leitura pública da versão.
+
+Registro: `docs/versoes/2026-10-30-v1.2.721-variantes-caixa-sangria.md`.
+
+---
+
 # v1.2.720-caixa-auditoria-denominacoes
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.720-caixa-auditoria-denominacoes`.

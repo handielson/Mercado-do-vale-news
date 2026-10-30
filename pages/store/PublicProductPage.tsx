@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { print3dPublicMeasurementSpecs } from '@/utils/print3dMeasurements.js';
+import { compareMemoryConfigurations } from '@/utils/productMemoryOrder.js';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers, Pencil, FileImage, ChevronRight } from 'lucide-react';
@@ -1074,20 +1075,13 @@ export const PublicProductPage: React.FC = () => {
             const ramCount = new Set(options.map(option => option.ram).filter(Boolean)).size;
             return {
                 memoryLabel,
+                ram: options[0]?.ram || '',
                 storage: options[0]?.storage || memoryLabel,
                 options: options.sort((a, b) => a.color.localeCompare(b.color)),
                 showRam: ramCount > 1,
             };
         })
-        .sort((a, b) => {
-            const parse = (value: string) => {
-                const match = value.match(/(\d+)(GB|TB)/i);
-                if (!match) return Number.MAX_SAFE_INTEGER;
-                const size = Number(match[1]);
-                return match[2].toUpperCase() === 'TB' ? size * 1024 : size;
-            };
-            return parse(a.storage) - parse(b.storage) || a.storage.localeCompare(b.storage);
-        });
+        .sort(compareMemoryConfigurations);
     const shouldShowVariantOptions = sellableVariantOptions.length > 1 || sellableVariantOptions.some((item) => {
         const parts = getVariantParts(item);
         return parts.storage !== 'Outras opções' || parts.color !== 'Padrão' || Boolean(parts.ram);
