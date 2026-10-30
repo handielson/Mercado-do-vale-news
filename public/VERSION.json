@@ -1,21 +1,26 @@
 {
-  "version": "v1.2.715-custo-nulo-historico",
+  "version": "v1.2.716-mercado-livre-erp-price-write-gate",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.715-custo-nulo-historico",
-  "release_vps": "/var/www/mdv-site/releases/20261030-171000-v12715-custo-nulo-historico",
+  "tag": "v1.2.716-mercado-livre-erp-price-write-gate",
+  "release_vps": "/var/www/mdv-site/releases/20261030-202646-mercado-livre-price-gate",
   "api_release": {
     "status": "published",
-    "module": "services/smartphonePriceGroupsServer.cjs",
-    "backup_prefix": "/var/www/mdv-api/backups/smartphone-price-groups-"
+    "module": "services/mercadoLivreListingPrice.cjs",
+    "backup_prefix": "/var/www/mdv-api/backups/mercado-livre-"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "O salvamento dos preços por configuração agora aceita aparelhos sem custo de compra informado. O custo no cadastro permanece inalterado, e o histórico registra o valor compatível com sua coluna obrigatória.",
+  "summary": "Adiciona atualização controlada de preço do ERP para anúncios Mercado Livre, com gate independente publicado desligado por padrão.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
-    "nodes": ["Vendas - Preparar Busca", "Vendas - Contexto Produtos", "Vendas - Verificar Pos Lista", "Resolver Acao de Conversacao"],
+    "nodes": [
+      "Vendas - Preparar Busca",
+      "Vendas - Contexto Produtos",
+      "Vendas - Verificar Pos Lista",
+      "Resolver Acao de Conversacao"
+    ],
     "target_sha256": "628afe00443d0aec779e59835f0678801e8c4098bb8f522b01f8b77d188f57bb"
   },
   "gestao_mdv_android": {
@@ -23,23 +28,29 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "publicada; /status HTTP 200, mysql.ok=true; GET /mercado-livre/settings HTTP 200, erpCapabilities=[]",
-    "site_manifest": "publicado; VERSION.json v1.2.715 na release ativa"
+    "mercado_livre_api": "publicada com preço e estoque desligados; validar status de capacidades",
+    "site_manifest": "publicado; VERSION.json v1.2.716 na release ativa"
   },
-  "site_source_base": "cfad34c0baa9d6a536eb09a66733f95a0b1d0d9c",
+  "site_source_base": "dfe061e8c55f1285a0974edcb8e6d42b0a3ba91b",
   "changed_files": [
-    "services/smartphonePriceGroupsServer.cjs",
-    "scripts/deploy-smartphone-price-groups.cjs",
-    "tmp-tests/smartphone-price-groups.test.cjs",
-    "tmp-tests/smartphone-price-groups-deploy.test.cjs",
+    "services/mercadoLivreListingPrice.cjs",
+    "services/mercadoLivreServer.cjs",
+    "scripts/mercado-livre-stock-write-deploy.cjs",
+    "deploy-vps-server-only.cjs",
+    "tmp-tests/mercado-livre-listing-price.test.cjs",
+    "tmp-tests/mercado-livre-stock-write-deploy.test.cjs",
+    "docs/operacional/mercado-livre-erp-sync.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.715-custo-nulo-historico.md"
+    "docs/versoes/2026-10-30-v1.2.716-mercado-livre-erp-price-write-gate.md"
   ],
   "validations": [
-    "Regressão reproduziu ER_BAD_NULL_ERROR antes da correção e passou depois.",
-    "Testes dos grupos de preço e do histórico, sintaxe da API e build do site.",
-    "API e site verificados após publicação."
+    "Testes focados do serviço de preço Mercado Livre e do deploy seletivo",
+    "node --check nos serviços e script de deploy",
+    "git diff --check",
+    "npm.cmd run build",
+    "Deploy seletivo da API e validação pública do status",
+    "Release do site e validação do VERSION.json"
   ],
   "android_entregas": {
     "version_name": "1.1.5",

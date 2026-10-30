@@ -10,6 +10,9 @@ require('dotenv').config({ path: path.join(__dirname, '.env.local') });
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env.vps.local') });
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env.local') });
 
+const { mercadoLivreStockWriteDeployEnv } = require('./scripts/mercado-livre-stock-write-deploy.cjs');
+const mercadoLivreStockWriteEnv = mercadoLivreStockWriteDeployEnv(process.argv, process.env);
+
 const host = process.env.VPS_SITE_HOST || process.env.VPS_HOST;
 const username = process.env.VPS_SITE_USER || process.env.VPS_USER;
 const password = process.env.VPS_SITE_PASSWORD || process.env.VPS_ROOT_PASSWORD || process.env.VPS_PASSWORD;
@@ -907,7 +910,7 @@ async function main() {
       const currentEnv = await readRemoteText(sftp, remoteEnv);
       await writeRemoteText(sftp, remoteEnvNext, upsertEnv(currentEnv, {
         MERCADO_LIVRE_ERP_READ_KEY: erpReadKey,
-        MDV_ERP_STOCK_WRITE_ENABLED: '0',
+        ...mercadoLivreStockWriteEnv,
       }));
     });
     await exec(`chmod 600 ${remoteEnvNext} && mv ${remoteEnvNext} ${remoteEnv} && chmod 600 ${remoteEnv}`);
@@ -930,7 +933,7 @@ async function main() {
     await exec(`mv ${publicationTarget}.next.cjs ${publicationTarget}`);
     await exec(`mv ${staged} ${target}`);
     console.log((await exec('pm2 restart mdv-api')).trim());
-    console.log(`Mercado Livre read key configured; backup: ${backupDir}`);
+    console.log(`Mercado Livre read key configured; ERP stock write ${mercadoLivreStockWriteEnv.MDV_ERP_STOCK_WRITE_ENABLED === '1' ? 'explicitly enabled' : 'disabled'}; ERP price write ${mercadoLivreStockWriteEnv.MDV_ERP_PRICE_WRITE_ENABLED === '1' ? 'explicitly enabled' : 'disabled'}; backup: ${backupDir}`);
     conn.end();
     return;
   }

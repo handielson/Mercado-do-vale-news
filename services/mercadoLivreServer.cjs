@@ -9,6 +9,7 @@ const ERP_STOCK_WRITE_CAPABILITIES = Object.freeze([
   'listing_stock_write_v1',
   'user_product_stock_write_v1',
 ]);
+const ERP_PRICE_WRITE_CAPABILITIES = Object.freeze(['listing_price_write_v1']);
 let refreshPromise = null;
 
 function erpWriteKeyMatches(candidate, expected) {
@@ -28,6 +29,11 @@ function isErpWriteKeyConfigured(value) {
 
 function isErpStockWriteEnabled() {
   return process.env.MDV_ERP_STOCK_WRITE_ENABLED === '1'
+    && isErpWriteKeyConfigured(process.env.MDV_ERP_WRITE_KEY);
+}
+
+function isErpPriceWriteEnabled() {
+  return process.env.MDV_ERP_PRICE_WRITE_ENABLED === '1'
     && isErpWriteKeyConfigured(process.env.MDV_ERP_WRITE_KEY);
 }
 
@@ -827,6 +833,13 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
     if (erpWriteKeyMatches(request.headers['x-erp-write-key'], process.env.MDV_ERP_WRITE_KEY)) return;
     return reply.code(401).send({ error: 'Unauthorized' });
   } };
+  const erpPriceWriteRoute = { preHandler: async (request, reply) => {
+    if (!isErpPriceWriteEnabled()) {
+      return reply.code(503).send({ error: 'A escrita de preço do ERP está desabilitada nesta integração.' });
+    }
+    if (erpWriteKeyMatches(request.headers['x-erp-write-key'], process.env.MDV_ERP_WRITE_KEY)) return;
+    return reply.code(401).send({ error: 'Unauthorized' });
+  } };
   const erpReadRoute = { preHandler: (request, reply) =>
     requireMercadoLivreErpRead(request, reply, requireSyncKeyOrAdmin) };
   const { createPublicationHandlers } = require('./mercadoLivrePublication.cjs');
@@ -860,8 +873,10 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         connected: Boolean(settings.access_token && settings.refresh_token && settings.user_id),
         userId: String(settings.user_id || ''),
         nickname: String(settings.nickname || '').slice(0, 100),
-        erpCapabilities: isErpStockWriteEnabled()
-          ? ERP_STOCK_WRITE_CAPABILITIES : [],
+        erpCapabilities: [
+          ...(isErpStockWriteEnabled() ? ERP_STOCK_WRITE_CAPABILITIES : []),
+          ...(isErpPriceWriteEnabled() ? ERP_PRICE_WRITE_CAPABILITIES : []),
+        ],
       };
     }
     return safeStatus(settings);
@@ -1096,7 +1111,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   const listingStock = createListingStockHandlers({ pool, settings: () => loadSettings(pool),
     request: async (path, options) => mlRequest(pool, path, options) });
   registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/price', erpReadRoute, presentListingError(listingPrices.read));
-  registerAliases(fastify, 'post', '/mercado-livre/products/items/:itemId/price', protectedRoute, presentListingError(listingPrices.update));
+  registerAliases(fastify, 'post', '/mercado-livre/products/items/:itemId/price', erpPriceWriteRoute, presentListingError(listingPrices.update));
   registerAliases(fastify, 'get', '/mercado-livre/products/items/:itemId/stock', erpReadRoute, presentListingError(listingStock.read));
   registerAliases(fastify, 'post', '/mercado-livre/products/items/:itemId/stock', erpWriteRoute, presentListingError(listingStock.update));
   registerAliases(fastify, 'post', '/mercado-livre/products/user-products/:userProductId/stock', erpWriteRoute, presentListingError(listingStock.updateWarehouse));
@@ -1165,6 +1180,7 @@ module.exports = {
   erpWriteKeyMatches,
   isErpWriteKeyConfigured,
   isErpStockWriteEnabled,
+  isErpPriceWriteEnabled,
   requireMercadoLivreErpRead,
   syncMercadoLivreStockFromBlingTargets,
   parseNotificationResource,

@@ -1,3 +1,15 @@
+# v1.2.716-mercado-livre-erp-price-write-gate
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.716-mercado-livre-erp-price-write-gate`.
+Release do site: `/var/www/mdv-site/releases/20261030-202646-mercado-livre-price-gate`.
+
+Publica a capacidade de atualização de preço pelo ERP no Mercado Livre com um gate independente do estoque. O deploy mantém ambos desligados por padrão e só libera preço por flag explícita, chave dedicada, confirmação do operador e releitura do valor após o PUT. Promoção, automação não excluída, preço por quantidade/B2B, canal misto, seller/vínculo divergente e variações com preços diferentes permanecem bloqueados.
+
+Validações: testes focados do serviço de preço e do helper de deploy, sintaxe Node, `git diff --check`, build do site, deploy seletivo da API e conferência pública do status e versão.
+
+Registro: `docs/versoes/2026-10-30-v1.2.716-mercado-livre-erp-price-write-gate.md`.
+
+---
 # v1.2.715-custo-nulo-historico
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.715-custo-nulo-historico`.
