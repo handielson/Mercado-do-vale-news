@@ -46,18 +46,7 @@ function stripKnownValue(name, value) {
 
 export function getPublicProductName(product) {
   const familyName = getCatalogFamilyName(product);
-  if (familyName) {
-    const variationSku = compactProductName(product?.sku);
-    const familySku = compactProductName(product?.parent_sku)
-      || (/-\d+$/.test(variationSku) ? variationSku.replace(/-\d+$/, '') : '');
-    // Generated family names may end in their internal SKU. The selected
-    // variation already has a dedicated SKU line below the public title.
-    if (familySku) {
-      const suffix = new RegExp(String.raw`\s+[-–—]\s+${escapeRegExp(familySku)}$`, 'i');
-      return compactProductName(familyName.replace(suffix, '')) || familyName;
-    }
-    return familyName;
-  }
+  if (familyName) return familyName;
   const modelName = compactProductName(product?.model);
   let name = compactProductName(product?.name || modelName || 'Produto');
 

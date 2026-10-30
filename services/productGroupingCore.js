@@ -2,9 +2,20 @@ function toCleanString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-// O nome da familia vem do cadastro do pai, nunca da variacao selecionada.
+// Canonical public family name for grouping, cards and product pages.
+// The parent record owns the name; SKU and variation specs remain separate.
 export function getCatalogFamilyName(product) {
-  return toCleanString(product?.parent_id) ? toCleanString(product?.parent_name) : '';
+  const isChild = Boolean(toCleanString(product?.parent_id));
+  const isParent = Number(product?.is_parent) === 1;
+  const familyName = isChild ? toCleanString(product?.parent_name) : isParent ? toCleanString(product?.name) : '';
+  if (!familyName) return '';
+  const sku = toCleanString(product?.sku);
+  const familySku = isParent && !isChild ? sku : toCleanString(product?.parent_sku)
+    || (/-\d+$/.test(sku) ? sku.replace(/-\d+$/, '') : '');
+  if (!familySku) return familyName;
+  const escapedSku = familySku.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const suffix = new RegExp(String.raw`\s+[-–—]\s+${escapedSku}$`, 'i');
+  return familyName.replace(suffix, '').trim() || familyName;
 }
 
 function normalizeKeyPart(value) {

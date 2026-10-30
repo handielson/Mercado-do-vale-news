@@ -1,3 +1,16 @@
+# v1.2.708-nome-familia-fonte-unica
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.708-nome-familia-fonte-unica`.
+Release do site: `/var/www/mdv-site/releases/20261030-154534-nome-familia-fonte-unica`.
+
+A função compartilhada getCatalogFamilyName resolve o nome público do pai para agrupamento, cards e página do produto. A limpeza do SKU deixou de existir apenas na página. Os cards também exibem Poco X8 5G, mantendo SKU e opções da variação separados. O nome gravado e os identificadores não são alterados.
+
+Validações: nomes públicos/família, agrupamento genérico, seções de famílias, complemento de catálogo, sintaxe dos servidores e build. Publicação somente do site.
+
+Registro: `docs/versoes/2026-10-30-v1.2.708-nome-familia-fonte-unica.md`.
+
+---
+
 # v1.2.707-titulo-modelo-sem-sku
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.707-titulo-modelo-sem-sku`.
