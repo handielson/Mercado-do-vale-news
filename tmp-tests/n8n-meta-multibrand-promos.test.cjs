@@ -53,7 +53,9 @@ test('patch is scoped, idempotent and preserves the workflow graph', () => {
   assert.deepEqual(patched.connections, original.connections);
   const changed = patched.nodes.filter((node, index) =>
     node.parameters?.jsCode !== original.nodes[index].parameters?.jsCode).map(node => node.name);
-  assert.deepEqual(changed, NODES);
+  const alreadyApplied = NODES.every(name =>
+    original.nodes.find(node => node.name === name)?.parameters?.jsCode?.includes(MARKER));
+  assert.deepEqual(changed, alreadyApplied ? [] : NODES);
   assert.ok(NODES.every(name => nodes.get(name).parameters.jsCode.includes(MARKER)));
 });
 

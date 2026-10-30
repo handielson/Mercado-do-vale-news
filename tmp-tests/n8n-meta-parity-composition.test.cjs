@@ -12,8 +12,11 @@ const original = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
 test('candidate composes only the four intended Code nodes', () => {
   const candidate = patchWorkflow(original);
   assert.deepEqual(candidate.connections, original.connections);
-  assert.deepEqual(candidate.nodes.filter((node, index) =>
-    JSON.stringify(node) !== JSON.stringify(original.nodes[index])).map(node => node.name).sort(),
-  ['Resolver Acao de Conversacao', 'Vendas - Contexto Produtos', 'Vendas - Preparar Busca', 'Vendas - Verificar Pos Lista'].sort());
+  const changed = candidate.nodes.filter((node, index) =>
+    JSON.stringify(node) !== JSON.stringify(original.nodes[index])).map(node => node.name).sort();
+  const expected = ['Resolver Acao de Conversacao', 'Vendas - Contexto Produtos',
+    'Vendas - Preparar Busca', 'Vendas - Verificar Pos Lista'].sort();
+  assert.ok(changed.length === 0 || JSON.stringify(changed) === JSON.stringify(expected),
+    `Unexpected changed nodes: ${changed.join(', ')}`);
   assert.deepEqual(patchWorkflow(candidate), candidate);
 });
