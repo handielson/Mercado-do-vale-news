@@ -1,3 +1,16 @@
+# v1.2.720-caixa-auditoria-denominacoes
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.720-caixa-auditoria-denominacoes`.
+Release do site: `/var/www/mdv-site/releases/20261030-210235-v12720-caixa-auditoria`.
+
+A Auditoria de Caixa mostra as notas e moedas registradas na abertura e nos fechamentos, além das retiradas e dos demais movimentos manuais com valor, motivo, operador e horário. A tela do caixa explica onde essas retiradas aparecem.
+
+Validações: contrato estático da auditoria, verificação do diff, build e verificação pública do site e da versão.
+
+Registro: `docs/versoes/2026-10-30-v1.2.720-caixa-auditoria-denominacoes.md`.
+
+---
+
 # v1.2.719-caixa-arquivo-synology
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.719-caixa-arquivo-synology`.

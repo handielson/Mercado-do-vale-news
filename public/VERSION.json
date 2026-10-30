@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.719-caixa-arquivo-synology",
+  "version": "v1.2.720-caixa-auditoria-denominacoes",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.719-caixa-arquivo-synology",
-  "release_vps": "/var/www/mdv-site/releases/20261030-213000-v12719-caixa-synology",
+  "tag": "v1.2.720-caixa-auditoria-denominacoes",
+  "release_vps": "/var/www/mdv-site/releases/20261030-210235-v12720-caixa-auditoria",
   "api_release": {
     "status": "published",
     "module": "vps_server.cjs, vps_server.js e services/cashSessionCutoff.cjs",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Corrige a autenticacao do upload do PDF do fechamento no Synology.",
+  "summary": "Exibe notas, moedas e movimentos registrados na auditoria do caixa.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -29,34 +29,21 @@
   },
   "pending_deployments": {
     "mercado_livre_api": "publicada com preço e estoque desligados; validar status de capacidades",
-    "site_manifest": "publicado; VERSION.json v1.2.717 na release ativa"
+    "site_manifest": "publicado; VERSION.json v1.2.720 na release ativa"
   },
   "site_source_base": "e5bbc8a0",
   "changed_files": [
-    "hooks/useCashSession.ts",
+    "pages/admin/financial/CashAuditPage.tsx",
     "pages/admin/financial/CashRegisterPage.tsx",
-    "pages/pdv/PDVPage.tsx",
-    "services/cashSessionCutoff.cjs",
-    "services/serializedSaleFinalization.cjs",
-    "deploy-vps-server-only.cjs",
-    "types/cashRegister.ts",
-    "vps_server.cjs",
-    "vps_server.js",
-    "tmp-tests/cash-closing-flow.test.cjs",
-    "tmp-tests/cash-daily-cutoff.test.cjs",
-    "tmp-tests/cash-register-linking-static.test.mjs",
-    "tmp-tests/cash-register-pdv-gate-static.test.mjs",
-    "tmp-tests/cash-summary-payment-status.test.cjs",
+    "tmp-tests/cash-audit-details-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.717-caixa-fechamento-diario.md"
+    "docs/versoes/2026-10-30-v1.2.720-caixa-auditoria-denominacoes.md"
   ],
   "validations": [
-    "Testes focados do corte diario, resumo e fechamento de caixa",
-    "node --check nos servidores",
+    "Contrato da auditoria de contagens e movimentos",
     "git diff --check",
     "npm.cmd run build",
-    "Deploy da API e validação pública do status e resumo do caixa",
     "Release do site e validação do VERSION.json"
   ],
   "android_entregas": {
