@@ -25,6 +25,7 @@ export default function CashRegisterPage() {
 
     const submitMovement = async () => {
         if (!session) return;
+        if (session.requires_closing) return toast.error('Feche o caixa anterior antes de registrar movimentos.');
         const amount = Math.round(Number(movementValue.replace(/\./g, '').replace(',', '.')) * 100);
         if (!Number.isFinite(amount) || amount <= 0) return toast.error('Informe um valor valido');
         if (!movementDescription.trim()) return toast.error('Informe a descricao do movimento');
@@ -60,6 +61,13 @@ export default function CashRegisterPage() {
                 </div>
             ) : (
                 <>
+                    {session.requires_closing && (
+                        <div role="alert" className="rounded-xl border-2 border-amber-300 bg-amber-50 p-5 text-amber-950">
+                            <strong>Caixa #{session.session_number} bloqueado desde as 20h.</strong>
+                            <p className="mt-1 text-sm">Confira e feche este caixa. A nova abertura ficará disponível a partir de 00h.</p>
+                            <button type="button" onClick={() => setShowClosing(true)} className="mt-3 rounded-lg bg-rose-600 px-4 py-2 font-bold text-white">Fazer fechamento</button>
+                        </div>
+                    )}
                     <div className="grid gap-4 lg:grid-cols-3">
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5"><div className="text-sm text-emerald-700">Caixa aberto</div><div className="text-2xl font-bold text-emerald-900">#{session.session_number}</div><div className="mt-2 text-xs text-emerald-700">{session.operator_name || 'Operador'} · {new Date(session.opened_at).toLocaleString('pt-BR')}</div></div>
                         <div className="rounded-xl border border-slate-200 bg-white p-5"><div className="text-sm text-slate-500">Dinheiro esperado</div><div className="text-2xl font-bold text-slate-900">{formatCashCents(summaryForSession?.expected_cash_cents)}</div><div className="mt-2 text-xs text-slate-500">Abertura: {formatCashCents(session.opening_amount_cents)}</div></div>
@@ -68,7 +76,7 @@ export default function CashRegisterPage() {
 
                     <div className="grid gap-5 lg:grid-cols-2">
                         <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold text-slate-900">Resumo por forma</h2><div className="mt-3 space-y-2">{Object.entries(summaryForSession?.by_method || {}).map(([method, amount]) => <div key={method} className="flex justify-between border-b border-slate-100 py-2 text-sm"><span>{CASH_METHOD_LABELS[method] || method}</span><strong>{formatCashCents(amount)}</strong></div>)}</div></section>
-                        <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold text-slate-900">Movimento manual</h2><div className="mt-3 grid grid-cols-2 gap-2">{(['sangria', 'suprimento', 'deposito', 'retirada'] as MovementType[]).map((type) => <button key={type} type="button" onClick={() => setMovementType(type)} className={`rounded-lg border px-3 py-2 text-sm font-semibold capitalize ${movementType === type ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200'}`}>{type === 'sangria' || type === 'retirada' ? <ArrowUpFromLine className="mr-1 inline" size={15} /> : <ArrowDownToLine className="mr-1 inline" size={15} />}{type}</button>)}</div><input value={movementValue} onChange={(e) => setMovementValue(e.target.value)} placeholder="Valor (R$)" className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2" /><input value={movementDescription} onChange={(e) => setMovementDescription(e.target.value)} placeholder="Motivo / descricao" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" /><button type="button" onClick={submitMovement} disabled={savingMovement} className="mt-3 w-full rounded-lg bg-slate-800 px-4 py-2 font-semibold text-white disabled:opacity-50">{savingMovement ? 'Registrando...' : 'Registrar movimento'}</button></section>
+                        {!session.requires_closing && <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-bold text-slate-900">Movimento manual</h2><div className="mt-3 grid grid-cols-2 gap-2">{(['sangria', 'suprimento', 'deposito', 'retirada'] as MovementType[]).map((type) => <button key={type} type="button" onClick={() => setMovementType(type)} className={`rounded-lg border px-3 py-2 text-sm font-semibold capitalize ${movementType === type ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200'}`}>{type === 'sangria' || type === 'retirada' ? <ArrowUpFromLine className="mr-1 inline" size={15} /> : <ArrowDownToLine className="mr-1 inline" size={15} />}{type}</button>)}</div><input value={movementValue} onChange={(e) => setMovementValue(e.target.value)} placeholder="Valor (R$)" className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2" /><input value={movementDescription} onChange={(e) => setMovementDescription(e.target.value)} placeholder="Motivo / descricao" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" /><button type="button" onClick={submitMovement} disabled={savingMovement} className="mt-3 w-full rounded-lg bg-slate-800 px-4 py-2 font-semibold text-white disabled:opacity-50">{savingMovement ? 'Registrando...' : 'Registrar movimento'}</button></section>}
                     </div>
                     <div className="flex justify-end"><button type="button" onClick={() => setShowClosing(true)} className="rounded-lg bg-rose-600 px-5 py-2.5 font-bold text-white">Fechar caixa</button></div>
                 </>

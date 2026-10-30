@@ -75,5 +75,22 @@ export function useCashSession(): UseCashSessionResult {
         };
     }, [isAuthLoading, refresh, user?.id]);
 
+    useEffect(() => {
+        if (!session || session.requires_closing || !session.cutoff_at) return;
+        const delay = Math.max(0, Date.parse(session.cutoff_at) - Date.now());
+        const timer = window.setTimeout(() => { void refresh(); }, Math.min(delay + 1000, 2147483647));
+        return () => window.clearTimeout(timer);
+    }, [session?.id, session?.cutoff_at, session?.requires_closing, refresh]);
+
+    useEffect(() => {
+        const onReturn = () => { if (document.visibilityState === 'visible') void refresh(); };
+        document.addEventListener('visibilitychange', onReturn);
+        window.addEventListener('focus', onReturn);
+        return () => {
+            document.removeEventListener('visibilitychange', onReturn);
+            window.removeEventListener('focus', onReturn);
+        };
+    }, [refresh]);
+
     return { session, summary, isLoading, error, refresh };
 }

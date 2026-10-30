@@ -20,6 +20,8 @@ export interface CashSession {
     operator_name: string | null;
     device_key: string | null;
     opened_at: string;
+    requires_closing?: boolean;
+    cutoff_at?: string | null;
     opening_notes: string | null;
     opening_amount_cents: number;
     opening_count_json: DenominationCount | null;

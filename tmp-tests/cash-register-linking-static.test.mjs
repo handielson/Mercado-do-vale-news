@@ -15,7 +15,8 @@ assert.match(saleService, /refund_cash_session_id:\s*refundCashSessionId/, 'canc
 
 for (const serverName of ['vps_server.js', 'vps_server.cjs']) {
     const server = read(serverName);
-    assert.match(server, /eventType: updatedRow\.status === 'refunded' \? 'sale_refund' : 'sale_cancellation'/, `${serverName} deve auditar cancelamento e estorno`);
+    assert.match(server, /\['cancelled', 'refunded'\]\.includes\(String\(updatedRow\.payment_status\)\)/, `${serverName} deve identificar cancelamento e estorno pelo campo real`);
+    assert.match(server, /eventType: updatedRow\.payment_status === 'refunded' \? 'sale_refund' : 'sale_cancellation'/, `${serverName} deve auditar cancelamento e estorno`);
 }
 
 console.log('cash register linking static checks passed');

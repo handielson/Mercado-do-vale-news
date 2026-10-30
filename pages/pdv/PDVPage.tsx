@@ -928,6 +928,11 @@ export default function PDVPage() {
             setShowCashOpeningModal(true);
             return;
         }
+        if (activeCashSession.requires_closing) {
+            toast.error('Caixa bloqueado desde as 20h. Faça o fechamento antes de continuar.');
+            navigate('/admin/caixa');
+            return;
+        }
 
         isFinalizingRef.current = true;
         setIsFinalizing(true);
@@ -1505,7 +1510,16 @@ export default function PDVPage() {
                     </div>
                 )}
 
-                <div className={`${cashSession ? 'grid' : 'hidden'} grid-cols-1 gap-6 lg:grid-cols-2`}>
+                {!isCashSessionLoading && cashSession?.requires_closing && (
+                    <div role="alert" data-pdv-cash-cutoff-warning className="mx-auto max-w-3xl rounded-2xl border-2 border-amber-300 bg-amber-50 p-8 text-center shadow-sm">
+                        <AlertTriangle className="mx-auto text-amber-600" size={30} />
+                        <h2 className="mt-3 text-xl font-bold text-amber-950">PDV bloqueado às 20h</h2>
+                        <p className="mt-2 text-sm text-amber-800">Feche o caixa anterior com a contagem. A nova abertura ficará disponível a partir de 00h.</p>
+                        <button type="button" onClick={() => navigate('/admin/caixa')} className="mt-5 rounded-xl bg-amber-700 px-5 py-3 text-sm font-bold text-white">Ir para fechamento do caixa</button>
+                    </div>
+                )}
+
+                <div className={`${cashSession && !cashSession.requires_closing ? 'grid' : 'hidden'} grid-cols-1 gap-6 lg:grid-cols-2`}>
                     {/* Coluna Esquerda: Formulário (50%) */}
                     <div className="space-y-6">
                         <CustomerSection

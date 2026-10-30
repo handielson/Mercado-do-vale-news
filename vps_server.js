@@ -30359,6 +30359,10 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
 
   const pk = await getPrimaryKey(pool, name);
   const insertBody = { ...body };
+  if (name === 'sales' && insertBody.cash_session_id) {
+    const cashError = await validateCashSessionForOperation(pool, String(insertBody.cash_session_id));
+    if (cashError) return reply.code(409).send({ error: cashError });
+  }
   if (pk === 'id' && !insertBody.id) insertBody.id = crypto.randomUUID();
   if (name === 'products') {
     const [id] = await insertProductRecordsWithGroupPrices(pool, [insertBody]);
@@ -32919,14 +32923,14 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
   if (name === 'customers' && updatedRow) {
     await syncCustomerGoogleContactRecord(updatedRow, 'table-data-update');
   }
-  if (name === 'sales' && updatedRow?.refund_cash_session_id && ['cancelled', 'refunded'].includes(String(updatedRow.status))) {
+  if (name === 'sales' && updatedRow?.refund_cash_session_id && ['cancelled', 'refunded'].includes(String(updatedRow.payment_status))) {
     await recordCashEvent(pool, req, {
       sessionId: updatedRow.refund_cash_session_id,
-      eventType: updatedRow.status === 'refunded' ? 'sale_refund' : 'sale_cancellation',
+      eventType: updatedRow.payment_status === 'refunded' ? 'sale_refund' : 'sale_cancellation',
       amountCents: updatedRow.total,
       referenceType: 'sale',
       referenceId: updatedRow.id,
-      payload: { status: updatedRow.status },
+      payload: { status: updatedRow.payment_status },
     });
   }
   return updatedRow || reply.code(404).send({ error: 'Not found' });
@@ -33599,6 +33603,8 @@ fastify.post('/customers/:customerId/delivery-payments', { preHandler: requireSy
   const description = String(req.body?.description || '').trim();
   const paymentMethod = String(req.body?.payment_method || '').trim().slice(0, 40) || null;
   const cashSessionId = String(req.body?.cash_session_id || '').trim().slice(0, 80) || null;
+  const cashError = await validateCashSessionForOperation(pool, cashSessionId);
+  if (cashError) return reply.code(409).send({ error: cashError });
   const paidAt = formatDateTimeSql(req.body?.paid_at || new Date());
   if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
   if (amount <= 0) return reply.code(400).send({ error: 'valor invalido' });
@@ -33670,6 +33676,8 @@ fastify.post('/customers/:customerId/delivery-offsets', { preHandler: requireSyn
   const debtId = String(req.body?.debt_id || '').trim();
   const amount = normalizeDeliveryLedgerAmount(req.body?.amount);
   const cashSessionId = String(req.body?.cash_session_id || '').trim().slice(0, 80) || null;
+  const cashError = await validateCashSessionForOperation(pool, cashSessionId);
+  if (cashError) return reply.code(409).send({ error: cashError });
   const description = String(req.body?.description || 'Abatimento com saldo de entregas').trim();
   if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
   if (!debtId) return reply.code(400).send({ error: 'debt_id obrigatorio' });
@@ -33721,6 +33729,8 @@ fastify.post('/customers/:customerId/delivery-adjustments', { preHandler: requir
   const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
   const deliveredAt = formatDateTimeSql(new Date());
   const cashSessionId = String(req.body?.cash_session_id || '').trim().slice(0, 80) || null;
+  const cashError = await validateCashSessionForOperation(pool, cashSessionId);
+  if (cashError) return reply.code(409).send({ error: cashError });
   const note = [observation, amount < 0 ? 'Lancamento negativo manual' : 'Lancamento positivo manual'].filter(Boolean).join('\n');
   await pool.query(
     `INSERT INTO customer_delivery_ledger
@@ -33875,7 +33885,9 @@ async function computeCashSessionSummary(db, sessionId) {
   const openingAmountCents = normalizeCashAmountCents(cashSessionRow?.opening_amount_cents);
 
   const [salesRows] = await db.query(
-    `SELECT s.id, s.total, s.payment_methods, s.payment_method, s.status, s.created_at, s.customer_id,
+    `SELECT s.id, s.total, s.payment_methods, s.payment_method,
+            CASE WHEN s.payment_status = 'paid' THEN 'completed' ELSE s.payment_status END AS status,
+            s.created_at, s.customer_id,
             c.name AS customer_name
        FROM sales s
        LEFT JOIN customers c ON c.id = s.customer_id
@@ -33903,14 +33915,18 @@ async function computeCashSessionSummary(db, sessionId) {
 
   // Estornos realizados nesta sessao (venda pode ser de sessao anterior).
   const [refundRows] = await db.query(
-    `SELECT id, total, payment_methods, payment_method, status FROM sales
-      WHERE refund_cash_session_id = ? AND status IN ('cancelled', 'refunded')`,
+    `SELECT id, total, payment_methods, payment_method, payment_status AS status, cash_session_id FROM sales
+      WHERE refund_cash_session_id = ? AND payment_status IN ('cancelled', 'refunded')`,
     [sessionId]
   );
   const refunds = [];
   for (const row of refundRows || []) {
     const payments = normalizeSalePaymentsForCash(row);
-    for (const p of payments) addToMethod(p.method, -p.amount_cents);
+    // A venda cancelada nesta mesma sessao ja foi excluida das entradas acima.
+    // Deduzir de novo faria o estorno aparecer duas vezes no saldo esperado.
+    if (row.cash_session_id !== sessionId) {
+      for (const p of payments) addToMethod(p.method, -p.amount_cents);
+    }
     refunds.push({ id: row.id, status: row.status, total_cents: normalizeCashAmountCents(row.total), payments });
   }
 
@@ -34075,11 +34091,23 @@ function mapCashSessionRow(row) {
     operator_name: row.operator_name || null,
     device_key: row.device_key || null,
     opened_at: row.opened_at,
+    ...(row.status === 'open' ? require('./services/cashSessionCutoff.cjs').cashSessionCutoff(row.opened_at) : {}),
     opening_notes: row.opening_notes || null,
     opening_amount_cents: normalizeCashAmountCents(row.opening_amount_cents),
     opening_count_json: parseCashJsonColumn(row.opening_count_json),
     created_at: row.created_at,
   };
+}
+
+async function validateCashSessionForOperation(db, sessionId) {
+  if (!sessionId) return null;
+  const [rows] = await db.query('SELECT id, status, opened_at FROM pdv_cash_sessions WHERE id = ? LIMIT 1', [sessionId]);
+  const session = rows?.[0];
+  if (!session || session.status !== 'open') return 'Caixa fechado ou nao encontrado. Abra um caixa para continuar.';
+  if (require('./services/cashSessionCutoff.cjs').cashSessionCutoff(session.opened_at).requires_closing) {
+    return 'Caixa bloqueado desde as 20h. Faca o fechamento e abra um novo caixa para continuar.';
+  }
+  return null;
 }
 
 function mapCashClosingRow(row, { includeSnapshot = false } = {}) {
@@ -34114,6 +34142,9 @@ fastify.post('/pdv/cash-sessions/open', { preHandler: requireAdminBearerToken },
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const auth = await getCashAuthContext(req);
   if (!auth.userId) return reply.code(401).send({ error: 'Unauthorized' });
+  if (!require('./services/cashSessionCutoff.cjs').cashOpeningAllowed()) {
+    return reply.code(409).send({ error: 'O caixa abre ate as 20h. Faca a nova abertura a partir de 00h.' });
+  }
 
   const countJson = normalizeCashCountJson(body.opening_count_json);
   const declaredCents = normalizeCashAmountCents(body.opening_amount_cents);
@@ -34784,6 +34815,10 @@ fastify.post('/pdv/cash-sessions/:id/movements', { preHandler: requireAdminBeare
     if (session.status !== 'open') {
       await connection.rollback();
       return reply.code(409).send({ error: 'Movimentos so podem ser lancados em caixa aberto' });
+    }
+    if (require('./services/cashSessionCutoff.cjs').cashSessionCutoff(session.opened_at).requires_closing) {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'Caixa bloqueado desde as 20h. Faca o fechamento antes de registrar movimentos.' });
     }
 
     const movementId = crypto.randomUUID();
@@ -35906,6 +35941,8 @@ fastify.post('/pix/standalone', { preHandler: requireSyncKey }, async (req, repl
   const displayId = body.display_id ? String(body.display_id) : null;
   const cashierKey = body.cashier_key ? String(body.cashier_key) : null;
   const cashSessionId = String(body.cash_session_id || '').trim().slice(0, 80) || null;
+  const cashError = await validateCashSessionForOperation(pool, cashSessionId);
+  if (cashError) return reply.code(409).send({ error: cashError });
   const description = String(body.description || 'Pix avulso Mercado do Vale').slice(0, 120);
   const publicToken = buildPublicToken();
   const expiresAt = addMinutes(new Date(), STANDALONE_PIX_EXPIRATION_MINUTES);
@@ -43294,6 +43331,11 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
     // 2. Inserir o registro de pagamento
     const paymentId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
     const cashSessionId = String(body.cash_session_id || '').trim().slice(0, 80) || null;
+    const cashError = await validateCashSessionForOperation(connection, cashSessionId);
+    if (cashError) {
+      await connection.rollback();
+      return reply.code(409).send({ error: cashError });
+    }
     await connection.query(
       `INSERT INTO customer_debt_payments (id, debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes, cash_session_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,

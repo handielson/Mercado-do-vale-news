@@ -58,6 +58,13 @@ async function finalizeSerializedSaleOnce({ pool, sale: inputSale, items: inputI
       if (units.length !== selected.length || selected.some(item => !units.some(unit => unit.id === item.serialized_unit_id && unit.status === 'sold'))) fail('Venda existente exige conferencia de estoque.');
       await db.commit(); return { sale: existing[0], replay: true };
     }
+    if (sale.cash_session_id) {
+      const [cashRows] = await db.query('SELECT status, opened_at FROM pdv_cash_sessions WHERE id = ? LIMIT 1 FOR UPDATE', [sale.cash_session_id]);
+      if (!cashRows.length || cashRows[0].status !== 'open') fail('Caixa fechado ou nao encontrado. Abra um caixa para continuar.');
+      if (require('./cashSessionCutoff.cjs').cashSessionCutoff(cashRows[0].opened_at).requires_closing) {
+        fail('Caixa bloqueado desde as 20h. Faca o fechamento e abra um novo caixa para continuar.');
+      }
+    }
     const productIds = [...new Set(selected.map(item => item.product_id))].sort();
     valuation = await movingCosts.prepareSale(db, sale, items);
     const productsById = new Map();
