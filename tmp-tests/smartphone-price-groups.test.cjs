@@ -81,6 +81,7 @@ function fixture(t, options = {}) {
     }
     if (q.startsWith('INSERT INTO product_price_history')) {
       if (options.failHistory) throw new Error('history unavailable');
+      if (params[2] == null) throw Object.assign(new Error("Column 'price_cost' cannot be null"), { code: 'ER_BAD_NULL_ERROR' });
       state.history.push({ product_id: params[1], cost: params[2], retail: params[3] }); return [{}];
     }
     if (q.startsWith('INSERT INTO products')) {
@@ -294,6 +295,16 @@ test('divergence requires a choice; save updates every color, preserves cost and
   assert.deepEqual(f.state().products.map(p => p.price_cost), [93200, 100000]);
   assert.deepEqual(f.state().history.map(h => h.cost), [93200, 100000]);
   assert.equal((await f.save(g)).statusCode, 409, 'stale revision must not overwrite another edit');
+});
+
+test('group save accepts a product without registered cost without changing its purchase cost', async t => {
+  const f = fixture(t, { products: [phone('unknown-cost', { price_cost: null })] });
+  const [group] = (await f.list()).groups;
+  const response = await f.save(group, { ...sale, price_retail: 115000 });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(f.state().products[0].price_cost, null);
+  assert.equal(f.state().products[0].price_retail, 115000);
+  assert.equal(f.state().history[0].cost, 0);
 });
 
 test('saving a group rolls back all prices and its definition if history fails', async t => {

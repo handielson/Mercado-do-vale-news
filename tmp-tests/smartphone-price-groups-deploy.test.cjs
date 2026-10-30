@@ -5,6 +5,8 @@ const { execFileSync } = require('node:child_process');
 const { patchModule, BASELINE, FILE } = require('../scripts/deploy-smartphone-price-groups.cjs');
 test('price-group module deploy accepts the published baseline, is idempotent and rejects drift', () => {
     const before = execFileSync('git', ['show', `${BASELINE}:${FILE}`], { encoding: 'utf8' });
+    const lastPublished = execFileSync('git', ['show', `v1.2.714-precos-bipe-cadastro:${FILE}`], { encoding: 'utf8' });
+    assert.equal(before, lastPublished, 'deploy baseline must match the most recent published API module');
     const after = fs.readFileSync(FILE, 'utf8');
     assert.equal(patchModule(before, before, after), after);
     assert.equal(patchModule(after, before, after), after);

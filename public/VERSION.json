@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.714-precos-bipe-cadastro",
+  "version": "v1.2.715-custo-nulo-historico",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.714-precos-bipe-cadastro",
-  "release_vps": "/var/www/mdv-site/releases/20261030-165500-v12714-precos-bipe-cadastro",
+  "tag": "v1.2.715-custo-nulo-historico",
+  "release_vps": "/var/www/mdv-site/releases/20261030-171000-v12715-custo-nulo-historico",
   "api_release": {
     "status": "published",
     "module": "services/smartphonePriceGroupsServer.cjs",
     "backup_prefix": "/var/www/mdv-api/backups/smartphone-price-groups-"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "A conferência por foto avança serial, IMEI 1, IMEI 2 e EAN após o bipe. Os preços existentes de varejo, revenda e atacado podem ser editados na família pela operação oficial do grupo, mantendo todas as cores sincronizadas e os custos individuais.",
+  "summary": "O salvamento dos preços por configuração agora aceita aparelhos sem custo de compra informado. O custo no cadastro permanece inalterado, e o histórico registra o valor compatível com sua coluna obrigatória.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -24,26 +24,22 @@
   },
   "pending_deployments": {
     "mercado_livre_api": "publicada; /status HTTP 200, mysql.ok=true; GET /mercado-livre/settings HTTP 200, erpCapabilities=[]",
-    "site_manifest": "publicado; VERSION.json v1.2.714 na release ativa"
+    "site_manifest": "publicado; VERSION.json v1.2.715 na release ativa"
   },
-  "site_source_base": "9af83e18dfed6ad13a5091eef2d6b7483e658508",
+  "site_source_base": "cfad34c0baa9d6a536eb09a66733f95a0b1d0d9c",
   "changed_files": [
-    "components/products/ProductFamilyEditor.tsx",
-    "components/products/familyRegistration.js",
-    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
-    "services/scannerFieldAdvance.mjs",
-    "tmp-tests/family-registration.test.mjs",
-    "tmp-tests/product-family-ean-browser.test.mjs",
-    "tmp-tests/product-family-ean-preview.tsx",
-    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
+    "services/smartphonePriceGroupsServer.cjs",
+    "scripts/deploy-smartphone-price-groups.cjs",
+    "tmp-tests/smartphone-price-groups.test.cjs",
+    "tmp-tests/smartphone-price-groups-deploy.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.714-precos-bipe-cadastro.md"
+    "docs/versoes/2026-10-30-v1.2.715-custo-nulo-historico.md"
   ],
   "validations": [
-    "Testes da família, grupos de preço e cadastro por foto aprovados.",
-    "Navegação real no navegador cobriu edição, cancelamento, falha e salvamento do grupo para duas cores, com custo preservado.",
-    "Build do site e validação pública da página e de VERSION.json."
+    "Regressão reproduziu ER_BAD_NULL_ERROR antes da correção e passou depois.",
+    "Testes dos grupos de preço e do histórico, sintaxe da API e build do site.",
+    "API e site verificados após publicação."
   ],
   "android_entregas": {
     "version_name": "1.1.5",

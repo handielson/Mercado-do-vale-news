@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { deployProductReadPrivacy } = require('./deploy-product-read-privacy.cjs');
-const BASELINE = 'v1.2.709-painel-modelo-imagens';
+const BASELINE = 'v1.2.710-foto-precos-media-compra';
 const FILE = 'services/smartphonePriceGroupsServer.cjs';
 const normalize = source => String(source).replace(/\r\n/g, '\n');
 function patchModule(remote, before, after) {

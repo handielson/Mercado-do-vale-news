@@ -286,7 +286,7 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey, inv
         if (core.samePrices(p, salePrices)) continue;
         await connection.query('UPDATE products SET price_retail=?,price_reseller=?,price_wholesale=?,updated_at=CURRENT_TIMESTAMP WHERE id=?', [...core.SALE_FIELDS.map(f => salePrices[f]), p.id]);
         await connection.query(`INSERT INTO product_price_history (id,product_id,price_cost,price_retail,price_reseller,price_wholesale)
-          VALUES (?,?,?,?,?,?)`, [crypto.randomUUID(), p.id, p.price_cost, ...core.SALE_FIELDS.map(f => salePrices[f])]);
+          VALUES (?,?,?,?,?,?)`, [crypto.randomUUID(), p.id, p.price_cost ?? 0, ...core.SALE_FIELDS.map(f => salePrices[f])]);
       }
       await connection.commit();
       return { ok: true, updated: peers.length };

@@ -1,3 +1,16 @@
+# v1.2.715-custo-nulo-historico
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.715-custo-nulo-historico`.
+Release do site: `/var/www/mdv-site/releases/20261030-171000-v12715-custo-nulo-historico`.
+
+Ao editar preços de uma configuração de celular cujo custo de compra ainda não foi informado, a API mantém o custo do produto como ausente e grava `0` apenas no campo obrigatório do histórico de preços. Assim, os preços de todas as cores podem ser salvos na mesma transação sem erro 500.
+
+Validações: teste que reproduziu `ER_BAD_NULL_ERROR` antes da correção e passou depois, suíte de preços por configuração, verificação de sintaxe, build e conferência pública. API publicada pelo deploy seletivo do módulo de grupos; site atualizado com a versão.
+
+Registro: `docs/versoes/2026-10-30-v1.2.715-custo-nulo-historico.md`.
+
+---
+
 # v1.2.714-precos-bipe-cadastro
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.714-precos-bipe-cadastro`.
