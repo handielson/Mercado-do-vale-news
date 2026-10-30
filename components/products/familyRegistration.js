@@ -25,13 +25,13 @@ export function smartphoneFamilyConfigurationKey(data) {
   return [ram, storage, clean(specs.version || specs.versao || DEFAULT_PRODUCT_VERSION), clean(specs._price_group_network || specs.rede_operadora || specs.network), clean(specs.condition || specs.condicao || 'new')].join('|');
 }
 
-export function setSmartphoneFamilyConfigurationPrice(rows, sourceKey, field, value) {
+export function setSmartphoneFamilyConfigurationPrice(rows, sourceKey, field, value, { includeExisting = false } = {}) {
   if (!FAMILY_SALE_PRICE_FIELDS.includes(field)) throw new Error('Campo de preço inválido.');
   const source = rows.find(row => row.key === sourceKey);
   const group = smartphoneFamilyConfigurationKey(source?.data);
   if (!group) throw new Error('Preencha RAM e armazenamento da variação antes dos preços.');
   return rows.map(row => {
-    if (row.data.id || smartphoneFamilyConfigurationKey(row.data) !== group) return row;
+    if ((!includeExisting && row.data.id) || smartphoneFamilyConfigurationKey(row.data) !== group) return row;
     const inherited = row.data.specs?._inherit_parent_fields || [];
     return { ...row, data: { ...row.data, [field]: value, specs: {
       ...row.data.specs, _inherit_parent_fields: inherited.filter(name => !FAMILY_SALE_PRICE_FIELDS.includes(name)),

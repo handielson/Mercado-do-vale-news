@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { isScannerValueComplete, nextScannerBurst, SCANNER_FAST_KEY_GAP_MS } from '../services/scannerFieldAdvance.mjs';
 
 const productList = fs.readFileSync(new URL('../pages/admin/products/ProductListPage.tsx', import.meta.url), 'utf8');
 const quickAccess = fs.readFileSync(new URL('../components/admin/dashboard/AdminQuickAccessGrid.tsx', import.meta.url), 'utf8');
@@ -17,9 +18,21 @@ assert.match(reviewCard, /onClick=\{\(\) => selectedModelId && void onAttachMode
 for (const input of reviewCard.matchAll(/<input\b[\s\S]*?\/>/g)) {
   if (/type="checkbox"/.test(input[0])) continue;
   for (const event of ['onFocus', 'onClick']) {
-    assert.match(input[0], new RegExp(`${event}=\\{event => event\\.currentTarget\\.select\\(\\)\\}`), `campos de texto devem selecionar todo o conteudo em ${event}`);
+    assert.match(input[0], new RegExp(`${event}=\\{event => [\\s\\S]*?event\\.currentTarget\\.select\\(\\)`), `campos de texto devem selecionar todo o conteudo em ${event}`);
   }
 }
+assert.match(reviewCard, /detected_serial: 'detected_imei_1',[\s\S]*detected_imei_1: 'detected_imei_2',[\s\S]*detected_imei_2: 'detected_ean'/, 'bipes devem seguir serial, IMEI 1, IMEI 2 e EAN');
+assert.match(reviewCard, /onKeyDown=\{NEXT_SCAN_FIELD\[field\.key\] \? event => handleScanKeyDown\(event, field\.key\)/, 'os campos devem avançar pelo terminador do leitor');
+assert.match(reviewCard, /scanInputs\.current\[nextField\]\?\.focus\(\)/, 'o próximo campo deve receber foco');
+assert.match(reviewCard, /isScannerValueComplete\(field, input\.value\)/, 'leitor sem Enter deve aguardar valor completo');
+let burst = nextScannerBurst(null, 'detected_serial', 100);
+for (let index = 1; index < 8; index++) burst = nextScannerBurst(burst, 'detected_serial', 100 + index * 20);
+assert.equal(burst.count, 8, 'sequência rápida identifica um bipe sem sufixo');
+assert.equal(nextScannerBurst(burst, 'detected_serial', burst.lastAt + SCANNER_FAST_KEY_GAP_MS + 1).count, 1, 'digitação lenta reinicia a detecção');
+assert.equal(isScannerValueComplete('detected_serial', '82211/Y6U806689'), true);
+assert.equal(isScannerValueComplete('detected_imei_1', '861106080748505'), true);
+assert.equal(isScannerValueComplete('detected_imei_2', '86110608074851'), false, 'IMEI incompleto não deve pular');
+assert.equal(isScannerValueComplete('detected_ean', '6939093017816'), false, 'EAN é a última etapa e não deve salvar sozinho');
 assert.match(reviewCard, /SKU da nova variação \(opcional\)/, 'SKU manual deve ser opcional');
 assert.match(reviewCard, /Deixe em branco para gerar automaticamente/, 'deve explicar a geração automática');
 assert.doesNotMatch(reviewCard, /setSku\(intake\.detected_product_code/, 'codigo do fabricante nao pode virar SKU comercial');

@@ -18,6 +18,7 @@ import { SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS } from '../../../types/smartphone
 import { smartphonePriceGroups, SmartphonePriceReference } from '../../../services/smartphonePriceGroups';
 import { DEFAULT_PRODUCT_VERSION } from '../../../services/smartphoneModelSpecs.mjs';
 import { ModelPricesPanel } from '../../settings/ModelPricesPanel';
+import { isScannerValueComplete, nextScannerBurst, SCANNER_IDLE_MS, SCANNER_MIN_FAST_KEYS } from '../../../services/scannerFieldAdvance.mjs';
 
 interface PhotoIntakeReviewCardProps {
   intake: SmartphonePhotoIntake;
@@ -46,6 +47,12 @@ const TEXT_FIELDS: Array<{ key: keyof SmartphonePhotoIntakeUpdate; label: string
   { key: 'detected_imei_2', label: 'IMEI 2', mono: true },
   { key: 'detected_ean', label: 'EAN/GTIN', mono: true },
 ];
+
+const NEXT_SCAN_FIELD: Partial<Record<keyof SmartphonePhotoIntakeUpdate, keyof SmartphonePhotoIntakeUpdate>> = {
+  detected_serial: 'detected_imei_1',
+  detected_imei_1: 'detected_imei_2',
+  detected_imei_2: 'detected_ean',
+};
 
 function buildDraft(intake: SmartphonePhotoIntake): SmartphonePhotoIntakeUpdate {
   return {
@@ -104,6 +111,42 @@ export function PhotoIntakeReviewCard({
   const [stockAverageError, setStockAverageError] = useState('');
   const [lastPurchaseCost, setLastPurchaseCost] = useState<number | null>(null);
   const costEdited = useRef(false);
+  const scanInputs = useRef<Partial<Record<keyof SmartphonePhotoIntakeUpdate, HTMLInputElement | null>>>({});
+  const scanBurst = useRef<{ field: keyof SmartphonePhotoIntakeUpdate; lastAt: number; count: number } | null>(null);
+  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resetScanBurst = () => {
+    if (scanTimer.current) clearTimeout(scanTimer.current);
+    scanTimer.current = null;
+    scanBurst.current = null;
+  };
+  useEffect(() => () => {
+    if (scanTimer.current) clearTimeout(scanTimer.current);
+  }, []);
+  const advanceScan = (field: keyof SmartphonePhotoIntakeUpdate) => {
+    const nextField = NEXT_SCAN_FIELD[field];
+    if (nextField) scanInputs.current[nextField]?.focus();
+  };
+  const handleScanKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, field: keyof SmartphonePhotoIntakeUpdate) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === 'Enter' || (event.key === 'Tab' && !event.shiftKey)) {
+      event.preventDefault();
+      resetScanBurst();
+      advanceScan(field);
+      return;
+    }
+    if (event.key.length !== 1 || event.ctrlKey || event.altKey || event.metaKey || event.repeat) return;
+    scanBurst.current = nextScannerBurst(scanBurst.current, field, event.timeStamp);
+    if (scanBurst.current.count < SCANNER_MIN_FAST_KEYS) return;
+    if (scanTimer.current) clearTimeout(scanTimer.current);
+    const input = event.currentTarget;
+    scanTimer.current = setTimeout(() => {
+      scanTimer.current = null;
+      if (document.activeElement === input && isScannerValueComplete(field, input.value)) {
+        scanBurst.current = null;
+        advanceScan(field);
+      }
+    }, SCANNER_IDLE_MS);
+  };
   useEffect(() => { costEdited.current = false; }, [intake.id]);
   const refreshSalePrices = () => {
     setLoadingPriceReference(true);
@@ -151,6 +194,7 @@ export function PhotoIntakeReviewCard({
   const groupPriceLocked = loadingPriceReference || !!priceReferenceError || Boolean(priceReference?.established || priceReference?.incomplete);
 
   useEffect(() => {
+    resetScanBurst();
     setDraft(buildDraft(intake));
     setSelectedModelId(intake.matched_model_id || '');
     setSku('');
@@ -296,9 +340,11 @@ export function PhotoIntakeReviewCard({
                 <label key={field.key} className="block min-w-0">
                   <span className="mb-1 block text-xs font-medium text-slate-500">{field.label}</span>
                   <input
+                    ref={element => { if (field.mono) scanInputs.current[field.key] = element; }}
                     value={String(draft[field.key] ?? '')}
-                    onFocus={event => event.currentTarget.select()}
+                    onFocus={event => { resetScanBurst(); event.currentTarget.select(); }}
                     onClick={event => event.currentTarget.select()}
+                    onKeyDown={NEXT_SCAN_FIELD[field.key] ? event => handleScanKeyDown(event, field.key) : undefined}
                     onChange={event => setDraft(current => ({ ...current, [field.key]: event.target.value, review_confirmed: false }))}
                     className={`h-10 min-w-0 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 ${field.mono ? 'font-mono' : ''}`}
                   />

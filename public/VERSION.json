@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.713-busca-imei-admin",
+  "version": "v1.2.714-precos-bipe-cadastro",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.713-busca-imei-admin",
-  "release_vps": "/var/www/mdv-site/releases/20261030-190000-v12713-busca-imei-admin",
+  "tag": "v1.2.714-precos-bipe-cadastro",
+  "release_vps": "/var/www/mdv-site/releases/20261030-165500-v12714-precos-bipe-cadastro",
   "api_release": {
     "status": "published",
     "module": "services/smartphonePriceGroupsServer.cjs",
     "backup_prefix": "/var/www/mdv-api/backups/smartphone-price-groups-"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Busca administrativa por IMEI preserva o aparelho encontrado após a atualização do catálogo e destaca sua variação.",
+  "summary": "A conferência por foto avança serial, IMEI 1, IMEI 2 e EAN após o bipe. Os preços existentes de varejo, revenda e atacado podem ser editados na família pela operação oficial do grupo, mantendo todas as cores sincronizadas e os custos individuais.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -24,22 +24,25 @@
   },
   "pending_deployments": {
     "mercado_livre_api": "publicada; /status HTTP 200, mysql.ok=true; GET /mercado-livre/settings HTTP 200, erpCapabilities=[]",
-    "site_manifest": "publicado; VERSION.json com manifesto final na release ativa"
+    "site_manifest": "publicado; VERSION.json v1.2.714 na release ativa"
   },
-  "site_source_base": "02b007646286da5ada553b2e624a355f7c690934",
+  "site_source_base": "9af83e18dfed6ad13a5091eef2d6b7483e658508",
   "changed_files": [
-    "components/products/ProductList.tsx",
-    "hooks/useProducts.ts",
-    "pages/admin/products/ProductListPage.tsx",
-    "tmp-tests/admin-product-filter-serialized-search.test.ts",
-    "tmp-tests/admin-products-imei-unit-hydration-static.test.mjs",
+    "components/products/ProductFamilyEditor.tsx",
+    "components/products/familyRegistration.js",
+    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
+    "services/scannerFieldAdvance.mjs",
+    "tmp-tests/family-registration.test.mjs",
+    "tmp-tests/product-family-ean-browser.test.mjs",
+    "tmp-tests/product-family-ean-preview.tsx",
+    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.713-busca-imei-admin.md"
+    "docs/versoes/2026-10-30-v1.2.714-precos-bipe-cadastro.md"
   ],
   "validations": [
-    "Consulta de leitura confirmou IMEI cadastrado em unidade disponível e variação ativa na API de produção.",
-    "Testes focados de busca por IMEI e preservação do resultado após recarga do catálogo.",
+    "Testes da família, grupos de preço e cadastro por foto aprovados.",
+    "Navegação real no navegador cobriu edição, cancelamento, falha e salvamento do grupo para duas cores, com custo preservado.",
     "Build do site e validação pública da página e de VERSION.json."
   ],
   "android_entregas": {

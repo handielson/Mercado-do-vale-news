@@ -75,6 +75,28 @@ try {
     await page.getByLabel('Custo médio em estoque 8GB / 256GB', { exact: true }).getByText(/1\.234,50/).waitFor();
     assert.equal(await page.getByRole('region', { name: 'Preços das configurações' }).count(), 1);
     assert.equal(await page.getByRole('button', { name: 'Remover rascunho' }).count(), 0);
+    const savedGroup = page.getByRole('region', { name: 'Preços das configurações' });
+    await savedGroup.getByRole('button', { name: 'Editar valores' }).waitFor();
+    assert.equal(await savedGroup.getByLabel('Varejo').isDisabled(), true);
+    await savedGroup.getByRole('button', { name: 'Editar valores' }).click();
+    await savedGroup.getByLabel('Varejo').fill('1250,00');
+    await savedGroup.getByRole('button', { name: 'Cancelar' }).click();
+    assert.equal(await page.evaluate(() => window.fixturePriceWrites || 0), 0, 'cancelar não grava preços');
+    await savedGroup.getByRole('button', { name: 'Editar valores' }).click();
+    await savedGroup.getByLabel('Varejo').fill('1250,00');
+    await page.evaluate(() => { window.fixturePriceSaveFailure = true; });
+    await savedGroup.getByRole('button', { name: /Salvar para todas as cores/ }).click();
+    await savedGroup.getByRole('alert').filter({ hasText: 'Falha simulada ao salvar preços' }).waitFor();
+    assert.equal(await page.evaluate(() => window.fixturePriceWrites || 0), 0, 'falha não confirma alteração');
+    await page.evaluate(() => { window.fixturePriceSaveFailure = false; });
+    await savedGroup.getByRole('button', { name: 'Editar valores' }).click();
+    await savedGroup.getByLabel('Varejo').fill('1250,00');
+    await savedGroup.getByRole('button', { name: /Salvar para todas as cores/ }).click();
+    await savedGroup.getByRole('status').filter({ hasText: 'Preços salvos para 2' }).waitFor();
+    const updatedRows = JSON.parse(await page.getByTestId('rows-state').textContent());
+    assert.deepEqual(updatedRows.map(row => row.data.price_retail), [125000, 125000], 'todas as cores refletem o preço salvo');
+    assert.deepEqual(updatedRows.map(row => row.data.price_cost), [99900, 99900], 'compra permanece individual');
+    assert.equal(await page.evaluate(() => window.fixturePriceWrites || 0), 1);
     assert.deepEqual(errors, []);
     console.log('Stock purchase average: new and saved variations, exact group, zero, missing data and retry passed');
 } finally {

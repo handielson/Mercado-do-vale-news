@@ -11,7 +11,7 @@ import { EANInput } from '../ui/EANInput';
 import { VariationMedia } from './VariationMedia';
 import { VariationListing } from './VariationListing';
 import { CurrencyInput } from '../ui/CurrencyInput';
-import { smartphonePriceGroups, type SmartphonePriceReference, type SmartphonePriceGroup } from '../../services/smartphonePriceGroups';
+import { smartphonePriceGroups, type SmartphonePriceReference, type SmartphonePriceGroup, type SmartphoneSalePrices } from '../../services/smartphonePriceGroups';
 import { nextVariationSku } from '@mdv/product-sku';
 
 export type FamilyRow = { key: string; data: ProductInput & { id?: string }; inheritImages: boolean; videoFile?: File | null };
@@ -56,6 +56,14 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
     const [inventoryLoading, setInventoryLoading] = useState(false);
     const [inventoryError, setInventoryError] = useState('');
     const [inventoryReload, setInventoryReload] = useState(0);
+    const [priceReferenceReload, setPriceReferenceReload] = useState(0);
+    const [editingPriceGroup, setEditingPriceGroup] = useState('');
+    const [priceEdits, setPriceEdits] = useState<SmartphoneSalePrices | null>(null);
+    const [savingPriceGroup, setSavingPriceGroup] = useState(false);
+    const [priceSaveError, setPriceSaveError] = useState('');
+    const [priceSaveErrorGroup, setPriceSaveErrorGroup] = useState('');
+    const [priceSaveMessage, setPriceSaveMessage] = useState('');
+    const [priceSaveMessageGroup, setPriceSaveMessageGroup] = useState('');
     const busy = busyKeys.length > 0;
     useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
     const mediaBusy = (key: string, active: boolean) => setBusyKeys(keys => active ? [...new Set([...keys, key])] : keys.filter(item => item !== key));
@@ -133,7 +141,38 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
             })
             .catch(error => { if (active) setPriceReferenceError(error instanceof Error ? error.message : 'Não foi possível consultar os preços existentes.'); });
         return () => { active = false; };
-    }, [smartphone, parent.model_id, priceGroupSignature]);
+    }, [smartphone, parent.model_id, priceGroupSignature, priceReferenceReload]);
+    const saveExistingGroupPrices = async (key: string, sourceKey: string, reference: SmartphonePriceReference) => {
+        const group = inventoryGroups.find(item => item.id === reference.group_id);
+        if (!group || !priceEdits || !parent.model_id) return;
+        if (Object.values(priceEdits).some(value => !Number.isSafeInteger(value) || value <= 0)
+            || priceEdits.price_retail < priceEdits.price_reseller || priceEdits.price_reseller < priceEdits.price_wholesale) {
+            setPriceSaveError('Informe os três preços acima de zero, na ordem varejo ≥ revenda ≥ atacado.');
+            return;
+        }
+        setSavingPriceGroup(true);
+        setPriceSaveError(''); setPriceSaveMessage('');
+        try {
+            const result = await smartphonePriceGroups.save(group, priceEdits);
+            let nextRows = rows;
+            for (const field of ['price_retail', 'price_reseller', 'price_wholesale'] as const) {
+                nextRows = setSmartphoneFamilyConfigurationPrice(nextRows, sourceKey, field, priceEdits[field], { includeExisting: true });
+            }
+            onChange(nextRows);
+            setPriceReferences(current => ({ ...current, [key]: { ...reference, prices: priceEdits, established: true, divergent: false } }));
+            setEditingPriceGroup(''); setPriceEdits(null);
+            setPriceSaveMessage(`Preços salvos para ${result.updated} variação(ões) desta configuração.`);
+            setPriceSaveMessageGroup(key);
+            setInventoryReload(value => value + 1);
+            setPriceReferenceReload(value => value + 1);
+        } catch (error) {
+            setPriceSaveError(error instanceof Error ? error.message : 'Não foi possível salvar os preços. Recarregue a configuração e tente novamente.');
+            setPriceSaveErrorGroup(key);
+            setEditingPriceGroup(''); setPriceEdits(null);
+            setInventoryReload(value => value + 1);
+            setPriceReferenceReload(value => value + 1);
+        } finally { setSavingPriceGroup(false); }
+    };
     return <section className="rounded-xl border border-blue-200 bg-white p-5 space-y-4" aria-label="Variações da família">
         <div className="flex justify-between gap-3"><h3 className="font-semibold">Variações ({rows.length})</h3>
             {!smartphone && <button type="button" disabled={disabled || busy || adding || !parent.name?.trim()} onClick={add} className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50">Adicionar variação</button>}</div>
@@ -218,16 +257,32 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
             {[...priceGroups.values()].map(groupRows => {
                 const first = groupRows[0];
                 const specs = first.data.specs || {};
-                const reference = priceReferences[smartphoneFamilyConfigurationKey(first.data)];
+                const groupKey = smartphoneFamilyConfigurationKey(first.data);
+                const reference = priceReferences[groupKey];
                 const inventoryGroup = inventoryGroups.find(group => group.id === reference?.group_id);
                 const averageCost = inventoryGroup?.cost_average_in_stock;
+                const editingPricesForGroup = editingPriceGroup === groupKey ? priceEdits : null;
+                const displayedPrices = editingPricesForGroup || reference?.prices || first.data;
                 return <div key={first.key} className="rounded-lg border border-emerald-200 bg-white p-3 space-y-2">
                     <p className="font-medium">{specs.ram} / {specs.storage} {specs.version ? `· ${specs.version}` : ''} <span className="text-sm font-normal text-slate-600">· {groupRows.map(row => row.data.specs?.color).filter(Boolean).join(', ')}</span></p>
                     <p className="text-sm text-slate-700" aria-label={`Custo médio em estoque ${specs.ram} / ${specs.storage}`}><strong>Custo médio de compra em estoque: </strong>{inventoryLoading ? 'Consultando…' : inventoryError || priceReferenceError ? 'Consulta indisponível' : !reference ? 'Consultando…' : averageCost != null ? (averageCost / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Sem custo de compra em estoque'}<span className="block text-xs text-slate-500">Média das cores desta configuração, conforme o estoque cadastrado.</span></p>
-                    {reference?.established && <p className="text-xs text-blue-800">{reference.prices ? 'Esta configuração já tem preços definidos. Os valores existentes foram carregados e serão mantidos.' : 'Esta configuração tem preços divergentes. Resolva a divergência em Gestão de Modelos antes de incluir outra cor.'}</p>}
+                    {reference?.established && <div className="flex flex-wrap items-center gap-3 text-xs text-blue-800">
+                        <span>{reference.prices ? 'Preços definidos para todas as cores desta configuração.' : 'Esta configuração tem preços divergentes. Resolva a divergência em Gestão de Modelos antes de incluir outra cor.'}</span>
+                        {reference.prices && !editingPricesForGroup && <button type="button" disabled={disabled || busy || savingPriceGroup || inventoryLoading || !!priceReferenceError || !inventoryGroup} onClick={() => {
+                            setEditingPriceGroup(groupKey); setPriceEdits({ ...reference.prices! }); setPriceSaveError(''); setPriceSaveMessage('');
+                        }} className="font-semibold text-blue-700 underline disabled:opacity-50">Editar valores</button>}
+                    </div>}
                     <div className="grid gap-3 sm:grid-cols-3">{(['price_retail', 'price_reseller', 'price_wholesale'] as const).map((field, index) =>
-                        <fieldset key={field} disabled={disabled || busy || !reference || !!reference.established || !!priceReferenceError || groupRows.every(row => !!row.data.id)}><CurrencyInput label={['Varejo', 'Revenda', 'Atacado'][index]} value={Number(first.data[field]) || 0}
-                            onChange={value => onChange(setSmartphoneFamilyConfigurationPrice(rows, first.key, field, value))} /></fieldset>)}</div>
+                        <fieldset key={field} disabled={disabled || busy || savingPriceGroup || !reference || (!!reference.established && !editingPricesForGroup) || !!priceReferenceError || (groupRows.every(row => !!row.data.id) && !editingPricesForGroup)}><CurrencyInput label={['Varejo', 'Revenda', 'Atacado'][index]} value={Number(displayedPrices[field]) || 0}
+                            onChange={value => editingPricesForGroup
+                                ? setPriceEdits(current => current ? { ...current, [field]: value } : current)
+                                : onChange(setSmartphoneFamilyConfigurationPrice(rows, first.key, field, value))} /></fieldset>)}</div>
+                    {editingPricesForGroup && <div className="flex flex-wrap items-center gap-3">
+                        <button type="button" disabled={disabled || busy || savingPriceGroup || inventoryLoading} onClick={() => void saveExistingGroupPrices(groupKey, first.key, reference!)} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{savingPriceGroup ? 'Salvando…' : `Salvar para todas as cores (${inventoryGroup?.products.length || 0})`}</button>
+                        <button type="button" disabled={savingPriceGroup} onClick={() => { setEditingPriceGroup(''); setPriceEdits(null); setPriceSaveError(''); }} className="text-xs text-slate-600 underline">Cancelar</button>
+                    </div>}
+                    {priceSaveError && (editingPriceGroup === groupKey || priceSaveErrorGroup === groupKey) && <p role="alert" className="text-xs text-red-700">{priceSaveError}</p>}
+                    {priceSaveMessage && priceSaveMessageGroup === groupKey && <p role="status" className="text-xs text-emerald-700">{priceSaveMessage}</p>}
                 </div>;
             })}
         </section>}

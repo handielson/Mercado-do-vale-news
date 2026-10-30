@@ -1,3 +1,16 @@
+# v1.2.714-precos-bipe-cadastro
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.714-precos-bipe-cadastro`.
+Release do site: `/var/www/mdv-site/releases/20261030-165500-v12714-precos-bipe-cadastro`.
+
+Na conferência por foto, um bipe em número de série avança para IMEI 1, depois para IMEI 2 e EAN/GTIN; leitores com Enter, Tab ou sequência rápida sem sufixo são aceitos. Em variações do produto pai, **Editar valores** permite alterar varejo, revenda e atacado de uma configuração já cadastrada. O salvamento usa o grupo oficial para atualizar todas as cores, preservando o custo individual de compra.
+
+Validações: testes da família, dos grupos de preço e do cadastro por foto; ensaio no navegador com cancelamento, erro e salvamento; build do site; verificação pública. Somente o site foi publicado; API e n8n não foram reiniciados.
+
+Registro: `docs/versoes/2026-10-30-v1.2.714-precos-bipe-cadastro.md`.
+
+---
+
 # v1.2.713-busca-imei-admin
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.713-busca-imei-admin`.

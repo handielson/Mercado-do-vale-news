@@ -108,7 +108,19 @@ test('modelo sem configuração leva direto à etapa única de variações e pre
   assert.match(form, /smartphonePriceGroups\.reference\(mergedData\.model_id!, row\.data\)/);
   assert.match(form, /Os preços de .* mudaram\. Reabra as variações/);
   const editor = fs.readFileSync('components/products/ProductFamilyEditor.tsx', 'utf8');
-  assert.match(editor, /reference\.established \|\| !!priceReferenceError/);
+  assert.match(editor, /saveExistingGroupPrices[\s\S]*smartphonePriceGroups\.save\(group, priceEdits\)/, 'preços existentes devem ser salvos pela operação do grupo');
+  assert.match(editor, /Editar valores[\s\S]*Salvar para todas as cores/, 'configuração existente deve permitir edição nesta tela');
+});
+
+test('edição de preço confirmado atualiza todas as cores locais sem alterar custo ou outros grupos', () => {
+  const row = (key, ram, id) => ({ key, data: { id, specs: { ram, storage: '256GB', color: key }, price_cost: 99900, price_retail: 119900, price_reseller: 114900, price_wholesale: 109900 } });
+  const rows = [row('Verde', '4GB', 'saved'), row('Azul', '4GB'), row('Preto', '6GB', 'other')];
+  const draftOnly = setSmartphoneFamilyConfigurationPrice(rows, 'Verde', 'price_retail', 125000);
+  assert.equal(draftOnly[0].data.price_retail, 119900, 'edição de rascunho não altera produto salvo');
+  assert.equal(draftOnly[1].data.price_retail, 125000);
+  const confirmed = setSmartphoneFamilyConfigurationPrice(rows, 'Verde', 'price_retail', 125000, { includeExisting: true });
+  assert.deepEqual(confirmed.map(item => item.data.price_retail), [125000, 125000, 119900]);
+  assert.deepEqual(confirmed.map(item => item.data.price_cost), [99900, 99900, 99900]);
 });
 import { stripModelOwnedSpecs } from '../services/smartphoneModelSpecs.mjs';
 
