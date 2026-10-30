@@ -1,3 +1,16 @@
+# v1.2.719-caixa-arquivo-synology
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.719-caixa-arquivo-synology`.
+Release do site: `/var/www/mdv-site/releases/20261030-213000-v12719-caixa-synology`.
+
+O PDF do fechamento passa o SID do Synology tambem na URL do upload. O caixa #1 ja estava fechado; esta entrega permite arquivar o documento pendente sem reabrir ou repetir o fechamento.
+
+Validacoes: teste estatico do contrato Synology, sintaxe dos servidores, build e verificacao publica.
+
+Registro: `docs/versoes/2026-10-30-v1.2.719-caixa-arquivo-synology.md`.
+
+---
+
 # v1.2.718-caixa-relatorio-itens
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.718-caixa-relatorio-itens`.

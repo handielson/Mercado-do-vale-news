@@ -14,6 +14,7 @@ assert.match(wizard, /uploadDocument\(result\.document_id/, 'fechamento deve arq
 for (const serverName of ['vps_server.js', 'vps_server.cjs']) {
     const server = read(serverName);
     assert.match(server, /async function uploadCashReportToSynology/, `${serverName} deve ter helper de upload`);
+    assert.match(server.match(/async function uploadCashReportToSynology[\s\S]*?fastify\.post\('\/pdv\/cash-documents/)[0], /entry\.cgi\?_sid=\$\{encodeURIComponent\(sid\)\}/, `${serverName} deve autenticar upload na URL`);
     assert.match(server, /create_parents[^\n]*true/, `${serverName} deve criar pastas no Synology`);
     assert.match(server, /overwrite[^\n]*false/, `${serverName} nao pode sobrescrever relatorios`);
     assert.match(server, /\/caixa\/\$\{parts\.year\}/, `${serverName} deve usar pasta dedicada de caixa`);

@@ -34822,7 +34822,7 @@ async function uploadCashReportToSynology({ fileName, fileBuf, dateValue }) {
     const options = {
       hostname: urlObj.hostname,
       port: getSynologyRequestPort(urlObj),
-      path: '/webapi/entry.cgi',
+      path: `/webapi/entry.cgi?_sid=${encodeURIComponent(sid)}`,
       method: 'POST',
       rejectUnauthorized: false,
       headers: {
