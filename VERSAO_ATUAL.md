@@ -1778,3 +1778,15 @@ Fechamento v1.2.615: commit funcional 86153590/tag enviados, site publicado e va
 
 
 Fechamento v1.2.616: commit 73758b95/tag enviados a main, site publicado e VERSION.json/catalogo real validados sem erro fatal. Workflow PayJoy ativo, API/MySQL e n8n saudaveis; sem novo restart. Limpeza: 0 removidos, 34 bloqueados preservados, listados na nota. Seis arquivos preexistentes fora do escopo.
+# v1.2.712-meta-atendimento-paridade
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.712-meta-atendimento-paridade`.
+Release do site: `/var/www/mdv-site/releases/20261030-154100-meta-atendimento-paridade`.
+
+O atendimento pelo Facebook/Messenger preserva pedidos de várias marcas ao confirmar promoções, envia as opções do catálogo em blocos de até três aparelhos e mantém a continuidade da compra no mesmo padrão do WhatsApp. O fluxo pede o número de WhatsApp para o cadastro e aceita endereço por texto no Messenger. Os quatro nós alterados foram validados contra o fluxo ativo; o comportamento do WhatsApp permanece coberto pelos testes existentes.
+
+Validações: gate comercial, suites de paridade Meta, comparação do fluxo ativo, backup e verificação do webhook após implantação.
+
+Registro: `docs/versoes/2026-10-30-v1.2.712-meta-atendimento-paridade.md`.
+
+---

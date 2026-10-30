@@ -1,22 +1,22 @@
 {
-  "version": "v1.2.710-foto-precos-media-compra",
+  "version": "v1.2.712-meta-atendimento-paridade",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.710-foto-precos-media-compra",
-  "release_vps": "/var/www/mdv-site/releases/20261030-163154-foto-precos-media-compra",
+  "tag": "v1.2.712-meta-atendimento-paridade",
+  "release_vps": "/var/www/mdv-site/releases/20261030-154100-meta-atendimento-paridade",
   "api_release": {
     "status": "published",
     "module": "services/smartphonePriceGroupsServer.cjs",
     "backup_prefix": "/var/www/mdv-api/backups/smartphone-price-groups-"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Editor de preços na conferência por foto, média dos aparelhos disponíveis e sugestão da última compra registrada, preservando custos digitados ou confirmados.",
+  "summary": "Atendimento do Facebook/Messenger alinhado ao WhatsApp para catálogo, promoções e continuidade da compra.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
-    "node": "Pagamento - Politica",
-    "target_sha256": "bb5d08653181bf7b6f6219108199b46c7cc80afe75313e3b4fce9f102195cf45"
+    "nodes": ["Vendas - Preparar Busca", "Vendas - Contexto Produtos", "Vendas - Verificar Pos Lista", "Resolver Acao de Conversacao"],
+    "target_sha256": "628afe00443d0aec779e59835f0678801e8c4098bb8f522b01f8b77d188f57bb"
   },
   "gestao_mdv_android": {
     "version_name": "0.13.9",
@@ -26,29 +26,26 @@
     "mercado_livre_api": "publicada; /status HTTP 200, mysql.ok=true; GET /mercado-livre/settings HTTP 200, erpCapabilities=[]",
     "site_manifest": "publicado; VERSION.json com manifesto final na release ativa"
   },
-  "site_source_base": "main",
+  "site_source_base": "2fa01b7abc975d79c9973876c881622e09e82b17",
   "changed_files": [
-    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
-    "components/settings/ModelPricesPanel.tsx",
-    "services/smartphonePriceGroups.ts",
-    "services/smartphonePriceGroupsServer.cjs",
-    "deploy-vps-server-only.cjs",
-    "scripts/deploy-smartphone-price-groups.cjs",
-    "tmp-tests/smartphone-price-groups-deploy.test.cjs",
-    "tmp-tests/photo-intake-price-editor.test.mjs",
-    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
-    "tmp-tests/smartphone-price-groups-preview.tsx",
-    "tmp-tests/smartphone-price-groups.test.cjs",
+    "scripts/build-n8n-meta-parity.cjs",
+    "scripts/deploy-n8n-meta-parity.cjs",
+    "scripts/n8n-meta-catalog-intent-parity.cjs",
+    "scripts/n8n-meta-multibrand-promos.cjs",
+    "scripts/n8n-meta-sales-parity.cjs",
+    "tmp-tests/n8n-meta-catalog-intent-parity.test.cjs",
+    "tmp-tests/n8n-meta-multibrand-promos.test.cjs",
+    "tmp-tests/n8n-meta-parity-composition.test.cjs",
+    "tmp-tests/n8n-meta-sales-parity.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.710-foto-precos-media-compra.md"
+    "docs/versoes/2026-10-30-v1.2.712-meta-atendimento-paridade.md"
   ],
   "validations": [
-    "Chrome: editor canônico de preços, recarga após salvar, média separada da compra, falha/ausência da média e preservação de custo digitado/confirmado.",
-    "API: média exclui unidades vendidas/reservadas/ocultas e produtos inativos; última compra usa registro histórico com custo conhecido.",
-    "Suites de preço e cadastro por foto; deploy seletivo com baseline e proteção contra drift.",
-    "Sintaxe dos servidores e git diff --check.",
-    "Build de produção com travas de segredos e de runtime legado."
+    "Candidato montado sobre o n8n ativo com verificação de histórico, credencial e integridade dos 128 nós.",
+    "Gate comercial: 17 arquivos de testes; mais 16 testes de paridade Meta e 51 testes Meta existentes.",
+    "Implantação com backup, espera de execuções, comparação do hash e verificação do webhook.",
+    "Build do site e verificação do VERSION.json publicado."
   ],
   "android_entregas": {
     "version_name": "1.1.5",
