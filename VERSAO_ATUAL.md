@@ -1,3 +1,16 @@
+# v1.2.718-caixa-relatorio-itens
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.718-caixa-relatorio-itens`.
+Release do site: `/var/www/mdv-site/releases/20261030-210000-v12718-caixa-itens`.
+
+O relatorio de fechamento le o indicador de brinde de `products`, pois a tabela `sale_items` nao possui essa coluna na producao. O fechamento que falhou foi revertido e a sessao antiga permaneceu aberta ate uma nova tentativa.
+
+Validacoes: consulta real em leitura na producao, teste do fluxo de fechamento, verificacao de sintaxe e build.
+
+Registro: `docs/versoes/2026-10-30-v1.2.718-caixa-relatorio-itens.md`.
+
+---
+
 # v1.2.717-caixa-fechamento-diario
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.717-caixa-fechamento-diario`.

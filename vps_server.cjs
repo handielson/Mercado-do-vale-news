@@ -34408,8 +34408,10 @@ fastify.post('/pdv/cash-sessions/:id/close', { preHandler: requireAdminBearerTok
     const saleIds = summary.sales.map((s) => s.id);
     if (saleIds.length > 0) {
       const [itemRows] = await connection.query(
-        `SELECT sale_id, product_name, quantity, unit_price, total, is_gift
-           FROM sale_items WHERE sale_id IN (${saleIds.map(() => '?').join(',')})`,
+        `SELECT si.sale_id, si.product_name, si.quantity, si.unit_price, si.total,
+                COALESCE(p.is_gift, 0) AS is_gift
+           FROM sale_items si LEFT JOIN products p ON p.id = si.product_id
+          WHERE si.sale_id IN (${saleIds.map(() => '?').join(',')})`,
         saleIds
       );
       const itemsBySale = {};

@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.717-caixa-fechamento-diario",
+  "version": "v1.2.718-caixa-relatorio-itens",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.717-caixa-fechamento-diario",
-  "release_vps": "/var/www/mdv-site/releases/20261030-203600-v12717-caixa-diario",
+  "tag": "v1.2.718-caixa-relatorio-itens",
+  "release_vps": "/var/www/mdv-site/releases/20261030-210000-v12718-caixa-itens",
   "api_release": {
     "status": "published",
     "module": "vps_server.cjs, vps_server.js e services/cashSessionCutoff.cjs",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Bloqueia o uso do caixa apos as 20h e corrige o resumo financeiro do fechamento.",
+  "summary": "Corrige a consulta de itens do relatorio de fechamento do caixa.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",

@@ -10,6 +10,7 @@ const source = fs.readFileSync(require.resolve('../vps_server.cjs'), 'utf8');
 const start = source.indexOf("fastify.post('/pdv/cash-sessions/:id/close'");
 const end = source.indexOf("fastify.post('/pdv/cash-sessions/:id/reopen'", start);
 assert.ok(start > 0 && end > start);
+assert.match(source.slice(start, end), /COALESCE\(p\.is_gift, 0\) AS is_gift[\s\S]*?FROM sale_items si LEFT JOIN products p ON p\.id = si\.product_id/);
 
 function fixture(t) {
   const app = Fastify();
