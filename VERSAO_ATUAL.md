@@ -1,3 +1,16 @@
+# v1.2.710-foto-precos-media-compra
+
+Data: 30/10/2026. Branch: `main`. Tag: `v1.2.710-foto-precos-media-compra`.
+Release do site: `/var/www/mdv-site/releases/20261030-163154-foto-precos-media-compra`.
+
+A conferência por foto abre o editor canônico de preços na configuração do aparelho e atualiza os valores ao voltar. Mostra a compra média somente dos aparelhos disponíveis para venda e, separadamente, a última compra registrada da configuração. Esta última é sugerida como compra da nova entrada, sem substituir valores digitados ou já confirmados.
+
+Validações: testes de preços e cadastro por foto, fluxo em Chrome, filtros de disponibilidade/custos históricos, proteção contra drift, sintaxe e build. API publicada seletivamente antes do site, sem migration ou gravação comercial nos testes.
+
+Registro: `docs/versoes/2026-10-30-v1.2.710-foto-precos-media-compra.md`.
+
+---
+
 # v1.2.709-painel-modelo-imagens
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.709-painel-modelo-imagens`.

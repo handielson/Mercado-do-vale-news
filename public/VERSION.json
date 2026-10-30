@@ -1,16 +1,17 @@
 {
-  "version": "v1.2.709-painel-modelo-imagens",
+  "version": "v1.2.710-foto-precos-media-compra",
   "date": "2026-10-30",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.709-painel-modelo-imagens",
-  "release_vps": "/var/www/mdv-site/releases/20261030-160209-painel-modelo-imagens",
+  "tag": "v1.2.710-foto-precos-media-compra",
+  "release_vps": "/var/www/mdv-site/releases/20261030-163154-foto-precos-media-compra",
   "api_release": {
     "status": "published",
-    "backup": "/var/www/mdv-api/backups/mercado-livre-1793307873300"
+    "module": "services/smartphonePriceGroupsServer.cjs",
+    "backup_prefix": "/var/www/mdv-api/backups/smartphone-price-groups-"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Organiza o painel do modelo por variação com imagem principal à esquerda, dados ao lado e aparelhos abaixo, adaptando o layout ao celular.",
+  "summary": "Editor de preços na conferência por foto, média dos aparelhos disponíveis e sugestão da última compra registrada, preservando custos digitados ou confirmados.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -27,15 +28,25 @@
   },
   "site_source_base": "main",
   "changed_files": [
-    "pages/admin/products/ModelProductAggregatorPage.tsx",
-    "tmp-tests/model-panel-variation-image.test.mjs",
+    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
+    "components/settings/ModelPricesPanel.tsx",
+    "services/smartphonePriceGroups.ts",
+    "services/smartphonePriceGroupsServer.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-smartphone-price-groups.cjs",
+    "tmp-tests/smartphone-price-groups-deploy.test.cjs",
+    "tmp-tests/photo-intake-price-editor.test.mjs",
+    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
+    "tmp-tests/smartphone-price-groups-preview.tsx",
+    "tmp-tests/smartphone-price-groups.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-30-v1.2.709-painel-modelo-imagens.md"
+    "docs/versoes/2026-10-30-v1.2.710-foto-precos-media-compra.md"
   ],
   "validations": [
-    "Renderização do painel real com dados sintéticos em Chrome 1280px e 390px: imagem, resumo, ausência de foto e ausência de overflow.",
-    "Testes da fonte canônica das imagens e guarda contra runtime legado do painel.",
+    "Chrome: editor canônico de preços, recarga após salvar, média separada da compra, falha/ausência da média e preservação de custo digitado/confirmado.",
+    "API: média exclui unidades vendidas/reservadas/ocultas e produtos inativos; última compra usa registro histórico com custo conhecido.",
+    "Suites de preço e cadastro por foto; deploy seletivo com baseline e proteção contra drift.",
     "Sintaxe dos servidores e git diff --check.",
     "Build de produção com travas de segredos e de runtime legado."
   ],

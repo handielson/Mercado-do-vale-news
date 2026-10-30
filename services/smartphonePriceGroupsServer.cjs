@@ -141,6 +141,7 @@ function presentGroup(config, saved, products, model) {
   let stockCost = 0;
   let costedStock = 0;
   for (const product of products) {
+    if (product.status && product.status !== 'active') continue;
     const quantity = Number(product.stock_quantity || 0);
     if (!Number.isFinite(quantity) || quantity <= 0) continue;
     if (product.has_serialized_units) {
@@ -156,11 +157,15 @@ function presentGroup(config, saved, products, model) {
       costedStock += quantity;
     }
   }
+  const lastPurchase = products.map(product => product.last_unit_purchase).filter(Boolean)
+    .sort((a, b) => b.time - a.time || String(b.id).localeCompare(String(a.id)))[0];
   return {
     ...config, model_name: model.name, revision: core.revision(saved, products), prices: salePrices,
     confirmed: Boolean(saved), divergent: !salePrices || products.some(p => !core.samePrices(p, salePrices)),
     cost_min: costs.length ? Math.min(...costs) : null, cost_max: costs.length ? Math.max(...costs) : null,
     cost_average_in_stock: costedStock > 0 ? Math.round(stockCost / costedStock) : null,
+    last_purchase_cost: lastPurchase?.cost ?? null,
+    last_purchase_at: lastPurchase ? new Date(lastPurchase.time).toISOString() : null,
     products: products.map(p => ({ id: p.id, sku: p.sku, name: p.name, color: core.object(p.specs).color || core.object(p.specs).cor || '',
       stock_quantity: Number(p.stock_quantity || 0), price_cost: p.price_cost == null ? null : Number(p.price_cost), unit_costs: p.unit_costs || [], available_unit_count: p.available_unit_count || 0,
       ...Object.fromEntries(core.SALE_FIELDS.map(f => [f, p[f] == null ? null : Number(p[f])])) })),
@@ -220,13 +225,21 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey, inv
     const [products] = await pool.query(`SELECT id,model_id,company_id,name,sku,specs,is_print3d,is_parent,is_combo,offer_type,status,stock_quantity,
       price_cost,price_retail,price_reseller,price_wholesale FROM products WHERE model_id=? AND COALESCE(is_parent,0)=0 AND COALESCE(is_combo,0)=0 AND offer_type IS NULL`, [model.id]);
     const [saved] = await pool.query('SELECT * FROM smartphone_price_groups WHERE model_id=?', [model.id]);
-    const [units] = await pool.query(`SELECT u.product_id,u.cost_price,u.status FROM units u JOIN products p ON p.id=u.product_id
+    const [units] = await pool.query(`SELECT u.id,u.product_id,u.cost_price,u.status,u.created_at FROM units u JOIN products p ON p.id=u.product_id
       WHERE p.model_id=? ORDER BY u.product_id,u.cost_price`, [model.id]);
     const unitCosts = new Map();
     const unitCounts = new Map();
     const serializedProducts = new Set();
+    const lastPurchases = new Map();
     for (const unit of units) {
       serializedProducts.add(unit.product_id);
+      const cost = unit.cost_price == null ? null : Number(unit.cost_price);
+      const time = unit.created_at ? new Date(unit.created_at).getTime() : NaN;
+      const previous = lastPurchases.get(unit.product_id);
+      if (cost != null && Number.isSafeInteger(cost) && cost >= 0 && Number.isFinite(time)
+          && (!previous || time > previous.time || (time === previous.time && String(unit.id) > String(previous.id)))) {
+        lastPurchases.set(unit.product_id, { cost, time, id: unit.id });
+      }
       if (unit.status !== 'available') continue;
       unitCounts.set(unit.product_id, (unitCounts.get(unit.product_id) || 0) + 1);
       if (!unitCosts.has(unit.product_id)) unitCosts.set(unit.product_id, []);
@@ -236,6 +249,7 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey, inv
       product.unit_costs = unitCosts.get(product.id) || [];
       product.available_unit_count = unitCounts.get(product.id) || 0;
       product.has_serialized_units = serializedProducts.has(product.id);
+      product.last_unit_purchase = lastPurchases.get(product.id) || null;
     }
     const groups = new Map();
     const unresolved = [];

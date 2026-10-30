@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Save, Sparkles, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CurrencyInput } from '../../ui/CurrencyInput';
@@ -17,6 +17,7 @@ import type {
 import { SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS } from '../../../types/smartphone-photo-intake';
 import { smartphonePriceGroups, SmartphonePriceReference } from '../../../services/smartphonePriceGroups';
 import { DEFAULT_PRODUCT_VERSION } from '../../../services/smartphoneModelSpecs.mjs';
+import { ModelPricesPanel } from '../../settings/ModelPricesPanel';
 
 interface PhotoIntakeReviewCardProps {
   intake: SmartphonePhotoIntake;
@@ -96,6 +97,18 @@ export function PhotoIntakeReviewCard({
   const [priceReference, setPriceReference] = useState<SmartphonePriceReference | null>(null);
   const [priceReferenceError, setPriceReferenceError] = useState('');
   const [loadingPriceReference, setLoadingPriceReference] = useState(false);
+  const [priceEditorOpen, setPriceEditorOpen] = useState(false);
+  const [priceRefresh, setPriceRefresh] = useState(0);
+  const [stockAverage, setStockAverage] = useState<number | null>(null);
+  const [loadingStockAverage, setLoadingStockAverage] = useState(false);
+  const [stockAverageError, setStockAverageError] = useState('');
+  const [lastPurchaseCost, setLastPurchaseCost] = useState<number | null>(null);
+  const costEdited = useRef(false);
+  useEffect(() => { costEdited.current = false; }, [intake.id]);
+  const refreshSalePrices = () => {
+    setLoadingPriceReference(true);
+    setPriceRefresh(current => current + 1);
+  };
   useEffect(() => {
     if (!intake.matched_model_id) { setPriceReference(null); setPriceReferenceError(''); setLoadingPriceReference(false); return; }
     let cancelled = false;
@@ -106,12 +119,33 @@ export function PhotoIntakeReviewCard({
     }).catch(error => { if (!cancelled) { setPriceReference(null); setPriceReferenceError(error.message); } })
       .finally(() => { if (!cancelled) setLoadingPriceReference(false); });
     return () => { cancelled = true; };
-  }, [intake.id, intake.matched_model_id, intake.company_id, draft.detected_ram, draft.detected_storage, draft.detected_version]);
+  }, [intake.id, intake.matched_model_id, intake.company_id, draft.detected_ram, draft.detected_storage, draft.detected_version, priceRefresh]);
+  useEffect(() => {
+    setStockAverage(null); setLastPurchaseCost(null); setStockAverageError('');
+    if (!intake.matched_model_id || !priceReference?.group_id || loadingPriceReference) { setLoadingStockAverage(false); return; }
+    let cancelled = false;
+    setLoadingStockAverage(true);
+    smartphonePriceGroups.list(intake.matched_model_id).then(result => {
+      const group = result.groups.find(group => group.id === priceReference.group_id);
+      const average = group?.cost_average_in_stock;
+      const lastCost = group?.last_purchase_cost;
+      if (!cancelled) {
+        setStockAverage(average != null && Number.isFinite(Number(average)) ? Number(average) : null);
+        const last = lastCost != null && Number.isSafeInteger(Number(lastCost)) && Number(lastCost) >= 0 ? Number(lastCost) : null;
+        setLastPurchaseCost(last);
+        if (last != null && !costEdited.current && !intake.prices_confirmed) {
+          setDraft(current => ({ ...current, price_cost: last, prices_confirmed: false }));
+        }
+      }
+    }).catch(() => { if (!cancelled) setStockAverageError('Não foi possível consultar a média em estoque. Use Atualizar valores para tentar novamente.'); })
+      .finally(() => { if (!cancelled) setLoadingStockAverage(false); });
+    return () => { cancelled = true; };
+  }, [intake.id, intake.matched_model_id, intake.prices_confirmed, priceReference?.group_id, loadingPriceReference, priceRefresh]);
   useEffect(() => {
     const prices = priceReference?.prices;
     if (!prices || loadingPriceReference) return;
     if (draft.price_retail !== prices.price_retail || draft.price_reseller !== prices.price_reseller || draft.price_wholesale !== prices.price_wholesale) {
-      setDraft(current => ({ ...current, ...prices }));
+      setDraft(current => ({ ...current, ...prices, prices_confirmed: false }));
     }
   }, [priceReference, loadingPriceReference, draft.price_retail, draft.price_reseller, draft.price_wholesale]);
   const groupPriceLocked = loadingPriceReference || !!priceReferenceError || Boolean(priceReference?.established || priceReference?.incomplete);
@@ -120,6 +154,7 @@ export function PhotoIntakeReviewCard({
     setDraft(buildDraft(intake));
     setSelectedModelId(intake.matched_model_id || '');
     setSku('');
+    setPriceEditorOpen(false);
   }, [intake]);
 
   const sortedModels = useMemo(
@@ -129,6 +164,7 @@ export function PhotoIntakeReviewCard({
   const modelNames = useMemo(() => new Map(models.map(model => [model.id, model.name])), [models]);
 
   const updateCost = (cost: number) => {
+    costEdited.current = true;
     const activeMargin = !groupPriceLocked && margin && Boolean(margin.active) ? margin : null;
     setDraft(current => ({
       ...current,
@@ -164,7 +200,8 @@ export function PhotoIntakeReviewCard({
   const confirmReview = async () => {
     await onUpdate({ ...draft, review_confirmed: true });
   };
-  const canFinalize = intake.status === 'ready_to_finalize' && Boolean(intake.matched_color_id)
+  const canFinalize = !priceEditorOpen && !loadingPriceReference && !priceReferenceError && !priceReference?.divergent
+    && intake.status === 'ready_to_finalize' && Boolean(intake.matched_color_id)
     && Boolean(draft.prices_confirmed) && (draft.detected_version || '') === (intake.detected_version || '')
     && !loadingPriceReference && !priceReferenceError && !priceReference?.divergent;
 
@@ -367,11 +404,23 @@ export function PhotoIntakeReviewCard({
               </p>
               {!margin && !priceReference?.prices && <p className="mt-1 text-xs font-semibold text-red-700">Cadastre a margem desta marca antes de confirmar.</p>}
               {priceReference?.prices && <p className="mt-1 text-sm text-blue-800">Preço de venda do grupo: todas as cores usam os mesmos valores. Alterar a compra mantém estes preços.</p>}
-              {priceReference?.divergent && <p role="alert" className="mt-1 text-sm text-red-700">Preços divergentes. Revise em Configurações → Modelos → Preços por configuração antes de concluir.</p>}
+              {priceReference?.divergent && <p role="alert" className="mt-1 text-sm text-red-700">Preços divergentes. Use Ajustar preços de venda para definir os valores desta configuração antes de concluir.</p>}
               {priceReferenceError && <p role="alert" className="text-red-700">Falha ao consultar o preço do grupo. Recarregue a página.</p>}
             </div>
+            {intake.matched_model_id && <div className="mb-4 flex flex-wrap items-center gap-3">
+              <button type="button" disabled={busy || loadingPriceReference} onClick={() => setPriceEditorOpen(true)} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-50">Ajustar preços de venda</button>
+              <button type="button" disabled={busy || loadingPriceReference} onClick={refreshSalePrices} className="inline-flex items-center gap-2 text-sm font-semibold text-amber-900 disabled:opacity-50"><RefreshCw size={14} className={loadingPriceReference ? 'animate-spin' : ''} />Atualizar valores</button>
+              <p className="text-xs text-amber-800">O editor é o mesmo da Gestão de Modelos. Ao voltar, os preços de venda são atualizados aqui.</p>
+            </div>}
+            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3" role="status" aria-label="Compra média em estoque">
+              <p className="text-sm font-semibold text-blue-950">Compra média em estoque disponível para venda: <strong>{loadingPriceReference || loadingStockAverage ? 'Consultando…' : stockAverageError ? 'Consulta indisponível' : stockAverage != null ? (stockAverage / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Sem custo de compra informado em estoque'}</strong></p>
+              <p className="mt-1 text-xs text-blue-800">Somente aparelhos disponíveis para venda da configuração {draft.detected_ram} / {draft.detected_storage}{draft.detected_version ? ` · ${draft.detected_version}` : ''}, em todas as cores. Vendidos, reservados e ocultos ficam fora da média.</p>
+              <p className="mt-2 text-sm text-blue-950">Última compra registrada: <strong>{loadingPriceReference || loadingStockAverage ? 'Consultando…' : stockAverageError ? 'Consulta indisponível' : lastPurchaseCost != null ? (lastPurchaseCost / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Não informada'}</strong></p>
+              <p className="mt-1 text-xs text-blue-800">A última compra pode ser de um aparelho já vendido. É uma sugestão para a nova entrada; confira o valor pago.</p>
+              {stockAverageError && <p className="mt-1 text-xs text-red-700">{stockAverageError}</p>}
+            </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-4">
-              <CurrencyInput label="Compra" className="h-12 text-base tabular-nums" value={draft.price_cost || 0} onChange={updateCost} />
+              <div><CurrencyInput label="Compra deste aparelho" className="h-12 text-base tabular-nums" value={draft.price_cost || 0} onChange={updateCost} /><p className="mt-1 text-xs text-amber-800">Sugerido pela última compra registrada, quando disponível. Valores digitados ou já confirmados são preservados; confira quanto pagou neste aparelho.</p></div>
               <CurrencyInput label="Varejo" className="h-12 text-base tabular-nums" disabled={groupPriceLocked} value={draft.price_retail || 0} onChange={value => setDraft(current => ({ ...current, price_retail: value }))} />
               <CurrencyInput label="Revenda" className="h-12 text-base tabular-nums" disabled={groupPriceLocked} value={draft.price_reseller || 0} onChange={value => setDraft(current => ({ ...current, price_reseller: value }))} />
               <CurrencyInput label="Atacado" className="h-12 text-base tabular-nums" disabled={groupPriceLocked} value={draft.price_wholesale || 0} onChange={value => setDraft(current => ({ ...current, price_wholesale: value }))} />
@@ -425,6 +474,13 @@ export function PhotoIntakeReviewCard({
           </button>
         </div>
       </div>
+      {priceEditorOpen && intake.matched_model_id && <ModelPricesPanel
+        modelId={intake.matched_model_id}
+        modelName={modelNames.get(intake.matched_model_id) || intake.detected_model || 'Modelo'}
+        initialGroupId={priceReference?.group_id}
+        onClose={() => { setPriceEditorOpen(false); refreshSalePrices(); }}
+        onSaved={() => { setDraft(current => ({ ...current, prices_confirmed: false })); refreshSalePrices(); }}
+      />}
     </section>
   );
 }

@@ -992,6 +992,14 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--smartphone-price-groups-only') || process.argv.includes('--smartphone-price-groups-check')) {
+    await require('./scripts/deploy-smartphone-price-groups.cjs').deploy({ appDir, apiProc, exec, root: __dirname,
+      checkOnly: process.argv.includes('--smartphone-price-groups-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--moving-average-only')) {
     if (apiProc.name !== 'mdv-api') throw new Error('Unexpected API target');
     await require('./scripts/deploy-smartphone-moving-average.cjs').deploy({ exec, upload, appDir });

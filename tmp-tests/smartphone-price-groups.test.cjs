@@ -167,6 +167,24 @@ test('listing is read-only, includes empty stock and shows actual unit costs wit
   assert.equal((await f.app.inject({ url: `/models/${model.id}/smartphone-price-groups` })).statusCode, 401);
 });
 
+test('available stock average excludes sold/reserved/hidden units and inactive products; last purchase is historical', async t => {
+  const f = fixture(t, { products: [phone('active', { stock_quantity: 2 }), phone('disabled', { status: 'inactive', stock_quantity: 1 })], units: [
+    { id: 'available-1', product_id: 'active', status: 'available', cost_price: 100000, created_at: '2026-10-01T12:00:00Z' },
+    { id: 'available-2', product_id: 'active', status: 'available', cost_price: 120000, created_at: '2026-10-02T12:00:00Z' },
+    { id: 'sold', product_id: 'active', status: 'sold', cost_price: 130000, created_at: '2026-10-05T12:00:00Z' },
+    { id: 'reserved', product_id: 'active', status: 'reserved', cost_price: 990000, created_at: '2026-09-01T12:00:00Z' },
+    { id: 'hidden', product_id: 'active', status: 'hidden', cost_price: 880000, created_at: '2026-09-01T12:00:00Z' },
+    { id: 'inactive', product_id: 'disabled', status: 'available', cost_price: 770000, created_at: '2026-09-01T12:00:00Z' },
+    { id: 'unknown-cost', product_id: 'active', status: 'sold', cost_price: null, created_at: '2026-10-06T12:00:00Z' },
+  ] });
+  const group = (await f.list()).groups[0];
+  assert.equal(group.cost_average_in_stock, 110000);
+  assert.equal(group.cost_min, 100000);
+  assert.equal(group.cost_max, 120000);
+  assert.equal(group.last_purchase_cost, 130000);
+  assert.equal(group.last_purchase_at, '2026-10-05T12:00:00.000Z');
+});
+
 test('stock average uses individual costs and weights legacy products by stock, without writing prices', async t => {
   const f = fixture(t, { products: [
     phone('units', { stock_quantity: 2, price_cost: 500000 }),

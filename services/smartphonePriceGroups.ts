@@ -8,6 +8,7 @@ export type SmartphonePriceGroup = {
     revision: string; confirmed: boolean; divergent: boolean;
     prices: SmartphoneSalePrices | null; cost_min: number | null; cost_max: number | null;
     cost_average_in_stock: number | null;
+    last_purchase_cost?: number | null; last_purchase_at?: string | null;
     moving_average_cost?: number | null; moving_average_quantity?: number;
     moving_average_initialized?: boolean; moving_average_unknown_costs?: number;
     products: Array<SmartphoneSalePrices & { id: string; sku: string; name: string; color: string; stock_quantity: number; price_cost: number | null; unit_costs?: number[]; available_unit_count?: number }>;

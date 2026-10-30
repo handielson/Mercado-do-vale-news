@@ -8,7 +8,7 @@ const intakePage = fs.readFileSync(new URL('../pages/admin/products/SmartphonePh
 const reviewCard = fs.readFileSync(new URL('../components/products/photo-intake/PhotoIntakeReviewCard.tsx', import.meta.url), 'utf8');
 assert.match(reviewCard, /Versão comercial[\s\S]*<VersionSelect value=\{draft.detected_version/, 'conferencia deve oferecer versoes cadastradas');
 assert.match(reviewCard, /specs: \{ ram: draft.detected_ram, storage: draft.detected_storage, version: draft.detected_version/, 'consulta deve usar a versao comercial selecionada');
-assert.match(reviewCard, /detected_storage, draft.detected_version\]/, 'trocar versao deve consultar novamente o preco');
+assert.match(reviewCard, /detected_storage, draft.detected_version, priceRefresh\]/, 'trocar versao ou recarregar valores deve consultar novamente o preco');
 assert.match(reviewCard, /detected_version: version,[\s\S]*prices_confirmed: false/, 'trocar versao deve exigir nova confirmacao');
 assert.match(reviewCard, /const canFinalize[\s\S]*Boolean\(draft.prices_confirmed\)[\s\S]*draft.detected_version[\s\S]*intake.detected_version/, 'nao finalizar com versao local ainda nao salva e confirmada');
 assert.match(reviewCard, /<SearchableSelect[\s\S]*options=\{sortedModels\.map\(model => model.id\)\}[\s\S]*onChange=\{setSelectedModelId\}[\s\S]*placeholder="Pesquisar modelo cadastrado/, 'modelo do sistema deve pesquisar por nome e preservar o ID selecionado');
