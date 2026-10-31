@@ -113,9 +113,11 @@ test('a chave ERP autoriza consultas GET selecionadas e não revela configuraç�
   const previous = process.env.MERCADO_LIVRE_ERP_READ_KEY;
   const previousWriteKey = process.env.MDV_ERP_WRITE_KEY;
   const previousWriteFlag = process.env.MDV_ERP_STOCK_WRITE_ENABLED;
+  const previousPriceWriteFlag = process.env.MDV_ERP_PRICE_WRITE_ENABLED;
   process.env.MERCADO_LIVRE_ERP_READ_KEY = key;
   delete process.env.MDV_ERP_WRITE_KEY;
   delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
+  delete process.env.MDV_ERP_PRICE_WRITE_ENABLED;
   const app = require('fastify')();
   const pool = { query: async () => [[{
     access_token: 'private-access-token', refresh_token: 'private-refresh-token',
@@ -140,6 +142,13 @@ test('a chave ERP autoriza consultas GET selecionadas e não revela configuraç�
     const enabledByExplicitFlag = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
     assert.deepEqual(enabledByExplicitFlag.json().erpCapabilities, ['listing_stock_write_v1', 'user_product_stock_write_v1']);
     assert.equal(enabledByExplicitFlag.json().erpCapabilities.includes('listing_price_write_v1'), false);
+    process.env.MDV_ERP_PRICE_WRITE_ENABLED = '1';
+    const enabledPriceCapability = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
+    assert.deepEqual(enabledPriceCapability.json().erpCapabilities,
+      ['listing_stock_write_v1', 'user_product_stock_write_v1', 'listing_price_write_v1']);
+    delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
+    const priceOnlyCapability = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
+    assert.deepEqual(priceOnlyCapability.json().erpCapabilities, ['listing_price_write_v1']);
 
     for (const [path, method] of [
       ['/mercado-livre/settings', 'PATCH'],
@@ -173,5 +182,7 @@ test('a chave ERP autoriza consultas GET selecionadas e não revela configuraç�
     else process.env.MDV_ERP_WRITE_KEY = previousWriteKey;
     if (previousWriteFlag === undefined) delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
     else process.env.MDV_ERP_STOCK_WRITE_ENABLED = previousWriteFlag;
+    if (previousPriceWriteFlag === undefined) delete process.env.MDV_ERP_PRICE_WRITE_ENABLED;
+    else process.env.MDV_ERP_PRICE_WRITE_ENABLED = previousPriceWriteFlag;
   }
 });

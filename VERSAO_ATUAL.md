@@ -1,3 +1,15 @@
+# v1.2.725-mercado-livre-preco-gate
+
+Data: 31/10/2026. Status: em publicação. Branch: `main`. Tag: `v1.2.725-mercado-livre-preco-gate`.
+Release do site: pendente. API Mercado Livre: pendente; gates de escrita de preço e estoque desligados.
+
+As rotas de escrita do ERP no Mercado Livre validam primeiro a chave dedicada e só então respondem se a função está desabilitada. Isso evita revelar o estado interno do gate a chamadas sem autenticação. O gate de preço é independente do gate de estoque, e ambos continuam desligados na publicação. O teste completo da integração agora inclui os 11 casos da atualização de preço.
+
+Validações locais: suíte Mercado Livre (60 testes + contrato estático), sintaxe do servidor de integração e `git diff --check`. Build, publicação e validação pública pendentes.
+Registro: `docs/versoes/2026-10-31-v1.2.725-mercado-livre-preco-gate.md`.
+
+---
+
 # v1.2.724-pdv-falta-estoque
 
 Data: 31/10/2026. Status: publicada após validação da release. Branch: `main`. Tag: `v1.2.724-pdv-falta-estoque`.

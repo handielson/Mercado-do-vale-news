@@ -827,18 +827,20 @@ async function syncMercadoLivreStockFromBlingTargets(pool, stockTargets = []) {
 function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSyncKeyOrAdmin = requireSyncKey, onSale }) {
   const protectedRoute = { preHandler: requireSyncKeyOrAdmin };
   const erpWriteRoute = { preHandler: async (request, reply) => {
+    if (!erpWriteKeyMatches(request.headers['x-erp-write-key'], process.env.MDV_ERP_WRITE_KEY)) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
     if (!isErpStockWriteEnabled()) {
       return reply.code(503).send({ error: 'A escrita de estoque do ERP está desabilitada nesta integração.' });
     }
-    if (erpWriteKeyMatches(request.headers['x-erp-write-key'], process.env.MDV_ERP_WRITE_KEY)) return;
-    return reply.code(401).send({ error: 'Unauthorized' });
   } };
   const erpPriceWriteRoute = { preHandler: async (request, reply) => {
+    if (!erpWriteKeyMatches(request.headers['x-erp-write-key'], process.env.MDV_ERP_WRITE_KEY)) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
     if (!isErpPriceWriteEnabled()) {
       return reply.code(503).send({ error: 'A escrita de preço do ERP está desabilitada nesta integração.' });
     }
-    if (erpWriteKeyMatches(request.headers['x-erp-write-key'], process.env.MDV_ERP_WRITE_KEY)) return;
-    return reply.code(401).send({ error: 'Unauthorized' });
   } };
   const erpReadRoute = { preHandler: (request, reply) =>
     requireMercadoLivreErpRead(request, reply, requireSyncKeyOrAdmin) };

@@ -191,7 +191,11 @@ test('publicacao seletiva inclui somente o modulo Mercado Livre antes de reinici
     assert.ok(section.includes('mercadoLivreListingStock.cjs'));
     assert.ok(section.includes('cp -p'));
     assert.ok(section.includes('MERCADO_LIVRE_ERP_READ_KEY'));
-    assert.ok(section.includes("MDV_ERP_STOCK_WRITE_ENABLED: '0'"), 'publicação de leitura deve manter escrita de estoque desativada');
+    assert.ok(section.includes('...mercadoLivreStockWriteEnv'), 'publicação deve aplicar os gates explícitos de escrita do helper dedicado');
+    const writeEnv = require('../scripts/mercado-livre-stock-write-deploy.cjs').mercadoLivreStockWriteDeployEnv(
+        ['node', 'deploy-vps-server-only.cjs', '--mercado-livre-only'], {});
+    assert.equal(writeEnv.MDV_ERP_STOCK_WRITE_ENABLED, '0', 'publicação padrão deve manter escrita de estoque desativada');
+    assert.equal(writeEnv.MDV_ERP_PRICE_WRITE_ENABLED, '0', 'publicação padrão deve manter escrita de preço desativada');
     assert.ok(section.includes('chmod 600'));
     assert.ok(!section.includes('localServer'));
 });

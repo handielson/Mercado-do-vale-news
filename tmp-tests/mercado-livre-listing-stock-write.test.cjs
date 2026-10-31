@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createListingStockHandlers } = require('../services/mercadoLivreListingStock.cjs');
-const { erpWriteKeyMatches, isErpWriteKeyConfigured, isErpStockWriteEnabled, registerMercadoLivreRoutes } = require('../services/mercadoLivreServer.cjs');
+const { erpWriteKeyMatches, isErpWriteKeyConfigured, isErpStockWriteEnabled, isErpPriceWriteEnabled, registerMercadoLivreRoutes } = require('../services/mercadoLivreServer.cjs');
 
 const itemId = 'MLB4282518399';
 const parentId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -44,11 +44,37 @@ test('stock writes require both an explicit enable flag and a valid dedicated ke
   }
 });
 
+test('price writes have a separate explicit flag and never enable stock writes', () => {
+  const previousKey = process.env.MDV_ERP_WRITE_KEY;
+  const previousStockFlag = process.env.MDV_ERP_STOCK_WRITE_ENABLED;
+  const previousPriceFlag = process.env.MDV_ERP_PRICE_WRITE_ENABLED;
+  try {
+    process.env.MDV_ERP_WRITE_KEY = key;
+    delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
+    delete process.env.MDV_ERP_PRICE_WRITE_ENABLED;
+    assert.equal(isErpPriceWriteEnabled(), false);
+    process.env.MDV_ERP_PRICE_WRITE_ENABLED = 'true';
+    assert.equal(isErpPriceWriteEnabled(), false);
+    process.env.MDV_ERP_PRICE_WRITE_ENABLED = '1';
+    assert.equal(isErpPriceWriteEnabled(), true);
+    assert.equal(isErpStockWriteEnabled(), false);
+  } finally {
+    if (previousKey === undefined) delete process.env.MDV_ERP_WRITE_KEY;
+    else process.env.MDV_ERP_WRITE_KEY = previousKey;
+    if (previousStockFlag === undefined) delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
+    else process.env.MDV_ERP_STOCK_WRITE_ENABLED = previousStockFlag;
+    if (previousPriceFlag === undefined) delete process.env.MDV_ERP_PRICE_WRITE_ENABLED;
+    else process.env.MDV_ERP_PRICE_WRITE_ENABLED = previousPriceFlag;
+  }
+});
+
 test('stock write routes reject the general sync key and require the dedicated ERP write key', async () => {
   const previous = process.env.MDV_ERP_WRITE_KEY;
   const previousFlag = process.env.MDV_ERP_STOCK_WRITE_ENABLED;
+  const previousPriceFlag = process.env.MDV_ERP_PRICE_WRITE_ENABLED;
   process.env.MDV_ERP_WRITE_KEY = key;
   delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
+  delete process.env.MDV_ERP_PRICE_WRITE_ENABLED;
   const app = require('fastify')();
   const pool = { query: async () => [[]] };
   const requireSyncKeyOrAdmin = async (_request, reply) => reply.code(401).send({ error: 'Unauthorized' });
@@ -58,6 +84,8 @@ test('stock write routes reject the general sync key and require the dedicated E
     const disabled = await app.inject({ method: 'POST', url: `/mercado-livre/products/items/${itemId}/stock?parentId=${parentId}`,
       headers: { 'x-erp-write-key': key }, payload });
     assert.equal(disabled.statusCode, 503);
+    const unauthenticatedWhileDisabled = await app.inject({ method: 'POST', url: `/mercado-livre/products/items/${itemId}/stock?parentId=${parentId}`, payload });
+    assert.equal(unauthenticatedWhileDisabled.statusCode, 401);
     process.env.MDV_ERP_STOCK_WRITE_ENABLED = '1';
     const noKey = await app.inject({ method: 'POST', url: `/mercado-livre/products/items/${itemId}/stock?parentId=${parentId}`, payload });
     const generalKey = await app.inject({ method: 'POST', url: `/mercado-livre/products/items/${itemId}/stock?parentId=${parentId}`,
@@ -74,6 +102,8 @@ test('stock write routes reject the general sync key and require the dedicated E
     else process.env.MDV_ERP_WRITE_KEY = previous;
     if (previousFlag === undefined) delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
     else process.env.MDV_ERP_STOCK_WRITE_ENABLED = previousFlag;
+    if (previousPriceFlag === undefined) delete process.env.MDV_ERP_PRICE_WRITE_ENABLED;
+    else process.env.MDV_ERP_PRICE_WRITE_ENABLED = previousPriceFlag;
   }
 });
 
@@ -148,12 +178,33 @@ test('rejects stale location version before any stock write', async () => {
   assert.equal(calls.some(call => call.method === 'PUT'), false);
 });
 
-test('blocks price writes before making any Mercado Livre request', async () => {
-  const { createListingPriceHandlers } = require('../services/mercadoLivreListingPrice.cjs');
+test('price write routes authenticate before revealing the disabled gate and never call Mercado Livre', async () => {
+  const previousKey = process.env.MDV_ERP_WRITE_KEY;
+  const previousFlag = process.env.MDV_ERP_PRICE_WRITE_ENABLED;
+  process.env.MDV_ERP_WRITE_KEY = key;
+  delete process.env.MDV_ERP_PRICE_WRITE_ENABLED;
+  const app = require('fastify')();
   const calls = [];
-  const handlers = createListingPriceHandlers({ pool: {}, settings: async () => ({}),
-    request: async (...args) => { calls.push(args); throw new Error('Unexpected external request'); } });
-  await assert.rejects(handlers.update({ body: { priceCents: 2000, expectedPriceCents: 1000 } }),
-    error => error.statusCode === 409 && /endpoint oficial/.test(error.message));
-  assert.deepEqual(calls, []);
+  const requireSyncKeyOrAdmin = async (_request, reply) => reply.code(401).send({ error: 'Unauthorized' });
+  registerMercadoLivreRoutes(app, { pool: { query: async () => { calls.push('database'); throw Error('Unexpected database request'); } },
+    requireSyncKey: requireSyncKeyOrAdmin, requireSyncKeyOrAdmin });
+  try {
+    const url = `/mercado-livre/products/items/${itemId}/price?parentId=${parentId}`;
+    const unauthorized = await app.inject({ method: 'POST', url, payload: { priceCents: 2000, expectedPriceCents: 1000 } });
+    assert.equal(unauthorized.statusCode, 401);
+    const disabled = await app.inject({ method: 'POST', url, headers: { 'x-erp-write-key': key },
+      payload: { priceCents: 2000, expectedPriceCents: 1000 } });
+    assert.equal(disabled.statusCode, 503);
+    process.env.MDV_ERP_PRICE_WRITE_ENABLED = '1';
+    const invalidConfirmation = await app.inject({ method: 'POST', url, headers: { 'x-erp-write-key': key },
+      payload: { priceCents: 2000, expectedPriceCents: 1000 } });
+    assert.equal(invalidConfirmation.statusCode, 400);
+    assert.deepEqual(calls, []);
+  } finally {
+    await app.close();
+    if (previousKey === undefined) delete process.env.MDV_ERP_WRITE_KEY;
+    else process.env.MDV_ERP_WRITE_KEY = previousKey;
+    if (previousFlag === undefined) delete process.env.MDV_ERP_PRICE_WRITE_ENABLED;
+    else process.env.MDV_ERP_PRICE_WRITE_ENABLED = previousFlag;
+  }
 });
