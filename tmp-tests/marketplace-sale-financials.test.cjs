@@ -69,8 +69,9 @@ test('cost lookup prefers the Shopee listing link, then a unique SKU', async () 
     async query(sql, params) {
       queries.push({ sql, params });
       if (/FROM shopee_products/.test(sql)) return [[{ product_id: 'p-linked', shopee_item_id: 111, shopee_model_id: 222 }]];
+      if (/FROM units/.test(sql)) return [[{ product_id: 'p-sku', total: 2 }]];
       return [[
-        { id: 'p-linked', name: 'Adaptador Preto', sku: 'ADV8PRE', price_cost: 350 },
+        { id: 'p-linked', name: 'Adaptador Preto', sku: 'ADV8PRE', price_cost: 350, is_parent: 0, specs: { _acquisition_cost: { basis: 'manual_operator' } } },
         { id: 'p-sku', name: 'Cabo', sku: 'CABO1', price_cost: '120' },
       ]];
     },
@@ -87,6 +88,12 @@ test('cost lookup prefers the Shopee listing link, then a unique SKU', async () 
     ['p-sku', 'sku', 240],
     [null, null, 0],
   ]);
+  assert.deepEqual(costs.map((item) => [item.cost_editable, item.cost_basis, item.current_cost_cents]), [
+    [true, 'manual_operator', 350],
+    [false, null, 120],
+    [false, null, null],
+  ]);
+  assert.match(costs[1].cost_lock_reason, /IMEI/);
 });
 
 test('loader survives Shopee errors and returns unavailable state', async () => {

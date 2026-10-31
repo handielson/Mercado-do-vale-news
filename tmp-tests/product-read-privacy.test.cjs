@@ -7,7 +7,7 @@ const Fastify = require('fastify');
 const { registerProductReadPrivacy, filterProductPrices } = require('../services/productReadPrivacy.cjs');
 
 const product = { id: 'p1', price_cost: 1000, price_retail: 2000, price_reseller: 1700,
-  price_wholesale: 1500, specs: { color: 'Branco' }, created_at: new Date('2026-10-07'),
+  price_wholesale: 1500, specs: { color: 'Branco', _acquisition_cost: { basis: 'manual_operator', costCents: 1000, previousCostCents: 900 } }, created_at: new Date('2026-10-07'),
   components: [{ id: 'child', cost_price: 700, unit_cost: 700, purchase_price: 700, price_retail: 900 }] };
 
 test('HTTP: every public product route protects prices and private responses cannot be cached', async () => {
@@ -43,6 +43,8 @@ test('HTTP: every public product route protects prices and private responses can
         assert.equal(data.price_retail, 2000);
         assert.equal(data.created_at, '2026-10-07T00:00:00.000Z');
         assert.equal(Object.hasOwn(data.components[0], 'unit_cost'), token === 'admin');
+        assert.equal(Object.hasOwn(data.specs, '_acquisition_cost'), token === 'admin', `cost evidence ${path} ${token}`);
+        assert.equal(data.specs.color, 'Branco');
         assert.equal(response.headers['cache-control'], 'no-store');
         assert.equal(response.headers['cdn-cache-control'], 'no-store');
         assert.match(response.headers.vary, /Authorization/);

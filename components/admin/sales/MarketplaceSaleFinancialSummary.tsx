@@ -1,10 +1,12 @@
 import React from 'react';
 import { AlertTriangle, DollarSign } from 'lucide-react';
 import type { MarketplaceFinancialLine, MarketplaceSale } from '../../../services/adminMarketplaceSalesService';
+import { ProductCostItemRow } from './ProductCostItemRow';
 
 interface Props {
     sale: MarketplaceSale;
     isRefreshing: boolean;
+    onCostSaved?: () => void;
 }
 
 function money(cents: number | null | undefined): string {
@@ -34,7 +36,7 @@ function Line({ line, strong = false }: { line: MarketplaceFinancialLine; strong
     );
 }
 
-export function MarketplaceSaleFinancialSummary({ sale, isRefreshing }: Props) {
+export function MarketplaceSaleFinancialSummary({ sale, isRefreshing, onCostSaved }: Props) {
     const financial = sale.details?.financial;
     const isShopee = sale.channel === 'shopee_mv' || sale.channel === 'shopee_g';
 
@@ -116,16 +118,12 @@ export function MarketplaceSaleFinancialSummary({ sale, isRefreshing }: Props) {
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Custo por item</p>
                     <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 text-sm">
                         {cost.items.map((item, index) => (
-                            <div key={`${item.sku || item.name}-${index}`} className="flex items-start justify-between gap-4 p-3">
-                                <div className="min-w-0">
-                                    <p className="truncate text-slate-700" title={item.name}>{item.name}</p>
-                                    <p className="text-xs text-slate-500">
-                                        {item.quantity} × {item.unit_cost_cents > 0 ? money(item.unit_cost_cents) : 'sem custo'}
-                                        {item.matched_by === 'shopee_link' ? ' · vínculo do anúncio' : item.matched_by === 'sku' ? ' · pelo SKU' : ' · produto não encontrado'}
-                                    </p>
-                                </div>
-                                <p className="whitespace-nowrap font-medium text-slate-800">{money(item.total_cost_cents)}</p>
-                            </div>
+                            <ProductCostItemRow
+                                key={`${item.sku || item.name}-${index}`}
+                                item={item}
+                                context={`marketplace_sale:${sale.channel}:${sale.external_id}`}
+                                onSaved={() => onCostSaved?.()}
+                            />
                         ))}
                     </div>
                     {!cost.complete && (
@@ -134,7 +132,7 @@ export function MarketplaceSaleFinancialSummary({ sale, isRefreshing }: Props) {
                             {cost.missing_count} item(ns) sem custo de compra cadastrado. O lucro real acima não desconta esse custo.
                         </p>
                     )}
-                    <p className="mt-2 text-[11px] text-slate-400">Custo pelo preço de custo atual do produto. Impostos (Simples Nacional) não estão incluídos.</p>
+                    <p className="mt-2 text-[11px] text-slate-400">Custo pelo custo de compra atual do produto; ao alterar, o financeiro é recalculado. Impostos (Simples Nacional) não estão incluídos.</p>
                 </div>
             )}
 

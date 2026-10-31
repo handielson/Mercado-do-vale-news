@@ -30,6 +30,10 @@ export interface MarketplaceFinancialCostItem {
     matched_by: 'shopee_link' | 'sku' | null;
     unit_cost_cents: number;
     total_cost_cents: number;
+    current_cost_cents?: number | null;
+    cost_basis?: string | null;
+    cost_editable?: boolean;
+    cost_lock_reason?: string | null;
 }
 
 export interface MarketplaceSaleFinancial {
@@ -248,4 +252,16 @@ export async function getMarketplaceSaleDetail(sale: MarketplaceSale): Promise<M
     );
     const refreshed = mapSales({ sales: response?.sale ? [response.sale] : [] }, sale.channel, sale.channel_label, sale.connection_id)[0];
     return refreshed || sale;
+}
+
+export interface ManualCostUpdateInput {
+    cost_cents: number;
+    expected_cost_cents: number | null;
+    note?: string;
+    context?: string;
+}
+
+/** Ajusta o custo de compra do produto (sem Bling). A API registra quem, quando, valor anterior e motivo. */
+export async function updateProductManualCost(productId: string, input: ManualCostUpdateInput): Promise<{ ok: boolean; product: { id: string; price_cost: number } }> {
+    return vpsClient.patch(`/admin/products/${encodeURIComponent(productId)}/cost`, input);
 }

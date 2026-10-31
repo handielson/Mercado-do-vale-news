@@ -13873,6 +13873,23 @@ fastify.get('/admin/mobile-sales', { preHandler: requireAdminBearerToken }, asyn
     });
   }
 });
+const { createProductManualCostService } = require('./services/productManualCost.cjs');
+const productManualCostVps = createProductManualCostService({ pool });
+fastify.patch('/admin/products/:id/cost', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    const auth = await getVpsBearerAuthContext(request);
+    const result = await productManualCostVps.updateCost(request.params?.id, request.body || {}, {
+      customerId: auth.customerId,
+      context: request.body?.context,
+    });
+    reply.header('Cache-Control', 'no-store');
+    return result;
+  } catch (error) {
+    if (error?.statusCode) return reply.code(error.statusCode).send({ error: error.message, code: error.code });
+    console.error('[product-manual-cost] update failed:', error?.message || error);
+    return reply.code(500).send({ error: 'Falha ao salvar o custo do produto.' });
+  }
+});
 const { createShopeeSaleFinancialsLoader } = require('./services/marketplaceSaleFinancials.cjs');
 const loadShopeeSaleFinancialsVps = createShopeeSaleFinancialsLoader({
   pool,

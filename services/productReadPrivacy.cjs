@@ -14,7 +14,8 @@ function filterProductPrices(value, access) {
   if (!value || typeof value !== 'object') return value;
   if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) return value;
   const projected = Object.fromEntries(Object.entries(value)
-    .filter(([key]) => access.isAdmin || !['price_cost', 'cost_price', 'unit_cost', 'purchase_price'].includes(key))
+    // _acquisition_cost guarda a evidência do custo (valores, origem e quem alterou) dentro de specs.
+    .filter(([key]) => access.isAdmin || !['price_cost', 'cost_price', 'unit_cost', 'purchase_price', '_acquisition_cost'].includes(key))
     .filter(([key]) => access.isCommercial || !['price_reseller', 'price_wholesale'].includes(key))
     .map(([key, item]) => [key, filterProductPrices(item, access)]));
   // Keep the editor's stored description intact. Public product consumers use

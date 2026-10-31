@@ -1,5 +1,7 @@
 # Custo de aquisição por SKU
 
+> Atualização 31/10/2026 (v1.2.723): com a saída do Bling, o operador também pode ajustar o custo manualmente pelo atalho "Alterar custo" (financeiro do pedido). Esse ajuste grava `specs._acquisition_cost` com `basis: manual_operator`, custo e origem anteriores, data, administrador e motivo, e uma linha em `product_price_history`. Aparelhos com IMEI continuam no custo por unidade e na média móvel. O importador abaixo continua válido para custos conferidos a partir do histórico do Bling.
+
 Decisão do operador em 02/10/2026: usar média ponderada do custo com despesas de aquisição no Mercado do Vale, mantendo a configuração de cálculo do Bling.
 
 `products.price_cost` é o resultado em centavos. `products.specs._acquisition_cost` guarda os movimentos conferidos, depósito, data, URL de origem, base e resultado. Custo de compra, cadastro do fornecedor e preço do pai não comprovam essa média. Importação/reimportação de produtos e webhook deixam esse campo de custo intacto; produtos novos sem histórico permanecem sem custo e não podem ser precificados pela automação.

@@ -1,5 +1,7 @@
 'use strict';
 
+const { manualCostLockReason, costBasisOf } = require('./productManualCost.cjs');
+
 // Detalhamento financeiro de vendas de marketplace (Shopee).
 // Fonte dos valores: /api/v2/payment/get_escrow_detail (valores em reais na API).
 // Saída sempre em centavos. O repasse (escrow_amount) é a referência oficial:
@@ -228,12 +230,21 @@ async function resolveShopeeItemCosts(pool, connectionId, lookupItems) {
     if (productIds.length) { clauses.push(`id IN (${productIds.map(() => '?').join(',')})`); params.push(...productIds); }
     if (skus.length) { clauses.push(`sku IN (${skus.map(() => '?').join(',')})`); params.push(...skus); }
     const [rows] = await pool.query(
-      `SELECT id, name, sku, price_cost FROM products WHERE ${clauses.join(' OR ')}`,
+      `SELECT id, name, sku, price_cost, is_parent, specs, custom_fields FROM products WHERE ${clauses.join(' OR ')}`,
       params,
     );
     products.push(...(Array.isArray(rows) ? rows : []));
   }
   const byId = new Map(products.map((product) => [cleanText(product.id), product]));
+  const unitCounts = new Map();
+  if (products.length) {
+    const ids = products.map((product) => cleanText(product.id));
+    const [rows] = await pool.query(
+      `SELECT product_id, COUNT(*) AS total FROM units WHERE product_id IN (${ids.map(() => '?').join(',')}) GROUP BY product_id`,
+      ids,
+    );
+    for (const row of Array.isArray(rows) ? rows : []) unitCounts.set(cleanText(row.product_id), Number(row.total) || 0);
+  }
 
   return items.map((item, index) => {
     let product = linkedIds[index] ? byId.get(linkedIds[index]) : null;
@@ -243,6 +254,7 @@ async function resolveShopeeItemCosts(pool, connectionId, lookupItems) {
       if (bySku.length === 1) { product = bySku[0]; matchedBy = 'sku'; }
     }
     const unitCostCents = product ? Math.max(0, Math.round(Number(product.price_cost) || 0)) : 0;
+    const lockReason = product ? manualCostLockReason(product, unitCounts.get(cleanText(product.id)) || 0) : null;
     return {
       name: item.name,
       variation: item.variation || '',
@@ -251,6 +263,10 @@ async function resolveShopeeItemCosts(pool, connectionId, lookupItems) {
       product_id: product ? cleanText(product.id) : null,
       product_name: product ? cleanText(product.name) : null,
       matched_by: matchedBy,
+      current_cost_cents: product && product.price_cost !== null && product.price_cost !== undefined ? Math.round(Number(product.price_cost)) : null,
+      cost_basis: product ? costBasisOf(product) : null,
+      cost_editable: Boolean(product) && !lockReason,
+      cost_lock_reason: lockReason,
       unit_cost_cents: unitCostCents,
       total_cost_cents: unitCostCents * item.quantity,
     };

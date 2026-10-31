@@ -24,7 +24,7 @@ assert.match(server, /loadMobileShopeeSalesVps\(1, saleId, connectionId\)/);
 const financialPanel = readFileSync('components/admin/sales/MarketplaceSaleFinancialSummary.tsx', 'utf8');
 const deploy = readFileSync('deploy-vps-server-only.cjs', 'utf8');
 const legacyServer = readFileSync('vps_server.js', 'utf8');
-assert.match(modal, /<MarketplaceSaleFinancialSummary sale=\{sale\} isRefreshing=\{isRefreshing\} \/>/);
+assert.match(modal, /<MarketplaceSaleFinancialSummary sale=\{sale\} isRefreshing=\{isRefreshing\} onCostSaved=\{\(\) => void refresh\(\)\} \/>/);
 assert.match(financialPanel, /Lucro real/);
 assert.match(financialPanel, /Repasse da Shopee/);
 assert.match(service, /financial\?: MarketplaceSaleFinancial/);
