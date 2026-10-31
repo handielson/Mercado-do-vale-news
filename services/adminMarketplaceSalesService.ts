@@ -14,6 +14,46 @@ export interface MarketplaceSaleItem {
     image_url?: string;
 }
 
+export interface MarketplaceFinancialLine {
+    key: string;
+    label: string;
+    amount_cents: number;
+}
+
+export interface MarketplaceFinancialCostItem {
+    name: string;
+    variation?: string;
+    sku?: string;
+    quantity: number;
+    product_id: string | null;
+    product_name: string | null;
+    matched_by: 'shopee_link' | 'sku' | null;
+    unit_cost_cents: number;
+    total_cost_cents: number;
+}
+
+export interface MarketplaceSaleFinancial {
+    source: 'shopee_escrow';
+    state: 'final' | 'estimated' | 'cancelled' | 'unavailable';
+    note?: string;
+    product_revenue_cents?: number;
+    buyer_paid_cents?: number | null;
+    revenue_lines?: MarketplaceFinancialLine[];
+    fee_lines?: MarketplaceFinancialLine[];
+    marketplace_deductions_cents?: number;
+    marketplace_deductions_pct?: number | null;
+    payout_cents?: number | null;
+    cost?: {
+        total_cents: number;
+        complete: boolean;
+        missing_count: number;
+        items: MarketplaceFinancialCostItem[];
+    };
+    profit_cents?: number | null;
+    margin_pct?: number | null;
+    raw_fields?: MarketplaceFinancialLine[];
+}
+
 export interface MarketplaceSale {
     channel: MarketplaceSalesChannel;
     channel_label: string;
@@ -32,6 +72,7 @@ export interface MarketplaceSale {
         tracking_number?: string;
         shipment_id?: string;
         pack_id?: string;
+        financial?: MarketplaceSaleFinancial;
         [key: string]: unknown;
     };
 }

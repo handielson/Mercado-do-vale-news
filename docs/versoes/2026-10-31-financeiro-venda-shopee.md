@@ -1,0 +1,40 @@
+# Financeiro da venda Shopee no detalhe do pedido
+
+Data: 31/10/2026. Base: `origin/main` em `d13a0568` (v1.2.721). Publicação: pendente de aprovação.
+
+## O que muda
+
+O modal de pedido de marketplace (Admin → Vendas → pedido Shopee MV/G) ganha a seção **Financeiro da venda**:
+
+- Valor da venda (preço dos produtos menos desconto/cupom do vendedor).
+- Taxas e ajustes da Shopee: comissão, taxa de serviço, taxa de transação, afiliados, campanha etc. Tudo que não tem campo próprio (frete, taxa fixa, ajustes) entra em **Frete e outros ajustes**, calculado para que a conta sempre feche com o repasse oficial (`escrow_amount`).
+- Repasse da Shopee.
+- Custo dos produtos (preço de custo atual do produto local, encontrado pelo vínculo `shopee_products` do anúncio/variação; se não houver vínculo, por SKU único).
+- Lucro real = repasse − custo, com margem sobre o valor da venda.
+- Selo de estado: Estimado (pedido em andamento), Valores finais (COMPLETED), Cancelado ou Indisponível.
+- Lista expansível com todos os valores numéricos retornados pela Shopee.
+
+Impostos (Simples Nacional) não são descontados, igual ao "Lucro Real" do PDV.
+
+## Arquivos
+
+- `services/marketplaceSaleFinancials.cjs` (novo): cálculo puro + busca de custos.
+- `vps_server.cjs` / `vps_server.js`: `GET /admin/mobile-sales/shopee/:id` passa a anexar `details.financial` (consulta `get_escrow_detail` só no detalhe de um pedido; falhas não derrubam o detalhe).
+- `components/admin/sales/MarketplaceSaleFinancialSummary.tsx` (novo) e `MarketplaceSaleDetailsModal.tsx`.
+- `services/adminMarketplaceSalesService.ts`: tipos.
+- `deploy-vps-server-only.cjs` e `scripts/publish-vps-plan.cjs`: incluem o novo módulo no deploy da API.
+
+## Validações
+
+- `node --test tmp-tests/marketplace-sale-financials.test.cjs` — 5 testes aprovados.
+- `node tmp-tests/marketplace-sale-details-static.test.mjs` — aprovado.
+- `node --check` nos servidores e no módulo; `npm run build` aprovado.
+- `tsc`: sem erros nos arquivos alterados (o erro em `SalesPage.tsx` já existia na base).
+- `tmp-tests/sales-page-marketplaces-static.test.mjs` já falhava na base (espera refresh de 60 s; a página usa 5 min) — não relacionado.
+
+## Publicação
+
+1. API: `node deploy-vps-server-only.cjs` (envia `services/marketplaceSaleFinancials.cjs` junto).
+2. Site: fluxo normal de publicação do front.
+
+Nenhum dado foi alterado; a mudança só lê (escrow da Shopee, `shopee_products`, `products.price_cost`).

@@ -25,6 +25,7 @@ const API_PATTERNS = [
   /^services\/mercadoLivrePublication\.cjs$/,
   /^services\/mercadoLivreListingPrice\.cjs$/,
   /^services\/mobileSalesPushService\.cjs$/,
+  /^services\/marketplaceSaleFinancials\.cjs$/,
   /^services\/(?:priorityStockDecrement|saleStockReconciliation)\.cjs$/,
   /^services\/.*Vault\.cjs$/,
   /^services\/.*Server\.(?:js|cjs|ts)$/i,

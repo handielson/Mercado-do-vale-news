@@ -21,4 +21,17 @@ assert.match(modal, /whitespace-nowrap font-bold text-slate-900/, 'marketplace t
 assert.match(receipt, /receipt_width/);
 assert.match(receipt, /window\.print/);
 assert.match(server, /loadMobileShopeeSalesVps\(1, saleId, connectionId\)/);
+const financialPanel = readFileSync('components/admin/sales/MarketplaceSaleFinancialSummary.tsx', 'utf8');
+const deploy = readFileSync('deploy-vps-server-only.cjs', 'utf8');
+const legacyServer = readFileSync('vps_server.js', 'utf8');
+assert.match(modal, /<MarketplaceSaleFinancialSummary sale=\{sale\} isRefreshing=\{isRefreshing\} \/>/);
+assert.match(financialPanel, /Lucro real/);
+assert.match(financialPanel, /Repasse da Shopee/);
+assert.match(service, /financial\?: MarketplaceSaleFinancial/);
+for (const source of [server, legacyServer]) {
+  assert.match(source, /require\('\.\/services\/marketplaceSaleFinancials\.cjs'\)/);
+  assert.match(source, /\/api\/v2\/payment\/get_escrow_detail', creds, encodeShopeeCatalogParamsVps\(\{ order_sn: orderSn \}\)/);
+  assert.match(source, /loadShopeeSaleFinancialsVps\(sale, connectionId\)/);
+}
+assert.match(deploy, /services\/marketplaceSaleFinancials\.cjs/);
 console.log('marketplace sale details static checks passed');

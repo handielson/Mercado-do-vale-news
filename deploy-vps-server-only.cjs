@@ -22,6 +22,7 @@ const localServer = path.join(__dirname, 'vps_server.js');
 const localServerCjs = path.join(__dirname, 'vps_server.cjs');
 const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim();
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
+const marketplaceSaleFinancialsPath = 'services/marketplaceSaleFinancials.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
 const metaAttendanceServicePaths = ['services/metaAttendanceCore.cjs', 'services/metaAttendanceServer.cjs', 'services/metaAttendanceReplies.cjs', 'services/metaAttendanceTransport.cjs', 'services/metaAttendanceMedia.cjs'];
 const phonePriceListServicePaths = [
@@ -240,6 +241,11 @@ async function uploadMobileSalesPushFiles(appDir) {
     remotePathJoin(appDir, mobileSalesServicePath),
   );
   console.log(`Uploaded ${mobileSalesServicePath}`);
+  await upload(
+    path.join(__dirname, marketplaceSaleFinancialsPath),
+    remotePathJoin(appDir, marketplaceSaleFinancialsPath),
+  );
+  console.log(`Uploaded ${marketplaceSaleFinancialsPath}`);
 }
 
 async function uploadMarketingCampaignFiles(appDir) {

@@ -4,6 +4,7 @@ import { formatMarketplaceStatus, getMarketplaceSaleDetail, type MarketplaceSale
 import { companySettingsService } from '../../../services/companySettingsService';
 import { printMarketplaceSaleReceipt } from '../../../utils/printMarketplaceSaleReceipt';
 import { SaleItemInventoryInfo } from './SaleItemInventoryInfo';
+import { MarketplaceSaleFinancialSummary } from './MarketplaceSaleFinancialSummary';
 
 interface Props {
     sale: MarketplaceSale | null;
@@ -74,6 +75,7 @@ function MarketplaceSaleDetailsContent({ sale: initialSale, onClose }: { sale: M
                         </div>
                     ) : <p className="text-sm text-slate-500">O marketplace não retornou os itens deste pedido.</p>}
                 </div>
+                <MarketplaceSaleFinancialSummary sale={sale} isRefreshing={isRefreshing} />
                 <div className="flex justify-end border-t border-slate-200 bg-slate-50 p-4"><button onClick={() => void handlePrint()} disabled={isPrinting} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">{isPrinting ? <RefreshCw size={16} className="animate-spin" /> : <Printer size={16} />} Imprimir comprovante</button></div>
             </div>
         </div>

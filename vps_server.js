@@ -13873,6 +13873,15 @@ fastify.get('/admin/mobile-sales', { preHandler: requireAdminBearerToken }, asyn
     });
   }
 });
+const { createShopeeSaleFinancialsLoader } = require('./services/marketplaceSaleFinancials.cjs');
+const loadShopeeSaleFinancialsVps = createShopeeSaleFinancialsLoader({
+  pool,
+  fetchEscrow: async (orderSn, connectionId) => {
+    const creds = await getShopeeCatalogCredentialsVps(connectionId === 'primary' ? undefined : connectionId);
+    const result = await shopeeCatalogGetVps('/api/v2/payment/get_escrow_detail', creds, encodeShopeeCatalogParamsVps({ order_sn: orderSn }));
+    return result?.data || null;
+  },
+});
 fastify.get('/admin/mobile-sales/:channel/:saleId', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   const channel = String(request.params?.channel || '').trim().toLowerCase();
   const saleId = String(request.params?.saleId || '').trim();
@@ -13889,6 +13898,14 @@ fastify.get('/admin/mobile-sales/:channel/:saleId', { preHandler: requireAdminBe
 
     if (!sale) sale = await mobileSalesPushService.getRecordedSale(channel, saleId);
     if (!sale) return reply.code(404).send({ error: 'Venda nao encontrada.' });
+    if (channel === 'shopee') {
+      const financial = await loadShopeeSaleFinancialsVps(sale, connectionId).catch((error) => ({
+        source: 'shopee_escrow',
+        state: 'unavailable',
+        note: error?.message || 'Falha ao montar o financeiro da venda.',
+      }));
+      if (financial) sale = { ...sale, details: { ...(sale.details || {}), financial } };
+    }
     reply.header('Cache-Control', 'no-store');
     return { sale };
   } catch (error) {
