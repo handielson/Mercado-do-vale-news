@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.723-custo-manual-produto",
+  "version": "v1.2.724-pdv-falta-estoque",
   "date": "2026-10-31",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.723-custo-manual-produto",
-  "release_vps": "/var/www/mdv-site/releases/20261031-130000-v12723-custo-manual",
+  "tag": "v1.2.724-pdv-falta-estoque",
+  "release_vps": "/var/www/mdv-site/releases/20261031-163830-pdv-falta-estoque",
   "api_release": {
     "status": "published",
     "module": "vps_server.cjs, vps_server.js, services/productManualCost.cjs, services/marketplaceSaleFinancials.cjs e services/productReadPrivacy.cjs",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Atalho para alterar o custo de compra no financeiro do pedido Shopee, com auditoria, e evidência de custo fora das leituras públicas.",
+  "summary": "Log da venda explica falta de estoque disponível, incluindo reservas, produto e quantidade solicitada; diagnóstico técnico preservado na auditoria.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -29,36 +29,22 @@
   },
   "pending_deployments": {
     "mercado_livre_api": "publicada com preço e estoque desligados; validar status de capacidades",
-    "site_manifest": "publicado; VERSION.json v1.2.723 na release ativa"
+    "site_manifest": "VERSION.json v1.2.724; publicação apenas do site"
   },
-  "site_source_base": "dd2c23f9",
+  "site_source_base": "c311267d",
   "changed_files": [
-    "components/admin/sales/ProductCostItemRow.tsx",
-    "components/admin/sales/MarketplaceSaleFinancialSummary.tsx",
-    "components/admin/sales/MarketplaceSaleDetailsModal.tsx",
-    "services/adminMarketplaceSalesService.ts",
-    "services/productManualCost.cjs",
-    "services/marketplaceSaleFinancials.cjs",
-    "services/productReadPrivacy.cjs",
-    "vps_server.cjs",
-    "vps_server.js",
-    "deploy-vps-server-only.cjs",
-    "scripts/publish-vps-plan.cjs",
-    "tmp-tests/product-manual-cost.test.cjs",
-    "tmp-tests/marketplace-sale-financials.test.cjs",
-    "tmp-tests/marketplace-sale-details-static.test.mjs",
-    "tmp-tests/product-read-privacy.test.cjs",
-    "docs/operacional/bling-custo-aquisicao.md",
+    "services/saleService.ts",
+    "tmp-tests/pdv-sale-finalization-log-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-31-v1.2.723-custo-manual-produto.md"
+    "docs/versoes/2026-10-31-v1.2.724-pdv-falta-estoque.md"
   ],
   "validations": [
-    "node --test tmp-tests/product-manual-cost.test.cjs",
-    "node --test tmp-tests/marketplace-sale-financials.test.cjs",
-    "node --test tmp-tests/product-read-privacy.test.cjs",
-    "node tmp-tests/marketplace-sale-details-static.test.mjs",
-    "node --check nos entrypoints e módulos",
+    "npm run test:pdv-sale-finalization-log",
+    "npm run test:pdv-stock-location",
+    "node tmp-tests/pdv-stock-recovery.test.cjs",
+    "node --check server.js, vps_server.js e vps_server.cjs",
+    "git diff --check",
     "npm run build",
     "Release do site e validação do VERSION.json"
   ],

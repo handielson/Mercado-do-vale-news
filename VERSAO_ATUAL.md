@@ -1,3 +1,15 @@
+# v1.2.724-pdv-falta-estoque
+
+Data: 31/10/2026. Status: publicada após validação da release. Branch: `main`. Tag: `v1.2.724-pdv-falta-estoque`.
+Release do site: `/var/www/mdv-site/releases/20261031-163830-pdv-falta-estoque`.
+
+O log da venda informa falta de estoque disponível em português, explica o efeito das reservas e identifica produto e quantidade solicitada. A resposta técnica original permanece no diagnóstico da auditoria. Sem alteração na regra de baixa de estoque ou publicação da API.
+
+Validações: regressão do log, baixa por local, recuperação idempotente, sintaxe dos entrypoints, build e versão pública.
+Registro: `docs/versoes/2026-10-31-v1.2.724-pdv-falta-estoque.md`.
+
+---
+
 # v1.2.723-custo-manual-produto
 
 Data: 31/10/2026. Branch: `main`. Tag: `v1.2.723-custo-manual-produto`.

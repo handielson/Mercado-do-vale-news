@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
+import { stripTypeScriptTypes } from 'node:module';
 
 const pdvPage = fs.readFileSync('pages/pdv/PDVPage.tsx', 'utf8');
 const saleService = fs.readFileSync('services/saleService.ts', 'utf8');
@@ -9,6 +11,21 @@ const salesPage = fs.readFileSync('pages/admin/sales/SalesPage.tsx', 'utf8');
 const vpsServer = fs.readFileSync('vps_server.js', 'utf8');
 const vpsServerCjs = fs.readFileSync('vps_server.cjs', 'utf8');
 const finalizationLogUtil = fs.readFileSync('utils/pdvSaleFinalizationLog.ts', 'utf8');
+
+// Exercise the real normalizer with the HTTP error returned in production.
+const normalizerSource = saleService.slice(saleService.indexOf('function normalizeFinalizationError('), saleService.indexOf('function appendIssueToFinalizationLog('));
+const normalize = vm.runInNewContext(stripTypeScriptTypes(normalizerSource) + '\nnormalizeFinalizationError', { Error });
+const technicalMessage = '[VPS] 400 /stock-locations/priority-decrements — {"error":"insufficient_stock_by_location"}';
+const insufficient = normalize(Object.assign(new Error(technicalMessage), { debug: { request_id: 'test' } }), 'stock_decrement');
+assert.match(insufficient.message, /Falta de estoque disponível/);
+assert.match(insufficient.message, /reservad/);
+assert.doesNotMatch(insufficient.message, /\[VPS\]|priority-decrements/);
+assert.equal(insufficient.debug.code, 'insufficient_stock_by_location');
+assert.equal(insufficient.debug.technical_message, technicalMessage);
+assert.equal(insufficient.debug.upstream.request_id, 'test');
+assert.equal(normalize(new Error('stock_busy'), 'stock_decrement').message, 'stock_busy');
+assert.equal(normalize(new Error(technicalMessage), 'sale_items').message, technicalMessage);
+assert.equal(normalize(null, 'stock_decrement').message, 'Erro desconhecido');
 
 for (const field of ['finalization_status', 'finalization_log', 'finalization_error_summary']) {
   assert.match(saleTypes, new RegExp(`${field}\\?`), `types/sale.ts must type ${field}`);

@@ -187,11 +187,16 @@ type SaleFinalizationWarning = {
 
 function normalizeFinalizationError(error: unknown, step: string): SaleFinalizationIssue {
     const record = error && typeof error === 'object' ? error as any : null;
+    const technicalMessage = error instanceof Error ? error.message : String(error || 'Erro desconhecido');
+    const upstream = record?.debug || record?.response?.debug || record?.response?.data?.debug || record?.data?.debug || null;
+    const insufficientStock = step === 'stock_decrement' && technicalMessage.includes('insufficient_stock_by_location');
     return {
         step,
-        message: error instanceof Error ? error.message : String(error || 'Erro desconhecido'),
+        message: insufficientStock
+            ? 'Falta de estoque disponível para dar baixa nesta venda. O saldo nos locais de estoque, descontadas as unidades reservadas, é insuficiente. Confira o estoque e as reservas do produto.'
+            : technicalMessage,
         name: error instanceof Error ? error.name : undefined,
-        debug: record?.debug || record?.response?.debug || record?.response?.data?.debug || record?.data?.debug || null,
+        debug: insufficientStock ? { code: 'insufficient_stock_by_location', technical_message: technicalMessage, upstream } : upstream,
         timestamp: new Date().toISOString(),
     };
 }
@@ -735,6 +740,9 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
                 }
             } catch (stockError) {
                 const issue = normalizeFinalizationError(stockError, 'stock_decrement');
+                if (issue.message.startsWith('Falta de estoque disponível')) {
+                    issue.message = `Produto ${item.product_sku || item.product_name || item.product_id}: ${issue.message} Quantidade solicitada: ${item.quantity}.`;
+                }
                 issue.debug = { product_id: item.product_id, sku: item.product_sku, quantity: item.quantity, upstream: issue.debug };
                 finalizationIssues.push(issue);
             }
