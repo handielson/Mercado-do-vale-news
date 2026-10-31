@@ -1,3 +1,16 @@
+# v1.2.722-financeiro-venda-shopee
+
+Data: 31/10/2026. Branch: `main`. Tag: `v1.2.722-financeiro-venda-shopee`.
+Release do site: `/var/www/mdv-site/releases/20261031-120000-v12722-financeiro-shopee`.
+
+O detalhe do pedido Shopee (MV e G) passa a mostrar o financeiro da venda: valor da venda, comissão e demais taxas da Shopee, frete e outros ajustes conciliados com o repasse oficial, custo dos produtos pelo vínculo do anúncio ou SKU, lucro real e margem. A API consulta o repasse (escrow) somente ao abrir o detalhe de um pedido.
+
+Validações: testes do cálculo e dos custos, contrato estático do modal, sintaxe da API, build e leitura pública da versão.
+
+Registro: `docs/versoes/2026-10-31-v1.2.722-financeiro-venda-shopee.md`.
+
+---
+
 # v1.2.721-variantes-caixa-sangria
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.721-variantes-caixa-sangria`.
