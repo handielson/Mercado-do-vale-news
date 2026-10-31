@@ -1,3 +1,16 @@
+# v1.2.723-custo-manual-produto
+
+Data: 31/10/2026. Branch: `main`. Tag: `v1.2.723-custo-manual-produto`.
+Release do site: `/var/www/mdv-site/releases/20261031-130000-v12723-custo-manual`.
+
+No financeiro do pedido Shopee, cada item mostra a origem do custo e o botão Alterar custo. O ajuste vale para as próximas vendas, exige o custo anterior exibido, recusa aparelhos com IMEI e variações que herdam o custo do pai, e registra evidência e histórico. A evidência de custo deixa de aparecer nas leituras públicas de produtos.
+
+Validações: testes do ajuste de custo, do financeiro, da privacidade de produtos e do modal, sintaxe da API, build e leitura pública da versão.
+
+Registro: `docs/versoes/2026-10-31-v1.2.723-custo-manual-produto.md`.
+
+---
+
 # v1.2.722-financeiro-venda-shopee
 
 Data: 31/10/2026. Branch: `main`. Tag: `v1.2.722-financeiro-venda-shopee`.

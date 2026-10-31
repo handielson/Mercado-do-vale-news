@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.722-financeiro-venda-shopee",
+  "version": "v1.2.723-custo-manual-produto",
   "date": "2026-10-31",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.722-financeiro-venda-shopee",
-  "release_vps": "/var/www/mdv-site/releases/20261031-120000-v12722-financeiro-shopee",
+  "tag": "v1.2.723-custo-manual-produto",
+  "release_vps": "/var/www/mdv-site/releases/20261031-130000-v12723-custo-manual",
   "api_release": {
     "status": "published",
-    "module": "vps_server.cjs, vps_server.js e services/marketplaceSaleFinancials.cjs",
+    "module": "vps_server.cjs, vps_server.js, services/productManualCost.cjs, services/marketplaceSaleFinancials.cjs e services/productReadPrivacy.cjs",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Mostra no detalhe do pedido Shopee o valor da venda, taxas e ajustes conciliados com o repasse, custo dos produtos, lucro real e margem.",
+  "summary": "Atalho para alterar o custo de compra no financeiro do pedido Shopee, com auditoria, e evidência de custo fora das leituras públicas.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -29,28 +29,36 @@
   },
   "pending_deployments": {
     "mercado_livre_api": "publicada com preço e estoque desligados; validar status de capacidades",
-    "site_manifest": "publicado; VERSION.json v1.2.722 na release ativa"
+    "site_manifest": "publicado; VERSION.json v1.2.723 na release ativa"
   },
-  "site_source_base": "d13a0568",
+  "site_source_base": "dd2c23f9",
   "changed_files": [
-    "components/admin/sales/MarketplaceSaleDetailsModal.tsx",
+    "components/admin/sales/ProductCostItemRow.tsx",
     "components/admin/sales/MarketplaceSaleFinancialSummary.tsx",
+    "components/admin/sales/MarketplaceSaleDetailsModal.tsx",
     "services/adminMarketplaceSalesService.ts",
+    "services/productManualCost.cjs",
     "services/marketplaceSaleFinancials.cjs",
+    "services/productReadPrivacy.cjs",
     "vps_server.cjs",
     "vps_server.js",
     "deploy-vps-server-only.cjs",
     "scripts/publish-vps-plan.cjs",
+    "tmp-tests/product-manual-cost.test.cjs",
     "tmp-tests/marketplace-sale-financials.test.cjs",
     "tmp-tests/marketplace-sale-details-static.test.mjs",
+    "tmp-tests/product-read-privacy.test.cjs",
+    "docs/operacional/bling-custo-aquisicao.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-31-v1.2.722-financeiro-venda-shopee.md"
+    "docs/versoes/2026-10-31-v1.2.723-custo-manual-produto.md"
   ],
   "validations": [
+    "node --test tmp-tests/product-manual-cost.test.cjs",
     "node --test tmp-tests/marketplace-sale-financials.test.cjs",
+    "node --test tmp-tests/product-read-privacy.test.cjs",
     "node tmp-tests/marketplace-sale-details-static.test.mjs",
-    "node --check vps_server.cjs, vps_server.js e services/marketplaceSaleFinancials.cjs",
+    "node --check nos entrypoints e módulos",
     "npm run build",
     "Release do site e validação do VERSION.json"
   ],
