@@ -1,12 +1,12 @@
 {
   "version": "v1.2.725-mercado-livre-preco-gate",
   "date": "2026-10-31",
-  "status": "pending",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.725-mercado-livre-preco-gate",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261031-234913-mercado-livre-preco-gate",
   "api_release": {
-    "status": "pending",
+    "status": "published",
     "module": "services/mercadoLivreServer.cjs — autenticação das rotas ERP de escrita",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
@@ -28,8 +28,8 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "correção pendente; escrita de preço e estoque desligadas",
-    "site_manifest": "VERSION.json v1.2.725; publicação pendente"
+    "mercado_livre_api": "publicada; preço e estoque desligados; GET de configurações confirmou erpCapabilities vazio",
+    "site_manifest": "VERSION.json v1.2.725; release registrada"
   },
   "site_source_base": "c311267d",
   "changed_files": [
@@ -48,7 +48,7 @@
     "node --check services/mercadoLivreServer.cjs",
     "git diff --check",
     "npm run build",
-    "Build e publicação/validação do site e API pendentes"
+    "npm.cmd run test:mercado-livre (60 testes + contrato estático), node --check dos servidores, git diff --check, npm.cmd run build, API HTTP 200 com mysql.ok=true, GET autenticado de configurações com erpCapabilities vazio, release do site e VERSION.json públicos validados"
   ],
   "android_entregas": {
     "version_name": "1.1.5",
