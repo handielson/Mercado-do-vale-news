@@ -6,7 +6,7 @@
   "tag": "v1.2.728-erp-ml-price-capability",
   "release_vps": "/var/www/mdv-site/releases/20261101-012920-erp-ml-publish-gate",
   "api_release": {
-    "status": "pending",
+    "status": "published",
     "module": "services/mercadoLivreServer.cjs — capability de preço anunciada; gate de escrita desligado",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
@@ -28,34 +28,28 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "pendente; publicar capability de preço com gates desligados",
+    "mercado_livre_api": "publicada; capability de preço presente e gates de publicação, preço e estoque desligados",
     "site_manifest": "pendente; VERSION.json v1.2.728-erp-ml-price-capability"
   },
   "site_source_base": "8f4e3196",
   "changed_files": [
-    "docs/operacional/mercado-livre-erp-sync.md",
     "scripts/mercado-livre-stock-write-deploy.cjs",
-    "deploy-vps-server-only.cjs",
-    "package.json",
-    "services/mercadoLivrePublication.cjs",
     "services/mercadoLivreServer.cjs",
     "tmp-tests/mercado-livre-erp-read-key.test.cjs",
-    "tmp-tests/mercado-livre-publication.test.cjs",
+    "tmp-tests/mercado-livre-listing-stock-write.test.cjs",
     "tmp-tests/mercado-livre-stock-write-deploy.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-31-v1.2.727-erp-ml-publish-gate.md"
+    "docs/versoes/2026-11-01-v1.2.728-erp-ml-price-capability.md"
   ],
   "validations": [
     "node --check services/mercadoLivreServer.cjs",
-    "node --check services/mercadoLivrePublication.cjs",
     "node --check scripts/mercado-livre-stock-write-deploy.cjs",
-    "node --check deploy-vps-server-only.cjs",
-    "node --test tmp-tests/mercado-livre-stock-write-deploy.test.cjs tmp-tests/mercado-livre-erp-read-key.test.cjs tmp-tests/mercado-livre-publication.test.cjs (48 testes)",
-    "npm.cmd run test:mercado-livre",
-    "git diff --check",
+    "npm.cmd run test:mercado-livre (104 testes + contrato estático)",
+    "git diff --cached --check (arquivos da release)",
     "npm.cmd run build",
-    "API pública e versão pública verificadas após deploy"
+    "GET /status HTTP 200 com MySQL OK",
+    "GET /api/mercado-livre/settings autenticado confirma listing_price_write_v1 e três gates false"
   ],
   "android_entregas": {
     "version_name": "1.1.5",
