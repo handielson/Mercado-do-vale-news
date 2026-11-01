@@ -4,9 +4,9 @@
   "status": "pending",
   "branch": "main",
   "tag": "v1.2.731-erp-ml-price-read-seller-sku-attr",
-  "release_vps": "pendente",
+  "release_vps": "API Mercado Livre publicada; manifesto do site pendente",
   "api_release": {
-    "status": "pending",
+    "status": "published",
     "module": "services/mercadoLivreListingPrice.cjs — leitura compara o SKU da família ERP com SELLER_SKU em atributo do anúncio; escritas seguem desligadas",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
@@ -28,7 +28,7 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "pendente; consulta somente leitura pelo atributo SELLER_SKU; gates de escrita desligados",
+    "mercado_livre_api": "publicada; consulta de preço somente leitura verificada; gates de escrita desligados",
     "site_manifest": "pendente; VERSION.json v1.2.731-erp-ml-price-read-seller-sku-attr"
   },
   "site_source_base": "8f4e3196",
@@ -46,8 +46,8 @@
     "Python test_mercado_livre_bridge (60 aprovados)",
     "git diff --check (aprovado)",
     "npm.cmd run build (aprovado; pré-build validou segurança n8n e ausência de runtime Supabase)",
-    "GET /status HTTP 200 com MySQL OK (pendente após publicação)",
-    "GET autenticado de preço recebe diagnóstico e confirma gates false (pendente após publicação)"
+    "GET /status HTTP 200 com MySQL OK",
+    "GET autenticado de preço confirmado; gates de escrita false"
   ],
   "android_entregas": {
     "version_name": "1.1.5",

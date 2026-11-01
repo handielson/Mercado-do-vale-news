@@ -1,9 +1,9 @@
 # v1.2.731-erp-ml-price-read-seller-sku-attr
 
-Data: 01/11/2026. Status: pendente de publicação. Branch de destino: `main`. Tag: `v1.2.731-erp-ml-price-read-seller-sku-attr`.
+Data: 01/11/2026. Status: API publicada; manifesto do site pendente. Branch: `main`. Tag: `v1.2.731-erp-ml-price-read-seller-sku-attr`. Commit: `dbff06af`.
 API Mercado Livre: a leitura de preço extrai `SELLER_SKU` do atributo oficial do anúncio, além dos campos diretos/variações, para cruzar a família do catálogo com o vínculo confirmado no ERP. Escrita continua exigindo vínculo no Mercado do Vale e gate/chave próprios; todos os gates permanecem desligados.
 
-Validações locais aprovadas: 107 testes da suíte Mercado Livre e contrato estático, 60 testes da bridge ERP, sintaxe dos módulos, git diff --check e build de produção. API e leitura real pendentes após deploy.
+Validações locais aprovadas: 107 testes da suíte Mercado Livre e contrato estático, 60 testes da bridge ERP, sintaxe dos módulos, git diff --check e build de produção. API publicada; `/status` retornou MySQL OK e a leitura autenticada do anúncio MLB7880776080 retornou preço padrão/venda de 24900 centavos, sem promoção, automação ou variações.
 
 ---
 
