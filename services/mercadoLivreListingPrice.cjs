@@ -82,7 +82,7 @@ function hasQuantityPricing(data) {
 function createListingPriceHandlers({ pool, settings, request }) {
   const inFlight = new Set();
 
-  async function read(req) {
+  async function read(req, { requireMdvListingLink = false } = {}) {
     const itemId = String(req.params?.itemId || '').toUpperCase();
     const parentId = String(req.query?.parentId || req.body?.parentId || '');
     if (!/^MLB\d{1,30}$/.test(itemId) || !UUID.test(parentId)) {
@@ -93,7 +93,14 @@ function createListingPriceHandlers({ pool, settings, request }) {
     const [linked] = await pool.query(`SELECT p.id,p.sku FROM mercado_livre_products ml
       JOIN products p ON p.id COLLATE utf8mb4_unicode_ci=ml.product_id COLLATE utf8mb4_unicode_ci
       WHERE ml.item_id=? AND (p.id=? OR p.parent_id=?)`, [itemId, parentId, parentId]);
-    if (!linked.length) throw fail('Este anúncio não está vinculado à família selecionada.', 404);
+    let family = linked;
+    if (!linked.length) {
+      if (requireMdvListingLink) throw fail('Este anúncio não está vinculado à família selecionada.', 404);
+      const [products] = await pool.query(
+        'SELECT id,sku FROM products WHERE id=? OR parent_id=? LIMIT 200', [parentId, parentId]);
+      family = products;
+      if (!family.length) throw fail('O produto informado não existe no catálogo do Mercado do Vale.', 404);
+    }
     const readRemote = async (resource, options) => {
       try { return await request(resource, options); }
       catch (error) {
@@ -104,6 +111,17 @@ function createListingPriceHandlers({ pool, settings, request }) {
     const item = await readRemote(`/items/${itemId}?include_attributes=all`);
     if (String(item.seller_id) !== seller || String(item.id || '').toUpperCase() !== itemId) {
       throw fail('Anúncio não pertence à conta conectada.');
+    }
+    let affectedSkus = [...new Set(linked.map(product => String(product.sku || '').trim()).filter(Boolean))];
+    if (!linked.length) {
+      const remoteSkus = new Set([item.seller_sku, item.seller_custom_field,
+        ...(Array.isArray(item.variations) ? item.variations.flatMap(variation =>
+          [variation?.seller_sku, variation?.seller_custom_field]) : []),
+      ].filter(value => typeof value === 'string' && value.trim()).map(value => value.trim().toLocaleLowerCase('en-US')));
+      const familySkus = family.filter(product => typeof product.sku === 'string' && product.sku.trim());
+      affectedSkus = [...new Set(familySkus.filter(product => remoteSkus.has(
+        product.sku.trim().toLocaleLowerCase('en-US'))).map(product => product.sku.trim()))];
+      if (!affectedSkus.length) throw fail('O SKU remoto não corresponde ao produto confirmado no ERP.', 409);
     }
     const [prices, salePrice, automation] = await Promise.all([
       readRemote(`/items/${itemId}/prices`, { headers: { 'show-all-prices': 'true' } }),
@@ -146,7 +164,7 @@ function createListingPriceHandlers({ pool, settings, request }) {
       automationStatus: automation?.status ? String(automation.status) : '',
       automationKnown: tags !== null || automation !== null,
       promotion: salePrice.type === 'promotion' || Boolean(salePrice.metadata?.promotion_id) || salePriceCents !== priceCents,
-      variations, affectedSkus: [...new Set(linked.map(product => String(product.sku || '').slice(0, 120)))],
+      variations, affectedSkus: affectedSkus.map(sku => sku.slice(0, 120)),
     };
   }
 
@@ -169,7 +187,7 @@ function createListingPriceHandlers({ pool, settings, request }) {
         throw fail('A confirmação para todas as variações é inválida.', 400);
       }
 
-      const current = await read(req);
+      const current = await read(req, { requireMdvListingLink: true });
       if (!['active', 'paused'].includes(current.status)) {
         throw fail('Somente anúncio ativo ou pausado pode receber preço.', 409);
       }

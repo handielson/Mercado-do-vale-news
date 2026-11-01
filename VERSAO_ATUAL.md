@@ -1,6 +1,15 @@
+# v1.2.730-erp-ml-price-read-sku-link
+
+Data: 01/11/2026. Status: pendente de publicação. Branch de destino: `main`. Tag: `v1.2.730-erp-ml-price-read-sku-link`.
+API Mercado Livre: leitura de preço pode usar o vínculo SKU/família confirmado no ERP quando o catálogo do Mercado do Vale não possui associação duplicada do anúncio. A consulta exige produto da família no catálogo e SKU remoto correspondente. Escritas ainda exigem vínculo Mercado do Vale e gate/chave próprios; todos os gates de escrita continuam desligados.
+
+Validação local: suíte Mercado Livre, contrato estático, bridge do ERP, verificações de sintaxe e build de produção. A consulta autenticada em produção e os gates desligados serão conferidos após a publicação seletiva.
+
+---
+
 # v1.2.729-erp-ml-price-read-diagnostic
 
-Data: 01/11/2026. Status: pendente de publicação. Branch: `main`. Tag: `v1.2.729-erp-ml-price-read-diagnostic`.
+Data: 01/11/2026. Status: API publicada; manifesto do site pendente. Branch: `main`. Tag: `v1.2.729-erp-ml-price-read-diagnostic`.
 API Mercado Livre: publicação da rota GET de preço com diagnóstico técnico sanitizado. Retorna somente etapa, status HTTP e código remoto em lista segura; não devolve corpo bruto, token ou dados comerciais. Gates de publicação, preço e estoque permanecem desligados.
 
 Validações locais: 106 testes da integração Mercado Livre e contrato estático aprovados, além de 60 testes do bridge. O build de produção passou. Publicações e verificação autenticada do novo diagnóstico ainda pendentes.

@@ -14,7 +14,8 @@ function fixture({ variations = [], automation = null, promotion = false, linked
   const writes = [];
   const handlers = createListingPriceHandlers({
     settings: async () => ({ user_id: '7' }),
-    pool: { query: async () => [linked ? [{ id: 'child', sku: 'OIS063B' }] : []] },
+    pool: { query: async sql => [linked ? [{ id: 'child', sku: 'OIS063B' }] :
+      (String(sql).includes('mercado_livre_products') ? [] : [{ id: 'child', sku: 'OIS063B' }])] },
     request: async (path, options) => {
       if (options?.method === 'PUT') {
         const body = JSON.parse(options.body);
@@ -36,7 +37,8 @@ function fixture({ variations = [], automation = null, promotion = false, linked
       if (path.endsWith('/prices')) return { prices: [{ type: 'standard', amount: amount / 100, currency_id: 'BRL',
         conditions: quantityPricing ? { min_purchase_unit: 2, context_restrictions: ['channel_marketplace', 'user_type_business'] }
           : { context_restrictions: [] } }] };
-      return { id: 'MLB123', seller_id: seller, status: 'active', title: 'Suporte', variations: currentVariations,
+      return { id: 'MLB123', seller_id: seller, status: 'active', title: 'Suporte',
+        seller_sku: 'OIS063B', variations: currentVariations,
         tags, channels, user_product_id: userProductId, family_name: familyName,
         category_id: 'MLB58500', listing_type_id: 'gold_special', shipping: { mode: 'me2', logistic_type: 'drop_off' } };
     },
@@ -67,6 +69,15 @@ test('blocks automated prices, stale prices, foreign seller and unlinked family 
     await assert.rejects(() => handlers.update(req()));
     assert.equal(writes.length, 0);
   }
+});
+
+test('read-only price lookup accepts an ERP-confirmed SKU without an MDV marketplace link', async () => {
+  const { handlers, writes } = fixture({ linked: false });
+  const result = await handlers.read(req());
+  assert.equal(result.priceCents, 2500);
+  assert.deepEqual(result.affectedSkus, ['OIS063B']);
+  await assert.rejects(() => handlers.update(req()), /não está vinculado à família selecionada/);
+  assert.deepEqual(writes, []);
 });
 test('promotion is always blocked and ignored remote update is never reported as success', async () => {
   const promotional = fixture({ promotion: true });
