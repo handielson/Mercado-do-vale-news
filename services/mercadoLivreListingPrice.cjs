@@ -114,9 +114,11 @@ function createListingPriceHandlers({ pool, settings, request }) {
     }
     let affectedSkus = [...new Set(linked.map(product => String(product.sku || '').trim()).filter(Boolean))];
     if (!linked.length) {
-      const remoteSkus = new Set([item.seller_sku, item.seller_custom_field,
-        ...(Array.isArray(item.variations) ? item.variations.flatMap(variation =>
-          [variation?.seller_sku, variation?.seller_custom_field]) : []),
+      const skuValues = source => [source?.seller_sku, source?.seller_custom_field,
+        ...(Array.isArray(source?.attributes) ? source.attributes
+          .filter(attribute => attribute?.id === 'SELLER_SKU').map(attribute => attribute.value_name) : [])];
+      const remoteSkus = new Set([...skuValues(item),
+        ...(Array.isArray(item.variations) ? item.variations.flatMap(skuValues) : []),
       ].filter(value => typeof value === 'string' && value.trim()).map(value => value.trim().toLocaleLowerCase('en-US')));
       const familySkus = family.filter(product => typeof product.sku === 'string' && product.sku.trim());
       affectedSkus = [...new Set(familySkus.filter(product => remoteSkus.has(

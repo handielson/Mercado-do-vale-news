@@ -8,7 +8,8 @@ const req = (extra = {}) => ({ params: { itemId: 'MLB123' }, query: { parentId }
 } });
 function fixture({ variations = [], automation = null, promotion = false, linked = true, seller = '7',
   ignore = false, initial = 2500, tags = [], channels = ['marketplace'],
-  userProductId = null, familyName = '', quantityPricing = false, automationError = null } = {}) {
+  userProductId = null, familyName = '', quantityPricing = false, automationError = null,
+  skuInAttribute = false } = {}) {
   let amount = initial;
   let currentVariations = variations;
   const writes = [];
@@ -38,7 +39,9 @@ function fixture({ variations = [], automation = null, promotion = false, linked
         conditions: quantityPricing ? { min_purchase_unit: 2, context_restrictions: ['channel_marketplace', 'user_type_business'] }
           : { context_restrictions: [] } }] };
       return { id: 'MLB123', seller_id: seller, status: 'active', title: 'Suporte',
-        seller_sku: 'OIS063B', variations: currentVariations,
+        seller_sku: skuInAttribute ? undefined : 'OIS063B',
+        attributes: skuInAttribute ? [{ id: 'SELLER_SKU', value_name: 'OIS063B' }] : [],
+        variations: currentVariations,
         tags, channels, user_product_id: userProductId, family_name: familyName,
         category_id: 'MLB58500', listing_type_id: 'gold_special', shipping: { mode: 'me2', logistic_type: 'drop_off' } };
     },
@@ -72,7 +75,7 @@ test('blocks automated prices, stale prices, foreign seller and unlinked family 
 });
 
 test('read-only price lookup accepts an ERP-confirmed SKU without an MDV marketplace link', async () => {
-  const { handlers, writes } = fixture({ linked: false });
+  const { handlers, writes } = fixture({ linked: false, skuInAttribute: true });
   const result = await handlers.read(req());
   assert.equal(result.priceCents, 2500);
   assert.deepEqual(result.affectedSkus, ['OIS063B']);

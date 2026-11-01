@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.730-erp-ml-price-read-sku-link",
+  "version": "v1.2.731-erp-ml-price-read-seller-sku-attr",
   "date": "2026-11-01",
   "status": "pending",
   "branch": "main",
-  "tag": "v1.2.730-erp-ml-price-read-sku-link",
+  "tag": "v1.2.731-erp-ml-price-read-seller-sku-attr",
   "release_vps": "pendente",
   "api_release": {
     "status": "pending",
-    "module": "services/mercadoLivreListingPrice.cjs — leitura por SKU de produto/família confirmada no ERP, sem exigir vínculo duplicado no MDV; escritas seguem desligadas",
+    "module": "services/mercadoLivreListingPrice.cjs — leitura compara o SKU da família ERP com SELLER_SKU em atributo do anúncio; escritas seguem desligadas",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "A leitura GET valida SKU do anúncio contra a família do produto confirmada no ERP; a escrita continua exigindo vínculo Mercado do Vale e gate próprio.",
+  "summary": "A leitura GET reconhece SELLER_SKU em attributes, valida a família confirmada no ERP e o vendedor; escrita continua exigindo vínculo MDV e gate próprio.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -28,8 +28,8 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "pendente; consulta somente leitura por vínculo ERP confirmado; gates de escrita desligados",
-    "site_manifest": "pendente; VERSION.json v1.2.730-erp-ml-price-read-sku-link"
+    "mercado_livre_api": "pendente; consulta somente leitura pelo atributo SELLER_SKU; gates de escrita desligados",
+    "site_manifest": "pendente; VERSION.json v1.2.731-erp-ml-price-read-seller-sku-attr"
   },
   "site_source_base": "8f4e3196",
   "changed_files": [
@@ -37,7 +37,7 @@
     "tmp-tests/mercado-livre-listing-price.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-01-v1.2.730-erp-ml-price-read-sku-link.md"
+    "docs/versoes/2026-11-01-v1.2.731-erp-ml-price-read-seller-sku-attr.md"
   ],
   "validations": [
     "node --check services/mercadoLivreListingPrice.cjs",
