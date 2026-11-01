@@ -99,18 +99,21 @@ function draft() {
   return {productId:id,sku:'SKU-1',fields:Object.fromEntries(Object.entries(values).map(([key,value])=>[key,field(value)]))};
 }
 function fixture({timeout=false,descriptionFailure=false,existingSku=false,brokenInventory=false,lock=true,feeRate=0.15,costChanged=false,catalogWeight}={}) {
-  const records=new Map(),calls=[];let item=null,description=null,linked=false,failDescription=descriptionFailure;
+  const records=new Map(),calls=[],queries=[];let item=null,description=null,linked=false,failDescription=descriptionFailure;
   const journal={read:async k=>records.get(k),write:async(k,v)=>records.set(k,structuredClone(v))};
   const connection={beginTransaction:async()=>{},commit:async()=>{},rollback:async()=>{},release:()=>{},query:async(sql,args)=>{
+    queries.push(sql);
     if(sql.includes('GET_LOCK'))return [[{acquired:lock?1:0}]];
     if(sql.includes('RELEASE_LOCK'))return [[{}]];
     if(sql.includes('FROM mercado_livre_settings'))return [[{user_id:'123'}]];
+    if(sql.startsWith('SELECT sku,status FROM products'))return [[{sku:product.sku,status:'active'}]];
     if(sql.includes('FROM products'))return [[{sku:product.sku}]];
     if(sql.includes('SELECT product_id,item_id'))return [linked?[{product_id:id,item_id:'MLB999'}]:[]];
     if(sql.startsWith('INSERT')){linked=true;return [{affectedRows:1}];}
     throw new Error('SQL inesperado: '+sql);
   }};
   const pool={getConnection:async()=>connection,query:async(sql,args)=>{
+    queries.push(sql);
     if(sql==='SELECT id FROM products WHERE sku=?')return [[{id}]];
     if(sql.includes('FROM products'))return [[{...structuredClone(product),weight_kg:catalogWeight,...(costChanged && sql.includes('stock_quantity,status,price_cost')?{price_cost:6000}:{})}]];
     if(sql.includes('FROM mercado_livre_products'))return [linked?[{item_id:'MLB999'}]:[]];
@@ -133,9 +136,38 @@ function fixture({timeout=false,descriptionFailure=false,existingSku=false,broke
     }
     throw new Error('Recurso inesperado: '+resource);
   };
-  return {handlers:createPublicationHandlers({pool,settings:async()=>({user_id:'123'}),request,listingRows,journal}),calls,records};
+  return {handlers:createPublicationHandlers({pool,settings:async()=>({user_id:'123'}),request,listingRows,journal}),calls,records,queries};
 }
 const body=()=>({sellerId:'123',draft:draft(),confirmPublication:true});
+const erpBody=({confirmPublication=false}={})=>{
+  const d=draft();d.fields.priceCents.value=18000;d.fields.quantity.value=4;
+  return {sellerId:'123',draft:d,confirmPublication,erpSnapshot:{productId:'22222222-2222-4222-8222-222222222222',sku:d.sku,
+    priceCents:18000,quantity:4,costCents:8000,capturedAt:new Date().toISOString()}};
+};
+test('prévia ERP usa custo, preço e quantidade do snapshot sem consultar custo ou saldo local',async()=>{
+  const f=fixture();const result=await f.handlers.previewErp({body:erpBody()});
+  assert.equal(result.payload.price,180);assert.equal(result.payload.available_quantity,4);
+  assert.equal(result.pricing.costCents,8000);assert.equal(result.erpSnapshot.productId,'22222222-2222-4222-8222-222222222222');
+  assert.ok(f.queries.every(sql=>!/\b(?:stock_quantity|price_cost)\b/i.test(sql)));
+  assert.ok(f.calls.some(call=>call.resource==='/items/validate' && call.method==='POST'));
+});
+test('snapshot ERP expirado ou divergente bloqueia a prévia antes de qualquer chamada externa',async()=>{
+  for(const update of [snapshot=>snapshot.capturedAt='2020-01-01T00:00:00.000Z',snapshot=>snapshot.quantity=0]){
+    const f=fixture(),b=erpBody();update(b.erpSnapshot);
+    await assert.rejects(f.handlers.previewErp({body:b}),/Snapshot do ERP/);
+    assert.equal(f.calls.length,0);
+  }
+  const f=fixture(),b=erpBody();b.draft.fields.priceCents.value=19000;
+  await assert.rejects(f.handlers.previewErp({body:b}),/diverge/);assert.equal(f.calls.length,0);
+});
+test('publicação ERP envia quantidade do snapshot, usa custo ERP e não consulta nem altera saldo local',async()=>{
+  const f=fixture();const result=await f.handlers.publishErp({body:erpBody({confirmPublication:true})});
+  assert.equal(result.itemId,'MLB999');
+  const created=f.calls.find(call=>call.resource==='/items' && call.method==='POST');
+  assert.equal(created.body.price,180);assert.equal(created.body.available_quantity,4);
+  assert.equal(f.records.size,1);assert.ok(f.queries.every(sql=>!/\b(?:stock_quantity|price_cost)\b/i.test(sql)));
+  assert.ok(f.queries.every(sql=>!/^\s*UPDATE\s+products\b/i.test(sql)));
+});
 test('cotação usa peso atual do produto em vez do peso global herdado de outro anúncio',async()=>{
   for(const [catalogWeight,grams] of [[0.100,100],[0.4501,451],[undefined,1000]]) {
     const f=fixture({catalogWeight});const q=await f.handlers.pricing({body:body()});

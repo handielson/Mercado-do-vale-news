@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.726-ml-erp-capabilities-gates",
+  "version": "v1.2.727-erp-ml-publish-gate",
   "date": "2026-10-31",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.726-ml-erp-capabilities-gates",
-  "release_vps": "/var/www/mdv-site/releases/20261101-002743-ml-erp-stock-contract",
+  "tag": "v1.2.727-erp-ml-publish-gate",
+  "release_vps": "/var/www/mdv-site/releases/20261101-012920-erp-ml-publish-gate",
   "api_release": {
     "status": "published",
-    "module": "services/mercadoLivreServer.cjs — contrato de capacidades e gates de escrita do ERP",
+    "module": "services/mercadoLivreServer.cjs e services/mercadoLivrePublication.cjs — prévia de anúncio com snapshot do ERP; publicação desligada",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "O endpoint autenticado separa as capacidades implementadas dos gates autorizados. Os gates de escrita permanecem desligados; envio de preço continua bloqueado até existir suporte oficial à API standard.",
+  "summary": "A preparação de anúncios valida preço, custo e saldo a partir do snapshot do ERP. A publicação é roteada por chave dedicada e gate desligado; preço e estoque permanecem desligados.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -28,27 +28,34 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "publicada; GET autenticado confirmou capacidades de estoque e gates de preço/estoque false",
-    "site_manifest": "VERSION.json v1.2.726; release 20261101-002743-ml-erp-stock-contract"
+    "mercado_livre_api": "publicada; gate de criação de anúncios, preço e estoque desligados",
+    "site_manifest": "VERSION.json v1.2.727; release 20261101-012920-erp-ml-publish-gate"
   },
-  "site_source_base": "96afb968",
+  "site_source_base": "8f4e3196",
   "changed_files": [
     "docs/operacional/mercado-livre-erp-sync.md",
     "scripts/mercado-livre-stock-write-deploy.cjs",
+    "deploy-vps-server-only.cjs",
+    "package.json",
+    "services/mercadoLivrePublication.cjs",
     "services/mercadoLivreServer.cjs",
     "tmp-tests/mercado-livre-erp-read-key.test.cjs",
-    "tmp-tests/mercado-livre-listing-stock-write.test.cjs",
+    "tmp-tests/mercado-livre-publication.test.cjs",
     "tmp-tests/mercado-livre-stock-write-deploy.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-10-31-v1.2.726-ml-erp-capabilities-gates.md"
+    "docs/versoes/2026-10-31-v1.2.727-erp-ml-publish-gate.md"
   ],
   "validations": [
     "node --check services/mercadoLivreServer.cjs",
+    "node --check services/mercadoLivrePublication.cjs",
     "node --check scripts/mercado-livre-stock-write-deploy.cjs",
-    "npm.cmd run test:mercado-livre (60 testes + contrato estático)",
+    "node --check deploy-vps-server-only.cjs",
+    "node --test tmp-tests/mercado-livre-stock-write-deploy.test.cjs tmp-tests/mercado-livre-erp-read-key.test.cjs tmp-tests/mercado-livre-publication.test.cjs (48 testes)",
+    "npm.cmd run test:mercado-livre",
     "git diff --check",
-    "npm.cmd run build"
+    "npm.cmd run build",
+    "API pública e versão pública verificadas após deploy"
   ],
   "android_entregas": {
     "version_name": "1.1.5",

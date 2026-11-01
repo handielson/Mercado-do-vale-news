@@ -15,6 +15,7 @@ function mercadoLivreStockWriteDeployEnv(args = process.argv, env = process.env)
   if (!requested && !requestedPrice) return {
     MDV_ERP_STOCK_WRITE_ENABLED: '0',
     MDV_ERP_PRICE_WRITE_ENABLED: '0',
+    MDV_ERP_PUBLISH_ENABLED: '0',
   };
 
   const key = String(env.MDV_ERP_WRITE_KEY || '').trim();
@@ -26,6 +27,7 @@ function mercadoLivreStockWriteDeployEnv(args = process.argv, env = process.env)
     MDV_ERP_WRITE_KEY: key,
     MDV_ERP_STOCK_WRITE_ENABLED: requested ? '1' : '0',
     MDV_ERP_PRICE_WRITE_ENABLED: requestedPrice ? '1' : '0',
+    MDV_ERP_PUBLISH_ENABLED: '0',
   };
 }
 

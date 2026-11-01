@@ -10,6 +10,11 @@ const ERP_STOCK_WRITE_CAPABILITIES = Object.freeze([
   'user_product_stock_write_v1',
 ]);
 const ERP_PRICE_WRITE_CAPABILITIES = Object.freeze(['listing_price_write_v1']);
+const ERP_PUBLICATION_CAPABILITIES = Object.freeze([
+  'erp_snapshot_authority_v1',
+  'listing_publish_preview_v1',
+  'listing_publish_v1',
+]);
 // The official standard-price endpoint is still unavailable. Since 2026-03-18,
 // PUT /items either rejects a price-only request or ignores price when mixed
 // with other fields, so this legacy route must remain disabled until support lands.
@@ -40,6 +45,11 @@ function isErpPriceWriteEnabled() {
   return ERP_PRICE_STANDARD_ENDPOINT_AVAILABLE
     && process.env.MDV_ERP_PRICE_WRITE_ENABLED === '1'
     && isErpWriteKeyConfigured(process.env.MDV_ERP_WRITE_KEY);
+}
+
+function isErpPublishEnabled() {
+  return process.env.MDV_ERP_PUBLISH_ENABLED === '1'
+    && isErpWriteKeyConfigured(process.env.MDV_ERP_PUBLISH_KEY);
 }
 
 function listingRows(item) {
@@ -849,6 +859,14 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   } };
   const erpReadRoute = { preHandler: (request, reply) =>
     requireMercadoLivreErpRead(request, reply, requireSyncKeyOrAdmin) };
+  const erpPublishRoute = { preHandler: async (request, reply) => {
+    if (!erpWriteKeyMatches(request.headers['x-erp-publish-key'], process.env.MDV_ERP_PUBLISH_KEY)) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+    if (!isErpPublishEnabled()) {
+      return reply.code(503).send({ error: 'A publicação originada no ERP está desabilitada nesta integração.' });
+    }
+  } };
   const { createPublicationHandlers } = require('./mercadoLivrePublication.cjs');
   const publication = createPublicationHandlers({ pool, settings: () => loadSettings(pool), listingRows,
     request: async (resource, options) => {
@@ -872,6 +890,8 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   registerAliases(fastify, 'post', '/mercado-livre/preparation/preview', protectedRoute, publicationRoute(publication.preview));
   registerAliases(fastify, 'post', '/mercado-livre/preparation/pricing', protectedRoute, publicationRoute(publication.pricing));
   registerAliases(fastify, 'post', '/mercado-livre/preparation/publish', protectedRoute, publicationRoute(publication.publish));
+  registerAliases(fastify, 'post', '/mercado-livre/erp/preparation/preview', erpReadRoute, publicationRoute(publication.previewErp));
+  registerAliases(fastify, 'post', '/mercado-livre/erp/preparation/publish', erpPublishRoute, publicationRoute(publication.publishErp));
 
   const getSettings = async (request) => {
     const settings = await loadSettings(pool);
@@ -881,12 +901,14 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         userId: String(settings.user_id || ''),
         nickname: String(settings.nickname || '').slice(0, 100),
         erpCapabilities: [
+          ...ERP_PUBLICATION_CAPABILITIES,
           ...ERP_STOCK_WRITE_CAPABILITIES,
           ...(isErpPriceWriteEnabled() ? ERP_PRICE_WRITE_CAPABILITIES : []),
         ],
         erpWriteGates: {
           stock: isErpStockWriteEnabled(),
           price: isErpPriceWriteEnabled(),
+          publish: isErpPublishEnabled(),
         },
       };
     }

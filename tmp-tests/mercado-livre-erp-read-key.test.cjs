@@ -114,10 +114,14 @@ test('a chave ERP autoriza consultas GET selecionadas e não revela configuraç�
   const previousWriteKey = process.env.MDV_ERP_WRITE_KEY;
   const previousWriteFlag = process.env.MDV_ERP_STOCK_WRITE_ENABLED;
   const previousPriceWriteFlag = process.env.MDV_ERP_PRICE_WRITE_ENABLED;
+  const previousPublishKey = process.env.MDV_ERP_PUBLISH_KEY;
+  const previousPublishFlag = process.env.MDV_ERP_PUBLISH_ENABLED;
   process.env.MERCADO_LIVRE_ERP_READ_KEY = key;
   delete process.env.MDV_ERP_WRITE_KEY;
   delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
   delete process.env.MDV_ERP_PRICE_WRITE_ENABLED;
+  process.env.MDV_ERP_PUBLISH_KEY = writeKey;
+  delete process.env.MDV_ERP_PUBLISH_ENABLED;
   const app = require('fastify')();
   const pool = { query: async () => [[{
     access_token: 'private-access-token', refresh_token: 'private-refresh-token',
@@ -132,29 +136,34 @@ test('a chave ERP autoriza consultas GET selecionadas e não revela configuraç�
       const response = await app.inject({ method: 'GET', url: path, headers: { 'x-erp-read-key': key } });
       assert.equal(response.statusCode, 200);
       assert.deepEqual(response.json(), { connected: true, userId: '7', nickname: 'Conta de teste',
-        erpCapabilities: ['listing_stock_write_v1', 'user_product_stock_write_v1'],
-        erpWriteGates: { stock: false, price: false } });
+        erpCapabilities: ['erp_snapshot_authority_v1', 'listing_publish_preview_v1', 'listing_publish_v1',
+          'listing_stock_write_v1', 'user_product_stock_write_v1'],
+        erpWriteGates: { stock: false, price: false, publish: false } });
       assert(!response.body.includes('private-'));
     }
 
     process.env.MDV_ERP_WRITE_KEY = writeKey;
     const stillDisabled = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
-    assert.deepEqual(stillDisabled.json().erpCapabilities, ['listing_stock_write_v1', 'user_product_stock_write_v1']);
-    assert.deepEqual(stillDisabled.json().erpWriteGates, { stock: false, price: false });
+    assert.deepEqual(stillDisabled.json().erpCapabilities, ['erp_snapshot_authority_v1', 'listing_publish_preview_v1',
+      'listing_publish_v1', 'listing_stock_write_v1', 'user_product_stock_write_v1']);
+    assert.deepEqual(stillDisabled.json().erpWriteGates, { stock: false, price: false, publish: false });
     process.env.MDV_ERP_STOCK_WRITE_ENABLED = '1';
     const enabledByExplicitFlag = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
-    assert.deepEqual(enabledByExplicitFlag.json().erpCapabilities, ['listing_stock_write_v1', 'user_product_stock_write_v1']);
-    assert.deepEqual(enabledByExplicitFlag.json().erpWriteGates, { stock: true, price: false });
+    assert.deepEqual(enabledByExplicitFlag.json().erpCapabilities, ['erp_snapshot_authority_v1', 'listing_publish_preview_v1',
+      'listing_publish_v1', 'listing_stock_write_v1', 'user_product_stock_write_v1']);
+    assert.deepEqual(enabledByExplicitFlag.json().erpWriteGates, { stock: true, price: false, publish: false });
     process.env.MDV_ERP_PRICE_WRITE_ENABLED = '1';
     const enabledPriceCapability = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
     assert.deepEqual(enabledPriceCapability.json().erpCapabilities,
-      ['listing_stock_write_v1', 'user_product_stock_write_v1']);
-    assert.deepEqual(enabledPriceCapability.json().erpWriteGates, { stock: true, price: false });
+      ['erp_snapshot_authority_v1', 'listing_publish_preview_v1', 'listing_publish_v1',
+        'listing_stock_write_v1', 'user_product_stock_write_v1']);
+    assert.deepEqual(enabledPriceCapability.json().erpWriteGates, { stock: true, price: false, publish: false });
     delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
     const priceOnlyCapability = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
     assert.deepEqual(priceOnlyCapability.json().erpCapabilities,
-      ['listing_stock_write_v1', 'user_product_stock_write_v1']);
-    assert.deepEqual(priceOnlyCapability.json().erpWriteGates, { stock: false, price: false });
+      ['erp_snapshot_authority_v1', 'listing_publish_preview_v1', 'listing_publish_v1',
+        'listing_stock_write_v1', 'user_product_stock_write_v1']);
+    assert.deepEqual(priceOnlyCapability.json().erpWriteGates, { stock: false, price: false, publish: false });
 
     for (const [path, method] of [
       ['/mercado-livre/settings', 'PATCH'],
@@ -190,5 +199,37 @@ test('a chave ERP autoriza consultas GET selecionadas e não revela configuraç�
     else process.env.MDV_ERP_STOCK_WRITE_ENABLED = previousWriteFlag;
     if (previousPriceWriteFlag === undefined) delete process.env.MDV_ERP_PRICE_WRITE_ENABLED;
     else process.env.MDV_ERP_PRICE_WRITE_ENABLED = previousPriceWriteFlag;
+    if (previousPublishKey === undefined) delete process.env.MDV_ERP_PUBLISH_KEY;
+    else process.env.MDV_ERP_PUBLISH_KEY = previousPublishKey;
+    if (previousPublishFlag === undefined) delete process.env.MDV_ERP_PUBLISH_ENABLED;
+    else process.env.MDV_ERP_PUBLISH_ENABLED = previousPublishFlag;
+  }
+});
+
+test('publicação ERP exige chave dedicada e gate fica fechado sem chamadas de banco', async () => {
+  const previousKey = process.env.MDV_ERP_PUBLISH_KEY;
+  const previousFlag = process.env.MDV_ERP_PUBLISH_ENABLED;
+  process.env.MDV_ERP_PUBLISH_KEY = writeKey;
+  delete process.env.MDV_ERP_PUBLISH_ENABLED;
+  const databaseCalls = [];
+  const app = require('fastify')();
+  const requireSyncKeyOrAdmin = async (_request, reply) => reply.code(401).send({ error: 'Unauthorized' });
+  registerMercadoLivreRoutes(app, { pool: { query: async (...args) => { databaseCalls.push(args); throw Error('unexpected database access'); } }, requireSyncKeyOrAdmin });
+  try {
+    for (const path of ['/mercado-livre/erp/preparation/publish', '/api/mercado-livre/erp/preparation/publish']) {
+      const missingKey = await app.inject({ method: 'POST', url: path, payload: {} });
+      assert.equal(missingKey.statusCode, 401);
+      const generalKey = await app.inject({ method: 'POST', url: path, headers: { 'x-erp-write-key': writeKey }, payload: {} });
+      assert.equal(generalKey.statusCode, 401);
+      const dedicatedKey = await app.inject({ method: 'POST', url: path, headers: { 'x-erp-publish-key': writeKey }, payload: {} });
+      assert.equal(dedicatedKey.statusCode, 503);
+    }
+    assert.equal(databaseCalls.length, 0);
+  } finally {
+    await app.close();
+    if (previousKey === undefined) delete process.env.MDV_ERP_PUBLISH_KEY;
+    else process.env.MDV_ERP_PUBLISH_KEY = previousKey;
+    if (previousFlag === undefined) delete process.env.MDV_ERP_PUBLISH_ENABLED;
+    else process.env.MDV_ERP_PUBLISH_ENABLED = previousFlag;
   }
 });

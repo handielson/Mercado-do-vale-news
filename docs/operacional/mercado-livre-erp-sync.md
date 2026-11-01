@@ -7,7 +7,15 @@ A integração de leitura usa `MERCADO_LIVRE_ERP_READ_KEY`. O GET autenticado de
 - `MDV_ERP_PRICE_WRITE_ENABLED` não habilita preço enquanto a API oficial standard não estiver disponível; o servidor mantém esse gate desligado.
 - `MDV_ERP_STOCK_WRITE_ENABLED=1` anuncia `listing_stock_write_v1` e `user_product_stock_write_v1` e protege as rotas de estoque.
 
-As flags permanecem `0` em implantação seletiva padrão. A chave dedicada não substitui as flags. O catálogo e as consultas do ERP continuam sem projeção de saldo local do Mercado do Vale. As capacidades de estoque aparecem no contrato mesmo com `erpWriteGates.stock=false`; assim, o ERP distingue suporte de código de autorização operacional.
+As flags permanecem `0` em implantação seletiva padrão, inclusive `MDV_ERP_PUBLISH_ENABLED`. A chave dedicada não substitui as flags. O catálogo e as consultas do ERP continuam sem projeção de saldo local do Mercado do Vale. As capacidades de estoque aparecem no contrato mesmo com `erpWriteGates.stock=false`; assim, o ERP distingue suporte de código de autorização operacional.
+
+## Preparação de novos anúncios com dados do ERP
+
+O contrato dedicado usa `POST /mercado-livre/erp/preparation/preview` autenticado por `X-ERP-Read-Key` e `POST /mercado-livre/erp/preparation/publish` autenticado por `X-ERP-Publish-Key`. O endpoint autenticado de configurações anuncia `erp_snapshot_authority_v1`, `listing_publish_preview_v1` e `listing_publish_v1` quando o código dessas rotas está presente; isso não liga a publicação. `erpWriteGates.publish` só fica verdadeiro quando `MDV_ERP_PUBLISH_ENABLED=1` e uma chave dedicada de 32–256 caracteres está configurada.
+
+O snapshot validado fornece ao anúncio preço, custo e quantidade do ERP, identifica o produto do ERP e precisa corresponder ao SKU e aos campos confirmados no rascunho. A quantidade do anúncio é montada a partir desse snapshot. A implementação não consulta o saldo do produto no Mercado do Vale para decidir preço ou quantidade e não grava seu estoque. A prévia consulta o validador oficial `POST /items/validate` e as tarifas do Mercado Livre, sem criar anúncio. A publicação, quando habilitada e confirmada em etapa futura, cria o anúncio no Mercado Livre e registra somente o vínculo do anúncio no catálogo local; o gate permanece desligado durante a migração.
+
+Fonte oficial da validação prévia: [Validador de publicações](https://developers.mercadolivre.com.br/pt_br/tendencias/validador-de-publicacoes).
 
 ## Preço
 

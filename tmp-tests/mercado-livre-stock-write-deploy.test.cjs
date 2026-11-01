@@ -10,6 +10,7 @@ test('deploy do Mercado Livre mantém escrita de estoque desligada por padrão',
   assert.deepEqual(mercadoLivreStockWriteDeployEnv(READ_ONLY_ARGS, {}), {
     MDV_ERP_STOCK_WRITE_ENABLED: '0',
     MDV_ERP_PRICE_WRITE_ENABLED: '0',
+    MDV_ERP_PUBLISH_ENABLED: '0',
   });
 });
 
@@ -34,6 +35,7 @@ test('habilitação explícita escreve somente a chave dedicada e o flag de esto
     MDV_ERP_WRITE_KEY: key,
     MDV_ERP_STOCK_WRITE_ENABLED: '1',
     MDV_ERP_PRICE_WRITE_ENABLED: '0',
+    MDV_ERP_PUBLISH_ENABLED: '0',
   });
 });
 
@@ -54,4 +56,11 @@ test('deploy padrão não exige nem instala a chave de escrita', () => {
     .split("if (process.argv.includes('--central-printing-only'))")[0];
   assert.match(section, /\.\.\.mercadoLivreStockWriteEnv/);
   assert.match(source, /mercadoLivreStockWriteDeployEnv\(process\.argv, process\.env\)/);
+});
+
+test('deploy seletivo mantém publicação do ERP desligada mesmo com chave de publicação presente', () => {
+  const key = 'c'.repeat(48);
+  const result = mercadoLivreStockWriteDeployEnv(READ_ONLY_ARGS, { MDV_ERP_PUBLISH_KEY: key });
+  assert.equal(result.MDV_ERP_PUBLISH_ENABLED, '0');
+  assert.equal(result.MDV_ERP_PUBLISH_KEY, undefined);
 });

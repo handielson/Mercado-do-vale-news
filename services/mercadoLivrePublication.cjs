@@ -188,6 +188,22 @@ function createFileJournal(directory = process.env.MERCADO_LIVRE_PUBLICATION_DIR
   };
 }
 
+function validateErpSnapshot(body) {
+  const snapshot=body?.erpSnapshot,draft=body?.draft,uuid=/^[a-f0-9-]{36}$/i;
+  if(!object(snapshot) || !uuid.test(snapshot.productId || '') || !uuid.test(draft?.productId || '') ||
+     typeof snapshot.sku!=='string' || snapshot.sku.length<1 || snapshot.sku.length>120 ||
+     !Number.isSafeInteger(snapshot.priceCents) || snapshot.priceCents<1 || snapshot.priceCents>1_000_000_000_000 ||
+     !Number.isSafeInteger(snapshot.costCents) || snapshot.costCents<1 || snapshot.costCents>1_000_000_000_000 ||
+     !Number.isSafeInteger(snapshot.quantity) || snapshot.quantity<1 || snapshot.quantity>1_000_000_000 ||
+     typeof snapshot.capturedAt!=='string' ||
+     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(snapshot.capturedAt)) throw fail('Snapshot do ERP inválido.',400);
+  const capturedAt=Date.parse(snapshot.capturedAt),age=Date.now()-capturedAt;
+  if(!Number.isFinite(capturedAt) || age>300_000 || age< -30_000) throw fail('Snapshot do ERP expirado ou com data inválida. Recarregue o produto.');
+  if(snapshot.sku!==draft.sku || draft.fields?.priceCents?.value!==snapshot.priceCents ||
+     draft.fields?.quantity?.value!==snapshot.quantity) throw fail('SKU, preço ou quantidade do rascunho diverge do ERP.',409);
+  return snapshot;
+}
+
 function createPublicationHandlers({pool,settings,request,listingRows,journal=createFileJournal()}) {
   const snapshots=new Map();
   const account = async () => { const s=await settings(); if(!/^\d+$/.test(String(s.user_id || ''))) throw fail('Conecte a conta Mercado Livre.'); const p=await request(`/users/${s.user_id}`); if(String(p.id)!==String(s.user_id)) throw fail('Conta não corresponde à conexão.'); return {sellerId:String(p.id),nickname:p.nickname,mode:modeOf(p)}; };
@@ -212,11 +228,15 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
   };
   const catalog = async () => { const [rows]=await pool.query(`SELECT ${PRODUCT_COLUMNS} FROM products ORDER BY sku,id`); return rows.map(publicProduct); };
   const categoryData = async id => { if(!/^MLB\d+$/.test(id)) throw fail('Categoria inválida.',400); const [category,attributes]=await Promise.all([request(`/categories/${id}`),request(`/categories/${id}/attributes`)]); return {category,attributes}; };
-  const live = async body => {
+  const live = async (body,erpSnapshot=null) => {
     const a=await account(); if(body.sellerId!==a.sellerId) throw fail('Conta mudou. Recarregue o catálogo.');
     const id=body.draft?.productId; if(!/^[a-f0-9-]{36}$/i.test(id || '')) throw fail('Produto inválido.',400);
-    const [products]=await pool.query(`SELECT ${PRODUCT_COLUMNS} FROM products WHERE id=?`,[id]); if(!products.length) throw fail('Produto não encontrado.');
-    const product=products[0]; const [sameSku]=await pool.query('SELECT id FROM products WHERE sku=?',[product.sku]); if(sameSku.length!==1) throw fail('SKU local ambíguo.');
+    const liveColumns=erpSnapshot?PRODUCT_COLUMNS.replace(',stock_quantity,status', ',status'):PRODUCT_COLUMNS;
+    const [products]=await pool.query(`SELECT ${liveColumns} FROM products WHERE id=?`,[id]); if(!products.length) throw fail('Produto não encontrado.');
+    const catalogProduct=products[0];
+    if(erpSnapshot && erpSnapshot.sku!==catalogProduct.sku) throw fail('SKU do snapshot ERP diverge do produto vinculado.',409);
+    const product=erpSnapshot?{...catalogProduct,stock_quantity:erpSnapshot.quantity}:catalogProduct;
+    const [sameSku]=await pool.query('SELECT id FROM products WHERE sku=?',[product.sku]); if(sameSku.length!==1) throw fail('SKU local ambíguo.');
     const [links]=await pool.query('SELECT item_id FROM mercado_livre_products WHERE product_id=? OR seller_sku=?',[id,product.sku]);
     if(links.length) throw fail('Produto já vinculado. Revise o anúncio existente.');
     const listings=await inventory(a.sellerId); if(listings.some(l=>l.sku===product.sku)) throw fail('SKU já anunciado, inclusive pausado ou encerrado.');
@@ -225,18 +245,21 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
     return {...a,product,payload};
   };
   const validate = payload => request('/items/validate',{method:'POST',body:JSON.stringify(payload)});
-  const priceFor = async (body,chosenPriceCents) => {
+  const priceFor = async (body,chosenPriceCents,erpSnapshot=null) => {
     const a=await account(); if(body.sellerId!==a.sellerId) throw fail('Conta mudou. Recarregue o catálogo.');
     const draft=body.draft,id=draft?.productId;
     if(!/^[a-f0-9-]{36}$/i.test(id || '')) throw fail('Produto inválido.',400);
-    const [rows]=await pool.query('SELECT id,sku,price_cost,weight_kg,dimensions FROM products WHERE id=?',[id]);
+    const pricingColumns=erpSnapshot?'id,sku,weight_kg,dimensions':'id,sku,price_cost,weight_kg,dimensions';
+    const [rows]=await pool.query(`SELECT ${pricingColumns} FROM products WHERE id=?`,[id]);
     if(!rows[0] || rows[0].sku!==draft.sku) throw fail('Produto/SKU mudou.');
     const commercial=draft.fields?.commercialPolicy?.value,categoryId=draft.fields?.categoryId?.value;
     if(!/^MLB\d+$/.test(categoryId || '') || !['gold_special','gold_pro'].includes(commercial?.listingTypeId) || !['me2','custom'].includes(commercial?.shipping?.mode)) throw fail('Defina categoria, tipo do anúncio e modo de envio antes de calcular.');
     const policy=pricingPolicy(chosenPriceCents===undefined ? (body.pricingPolicy || commercial.pricing) : commercial.pricing);
     const measures=catalogMeasures(rows[0]);
     if(measures.grams) policy.billableWeightGrams=measures.grams;
-    const pricing=await calculatePrice(Number(rows[0].price_cost),policy,async price=>{
+    if(erpSnapshot && erpSnapshot.sku!==rows[0].sku) throw fail('SKU do snapshot ERP diverge do produto vinculado.',409);
+    const costCents=erpSnapshot?erpSnapshot.costCents:Number(rows[0].price_cost);
+    const pricing=await calculatePrice(costCents,policy,async price=>{
       const query=new URLSearchParams({category_id:categoryId,price:(price/100).toFixed(2),currency_id:'BRL',listing_type_id:commercial.listingTypeId,shipping_mode:commercial.shipping.mode,logistic_type:policy.logisticType,billable_weight:String(policy.billableWeightGrams)});
       const resource=`/sites/MLB/listing_prices?${query}`;
       return officialFees(await request(resource),commercial.listingTypeId,`https://api.mercadolibre.com${resource}`);
@@ -249,7 +272,7 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
       const latest=await settings(); if(String(latest.user_id)!==a.sellerId) throw fail('Conta mudou durante a consulta.');
       return {schema:'mdv.ml.catalog.v1',...a,capturedAt,complete:true,products,links,listings};
   };
-  return {
+  const handlers={
     async discoverCategory(req) {
       const title=req.body?.title;
       if(typeof title!=='string' || title.trim().length<5 || title.length>300)throw fail('Preencha o nome do produto para localizar a categoria.',400);
@@ -335,27 +358,49 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
     category: req => categoryData(req.params.categoryId),
     pricing: req => priceFor(req.body || {}),
     async preview(req) { const body=req.body || {},ctx=await live(body); const pricing=await priceFor(body,body.draft.fields.priceCents.value); const validation=await validate(ctx.payload); return {payload:ctx.payload,pricing,validation,sellerId:ctx.sellerId,mode:ctx.mode}; },
-    async publish(req) {
-      const body=req.body || {}; if(body.confirmPublication!==true) throw fail('Confirme a publicação após revisar a prévia.',400);
+    async previewErp(req) {
+      const body=req.body || {},snapshot=validateErpSnapshot(body),ctx=await live(body,snapshot);
+      const pricing=await priceFor(body,snapshot.priceCents,snapshot),validation=await validate(ctx.payload);
+      return {payload:ctx.payload,pricing,validation,sellerId:ctx.sellerId,mode:ctx.mode,
+        erpSnapshot:{productId:snapshot.productId,sku:snapshot.sku,priceCents:snapshot.priceCents,quantity:snapshot.quantity}};
+    },
+    async publish(req,erpSnapshot=null) {
+      const body=req.body || {};
+      if(!erpSnapshot && body.erpSnapshot!==undefined) throw fail('Use a rota dedicada da publicação originada no ERP.',400);
+      if(erpSnapshot) erpSnapshot=validateErpSnapshot(body);
+      if(body.confirmPublication!==true) throw fail('Confirme a publicação após revisar a prévia.',400);
       const id=body.draft?.productId; if(!/^[a-f0-9-]{36}$/i.test(id || '') || !/^\d+$/.test(body.sellerId || '')) throw fail('Publicação inválida.',400);
-      const key=`${body.sellerId}:${id}`,lock=`ml-publish-${body.sellerId}`;
+      const key=`${body.sellerId}:${erpSnapshot?.productId || id}`,lock=`ml-publish-${body.sellerId}`;
       const connection=await pool.getConnection(); let locked=false;
       try {
         const [locks]=await connection.query('SELECT GET_LOCK(?,0) AS acquired',[lock]); locked=Number(locks[0]?.acquired)===1; if(!locked) throw fail('Outra publicação está em andamento. Aguarde.');
         if(String((await settings()).user_id)!==body.sellerId) throw fail('Conta mudou. Recarregue a integração.');
         let state=await journal.read(key);
         if(body.resumeOnly===true && !state) throw fail('Não há envio anterior para retomar. Valide a prévia antes de publicar.');
+        if(state && Boolean(erpSnapshot)!==Boolean(state.erpSnapshot)) throw fail('Existe um envio anterior por outro fluxo. Confira a conta antes de continuar.',409);
+        if(erpSnapshot && state?.erpSnapshot &&
+           (state.erpSnapshot.productId!==erpSnapshot.productId || state.erpSnapshot.sku!==erpSnapshot.sku ||
+            state.erpSnapshot.priceCents!==erpSnapshot.priceCents || state.erpSnapshot.quantity!==erpSnapshot.quantity ||
+            state.erpSnapshot.costCents!==erpSnapshot.costCents)) throw fail('O snapshot ERP diverge do envio anterior. Confira o anúncio antes de continuar.',409);
         if(state?.status==='complete') return {itemId:state.itemId,alreadyPublished:true};
         if(state && !state.itemId) throw fail('Envio anterior sem resposta conclusiva. Confira a conta antes de tentar outro anúncio.');
         if(!state) {
-          const ctx=await live(body); await validate(ctx.payload);
-          const pricing=await priceFor(body,body.draft.fields.priceCents.value);
+          const ctx=await live(body,erpSnapshot); await validate(ctx.payload);
+          const pricing=await priceFor(body,body.draft.fields.priceCents.value,erpSnapshot);
           // Repeat account and stock immediately before the irreversible request.
           if(String((await settings()).user_id)!==ctx.sellerId) throw fail('Conta mudou antes do envio.');
-          const [stock]=await pool.query('SELECT sku,stock_quantity,status,price_cost FROM products WHERE id=?',[id]);
-          if(stock[0]?.sku!==ctx.product.sku || stock[0]?.status!=='active' || stock[0]?.stock_quantity==null || !Number.isSafeInteger(Number(stock[0]?.stock_quantity)) || Number(stock[0]?.stock_quantity)<ctx.payload.available_quantity) throw fail('Produto/estoque mudou antes do envio.');
-          if(Number(stock[0]?.price_cost)!==pricing.costCents) throw fail('Custo mudou antes do envio. Recalcule o preço.');
-          state={status:'sending',sellerId:ctx.sellerId,productId:id,sku:ctx.product.sku,pricing,description:body.draft.fields.description.value,createdAt:new Date().toISOString()};
+          if(erpSnapshot) {
+            const [catalog]=await pool.query('SELECT sku,status FROM products WHERE id=?',[id]);
+            if(catalog[0]?.sku!==ctx.product.sku || catalog[0]?.status!=='active') throw fail('Produto ou SKU mudou antes do envio.');
+          } else {
+            const [stock]=await pool.query('SELECT sku,stock_quantity,status,price_cost FROM products WHERE id=?',[id]);
+            if(stock[0]?.sku!==ctx.product.sku || stock[0]?.status!=='active' || stock[0]?.stock_quantity==null || !Number.isSafeInteger(Number(stock[0]?.stock_quantity)) || Number(stock[0]?.stock_quantity)<ctx.payload.available_quantity) throw fail('Produto/estoque mudou antes do envio.');
+            if(Number(stock[0]?.price_cost)!==pricing.costCents) throw fail('Custo mudou antes do envio. Recalcule o preço.');
+          }
+          if(erpSnapshot) validateErpSnapshot(body);
+          state={status:'sending',sellerId:ctx.sellerId,productId:id,sku:ctx.product.sku,pricing,
+            ...(erpSnapshot?{erpSnapshot:{productId:erpSnapshot.productId,sku:erpSnapshot.sku,priceCents:erpSnapshot.priceCents,quantity:erpSnapshot.quantity,costCents:erpSnapshot.costCents}}:{}),
+            description:body.draft.fields.description.value,createdAt:new Date().toISOString()};
           await journal.write(key,state); // A crash or timeout now cannot trigger an automatic second POST.
           const result=await request('/items',{method:'POST',body:JSON.stringify(ctx.payload)});
           if(!/^MLB\d+$/.test(result.id || '') || String(result.seller_id)!==ctx.sellerId) throw fail('Resposta inconclusiva do envio. Confira a conta.');
@@ -384,5 +429,7 @@ function createPublicationHandlers({pool,settings,request,listingRows,journal=cr
       finally { if(locked) await connection.query('SELECT RELEASE_LOCK(?)',[lock]).catch(()=>{}); connection.release(); }
     },
   };
+  handlers.publishErp=req=>handlers.publish(req,validateErpSnapshot(req.body || {}));
+  return handlers;
 }
 module.exports={buildPublication,createPublicationHandlers,createFileJournal,modeOf,publicProduct,reusableAttributes,pricingPolicy,pricingBreakdown,calculatePrice,officialFees,catalogMeasures};

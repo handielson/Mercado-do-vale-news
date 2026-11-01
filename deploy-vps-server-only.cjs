@@ -945,7 +945,7 @@ async function main() {
     await exec(`mv ${publicationTarget}.next.cjs ${publicationTarget}`);
     await exec(`mv ${staged} ${target}`);
     console.log((await exec('pm2 restart mdv-api')).trim());
-    console.log(`Mercado Livre read key configured; ERP stock write ${mercadoLivreStockWriteEnv.MDV_ERP_STOCK_WRITE_ENABLED === '1' ? 'explicitly enabled' : 'disabled'}; ERP price write ${mercadoLivreStockWriteEnv.MDV_ERP_PRICE_WRITE_ENABLED === '1' ? 'explicitly enabled' : 'disabled'}; backup: ${backupDir}`);
+    console.log(`Mercado Livre read key configured; ERP publication disabled; ERP stock write ${mercadoLivreStockWriteEnv.MDV_ERP_STOCK_WRITE_ENABLED === '1' ? 'explicitly enabled' : 'disabled'}; ERP price write ${mercadoLivreStockWriteEnv.MDV_ERP_PRICE_WRITE_ENABLED === '1' ? 'explicitly enabled' : 'disabled'}; backup: ${backupDir}`);
     conn.end();
     return;
   }
