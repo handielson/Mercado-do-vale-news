@@ -37,23 +37,15 @@ test('habilitação explícita escreve somente a chave dedicada e o flag de esto
   });
 });
 
-test('preço exige flag separado e nunca liga escrita de estoque junto', () => {
+test('deploy bloqueia preço enquanto a API standard oficial não estiver disponível', () => {
   const key = 'b'.repeat(48);
   assert.throws(() => mercadoLivreStockWriteDeployEnv(
     ['node', 'deploy-vps-server-only.cjs', '--enable-erp-price-write'],
     { MDV_ERP_WRITE_KEY: key }), /requires --mercado-livre-only/);
-  assert.deepEqual(mercadoLivreStockWriteDeployEnv(
-    [...READ_ONLY_ARGS, '--enable-erp-price-write'], { MDV_ERP_WRITE_KEY: key }), {
-    MDV_ERP_WRITE_KEY: key,
-    MDV_ERP_STOCK_WRITE_ENABLED: '0',
-    MDV_ERP_PRICE_WRITE_ENABLED: '1',
-  });
-  assert.deepEqual(mercadoLivreStockWriteDeployEnv(
-    [...READ_ONLY_ARGS, '--enable-erp-stock-write', '--enable-erp-price-write'], { MDV_ERP_WRITE_KEY: key }), {
-    MDV_ERP_WRITE_KEY: key,
-    MDV_ERP_STOCK_WRITE_ENABLED: '1',
-    MDV_ERP_PRICE_WRITE_ENABLED: '1',
-  });
+  assert.throws(() => mercadoLivreStockWriteDeployEnv(
+    [...READ_ONLY_ARGS, '--enable-erp-price-write'], { MDV_ERP_WRITE_KEY: key }), /standard-price API/);
+  assert.throws(() => mercadoLivreStockWriteDeployEnv(
+    [...READ_ONLY_ARGS, '--enable-erp-stock-write', '--enable-erp-price-write'], { MDV_ERP_WRITE_KEY: key }), /standard-price API/);
 });
 
 test('deploy padrão não exige nem instala a chave de escrita', () => {

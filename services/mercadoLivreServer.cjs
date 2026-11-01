@@ -10,6 +10,10 @@ const ERP_STOCK_WRITE_CAPABILITIES = Object.freeze([
   'user_product_stock_write_v1',
 ]);
 const ERP_PRICE_WRITE_CAPABILITIES = Object.freeze(['listing_price_write_v1']);
+// The official standard-price endpoint is still unavailable. Since 2026-03-18,
+// PUT /items either rejects a price-only request or ignores price when mixed
+// with other fields, so this legacy route must remain disabled until support lands.
+const ERP_PRICE_STANDARD_ENDPOINT_AVAILABLE = false;
 let refreshPromise = null;
 
 function erpWriteKeyMatches(candidate, expected) {
@@ -33,7 +37,8 @@ function isErpStockWriteEnabled() {
 }
 
 function isErpPriceWriteEnabled() {
-  return process.env.MDV_ERP_PRICE_WRITE_ENABLED === '1'
+  return ERP_PRICE_STANDARD_ENDPOINT_AVAILABLE
+    && process.env.MDV_ERP_PRICE_WRITE_ENABLED === '1'
     && isErpWriteKeyConfigured(process.env.MDV_ERP_WRITE_KEY);
 }
 
@@ -876,9 +881,13 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         userId: String(settings.user_id || ''),
         nickname: String(settings.nickname || '').slice(0, 100),
         erpCapabilities: [
-          ...(isErpStockWriteEnabled() ? ERP_STOCK_WRITE_CAPABILITIES : []),
+          ...ERP_STOCK_WRITE_CAPABILITIES,
           ...(isErpPriceWriteEnabled() ? ERP_PRICE_WRITE_CAPABILITIES : []),
         ],
+        erpWriteGates: {
+          stock: isErpStockWriteEnabled(),
+          price: isErpPriceWriteEnabled(),
+        },
       };
     }
     return safeStatus(settings);

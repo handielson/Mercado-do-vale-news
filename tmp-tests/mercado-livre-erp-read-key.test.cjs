@@ -131,24 +131,30 @@ test('a chave ERP autoriza consultas GET selecionadas e não revela configuraç�
     for (const path of ['/mercado-livre/settings', '/api/mercado-livre/settings']) {
       const response = await app.inject({ method: 'GET', url: path, headers: { 'x-erp-read-key': key } });
       assert.equal(response.statusCode, 200);
-      assert.deepEqual(response.json(), { connected: true, userId: '7', nickname: 'Conta de teste', erpCapabilities: [] });
+      assert.deepEqual(response.json(), { connected: true, userId: '7', nickname: 'Conta de teste',
+        erpCapabilities: ['listing_stock_write_v1', 'user_product_stock_write_v1'],
+        erpWriteGates: { stock: false, price: false } });
       assert(!response.body.includes('private-'));
     }
 
     process.env.MDV_ERP_WRITE_KEY = writeKey;
     const stillDisabled = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
-    assert.deepEqual(stillDisabled.json().erpCapabilities, []);
+    assert.deepEqual(stillDisabled.json().erpCapabilities, ['listing_stock_write_v1', 'user_product_stock_write_v1']);
+    assert.deepEqual(stillDisabled.json().erpWriteGates, { stock: false, price: false });
     process.env.MDV_ERP_STOCK_WRITE_ENABLED = '1';
     const enabledByExplicitFlag = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
     assert.deepEqual(enabledByExplicitFlag.json().erpCapabilities, ['listing_stock_write_v1', 'user_product_stock_write_v1']);
-    assert.equal(enabledByExplicitFlag.json().erpCapabilities.includes('listing_price_write_v1'), false);
+    assert.deepEqual(enabledByExplicitFlag.json().erpWriteGates, { stock: true, price: false });
     process.env.MDV_ERP_PRICE_WRITE_ENABLED = '1';
     const enabledPriceCapability = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
     assert.deepEqual(enabledPriceCapability.json().erpCapabilities,
-      ['listing_stock_write_v1', 'user_product_stock_write_v1', 'listing_price_write_v1']);
+      ['listing_stock_write_v1', 'user_product_stock_write_v1']);
+    assert.deepEqual(enabledPriceCapability.json().erpWriteGates, { stock: true, price: false });
     delete process.env.MDV_ERP_STOCK_WRITE_ENABLED;
     const priceOnlyCapability = await app.inject({ method: 'GET', url: '/api/mercado-livre/settings', headers: { 'x-erp-read-key': key } });
-    assert.deepEqual(priceOnlyCapability.json().erpCapabilities, ['listing_price_write_v1']);
+    assert.deepEqual(priceOnlyCapability.json().erpCapabilities,
+      ['listing_stock_write_v1', 'user_product_stock_write_v1']);
+    assert.deepEqual(priceOnlyCapability.json().erpWriteGates, { stock: false, price: false });
 
     for (const [path, method] of [
       ['/mercado-livre/settings', 'PATCH'],
