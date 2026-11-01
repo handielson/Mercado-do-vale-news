@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.728-erp-ml-price-capability",
+  "version": "v1.2.729-erp-ml-price-read-diagnostic",
   "date": "2026-11-01",
   "status": "pending",
   "branch": "main",
-  "tag": "v1.2.728-erp-ml-price-capability",
-  "release_vps": "/var/www/mdv-site/releases/20261101-012920-erp-ml-publish-gate",
+  "tag": "v1.2.729-erp-ml-price-read-diagnostic",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "published",
-    "module": "services/mercadoLivreServer.cjs — capability de preço anunciada; gate de escrita desligado",
+    "status": "pending",
+    "module": "services/mercadoLivreListingPrice.cjs e services/mercadoLivreServer.cjs — diagnóstico sanitizado da rota GET de preço; todas as escritas desligadas",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "A integração anuncia suporte à atualização segura de preço padrão via ERP. Gates de publicação, preço e estoque permanecem desligados.",
+  "summary": "A rota GET de preço retorna apenas etapa, status HTTP e código seguro da falha remota. Gates de publicação, preço e estoque permanecem desligados.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -28,28 +28,27 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "publicada; capability de preço presente e gates de publicação, preço e estoque desligados",
-    "site_manifest": "pendente; VERSION.json v1.2.728-erp-ml-price-capability"
+    "mercado_livre_api": "pendente; diagnóstico sanitizado somente leitura; gates de escrita desligados",
+    "site_manifest": "pendente; VERSION.json v1.2.729-erp-ml-price-read-diagnostic"
   },
   "site_source_base": "8f4e3196",
   "changed_files": [
-    "scripts/mercado-livre-stock-write-deploy.cjs",
+    "services/mercadoLivreListingPrice.cjs",
     "services/mercadoLivreServer.cjs",
-    "tmp-tests/mercado-livre-erp-read-key.test.cjs",
-    "tmp-tests/mercado-livre-listing-stock-write.test.cjs",
-    "tmp-tests/mercado-livre-stock-write-deploy.test.cjs",
+    "tmp-tests/mercado-livre-listing-price.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-01-v1.2.728-erp-ml-price-capability.md"
+    "docs/versoes/2026-11-01-v1.2.729-erp-ml-price-read-diagnostic.md"
   ],
   "validations": [
+    "node --check services/mercadoLivreListingPrice.cjs",
     "node --check services/mercadoLivreServer.cjs",
-    "node --check scripts/mercado-livre-stock-write-deploy.cjs",
-    "npm.cmd run test:mercado-livre (104 testes + contrato estático)",
-    "git diff --cached --check (arquivos da release)",
-    "npm.cmd run build",
-    "GET /status HTTP 200 com MySQL OK",
-    "GET /api/mercado-livre/settings autenticado confirma listing_price_write_v1 e três gates false"
+    "npm.cmd run test:mercado-livre (106 aprovados + contrato estático)",
+    "Python test_mercado_livre_bridge (60 aprovados)",
+    "git diff --check (aprovado)",
+    "npm.cmd run build (aprovado; pré-build validou segurança n8n e ausência de runtime Supabase)",
+    "GET /status HTTP 200 com MySQL OK (pendente após publicação)",
+    "GET autenticado de preço recebe diagnóstico e confirma gates false (pendente após publicação)"
   ],
   "android_entregas": {
     "version_name": "1.1.5",

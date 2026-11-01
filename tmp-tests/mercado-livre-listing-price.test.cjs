@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createListingPriceHandlers, standardPrice, hasQuantityPricing, isAutomationNotFound } = require('../services/mercadoLivreListingPrice.cjs');
+const { createListingPriceHandlers, standardPrice, hasQuantityPricing, isAutomationNotFound,
+  safeReadFailure } = require('../services/mercadoLivreListingPrice.cjs');
 const parentId = 'ba0dd37d-5959-4d8b-9808-90024f619bcb';
 const req = (extra = {}) => ({ params: { itemId: 'MLB123' }, query: { parentId }, body: {
   parentId, priceCents: 2685, expectedPriceCents: 2500, confirm: true, ...extra,
@@ -112,6 +113,39 @@ test('only treats the documented automation_not_found response as no automation'
     new Error('Mercado Livre API 404: {"error":"item_not_found"}'), { remoteStatus: 404 }) });
   await assert.rejects(() => handlers.update(req()), /item_not_found/);
   assert.equal(writes.length, 0);
+});
+
+test('price read diagnostics expose only a stage and safe upstream status/code', () => {
+  const error = Object.assign(new Error('Mercado Livre API 403: {"error":"forbidden","message":"private detail"}'),
+    { remoteStatus: 403 });
+  assert.deepEqual(safeReadFailure(error, '/items/MLB123/prices'), {
+    stage: 'prices', upstreamStatus: 403, upstreamCode: 'forbidden',
+  });
+  assert.deepEqual(safeReadFailure(new Error('network failure'), '/items/MLB123/sale_price?context=channel_marketplace'), {
+    stage: 'sale_price',
+  });
+});
+
+test('read handler tags the failed remote resource without exposing its raw response', async () => {
+  const error = Object.assign(new Error('Mercado Livre API 404: {"error":"item_not_found","message":"private"}'),
+    { remoteStatus: 404 });
+  const handlers = createListingPriceHandlers({
+    settings: async () => ({ user_id: '7' }),
+    pool: { query: async () => [[{ id: 'child', sku: 'OIS063B' }]] },
+    request: async (path) => {
+      if (path.endsWith('/prices')) throw error;
+      if (path.includes('/sale_price')) return { amount: 25, currency_id: 'BRL' };
+      if (path.includes('/automation')) return null;
+      return { id: 'MLB123', seller_id: '7', status: 'active', variations: [] };
+    },
+  });
+  await assert.rejects(() => handlers.read(req()), (caught) => {
+    assert.deepEqual(caught.priceReadDiagnostic, {
+      stage: 'prices', upstreamStatus: 404, upstreamCode: 'item_not_found',
+    });
+    assert.match(caught.message, /private/);
+    return true;
+  });
 });
 
 test('already-current target is idempotent after a lost response', async () => {

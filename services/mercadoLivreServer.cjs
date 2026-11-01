@@ -1138,7 +1138,13 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   const presentListingError = handler => async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     try { return await handler(req); }
-    catch (error) { return reply.code(error.statusCode || 502).send({ error: error.statusCode ? error.message : 'Consulta ao Mercado Livre indisponível. Confira a conexão; se a busca expirou, reinicie a consulta.' }); }
+    catch (error) {
+      const body = { error: error.statusCode ? error.message : 'Consulta ao Mercado Livre indisponível. Confira a conexão; se a busca expirou, reinicie a consulta.' };
+      if (error.priceReadDiagnostic && typeof error.priceReadDiagnostic === 'object') {
+        body.diagnostic = error.priceReadDiagnostic;
+      }
+      return reply.code(error.statusCode || 502).send(body);
+    }
   };
   const linkProduct = presentListingError(listingHandlers.link);
   const listingPrices = createListingPriceHandlers({ pool, settings: () => loadSettings(pool),

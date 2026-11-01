@@ -19,6 +19,31 @@ function isAutomationNotFound(error) {
   }
 }
 
+function safeReadFailure(error, resource) {
+  const path = String(resource || '').split('?')[0];
+  const stage = /\/pricing-automation\//.test(path) ? 'price_automation' :
+    /\/sale_price$/.test(path) ? 'sale_price' :
+    /\/prices$/.test(path) ? 'prices' :
+    /\/items\/MLB\d+$/.test(path) ? 'item' : 'unknown';
+  const remoteStatus = Number.isInteger(error?.remoteStatus) && error.remoteStatus >= 400 &&
+    error.remoteStatus <= 599 ? error.remoteStatus : null;
+  let remoteCode = '';
+  if (typeof error?.message === 'string') {
+    const separator = error.message.indexOf(':');
+    if (separator >= 0) {
+      try {
+        const body = JSON.parse(error.message.slice(separator + 1).trim());
+        const candidate = body?.error;
+        if (typeof candidate === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/i.test(candidate)) {
+          remoteCode = candidate;
+        }
+      } catch {}
+    }
+  }
+  return { stage, ...(remoteStatus === null ? {} : { upstreamStatus: remoteStatus }),
+    ...(remoteCode ? { upstreamCode: remoteCode } : {}) };
+}
+
 function standardPrice(data) {
   if (!Array.isArray(data?.prices) || data.prices.length > 100) {
     throw fail('A resposta de preços está ausente ou fora do limite esperado.');
@@ -69,14 +94,21 @@ function createListingPriceHandlers({ pool, settings, request }) {
       JOIN products p ON p.id COLLATE utf8mb4_unicode_ci=ml.product_id COLLATE utf8mb4_unicode_ci
       WHERE ml.item_id=? AND (p.id=? OR p.parent_id=?)`, [itemId, parentId, parentId]);
     if (!linked.length) throw fail('Este anúncio não está vinculado à família selecionada.', 404);
-    const item = await request(`/items/${itemId}?include_attributes=all`);
+    const readRemote = async (resource, options) => {
+      try { return await request(resource, options); }
+      catch (error) {
+        error.priceReadDiagnostic = safeReadFailure(error, resource);
+        throw error;
+      }
+    };
+    const item = await readRemote(`/items/${itemId}?include_attributes=all`);
     if (String(item.seller_id) !== seller || String(item.id || '').toUpperCase() !== itemId) {
       throw fail('Anúncio não pertence à conta conectada.');
     }
     const [prices, salePrice, automation] = await Promise.all([
-      request(`/items/${itemId}/prices`, { headers: { 'show-all-prices': 'true' } }),
-      request(`/items/${itemId}/sale_price?context=channel_marketplace`),
-      request(`/pricing-automation/items/${itemId}/automation`).catch(error => {
+      readRemote(`/items/${itemId}/prices`, { headers: { 'show-all-prices': 'true' } }),
+      readRemote(`/items/${itemId}/sale_price?context=channel_marketplace`),
+      readRemote(`/pricing-automation/items/${itemId}/automation`).catch(error => {
         if (isAutomationNotFound(error)) return null;
         throw error;
       }),
@@ -198,4 +230,5 @@ function createListingPriceHandlers({ pool, settings, request }) {
   return { read, update };
 }
 
-module.exports = { createListingPriceHandlers, standardPrice, hasQuantityPricing, isAutomationNotFound };
+module.exports = { createListingPriceHandlers, standardPrice, hasQuantityPricing, isAutomationNotFound,
+  safeReadFailure };

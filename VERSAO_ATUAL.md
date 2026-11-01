@@ -1,3 +1,12 @@
+# v1.2.729-erp-ml-price-read-diagnostic
+
+Data: 01/11/2026. Status: pendente de publicação. Branch: `main`. Tag: `v1.2.729-erp-ml-price-read-diagnostic`.
+API Mercado Livre: publicação da rota GET de preço com diagnóstico técnico sanitizado. Retorna somente etapa, status HTTP e código remoto em lista segura; não devolve corpo bruto, token ou dados comerciais. Gates de publicação, preço e estoque permanecem desligados.
+
+Validações locais: 106 testes da integração Mercado Livre e contrato estático aprovados, além de 60 testes do bridge. O build de produção passou. Publicações e verificação autenticada do novo diagnóstico ainda pendentes.
+
+---
+
 # v1.2.728-erp-ml-price-capability
 
 Data: 01/11/2026. Status: API publicada; manifesto do site pendente. Branch: `main`. Tag: `v1.2.728-erp-ml-price-capability`.
