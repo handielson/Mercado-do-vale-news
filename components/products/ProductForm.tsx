@@ -70,6 +70,7 @@ import { productFormDraftsService } from '../../services/productFormDrafts';
 import { isLocalCatalogPreviewRuntime } from '../../services/localCatalogPreview';
 import { Print3dRegistrationEditor } from './Print3dRegistrationEditor';
 import { assertPrint3dRegistrationAvailable, preparePrint3dRegistration, savePrint3dRegistration, copyPrint3dSetup, print3dSetupParameters, withPrint3dCost, type Print3dSetup } from '../../services/print3dRegistration';
+import { FiscalNcmCestHint } from '../fiscal/FiscalNcmCestHint';
 
 interface ProductFormProps {
     initialProductionSetup?: Print3dSetup;
@@ -2692,6 +2693,9 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                             className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                             onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^0-9]/g, ''); }}
                         />
+                    </div>
+                    <div className="md:col-span-2 rounded-md bg-slate-50 p-3">
+                        <FiscalNcmCestHint ncm={watch('ncm') || ''} cest={watch('cest') || ''} onPickCest={(code) => setValue('cest', code, { shouldDirty: true })} />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Origem da Mercadoria</label>

@@ -35,7 +35,7 @@ async function main() {
   }
   const fastify = require('fastify')();
   const env = require('dotenv').parse(fs.readFileSync(path.join(__dirname, '../.env.local')));
-  const syncKey = env.VITE_VPS_SYNC_KEY;
+  const syncKey = env.VPS_SYNC_KEY || env.SYNC_SECRET || env.VITE_VPS_SYNC_KEY;
   if (!syncKey) throw new Error('Chave do preview local não configurada.');
   const cache = new Map();
   fastify.get('/finance', async (req, reply) => {

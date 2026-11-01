@@ -19,23 +19,26 @@ const deferStylesheets = () => ({
 });
 
 export default defineConfig(({ mode }) => {
-  // Load env from .env.local directly to ensure VITE_VPS_SYNC_KEY is available
+  // Dev proxy only: le VPS_SYNC_KEY (sem prefixo VITE_) do .env.local. Nunca vai para o bundle.
   let syncKey = '';
   try {
     const envPath = path.join(process.cwd(), '.env.local');
     if (fs.existsSync(envPath)) {
       const envContent = fs.readFileSync(envPath, 'utf-8');
-      const keyMatch = envContent.match(/VITE_VPS_SYNC_KEY=(.+)/);
+      const keyMatch = envContent.match(/^\s*VPS_SYNC_KEY=(.+)$/m);
       if (keyMatch && keyMatch[1]) {
-        syncKey = keyMatch[1].trim();
-        console.log('[Vite Config] ✅ Loaded VITE_VPS_SYNC_KEY from .env.local');
+        syncKey = keyMatch[1].trim().replace(/^['"]|['"]$/g, '');
+        console.log('[Vite Config] ✅ Loaded VPS_SYNC_KEY from .env.local (dev proxy)');
       }
     }
   } catch (e) {
-    console.error('[Vite Config] ❌ Failed to load VITE_VPS_SYNC_KEY:', e.message);
+    console.error('[Vite Config] ❌ Failed to load VPS_SYNC_KEY:', e.message);
   }
 
   const env = loadEnv(mode, process.cwd(), '');
+  if (String(env.VITE_VPS_SYNC_KEY || '').trim()) {
+    throw new Error('[Vite Config] VITE_VPS_SYNC_KEY esta definido em algum .env. Variaveis VITE_ vao para o navegador: renomeie para VPS_SYNC_KEY (usado so pelo proxy de dev).');
+  }
   const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'https://www.mercadodovale.com.br';
   const shopeeApiProxyTarget = env.VITE_SHOPEE_API_PROXY_TARGET || apiProxyTarget;
   const localPreviewPort = Number(env.VITE_LOCAL_PREVIEW_API_PORT || 3101);
@@ -52,7 +55,7 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:3102',
           rewrite: pathStr => pathStr.replace(/^\/local-ai-finance/, ''),
           configure: proxy => proxy.on('proxyReq', proxyReq => {
-            const key = syncKey || env.VITE_VPS_SYNC_KEY || '';
+            const key = syncKey || env.VPS_SYNC_KEY || '';
             if (key) proxyReq.setHeader('x-sync-key', key);
           }),
         },
@@ -66,7 +69,7 @@ export default defineConfig(({ mode }) => {
           },
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq) => {
-              const key = syncKey || env.VITE_VPS_SYNC_KEY || '';
+              const key = syncKey || env.VPS_SYNC_KEY || '';
               if (key) proxyReq.setHeader('x-sync-key', key);
             });
           },
@@ -102,7 +105,7 @@ export default defineConfig(({ mode }) => {
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq, req, res) => {
               // Get the sync key (from .env.local or fallback)
-              const key = syncKey || env.VITE_VPS_SYNC_KEY || '';
+              const key = syncKey || env.VPS_SYNC_KEY || '';
               if (!key) {
                 console.warn('[Vite Proxy] x-sync-key is empty. Check .env.local');
               }

@@ -419,7 +419,7 @@ Variaveis esperadas para publicar:
 ```text
 VPS_SITE_HOST
 VPS_SITE_USER
-VPS_SITE_PASSWORD ou VPS_SITE_PRIVATE_KEY
+VPS_SITE_PRIVATE_KEY   (somente chave: desde 01/11/2026 a VPS nao aceita login por senha; nao usar VPS_SITE_PASSWORD)
 VPS_SITE_ROOT=/var/www/mdv-site
 ```
 

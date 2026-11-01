@@ -115,7 +115,8 @@ function registerPrint3dShipping(fastify, { pool, loadQuote, calculateShipping, 
       const options = settled.flatMap(result => result.status === 'fulfilled' ? result.value : []).sort((a,b) => a.price_cents - b.price_cents);
       if (!options.length) return reply.code(503).send({ error: 'Não foi possível obter opções de entrega para este CEP. Tente novamente ou entre em contato.' });
       const productionDays = Math.max(0, ...quote.items.map(item => Number(item.production_days) || 0));
-      const secret = env.VPS_AUTH_SECRET || env.AUTH_SECRET || env.JWT_SECRET || env.SYNC_SECRET;
+      const authSecret = String(env.VPS_AUTH_SECRET || '').trim();
+      const secret = authSecret && authSecret !== String(env.SYNC_SECRET || '').trim() ? authSecret : null;
       const quoteToken = typeof secret === 'string' && secret.length >= 32 ? signShippingQuote({
         items: requested, quote, cep: destination, options, origin_cep: config.origin, parcel: box,
         production_days: productionDays, handling_business_days: config.handling,

@@ -102,7 +102,18 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 });
 
-const VPS_AUTH_SECRET = process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET || 'dev-vps-auth-secret';
+// Chave exclusiva para assinar tokens de login e de frete.
+// Sem fallback: nunca reutilizar o SYNC_SECRET (que ja foi exposto no front) nem uma string fixa.
+const VPS_AUTH_SECRET = (() => {
+  const secret = String(process.env.VPS_AUTH_SECRET || '').trim();
+  if (secret.length < 32) {
+    throw new Error('[auth] VPS_AUTH_SECRET ausente ou com menos de 32 caracteres. Defina uma chave propria no .env (ex.: openssl rand -hex 32). O servidor nao sobe sem ela.');
+  }
+  if (secret === String(process.env.SYNC_SECRET || '').trim()) {
+    throw new Error('[auth] VPS_AUTH_SECRET nao pode ser igual ao SYNC_SECRET. Gere uma chave separada.');
+  }
+  return secret;
+})();
 const VPS_AUTH_TOKEN_TTL_SECONDS = Number(process.env.VPS_AUTH_TOKEN_TTL_SECONDS || 60 * 60 * 24 * 30);
 const BRASILAPI_NCM_URL = 'https://brasilapi.com.br/api/ncm/v1';
 const ADMIN_NAVIGATION_LOG_LIMIT = 5000;

@@ -333,7 +333,18 @@ function startN8nBotHealthMonitorVps() {
 const MP_PIX_FEE_PCT = Number(process.env.MP_PIX_FEE_PCT || 0);
 const MP_CARD_FEE_PCT = Number(process.env.MP_CARD_FEE_PCT || 0.0499);
 
-const VPS_AUTH_SECRET = process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET || 'dev-vps-auth-secret';
+// Chave exclusiva para assinar tokens de login e de frete.
+// Sem fallback: nunca reutilizar o SYNC_SECRET (que ja foi exposto no front) nem uma string fixa.
+const VPS_AUTH_SECRET = (() => {
+  const secret = String(process.env.VPS_AUTH_SECRET || '').trim();
+  if (secret.length < 32) {
+    throw new Error('[auth] VPS_AUTH_SECRET ausente ou com menos de 32 caracteres. Defina uma chave propria no .env (ex.: openssl rand -hex 32). O servidor nao sobe sem ela.');
+  }
+  if (secret === String(process.env.SYNC_SECRET || '').trim()) {
+    throw new Error('[auth] VPS_AUTH_SECRET nao pode ser igual ao SYNC_SECRET. Gere uma chave separada.');
+  }
+  return secret;
+})();
 const VPS_AUTH_TOKEN_TTL_SECONDS = Number(process.env.VPS_AUTH_TOKEN_TTL_SECONDS || 60 * 60 * 24 * 30);
 const BRASILAPI_NCM_URL = 'https://brasilapi.com.br/api/ncm/v1';
 const ADMIN_NAVIGATION_LOG_LIMIT = 5000;
@@ -2271,6 +2282,8 @@ function isVpsProxyCustomerSelfServicePath(proxyPath, method = 'GET') {
   const pathname = proxyPath.split('?')[0] || '/';
   if (pathname === '/accountant/companies' && ['GET', 'HEAD'].includes(normalizedMethod)) return true;
   if (/^\/accountant\/companies\/[^/]+\/(?:tax-validation|revenue)$/u.test(pathname) && ['GET', 'HEAD', 'PUT'].includes(normalizedMethod)) return true;
+  if (/^\/accountant\/fiscal-catalog\/(?:info|ncm|ncm\/[^/]+|cest\/[^/]+)$/u.test(pathname) && ['GET', 'HEAD'].includes(normalizedMethod)) return true; // MDV-FISCAL-TAX-PROFILES
+  if (/^\/accountant\/companies\/[^/]+\/(?:tax-profiles|fiscal-products)(?:\/[^/]+)?$/u.test(pathname) && ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'].includes(normalizedMethod)) return true; // MDV-FISCAL-TAX-PROFILES
   if (normalizedMethod !== 'POST') return false;
   return pathname === '/customer/checkin'
     || pathname === '/customer/reviews'
@@ -21365,7 +21378,7 @@ registerProductDeadlineRequestRoutes(fastify, {
 const print3dAccounts = registerPrint3dCustomerAccountRoutes(fastify, {
   pool,
   enabled: process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig()),
-  authSecret: process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET,
+  authSecret: VPS_AUTH_SECRET,
   publicUrl: process.env.MDV_PRINT3D_PUBLIC_URL || 'https://www.gcode3d.com.br',
   fromEmail: process.env.MDV_PRINT3D_SMTP_FROM,
   brandName: process.env.MDV_PRINT3D_BRAND_NAME,
@@ -21406,7 +21419,7 @@ require('./services/print3dStorefrontSettingsServer.cjs').registerPrint3dStorefr
 registerPrint3dCheckoutRoutes(fastify, {
   pool, getCustomer: print3dAccounts.getCustomer,
   loadQuote: require('./services/productStorefrontOffersServer.cjs').loadPrint3dQuote,
-  verifyShipping: input => verifyShippingQuote(input, process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET),
+  verifyShipping: input => verifyShippingQuote(input, VPS_AUTH_SECRET),
   companyId: process.env.MDV_PRINT3D_COMPANY_ID,
   enabled: print3dCheckoutEnabled,
   dispatchEnabled: print3dCheckoutEnabled && process.env.MDV_PRINT3D_DISPATCH_ENABLED === '1',

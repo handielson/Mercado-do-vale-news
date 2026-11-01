@@ -82,6 +82,19 @@ function assertBuiltBundleSafety() {
   }
   const assetsDir = path.join(DIST_DIR, 'assets');
   const jsFiles = walkFiles(assetsDir).filter((file) => file.endsWith('.js'));
+  const secretValues = ['SYNC_SECRET', 'VPS_SYNC_KEY', 'VITE_VPS_SYNC_KEY', 'VPS_AUTH_SECRET']
+    .map((name) => String(process.env[name] || '').trim().replace(/^['"]|['"]$/g, ''))
+    .filter((value) => value.length >= 16);
+  const leaking = walkFiles(DIST_DIR).filter((file) => {
+    const content = fs.readFileSync(file, 'utf8');
+    return secretValues.some((value) => content.includes(value));
+  });
+  if (leaking.length) {
+    throw new Error([
+      'Deploy bloqueado: o build contem uma chave secreta (SYNC_SECRET/VPS_SYNC_KEY/VPS_AUTH_SECRET).',
+      ...leaking.slice(0, 5).map((file) => `- ${path.relative(ROOT, file).replace(/\\/g, '/')}`),
+    ].join('\n'));
+  }
   const offenders = jsFiles.filter((file) =>
     fs.readFileSync(file, 'utf8').includes('Missing Supabase environment variables')
   );

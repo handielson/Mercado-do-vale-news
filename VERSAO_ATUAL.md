@@ -1,3 +1,12 @@
+# v1.2.732-perfis-fiscais-produto
+
+Data: 01/11/2026. Status: pendente de publicação. Branch: `main`. Tag: `v1.2.732-perfis-fiscais-produto`.
+Tributação por produto (pedido da contadora): perfis fiscais com abas NFC-e (65) e NF-e (55), tabelas oficiais NCM (Siscomex) e CEST (Convênio 142/2018) no sistema, vínculo e prontidão por produto, conferência de NCM/CEST no cadastro. Só cadastro: não emite nota nem altera o Bling. Inclui o manifesto pendente das v1.2.729–v1.2.731 e versiona o endurecimento de segurança aplicado na VPS em 01/11.
+
+Validações locais: 34 testes novos aprovados; testes fiscais existentes 146/147 (falha anterior). Release do site e API: pendentes.
+
+---
+
 # v1.2.731-erp-ml-price-read-seller-sku-attr
 
 Data: 01/11/2026. Status: API publicada; manifesto do site pendente. Branch: `main`. Tag: `v1.2.731-erp-ml-price-read-seller-sku-attr`. Commit: `dbff06af`.
@@ -1996,12 +2005,4 @@ Fechamento v1.2.616: commit 73758b95/tag enviados a main, site publicado e VERSI
 # v1.2.712-meta-atendimento-paridade
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.712-meta-atendimento-paridade`.
-Release do site: `/var/www/mdv-site/releases/20261030-154100-meta-atendimento-paridade`.
-
-O atendimento pelo Facebook/Messenger preserva pedidos de várias marcas ao confirmar promoções, envia as opções do catálogo em blocos de até três aparelhos e mantém a continuidade da compra no mesmo padrão do WhatsApp. O fluxo pede o número de WhatsApp para o cadastro e aceita endereço por texto no Messenger. Os quatro nós alterados foram validados contra o fluxo ativo; o comportamento do WhatsApp permanece coberto pelos testes existentes.
-
-Validações: gate comercial, suites de paridade Meta, comparação do fluxo ativo, backup e verificação do webhook após implantação.
-
-Registro: `docs/versoes/2026-10-30-v1.2.712-meta-atendimento-paridade.md`.
-
----
+Release do site: `/var/www/mdv-site/releases/20261030-154100-meta-atendime

@@ -129,6 +129,11 @@ const companyFiscalServicePaths = [
   'services/fiscalCancellationCore.cjs',
   'services/fiscalCancellationSefaz.cjs',
   'services/fiscalCancellationAutomation.cjs',
+  'services/fiscalCatalog.cjs',
+  'services/fiscalTaxProfileCore.cjs',
+  'services/fiscalTaxProfilesServer.cjs',
+  'data/fiscal/ncm-vigente.json',
+  'data/fiscal/cest-conv142.json',
 ];
 const autoresponderEngineFiles = [
   'services/autoresponder/engine/types.js',
@@ -446,18 +451,18 @@ async function ensureRemoteFiscalDependencies(appDir) {
 
 async function applyCompanyFiscalMigration({ appDir, apiProc }) {
   if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
-  const migrationPaths = ['migrations/020_company_fiscal_profiles.sql', 'migrations/021_company_fiscal_tax_validation.sql', 'migrations/022_accountant_portal.sql', 'migrations/023_accountant_customer_collation.sql', 'migrations/024_fiscal_document_review.sql', 'migrations/027_fiscal_document_xml_archive.sql'];
+  const migrationPaths = ['migrations/020_company_fiscal_profiles.sql', 'migrations/021_company_fiscal_tax_validation.sql', 'migrations/022_accountant_portal.sql', 'migrations/023_accountant_customer_collation.sql', 'migrations/024_fiscal_document_review.sql', 'migrations/027_fiscal_document_xml_archive.sql', 'migrations/028_fiscal_tax_profiles.sql'];
   await exec(`mkdir -p ${appDir}/migrations`);
   for (const migrationPath of migrationPaths) await upload(path.join(__dirname, migrationPath), remotePathJoin(appDir, migrationPath));
   const source = `
     const fs = require('fs'); require('dotenv').config();
     (async () => {
       const db = await require('mysql2/promise').createConnection({host:process.env.DB_HOST,user:process.env.DB_USER,password:process.env.DB_PASS,database:process.env.DB_NAME,multipleStatements:true});
-      for (const migrationPath of ${JSON.stringify(['migrations/020_company_fiscal_profiles.sql', 'migrations/021_company_fiscal_tax_validation.sql', 'migrations/022_accountant_portal.sql', 'migrations/023_accountant_customer_collation.sql', 'migrations/024_fiscal_document_review.sql', 'migrations/027_fiscal_document_xml_archive.sql'])}) {
+      for (const migrationPath of ${JSON.stringify(['migrations/020_company_fiscal_profiles.sql', 'migrations/021_company_fiscal_tax_validation.sql', 'migrations/022_accountant_portal.sql', 'migrations/023_accountant_customer_collation.sql', 'migrations/024_fiscal_document_review.sql', 'migrations/027_fiscal_document_xml_archive.sql', 'migrations/028_fiscal_tax_profiles.sql'])}) {
         const sql=fs.readFileSync(migrationPath,'utf8').replace(/--[^\\n]*/g,'');
         for (const statement of sql.split(';').map(value=>value.trim()).filter(Boolean)) await db.query(statement);
       }
-      const expected=['company_fiscal_profiles','company_fiscal_events','company_certificate_settings','company_fiscal_tax_validations','company_accountant_access','company_fiscal_documents','company_fiscal_sale_reconciliations','company_fiscal_document_reviews'];
+      const expected=['company_fiscal_profiles','company_fiscal_events','company_certificate_settings','company_fiscal_tax_validations','company_accountant_access','company_fiscal_documents','company_fiscal_sale_reconciliations','company_fiscal_document_reviews','company_fiscal_tax_profiles','product_fiscal_settings'];
       for (const table of expected) { const [rows]=await db.query('SHOW TABLES LIKE ?',[table]); if(!rows.length) throw new Error('Missing table '+table); }
       const [columns]=await db.query("SHOW COLUMNS FROM company_certificate_settings LIKE 'fingerprint_sha256'"); if(!columns.length) throw new Error('Certificate metadata columns missing');
       const [accountantColumns]=await db.query("SHOW FULL COLUMNS FROM company_accountant_access LIKE 'customer_id'"); if(!accountantColumns.length || accountantColumns[0].Collation!=='utf8mb4_unicode_ci') throw new Error('Accountant customer ID collation mismatch');
@@ -471,7 +476,7 @@ async function applyCompanyFiscalMigration({ appDir, apiProc }) {
 async function deployCompanyFiscalOnly(appDir, apiProc) {
   if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
   const backupDir = `${appDir}/backups/company-fiscal-${Date.now()}`;
-  await exec(`mkdir -p ${backupDir} ${appDir}/services`);
+  await exec(`mkdir -p ${backupDir} ${appDir}/services ${appDir}/data/fiscal`);
   for (const file of companyFiscalServicePaths) {
     await exec(`if test -f ${appDir}/${file}; then cp -p ${appDir}/${file} ${backupDir}/${path.basename(file)}; fi`);
     await upload(path.join(__dirname, file), remotePathJoin(appDir, file));
@@ -861,6 +866,11 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--fiscal-tax-profiles-only') || process.argv.includes('--fiscal-tax-profiles-check')) {
+    await require('./scripts/deploy-fiscal-tax-profiles.cjs').deployFiscalTaxProfiles({appDir,apiProc,exec,upload,root:__dirname,checkOnly:process.argv.includes('--fiscal-tax-profiles-check')});
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--nfce-homologation-only') || process.argv.includes('--nfce-homologation-check')) {
     await require('./scripts/deploy-nfce-homologation.cjs').deployNfceHomologation({appDir,apiProc,exec,upload,root:__dirname,checkOnly:process.argv.includes('--nfce-homologation-check')});
     conn.end();
@@ -1083,6 +1093,7 @@ async function main() {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }
+  await exec(`mkdir -p ${appDir}/data/fiscal`);
   for (const file of companyFiscalServicePaths) {
     await upload(path.join(__dirname, file), remotePathJoin(appDir, file));
     console.log(`Uploaded ${file}`);

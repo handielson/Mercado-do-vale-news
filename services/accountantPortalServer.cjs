@@ -453,6 +453,9 @@ function registerAccountantPortalRoutes(app, { pool, getBearerAuthContext, enabl
     await pool.query('INSERT INTO company_fiscal_events (profile_id,actor,event,details) VALUES (?,?,?,?)', [profile.id,String(req.accountantAuth.userId),'accountant_access_revoke',JSON.stringify({ customerId:req.params.customerId })]);
     return { revoked: true };
   });
+
+  // Perfis fiscais por produto (NFC-e 65 / NF-e 55): mesma permissao de edicao da validacao contabil.
+  require('./fiscalTaxProfilesServer.cjs').registerFiscalTaxProfileRoutes(app, { pool, requireEdit: requireCompanyAccess('edit'), requireAuth: auth });
 }
 
 module.exports = { registerAccountantPortalRoutes, findProfile };

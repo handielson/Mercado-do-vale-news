@@ -10,12 +10,16 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Building2, FileKey2, Save, Loader2, ReceiptText, UserRoundCog, ClipboardCheck } from 'lucide-react';
+import { Building2, FileKey2, Save, Loader2, ReceiptText, UserRoundCog, ClipboardCheck, Boxes } from 'lucide-react';
+import { FiscalProductTaxPanel } from '../../../components/fiscal/FiscalProductTaxPanel';
 import { Company, defaultCompany } from '../../../types/company';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { formatCep, searchCep } from '../../../utils/customerFormUtils';
 import { isValidCNPJ } from '../../../utils/cnpjHelper';
 import { companyFiscalService, type FiscalLookup } from '../../../services/companyFiscalService';
+
+const listFiscalCompaniesForTax = () => companyFiscalService.list();
+const adminProductLink = (id: string) => `/admin/products/${encodeURIComponent(id)}`;
 import { getDocuments } from '../../../services/documentService';
 import type { CompanyDocument } from '../../../types/document';
 import { SharePaymentDataModal } from '../../../components/SharePaymentDataModal';
@@ -40,7 +44,7 @@ import { RevenuePanel } from '../../accountant/AccountantPortalPage';
 
 export const CompanyDataPage: React.FC = () => {
     const [activeArea, setActiveArea] = useState<'general' | 'fiscal' | 'accountant'>(() => window.location.hash === '#contador' ? 'accountant' : window.location.hash === '#fiscal' ? 'fiscal' : 'general');
-    const [accountantArea, setAccountantArea] = useState<'revenue' | 'validation' | 'access'>('revenue');
+    const [accountantArea, setAccountantArea] = useState<'revenue' | 'validation' | 'products' | 'access'>('revenue');
     const [form, setForm] = useState<Company>(defaultCompany);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingCep, setIsLoadingCep] = useState(false);
@@ -282,10 +286,12 @@ export const CompanyDataPage: React.FC = () => {
                 <nav className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2" aria-label="Seções do Espaço do Contador">
                     <button type="button" onClick={() => setAccountantArea('revenue')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${accountantArea === 'revenue' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}><ReceiptText size={17} /> Faturamento e notas</button>
                     <button type="button" onClick={() => setAccountantArea('validation')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${accountantArea === 'validation' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}><ClipboardCheck size={17} /> Validação contábil</button>
+                    <button type="button" onClick={() => setAccountantArea('products')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${accountantArea === 'products' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}><Boxes size={17} /> Tributação por produto</button>
                     <button type="button" onClick={() => setAccountantArea('access')} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${accountantArea === 'access' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}><UserRoundCog size={17} /> Acessos e importação</button>
                 </nav>
                 {accountantArea === 'revenue' && <RevenuePanel adminMode />}
                 {accountantArea === 'validation' && <><AccountantNfceSequencePanel /><CompanyTaxValidationPanel /></>}
+                {accountantArea === 'products' && <FiscalProductTaxPanel listCompanies={listFiscalCompaniesForTax} productLink={adminProductLink} />}
                 {accountantArea === 'access' && <CompanyAccountantAccessPanel />}
             </div>}
 
