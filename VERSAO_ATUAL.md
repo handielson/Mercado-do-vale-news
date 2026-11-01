@@ -1,9 +1,10 @@
 # v1.2.732-perfis-fiscais-produto
 
-Data: 01/11/2026. Status: pendente de publicação. Branch: `main`. Tag: `v1.2.732-perfis-fiscais-produto`.
+Data: 01/11/2026. Status: publicada. Branch: `main` (commit a241450d). Tag: `v1.2.732-perfis-fiscais-produto` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261101-232648-v1232-perfis-fiscais`. API: perfis fiscais publicados (`--fiscal-tax-profiles-only`, backup `/var/www/mdv-api/backups/fiscal-tax-profiles-1793575559110`). Esta release também publica o manifesto do site das v1.2.729–v1.2.731.
 Tributação por produto (pedido da contadora): perfis fiscais com abas NFC-e (65) e NF-e (55), tabelas oficiais NCM (Siscomex) e CEST (Convênio 142/2018) no sistema, vínculo e prontidão por produto, conferência de NCM/CEST no cadastro. Só cadastro: não emite nota nem altera o Bling. Inclui o manifesto pendente das v1.2.729–v1.2.731 e versiona o endurecimento de segurança aplicado na VPS em 01/11.
 
-Validações locais: 34 testes novos aprovados; testes fiscais existentes 146/147 (falha anterior). Release do site e API: pendentes.
+Validações: 34 testes novos aprovados; testes fiscais existentes 146/147 (falha anterior); build aprovado; `/status` 200 com MySQL OK; rotas novas 401 sem login; site e `/VERSION.json` 200.
 
 ---
 

@@ -1,14 +1,15 @@
 {
   "version": "v1.2.732-perfis-fiscais-produto",
   "date": "2026-11-01",
-  "status": "pending",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.732-perfis-fiscais-produto",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261101-232648-v1232-perfis-fiscais",
   "api_release": {
-    "status": "pending",
+    "status": "published",
     "module": "Perfis fiscais por produto (rotas /accountant/fiscal-catalog e /accountant/companies/:id/tax-profiles|fiscal-products, migration 028, proxy) — só cadastro, sem emissão; guarda de VPS_AUTH_SECRET já ativa desde 01/11",
-    "backup_prefix": "/var/www/mdv-api/backups/fiscal-tax-profiles-"
+    "backup_prefix": "/var/www/mdv-api/backups/fiscal-tax-profiles-",
+    "backup": "/var/www/mdv-api/backups/fiscal-tax-profiles-1793575559110"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Tributação por produto: perfis fiscais com abas NFC-e (65) e NF-e (55), tabelas oficiais NCM (Siscomex) e CEST (Conv. 142/2018), vínculo e prontidão por produto, conferência de NCM/CEST no cadastro. Inclui o manifesto pendente das versões v1.2.729–v1.2.731 (Mercado Livre) e versiona o endurecimento de segurança de 01/11.",
@@ -37,8 +38,7 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "fiscal_tax_profiles_api": "pendente; node deploy-vps-server-only.cjs --fiscal-tax-profiles-only",
-    "site_manifest": "pendente; VERSION.json v1.2.732-perfis-fiscais-produto"
+    "tag_push": "pendente: push da tag v1.2.732-perfis-fiscais-produto (proxy da sessão bloqueia tags)"
   },
   "site_source_base": "41c8f59f",
   "changed_files": [
@@ -83,7 +83,16 @@
     "testes fiscais/contador existentes: 146/147 (falha anterior accountant-deploy desde 05/10)",
     "node --check dos servidores e scripts de deploy",
     "pdv-stock-location-decrement-static aprovado",
-    "npm run build (pendente)",
-    "GET /status HTTP 200 com MySQL OK (pendente após publicação)"
+    "npm run build aprovado (prebuild: segredos n8n, Supabase e rotas nginx)",
+    "dist sem segredos da VPS e sem Supabase",
+    "node deploy-vps-server-only.cjs --fiscal-tax-profiles-check/--fiscal-tax-profiles-only: aprovado; tabelas 028 criadas; catálogo carregado",
+    "GET /status HTTP 200 com MySQL OK",
+    "rotas /accountant/fiscal-catalog e /tax-profiles: 401 sem login (direto e via proxy)",
+    "site 200; /VERSION.json v1.2.732; /contador e /admin/settings/company 200"
+  ],
+  "site_manifest_includes": [
+    "v1.2.729-erp-ml-price-read-diagnostic",
+    "v1.2.730-erp-ml-price-read-sku-link",
+    "v1.2.731-erp-ml-price-read-seller-sku-attr"
   ]
 }
