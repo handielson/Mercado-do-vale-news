@@ -44,7 +44,7 @@ test('stock writes require both an explicit enable flag and a valid dedicated ke
   }
 });
 
-test('price writes remain unavailable while the official standard-price endpoint is unavailable', () => {
+test('price writes require an explicit flag and a valid dedicated write key', () => {
   const previousKey = process.env.MDV_ERP_WRITE_KEY;
   const previousStockFlag = process.env.MDV_ERP_STOCK_WRITE_ENABLED;
   const previousPriceFlag = process.env.MDV_ERP_PRICE_WRITE_ENABLED;
@@ -56,6 +56,8 @@ test('price writes remain unavailable while the official standard-price endpoint
     process.env.MDV_ERP_PRICE_WRITE_ENABLED = 'true';
     assert.equal(isErpPriceWriteEnabled(), false);
     process.env.MDV_ERP_PRICE_WRITE_ENABLED = '1';
+    assert.equal(isErpPriceWriteEnabled(), true);
+    delete process.env.MDV_ERP_WRITE_KEY;
     assert.equal(isErpPriceWriteEnabled(), false);
     assert.equal(isErpStockWriteEnabled(), false);
   } finally {
@@ -195,10 +197,6 @@ test('price write routes authenticate before revealing the disabled gate and nev
     const disabled = await app.inject({ method: 'POST', url, headers: { 'x-erp-write-key': key },
       payload: { priceCents: 2000, expectedPriceCents: 1000 } });
     assert.equal(disabled.statusCode, 503);
-    process.env.MDV_ERP_PRICE_WRITE_ENABLED = '1';
-    const invalidConfirmation = await app.inject({ method: 'POST', url, headers: { 'x-erp-write-key': key },
-      payload: { priceCents: 2000, expectedPriceCents: 1000, confirm: true } });
-    assert.equal(invalidConfirmation.statusCode, 503);
     assert.deepEqual(calls, []);
   } finally {
     await app.close();

@@ -10,7 +10,7 @@ function mercadoLivreStockWriteDeployEnv(args = process.argv, env = process.env)
     throw new Error(`${requestedPrice ? ENABLE_PRICE_FLAG : ENABLE_FLAG} requires ${SELECTIVE_DEPLOY_FLAG}`);
   }
   if (requestedPrice) {
-    throw new Error(`${ENABLE_PRICE_FLAG} is unavailable until Mercado Livre releases its standard-price API and the ERP integration implements it`);
+    throw new Error(`${ENABLE_PRICE_FLAG} requires a separately reviewed gate activation; this release keeps all ERP writes disabled`);
   }
   if (!requested && !requestedPrice) return {
     MDV_ERP_STOCK_WRITE_ENABLED: '0',

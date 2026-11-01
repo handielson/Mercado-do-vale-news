@@ -1,11 +1,11 @@
-# v1.2.727-erp-ml-publish-gate
+# v1.2.728-erp-ml-price-capability
 
-Data: 31/10/2026. Status: publicada. Branch: `main`. Tag: `v1.2.727-erp-ml-publish-gate`.
-Release VPS: `/var/www/mdv-site/releases/20261101-012920-erp-ml-publish-gate`. API Mercado Livre: publicada; publicação, preço e estoque permanecem desligados.
+Data: 01/11/2026. Status: em publicação. Branch: `main`. Tag: `v1.2.728-erp-ml-price-capability`.
+API Mercado Livre: capability de atualização de preço anunciada; gates de publicação, preço e estoque desligados. Manifesto do site pendente.
 
-A prévia de novos anúncios usa preço, custo e saldo do snapshot atual do ERP e valida o rascunho com o Mercado Livre sem criar anúncio. O deploy seletivo força `MDV_ERP_PUBLISH_ENABLED=0`, mesmo que exista uma chave de publicação configurada. Nenhum anúncio foi criado e nenhum estoque do Mercado do Vale foi alterado.
+A integração anuncia a atualização de preço padrão por solicitação somente de preço, com proteção contra preço automatizado, promoções, preço por quantidade e divergência de leitura posterior. A permissão continua exigindo flag e chave dedicada válidos. Nenhum preço, anúncio ou estoque foi alterado.
 
-Validações: 48 testes focados, suíte Mercado Livre completa, verificações de sintaxe, build de produção, API pública e versão pública.
+Validações locais: suíte Mercado Livre (104 testes), contrato estático e build de produção. Publicação e validação remota pendentes.
 
 ---
 # v1.2.727-erp-ml-publish-gate\n\nData: 31/10/2026. Status: publicada. Branch: `main`. Tag: `v1.2.727-erp-ml-publish-gate`.\nRelease VPS: `/var/www/mdv-site/releases/20261101-012920-erp-ml-publish-gate`. API Mercado Livre: publicada; publicação, preço e estoque permanecem desligados.\n\nA prévia de novos anúncios usa preço, custo e saldo do snapshot atual do ERP e valida o rascunho com o Mercado Livre sem criar anúncio. O deploy seletivo força `MDV_ERP_PUBLISH_ENABLED=0`, mesmo que exista uma chave de publicação configurada. Nenhum anúncio foi criado e nenhum estoque do Mercado do Vale foi alterado.\n\nValidações: 48 testes focados, suíte Mercado Livre completa, verificações de sintaxe, build de produção, API pública e versão pública.\n\n---\n\n# v1.2.726-ml-erp-capabilities-gates

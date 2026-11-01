@@ -1,17 +1,17 @@
 {
-  "version": "v1.2.727-erp-ml-publish-gate",
-  "date": "2026-10-31",
-  "status": "published",
+  "version": "v1.2.728-erp-ml-price-capability",
+  "date": "2026-11-01",
+  "status": "pending",
   "branch": "main",
-  "tag": "v1.2.727-erp-ml-publish-gate",
+  "tag": "v1.2.728-erp-ml-price-capability",
   "release_vps": "/var/www/mdv-site/releases/20261101-012920-erp-ml-publish-gate",
   "api_release": {
-    "status": "published",
-    "module": "services/mercadoLivreServer.cjs e services/mercadoLivrePublication.cjs — prévia de anúncio com snapshot do ERP; publicação desligada",
+    "status": "pending",
+    "module": "services/mercadoLivreServer.cjs — capability de preço anunciada; gate de escrita desligado",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "A preparação de anúncios valida preço, custo e saldo a partir do snapshot do ERP. A publicação é roteada por chave dedicada e gate desligado; preço e estoque permanecem desligados.",
+  "summary": "A integração anuncia suporte à atualização segura de preço padrão via ERP. Gates de publicação, preço e estoque permanecem desligados.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -28,8 +28,8 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "publicada; gate de criação de anúncios, preço e estoque desligados",
-    "site_manifest": "VERSION.json v1.2.727; release 20261101-012920-erp-ml-publish-gate"
+    "mercado_livre_api": "pendente; publicar capability de preço com gates desligados",
+    "site_manifest": "pendente; VERSION.json v1.2.728-erp-ml-price-capability"
   },
   "site_source_base": "8f4e3196",
   "changed_files": [

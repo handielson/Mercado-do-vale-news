@@ -15,10 +15,12 @@ const ERP_PUBLICATION_CAPABILITIES = Object.freeze([
   'listing_publish_preview_v1',
   'listing_publish_v1',
 ]);
-// The official standard-price endpoint is still unavailable. Since 2026-03-18,
-// PUT /items either rejects a price-only request or ignores price when mixed
-// with other fields, so this legacy route must remain disabled until support lands.
-const ERP_PRICE_STANDARD_ENDPOINT_AVAILABLE = false;
+// The dedicated standard-price endpoint is unavailable; standard offer prices
+// are updated through a price-only PUT /items request. The price service blocks
+// automated pricing, promotions, quantity pricing and unsupported channels.
+// This support flag advertises capability; the independent environment gate
+// and dedicated write key still control whether any request can write.
+const ERP_PRICE_ITEM_UPDATE_SUPPORTED = true;
 let refreshPromise = null;
 
 function erpWriteKeyMatches(candidate, expected) {
@@ -42,7 +44,7 @@ function isErpStockWriteEnabled() {
 }
 
 function isErpPriceWriteEnabled() {
-  return ERP_PRICE_STANDARD_ENDPOINT_AVAILABLE
+  return ERP_PRICE_ITEM_UPDATE_SUPPORTED
     && process.env.MDV_ERP_PRICE_WRITE_ENABLED === '1'
     && isErpWriteKeyConfigured(process.env.MDV_ERP_WRITE_KEY);
 }
@@ -903,7 +905,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         erpCapabilities: [
           ...ERP_PUBLICATION_CAPABILITIES,
           ...ERP_STOCK_WRITE_CAPABILITIES,
-          ...(isErpPriceWriteEnabled() ? ERP_PRICE_WRITE_CAPABILITIES : []),
+          ...(ERP_PRICE_ITEM_UPDATE_SUPPORTED ? ERP_PRICE_WRITE_CAPABILITIES : []),
         ],
         erpWriteGates: {
           stock: isErpStockWriteEnabled(),

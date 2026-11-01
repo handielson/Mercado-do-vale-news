@@ -39,15 +39,15 @@ test('habilitação explícita escreve somente a chave dedicada e o flag de esto
   });
 });
 
-test('deploy bloqueia preço enquanto a API standard oficial não estiver disponível', () => {
+test('deploy mantém o gate de preço desligado nesta release', () => {
   const key = 'b'.repeat(48);
   assert.throws(() => mercadoLivreStockWriteDeployEnv(
     ['node', 'deploy-vps-server-only.cjs', '--enable-erp-price-write'],
     { MDV_ERP_WRITE_KEY: key }), /requires --mercado-livre-only/);
   assert.throws(() => mercadoLivreStockWriteDeployEnv(
-    [...READ_ONLY_ARGS, '--enable-erp-price-write'], { MDV_ERP_WRITE_KEY: key }), /standard-price API/);
+    [...READ_ONLY_ARGS, '--enable-erp-price-write'], { MDV_ERP_WRITE_KEY: key }), /separately reviewed gate activation/);
   assert.throws(() => mercadoLivreStockWriteDeployEnv(
-    [...READ_ONLY_ARGS, '--enable-erp-stock-write', '--enable-erp-price-write'], { MDV_ERP_WRITE_KEY: key }), /standard-price API/);
+    [...READ_ONLY_ARGS, '--enable-erp-stock-write', '--enable-erp-price-write'], { MDV_ERP_WRITE_KEY: key }), /separately reviewed gate activation/);
 });
 
 test('deploy padrão não exige nem instala a chave de escrita', () => {
