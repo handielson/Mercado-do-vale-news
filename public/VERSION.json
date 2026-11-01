@@ -1,12 +1,12 @@
 {
   "version": "v1.2.726-ml-erp-capabilities-gates",
   "date": "2026-10-31",
-  "status": "pending",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.726-ml-erp-capabilities-gates",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261101-002743-ml-erp-stock-contract",
   "api_release": {
-    "status": "pending",
+    "status": "published",
     "module": "services/mercadoLivreServer.cjs — contrato de capacidades e gates de escrita do ERP",
     "backup_prefix": "/var/www/mdv-api/backups/"
   },
@@ -28,10 +28,10 @@
     "version_code": 66
   },
   "pending_deployments": {
-    "mercado_livre_api": "pendente; gates de preço e estoque devem permanecer desligados",
-    "site_manifest": "VERSION.json v1.2.726; aguardando publicação"
+    "mercado_livre_api": "publicada; GET autenticado confirmou capacidades de estoque e gates de preço/estoque false",
+    "site_manifest": "VERSION.json v1.2.726; release 20261101-002743-ml-erp-stock-contract"
   },
-  "site_source_base": "c311267d",
+  "site_source_base": "96afb968",
   "changed_files": [
     "docs/operacional/mercado-livre-erp-sync.md",
     "scripts/mercado-livre-stock-write-deploy.cjs",

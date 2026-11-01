@@ -1,11 +1,11 @@
 # v1.2.726-ml-erp-capabilities-gates
 
-Data: 31/10/2026. Status: pendente de publicação. Branch: `main`.
-Release VPS: pendente. API Mercado Livre: pendente; gates de escrita de preço e estoque permanecem desligados.
+Data: 31/10/2026. Status: publicada. Branch: `main`. Tag: `v1.2.726-ml-erp-capabilities-gates`.
+Release VPS: `/var/www/mdv-site/releases/20261101-002743-ml-erp-stock-contract`. API Mercado Livre publicada; gates de escrita de preço e estoque permanecem desligados.
 
 O contrato autenticado do ERP passa a distinguir capacidades implementadas de permissões de escrita. A rota de preço permanece indisponível, mesmo se a variável antiga for ativada, até haver suporte oficial funcional à API standard. A configuração de deploy rejeita o pedido de habilitar escrita de preço. Nenhuma escrita foi enviada ao Mercado Livre e nenhum estoque do Mercado do Vale foi alterado.
 
-Validações executadas: suíte Mercado Livre (60 testes + contrato estático), verificações de sintaxe dos dois arquivos CJS alterados, `git diff --check` e build de produção. Publicação ainda pendente.
+Validações executadas: suíte Mercado Livre (60 testes + contrato estático), verificações de sintaxe dos dois arquivos CJS alterados, `git diff --check`, build de produção, API pública HTTP 200 com MySQL OK e GET autenticado confirmando capacidades de estoque e os gates de preço/estoque como `false`.
 Registro: `docs/versoes/2026-10-31-v1.2.726-ml-erp-capabilities-gates.md`.
 
 ---
