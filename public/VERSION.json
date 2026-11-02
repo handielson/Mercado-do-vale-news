@@ -4,10 +4,10 @@
   "status": "published",
   "branch": "main",
   "tag": "v1.2.753-mercado-livre-stock-batch-window",
-  "release_vps": "/var/www/mdv-site/releases/20261102-175534-ml-stock-batch-window",
+  "release_vps": "/var/www/mdv-site/releases/20261102-180543-v753-release-record",
   "api_release": {
     "status": "published",
-    "note": "--mercado-livre-stock-read-only; janela de 150 ms para agrupar leituras escalonadas via /items/bulk; gates de preço, estoque e publicação desligados"
+    "note": "Janela de 150 ms para agrupar leituras escalonadas via /items/bulk; deploy da API concluído, gates de preço, estoque e publicação desligados"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Consultas de estoque do ERP agrupam anúncios escalonados via /items/bulk em uma janela curta; escritas seguem desligadas.",

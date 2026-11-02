@@ -2208,10 +2208,12 @@ Release do site: `/var/www/mdv-site/releases/20261030-154100-meta-atendime
 # v1.2.753-mercado-livre-stock-batch-window
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.753-mercado-livre-stock-batch-window`.
-Release VPS planejada: `/var/www/mdv-site/releases/20261102-175534-ml-stock-batch-window`. API seletiva: `--mercado-livre-stock-read-only`.
+Release VPS: `/var/www/mdv-site/releases/20261102-180543-v753-release-record`. API reiniciada pelo deploy padrão.
 
 Leituras simultâneas de estoque podem chegar escalonadas depois das consultas locais do ERP. O agrupador agora aguarda 150 ms antes de chamar `/items/bulk`, permitindo reunir até 20 anúncios numa única consulta. Todas as gravações continuam desligadas.
 
-Validações: `npm.cmd run test:mercado-livre` (118 aprovados; contrato estático aprovado), `node --check` nos serviços alterados, trava Supabase e `npm.cmd run build`.
+Validações: `npm.cmd run test:mercado-livre` (118 aprovados; contrato estático aprovado), `node --check` nos serviços alterados, trava Supabase, `npm.cmd run build`, site HTTP 200, API/MySQL saudáveis. A rechecagem ao vivo após a release ainda expirou em quatro de cinco leituras paralelas; a janela maior não resolveu a latência.
+
+Nota operacional: o comando de inspeção `--help` não é aceito por `deploy-vps-server-only.cjs` e executou o deploy padrão da API. O script forçou os flags de escrita de estoque, preço e publicação a `0`; o log confirmou migração fiscal da empresa aplicada/validada e sincronização do ambiente remoto. Nenhum dado comercial ou estoque foi alterado.
 
 ---
