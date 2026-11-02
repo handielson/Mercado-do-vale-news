@@ -536,10 +536,21 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
 // Histórico de navegação do admin, lido uma vez por sessão para montar os "Mais usados".
 let navigationLogPromise: Promise<any[]> | null = null;
+const NAVIGATION_LOG_CACHE_KEY = 'mdv-admin-menu-frequent-log';
 function loadNavigationLog(): Promise<any[]> {
   if (!navigationLogPromise) {
-    navigationLogPromise = vpsClient.get<{ items?: any[] }>('/admin/navigation-log?limit=2000')
-      .then(response => (Array.isArray(response?.items) ? response.items : []))
+    // Guarda só o necessário (caminho e quem visitou) durante a sessão do navegador: não baixa de novo a cada página aberta.
+    try {
+      const cached = JSON.parse(window.sessionStorage.getItem(NAVIGATION_LOG_CACHE_KEY) || 'null');
+      if (Array.isArray(cached)) { navigationLogPromise = Promise.resolve(cached); return navigationLogPromise; }
+    } catch { /* sessão indisponível */ }
+    navigationLogPromise = vpsClient.get<{ items?: any[] }>('/admin/navigation-log?limit=400')
+      .then(response => {
+        const rows = (Array.isArray(response?.items) ? response.items : [])
+          .map((row: any) => ({ pathname: row.pathname, created_at: row.created_at, customer_id: row.customer_id, user_id: row.user_id }));
+        try { window.sessionStorage.setItem(NAVIGATION_LOG_CACHE_KEY, JSON.stringify(rows)); } catch { /* sem espaço */ }
+        return rows;
+      })
       .catch(() => { navigationLogPromise = null; return []; });
   }
   return navigationLogPromise;

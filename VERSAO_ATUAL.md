@@ -1,3 +1,11 @@
+# v1.2.763-modelos-celular-cartoes
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.763-modelos-celular-cartoes` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-215648-v1263-modelos-celular`. API: sem alteração.
+Modelos (parte 2): cartões no celular, filtros num botão, "Salvar" só quando muda; "Mais usados" do menu mais leve.
+
+---
+
 # v1.2.762-modelos-precos-protegidos
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.762-modelos-precos-protegidos` (local; push da tag pendente).

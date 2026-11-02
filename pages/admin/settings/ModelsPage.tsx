@@ -71,9 +71,11 @@ interface ModelRowProps {
     openingParent: boolean;
     /** Resumo vindo da consulta em lote: undefined = carregando; null = indisponível (a linha busca sozinha). */
     summary?: ModelPriceSummary | null;
+    /** 'card' no celular (cartão), 'row' no computador (linha da tabela). */
+    variant?: 'row' | 'card';
 }
 
-function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit, onDelete, onRefresh, onOpenParent, openingParent, summary }: ModelRowProps) {
+function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit, onDelete, onRefresh, onOpenParent, openingParent, summary, variant = 'row' }: ModelRowProps) {
     const [products, setProducts] = useState<ProductRow[]>([]);
     const [loadingPrices, setLoadingPrices] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -87,6 +89,8 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
     const [prices, setPrices] = useState<PriceState>({
         price_cost: 0, price_retail: 0, price_reseller: 0, price_wholesale: 0,
     });
+    // Preços como estão gravados: "Salvar" só aparece quando algo mudou.
+    const [savedPrices, setSavedPrices] = useState<PriceState | null>(null);
     // histórico por produto
     const [history, setHistory] = useState<Record<string, PriceSnapshot[]>>({});
     const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
@@ -101,12 +105,14 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                 total > 0
                     ? Math.round(rows.reduce((s, p) => s + (Number(p[field]) * (Number(p.stock_quantity) || 0)), 0) / total)
                     : Number(rows[0][field]) || 0;
-            setPrices({
+            const next = {
                 price_cost: wavg('price_cost'),
                 price_retail: wavg('price_retail'),
                 price_reseller: wavg('price_reseller'),
                 price_wholesale: wavg('price_wholesale'),
-            });
+            };
+            setPrices(next);
+            setSavedPrices(next);
         }
     }, []);
 
@@ -237,6 +243,167 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
     
     const hasSeo = Boolean(model.description?.trim() || model.template_values?.meta_title?.trim());
 
+    const actionsMenu = (
+<ModelActionsMenu modelName={model.name} actions={[
+            { section: 'Produto', label: 'Produto pai, fotos e variações', onClick: () => onOpenParent(model), disabled: openingParent,
+                icon: openingParent ? <Loader2 size={16} className="animate-spin" /> : <Layers size={16} /> },
+            { section: 'Integração Bling', label: 'Trazer medidas do Bling', onClick: handlePullBling, disabled: pullingBling || syncingBling || reimporting,
+                icon: pullingBling ? <Loader2 size={16} className="animate-spin" /> : <DownloadCloud size={16} /> },
+            { label: 'Enviar medidas para o Bling', onClick: handleSyncBling, disabled: pullingBling || syncingBling || reimporting,
+                icon: syncingBling ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} /> },
+            { label: 'Re-sincronizar SKUs do Bling', onClick: handleReimportBling, disabled: pullingBling || syncingBling || reimporting,
+                icon: reimporting ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} /> },
+            { section: 'Modelo', label: 'Excluir modelo', onClick: () => onDelete(model), destructive: true, icon: <Trash2 size={16} /> },
+        ]} />
+    );
+    const dirty = Boolean(savedPrices) && PRICE_KEYS.some(key => prices[key] !== savedPrices![key]);
+    const expandedDetails = (
+        <>
+                        <div className="flex flex-wrap items-center gap-6">
+                            <button type="button" onClick={() => onOpenParent(model)} disabled={openingParent} className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60"><Layers size={15} />Produto pai, fotos e variações</button>
+                            {/* Slug */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Slug:</span>
+                                <code className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs text-slate-600">
+                                    {model.slug}
+                                </code>
+                            </div>
+
+                            {/* Peso */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Peso:</span>
+                                <span className="text-xs text-slate-600">
+                                    {model.template_values?.weight_kg || '0'} kg
+                                </span>
+                            </div>
+
+                            {/* Dimensões */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Dimensões (LxAxP):</span>
+                                <span className="text-xs text-slate-600">
+                                    {model.template_values?.['dimensions.width_cm'] || '0'} x {model.template_values?.['dimensions.height_cm'] || '0'} x {model.template_values?.['dimensions.depth_cm'] || '0'} cm
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Variações */}
+                        {phoneModel !== false ? <ModelPricesPanel modelId={model.id} modelName={model.name} inline onClose={() => setExpanded(false)} onSaved={() => void loadPrices()} onCreateConfigurations={() => onOpenParent(model)} /> : (
+                        <div className="w-full mt-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                                <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide">Composição de Preços (Variações)</h4>
+                            </div>
+                            <div className="p-4">
+                                <table className="w-full text-left text-xs text-slate-600">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-slate-400">
+                                            <th className="font-medium pb-2">SKU</th>
+                                            <th className="font-medium pb-2">Produto</th>
+                                            <th className="font-medium pb-2 text-right">Estoque</th>
+                                            <th className="font-medium pb-2 text-right">Custo</th>
+                                            <th className="font-medium pb-2 text-right">Varejo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {products.length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} className="py-4 text-center text-slate-400 italic">Nenhum produto encontrado neste modelo.</td>
+                                            </tr>
+                                        )}
+                                        {products.map(p => (
+                                            <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
+                                                <td className="py-2"><code className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] text-slate-500">{p.sku || p.specs?.sku || 'Sem SKU'}</code></td>
+                                                <td className="py-2 font-medium text-slate-700">
+                                                    {p.name}
+                                                    {p.specs?.color && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">Cor: {p.specs.color}</span>}
+                                                    {p.specs?.capacity && <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700">{p.specs.capacity}</span>}
+                                                </td>
+                                                <td className="py-2 text-right">{p.stock_quantity || 0}</td>
+                                                <td className="py-2 text-right">{fmt(p.price_cost)}</td>
+                                                <td className="py-2 text-right font-semibold text-slate-800">{fmt(p.price_retail)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {products.length > 1 && (
+                                    <div className="mt-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 px-3 py-2 rounded flex items-start gap-2">
+                                        <div className="mt-0.5">ℹ️</div>
+                                        <div>
+                                            <span className="font-semibold block mb-0.5">Por que o número de cima é diferente?</span>
+                                            O preço do Varejo na linha resumida (lá em cima) é uma média ponderada dos valores destas variações. Quando você digita um preço na linha e aperta Enter, ele atualiza todas elas de uma vez!
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        )}
+        </>
+    );
+
+    if (variant === 'card') {
+        const priceLabels: Record<string, string> = { price_cost: 'Custo', price_retail: 'Varejo', price_reseller: 'Revenda', price_wholesale: 'Atacado' };
+        return (
+            <article className={`rounded-xl border bg-white p-3 shadow-sm ${isSelected ? 'border-purple-300 ring-2 ring-purple-200' : 'border-slate-200'}`} data-model-card>
+                <div className="flex items-start gap-3">
+                    <input type="checkbox" checked={isSelected} onChange={() => onToggleSelect(model.id)} aria-label={`Selecionar ${model.name}`}
+                        className="mt-1 h-5 w-5 shrink-0 rounded text-purple-600 focus:ring-purple-500" />
+                    <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{brandName}</p>
+                        <p className="text-base font-semibold leading-snug text-slate-900">
+                            {model.name}
+                            {hasSeo && <Sparkles size={14} className="ml-1 inline text-purple-600" aria-label="SEO preenchido" />}
+                        </p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${model.active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}`}>{model.active ? 'Ativo' : 'Inativo'}</span>
+                </div>
+                <div className="mt-3">
+                    {loadingPrices ? (
+                        <Loader2 size={16} className="animate-spin text-slate-400" />
+                    ) : phoneModel !== false ? (
+                        <div className="text-sm">
+                            <button type="button" onClick={() => setExpanded(true)} className="min-h-[44px] font-semibold text-blue-700 underline">Preços por configuração · todas as cores</button>
+                            {groupAudit.divergent > 0 && <p className="text-xs text-amber-700">{groupAudit.divergent} grupo(s) divergente(s)</p>}
+                            {groupAudit.unresolved > 0 && <p className="text-xs text-red-700">{groupAudit.unresolved} cadastro(s) incompleto(s)</p>}
+                        </div>
+                    ) : products.length === 0 ? (
+                        <p className="text-sm text-slate-500">Nenhum produto ativo neste modelo.</p>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                            {PRICE_KEYS.map(key => (
+                                <label key={key} className="block text-xs font-semibold text-slate-500">
+                                    {priceLabels[key]}
+                                    <CurrencyInput value={prices[key]} onChange={cents => setPrices(prev => ({ ...prev, [key]: cents }))}
+                                        className="mt-0.5 h-11 w-full min-w-0 text-base"
+                                        onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); handleSave(); } }} />
+                                </label>
+                            ))}
+                        </div>
+                    )}
+                    {phoneModel === false && (dirty || saving || saved) && (
+                        <button type="button" onClick={handleSave} disabled={saving} data-model-card-save
+                            className={`mt-2 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold text-white ${saved ? 'bg-green-600' : 'bg-blue-600'} disabled:opacity-60`}>
+                            {saving ? <Loader2 size={16} className="animate-spin" /> : saved ? <CheckCircle size={16} /> : <Save size={16} />}
+                            {saved ? 'Preços salvos' : `Salvar preços (${products.length} produto${products.length > 1 ? 's' : ''})`}
+                        </button>
+                    )}
+                </div>
+                <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-2">
+                    <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}
+                        className="inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 text-sm font-semibold text-slate-600">
+                        {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />} Detalhes
+                    </button>
+                    <div className="ml-auto flex items-center gap-2">
+                        <button type="button" onClick={() => onEdit(model)} aria-label={`Editar ${model.name}`}
+                            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-3 text-sm font-semibold text-blue-700">
+                            <Pencil size={15} /> Editar
+                        </button>
+                        {actionsMenu}
+                    </div>
+                </div>
+                {expanded && <div className="mt-2 overflow-x-auto border-t border-slate-100 pt-3 text-sm" data-model-card-details>{expandedDetails}</div>}
+            </article>
+        );
+    }
+
     return (
         <>
             {/* ── Linha principal ─────────────────────────────────────── */}
@@ -346,17 +513,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                         >
                             <Pencil size={14} /> Editar
                         </button>
-                        <ModelActionsMenu modelName={model.name} actions={[
-                            { section: 'Produto', label: 'Produto pai, fotos e variações', onClick: () => onOpenParent(model), disabled: openingParent,
-                                icon: openingParent ? <Loader2 size={16} className="animate-spin" /> : <Layers size={16} /> },
-                            { section: 'Integração Bling', label: 'Trazer medidas do Bling', onClick: handlePullBling, disabled: pullingBling || syncingBling || reimporting,
-                                icon: pullingBling ? <Loader2 size={16} className="animate-spin" /> : <DownloadCloud size={16} /> },
-                            { label: 'Enviar medidas para o Bling', onClick: handleSyncBling, disabled: pullingBling || syncingBling || reimporting,
-                                icon: syncingBling ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} /> },
-                            { label: 'Re-sincronizar SKUs do Bling', onClick: handleReimportBling, disabled: pullingBling || syncingBling || reimporting,
-                                icon: reimporting ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} /> },
-                            { section: 'Modelo', label: 'Excluir modelo', onClick: () => onDelete(model), destructive: true, icon: <Trash2 size={16} /> },
-                        ]} />
+                        {actionsMenu}
                     </div>
                 </td>
             </tr>
@@ -365,83 +522,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
             {expanded && (
                 <tr className={`border-b border-slate-200 ${rowBg} ${selectedRowClass}`}>
                     <td colSpan={10} className="px-6 py-2.5">
-                        <div className="flex flex-wrap items-center gap-6">
-                            <button type="button" onClick={() => onOpenParent(model)} disabled={openingParent} className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60"><Layers size={15} />Produto pai, fotos e variações</button>
-                            {/* Slug */}
-                            <div className="flex items-center gap-2">
-                                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Slug:</span>
-                                <code className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs text-slate-600">
-                                    {model.slug}
-                                </code>
-                            </div>
-
-                            {/* Peso */}
-                            <div className="flex items-center gap-2">
-                                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Peso:</span>
-                                <span className="text-xs text-slate-600">
-                                    {model.template_values?.weight_kg || '0'} kg
-                                </span>
-                            </div>
-
-                            {/* Dimensões */}
-                            <div className="flex items-center gap-2">
-                                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Dimensões (LxAxP):</span>
-                                <span className="text-xs text-slate-600">
-                                    {model.template_values?.['dimensions.width_cm'] || '0'} x {model.template_values?.['dimensions.height_cm'] || '0'} x {model.template_values?.['dimensions.depth_cm'] || '0'} cm
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Variações */}
-                        {phoneModel !== false ? <ModelPricesPanel modelId={model.id} modelName={model.name} inline onClose={() => setExpanded(false)} onSaved={() => void loadPrices()} onCreateConfigurations={() => onOpenParent(model)} /> : (
-                        <div className="w-full mt-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-                            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
-                                <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide">Composição de Preços (Variações)</h4>
-                            </div>
-                            <div className="p-4">
-                                <table className="w-full text-left text-xs text-slate-600">
-                                    <thead>
-                                        <tr className="border-b border-slate-100 text-slate-400">
-                                            <th className="font-medium pb-2">SKU</th>
-                                            <th className="font-medium pb-2">Produto</th>
-                                            <th className="font-medium pb-2 text-right">Estoque</th>
-                                            <th className="font-medium pb-2 text-right">Custo</th>
-                                            <th className="font-medium pb-2 text-right">Varejo</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {products.length === 0 && (
-                                            <tr>
-                                                <td colSpan={5} className="py-4 text-center text-slate-400 italic">Nenhum produto encontrado neste modelo.</td>
-                                            </tr>
-                                        )}
-                                        {products.map(p => (
-                                            <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
-                                                <td className="py-2"><code className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] text-slate-500">{p.sku || p.specs?.sku || 'Sem SKU'}</code></td>
-                                                <td className="py-2 font-medium text-slate-700">
-                                                    {p.name}
-                                                    {p.specs?.color && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">Cor: {p.specs.color}</span>}
-                                                    {p.specs?.capacity && <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700">{p.specs.capacity}</span>}
-                                                </td>
-                                                <td className="py-2 text-right">{p.stock_quantity || 0}</td>
-                                                <td className="py-2 text-right">{fmt(p.price_cost)}</td>
-                                                <td className="py-2 text-right font-semibold text-slate-800">{fmt(p.price_retail)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                                {products.length > 1 && (
-                                    <div className="mt-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 px-3 py-2 rounded flex items-start gap-2">
-                                        <div className="mt-0.5">ℹ️</div>
-                                        <div>
-                                            <span className="font-semibold block mb-0.5">Por que o número de cima é diferente?</span>
-                                            O preço do Varejo na linha resumida (lá em cima) é uma média ponderada dos valores destas variações. Quando você digita um preço na linha e aperta Enter, ele atualiza todas elas de uma vez!
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        )}
+                        {expandedDetails}
                     </td>
                 </tr>
             )}
@@ -463,6 +544,15 @@ export function ModelsPage() {
     const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
 
     // ── Filtros ──
+    // Celular mostra cartões; computador mostra a tabela (só uma das duas é montada).
+    const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
+    useEffect(() => {
+        const media = window.matchMedia('(max-width: 767px)');
+        const update = () => setIsMobile(media.matches);
+        media.addEventListener?.('change', update);
+        return () => media.removeEventListener?.('change', update);
+    }, []);
+    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [filterBrand, setFilterBrand] = useState('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
@@ -583,22 +673,22 @@ export function ModelsPage() {
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className="p-3 bg-purple-100 text-purple-600 rounded-xl">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-4">
+                    <div className="hidden sm:block p-3 bg-purple-100 text-purple-600 rounded-xl">
                         <Smartphone size={32} />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-slate-800">Gestão de Modelos</h1>
-                        <p className="text-slate-500">Gerencie os modelos de produtos por marca</p>
+                        <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Gestão de Modelos</h1>
+                        <p className="hidden sm:block text-slate-500">Gerencie os modelos de produtos por marca</p>
                     </div>
                 </div>
                 <button
                     onClick={handleAdd}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="flex min-h-[44px] shrink-0 items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                     <Plus size={20} />
-                    Novo Modelo
+                    <span className="sm:hidden">Novo</span><span className="hidden sm:inline">Novo Modelo</span>
                 </button>
             </div>
 
@@ -610,8 +700,8 @@ export function ModelsPage() {
             )}
 
             {/* ── Barra de Pesquisa + Filtros ── */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                <div className="flex flex-wrap gap-3 items-center">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-4">
+                <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
                     {/* Pesquisa */}
                     <div className="relative flex-1 min-w-[200px]">
                         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -620,15 +710,21 @@ export function ModelsPage() {
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             placeholder="Pesquisar por nome ou marca…"
-                            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                            className="w-full pl-9 pr-3 py-2.5 sm:py-2 text-base sm:text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                         />
                     </div>
+
+                    {/* Celular: os filtros abrem por este botão */}
+                    <button type="button" onClick={() => setMobileFiltersOpen(open => !open)} aria-expanded={mobileFiltersOpen} data-models-filters-toggle
+                        className="sm:hidden min-h-[44px] rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700">
+                        Filtros{[filterBrand, filterStatus !== 'all', filterSeo !== 'all', sortOrder !== 'newest'].filter(Boolean).length ? ` (${[filterBrand, filterStatus !== 'all', filterSeo !== 'all', sortOrder !== 'newest'].filter(Boolean).length})` : ''}
+                    </button>
 
                     {/* Filtro Marca */}
                     <select
                         value={filterBrand}
                         onChange={e => setFilterBrand(e.target.value)}
-                        className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        className={`${mobileFiltersOpen ? 'block w-full' : 'hidden'} sm:block sm:w-auto min-h-[44px] sm:min-h-0 text-base sm:text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none`}
                     >
                         <option value="">Todas as marcas</option>
                         {brands.map(b => (
@@ -640,7 +736,7 @@ export function ModelsPage() {
                     <select
                         value={filterStatus}
                         onChange={e => setFilterStatus(e.target.value as any)}
-                        className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        className={`${mobileFiltersOpen ? 'block w-full' : 'hidden'} sm:block sm:w-auto min-h-[44px] sm:min-h-0 text-base sm:text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none`}
                     >
                         <option value="all">Todos os status</option>
                         <option value="active">Ativos</option>
@@ -651,7 +747,7 @@ export function ModelsPage() {
                     <select
                         value={filterSeo}
                         onChange={e => setFilterSeo(e.target.value as any)}
-                        className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        className={`${mobileFiltersOpen ? 'block w-full' : 'hidden'} sm:block sm:w-auto min-h-[44px] sm:min-h-0 text-base sm:text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none`}
                     >
                         <option value="all">SEO: Todos</option>
                         <option value="with_seo">✨ Com SEO</option>
@@ -662,7 +758,7 @@ export function ModelsPage() {
                     <select
                         value={sortOrder}
                         onChange={e => setSortOrder(e.target.value as any)}
-                        className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        className={`${mobileFiltersOpen ? 'block w-full' : 'hidden'} sm:block sm:w-auto min-h-[44px] sm:min-h-0 text-base sm:text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none`}
                     >
                         <option value="newest">Mais recentes</option>
                         <option value="oldest">Mais antigos</option>
@@ -680,7 +776,7 @@ export function ModelsPage() {
                         </button>
                     )}
 
-                    <div className="flex-1 flex justify-end items-center gap-3">
+                    <div className={`${mobileFiltersOpen ? 'flex' : 'hidden'} sm:flex flex-1 flex-wrap justify-end items-center gap-3`}>
                         <span className="text-xs text-slate-400 whitespace-nowrap">
                             {filtered.length} de {models.length} modelo{models.length !== 1 ? 's' : ''}
                         </span>
@@ -715,13 +811,24 @@ export function ModelsPage() {
 
             {/* Tabela */}
             <nav aria-label="Páginas dos modelos" className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
-                <span>{filtered.length ? `${pageStart + 1}–${Math.min(pageStart + pageSize, filtered.length)}` : '0'} de {filtered.length} modelos · 25 por página</span>
-                <div className="flex items-center gap-3">
-                    <button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">Anterior</button>
+                <span className="hidden sm:inline">{filtered.length ? `${pageStart + 1}–${Math.min(pageStart + pageSize, filtered.length)}` : '0'} de {filtered.length} modelos · 25 por página</span>
+                <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
+                    <button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} className="min-h-[44px] rounded-lg border px-3 py-2 disabled:opacity-40">Anterior</button>
                     <span>Página {currentPage} de {pageCount}</span>
-                    <button type="button" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">Próxima</button>
+                    <button type="button" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)} className="min-h-[44px] rounded-lg border px-3 py-2 disabled:opacity-40">Próxima</button>
                 </div>
             </nav>
+            {isMobile ? (
+                <div className="space-y-3" data-models-cards>
+                    {filtered.length === 0 ? (
+                        <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">Nenhum modelo encontrado.</p>
+                    ) : visibleModels.map((model, i) => (
+                        <ModelRow key={model.id} variant="card" model={model} index={i} brandName={getBrandName(model.brand_id)}
+                            isSelected={selectedModelIds.has(model.id)} onToggleSelect={toggleSelect} onEdit={handleEdit} onDelete={handleDelete}
+                            onRefresh={loadData} onOpenParent={handleOpenParent} openingParent={false} summary={summaryFor(model.id)} />
+                    ))}
+                </div>
+            ) : (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-auto max-h-[65vh]">
                 <table className="w-full min-w-[1200px] table-fixed relative">
                     <colgroup>
@@ -779,6 +886,7 @@ export function ModelsPage() {
                     </tbody>
                 </table>
             </div>
+            )}
 
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

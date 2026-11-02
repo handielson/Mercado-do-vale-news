@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.762-modelos-precos-protegidos",
+  "version": "v1.2.763-modelos-celular-cartoes",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.762-modelos-precos-protegidos",
-  "release_vps": "/var/www/mdv-site/releases/20261102-214224-v1261-modelos-lote",
+  "tag": "v1.2.763-modelos-celular-cartoes",
+  "release_vps": "/var/www/mdv-site/releases/20261102-215648-v1263-modelos-celular",
   "api_release": {
-    "status": "published",
-    "note": "--unit-read-privacy-only (proxy)"
+    "status": "sem alteração",
+    "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Segurança: a consulta nova de preços por modelo (/models/price-summary) e a antiga por modelo (/models/:id/smartphone-price-*) respondiam sem login pelo /vps-proxy do site (o proxy acrescentava a chave interna), expondo custos. Agora o proxy exige administrador nessas rotas. Só o admin e o PDV usam essas telas.",
+  "summary": "Modelos (parte 2): no celular cada modelo vira um cartão (marca, nome, situação, preços em campos grandes, 'Salvar preços' só depois de mudar um valor, Detalhes, Editar e ⋯); topo enxuto ('+ Novo'), só a busca à mostra e os filtros no botão 'Filtros (N)'; sem tabela de 1.200px nem caixa de rolagem. Primeiro modelo a 304px do topo (antes 738). Menu: 'Mais usados' lê 400 registros e guarda na sessão (0,9 MB → 0,18 MB, uma vez por sessão).",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,23 +31,22 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.762 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.763 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'"
   },
-  "site_source_base": "0e5df90b",
+  "site_source_base": "708d9baf",
   "changed_files": [
-    "scripts/deploy-unit-read-privacy.cjs",
-    "vps_server.cjs",
-    "vps_server.js",
-    "server.js",
-    "tmp-tests/unit-read-privacy.test.cjs",
+    "pages/admin/settings/ModelsPage.tsx",
+    "layouts/AdminLayout.tsx",
+    "tmp-tests/models-page-mobile-cards-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.762-modelos-precos-protegidos.md"
+    "docs/versoes/2026-11-02-v1.2.763-modelos-celular-cartoes.md"
   ],
   "validations": [
-    "unit-read-privacy aprovado",
-    "node --check nos servidores",
-    "antes: GET anônimo /models/price-summary pelo site = 200"
+    "models-page-mobile-cards-static aprovado",
+    "testes de Modelos/AdminLayout: mesmas 5 falhas anteriores",
+    "tsc; npm run build",
+    "Playwright com dados reais (só leitura): celular 25 cartões, largura 390, Salvar aparece só após editar, Detalhes abre, Filtros mostra 4 seletores; computador continua com a tabela"
   ]
 }
