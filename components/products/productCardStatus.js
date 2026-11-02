@@ -75,3 +75,31 @@ export function getAdminProductCardStatus(product) {
     ...view,
   };
 }
+
+const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/**
+ * Linha de resumo do card fechado: preço, estoque/situação e alertas.
+ * Ex.: "R$ 1.299,00 · 3 em estoque" ou "R$ 39,90 · Sem estoque · Sem preço".
+ * @param {object} product produto (com status/estoque atuais)
+ * @returns {{ price: string | null, chips: Array<{ key: string, label: string, color: string }> }}
+ */
+export function getAdminProductCardSummary(product) {
+  const isParent = Number(product?.is_parent || 0) === 1;
+  const priceCents = Number(product?.price_retail || 0);
+  const price = priceCents > 0 ? BRL.format(priceCents / 100) : null;
+  const chips = [];
+  const status = getAdminProductCardStatus(product);
+  if (!isParent) {
+    if (status.status === PRODUCT_STATUS.ACTIVE && product?.track_inventory !== false) {
+      const stock = Math.max(0, Number(product?.stock_quantity || 0));
+      chips.push({ key: 'stock', label: `${stock} em estoque`, color: 'bg-green-100 text-green-800 border-green-200' });
+    } else if (status.status !== PRODUCT_STATUS.ACTIVE) {
+      chips.push({ key: 'status', label: status.label, color: status.color });
+    }
+    if (!price) chips.push({ key: 'no-price', label: 'Sem preço', color: 'bg-amber-100 text-amber-800 border-amber-200' });
+  } else if (status.status !== PRODUCT_STATUS.ACTIVE) {
+    chips.push({ key: 'status', label: status.label, color: status.color });
+  }
+  return { price: isParent ? null : price, chips };
+}

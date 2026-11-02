@@ -1,3 +1,13 @@
+# v1.2.744-produtos-card-preco-estoque
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.744-produtos-card-preco-estoque` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-135358-v1244-produtos-card`. API: sem alteração.
+Lista de produtos (parte 1): card fechado mostra preço, estoque ou situação e "Sem preço"; paginação no celular só "‹ Página X de Y ›".
+
+Validações: testes novos, testes da lista/card (falhas anteriores mantidas), tsc, build e Playwright (iPhone 13).
+
+---
+
 # v1.2.743-foto-mapeamento-cores
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.743-foto-mapeamento-cores` (local; push da tag pendente).

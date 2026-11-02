@@ -546,8 +546,8 @@ export const ProductListPage: React.FC = () => {
                     </div>
 
                     {familyGroups.length > 0 && (
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
+                        <div className="flex w-full flex-wrap items-center justify-center gap-3 sm:w-auto sm:flex-nowrap sm:gap-4" data-product-pagination>
+                            <div className="hidden items-center gap-2 sm:flex">
                                 <span className="text-sm text-slate-500">Itens por pág:</span>
                                 <select
                                     value={itemsPerPage}
@@ -568,24 +568,24 @@ export const ProductListPage: React.FC = () => {
                                 <button
                                     onClick={() => goToPage(currentPage - 1)}
                                     disabled={currentPage === 1}
-                                    className="p-1 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 sm:h-auto sm:w-auto sm:border-0 sm:p-1 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Página anterior"
                                 >
                                     <ChevronLeft size={20} />
                                 </button>
-                                <span className="text-sm font-medium text-slate-700">
+                                <span className="whitespace-nowrap text-sm font-medium text-slate-700">
                                     Página {currentPage} de {totalPages || 1}
                                 </span>
                                 <button
                                     onClick={() => goToPage(currentPage + 1)}
                                     disabled={currentPage >= totalPages}
-                                    className="p-1 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 sm:h-auto sm:w-auto sm:border-0 sm:p-1 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Próxima página"
                                 >
                                     <ChevronRight size={20} />
                                 </button>
                             </div>
 
                             <form
-                                className="flex items-center gap-2"
+                                className="hidden items-center gap-2 sm:flex"
                                 onSubmit={(event) => {
                                     event.preventDefault();
                                     goToTypedPage();

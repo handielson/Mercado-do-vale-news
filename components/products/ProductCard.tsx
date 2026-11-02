@@ -29,7 +29,7 @@ import { stockLocationService } from '../../services/stockLocationService';
 import { unitService } from '../../services/units';
 import { deleteImageFromBank, uploadImagesToBank } from '../../services/productImageBank';
 import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct, validateShopeeItemForProduct } from './productCardShopee.js';
-import { getAdminProductCardStatus } from './productCardStatus.js';
+import { getAdminProductCardStatus, getAdminProductCardSummary } from './productCardStatus.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeBulkAutoPreset, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
 import TikTokShopSyncModal from '../../pages/admin/settings/components/TikTokShopSyncModal';
 import type { TikTokShopProductLink } from '../../services/tiktokShopService';
@@ -1133,6 +1133,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
         status: currentStatus,
         stock_quantity: currentStock,
     });
+    // Resumo sempre visível no card fechado: preço, estoque/situação e alertas.
+    const cardSummary = getAdminProductCardSummary({
+        ...product,
+        status: currentStatus,
+        stock_quantity: currentStock,
+    });
 
     return (
         <div
@@ -1629,6 +1635,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                         </>}
                         {/* SKU sempre visível, inclusive no card do pai. */}
                         {product.sku && <p className="font-mono text-[10px] text-slate-400 mt-0.5">SKU: {product.sku}</p>}
+                        {(cardSummary.price || cardSummary.chips.length > 0) && (
+                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1" data-card-summary>
+                                {cardSummary.price && <span className="text-base font-bold text-slate-900 tabular-nums">{cardSummary.price}</span>}
+                                {cardSummary.chips.map(chip => (
+                                    <span key={chip.key} data-card-chip={chip.key} className={cn('rounded-full border px-2 py-0.5 text-xs font-semibold', chip.color)}>{chip.label}</span>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
                 <button type="button" aria-expanded={showDetails} aria-controls={detailsId} disabled={forceDetailsExpanded}
