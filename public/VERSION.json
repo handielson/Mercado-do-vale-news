@@ -9,7 +9,7 @@
     "status": "published",
     "module": "Cadastro por foto (--photo-intake-only): leitura de código de barras (zxing-wasm 3.1.5) + conferência + aviso de duplicado detalhado",
     "backup_prefix": "/var/www/mdv-api/backups/photo-intake-",
-    "backup": "pendente"
+    "backup": "/var/www/mdv-api/backups/photo-intake-1793580660321"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Cadastro por foto: o servidor lê os códigos de barras da etiqueta (IMEIs, EAN) e confere com a leitura da IA — divergência vira aviso com botão 'Usar este', sem sobrescrever. Aviso de já cadastrado mostra campo, data, situação e produto com link 'Ver aparelho'. Marca, modelo, RAM e armazenamento passam a ser escolhidos de lista do cadastro (mostra o que a foto leu quando não existe na lista).",
@@ -65,6 +65,7 @@
     "testes existentes do cadastro por foto aprovados (core, server-static, deploy-static, navigation, queue-removal, bling-routes 18, price-editor)",
     "tsc sem erros nos arquivos alterados",
     "npm run build aprovado",
-    "Playwright Pixel 7: listas de marca/modelo/RAM/armazenamento, 'Lido na foto', conferência com código de barras, 'Usar este' e link 'Ver aparelho'"
+    "Playwright Pixel 7: listas de marca/modelo/RAM/armazenamento, 'Lido na foto', conferência com código de barras, 'Usar este' e link 'Ver aparelho'",
+    "publicado: API --photo-intake-only (zxing-wasm 3.1.5 carregado, pm2 online), /status 200, rota sem login 401; site 200, /VERSION.json v1.2.734, /admin/serializados 200"
   ]
 }
