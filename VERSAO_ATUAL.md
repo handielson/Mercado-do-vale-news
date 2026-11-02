@@ -5,7 +5,7 @@ Release VPS: `/var/www/mdv-site/releases/20261102-181536-ml-stock-parallel-reads
 
 Para anúncios com vínculo local exato, o serviço consulta em paralelo o anúncio e o perfil do vendedor. Anúncios sem vínculo confirmado continuam esperando a validação por SKU antes de consultar o perfil. A janela de lote de 150 ms permanece para reunir itens iniciados com pequeno atraso. Todos os gates de escrita seguem desligados.
 
-Validações: teste focado de leitura Mercado Livre (16/16 aprovados); build e validação pública pendentes.
+Validações: suíte Mercado Livre (118/118 aprovados e contrato estático aprovado); build de produção concluído; API pública HTTP 200 com MySQL saudável; site HTTP 200 e `VERSION.json` v1.2.754 conferido. Deploy seletivo manteve os gates de escrita desligados.
 
 ---
 
