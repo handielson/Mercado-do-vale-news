@@ -2205,3 +2205,13 @@ Fechamento v1.2.616: commit 73758b95/tag enviados a main, site publicado e VERSI
 
 Data: 30/10/2026. Branch: `main`. Tag: `v1.2.712-meta-atendimento-paridade`.
 Release do site: `/var/www/mdv-site/releases/20261030-154100-meta-atendime
+# v1.2.753-mercado-livre-stock-batch-window
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.753-mercado-livre-stock-batch-window`.
+Release VPS planejada: `/var/www/mdv-site/releases/20261102-175534-ml-stock-batch-window`. API seletiva: `--mercado-livre-stock-read-only`.
+
+Leituras simultâneas de estoque podem chegar escalonadas depois das consultas locais do ERP. O agrupador agora aguarda 150 ms antes de chamar `/items/bulk`, permitindo reunir até 20 anúncios numa única consulta. Todas as gravações continuam desligadas.
+
+Validações: `npm.cmd run test:mercado-livre` (118 aprovados; contrato estático aprovado), `node --check` nos serviços alterados, trava Supabase e `npm.cmd run build`.
+
+---

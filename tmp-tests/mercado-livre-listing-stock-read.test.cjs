@@ -102,6 +102,38 @@ test('shares only an in-flight seller-profile GET across concurrent stock reads'
   assert.ok(calls.every(url => !url.includes('?') || url.startsWith('/items/')));
 });
 
+test('coalesces stock reads that arrive while ERP finishes staggered local checks', async () => {
+  const itemIds = [itemId, 'MLB4282518400', 'MLB4282518401', 'MLB4282518402', 'MLB4282518403'];
+  const calls = [];
+  let queryIndex = 0;
+  const pool = { query: async () => {
+    const delay = queryIndex++ * 30;
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return [[{ id: 'product-1', sku: 'LJH074', variation_id: '' }]];
+  } };
+  const request = async url => {
+    calls.push(url);
+    if (url.startsWith('/items/bulk?ids=')) {
+      const ids = url.slice('/items/bulk?ids='.length).split(',');
+      return response(ids.map(id => ({ id, status_code: 200, body: { id, seller_id: sellerId,
+        status: 'active', sub_status: [], tags: [], available_quantity: 1, variations: [] } })));
+    }
+    if (url.startsWith('/items/')) throw new Error('A staggered group should use the bulk endpoint.');
+    if (url === `/users/${sellerId}`) return response({ id: sellerId, tags: [] });
+    throw new Error(`Unexpected Mercado Livre API path: ${url}`);
+  };
+  const read = createListingStockHandlers({ pool, settings: async () => ({ user_id: sellerId }), request }).read;
+
+  const results = await Promise.all(itemIds.map(remoteId =>
+    read({ params: { itemId: remoteId }, query: { parentId } })));
+
+  assert.equal(results.length, 5);
+  assert.ok(results.every(result => result.quantities[0].quantity === 1));
+  assert.equal(calls.filter(url => url.startsWith('/items/bulk?ids=')).length, 1);
+  assert.equal(calls.filter(url => url.startsWith('/items/')).length, 1);
+  assert.equal(calls.filter(url => url === `/users/${sellerId}`).length, 1);
+});
+
 test('isolates one failed item in an otherwise successful bulk read', async () => {
   const ids = [itemId, 'MLB4282518400'];
   const calls = [];

@@ -43,7 +43,9 @@ function createListingStockHandlers({ pool, settings, request }) {
 
   function scheduleItemReadBatch() {
     if (itemReadTimer !== null) return;
-    itemReadTimer = setTimeout(() => { void flushItemReadBatch(); }, 20);
+    // ERP callers do local link and balance checks before reaching this coalescer.
+    // Keep a short window for those staggered requests to share one official bulk read.
+    itemReadTimer = setTimeout(() => { void flushItemReadBatch(); }, 150);
   }
 
   async function flushItemReadBatch() {
