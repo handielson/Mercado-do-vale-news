@@ -7,6 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { vpsClient } from '../services/vpsClient';
+import { computeFrequentMenuItems } from '../services/adminMenuFrequent.mjs';
 import { companyFiscalService, type FiscalCertificateStatus } from '../services/companyFiscalService';
 import { SaleAlerts } from '../components/admin/SaleAlerts';
 
@@ -233,6 +234,17 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   ], []);
 
   // Filtra itens com base na busca
+  const [navigationLog, setNavigationLog] = useState<any[]>([]);
+  useEffect(() => {
+    // Sem pressa: carrega depois que a página abriu.
+    const timer = window.setTimeout(() => { void loadNavigationLog().then(setNavigationLog); }, 1500);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const frequentItems = useMemo(() => {
+    const allowed = menuGroups.flatMap(group => group.items).filter(item => !item.adminOnly || customer?.customer_type === 'ADMIN');
+    return computeFrequentMenuItems(navigationLog, allowed, { customerId: customer?.id || null, userId: user?.id || null, limit: 6 });
+  }, [navigationLog, menuGroups, customer?.id, customer?.customer_type, user?.id]);
+
   const filteredGroups = useMemo(() => {
     if (!search.trim()) return menuGroups;
     const term = search.toLowerCase();
@@ -394,6 +406,24 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         </div>
 
         <nav aria-label="Menu administrativo" className={cn("admin-sidebar-scroll space-y-0.5 md:space-y-1 flex-none md:flex-1 md:overflow-y-auto md:pr-2 md:-mr-2 pb-2 md:pb-4", sidebarCollapsed && "md:pr-0 md:mr-0")}>
+          {!search.trim() && frequentItems.length > 0 && (
+            <div className={cn("mb-2 md:mb-4", sidebarCollapsed && "md:hidden")} data-menu-frequent>
+              <p className="px-3 pb-1.5 pt-1 text-xs font-bold uppercase tracking-widest text-amber-300/90 md:text-[10px]">Mais usados</p>
+              <div className="grid grid-cols-2 gap-1.5 md:grid-cols-1 md:gap-0.5">
+                {frequentItems.map(item => {
+                  const active = activeItemPath === item.to;
+                  return (
+                    <Link key={item.to} to={item.to} replace={mobileMenuOpen} aria-label={item.label}
+                      className={cn("flex min-h-[44px] items-center gap-2 rounded-xl px-2.5 py-2 text-[13px] font-semibold leading-tight md:min-h-0 md:px-3 md:text-sm",
+                        active ? "bg-blue-600 text-white" : "bg-slate-800/70 text-slate-200 hover:bg-slate-800 md:bg-transparent md:text-slate-400 md:hover:text-white")}>
+                      <span className={cn("shrink-0", active ? "text-white" : "text-amber-300/90")}>{item.icon}</span>
+                      <span className="min-w-0 line-clamp-2">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {filteredGroups.length === 0 ? (
             <div className="text-center py-6 text-slate-500 text-xs">
               Nenhuma página encontrada.
@@ -498,6 +528,17 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     </div>
   );
 };
+
+// Histórico de navegação do admin, lido uma vez por sessão para montar os "Mais usados".
+let navigationLogPromise: Promise<any[]> | null = null;
+function loadNavigationLog(): Promise<any[]> {
+  if (!navigationLogPromise) {
+    navigationLogPromise = vpsClient.get<{ items?: any[] }>('/admin/navigation-log?limit=2000')
+      .then(response => (Array.isArray(response?.items) ? response.items : []))
+      .catch(() => { navigationLogPromise = null; return []; });
+  }
+  return navigationLogPromise;
+}
 
 const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; active?: boolean; collapsed?: boolean; replace?: boolean }> = ({ to, icon, label, active, collapsed, replace }) => (
   <Link

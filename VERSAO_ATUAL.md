@@ -1,3 +1,11 @@
+# v1.2.759-menu-mais-usados
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.759-menu-mais-usados` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-203219-v1259-menu-mais-usados`. API: sem alteração.
+Menu lateral (parte 2): "Mais usados" no topo, pelas visitas da própria pessoa.
+
+---
+
 # v1.2.758-menu-celular-espaco
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.758-menu-celular-espaco` (local; push da tag pendente).
