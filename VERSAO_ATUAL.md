@@ -1,3 +1,11 @@
+# v1.2.764-modelos-tabela-salvar
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.764-modelos-tabela-salvar` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-221603-v1264-modelos-tabela`. API: sem alteração.
+Modelos (parte 3): tabela sem caixa de rolagem própria; "Salvar" da linha só quando um preço muda.
+
+---
+
 # v1.2.763-modelos-celular-cartoes
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.763-modelos-celular-cartoes` (local; push da tag pendente).

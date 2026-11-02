@@ -459,7 +459,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                             <CurrencyInput
                                 value={prices[key]}
                                 onChange={cents => setPrices(prev => ({ ...prev, [key]: cents }))}
-                                className="h-7 w-full min-w-0 text-xs py-1"
+                                className={`h-7 w-full min-w-0 text-xs py-1 ${dirty && savedPrices && prices[key] !== savedPrices[key] ? 'ring-2 ring-amber-300' : ''}`}
                                 onKeyDown={(e: React.KeyboardEvent) => {
                                     if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
                                 }}
@@ -470,7 +470,8 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
 
                 {/* Salvar — ícone animado */}
                 <td className="px-2 py-2.5 text-center">
-                    <button
+                    {(phoneModel !== false || dirty || saving || saved) && <button
+                        data-model-row-save
                         onClick={handleSave}
                         disabled={saving || loadingPrices || products.length === 0}
                         title={phoneModel ? 'Abrir preços por configuração' : 'Salvar preços'}
@@ -486,7 +487,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                                 ? <CheckCircle size={16} className="animate-in zoom-in duration-200" />
                                 : <Save size={16} />
                         }
-                    </button>
+                    </button>}
                 </td>
 
                 {/* Status */}
@@ -829,7 +830,7 @@ export function ModelsPage() {
                     ))}
                 </div>
             ) : (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-auto max-h-[65vh]">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto" data-models-table>
                 <table className="w-full min-w-[1200px] table-fixed relative">
                     <colgroup>
                         <col className="w-12" /><col className="w-[11%]" /><col />

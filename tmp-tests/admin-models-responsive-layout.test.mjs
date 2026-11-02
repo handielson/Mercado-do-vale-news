@@ -25,7 +25,8 @@ test('menu de modelos abre compacto e permite recuperar o menu completo', () => 
 
 test('precos e acoes dos modelos nao sao comprimidos quando falta largura', () => {
   assert.match(layout, /flex-1 min-w-0 p-4/);
-  assert.match(models, /overflow-auto max-h-\[65vh\]/);
+  // 02/11/2026: sem caixa de rolagem vertical (max-h); a rolagem lateral continua quando falta largura.
+  assert.match(models, /shadow-sm overflow-x-auto" data-models-table/);
   assert.match(models, /w-full min-w-\[1200px\] table-fixed/);
 });
 

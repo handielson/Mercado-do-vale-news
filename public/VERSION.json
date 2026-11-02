@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.763-modelos-celular-cartoes",
+  "version": "v1.2.764-modelos-tabela-salvar",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.763-modelos-celular-cartoes",
-  "release_vps": "/var/www/mdv-site/releases/20261102-215648-v1263-modelos-celular",
+  "tag": "v1.2.764-modelos-tabela-salvar",
+  "release_vps": "/var/www/mdv-site/releases/20261102-221603-v1264-modelos-tabela",
   "api_release": {
     "status": "sem alteração",
     "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Modelos (parte 2): no celular cada modelo vira um cartão (marca, nome, situação, preços em campos grandes, 'Salvar preços' só depois de mudar um valor, Detalhes, Editar e ⋯); topo enxuto ('+ Novo'), só a busca à mostra e os filtros no botão 'Filtros (N)'; sem tabela de 1.200px nem caixa de rolagem. Primeiro modelo a 304px do topo (antes 738). Menu: 'Mais usados' lê 400 registros e guarda na sessão (0,9 MB → 0,18 MB, uma vez por sessão).",
+  "summary": "Modelos (parte 3, computador): a tabela não fica mais dentro de uma caixa com rolagem própria (65% da tela) — rola junto com a página; rolagem lateral só quando a tela é estreita demais (preços não são espremidos). O ícone 'Salvar' de cada linha só aparece quando um preço muda (o campo alterado fica destacado); nos celulares continua como atalho para os preços por configuração.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,22 +31,22 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.763 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'"
   },
-  "site_source_base": "708d9baf",
+  "site_source_base": "ac06ce3f",
   "changed_files": [
     "pages/admin/settings/ModelsPage.tsx",
-    "layouts/AdminLayout.tsx",
     "tmp-tests/models-page-mobile-cards-static.test.mjs",
+    "tmp-tests/admin-models-responsive-layout.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.763-modelos-celular-cartoes.md"
+    "docs/versoes/2026-11-02-v1.2.764-modelos-tabela-salvar.md"
   ],
   "validations": [
-    "models-page-mobile-cards-static aprovado",
+    "models-page-mobile-cards-static e admin-models-responsive-layout aprovados (este atualizado: sem max-h)",
     "testes de Modelos/AdminLayout: mesmas 5 falhas anteriores",
     "tsc; npm run build",
-    "Playwright com dados reais (só leitura): celular 25 cartões, largura 390, Salvar aparece só após editar, Detalhes abre, Filtros mostra 4 seletores; computador continua com a tabela"
+    "Playwright com dados reais (só leitura), 1440 e 1280px: caixa sem rolagem própria, sem rolagem lateral, Salvar só nas 4 linhas de celular e +1 após editar"
   ]
 }
