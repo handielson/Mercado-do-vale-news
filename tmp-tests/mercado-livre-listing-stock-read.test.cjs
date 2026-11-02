@@ -54,6 +54,80 @@ test('reads traditional listing quantity through GET only', async () => {
   assert.ok(h.calls.every(call => call.method === 'GET'));
 });
 
+test('shares only an in-flight seller-profile GET across concurrent stock reads', async () => {
+  const itemIds = [itemId, 'MLB4282518400'];
+  const calls = [];
+  let releaseSeller;
+  let markSellerStarted;
+  const sellerStarted = new Promise(resolve => { markSellerStarted = resolve; });
+  const sellerGate = new Promise(resolve => { releaseSeller = resolve; });
+  const pool = { query: async () => [[{ id: 'product-1', sku: 'LJH074', variation_id: '' }]] };
+  const request = async url => {
+    calls.push(url);
+    if (url.startsWith('/items/bulk?ids=')) {
+      const ids = url.slice('/items/bulk?ids='.length).split(',');
+      return response(ids.map(id => ({ id, status_code: 200, body: { id, seller_id: sellerId,
+        status: 'active', sub_status: [], tags: [],
+        available_quantity: id === itemIds[0] ? 3 : 5, variations: [] } })));
+    }
+    if (url.startsWith('/items/')) {
+      const remoteItemId = url.slice('/items/'.length).split('?')[0];
+      return response({ id: remoteItemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
+        available_quantity: remoteItemId === itemIds[0] ? 3 : 5, variations: [] });
+    }
+    if (url === `/users/${sellerId}`) {
+      markSellerStarted();
+      await sellerGate;
+      return response({ id: sellerId, tags: [] });
+    }
+    throw new Error(`Unexpected Mercado Livre API path: ${url}`);
+  };
+  const read = createListingStockHandlers({ pool, settings: async () => ({ user_id: sellerId }), request }).read;
+  const readFirst = read({ params: { itemId: itemIds[0] }, query: { parentId } });
+  const readSecond = read({ params: { itemId: itemIds[1] }, query: { parentId } });
+
+  await sellerStarted;
+  assert.equal(calls.filter(url => url === `/users/${sellerId}`).length, 1);
+  releaseSeller();
+  const [first, second] = await Promise.all([readFirst, readSecond]);
+  assert.deepEqual(first.quantities.map(row => row.quantity), [3]);
+  assert.deepEqual(second.quantities.map(row => row.quantity), [5]);
+  assert.equal(calls.filter(url => url.startsWith('/items/bulk?ids=')).length, 1);
+
+  await read({ params: { itemId: itemIds[0] }, query: { parentId } });
+  assert.equal(calls.filter(url => url === `/users/${sellerId}`).length, 2,
+    'the seller profile must be fetched again after the concurrent request completes');
+  assert.equal(calls.filter(url => url === `/items/${itemIds[0]}?include_attributes=all`).length, 1,
+    'a standalone read keeps the single-item endpoint');
+  assert.ok(calls.every(url => !url.includes('?') || url.startsWith('/items/')));
+});
+
+test('isolates one failed item in an otherwise successful bulk read', async () => {
+  const ids = [itemId, 'MLB4282518400'];
+  const calls = [];
+  const pool = { query: async () => [[{ id: 'product-1', sku: 'LJH074', variation_id: '' }]] };
+  const request = async url => {
+    calls.push(url);
+    if (url.startsWith('/items/bulk?ids=')) return response([
+      { id: ids[0], status_code: 200, body: { id: ids[0], seller_id: sellerId,
+        status: 'active', sub_status: [], tags: [], available_quantity: 3, variations: [] } },
+      { id: ids[1], status_code: 404, body: { message: 'not found' } },
+    ]);
+    if (url === `/users/${sellerId}`) return response({ id: sellerId, tags: [] });
+    throw new Error(`Unexpected Mercado Livre API path: ${url}`);
+  };
+  const read = createListingStockHandlers({ pool, settings: async () => ({ user_id: sellerId }), request }).read;
+  const results = await Promise.allSettled(ids.map(remoteId =>
+    read({ params: { itemId: remoteId }, query: { parentId } })));
+
+  assert.equal(results[0].status, 'fulfilled');
+  assert.equal(results[0].value.quantities[0].quantity, 3);
+  assert.equal(results[1].status, 'rejected');
+  assert.match(results[1].reason.message, /não confirmou um dos anúncios/);
+  assert.equal(calls.filter(url => url.startsWith('/items/bulk?ids=')).length, 1);
+  assert.equal(calls.filter(url => url === `/users/${sellerId}`).length, 1);
+});
+
 test('maps variation quantities to the exact locally linked SKUs', async () => {
   const h = harness({
     linked: [

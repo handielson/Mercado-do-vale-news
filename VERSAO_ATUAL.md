@@ -1,3 +1,14 @@
+# v1.2.752-mercado-livre-stock-batch-read
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.752-mercado-livre-stock-batch-read`.
+Release VPS: `/var/www/mdv-site/releases/20261102-162432-ml-stock-batch-read`. API: leitura de estoque do Mercado Livre publicada seletivamente.
+
+Leituras simultâneas agrupam até 20 anúncios via `/items/bulk`; o perfil do vendedor é deduplicado somente durante a requisição em andamento. Todas as escritas de anúncio, preço e estoque seguem desligadas.
+
+Validações: suíte Mercado Livre (117 aprovados), contratos estáticos, sintaxe, build e conferência pública.
+
+---
+
 # v1.2.751-erp-mercado-livre-readonly
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.751-erp-mercado-livre-readonly`.

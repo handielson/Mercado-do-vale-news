@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.751-erp-mercado-livre-readonly",
+  "version": "v1.2.752-mercado-livre-stock-batch-read",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.751-erp-mercado-livre-readonly",
-  "release_vps": "/var/www/mdv-site/releases/20261102-155832-mercado-livre-erp-readonly",
+  "tag": "v1.2.752-mercado-livre-stock-batch-read",
+  "release_vps": "/var/www/mdv-site/releases/20261102-162432-ml-stock-batch-read",
   "api_release": {
     "status": "published",
-    "note": "--mercado-livre-only; chave de leitura ERP configurada; gates de preço, estoque e publicação desligados"
+    "note": "--mercado-livre-stock-read-only; leituras simultâneas agrupadas via /items/bulk (máx. 20); gates de preço, estoque e publicação desligados"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Bridge de leitura Mercado Livre para o ERP: autenticação por chave dedicada e consultas de status, anúncios, preço e estoque. Recursos de escrita de preço, estoque e publicação permanecem desligados.",
+  "summary": "Consultas simultâneas de estoque do ERP agrupam anúncios via /items/bulk e deduplicam somente a consulta de perfil em andamento; escritas seguem desligadas.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -36,19 +36,16 @@
   },
   "site_source_base": "e803f89b",
   "changed_files": [
-    "deploy-vps-server-only.cjs",
-    "services/mercadoLivreServer.cjs",
-    "services/mercadoLivrePublication.cjs",
-    "services/mercadoLivreListingPrice.cjs",
     "services/mercadoLivreListingStock.cjs",
+    "tmp-tests/mercado-livre-listing-stock-read.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.751-erp-mercado-livre-readonly.md"
+    "docs/versoes/2026-11-02-v1.2.752-mercado-livre-stock-batch-read.md"
   ],
   "validations": [
-    "npm.cmd run test:mercado-livre (115 aprovados; integração estática aprovada)",
-    "node --check nos módulos Mercado Livre e servidores",
+    "npm.cmd run test:mercado-livre (117 aprovados; contrato de integração estático aprovado)",
+    "node --check services/mercadoLivreListingStock.cjs; node --check vps_server.js; node --check vps_server.cjs",
     "npm.cmd run build",
-    "GET público /status, /mercado-livre/settings e versão do site; gates de escrita confirmados desligados"
+    "Publicação seletiva do módulo de leitura de estoque e validação pública; gates de escrita confirmados desligados"
   ]
 }

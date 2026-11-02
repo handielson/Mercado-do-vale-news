@@ -20,6 +20,95 @@ function skuOf(source) {
 }
 
 function createListingStockHandlers({ pool, settings, request }) {
+  const sellerProfileInFlight = new Map();
+  const itemReadInFlight = new Map();
+  const pendingItemReads = new Map();
+  let itemReadTimer = null;
+
+  async function sellerProfile(seller) {
+    let pending = sellerProfileInFlight.get(seller);
+    if (!pending) {
+      pending = (async () => {
+        const response = await request(`/users/${seller}`);
+        return response.json();
+      })();
+      sellerProfileInFlight.set(seller, pending);
+    }
+    try {
+      return await pending;
+    } finally {
+      if (sellerProfileInFlight.get(seller) === pending) sellerProfileInFlight.delete(seller);
+    }
+  }
+
+  function scheduleItemReadBatch() {
+    if (itemReadTimer !== null) return;
+    itemReadTimer = setTimeout(() => { void flushItemReadBatch(); }, 20);
+  }
+
+  async function flushItemReadBatch() {
+    itemReadTimer = null;
+    const batch = [...pendingItemReads.entries()].slice(0, 20);
+    for (const [id] of batch) pendingItemReads.delete(id);
+    if (!batch.length) return;
+
+    try {
+      let bodies;
+      if (batch.length === 1) {
+        const [id] = batch[0];
+        const response = await request(`/items/${id}?include_attributes=all`);
+        bodies = new Map([[id, await response.json()]]);
+      } else {
+        const ids = batch.map(([id]) => id);
+        const response = await request(`/items/bulk?ids=${ids.join(',')}`);
+        const results = await response.json();
+        if (!Array.isArray(results) || results.length !== ids.length)
+          throw fail('O Mercado Livre retornou uma lista incompleta de anúncios.');
+        bodies = new Map();
+        const itemErrors = new Map();
+        for (const result of results) {
+          const id = String(result?.id || '').toUpperCase();
+          if (!ids.includes(id) || bodies.has(id) || itemErrors.has(id))
+            throw fail('Não foi possível validar individualmente a resposta agrupada do Mercado Livre.');
+          if (result.status_code !== 200 || !result.body || typeof result.body !== 'object' ||
+              String(result.body.id || '').toUpperCase() !== id) {
+            itemErrors.set(id, fail('O Mercado Livre não confirmou um dos anúncios da consulta agrupada.'));
+          } else bodies.set(id, result.body);
+        }
+        for (const [id, error] of itemErrors) bodies.set(id, error);
+      }
+      for (const [id, pending] of batch) {
+        const body = bodies.get(id);
+        if (body instanceof Error) pending.reject(body);
+        else if (!body || String(body.id || '').toUpperCase() !== id)
+          pending.reject(fail('O Mercado Livre não retornou o anúncio solicitado.'));
+        else pending.resolve({ json: async () => body });
+        if (itemReadInFlight.get(id) === pending.promise) itemReadInFlight.delete(id);
+      }
+    } catch (error) {
+      for (const [id, pending] of batch) {
+        pending.reject(error);
+        if (itemReadInFlight.get(id) === pending.promise) itemReadInFlight.delete(id);
+      }
+    }
+    if (pendingItemReads.size) scheduleItemReadBatch();
+  }
+
+  function readItem(itemId) {
+    const existing = itemReadInFlight.get(itemId);
+    if (existing) return existing;
+    let resolve, reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+    const pending = { promise, resolve, reject };
+    itemReadInFlight.set(itemId, promise);
+    pendingItemReads.set(itemId, pending);
+    scheduleItemReadBatch();
+    return promise;
+  }
+
   async function read(req, { requireSavedLink = false } = {}) {
     const itemId = String(req.params?.itemId || '').toUpperCase();
     const parentId = String(req.query?.parentId || '');
@@ -42,7 +131,7 @@ function createListingStockHandlers({ pool, settings, request }) {
       if (!familyProducts.length) throw fail('O produto informado não existe no catálogo do Mercado do Vale.', 404);
     }
 
-    const itemResponse = await request(`/items/${itemId}?include_attributes=all`);
+    const itemResponse = await readItem(itemId);
     const item = await itemResponse.json();
     if (String(item.seller_id) !== seller || String(item.id) !== itemId)
       throw fail('Anúncio não pertence à conta conectada.');
@@ -76,8 +165,7 @@ function createListingStockHandlers({ pool, settings, request }) {
       }
     }
     let matchMethod = linked.length ? 'saved_listing_link' : 'exact_catalog_sku_read_only';
-    const userResponse = await request(`/users/${seller}`);
-    const user = await userResponse.json();
+    const user = await sellerProfile(seller);
     if (String(user.id) !== seller || !Array.isArray(user.tags) || user.tags.length > 100 ||
         user.tags.some(tag => typeof tag !== 'string' || tag.length > 120))
       throw fail('Não foi possível confirmar o modelo de estoque da conta.');
