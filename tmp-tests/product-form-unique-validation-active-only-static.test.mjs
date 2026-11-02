@@ -4,8 +4,12 @@ import { resolve } from 'node:path';
 
 const source = readFileSync(resolve('components/products/ProductForm.tsx'), 'utf8');
 
-const start = source.indexOf('if (serialList.length > 0) {');
-const end = source.indexOf('if (hasSerializedIdentity(mergedData.specs || {}))', start);
+// Começa na verificação de duplicidade do envio (o primeiro "if (serialList.length > 0)" do arquivo
+// agora é um efeito no topo, e pegaria as buscas de SKU do Bling, que olham todos os status de propósito).
+const start = source.indexOf("message: 'Verificando duplicidades...'");
+// O bloco termina onde o produto único passa a montar a identidade serializada
+// (antes era um "if (hasSerializedIdentity(...))", virou constante).
+const end = source.indexOf('const singleSerializedIdentity = hasSerializedIdentity(mergedData.specs || {});', start);
 assert(start >= 0 && end > start, 'Could not isolate ProductForm serialized uniqueness block');
 
 const block = source.slice(start, end);

@@ -15,11 +15,13 @@ for (const server of [serverCjs, serverJs]) {
   assert.match(server, /isWhatsAppBroadcastOptOutMessage/);
   assert.match(server, /responda SAIR/);
   assert.match(server, /const marketingVideo = String\(product\?\.marketing_video_url/);
-  assert.ok(
-    server.indexOf("const marketingVideo = String(product?.marketing_video_url")
-      < server.indexOf("const configured = String(product?.video_url", server.indexOf('function buildWhatsAppStatusVideoCandidates')),
-    'marketing video must be evaluated before the regular product video',
-  );
+  // Status do WhatsApp: agrupado por cor; em cada cor o vídeo de marketing vem antes do vídeo normal.
+  const statusStart = server.indexOf('function buildWhatsAppStatusVideoCandidates');
+  const statusFn = server.slice(statusStart, server.indexOf('\n}\n', statusStart));
+  assert.ok(statusStart > 0, 'status video candidates builder must exist');
+  assert.match(statusFn, /const marketingVideo = String\(item\?\.marketing_video_url/);
+  assert.match(statusFn, /const fallbackVideo = String\(item\?\.video_url/);
+  assert.match(statusFn, /candidates: Array\.from\(new Set\(\[\.\.\.group\.marketing, \.\.\.group\.fallback\]\)\)/, 'marketing video must be evaluated before the regular product video');
   assert.match(server, /addColumnIfMissing\('products', 'marketing_background_url'/);
   assert.match(server, /addColumnIfMissing\('products', 'marketing_video_url'/);
 }
@@ -27,7 +29,10 @@ for (const server of [serverCjs, serverJs]) {
 assert.match(productForm, /Mídia de Marketing \(Opcional\)/);
 assert.match(productForm, /marketing_background_url/);
 assert.match(productForm, /marketing_video_url/);
-assert.match(marketingPage, /selectedProduct\?\.marketing_background_url/);
+// O Gerador de Artes grava a arte pronta no produto (com e sem preço); o status do WhatsApp usa essa arte.
+assert.match(marketingPage, /const targetField = showPrice \? 'marketing_background_url' : 'marketing_background_no_price_url';/);
+const statusPanel = fs.readFileSync('pages/admin/settings/marketing/WhatsAppStatusCampaignPanel.tsx', 'utf8');
+assert.match(statusPanel, /product\.marketing_background_url/);
 assert.match(whatsappPage, /<WhatsAppBroadcastPanel \/>/);
 
 console.log('whatsapp broadcast and marketing media static regression: ok');

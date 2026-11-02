@@ -10,7 +10,8 @@ assert(
 );
 
 assert(
-  /disabled=\{isSavingOperation \|\| isCompressing \|\| blocksSubmitForDuplicateEAN\}/.test(source),
+  // "savingDraft" entrou com o rascunho automático: não salvar o produto enquanto o rascunho grava.
+  /disabled=\{isSavingOperation \|\| savingDraft \|\| isCompressing \|\| blocksSubmitForDuplicateEAN\}/.test(source),
   'Submit button must use the serialized-aware duplicate EAN blocker',
 );
 

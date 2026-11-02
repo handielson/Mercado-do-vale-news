@@ -5,9 +5,14 @@ const source = readFileSync('components/products/ProductForm.tsx', 'utf8');
 
 assert.match(
   source,
-  /const localProduct = await findLocalProductForBlingLink\(cleanSku,\s*product\.id\);/,
+  /const localProduct = options\.skipLocalProductLookup\s*\?\s*null\s*:\s*await findLocalProductForBlingLink\(cleanSku,\s*product\.id\);/,
   'findBlingLinkBySku must look for an existing local product linked by SKU/Bling before returning',
 );
+
+// v1.2.209 (05/08/2026): o vínculo automático ao digitar o SKU pula a busca local para não travar
+// (as imagens locais vêm por hydrateExistingLocalProductImagesBySku); o vínculo manual faz a busca completa.
+assert.match(source, /hydrateExistingLocalProductImagesBySku\(cleanSku\)[\s\S]{0,400}findBlingLinkBySku\(cleanSku, \{ skipLocalProductLookup: true \}\)/, 'automatic SKU link skips the slow local lookup and hydrates images separately');
+assert.match(source, /const link = await findBlingLinkBySku\(cleanSku\);/, 'manual Bling link keeps the full local product lookup');
 
 assert.match(
   source,

@@ -95,5 +95,8 @@ test('entry links reach pages that prefill 3D without replacing the SKU', () => 
     assert.match(detail, /\{ \.\.\.product, is_print3d: true \}/);
     assert.match(detail, /print3dEntry && savedProduct.is_print3d && !Number\(savedProduct.is_parent\)/);
     assert.match(create, /defaultIsPrint3d=\{print3dEntry\}/);
-    assert.match(form, /is_print3d: defaultIsPrint3d/);
+    // Os padrões do formulário foram para productFormDefaults.ts; o formulário repassa a flag de entrada 3D.
+    const defaults = fs.readFileSync('components/products/productFormDefaults.ts', 'utf8');
+    assert.match(form, /defaultValues: buildProductFormDefaults\(initialData, defaultIsPrint3d\)/);
+    assert.match(defaults, /is_print3d: defaultIsPrint3d,[\s\S]*\.\.\.Object\.fromEntries\(Object\.entries\(initialData\)/, 'entrada 3D marca o produto, mas os dados existentes prevalecem');
 });

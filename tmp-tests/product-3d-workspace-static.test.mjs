@@ -12,8 +12,11 @@ test('produto 3D usa um fluxo único entre cadastro, produção e sites', () => 
   assert.match(nav, /product_id=/);
 
   const form = read('components/products/ProductForm.tsx');
-  assert.match(form, /Arquivos e ficha de produção/);
-  assert.match(form, /onBatchComplete\?\.\(savedProduct \|\| undefined\)/);
+  // A antiga aba "Arquivos e ficha de produção" virou duas: "Arquivos e URL" e "Parâmetros e placas" (só para 3D).
+  assert.match(form, /\.\.\.\(isPrint3d \? \[\['files', 'Arquivos e URL'\] as const, \['production', 'Parâmetros e placas'\] as const\] : \[\]\)/);
+  assert.match(form, /ficam privados na ficha de produção/);
+  // Depois de salvar, o produto segue para a etapa seguinte (agora levando o rascunho junto).
+  assert.match(form, /onBatchComplete\?\.\(savedProduct \|\| undefined, captureDraftSnapshot\(\)\)/);
 
   const page = read('pages/admin/products/ProductFormPage.tsx');
   assert.match(page, /savedProduct\?\.is_print3d/);
