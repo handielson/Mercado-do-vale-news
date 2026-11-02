@@ -133,6 +133,9 @@ function createListingStockHandlers({ pool, settings, request }) {
       if (!familyProducts.length) throw fail('O produto informado não existe no catálogo do Mercado do Vale.', 404);
     }
 
+    // For already linked listings, fetch the independent seller profile while
+    // the item request is in flight. Unlinked SKUs must pass exact matching first.
+    const userPromise = linked.length ? sellerProfile(seller) : null;
     const itemResponse = await readItem(itemId);
     const item = await itemResponse.json();
     if (String(item.seller_id) !== seller || String(item.id) !== itemId)
@@ -167,7 +170,7 @@ function createListingStockHandlers({ pool, settings, request }) {
       }
     }
     let matchMethod = linked.length ? 'saved_listing_link' : 'exact_catalog_sku_read_only';
-    const user = await sellerProfile(seller);
+    const user = await (userPromise || sellerProfile(seller));
     if (String(user.id) !== seller || !Array.isArray(user.tags) || user.tags.length > 100 ||
         user.tags.some(tag => typeof tag !== 'string' || tag.length > 120))
       throw fail('Não foi possível confirmar o modelo de estoque da conta.');

@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.753-mercado-livre-stock-batch-window",
+  "version": "v1.2.754-mercado-livre-parallel-stock-reads",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.753-mercado-livre-stock-batch-window",
-  "release_vps": "/var/www/mdv-site/releases/20261102-180543-v753-release-record",
+  "tag": "v1.2.754-mercado-livre-parallel-stock-reads",
+  "release_vps": "/var/www/mdv-site/releases/20261102-181536-ml-stock-parallel-reads",
   "api_release": {
     "status": "published",
-    "note": "Janela de 150 ms para agrupar leituras escalonadas via /items/bulk; deploy da API concluído, gates de preço, estoque e publicação desligados"
+    "note": "Deploy seletivo da leitura de estoque; perfil do vendedor consultado em paralelo com o anúncio; gates de preço, estoque e publicação desligados"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Consultas de estoque do ERP agrupam anúncios escalonados via /items/bulk em uma janela curta; escritas seguem desligadas.",
+  "summary": "Consultas de saldo agrupam anúncios escalonados e, para vínculos exatos, buscam em paralelo o anúncio e o perfil do vendedor; escritas seguem desligadas.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -40,12 +40,12 @@
     "tmp-tests/mercado-livre-listing-stock-read.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.752-mercado-livre-stock-batch-read.md"
+    "docs/versoes/2026-11-02-v1.2.754-mercado-livre-parallel-stock-reads.md"
   ],
   "validations": [
-    "npm.cmd run test:mercado-livre (117 aprovados; contrato de integração estático aprovado)",
+    "node --test tmp-tests/mercado-livre-listing-stock-read.test.cjs (16 aprovados)",
     "node --check services/mercadoLivreListingStock.cjs; node --check vps_server.js; node --check vps_server.cjs",
     "npm.cmd run build",
-    "Publicação seletiva do módulo de leitura de estoque e validação pública; gates de escrita confirmados desligados"
+    "Publicação seletiva da leitura de estoque e validação pública; gates de escrita confirmados desligados"
   ]
 }
