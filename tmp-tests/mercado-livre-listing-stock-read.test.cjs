@@ -208,6 +208,43 @@ test('reads an unlinked single-item listing by exact catalog SKU without persist
   assert.ok(h.calls.every(call => call.method === 'GET'));
 });
 
+test('fetches seller profile while validating an unlinked exact-SKU listing', async () => {
+  let releaseItem;
+  let markItemStarted;
+  let markSellerStarted;
+  const itemGate = new Promise(resolve => { releaseItem = resolve; });
+  const itemStarted = new Promise(resolve => { markItemStarted = resolve; });
+  const sellerStarted = new Promise(resolve => { markSellerStarted = resolve; });
+  const calls = [];
+  let queryCount = 0;
+  const pool = { query: async () => [++queryCount === 1 ? [] : [
+    { id: 'product-1', sku: 'LJH074' }, { id: 'product-2', sku: 'OTHER' },
+  ]] };
+  const request = async url => {
+    calls.push(url);
+    if (url.startsWith(`/items/${itemId}?`)) {
+      markItemStarted();
+      await itemGate;
+      return response({ id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
+        attributes: [{ id: 'SELLER_SKU', value_name: 'LJH074' }], available_quantity: 4, variations: [] });
+    }
+    if (url === `/users/${sellerId}`) {
+      markSellerStarted();
+      return response({ id: sellerId, tags: [] });
+    }
+    throw new Error(`Unexpected Mercado Livre API path: ${url}`);
+  };
+  const read = createListingStockHandlers({ pool, settings: async () => ({ user_id: sellerId }), request }).read;
+  const pending = read({ params: { itemId }, query: { parentId } });
+
+  await Promise.all([itemStarted, sellerStarted]);
+  assert.equal(calls.length, 2);
+  releaseItem();
+  const result = await pending;
+  assert.equal(result.matchMethod, 'exact_catalog_sku_read_only');
+  assert.deepEqual(result.quantities, [{ variationId: '', sku: 'LJH074', quantity: 4 }]);
+});
+
 test('reads only variations with an exact unique family SKU match', async () => {
   const h = harness({
     linked: [],
@@ -241,7 +278,9 @@ test('rejects ambiguous SKUs and oversized families without querying remote stoc
     assert.match(error.message, /mais de um produto/);
     return true;
   });
-  assert.equal(duplicate.calls.length, 1);
+  assert.equal(duplicate.calls.filter(call => call.url.startsWith(`/items/${itemId}?`)).length, 1);
+  assert.equal(duplicate.calls.filter(call => call.url === `/users/${sellerId}`).length, 1);
+  assert.equal(duplicate.calls.some(call => call.url.startsWith('/user-products/')), false);
 
   const oversized = harness({
     linked: [],

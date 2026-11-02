@@ -1,3 +1,14 @@
+# v1.2.755-mercado-livre-unlinked-parallel-stock-reads
+
+Data: 02/11/2026. Status: em publicação. Branch: `main`. Tag: `v1.2.755-mercado-livre-unlinked-parallel-stock-reads`.
+Release VPS: `/var/www/mdv-site/releases/20261102-182739-ml-stock-read-unlinked-parallel`. API: `--mercado-livre-stock-read-only`.
+
+Para famílias válidas do catálogo local, consulta o perfil do vendedor em paralelo à leitura do anúncio, inclusive quando ainda não há vínculo salvo no Mercado do Vale. Em anúncios sem vínculo, o ERP continua validando SKU exato e único antes de devolver qualquer saldo. Não cria vínculo, movimento ou ajuste de estoque; gates de publicação, preço e estoque seguem desligados.
+
+Validações locais: suíte Mercado Livre (119/119 aprovados e contrato estático aprovado); teste focado de leitura (17/17); build concluído com 3.893 módulos. Deploy e verificação pública pendentes.
+
+---
+
 # v1.2.754-mercado-livre-parallel-stock-reads
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.754-mercado-livre-parallel-stock-reads`.

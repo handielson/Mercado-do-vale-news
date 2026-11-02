@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.754-mercado-livre-parallel-stock-reads",
+  "version": "v1.2.755-mercado-livre-unlinked-parallel-stock-reads",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.754-mercado-livre-parallel-stock-reads",
-  "release_vps": "/var/www/mdv-site/releases/20261102-181536-ml-stock-parallel-reads",
+  "tag": "v1.2.755-mercado-livre-unlinked-parallel-stock-reads",
+  "release_vps": "/var/www/mdv-site/releases/20261102-182739-ml-stock-read-unlinked-parallel",
   "api_release": {
     "status": "published",
-    "note": "Deploy seletivo da leitura de estoque; perfil do vendedor consultado em paralelo com o anúncio; gates de preço, estoque e publicação desligados"
+    "note": "Deploy seletivo; perfil do vendedor consultado em paralelo também para anúncios não vinculados, sem devolver saldo antes do vínculo exato por SKU; gates de escrita desligados"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Consultas de saldo agrupam anúncios escalonados e, para vínculos exatos, buscam em paralelo o anúncio e o perfil do vendedor; escritas seguem desligadas.",
+  "summary": "Consultas de saldo agrupam anúncios escalonados e consultam perfil do vendedor em paralelo enquanto validam anúncios vinculados ou por SKU exato; escritas seguem desligadas.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -40,10 +40,10 @@
     "tmp-tests/mercado-livre-listing-stock-read.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.754-mercado-livre-parallel-stock-reads.md"
+    "docs/versoes/2026-11-02-v1.2.755-mercado-livre-unlinked-parallel-stock-reads.md"
   ],
   "validations": [
-    "node --test tmp-tests/mercado-livre-listing-stock-read.test.cjs (16 aprovados)",
+    "node --test tmp-tests/mercado-livre-listing-stock-read.test.cjs (17 aprovados)",
     "node --check services/mercadoLivreListingStock.cjs; node --check vps_server.js; node --check vps_server.cjs",
     "npm.cmd run build",
     "Publicação seletiva da leitura de estoque e validação pública; gates de escrita confirmados desligados"
