@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, X, Camera, ChevronDown } from 'lucide-react';
 
 import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -49,6 +49,10 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const [botHealth, setBotHealth] = useState<BotHealth | null>(null);
   const [certificateAlerts, setCertificateAlerts] = useState<Array<FiscalCertificateStatus & { companyId: string; companyName: string }>>([]);
   const [certificatePopupOpen, setCertificatePopupOpen] = useState(false);
+  // Celular: menu em gaveta (abaixo de md). No computador nada muda.
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openMobileGroup, setOpenMobileGroup] = useState<string | null>(null);
+  const mobileMenuHistory = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -263,6 +267,58 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     ].filter(Boolean).join('\n')
     : '';
 
+  const activeItemLabel = useMemo(() => menuGroups.flatMap(group => group.items).find(item => item.to === activeItemPath)?.label || '', [menuGroups, activeItemPath]);
+  const activeGroupTitle = useMemo(() => menuGroups.find(group => group.items.some(item => item.to === activeItemPath))?.title || null, [menuGroups, activeItemPath]);
+
+  function openMobileMenu() {
+    setOpenMobileGroup(activeGroupTitle);
+    setMobileMenuOpen(true);
+    // Entrada no historico para o botao "voltar" do celular fechar a gaveta em vez de sair da pagina.
+    try { window.history.pushState({ ...(window.history.state || {}), mdvAdminMenu: true }, ''); mobileMenuHistory.current = true; } catch { mobileMenuHistory.current = false; }
+  }
+
+  function closeMobileMenu() {
+    setMobileMenuOpen(false);
+    if (mobileMenuHistory.current) {
+      mobileMenuHistory.current = false;
+      try { window.history.back(); } catch { /* Historico indisponivel. */ }
+    }
+  }
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onPop = () => { mobileMenuHistory.current = false; setMobileMenuOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') closeMobileMenu(); };
+    window.addEventListener('popstate', onPop);
+    window.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    // Ao navegar (item do menu usa replace sobre a entrada da gaveta), so fecha sem voltar no historico.
+    mobileMenuHistory.current = false;
+    setMobileMenuOpen(false);
+  }, [location.key]);
+
+  const mobileShortcuts = [
+    { to: '/admin/products', icon: <Package size={20} />, label: 'Produtos' },
+    { to: '/admin/products/photo-intake', icon: <Camera size={20} />, label: 'Foto', title: 'Cadastro por foto' },
+    { to: '/admin/inventory', icon: <ClipboardList size={20} />, label: 'Estoque' },
+    { to: '/admin/products/labels', icon: <Barcode size={20} />, label: 'Etiquetas' },
+  ];
+  // Atalho mais especifico vence: /admin/products/photo-intake acende "Foto", nao "Produtos".
+  const activeShortcutPath = mobileShortcuts
+    .filter(shortcut => location.pathname === shortcut.to || location.pathname.startsWith(`${shortcut.to}/`))
+    .sort((a, b) => b.to.length - a.to.length)[0]?.to || null;
+  const activeShortcut = mobileShortcuts.find(shortcut => shortcut.to === activeShortcutPath);
+  const mobileTitle = activeShortcut && activeShortcut.to.length > (activeItemPath || '').length ? (activeShortcut.title || activeShortcut.label) : (activeItemLabel || 'Painel');
+
   return (
     <div className={cn("min-h-screen flex flex-col md:flex-row bg-slate-50", isPrint3dArea && "print3d-admin")} data-storefront={isPrint3dArea ? 'loja_3d' : 'mercado_do_vale'} data-admin-layout-build="2026-06-14-assets-refresh">
       {!isPrint3dArea && <SaleAlerts />}
@@ -272,12 +328,19 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           🔧 MODO DESENVOLVIMENTO - Autenticação Mock Ativa
         </div>
       )}
+      <header className="md:hidden sticky top-0 z-40 flex h-14 items-center gap-2 bg-slate-900 px-2 text-white shadow-md" data-admin-mobile-topbar>
+        <button type="button" onClick={openMobileMenu} aria-label="Abrir menu" aria-expanded={mobileMenuOpen} className="flex h-11 w-11 flex-none items-center justify-center rounded-lg hover:bg-slate-800"><MenuIcon size={22} /></button>
+        <span className="min-w-0 flex-1 truncate text-base font-semibold">{mobileTitle}</span>
+      </header>
+      {mobileMenuOpen && <div className="md:hidden fixed inset-0 z-40 bg-slate-950/60" onClick={closeMobileMenu} aria-hidden="true" data-admin-mobile-backdrop />}
       <aside className={cn(
-        "admin-sidebar-scroll w-full bg-slate-900 text-white p-6 space-y-4 md:sticky md:top-0 md:h-screen md:flex-none flex flex-col z-50 shadow-2xl overflow-y-auto transition-[width,padding] duration-200",
+        "admin-sidebar-scroll fixed inset-y-0 left-0 w-[85vw] max-w-[320px] bg-slate-900 text-white p-6 space-y-4 md:sticky md:top-0 md:h-screen md:max-w-none md:flex-none md:translate-x-0 flex flex-col z-50 shadow-2xl overflow-y-auto transition-[width,padding,transform] duration-200",
         sidebarCollapsed ? "md:w-[72px] md:p-3" : "md:w-64",
+        mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
         DEV_MODE ? "md:top-10 md:h-[calc(100vh-2.5rem)]" : ""
       )}>
         <div className={cn("px-2 pb-2", sidebarCollapsed && "md:px-0")}>
+          <div className="mb-2 flex items-center justify-between md:hidden"><span className="text-xs font-bold uppercase tracking-widest text-slate-400">Menu</span><button type="button" onClick={closeMobileMenu} aria-label="Fechar menu" className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800"><X size={22} /></button></div>
           <button type="button" onClick={toggleSidebar} aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} className={cn("hidden md:flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white mb-3", sidebarCollapsed ? "mx-auto" : "ml-auto")}>
             {sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
           </button>
@@ -339,9 +402,11 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           ) : (
             filteredGroups.map((group, groupIndex) => (
               <div key={groupIndex} className={cn("mb-4", sidebarCollapsed && "md:mb-2 md:border-t md:border-slate-800 md:pt-2")}>
-                <div className={cn("pt-2 pb-2 px-3 text-[10px] font-bold uppercase tracking-widest", group.title === 'Loja 3D' ? 'text-violet-200 bg-violet-500/10 rounded-lg border-l-2 border-violet-400' : 'text-slate-400 bg-transparent', sidebarCollapsed && "md:hidden")}>
+                <button type="button" onClick={() => setOpenMobileGroup(current => current === group.title ? null : group.title)} aria-expanded={!!search.trim() || openMobileGroup === group.title} className="md:hidden flex min-h-[44px] w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold uppercase tracking-widest text-slate-300 hover:bg-slate-800"><span className="min-w-0">{group.title}</span><ChevronDown size={16} className={cn("shrink-0 transition-transform", (search.trim() || openMobileGroup === group.title) && "rotate-180")} /></button>
+                <div className={cn("hidden md:block pt-2 pb-2 px-3 text-[10px] font-bold uppercase tracking-widest", group.title === 'Loja 3D' ? 'text-violet-200 bg-violet-500/10 rounded-lg border-l-2 border-violet-400' : 'text-slate-400 bg-transparent', sidebarCollapsed && "md:hidden")}>
                   {group.title}
                 </div>
+                <div className={cn(search.trim() || openMobileGroup === group.title ? "block" : "hidden", "md:block")}>
                 {group.items.map((item, itemIndex) => {
                   if (item.adminOnly && customer?.customer_type !== 'ADMIN') return null;
                   
@@ -353,9 +418,11 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                       label={item.label} 
                       active={activeItemPath === item.to} 
                       collapsed={sidebarCollapsed}
+                      replace={mobileMenuOpen}
                     />
                   );
                 })}
+                </div>
               </div>
             ))
           )}
@@ -400,7 +467,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
         )}
       </aside>
-      <main className={cn("flex-1 min-w-0 p-4 overflow-y-auto w-full md:w-auto overflow-x-hidden", location.pathname.startsWith('/admin/settings/models') ? "md:p-6" : "md:p-10")}>
+      <main className={cn("flex-1 min-w-0 p-4 pb-24 overflow-y-auto w-full md:w-auto overflow-x-hidden", location.pathname.startsWith('/admin/settings/models') ? "md:p-6" : "md:p-10")}>
         {isPrint3dArea && <div className="mb-5 flex items-center gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 text-violet-900"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-700"><Printer size={20} /></span><div><p className="text-sm font-bold">3DMV</p><p className="text-xs text-violet-700">Área de gestão da 3DMV · estoque central compartilhado</p></div></div>}
         {!isPrint3dArea && botHealth?.status === 'offline' && (
           <div role="alert" className="mb-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 shadow-sm">
@@ -416,17 +483,26 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         )}
         {children}
       </main>
+      <nav aria-label="Atalhos do celular" data-admin-mobile-shortcuts className="md:hidden fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_12px_rgba(15,23,42,0.08)]">
+        {mobileShortcuts.map(shortcut => (
+          <Link key={shortcut.to} to={shortcut.to} aria-current={activeShortcutPath === shortcut.to ? 'page' : undefined} className={cn("flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold", activeShortcutPath === shortcut.to ? "text-blue-600" : "text-slate-500")}>
+            {shortcut.icon}<span>{shortcut.label}</span>
+          </Link>
+        ))}
+        <button type="button" onClick={openMobileMenu} aria-label="Abrir menu completo" className="flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold text-slate-500"><MenuIcon size={20} /><span>Menu</span></button>
+      </nav>
     </div>
   );
 };
 
-const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; active?: boolean; collapsed?: boolean }> = ({ to, icon, label, active, collapsed }) => (
+const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; active?: boolean; collapsed?: boolean; replace?: boolean }> = ({ to, icon, label, active, collapsed, replace }) => (
   <Link
+    replace={replace}
     to={to}
     title={collapsed ? label : undefined}
     aria-label={label}
     className={cn(
-      "flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 group",
+      "flex min-h-[44px] md:min-h-0 items-center gap-3 px-3 py-3 md:py-2.5 rounded-xl cursor-pointer transition-all duration-200 group",
       collapsed && "md:justify-center md:px-2",
       active
         ? to.startsWith('/admin/loja-3d/') ? "bg-violet-700 text-white shadow-lg shadow-violet-700/20" : "bg-blue-600 text-white shadow-lg shadow-blue-600/20"

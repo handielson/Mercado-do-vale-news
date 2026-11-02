@@ -22,6 +22,8 @@ assert(/npm run build/.test(script), 'script should run npm run build before upl
 assert(/shell:\s*process\.platform\s*===\s*'win32'/.test(script), 'script should run npm.cmd through shell on Windows');
 assert(/VPS_SITE_SKIP_BUILD/.test(script), 'script should allow skipping build after a separately validated build');
 assert(/rollback/.test(script), 'script should document rollback command output');
+assert(/chown -R root:root/.test(script), 'script should normalize release owner so nginx can read every file');
+assert(/-type d -exec chmod 755/.test(script) && /-type f -exec chmod 644/.test(script), 'script should normalize release permissions (dirs 755, files 644) to avoid nginx 403');
 assert(pkg.scripts['deploy:vps-site'] === 'node scripts/deploy-vps-site.cjs', 'package.json should expose deploy:vps-site');
 
 console.log('vps site deploy script static checks ok');

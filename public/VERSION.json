@@ -1,23 +1,16 @@
 {
-  "version": "v1.2.732-perfis-fiscais-produto",
+  "version": "v1.2.733-admin-celular-cadastro-foto",
   "date": "2026-11-01",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.732-perfis-fiscais-produto",
-  "release_vps": "/var/www/mdv-site/releases/20261101-232648-v1232-perfis-fiscais",
+  "tag": "v1.2.733-admin-celular-cadastro-foto",
+  "release_vps": "/var/www/mdv-site/releases/20261102-002159-v1233-admin-celular",
   "api_release": {
-    "status": "published",
-    "module": "Perfis fiscais por produto (rotas /accountant/fiscal-catalog e /accountant/companies/:id/tax-profiles|fiscal-products, migration 028, proxy) — só cadastro, sem emissão; guarda de VPS_AUTH_SECRET já ativa desde 01/11",
-    "backup_prefix": "/var/www/mdv-api/backups/fiscal-tax-profiles-",
-    "backup": "/var/www/mdv-api/backups/fiscal-tax-profiles-1793575559110"
+    "status": "sem alteração",
+    "note": "release só de frontend; API segue a da v1.2.732"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Tributação por produto: perfis fiscais com abas NFC-e (65) e NF-e (55), tabelas oficiais NCM (Siscomex) e CEST (Conv. 142/2018), vínculo e prontidão por produto, conferência de NCM/CEST no cadastro. Inclui o manifesto pendente das versões v1.2.729–v1.2.731 (Mercado Livre) e versiona o endurecimento de segurança de 01/11.",
-  "includes_previous": [
-    "v1.2.729-erp-ml-price-read-diagnostic",
-    "v1.2.730-erp-ml-price-read-sku-link",
-    "v1.2.731-erp-ml-price-read-seller-sku-attr"
-  ],
+  "summary": "Admin no celular (parte 1 e 2): menu em gaveta com barra superior e atalhos inferiores (Produtos, Foto, Estoque, Etiquetas), botão voltar do Android fecha o menu, grupos em sanfona e alvos de toque de 44px. Cadastro por foto: botão Fotografar caixa (câmera direto, resolução cheia), dica para enviar sem compressão, teclado numérico em IMEI/EAN e validação ao vivo (IMEI com Luhn, EAN com dígito verificador). Deploy do site passa a normalizar dono e permissões da release (evita 403 no nginx).",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -38,61 +31,29 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: push da tag v1.2.732-perfis-fiscais-produto (proxy da sessão bloqueia tags)"
+    "tag_push": "pendente: push das tags v1.2.732-perfis-fiscais-produto e v1.2.733-admin-celular-cadastro-foto (proxy da sessão bloqueia tags)"
   },
-  "site_source_base": "41c8f59f",
+  "site_source_base": "7c170142",
   "changed_files": [
-    "services/fiscalCatalog.cjs",
-    "services/fiscalTaxProfileCore.cjs",
-    "services/fiscalTaxProfilesServer.cjs",
-    "services/fiscalTaxProfileService.ts",
-    "components/fiscal/FiscalProductTaxPanel.tsx",
-    "components/fiscal/FiscalNcmCestHint.tsx",
-    "scripts/fiscal-catalog-import.cjs",
-    "scripts/deploy-fiscal-tax-profiles.cjs",
-    "scripts/test-vps-ssh-key.cjs",
-    "migrations/028_fiscal_tax_profiles.sql",
-    "data/fiscal/ncm-vigente.json",
-    "data/fiscal/cest-conv142.json",
-    "tmp-tests/fiscal-catalog.test.cjs",
-    "tmp-tests/fiscal-tax-profile-core.test.cjs",
-    "tmp-tests/fiscal-tax-profiles-routes.test.cjs",
-    "tmp-tests/fiscal-tax-profiles-deploy-static.test.cjs",
-    "tmp-tests/fiscal-tax-profiles-proxy-static.test.cjs",
-    "services/accountantPortalServer.cjs",
-    "vps_server.cjs",
-    "vps_server.js",
-    "server.js",
-    "services/print3dShippingServer.cjs",
-    "deploy-vps-server-only.cjs",
+    "layouts/AdminLayout.tsx",
+    "components/products/photo-intake/PhotoCapturePanel.tsx",
+    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
+    "services/deviceIdentifiers.mjs",
     "scripts/deploy-vps-site.cjs",
-    "scripts/openai-finance-readonly.cjs",
-    "vite.config.ts",
-    "pages/admin/settings/CompanyDataPage.tsx",
-    "pages/accountant/AccountantPortalPage.tsx",
-    "components/products/ProductForm.tsx",
-    "publicar.md",
-    "CHECKLIST-MIGRACAO-BLING.md",
-    "docs/migracao-bling/evidencias.md",
+    "tmp-tests/admin-mobile-navigation-static.test.mjs",
+    "tmp-tests/device-identifiers.test.cjs",
+    "tmp-tests/vps-site-deploy-script-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-01-v1.2.732-perfis-fiscais-produto.md"
+    "docs/versoes/2026-11-01-v1.2.733-admin-celular-cadastro-foto.md"
   ],
   "validations": [
-    "34 testes novos de perfis fiscais (node --test) aprovados",
-    "testes fiscais/contador existentes: 146/147 (falha anterior accountant-deploy desde 05/10)",
-    "node --check dos servidores e scripts de deploy",
-    "pdv-stock-location-decrement-static aprovado",
-    "npm run build aprovado (prebuild: segredos n8n, Supabase e rotas nginx)",
-    "dist sem segredos da VPS e sem Supabase",
-    "node deploy-vps-server-only.cjs --fiscal-tax-profiles-check/--fiscal-tax-profiles-only: aprovado; tabelas 028 criadas; catálogo carregado",
-    "GET /status HTTP 200 com MySQL OK",
-    "rotas /accountant/fiscal-catalog e /tax-profiles: 401 sem login (direto e via proxy)",
-    "site 200; /VERSION.json v1.2.732; /contador e /admin/settings/company 200"
-  ],
-  "site_manifest_includes": [
-    "v1.2.729-erp-ml-price-read-diagnostic",
-    "v1.2.730-erp-ml-price-read-sku-link",
-    "v1.2.731-erp-ml-price-read-seller-sku-attr"
+    "admin-mobile-navigation-static aprovado",
+    "device-identifiers (validação do front igual à do servidor) aprovado",
+    "vps-site-deploy-script-static e deploy-vps-site-asset-verification-static aprovados",
+    "tsc sem erros nos arquivos alterados",
+    "npm run build aprovado",
+    "Playwright Pixel 7: sem rolagem horizontal, gaveta abre/fecha, voltar do Android fecha sem sair da tela, item navega e fecha, atalho ativo correto, IMEI válido/inválido e EAN incompleto sinalizados, sem erros JS",
+    "Playwright desktop 1366px: layout inalterado (sem barra superior/inferior, menu lateral fixo)"
   ]
 }

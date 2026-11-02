@@ -19,6 +19,7 @@ import { smartphonePriceGroups, SmartphonePriceReference } from '../../../servic
 import { DEFAULT_PRODUCT_VERSION } from '../../../services/smartphoneModelSpecs.mjs';
 import { ModelPricesPanel } from '../../settings/ModelPricesPanel';
 import { isScannerValueComplete, nextScannerBurst, SCANNER_IDLE_MS, SCANNER_MIN_FAST_KEYS } from '../../../services/scannerFieldAdvance.mjs';
+import { describeIdentifier, identifierInputProps } from '../../../services/deviceIdentifiers.mjs';
 
 interface PhotoIntakeReviewCardProps {
   intake: SmartphonePhotoIntake;
@@ -37,15 +38,15 @@ interface PhotoIntakeReviewCardProps {
   fieldsRef: React.Ref<HTMLDivElement>;
 }
 
-const TEXT_FIELDS: Array<{ key: keyof SmartphonePhotoIntakeUpdate; label: string; mono?: boolean }> = [
+const TEXT_FIELDS: Array<{ key: keyof SmartphonePhotoIntakeUpdate; label: string; mono?: boolean; kind?: 'imei' | 'ean' | 'serial' }> = [
   { key: 'detected_brand', label: 'Marca' },
   { key: 'detected_model', label: 'Modelo' },
   { key: 'detected_ram', label: 'RAM' },
   { key: 'detected_storage', label: 'Armazenamento' },
-  { key: 'detected_serial', label: 'Número de série', mono: true },
-  { key: 'detected_imei_1', label: 'IMEI 1', mono: true },
-  { key: 'detected_imei_2', label: 'IMEI 2', mono: true },
-  { key: 'detected_ean', label: 'EAN/GTIN', mono: true },
+  { key: 'detected_serial', label: 'Número de série', mono: true, kind: 'serial' },
+  { key: 'detected_imei_1', label: 'IMEI 1', mono: true, kind: 'imei' },
+  { key: 'detected_imei_2', label: 'IMEI 2', mono: true, kind: 'imei' },
+  { key: 'detected_ean', label: 'EAN/GTIN', mono: true, kind: 'ean' },
 ];
 
 const NEXT_SCAN_FIELD: Partial<Record<keyof SmartphonePhotoIntakeUpdate, keyof SmartphonePhotoIntakeUpdate>> = {
@@ -336,20 +337,28 @@ export function PhotoIntakeReviewCard({
               </button>
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
-              {TEXT_FIELDS.map(field => (
+              {TEXT_FIELDS.map(field => {
+                const identifierState = field.kind ? describeIdentifier(field.kind, draft[field.key]) : null;
+                return (
                 <label key={field.key} className="block min-w-0">
                   <span className="mb-1 block text-xs font-medium text-slate-500">{field.label}</span>
                   <input
+                    {...(identifierInputProps(field.kind) as React.InputHTMLAttributes<HTMLInputElement>)}
+                    enterKeyHint={NEXT_SCAN_FIELD[field.key] ? 'next' : 'done'}
+                    maxLength={field.kind === 'imei' ? 15 : field.kind === 'ean' ? 14 : undefined}
+                    aria-invalid={identifierState?.state === 'invalid' || undefined}
                     ref={element => { if (field.mono) scanInputs.current[field.key] = element; }}
                     value={String(draft[field.key] ?? '')}
                     onFocus={event => { resetScanBurst(); event.currentTarget.select(); }}
                     onClick={event => event.currentTarget.select()}
                     onKeyDown={NEXT_SCAN_FIELD[field.key] ? event => handleScanKeyDown(event, field.key) : undefined}
                     onChange={event => setDraft(current => ({ ...current, [field.key]: event.target.value, review_confirmed: false }))}
-                    className={`h-10 min-w-0 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 ${field.mono ? 'font-mono' : ''}`}
+                    className={`h-12 md:h-10 min-w-0 w-full rounded-lg border px-3 text-base md:text-sm focus:outline-none focus:ring-2 ${identifierState?.state === 'invalid' ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : identifierState?.state === 'ok' && field.kind !== 'serial' ? 'border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100' : 'border-slate-200 focus:border-blue-400 focus:ring-blue-100'} ${field.mono ? 'font-mono' : ''}`}
                   />
+                  {identifierState?.message && <span data-identifier-state={identifierState.state} className={`mt-1 block text-xs ${identifierState.state === 'invalid' ? 'text-red-600' : identifierState.state === 'ok' ? 'text-emerald-700' : 'text-amber-700'}`}>{identifierState.message}</span>}
                 </label>
-              ))}
+                );
+              })}
               <fieldset disabled={busy} className="min-w-0">
                 <legend className="mb-1 text-xs font-medium text-slate-500">Versão comercial</legend>
                 <VersionSelect value={draft.detected_version || ''} onChange={version => {

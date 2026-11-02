@@ -15,6 +15,7 @@ function isDuplicateQueuePhotoError(error: unknown): boolean {
 
 export function PhotoCapturePanel({ onProcessed }: PhotoCapturePanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState('');
 
@@ -81,22 +82,45 @@ export function PhotoCapturePanel({ onProcessed }: PhotoCapturePanelProps) {
           <p className="mt-1 text-sm text-slate-600">
             Fotografe a etiqueta da caixa com modelo, cor, memória, serial e IMEIs bem visíveis.
           </p>
+          <p className="mt-1 text-xs text-slate-500" data-photo-intake-quality-tip>
+            Melhor leitura: fotografe por aqui no celular. Se a foto vier por WhatsApp ou Telegram, envie como arquivo (sem compressão).
+          </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={processing}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {processing ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
-          {processing ? 'Processando...' : 'Selecionar fotos'}
-        </button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <button
+            type="button"
+            onClick={() => cameraRef.current?.click()}
+            disabled={processing}
+            data-photo-intake-camera
+            className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-base font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 md:hidden"
+          >
+            {processing ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
+            {processing ? 'Processando...' : 'Fotografar caixa'}
+          </button>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={processing}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-5 py-2.5 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60 md:border-transparent md:bg-blue-600 md:text-white md:hover:bg-blue-700"
+          >
+            {processing ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+            {processing ? 'Processando...' : <><span className="md:hidden">Escolher da galeria</span><span className="hidden md:inline">Selecionar fotos</span></>}
+          </button>
+        </div>
+        {/* Câmera direta: uma foto por vez, em resolução total. */}
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          capture="environment"
+          className="hidden"
+          onChange={event => { void handleFiles(event.target.files); event.currentTarget.value = ''; }}
+        />
         <input
           ref={inputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"
-          capture="environment"
           multiple
           className="hidden"
           onChange={event => void handleFiles(event.target.files)}

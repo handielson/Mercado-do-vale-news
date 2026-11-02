@@ -1,3 +1,13 @@
+# v1.2.733-admin-celular-cadastro-foto
+
+Data: 01/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.733-admin-celular-cadastro-foto` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-002159-v1233-admin-celular`. API: sem alteração.
+Admin no celular (partes 1 e 2): menu em gaveta com barra superior, atalhos inferiores (Produtos, Foto, Estoque, Etiquetas) e voltar do Android fechando o menu; grupos em sanfona e toques de 44px. Cadastro por foto: botão "Fotografar caixa" (câmera direto, resolução cheia), dica para enviar sem compressão, teclado numérico em IMEI/EAN e validação ao vivo (IMEI com Luhn, EAN com dígito verificador). O deploy do site passa a normalizar dono e permissões da release (evita 403 no nginx).
+
+Validações: testes estáticos de navegação mobile, validadores iguais aos do servidor, testes do script de deploy, tsc, build e conferência visual no Playwright (Pixel 7 e desktop).
+
+---
+
 # v1.2.732-perfis-fiscais-produto
 
 Data: 01/11/2026. Status: publicada. Branch: `main` (commit a241450d). Tag: `v1.2.732-perfis-fiscais-produto` (local; push da tag pendente).

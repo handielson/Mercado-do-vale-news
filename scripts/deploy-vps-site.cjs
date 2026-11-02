@@ -330,6 +330,11 @@ async function main() {
         `rm -rf ${shellQuote(releaseDir)}`,
         `mkdir -p ${shellQuote(releaseDir)}`,
         `tar -xzf ${shellQuote(remoteArchivePath)} -C ${shellQuote(releaseDir)}`,
+        // Arquivos vindos de pasta montada (Synology/VM) chegam sem leitura publica e
+        // o nginx devolve 403. Normaliza dono e permissoes de toda release.
+        `chown -R root:root ${shellQuote(releaseDir)}`,
+        `find ${shellQuote(releaseDir)} -type d -exec chmod 755 {} +`,
+        `find ${shellQuote(releaseDir)} -type f -exec chmod 644 {} +`,
         `rm -f ${shellQuote(remoteArchivePath)}`,
       ].join(' && ')
     );
