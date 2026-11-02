@@ -5,7 +5,7 @@ Release VPS: `/var/www/mdv-site/releases/20261102-182739-ml-stock-read-unlinked-
 
 Para famílias válidas do catálogo local, consulta o perfil do vendedor em paralelo à leitura do anúncio, inclusive quando ainda não há vínculo salvo no Mercado do Vale. Em anúncios sem vínculo, o ERP continua validando SKU exato e único antes de devolver qualquer saldo. Não cria vínculo, movimento ou ajuste de estoque; gates de publicação, preço e estoque seguem desligados.
 
-Validações locais: suíte Mercado Livre (119/119 aprovados e contrato estático aprovado); teste focado de leitura (17/17); build concluído com 3.893 módulos. Deploy e verificação pública pendentes.
+Validações: suíte Mercado Livre (119/119 aprovados e contrato estático aprovado); teste focado de leitura (17/17); build concluído com 3.893 módulos; deploy seletivo concluído; API HTTP 200 com MySQL saudável; site HTTP 200 e `VERSION.json` v1.2.755 conferido. Rechecagem real de cinco leituras concorrentes: 1/5 concluída em 45,57 s e quatro expiraram em 65 s; a latência continua inadequada. Gates de publicação, preço e estoque seguem desligados.
 
 ---
 
