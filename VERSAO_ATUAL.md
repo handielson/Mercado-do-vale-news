@@ -1,3 +1,13 @@
+# v1.2.749-units-leitura-protegida
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.749-units-leitura-protegida` (local; push da tag pendente).
+Site: sem alteração (continua `v1.2.748`). API: `--unit-read-privacy-only`.
+Segurança: GET /units e /units/by-identifier exigem administrador ou chave interna; o /vps-proxy trata /units como sensível (antes respondiam sem login, com IMEI e custo).
+
+Validações: teste novo, testes do proxy/units (sem diferença), node --check, curl anônimo antes/depois.
+
+---
+
 # v1.2.748-produtos-menos-consultas
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.748-produtos-menos-consultas` (local; push da tag pendente).

@@ -2175,6 +2175,7 @@ function normalizeVpsProxyPath(input) {
 
 function isVpsProxySensitiveGetPath(proxyPath) {
   return (
+    proxyPath.startsWith('/units') ||
     proxyPath.startsWith('/company-settings') ||
     proxyPath.startsWith('/admin/') ||
     proxyPath.startsWith('/table-data/') ||
@@ -20242,7 +20243,7 @@ fastify.patch('/products/:id/category', { preHandler: requireSyncKey }, async (r
 // ─── Units (inventory de unidades serializadas: 1 linha por aparelho) ──────
 
 // Lista unidades — filtra por product_id, order_id ou sale_id (FIFO por created_at)
-fastify.get('/units', async (req, reply) => {
+fastify.get('/units', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const { product_id, order_id, sale_id, status, company_id, ids } = req.query;
   const conds = [];
   const params = [];
@@ -20269,7 +20270,7 @@ fastify.get('/units', async (req, reply) => {
 });
 
 // Busca por IMEI 1, IMEI 2 ou serial (usado no PDV)
-fastify.get('/units/by-identifier/:q', async (req, reply) => {
+fastify.get('/units/by-identifier/:q', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const q = req.params.q;
   if (!q) return reply.code(400).send({ error: 'identifier required' });
   const [rows] = await pool.query(

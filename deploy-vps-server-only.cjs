@@ -682,6 +682,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--unit-read-privacy-only') || process.argv.includes('--unit-read-privacy-check')) {
+    await require('./scripts/deploy-unit-read-privacy.cjs').deployUnitReadPrivacy({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+      checkOnly: process.argv.includes('--unit-read-privacy-check'),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--product-read-privacy-only') || process.argv.includes('--product-read-privacy-check')) {
     await require('./scripts/deploy-product-read-privacy.cjs').deployProductReadPrivacy({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
