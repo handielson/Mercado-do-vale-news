@@ -1,3 +1,13 @@
+# v1.2.741-imei-cadastrado-na-hora
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.741-imei-cadastrado-na-hora` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-113731-v1241-imei-na-hora`. API: sem alteração.
+IMEI/serial já cadastrado aparece na hora (ao completar 15 dígitos, digitado ou lido pela câmera), com "Ver aparelho"; "Adicionar à Lista" recusa aparelho repetido; só um botão "Adicionar à Lista".
+
+Validações: testes novos, 40 testes do formulário (0 falhas), tsc, build e Playwright (iPhone 13).
+
+---
+
 # v1.2.740-admin-sem-zoom-rodape
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.740-admin-sem-zoom-rodape` (local; push da tag pendente).

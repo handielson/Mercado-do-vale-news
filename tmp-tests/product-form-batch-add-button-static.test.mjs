@@ -35,11 +35,13 @@ assert.match(
   'ProductForm must pass the add-to-list action to ProductSpecifications only for new products',
 );
 
-// Desde 14/06/2026 (v1.1.0, autofill de cor pelo SKU do Bling) a lista de cadastro em massa voltou a ter
-// o botão grande "Adicionar à Lista" junto da lista, de propósito. Ele precisa usar a mesma ação do cabeçalho.
+// Só um botão "Adicionar à Lista": o do topo das Especificações (pedido do usuário em 02/11/2026).
 const batchListStart = form.indexOf('Lista para Cadastro em Massa');
-const listButton = form.slice(batchListStart, form.indexOf('Adicionar à Lista', batchListStart));
 assert.ok(batchListStart > 0, 'mass registration list must exist');
-assert.match(listButton, /onClick=\{\(\) => handleAddToBatchList\(\)\}/, 'list button must use the same add-to-list action');
+assert.equal(
+  form.indexOf('Adicionar à Lista', batchListStart),
+  -1,
+  'The lower mass registration list must no longer render a duplicate Adicionar a Lista button',
+);
 
 console.log('product form batch add button static checks passed');

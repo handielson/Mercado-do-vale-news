@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.740-admin-sem-zoom-rodape",
+  "version": "v1.2.741-imei-cadastrado-na-hora",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.740-admin-sem-zoom-rodape",
-  "release_vps": "/var/www/mdv-site/releases/20261102-105519-v1240-admin-sem-zoom",
+  "tag": "v1.2.741-imei-cadastrado-na-hora",
+  "release_vps": "/var/www/mdv-site/releases/20261102-113731-v1241-imei-na-hora",
   "api_release": {
     "status": "sem alteração",
-    "note": "release só de frontend"
+    "note": "usa GET /units/by-identifier existente"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Admin no celular: todos os campos com 16px (o iPhone dava zoom ao tocar e a tela ficava deslocada, com a barra de baixo fora da vista); rodapé do cadastro de produto empilhado com o botão principal em cima e largura total; características do modelo quebram textos longos. Computador inalterado.",
+  "summary": "IMEI/serial já cadastrado aparece na hora: ao completar os 15 dígitos (digitado ou lido pela câmera) o campo consulta a tabela de aparelhos e mostra 'Já cadastrado em DD/MM/AAAA — situação (produto) · Ver aparelho'. 'Adicionar à Lista' recusa aparelho já cadastrado. Só um botão 'Adicionar à Lista' (o do topo das Especificações).",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,23 +31,29 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.740"
+    "tag_push": "pendente: v1.2.735 a v1.2.741"
   },
-  "site_source_base": "5144fa6e",
+  "site_source_base": "f5bc918f",
   "changed_files": [
-    "index.css",
-    "components/products/ProductForm.tsx",
+    "services/registeredIdentifier.ts",
+    "services/deviceIdentifiers.mjs",
+    "components/ui/RegisteredIdentifierNotice.tsx",
+    "components/ui/IMEIInput.tsx",
     "components/products/sections/ProductSpecifications.tsx",
-    "tmp-tests/admin-mobile-form-ergonomics-static.test.mjs",
+    "components/products/ProductForm.tsx",
+    "tmp-tests/registered-identifier-instant-check-static.test.mjs",
+    "tmp-tests/device-identifiers.test.cjs",
+    "tmp-tests/product-form-batch-add-button-static.test.mjs",
+    "tmp-tests/print3d-product-specifications-render.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.740-admin-sem-zoom-rodape.md"
+    "docs/versoes/2026-11-02-v1.2.741-imei-cadastrado-na-hora.md"
   ],
   "validations": [
-    "admin-mobile-form-ergonomics-static aprovado",
-    "32 testes do formulário de produto: mesmo resultado de antes (8 falhas anteriores)",
+    "registered-identifier-instant-check-static e device-identifiers aprovados",
+    "40 testes de formulário/IMEI/especificações aprovados (0 falhas)",
+    "tsc sem erros",
     "npm run build aprovado",
-    "Playwright iPhone 13 (Com variações): 0 de 11 campos abaixo de 16px, rodapé empilhado, largura 390/390",
-    "Playwright desktop 1366px: campos continuam 14px"
+    "Playwright iPhone 13: IMEI repetido avisado ao completar 15 dígitos com link; IMEI livre sem aviso; Adicionar à Lista recusa o repetido; 1 botão Adicionar à Lista"
   ]
 }

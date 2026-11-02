@@ -46,6 +46,7 @@ import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
 import { vpsClient } from '../../services/vpsClient';
 import { unitService } from '../../services/units';
+import { lookupRegisteredIdentifier } from '../../services/registeredIdentifier';
 import { fetchBlingProductDetail, findBlingProductByExactSku, importBlingProducts, isBlingReconnectRequired } from '../../services/blingService';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
@@ -274,7 +275,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
         return key === 'serial' ? text.toUpperCase() : text;
     };
 
-    const handleAddToBatchList = (overrides: Partial<BatchItem> = {}) => {
+    const handleAddToBatchList = async (overrides: Partial<BatchItem> = {}) => {
         const currentProductImages = getValues('images') || imagePreviews;
         const item: BatchItem = {
             id: crypto.randomUUID(),
@@ -312,6 +313,25 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
         if (duplicateIdentifiers.length > 0) {
             toast.warning('Este produto serializado já está na lista.', {
                 description: duplicateIdentifiers.join(' | ')
+            });
+            return;
+        }
+
+        // Não deixa entrar na lista um aparelho que já está cadastrado (evita descobrir só no Salvar).
+        const identifiersToCheck = [
+            ['IMEI 1', item.imei1],
+            ['IMEI 2', item.imei2],
+            ['Serial', item.serial],
+        ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+        const registered = await Promise.all(identifiersToCheck.map(async ([label, value]) => {
+            const info = await lookupRegisteredIdentifier(value, initialData?.id || null);
+            return info ? { label, value, info } : null;
+        }));
+        const firstRegistered = registered.find(Boolean);
+        if (firstRegistered) {
+            toast.error(`${firstRegistered.label} ${firstRegistered.value}: ${firstRegistered.info.message}`, {
+                duration: 10000,
+                action: { label: 'Ver aparelho', onClick: () => window.open(firstRegistered.info.link, '_blank', 'noopener') },
             });
             return;
         }
@@ -2285,15 +2305,6 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                         Lista para Cadastro em Massa
                         <span className="ml-auto text-sm font-normal text-slate-500">{serialList.length} {serialList.length === 1 ? 'item' : 'itens'}</span>
                     </h3>
-
-                    <button
-                        type="button"
-                        onClick={() => handleAddToBatchList()}
-                        className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
-                    >
-                        <CheckCircle2 size={16} />
-                        Adicionar à Lista
-                    </button>
 
                     {serialList.length > 0 && (
                         <div className="space-y-2">

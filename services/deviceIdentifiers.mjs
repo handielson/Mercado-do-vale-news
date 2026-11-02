@@ -117,3 +117,35 @@ export function pickScannedValues(kind, reads) {
   }
   return out;
 }
+
+const UNIT_STATUS_LABEL = Object.freeze({
+  available: 'disponível',
+  reserved: 'reservado',
+  sold: 'vendido',
+  scrapped: 'descartado',
+  rma: 'em RMA',
+  hidden: 'oculto',
+});
+
+/**
+ * Aviso curto de aparelho já cadastrado: "Já cadastrado em 05/08/2026 — vendido (Realme C71)".
+ * @param {{ status?: string, created_at?: string | Date, product_name?: string }} unit
+ */
+export function describeRegisteredUnitShort(unit) {
+  const raw = unit?.created_at;
+  const date = raw ? (raw instanceof Date ? raw : new Date(String(raw).replace(' ', 'T'))) : null;
+  const when = date && !Number.isNaN(date.getTime())
+    ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Recife' }).format(date)
+    : '';
+  const status = UNIT_STATUS_LABEL[String(unit?.status || '')] || String(unit?.status || '').trim();
+  const product = String(unit?.product_name || '').trim();
+  return `Já cadastrado${when ? ` em ${when}` : ''}${status ? ` — ${status}` : ''}${product ? ` (${product})` : ''}`;
+}
+
+/** Quando vale consultar o cadastro: IMEI completo (15 dígitos) ou serial com tamanho de serial. */
+export function shouldLookupIdentifier(kind, value) {
+  const text = String(value ?? '').trim();
+  if (kind === 'imei') return /^\d{15}$/.test(text);
+  if (kind === 'serial') return text.replace(/\s+/g, '').length >= 6;
+  return false;
+}

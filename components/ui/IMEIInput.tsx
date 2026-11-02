@@ -2,6 +2,8 @@
 import React from 'react';
 import { cn } from '../../utils/cn';
 import { BarcodeScanButton } from './BarcodeScanButton';
+import { RegisteredIdentifierNotice } from './RegisteredIdentifierNotice';
+import { useRegisteredIdentifier } from '../../services/registeredIdentifier';
 
 interface IMEIInputProps {
   value: string;
@@ -19,6 +21,10 @@ interface IMEIInputProps {
   scan?: boolean;
   /** Quando a câmera lê IMEI 1 e IMEI 2 juntos ("usar os dois"). */
   onScanPair?: (imeis: string[]) => void;
+  /** Confere na hora (ao completar 15 dígitos) se o IMEI já está em algum aparelho cadastrado (padrão: sim). */
+  checkRegistered?: boolean;
+  /** Ao editar: aparelhos deste produto não contam como repetidos. */
+  excludeProductId?: string | null;
 }
 
 /**
@@ -43,7 +49,10 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
   technicalName,
   scan = true,
   onScanPair,
+  checkRegistered = true,
+  excludeProductId = null,
 }) => {
+  const registered = useRegisteredIdentifier('imei', value, { enabled: checkRegistered, excludeProductId });
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
 
@@ -57,8 +66,9 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
     onChange(limited.toUpperCase().trim());
   };
 
-  const isInvalid = value.length > 0 && value.length !== 15;
-  const isValid = value.length === 15;
+  const lengthInvalid = value.length > 0 && value.length !== 15;
+  const isInvalid = lengthInvalid || registered.state === 'found';
+  const isValid = value.length === 15 && registered.state !== 'found';
 
   return (
     <div className="flex flex-col gap-1.5 w-full">
@@ -109,7 +119,7 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
         )}>
           {value.length}/15 dígitos
         </span>
-        {isInvalid && (
+        {lengthInvalid && (
           <span className="text-red-600 font-medium">
             ⚠️ Deve ter 15 dígitos
           </span>
@@ -120,6 +130,7 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
           </span>
         )}
       </div>
+      <RegisteredIdentifierNotice check={registered} />
       {error && (
         <p className="text-xs text-red-600 mt-1">{error}</p>
       )}

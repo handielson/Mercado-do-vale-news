@@ -18,6 +18,8 @@ function render(isPrint3d,categoryConfig,customFields=[],measurementValues={}){
   if(name.includes('vpsApiService'))return {vpsApiService:{}};
   if(name==='lucide-react')return new Proxy({},{get:()=>()=>null});
   if(name.endsWith('/BarcodeScanButton'))return {BarcodeScanButton:()=>null};
+  if(name.endsWith('/RegisteredIdentifierNotice'))return {RegisteredIdentifierNotice:()=>null};
+  if(name.endsWith('/registeredIdentifier'))return {useRegisteredIdentifier:()=>({state:'idle'})};
   if(/IMEIInput|ColorSelect|CapacitySelect|VersionSelect|TableRelationField/.test(name)){
    const key=name.split('/').pop();return {[key]:props=>React.createElement('input',{'aria-label':props.label||key,value:props.value||'',readOnly:true})};
   }

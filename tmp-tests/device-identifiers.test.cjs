@@ -45,3 +45,13 @@ test('leitor da câmera escolhe o valor certo para cada campo', async () => {
   assert.deepEqual(pickScannedValues('imei', [{ text: 'IMEI1:865643073183577 IMEI2:865643073183569' }]), ['865643073183577', '865643073183569'], 'DataMatrix com os dois');
   assert.deepEqual(pickScannedValues('imei', []), []);
 });
+
+test('aviso imediato de aparelho já cadastrado', async () => {
+  const front = await import('../services/deviceIdentifiers.mjs');
+  assert.equal(front.describeRegisteredUnitShort({ status: 'sold', created_at: '2026-08-05T19:54:21.000Z', product_name: 'Realme C71' }), 'Já cadastrado em 05/08/2026 — vendido (Realme C71)');
+  assert.equal(front.describeRegisteredUnitShort({ status: 'available' }), 'Já cadastrado — disponível');
+  assert.equal(front.shouldLookupIdentifier('imei', '86564307318357'), false, 'só consulta com 15 dígitos');
+  assert.equal(front.shouldLookupIdentifier('imei', '865643073183577'), true);
+  assert.equal(front.shouldLookupIdentifier('serial', 'AB12'), false);
+  assert.equal(front.shouldLookupIdentifier('serial', '0074490208440B19'), true);
+});

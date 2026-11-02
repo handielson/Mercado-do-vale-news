@@ -4,6 +4,8 @@ import { ProductInput } from '../../../types/product';
 import { CategoryConfig, FieldRequirement } from '../../../types/category';
 import { IMEIInput } from '../../ui/IMEIInput';
 import { BarcodeScanButton } from '../../ui/BarcodeScanButton';
+import { RegisteredIdentifierNotice } from '../../ui/RegisteredIdentifierNotice';
+import { useRegisteredIdentifier } from '../../../services/registeredIdentifier';
 import { ColorSelect } from '../selectors/ColorSelect';
 import { MaterialSelect } from '../selectors/MaterialSelect';
 import { CapacitySelect } from '../selectors/CapacitySelect';
@@ -193,6 +195,8 @@ export function ProductSpecifications({
         }
     }, [currentProductId]);
 
+    const serialRegistered = useRegisteredIdentifier('serial', String(watch('specs.serial') || ''), { excludeProductId: currentProductId || null });
+
     if (!categoryConfig) return null;
 
     const storageRequirement = getBaseSpecRequirement('storage');
@@ -309,6 +313,7 @@ export function ProductSpecifications({
                     {uniqueError && !errors?.specs?.[key] && (
                         <p className="text-xs text-red-600 mt-1">⚠️ {uniqueError}</p>
                     )}
+                    {key === 'serial' && <RegisteredIdentifierNotice check={serialRegistered} />}
                 </div>
             );
         }
@@ -387,15 +392,13 @@ export function ProductSpecifications({
                             onChange={(val) => setValue('specs.imei1', val, { shouldDirty: true })}
                             onScanPair={(imeis) => {
                                 setValue('specs.imei1', imeis[0], { shouldDirty: true });
-                                checkUniqueInDb('imei1', imeis[0]);
                                 if (imeis[1] && shouldShowBaseSpecField('imei2')) {
                                     setValue('specs.imei2', imeis[1], { shouldDirty: true });
-                                    checkUniqueInDb('imei2', imeis[1]);
                                 }
                             }}
                             required={getBaseSpecRequirement('imei1') === 'required'}
                             placeholder="Digite 15 dígitos"
-                            onBlur={(e) => { if (e.target.value.length === 15) checkUniqueInDb('imei1', e.target.value); }}
+                            excludeProductId={currentProductId || null}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
@@ -424,7 +427,7 @@ export function ProductSpecifications({
                             onChange={(val) => setValue('specs.imei2', val)}
                             required={getBaseSpecRequirement('imei2') === 'required'}
                             placeholder="Digite 15 dígitos"
-                            onBlur={(e) => { if (e.target.value.length === 15) checkUniqueInDb('imei2', e.target.value); }}
+                            excludeProductId={currentProductId || null}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
