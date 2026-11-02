@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.745-produtos-topo-enxuto",
+  "version": "v1.2.746-produtos-menu-acoes",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.745-produtos-topo-enxuto",
-  "release_vps": "/var/www/mdv-site/releases/20261102-141136-v1245-produtos-topo",
+  "tag": "v1.2.746-produtos-menu-acoes",
+  "release_vps": "/var/www/mdv-site/releases/20261102-142033-v1246-produtos-menu",
   "api_release": {
     "status": "sem alteração",
     "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Lista de produtos (parte 2): no celular o topo ficou enxuto — título curto, 'Selecionar' e 'Atualizar' viram ícones, os 11 atalhos ficam atrás de 'Mais ações' e os filtros atrás de um botão 'Filtros (N)' com a busca sempre visível. O primeiro produto aparece a ~490px do topo (antes ~3000px). Computador continua igual.",
+  "summary": "Lista de produtos (parte 3): no celular a linha de 15 ícones pequenos de cada card virou Shopee, TikTok, Editar e um botão '⋯' que abre um menu de baixo com nome escrito em cada ação (copiar nome/SKU, imprimir etiqueta, locais de estoque, histórico, tags, painel do modelo, Bling, ocultar do site, inativar). Excluir fica no fim, separado, em vermelho, e continua pedindo confirmação. Se o produto está oculto do site, o olho amarelo continua à vista. Computador continua igual.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,25 +31,24 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.745 (Claude); v1.2.742 do Codex",
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.746 (Claude); v1.2.742 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde (06/10/2026) parece errado; aguardando confirmação do usuário"
   },
-  "site_source_base": "d71630b6",
+  "site_source_base": "b91ffea1",
   "changed_files": [
-    "pages/admin/products/ProductListPage.tsx",
-    "components/products/ProductFilters.tsx",
-    "tmp-tests/product-list-mobile-part2-static.test.mjs",
-    "tmp-tests/product-list-actions.test.cjs",
+    "components/products/ProductCardActionsMenu.tsx",
+    "components/products/ProductCard.tsx",
+    "tmp-tests/product-card-actions-menu-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.745-produtos-topo-enxuto.md"
+    "docs/versoes/2026-11-02-v1.2.746-produtos-menu-acoes.md"
   ],
   "validations": [
-    "product-list-mobile-part2-static e part1 aprovados",
-    "product-list-actions ajustado (novas variáveis) e aprovado",
-    "testes da lista/filtros: nenhuma falha nova",
+    "product-card-actions-menu-static aprovado",
+    "44 testes da lista/card/filtros: mesmas 8 falhas anteriores, nenhuma nova",
     "tsc sem erros",
     "npm run build aprovado",
-    "Playwright iPhone 13: primeiro card em y≈487 (antes ~3000), 'Filtros (1)', 11 atalhos em 'Mais ações', largura 390 sem rolagem lateral"
+    "Playwright iPhone 13: 4 botões na linha do card, menu com 9 ações + Excluir separado, Excluir pede confirmação, largura 390",
+    "Playwright 1366px: 12 ícones como antes, sem '⋯'"
   ]
 }

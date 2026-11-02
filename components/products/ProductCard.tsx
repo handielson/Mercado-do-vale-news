@@ -13,6 +13,7 @@ import { UnitJournalModal } from '../inventory/UnitJournalModal';
 import { History } from 'lucide-react';
 import { ProductQuickTagsModal } from './ProductQuickTagsModal';
 import { CatalogTitleEditor } from './CatalogTitleEditor';
+import { ProductCardActionsMenu, type ProductCardAction } from './ProductCardActionsMenu';
 import { ProductPublicationChannels } from './ProductPublicationChannels';
 import { getAuthSessionToken } from '../../services/authSession';
 import { buildVpsUrl } from '../../services/vpsProxyBase';
@@ -1140,6 +1141,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
         stock_quantity: currentStock,
     });
 
+    // Menu "⋯" do celular: as mesmas ações dos ícones, com nome escrito.
+    const mobileCardActions: ProductCardAction[] = [
+        { key: 'copy-name', label: 'Copiar nome', icon: <Type className="h-5 w-5 text-sky-600" />, onSelect: e => handleCopyProductField(e, product.name, 'nome') },
+        ...(product.sku ? [{ key: 'copy-sku', label: 'Copiar SKU', icon: <Barcode className="h-5 w-5 text-indigo-600" />, onSelect: (e: React.MouseEvent) => handleCopyProductField(e, product.sku, 'SKU') }] : []),
+        { key: 'print', label: 'Imprimir etiqueta', icon: <Printer className="h-5 w-5 text-blue-600" />, onSelect: () => setIsPrintModalOpen(true) },
+        { key: 'stock-locations', label: 'Locais de estoque', icon: <MapPin className="h-5 w-5 text-emerald-600" />, onSelect: handleOpenStockLocationModal },
+        { key: 'history', label: 'Histórico do produto', icon: <History className="h-5 w-5 text-amber-700" />, onSelect: () => setIsJournalModalOpen(true) },
+        { key: 'tags', label: 'Tags', hint: currentTags.length > 0 ? `${currentTags.length} aplicada${currentTags.length > 1 ? 's' : ''}` : undefined, icon: <Tags className="h-5 w-5 text-purple-600" />, onSelect: () => setIsTagsModalOpen(true) },
+        ...(product.model_id ? [{ key: 'model', label: 'Painel do modelo', icon: <Package className="h-5 w-5 text-slate-600" />, onSelect: () => { window.location.href = `/admin/products/models/${encodeURIComponent(product.model_id!)}`; } }] : []),
+        ...(product.bling_id ? [{ key: 'bling-sync', label: 'Sincronizar estoque (Bling)', disabled: isSyncing, icon: <RefreshCw className="h-5 w-5 text-green-600" />, onSelect: handleSyncStock }] : []),
+        { key: 'catalog-visibility', label: isHiddenFromCatalog ? 'Mostrar no site' : 'Ocultar do site', hint: isHiddenFromCatalog ? 'está oculto' : undefined, disabled: isTogglingCatalogVisibility, icon: isHiddenFromCatalog ? <Eye className="h-5 w-5 text-sky-600" /> : <EyeOff className="h-5 w-5 text-amber-600" />, onSelect: handleToggleCatalogVisibility },
+        { key: 'status', label: currentStatus === ProductStatus.ACTIVE ? 'Inativar produto' : 'Ativar produto', disabled: isTogglingStatus, icon: currentStatus === ProductStatus.ACTIVE ? <PowerOff className="h-5 w-5 text-slate-500" /> : <Power className="h-5 w-5 text-green-600" />, onSelect: handleToggleStatus },
+        ...(onDelete ? [{ key: 'delete', label: 'Excluir produto', danger: true, icon: <Trash2 className="h-5 w-5 text-red-600" />, onSelect: () => onDelete(product) }] : []),
+    ];
+
     return (
         <div
             className={cn(
@@ -1367,14 +1383,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                     <div className="flex flex-wrap items-center justify-end gap-1 pb-0.5">
                         <button
                             onClick={(e) => handleCopyProductField(e, product.name, 'nome')}
-                            className="shrink-0 p-1.5 bg-sky-50 hover:bg-sky-100 rounded-lg transition-colors group"
+                            className="shrink-0 p-1.5 bg-sky-50 hover:bg-sky-100 rounded-lg transition-colors group max-md:hidden"
                             title="Copiar nome"
                         >
                             <Type className="w-4 h-4 text-sky-600 group-hover:text-sky-700" />
                         </button>
                         <button
                             onClick={(e) => handleCopyProductField(e, product.sku, 'SKU')}
-                            className="shrink-0 p-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors group"
+                            className="shrink-0 p-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors group max-md:hidden"
                             title="Copiar SKU"
                         >
                             <Barcode className="w-4 h-4 text-indigo-600 group-hover:text-indigo-700" />
@@ -1382,7 +1398,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                         <button
                             type="button"
                             onClick={handleOpenStockLocationModal}
-                            className="shrink-0 p-1.5 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors group"
+                            className="shrink-0 p-1.5 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors group max-md:hidden"
                             title="Ver locais de estoque"
                             aria-label="Ver locais de estoque"
                         >
@@ -1391,7 +1407,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                         <button
                             type="button"
                             onClick={event => { event.stopPropagation(); setIsJournalModalOpen(true); }}
-                            className="shrink-0 p-1.5 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                            className="shrink-0 p-1.5 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors max-md:hidden"
                             title="Histórico do produto"
                             aria-label="Histórico do produto"
                         >
@@ -1402,7 +1418,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                             onClick={handleOpenShopeeModal}
                             disabled={isPreparingShopeeModal}
                             className={cn(
-                                "relative shrink-0 p-1.5 rounded-lg transition-all duration-200 group border",
+                                "relative shrink-0 p-1.5 max-md:p-2.5 rounded-lg transition-all duration-200 group border",
                                 isPreparingShopeeModal
                                     ? "opacity-50 cursor-wait border-slate-200 bg-slate-50"
                                     : shopeeVisualState.isSynced
@@ -1441,7 +1457,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                             type="button"
                             onClick={handleOpenTikTokPreparation}
                             className={cn(
-                                "relative shrink-0 p-1.5 rounded-lg transition-all duration-200 group border",
+                                "relative shrink-0 p-1.5 max-md:p-2.5 rounded-lg transition-all duration-200 group border",
                                 isTikTokSynced
                                     ? "border-cyan-200 bg-slate-950 shadow-[0_0_0_3px_rgba(37,244,238,0.12),0_0_18px_rgba(254,44,85,0.22)]"
                                     : hasTikTokLink
@@ -1516,7 +1532,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                                 onClick={handleSyncStock}
                                 disabled={isSyncing}
                                 className={cn(
-                                    "shrink-0 p-1.5 rounded-lg transition-colors group",
+                                    "shrink-0 p-1.5 rounded-lg transition-colors group max-md:hidden",
                                     isSyncing ? "opacity-50 cursor-not-allowed" : "hover:bg-green-50"
                                 )}
                                 title="Sincronizar Estoque (Bling)"
@@ -1526,7 +1542,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                         )}
                         <button
                             onClick={(e) => { e.stopPropagation(); setIsTagsModalOpen(true); }}
-                            className="relative shrink-0 p-1.5 hover:bg-purple-50 rounded-lg transition-colors group"
+                            className="relative shrink-0 p-1.5 hover:bg-purple-50 rounded-lg transition-colors group max-md:hidden"
                             title={currentTags.length > 0 ? `${currentTags.length} tag(s) aplicada(s)` : 'Gerenciar tags'}
                         >
                             <Tags className="w-4 h-4 text-slate-400 group-hover:text-purple-600" />
@@ -1542,7 +1558,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                                     e.stopPropagation();
                                     window.location.href = `/admin/products/models/${encodeURIComponent(product.model_id)}`;
                                 }}
-                                className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                                className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors max-md:hidden"
                                 title="Ver painel do modelo"
                             >
                                 <Package className="w-4 h-4 text-slate-600" />
@@ -1550,14 +1566,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                         )}
                         <button
                             onClick={() => onEdit?.(product)}
-                            className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                            className="shrink-0 p-1.5 max-md:p-2.5 hover:bg-slate-100 rounded-lg transition-colors"
                             title={familyVariants ? 'Editar produto pai da família' : 'Editar produto'}
+                            aria-label={familyVariants ? 'Editar produto pai da família' : 'Editar produto'}
                         >
                             <Edit className="w-4 h-4 text-slate-600" />
                         </button>
                         <button
                             onClick={() => setIsPrintModalOpen(true)}
-                            className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors group"
+                            className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors group max-md:hidden"
                             title="Imprimir Etiqueta"
                         >
                             <Printer className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
@@ -1566,8 +1583,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                             onClick={handleToggleCatalogVisibility}
                             disabled={isTogglingCatalogVisibility}
                             className={cn(
-                                'shrink-0 p-1.5 rounded-lg transition-colors group',
-                                isHiddenFromCatalog ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-sky-50'
+                                'shrink-0 p-1.5 max-md:p-2.5 rounded-lg transition-colors group',
+                                isHiddenFromCatalog ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-sky-50 max-md:hidden'
                             )}
                             title={isHiddenFromCatalog ? 'Mostrar no site' : 'Ocultar do site'}
                             aria-label={isHiddenFromCatalog ? 'Mostrar produto no site' : 'Ocultar produto do site'}
@@ -1584,7 +1601,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                             onClick={handleToggleStatus}
                             disabled={isTogglingStatus}
                             className={cn(
-                                'shrink-0 p-1.5 rounded-lg transition-colors group',
+                                'shrink-0 p-1.5 rounded-lg transition-colors group max-md:hidden',
                                 currentStatus === ProductStatus.ACTIVE
                                     ? 'hover:bg-red-50'
                                     : 'hover:bg-green-50'
@@ -1598,11 +1615,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                         </button>
                         <button
                             onClick={() => onDelete?.(product)}
-                            className="shrink-0 p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
+                            className="shrink-0 p-1.5 hover:bg-red-50 rounded-lg transition-colors group max-md:hidden"
                             title="Excluir produto"
                         >
                             <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
                         </button>
+                        <ProductCardActionsMenu title={product.name} actions={mobileCardActions} />
                     </div>
 
                     <div className="min-w-0">

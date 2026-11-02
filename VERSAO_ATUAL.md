@@ -1,3 +1,13 @@
+# v1.2.746-produtos-menu-acoes
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.746-produtos-menu-acoes` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-142033-v1246-produtos-menu`. API: sem alteração.
+Lista de produtos (parte 3): no celular as ações do card ficam num menu "⋯" com nome escrito; Excluir no fim, separado e com confirmação.
+
+Validações: teste novo, testes da lista/card (sem falha nova), tsc, build e Playwright (iPhone 13 e 1366px).
+
+---
+
 # v1.2.745-produtos-topo-enxuto
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.745-produtos-topo-enxuto` (local; push da tag pendente).
