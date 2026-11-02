@@ -1,9 +1,11 @@
-# Candidato v1.2.742-mercado-livre-estoque-leitura-sku
+# v1.2.742-mercado-livre-estoque-leitura-sku
 
-Data: 02/11/2026. Base: `57ed5449` (v1.2.741). Status: validado localmente, ainda não publicado. Escopo: GET de saldo por SKU exato único sem persistir associação; todos os gates de escrita continuam desligados. Teste focal 13/13, suíte Mercado Livre 115/115, contrato estático, plano de publicação e build aprovados; aviso Vite não fatal sobre __dirname/configLoader:native.
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.742-mercado-livre-estoque-leitura-sku`.
+Release VPS: `/var/www/mdv-site/releases/20261102-125239-v1-2-742-mercado-livre-estoque-leitura-sku`. API: handler de leitura de estoque por SKU exato publicado seletivamente; escritas desligadas.
 
----
-# v1.2.741-imei-cadastrado-na-hora
+GET real pelo ERP preview 8818 leu `MLB7880776080` como `MNLDAACS`, saldo 3. Teste focal 13/13, suíte Mercado Livre 115/115, self-test do plano, contratos estáticos e build aprovados. Nenhuma movimentação foi criada e nenhuma escrita foi habilitada.
+
+---# v1.2.741-imei-cadastrado-na-hora
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.741-imei-cadastrado-na-hora` (local; push da tag pendente).
 Release VPS: `/var/www/mdv-site/releases/20261102-113731-v1241-imei-na-hora`. API: sem alteração.

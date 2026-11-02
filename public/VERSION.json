@@ -1,13 +1,13 @@
 {
   "version": "v1.2.742-mercado-livre-estoque-leitura-sku",
   "date": "2026-11-02",
-  "status": "publication_in_progress",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.742-mercado-livre-estoque-leitura-sku",
-  "release_vps": "/var/www/mdv-site/releases/20261102-124714-mercado-livre-erp-readonly",
+  "release_vps": "/var/www/mdv-site/releases/20261102-125239-v1-2-742-mercado-livre-estoque-leitura-sku",
   "api_release": {
-    "status": "publication_in_progress",
-    "note": "Deploy seletivo do handler GET de estoque por SKU exato único. Escrita de estoque, preço e publicação não foram habilitadas."
+    "status": "published",
+    "note": "Deploy seletivo do handler GET de estoque por SKU exato único. POST de estoque segue com chave e gate separados; escrita de preço e publicação não foram habilitadas."
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Consulta somente leitura do saldo de anúncios Mercado Livre usando SKU exato único na família local quando ainda não existe vínculo salvo; ambiguidades e famílias acima de 200 produtos são recusadas.",
@@ -31,9 +31,9 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pending",
-    "api": "pending",
-    "site_manifest": "pending"
+    "tag_push": "pushed with release tag",
+    "api": "published",
+    "site_manifest": "published"
   },
   "site_source_base": "57ed5449",
   "changed_files": [
@@ -47,10 +47,11 @@
     "docs/versoes/2026-11-02-v1.2.742-mercado-livre-estoque-leitura-sku.md"
   ],
   "validations": [
-    "Teste de leitura/deploy: 13/13 aprovados, incluindo rollback quando o restart da API falha",
-    "Suíte Mercado Livre: 115/115 aprovados; contrato estático aprovado",
-    "publish-vps-plan --self-test aprovado; plano prevê deploy seletivo da API e atualização do manifesto do site, sem deploy API genérico",
-    "node --check dos módulos alterados aprovado; git diff --check aprovado",
-    "npm.cmd run build aprovado; aviso não fatal do Vite sobre __dirname/configLoader:native"
+    "Teste de leitura/deploy 13/13; restauração automática validada quando o restart falha",
+    "Suíte Mercado Livre 115/115 e contrato estático aprovados",
+    "publish-vps-plan --self-test, node --check nos módulos/entrypoints, git diff --check aprovados",
+    "Build de produção aprovado; aviso Vite não fatal sobre __dirname/configLoader:native",
+    "GET real pelo ERP preview 8818: MLB7880776080 reconhecido como SKU MNLDAACS, quantity 3, sem salvar vínculo ou criar movimentação",
+    "API VPS /status e MySQL saudáveis após deploy seletivo"
   ]
 }
