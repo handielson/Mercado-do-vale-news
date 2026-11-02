@@ -59,3 +59,23 @@ export function identifierInputProps(kind) {
   if (kind === 'serial') return { ...base, inputMode: 'text', autoCapitalize: 'characters' };
   return { ...base, inputMode: 'text', autoCapitalize: 'sentences' };
 }
+
+/**
+ * Compara o que está no campo com o que o código de barras da etiqueta leu.
+ * @param {{status?: string, barcode?: string|null}|null|undefined} barcodeField resultado salvo pela API
+ * @param {string} value valor atual do campo
+ * @returns {{ state: 'match' | 'differs', value: string } | null} null quando as barras não leram este campo
+ */
+export function barcodeHint(barcodeField, value) {
+  const barcode = String(barcodeField?.barcode ?? '').trim();
+  if (!barcode) return null;
+  const normalize = (text) => String(text ?? '').replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+  return normalize(value) === normalize(barcode) ? { state: 'match', value: barcode } : { state: 'differs', value: barcode };
+}
+
+/** Link para achar a unidade já cadastrada pelo IMEI/serial que bateu. */
+export function registeredUnitLink(issue) {
+  if (!issue || issue.code !== 'already_registered') return null;
+  const search = String(issue.matched_value ?? '').trim();
+  return search ? `/admin/serializados?search=${encodeURIComponent(search)}` : null;
+}

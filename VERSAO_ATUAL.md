@@ -1,3 +1,13 @@
+# v1.2.734-foto-barras-listas
+
+Data: 01/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.734-foto-barras-listas` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-004941-v1234-foto-barras-listas`. API: cadastro por foto publicado (`--photo-intake-only`).
+Cadastro por foto: o servidor lê os códigos de barras da etiqueta (IMEIs e EAN) em paralelo com a IA e confere; divergência vira aviso com o valor das barras e botão "Usar este" (não sobrescreve sozinho). O aviso de já cadastrado diz qual campo bateu, a data, a situação e o produto, com link "Ver aparelho". Marca, modelo, RAM e armazenamento agora são escolhidos de lista do cadastro.
+
+Validações: testes novos de leitura/conferência de barras e listas; testes existentes do cadastro por foto; tsc; build; conferência visual no Playwright (Pixel 7).
+
+---
+
 # v1.2.733-admin-celular-cadastro-foto
 
 Data: 01/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.733-admin-celular-cadastro-foto` (local; push da tag pendente).

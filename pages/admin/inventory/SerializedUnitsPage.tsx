@@ -10,6 +10,7 @@
  * - Histórico de trocas por pedido
  */
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { unitService } from '@/services/units';
 import { releaseSerializedDocsForOrder } from '@/services/orderService';
 import type { Unit } from '@/types/unit';
@@ -351,7 +352,9 @@ function UnitRow({
 export default function SerializedUnitsPage() {
     const [units, setUnits] = useState<UnitWithProduct[]>([]);
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
+    const [searchParams] = useSearchParams();
+    // ?search= vem do aviso "já cadastrado" do cadastro por foto.
+    const [search, setSearch] = useState(() => searchParams.get('search')?.trim() || '');
     const [filterStatus, setFilterStatus] = useState<string>('');
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 

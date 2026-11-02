@@ -36,11 +36,14 @@ const n8nAdminHandoffRelayPath = 'services/n8nAdminHandoffRelay.cjs';
 const customerSelfServicePath = 'services/customerSelfServiceServer.cjs';
 const customerGoogleAuthPath = 'services/customerGoogleAuthServer.cjs';
 const autoresponderCatalogPreferencesPath = 'services/autoresponderCatalogPreferences.cjs';
+const ZXING_WASM_VERSION = '3.1.5';
 const smartphonePhotoIntakeServiceFiles = [
   'services/smartphoneModelFamily.cjs',
   'services/physicalRamCore.cjs',
   'services/smartphonePhotoIntakeCore.cjs',
   'services/smartphonePhotoIntakeServer.cjs',
+  'services/smartphoneBarcodeCrossCheck.cjs',
+  'services/smartphoneBarcodeReader.cjs',
   'services/smartphonePriceGroupsCore.cjs',
   'services/smartphonePriceGroupsServer.cjs',
   'services/smartphoneMovingAverageCore.cjs',
@@ -273,6 +276,9 @@ async function uploadSmartphonePhotoIntakeFiles(appDir) {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }
+  // Leitor de código de barras da etiqueta (versão fixa; só instala se faltar ou mudar).
+  await exec(`cd ${appDir} && (test "$(node -p \"try{JSON.parse(require('fs').readFileSync('node_modules/zxing-wasm/package.json','utf8')).version}catch(e){''}\")" = "${ZXING_WASM_VERSION}" || npm install zxing-wasm@${ZXING_WASM_VERSION} --omit=dev --no-audit --no-fund)`);
+  await exec(`cd ${appDir} && node -e "require('./services/smartphoneBarcodeReader.cjs'); require('./services/smartphoneBarcodeCrossCheck.cjs')"`);
 }
 
 async function assertSmartphoneMovingAverageSchema(appDir) {

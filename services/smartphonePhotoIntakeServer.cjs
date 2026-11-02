@@ -9,6 +9,7 @@ const {
   PHOTO_INTAKE_STATUS,
   buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
+  describeRegisteredUnit,
   getBlockingPhotoIntakeErrors,
   getPhotoIntakeVersion,
   photoIntakePriceSpecs,
@@ -17,6 +18,7 @@ const {
   translateColorToPtBr,
   validatePhotoExtraction,
 } = require('./smartphonePhotoIntakeCore.cjs');
+const { classifyBarcodeItems, crossCheckIdentifiers, isBarcodeIssue } = require('./smartphoneBarcodeCrossCheck.cjs');
 
 const DEFAULT_MODEL = 'gpt-5.6-luna';
 const DEFAULT_INPUT_RATE = 0.20;
@@ -255,6 +257,47 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     return schemaPromise;
   };
 
+  // Unidade já existente com o mesmo IMEI/serial, com data, status e produto para o aviso.
+  async function findRegisteredUnitIssue(identifiers, intakeId) {
+    const values = [identifiers.imei1, identifiers.imei2, identifiers.serial].filter(Boolean);
+    if (!values.length) return null;
+    const placeholders = values.map(() => '?').join(',');
+    const [rows] = await pool.query(
+      `SELECT u.id, u.status, u.created_at, u.imei_1, u.imei_2, u.serial, p.name AS product_name
+         FROM units u LEFT JOIN products p ON p.id = u.product_id
+        WHERE (u.imei_1 IN (${placeholders}) OR u.imei_2 IN (${placeholders}) OR u.serial IN (${placeholders}))
+          AND (u.intake_id IS NULL OR u.intake_id <> ?)
+        ORDER BY u.created_at DESC LIMIT 1`,
+      [...values, ...values, ...values, intakeId]
+    );
+    return rows[0] ? describeRegisteredUnit(rows[0], identifiers) : null;
+  }
+
+  // Leitura das barras não pode derrubar a análise: falha vira "barras não lidas".
+  async function readIntakeBarcodes(imageBuffer) {
+    try {
+      const { readBarcodesFromImage } = require('./smartphoneBarcodeReader.cjs');
+      const result = await readBarcodesFromImage(imageBuffer, {
+        isComplete: (items) => {
+          const classified = classifyBarcodeItems(items);
+          return classified.imeis.length >= 2 && classified.eans.length >= 1;
+        },
+      });
+      const classified = classifyBarcodeItems(result.items);
+      return { ...classified, ms: result.ms, passes: result.passes, error: null };
+    } catch (error) {
+      return { imeis: [], eans: [], texts: [], ms: 0, passes: 0, error: String(error?.message || error).slice(0, 200) };
+    }
+  }
+
+  function applyBarcodeCrossCheck(validation, barcode) {
+    validation.warnings = (validation.warnings || []).filter((issue) => !isBarcodeIssue(issue));
+    if (!barcode || barcode.error) return null;
+    const check = crossCheckIdentifiers(validation.value, barcode);
+    validation.warnings.push(...check.warnings);
+    return check.fields;
+  }
+
   async function loadIntake(id, connection = pool) {
     const [rows] = await connection.query('SELECT * FROM smartphone_photo_intakes WHERE id = ? LIMIT 1', [id]);
     return parseIntakeRow(rows[0]);
@@ -390,6 +433,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       },
       required: ['brand', 'model', 'color', 'ram', 'storage', 'serial', 'imei1', 'imei2', 'ean', 'product_code', 'confidence'],
     };
+    const barcodePromise = readIntakeBarcodes(imageBuffer);
     const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -416,16 +460,12 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     const { DEFAULT_PRODUCT_VERSION } = await import('./smartphoneModelSpecs.mjs');
     const commercialVersion = getPhotoIntakeVersion(intake) || DEFAULT_PRODUCT_VERSION;
     const catalog = await matchCatalog({ ...validation.value, version: commercialVersion }, intake.company_id);
-    const duplicateValues = [validation.value.imei1, validation.value.imei2, validation.value.serial].filter(Boolean);
-    if (duplicateValues.length > 0) {
-      const placeholders = duplicateValues.map(() => '?').join(',');
-      const [duplicates] = await pool.query(
-        `SELECT id FROM units WHERE (imei_1 IN (${placeholders}) OR imei_2 IN (${placeholders}) OR serial IN (${placeholders}))
-         AND (intake_id IS NULL OR intake_id <> ?) LIMIT 1`,
-        [...duplicateValues, ...duplicateValues, ...duplicateValues, intake.id]
-      );
-      if (duplicates.length > 0) validation.errors.push({ field: 'identifiers', code: 'already_registered', message: 'IMEI ou serial já cadastrado' });
-    }
+    const registeredIssue = await findRegisteredUnitIssue(validation.value, intake.id);
+    if (registeredIssue) validation.errors.push(registeredIssue);
+    const barcode = await barcodePromise;
+    const barcodeFields = applyBarcodeCrossCheck(validation, barcode);
+    const barcodeData = { imeis: barcode.imeis, eans: barcode.eans, texts: barcode.texts.slice(0, 12), fields: barcodeFields,
+      ms: barcode.ms, passes: barcode.passes, error: barcode.error, read_at: new Date().toISOString() };
     const usage = payload?.usage || {};
     const inputTokens = Number(usage.input_tokens || 0);
     const outputTokens = Number(usage.output_tokens || 0);
@@ -449,7 +489,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         validation.value.ean, validation.value.product_code, catalog.model?.brand_id || null, catalog.model?.id || null,
         color.id, catalog.product?.id || null, catalog.product?.price_cost ?? null, catalog.product?.price_retail ?? null,
         catalog.product?.price_reseller ?? null, catalog.product?.price_wholesale ?? null,
-        JSON.stringify({ ...validation.value, color_original: color.original, commercial_version: commercialVersion }),
+        JSON.stringify({ ...validation.value, color_original: color.original, commercial_version: commercialVersion, barcode: barcodeData }),
         JSON.stringify(validation.errors), JSON.stringify(validation.warnings), inputTokens, outputTokens, cost,
         inputRate, outputRate, intake.id]
     );
@@ -644,18 +684,17 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     const sets = []; const values = [];
     for (const field of allowed) if (field in body) { sets.push(`${field}=?`); values.push(body[field] ?? null); }
     if (!sets.length && !('detected_version' in body)) return reply.code(400).send({ error: 'Nenhum campo permitido' });
-    const identifiers = [validation.value.imei1, validation.value.imei2, validation.value.serial].filter(Boolean);
-    if (identifiers.length > 0) {
-      const placeholders = identifiers.map(() => '?').join(',');
-      const [duplicates] = await pool.query(
-        `SELECT id FROM units WHERE (imei_1 IN (${placeholders}) OR imei_2 IN (${placeholders}) OR serial IN (${placeholders}))
-         AND (intake_id IS NULL OR intake_id <> ?) LIMIT 1`,
-        [...identifiers, ...identifiers, ...identifiers, intake.id]
-      );
-      if (duplicates.length > 0) validation.errors.push({ field: 'identifiers', code: 'already_registered', message: 'IMEI ou serial já cadastrado' });
-    }
+    const registeredIssue = await findRegisteredUnitIssue(validation.value, intake.id);
+    if (registeredIssue) validation.errors.push(registeredIssue);
+    // Reconfere com as barras já lidas na análise (sem reler a foto) para o aviso sumir quando corrigido.
+    const previousExtracted = safeJson(intake.extracted_data, {}) || {};
+    const previousBarcode = previousExtracted.barcode && typeof previousExtracted.barcode === 'object' ? previousExtracted.barcode : null;
+    const barcodeFields = applyBarcodeCrossCheck(validation, previousBarcode);
+    const nextExtracted = { ...validation.value, commercial_version: commercialVersion };
+    if (previousExtracted.color_original) nextExtracted.color_original = previousExtracted.color_original;
+    if (previousBarcode) nextExtracted.barcode = { ...previousBarcode, fields: barcodeFields };
     sets.push('extracted_data=?', 'validation_errors=?', 'validation_warnings=?');
-    values.push(JSON.stringify({ ...validation.value, commercial_version: commercialVersion }), JSON.stringify(validation.errors), JSON.stringify(validation.warnings));
+    values.push(JSON.stringify(nextExtracted), JSON.stringify(validation.errors), JSON.stringify(validation.warnings));
     const validationFields = ['detected_brand', 'detected_model', 'detected_color', 'detected_ram', 'detected_storage',
       'detected_serial', 'detected_imei_1', 'detected_imei_2', 'detected_ean', 'detected_product_code',
       'matched_model_id', 'matched_color_id', 'detected_version'];

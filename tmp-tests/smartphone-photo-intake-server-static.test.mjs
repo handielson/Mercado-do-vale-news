@@ -24,8 +24,12 @@ assert.match(source, /resolvePhotoIntakeCompanyId[\s\S]*slug='mercado-do-vale'/,
 assert.match(source, /SET company_id=\?, detected_color=\?/, 'pendências antigas devem receber a empresa real antes do casamento de modelo e cor');
 assert.match(source, /if \(!intake\.matched_color_id\)[\s\S]*Selecione ou cadastre a cor/, 'finalização deve exigir cor estruturada');
 assert.match(source, /color_id: intake\.matched_color_id/, 'produto final deve guardar o identificador da cor');
-assert.match(source, /SELECT id FROM units WHERE \(imei_1 IN[\s\S]*intake_id IS NULL OR intake_id <> \?[\s\S]*already_registered/, 'edições manuais devem checar duplicidade sem acusar o próprio pré-cadastro');
-assert.match(source, /const duplicateValues = \[validation\.value\.imei1[\s\S]*intake_id IS NULL OR intake_id <> \?[\s\S]*duplicateValues, intake\.id/, 'nova leitura deve ignorar unidades do próprio pré-cadastro');
+assert.match(source, /async function findRegisteredUnitIssue[\s\S]*FROM units u[\s\S]*u\.intake_id IS NULL OR u\.intake_id <> \?[\s\S]*describeRegisteredUnit\(rows\[0\], identifiers\)/, 'duplicidade deve ignorar o próprio pré-cadastro e dizer data, status e produto');
+assert.equal((source.match(/findRegisteredUnitIssue\(validation\.value, intake\.id\)/g) || []).length, 2, 'nova leitura e edição manual devem checar duplicidade');
+assert.match(source, /const barcodePromise = readIntakeBarcodes\(imageBuffer\);\s*const response = await fetch\('https:\/\/api\.openai\.com/, 'leitura das barras deve rodar em paralelo com a IA');
+assert.match(source, /async function readIntakeBarcodes[\s\S]*catch \(error\)[\s\S]*imeis: \[\]/, 'falha na leitura das barras não pode derrubar a análise');
+assert.match(source, /function applyBarcodeCrossCheck[\s\S]*crossCheckIdentifiers\(validation\.value, barcode\)[\s\S]*validation\.warnings\.push/, 'barras conferem como aviso, sem sobrescrever a leitura');
+assert.match(source, /previousExtracted\.barcode[\s\S]*applyBarcodeCrossCheck\(validation, previousBarcode\)[\s\S]*nextExtracted\.barcode/, 'edição manual deve reconferir com as barras já lidas e preservá-las');
 assert.match(source, /beginTransaction\(\)[\s\S]*FOR UPDATE[\s\S]*commit\(\)/, 'finalização deve ser transacional e bloquear a pendência');
 assert.match(source, /confirm-group-prices[\s\S]*matched_model_id=\?[\s\S]*matched_color_id=\?[\s\S]*detected_ram[\s\S]*detected_storage[\s\S]*FOR UPDATE/, 'confirmação em grupo deve usar a combinação exata e bloquear as linhas');
 assert.match(source, /updated_count: versionRows\.length/, 'confirmação em grupo deve contar apenas aparelhos da mesma versão');

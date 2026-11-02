@@ -25,6 +25,14 @@ export interface SmartphonePhotoIntakeIssue {
   field?: string;
   code?: string;
   message: string;
+  /** already_registered: unidade que já usa o IMEI/serial. */
+  unit_id?: string | null;
+  unit_status?: string | null;
+  registered_at?: string | null;
+  product_name?: string | null;
+  matched_value?: string | null;
+  /** barcode_mismatch / barcode_only: valor lido no código de barras. */
+  barcode_value?: string | null;
 }
 export interface SmartphonePhotoIntake {
   id: string;

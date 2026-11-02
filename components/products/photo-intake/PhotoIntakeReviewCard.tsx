@@ -19,7 +19,9 @@ import { smartphonePriceGroups, SmartphonePriceReference } from '../../../servic
 import { DEFAULT_PRODUCT_VERSION } from '../../../services/smartphoneModelSpecs.mjs';
 import { ModelPricesPanel } from '../../settings/ModelPricesPanel';
 import { isScannerValueComplete, nextScannerBurst, SCANNER_IDLE_MS, SCANNER_MIN_FAST_KEYS } from '../../../services/scannerFieldAdvance.mjs';
-import { describeIdentifier, identifierInputProps } from '../../../services/deviceIdentifiers.mjs';
+import { barcodeHint, describeIdentifier, identifierInputProps, registeredUnitLink } from '../../../services/deviceIdentifiers.mjs';
+import { findCatalogOption } from '../../../services/photoIntakeCatalogFields.mjs';
+import { loadPhotoIntakeCatalogLists, type PhotoIntakeCatalogLists } from '../../../services/photoIntakeCatalogLists';
 
 interface PhotoIntakeReviewCardProps {
   intake: SmartphonePhotoIntake;
@@ -38,15 +40,21 @@ interface PhotoIntakeReviewCardProps {
   fieldsRef: React.Ref<HTMLDivElement>;
 }
 
-const TEXT_FIELDS: Array<{ key: keyof SmartphonePhotoIntakeUpdate; label: string; mono?: boolean; kind?: 'imei' | 'ean' | 'serial' }> = [
-  { key: 'detected_brand', label: 'Marca' },
-  { key: 'detected_model', label: 'Modelo' },
-  { key: 'detected_ram', label: 'RAM' },
-  { key: 'detected_storage', label: 'Armazenamento' },
-  { key: 'detected_serial', label: 'Número de série', mono: true, kind: 'serial' },
-  { key: 'detected_imei_1', label: 'IMEI 1', mono: true, kind: 'imei' },
-  { key: 'detected_imei_2', label: 'IMEI 2', mono: true, kind: 'imei' },
-  { key: 'detected_ean', label: 'EAN/GTIN', mono: true, kind: 'ean' },
+type BarcodeFieldKey = 'imei1' | 'imei2' | 'ean' | 'serial';
+type BarcodeFieldResult = { status?: string; barcode?: string | null };
+
+type CatalogFieldKind = 'brand' | 'model' | 'ram' | 'storage';
+
+// Campos que já existem no cadastro são escolhidos de lista (evita erro de digitação/leitura).
+const TEXT_FIELDS: Array<{ key: keyof SmartphonePhotoIntakeUpdate; label: string; mono?: boolean; kind?: 'imei' | 'ean' | 'serial'; barcodeKey?: BarcodeFieldKey; catalog?: CatalogFieldKind }> = [
+  { key: 'detected_brand', label: 'Marca', catalog: 'brand' },
+  { key: 'detected_model', label: 'Modelo', catalog: 'model' },
+  { key: 'detected_ram', label: 'RAM', catalog: 'ram' },
+  { key: 'detected_storage', label: 'Armazenamento', catalog: 'storage' },
+  { key: 'detected_serial', label: 'Número de série', mono: true, kind: 'serial', barcodeKey: 'serial' },
+  { key: 'detected_imei_1', label: 'IMEI 1', mono: true, kind: 'imei', barcodeKey: 'imei1' },
+  { key: 'detected_imei_2', label: 'IMEI 2', mono: true, kind: 'imei', barcodeKey: 'imei2' },
+  { key: 'detected_ean', label: 'EAN/GTIN', mono: true, kind: 'ean', barcodeKey: 'ean' },
 ];
 
 const NEXT_SCAN_FIELD: Partial<Record<keyof SmartphonePhotoIntakeUpdate, keyof SmartphonePhotoIntakeUpdate>> = {
@@ -208,6 +216,106 @@ export function PhotoIntakeReviewCard({
   );
   const modelNames = useMemo(() => new Map(models.map(model => [model.id, model.name])), [models]);
 
+  const [catalogLists, setCatalogLists] = useState<PhotoIntakeCatalogLists | null>(null);
+  const [catalogListsError, setCatalogListsError] = useState('');
+  const refreshCatalogLists = (force = false) => {
+    setCatalogListsError('');
+    loadPhotoIntakeCatalogLists(force)
+      .then(setCatalogLists)
+      .catch(() => setCatalogListsError('Não foi possível carregar marcas, RAM e armazenamento. Toque em Atualizar listas.'));
+  };
+  useEffect(() => { refreshCatalogLists(); }, []);
+  const brandNames = useMemo(() => (catalogLists?.brands || []).map(brand => brand.name), [catalogLists]);
+  // Etiqueta pode trazer submarca (ex.: "Redmi"); com o modelo vinculado, a marca vem do modelo.
+  const linkedModelBrandName = catalogLists?.brands.find(brand => brand.id === models.find(model => model.id === draft.matched_model_id)?.brand_id)?.name || null;
+  const selectedBrandName = findCatalogOption(brandNames, String(draft.detected_brand ?? '')) || linkedModelBrandName;
+  const selectedBrandId = catalogLists?.brands.find(brand => brand.name === selectedBrandName)?.id || draft.matched_brand_id || null;
+  // Com a marca escolhida, a lista de modelos mostra só os dela.
+  const brandModels = useMemo(
+    () => (selectedBrandId ? sortedModels.filter(model => model.brand_id === selectedBrandId) : sortedModels),
+    [sortedModels, selectedBrandId],
+  );
+  const renderCatalogField = (field: (typeof TEXT_FIELDS)[number]) => {
+    const raw = String(draft[field.key] ?? '');
+    const inputClass = 'h-12 md:h-10 min-w-0 w-full rounded-lg border bg-white px-3 text-base md:text-sm focus:outline-none focus:ring-2';
+    const readHint = (matched: string | null) => (!matched && raw
+      ? <span data-catalog-state="unmatched" className="mt-1 block text-xs font-semibold text-amber-700">Lido na foto: “{raw}” — escolha da lista</span>
+      : null);
+    if (field.catalog === 'brand') {
+      return (
+        <div key={field.key} className="block min-w-0" data-catalog-field="brand">
+          <label htmlFor={`intake-brand-${intake.id}`} className="mb-1 block text-xs font-medium text-slate-500">{field.label}</label>
+          <SearchableSelect
+            key={`${intake.id}-brand`}
+            id={`intake-brand-${intake.id}`}
+            value={selectedBrandName || ''}
+            options={brandNames}
+            onChange={name => {
+              const brand = catalogLists?.brands.find(item => item.name === name);
+              setDraft(current => ({ ...current, detected_brand: name, matched_brand_id: brand?.id || null, review_confirmed: false }));
+            }}
+            disabled={busy || !catalogLists}
+            placeholder={raw ? `Lido: ${raw} — pesquisar marca` : 'Pesquisar marca...'}
+            className={`${inputClass} ${selectedBrandName ? 'border-slate-200' : 'border-amber-300'}`}
+          />
+          {readHint(selectedBrandName)}
+        </div>
+      );
+    }
+    if (field.catalog === 'model') {
+      const modelId = draft.matched_model_id && modelNames.has(draft.matched_model_id) ? draft.matched_model_id : '';
+      return (
+        <div key={field.key} className="block min-w-0" data-catalog-field="model">
+          <label htmlFor={`intake-model-field-${intake.id}`} className="mb-1 block text-xs font-medium text-slate-500">{field.label}</label>
+          <SearchableSelect
+            key={`${intake.id}-model`}
+            id={`intake-model-field-${intake.id}`}
+            value={modelId}
+            options={brandModels.map(model => model.id)}
+            getOptionLabel={id => modelNames.get(id) || ''}
+            onChange={id => {
+              const model = models.find(item => item.id === id);
+              setSelectedModelId(id);
+              setDraft(current => ({
+                ...current,
+                matched_model_id: id || null,
+                matched_brand_id: model?.brand_id || current.matched_brand_id || null,
+                detected_brand: catalogLists?.brands.find(brand => brand.id === model?.brand_id)?.name || current.detected_brand || '',
+                detected_model: model?.name || current.detected_model || '',
+                review_confirmed: false,
+              }));
+            }}
+            disabled={busy}
+            placeholder={raw ? `Lido: ${raw} — pesquisar modelo` : 'Pesquisar modelo...'}
+            className={`${inputClass} ${modelId ? 'border-slate-200' : 'border-amber-300'}`}
+          />
+          {!modelId && raw && <span data-catalog-state="unmatched" className="mt-1 block text-xs font-semibold text-amber-700">Lido na foto: “{raw}” — escolha da lista ou cadastre o modelo</span>}
+        </div>
+      );
+    }
+    const options = field.catalog === 'ram' ? catalogLists?.rams || [] : catalogLists?.storages || [];
+    const matched = findCatalogOption(options, raw, 'memory');
+    return (
+      <label key={field.key} className="block min-w-0" data-catalog-field={field.catalog}>
+        <span className="mb-1 block text-xs font-medium text-slate-500">{field.label}</span>
+        <select
+          value={matched || (raw ? `__lido__${raw}` : '')}
+          disabled={busy || !catalogLists}
+          onChange={event => {
+            const value = event.target.value;
+            if (value.startsWith('__lido__')) return;
+            setDraft(current => ({ ...current, [field.key]: value, review_confirmed: false }));
+          }}
+          className={`${inputClass} ${matched ? 'border-slate-200 focus:border-blue-400 focus:ring-blue-100' : 'border-amber-300 focus:ring-amber-100'}`}
+        >
+          {!matched && <option value={raw ? `__lido__${raw}` : ''} disabled>{raw ? `Lido: ${raw} — escolha` : 'Selecione'}</option>}
+          {options.map(option => <option key={option} value={option}>{option}</option>)}
+        </select>
+        {readHint(matched)}
+      </label>
+    );
+  };
+
   const updateCost = (cost: number) => {
     costEdited.current = true;
     const activeMargin = !groupPriceLocked && margin && Boolean(margin.active) ? margin : null;
@@ -240,6 +348,9 @@ export function PhotoIntakeReviewCard({
     ...(intake.validation_errors || []),
     ...(intake.validation_warnings || []),
   ];
+  // Resultado da leitura das barras salvo pela API (confere, não sobrescreve).
+  const barcodeData = (intake.extracted_data as { barcode?: { fields?: Partial<Record<BarcodeFieldKey, BarcodeFieldResult>> | null } } | null | undefined)?.barcode;
+  const barcodeFields = barcodeData?.fields || null;
   const hasNonConfirmableIssues = (intake.validation_errors || [])
     .some(issue => ['required', 'duplicate', 'already_registered'].includes(String(issue.code || '')));
   const confirmReview = async () => {
@@ -289,7 +400,15 @@ export function PhotoIntakeReviewCard({
                 {intake.review_confirmed ? 'Conferência confirmada' : 'Pontos para conferir'}
               </p>
               <ul className={`mt-2 space-y-1 text-xs ${intake.review_confirmed ? 'text-emerald-700' : 'text-orange-700'}`}>
-                {issues.map((issue, index) => <li key={`${issue.field || 'issue'}-${index}`}>• {issue.message}</li>)}
+                {issues.map((issue, index) => {
+                  const unitLink = registeredUnitLink(issue);
+                  return (
+                    <li key={`${issue.field || 'issue'}-${index}`} data-photo-intake-issue={issue.code || undefined}>
+                      • {issue.message}
+                      {unitLink && <Link to={unitLink} className="ml-1 inline-flex items-center gap-1 font-bold underline">Ver aparelho <ExternalLink size={12} /></Link>}
+                    </li>
+                  );
+                })}
               </ul>
               {!intake.review_confirmed && !hasNonConfirmableIssues && (
                 <button
@@ -337,8 +456,16 @@ export function PhotoIntakeReviewCard({
               </button>
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
+              {catalogListsError && (
+                <p className="col-span-full text-xs font-semibold text-red-600">
+                  {catalogListsError}{' '}
+                  <button type="button" onClick={() => refreshCatalogLists(true)} className="underline">Atualizar listas</button>
+                </p>
+              )}
               {TEXT_FIELDS.map(field => {
+                if (field.catalog) return renderCatalogField(field);
                 const identifierState = field.kind ? describeIdentifier(field.kind, draft[field.key]) : null;
+                const barcode = field.barcodeKey ? barcodeHint(barcodeFields?.[field.barcodeKey], String(draft[field.key] ?? '')) : null;
                 return (
                 <label key={field.key} className="block min-w-0">
                   <span className="mb-1 block text-xs font-medium text-slate-500">{field.label}</span>
@@ -356,6 +483,20 @@ export function PhotoIntakeReviewCard({
                     className={`h-12 md:h-10 min-w-0 w-full rounded-lg border px-3 text-base md:text-sm focus:outline-none focus:ring-2 ${identifierState?.state === 'invalid' ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : identifierState?.state === 'ok' && field.kind !== 'serial' ? 'border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100' : 'border-slate-200 focus:border-blue-400 focus:ring-blue-100'} ${field.mono ? 'font-mono' : ''}`}
                   />
                   {identifierState?.message && <span data-identifier-state={identifierState.state} className={`mt-1 block text-xs ${identifierState.state === 'invalid' ? 'text-red-600' : identifierState.state === 'ok' ? 'text-emerald-700' : 'text-amber-700'}`}>{identifierState.message}</span>}
+                  {barcode?.state === 'match' && <span data-barcode-state="match" className="mt-1 flex items-center gap-1 text-xs font-semibold text-emerald-700"><CheckCircle2 size={12} />Confere com o código de barras</span>}
+                  {barcode?.state === 'differs' && (
+                    <span data-barcode-state="differs" className="mt-1 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+                      <span>Código de barras: <span className="font-mono font-bold">{barcode.value}</span></span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={event => { event.preventDefault(); setDraft(current => ({ ...current, [field.key]: barcode.value, review_confirmed: false })); }}
+                        className="min-h-[36px] rounded-md bg-amber-600 px-3 font-bold text-white disabled:opacity-50"
+                      >
+                        Usar este
+                      </button>
+                    </span>
+                  )}
                 </label>
                 );
               })}

@@ -17,3 +17,14 @@ test('validação do front é igual à do servidor e orienta o usuário', async 
   assert.equal(front.identifierInputProps('imei').inputMode, 'numeric');
   assert.equal(front.identifierInputProps('serial').autoCapitalize, 'characters');
 });
+
+test('dica do código de barras e link do aparelho já cadastrado', async () => {
+  const front = await import('../services/deviceIdentifiers.mjs');
+  assert.equal(front.barcodeHint(null, '1'), null);
+  assert.equal(front.barcodeHint({ status: 'unread', barcode: null }, '1'), null);
+  assert.deepEqual(front.barcodeHint({ status: 'confirmed', barcode: '865643073183577' }, '865643073183577'), { state: 'match', value: '865643073183577' });
+  assert.deepEqual(front.barcodeHint({ status: 'mismatch', barcode: '865643073183577' }, '865643073183517'), { state: 'differs', value: '865643073183577' });
+  assert.equal(front.barcodeHint({ barcode: '0074490208440B19' }, '0074490208440b19').state, 'match');
+  assert.equal(front.registeredUnitLink({ code: 'already_registered', matched_value: '865643073183577' }), '/admin/serializados?search=865643073183577');
+  assert.equal(front.registeredUnitLink({ code: 'required', matched_value: 'x' }), null);
+});

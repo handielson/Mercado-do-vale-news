@@ -177,6 +177,48 @@ function validatePhotoExtraction(raw = {}) {
   return { value, errors, warnings, valid: errors.length === 0 };
 }
 
+const REGISTERED_UNIT_STATUS_LABEL = Object.freeze({
+  available: 'disponível',
+  reserved: 'reservado',
+  sold: 'vendido',
+  scrapped: 'descartado',
+  rma: 'em RMA',
+  hidden: 'oculto',
+});
+
+function formatRegisteredDate(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(String(value).replace(' ', 'T'));
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Recife' }).format(date);
+}
+
+// Monta o aviso de "já cadastrado" dizendo QUAL campo bateu, quando entrou e em que situação está.
+function describeRegisteredUnit(unit = {}, identifiers = {}) {
+  const fieldMatches = [
+    ['imei1', 'IMEI 1', identifiers.imei1],
+    ['imei2', 'IMEI 2', identifiers.imei2],
+    ['serial', 'Serial', identifiers.serial],
+  ];
+  const unitValues = [unit.imei_1, unit.imei_2, unit.serial].map((value) => normalizeSerial(value)).filter(Boolean);
+  const matched = fieldMatches.find(([, , value]) => value && unitValues.includes(normalizeSerial(value)));
+  const [field, label, matchedValue] = matched || ['identifiers', 'IMEI ou serial', null];
+  const date = formatRegisteredDate(unit.created_at);
+  const status = REGISTERED_UNIT_STATUS_LABEL[String(unit.status || '')] || String(unit.status || '').trim();
+  const details = [date ? `em ${date}` : '', status ? `— ${status}` : ''].filter(Boolean).join(' ');
+  const product = String(unit.product_name || '').trim();
+  return {
+    field,
+    code: 'already_registered',
+    message: `${label} já cadastrado${details ? ` ${details}` : ''}${product ? ` (${product})` : ''}`,
+    unit_id: unit.id || null,
+    unit_status: unit.status || null,
+    registered_at: date || null,
+    product_name: product || null,
+    matched_value: matchedValue ? String(matchedValue) : null,
+  };
+}
+
 function isManuallyConfirmablePhotoIntakeIssue(issue = {}) {
   return !['required', 'duplicate', 'already_registered'].includes(String(issue.code || '').trim());
 }
@@ -291,6 +333,7 @@ module.exports = {
   PHOTO_INTAKE_STATUS_LABEL,
   buildSmartphoneVariantSkuBase,
   calculateBrandPrices,
+  describeRegisteredUnit,
   getBlockingPhotoIntakeErrors,
   filterSmartphonesByFeatures,
   findConflictingNfcConfigurations,
