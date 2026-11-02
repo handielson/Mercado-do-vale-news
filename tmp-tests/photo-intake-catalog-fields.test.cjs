@@ -42,3 +42,33 @@ test('conferência mostra código de barras e link do aparelho já cadastrado', 
   const units = fs.readFileSync('pages/admin/inventory/SerializedUnitsPage.tsx', 'utf8');
   assert.match(units, /useState\(\(\) => searchParams\.get\('search'\)/, 'página de serializados deve abrir filtrada pelo link');
 });
+
+test('palpite de marca e modelo vem preenchido a partir da etiqueta', async () => {
+  const { guessCatalogBrand, guessCatalogModel } = await import('../services/photoIntakeCatalogFields.mjs');
+  const brands = ['Apple', 'Motorola', 'Poco', 'Realme', 'Samsung', 'Xiaomi'];
+  assert.deepEqual(guessCatalogBrand(brands, 'REDMI'), { value: 'Xiaomi', exact: false });
+  assert.deepEqual(guessCatalogBrand(brands, 'POCO'), { value: 'Poco', exact: true }, 'marca que existe no cadastro vence a família');
+  assert.deepEqual(guessCatalogBrand(brands, 'realme'), { value: 'Realme', exact: true });
+  assert.equal(guessCatalogBrand(brands, 'Nokia'), null);
+  const models = [
+    { id: 'n17', name: 'Redmi Note 17', brand_id: 'x' },
+    { id: 'n17p', name: 'Redmi Note 17 Pro', brand_id: 'x' },
+    { id: 'r', name: 'Redmi', brand_id: 'x' },
+    { id: 'c71', name: 'Realme C71', brand_id: 'r' },
+  ];
+  assert.deepEqual(guessCatalogModel(models, 'Redmi Note 17 Black', { brandId: 'x', brandName: 'Xiaomi' }), { id: 'n17', exact: false });
+  assert.deepEqual(guessCatalogModel(models, 'Redmi Note 17 Pro Preto', { brandId: 'x' }), { id: 'n17p', exact: false }, 'mais específico vence');
+  assert.deepEqual(guessCatalogModel(models, 'redmi note 17', { brandId: 'x' }), { id: 'n17', exact: true });
+  assert.deepEqual(guessCatalogModel(models, 'Xiaomi Redmi Note 17 Black', { brandId: 'x', brandName: 'Xiaomi' }), { id: 'n17', exact: false });
+  assert.deepEqual(guessCatalogModel(models, 'C71', { brandId: 'r', brandName: 'Realme' }), { id: 'c71', exact: true });
+  assert.equal(guessCatalogModel(models, 'Redmi 15C', { brandId: 'x' }), null, 'não casa só pela palavra Redmi');
+  assert.equal(guessCatalogModel(models, 'Realme C71', { brandId: 'x' }), null, 'respeita a marca escolhida');
+});
+
+test('conferência já vem com marca/modelo sugeridos e avisa de onde veio', () => {
+  const card = require('node:fs').readFileSync('components/products/photo-intake/PhotoIntakeReviewCard.tsx', 'utf8');
+  assert.match(card, /guessCatalogBrand\(brandNames, readBrand\)/, 'marca deve vir preenchida com o palpite');
+  assert.match(card, /guessCatalogModel\(models, readModel, \{ brandId/, 'modelo deve vir preenchido com o palpite da marca');
+  assert.match(card, /modelLinked \? null :/, 'não troca um modelo já vinculado');
+  assert.match(card, /Sugerido pelo que a foto leu: “\{from\}” — troque se não for/);
+});

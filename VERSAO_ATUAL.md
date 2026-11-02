@@ -1,3 +1,13 @@
+# v1.2.735-foto-marca-modelo-sugeridos
+
+Data: 01/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.735-foto-marca-modelo-sugeridos` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-010635-v1235-foto-sugestao`. API: sem alteração.
+Cadastro por foto: marca e modelo já vêm preenchidos com o melhor palpite (REDMI → Xiaomi; "Redmi Note 17 Black" → Redmi Note 17), com aviso "Sugerido pelo que a foto leu — troque se não for". Modelo já vinculado nunca é trocado. Tags v1.2.732–v1.2.734 enviadas.
+
+Validações: testes de palpite (5), tsc, build e conferência no Playwright (Pixel 7).
+
+---
+
 # v1.2.734-foto-barras-listas
 
 Data: 01/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.734-foto-barras-listas` (local; push da tag pendente).

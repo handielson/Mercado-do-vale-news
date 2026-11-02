@@ -1,18 +1,16 @@
 {
-  "version": "v1.2.734-foto-barras-listas",
+  "version": "v1.2.735-foto-marca-modelo-sugeridos",
   "date": "2026-11-01",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.734-foto-barras-listas",
-  "release_vps": "/var/www/mdv-site/releases/20261102-004941-v1234-foto-barras-listas",
+  "tag": "v1.2.735-foto-marca-modelo-sugeridos",
+  "release_vps": "/var/www/mdv-site/releases/20261102-010635-v1235-foto-sugestao",
   "api_release": {
-    "status": "published",
-    "module": "Cadastro por foto (--photo-intake-only): leitura de código de barras (zxing-wasm 3.1.5) + conferência + aviso de duplicado detalhado",
-    "backup_prefix": "/var/www/mdv-api/backups/photo-intake-",
-    "backup": "/var/www/mdv-api/backups/photo-intake-1793580660321"
+    "status": "sem alteração",
+    "note": "release só de frontend; API segue a da v1.2.734"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Cadastro por foto: o servidor lê os códigos de barras da etiqueta (IMEIs, EAN) e confere com a leitura da IA — divergência vira aviso com botão 'Usar este', sem sobrescrever. Aviso de já cadastrado mostra campo, data, situação e produto com link 'Ver aparelho'. Marca, modelo, RAM e armazenamento passam a ser escolhidos de lista do cadastro (mostra o que a foto leu quando não existe na lista).",
+  "summary": "Cadastro por foto: marca e modelo já vêm preenchidos com o melhor palpite do que a foto leu (submarca → marca do cadastro, ex.: REDMI → Xiaomi; modelo sem a cor grudada, ex.: 'Redmi Note 17 Black' → Redmi Note 17), com aviso 'Sugerido pelo que a foto leu' para trocar se não for.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -32,40 +30,21 @@
     "version_name": "1.1.5",
     "version_code": 9
   },
-  "pending_deployments": {
-    "tag_push": "pendente: push das tags v1.2.732, v1.2.733 e v1.2.734 (proxy da sessão bloqueia tags)"
-  },
-  "site_source_base": "5d0da736",
+  "pending_deployments": {},
+  "site_source_base": "1c792acc",
   "changed_files": [
-    "services/smartphoneBarcodeReader.cjs",
-    "services/smartphoneBarcodeCrossCheck.cjs",
-    "services/smartphonePhotoIntakeCore.cjs",
-    "services/smartphonePhotoIntakeServer.cjs",
-    "deploy-vps-server-only.cjs",
-    "package.json",
-    "services/deviceIdentifiers.mjs",
     "services/photoIntakeCatalogFields.mjs",
-    "services/photoIntakeCatalogLists.ts",
     "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
-    "pages/admin/inventory/SerializedUnitsPage.tsx",
-    "types/smartphone-photo-intake.ts",
-    "tmp-tests/smartphone-barcode-cross-check.test.cjs",
-    "tmp-tests/smartphone-barcode-reader.test.cjs",
     "tmp-tests/photo-intake-catalog-fields.test.cjs",
-    "tmp-tests/device-identifiers.test.cjs",
-    "tmp-tests/smartphone-photo-intake-server-static.test.mjs",
-    "tmp-tests/smartphone-photo-intake-deploy-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-01-v1.2.734-foto-barras-listas.md"
+    "docs/versoes/2026-11-01-v1.2.735-foto-marca-modelo-sugeridos.md"
   ],
   "validations": [
-    "smartphone-barcode-cross-check (10) e smartphone-barcode-reader (2, leitura real de Code128/EAN-13 gerados) aprovados",
-    "photo-intake-catalog-fields (3) e device-identifiers (2) aprovados",
-    "testes existentes do cadastro por foto aprovados (core, server-static, deploy-static, navigation, queue-removal, bling-routes 18, price-editor)",
-    "tsc sem erros nos arquivos alterados",
+    "photo-intake-catalog-fields (5) aprovado: palpite de marca (família e marca própria), modelo mais específico, respeita marca, não casa só 'Redmi'",
+    "tsc sem erros",
     "npm run build aprovado",
-    "Playwright Pixel 7: listas de marca/modelo/RAM/armazenamento, 'Lido na foto', conferência com código de barras, 'Usar este' e link 'Ver aparelho'",
-    "publicado: API --photo-intake-only (zxing-wasm 3.1.5 carregado, pm2 online), /status 200, rota sem login 401; site 200, /VERSION.json v1.2.734, /admin/serializados 200"
+    "Playwright Pixel 7: REDMI → Xiaomi e 'Redmi Note 17 Black' → Redmi Note 17 preenchidos com aviso",
+    "tags v1.2.732–v1.2.734 enviadas ao GitHub pelo usuário"
   ]
 }

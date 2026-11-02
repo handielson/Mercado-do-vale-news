@@ -20,7 +20,7 @@ import { DEFAULT_PRODUCT_VERSION } from '../../../services/smartphoneModelSpecs.
 import { ModelPricesPanel } from '../../settings/ModelPricesPanel';
 import { isScannerValueComplete, nextScannerBurst, SCANNER_IDLE_MS, SCANNER_MIN_FAST_KEYS } from '../../../services/scannerFieldAdvance.mjs';
 import { barcodeHint, describeIdentifier, identifierInputProps, registeredUnitLink } from '../../../services/deviceIdentifiers.mjs';
-import { findCatalogOption } from '../../../services/photoIntakeCatalogFields.mjs';
+import { findCatalogOption, guessCatalogBrand, guessCatalogModel } from '../../../services/photoIntakeCatalogFields.mjs';
 import { loadPhotoIntakeCatalogLists, type PhotoIntakeCatalogLists } from '../../../services/photoIntakeCatalogLists';
 
 interface PhotoIntakeReviewCardProps {
@@ -226,6 +226,33 @@ export function PhotoIntakeReviewCard({
   };
   useEffect(() => { refreshCatalogLists(); }, []);
   const brandNames = useMemo(() => (catalogLists?.brands || []).map(brand => brand.name), [catalogLists]);
+  // Marca/modelo já vêm preenchidos com o melhor palpite do que a foto leu; o usuário só troca se errado.
+  const [suggestedFrom, setSuggestedFrom] = useState<{ brand?: { from: string; value: string }; model?: { from: string; id: string } }>({});
+  useEffect(() => {
+    if (!catalogLists) return;
+    const readBrand = intake.detected_brand || '';
+    const readModel = intake.detected_model || '';
+    const brandGuess = guessCatalogBrand(brandNames, readBrand);
+    const brandId = catalogLists.brands.find(brand => brand.name === brandGuess?.value)?.id || intake.matched_brand_id || null;
+    const modelLinked = Boolean(intake.matched_model_id && models.some(model => model.id === intake.matched_model_id));
+    const modelGuess = modelLinked ? null : guessCatalogModel(models, readModel, { brandId, brandName: brandGuess?.value || readBrand });
+    const guessedModel = modelGuess ? models.find(model => model.id === modelGuess.id) : null;
+    setSuggestedFrom({
+      brand: brandGuess && !brandGuess.exact ? { from: readBrand, value: brandGuess.value } : undefined,
+      model: guessedModel && !modelGuess?.exact ? { from: readModel, id: guessedModel.id } : undefined,
+    });
+    if (!brandGuess && !guessedModel) return;
+    setDraft(current => ({
+      ...current,
+      ...(brandGuess && !brandGuess.exact ? { detected_brand: brandGuess.value, matched_brand_id: brandId } : {}),
+      ...(guessedModel ? {
+        matched_model_id: guessedModel.id,
+        matched_brand_id: guessedModel.brand_id || brandId || current.matched_brand_id || null,
+        detected_model: guessedModel.name,
+      } : {}),
+    }));
+    if (guessedModel) setSelectedModelId(guessedModel.id);
+  }, [intake, catalogLists, models, brandNames]);
   // Etiqueta pode trazer submarca (ex.: "Redmi"); com o modelo vinculado, a marca vem do modelo.
   const linkedModelBrandName = catalogLists?.brands.find(brand => brand.id === models.find(model => model.id === draft.matched_model_id)?.brand_id)?.name || null;
   const selectedBrandName = findCatalogOption(brandNames, String(draft.detected_brand ?? '')) || linkedModelBrandName;
@@ -240,6 +267,9 @@ export function PhotoIntakeReviewCard({
     const inputClass = 'h-12 md:h-10 min-w-0 w-full rounded-lg border bg-white px-3 text-base md:text-sm focus:outline-none focus:ring-2';
     const readHint = (matched: string | null) => (!matched && raw
       ? <span data-catalog-state="unmatched" className="mt-1 block text-xs font-semibold text-amber-700">Lido na foto: “{raw}” — escolha da lista</span>
+      : null);
+    const suggestedHint = (from?: string) => (from
+      ? <span data-catalog-state="suggested" className="mt-1 block text-xs text-blue-700">Sugerido pelo que a foto leu: “{from}” — troque se não for</span>
       : null);
     if (field.catalog === 'brand') {
       return (
@@ -258,7 +288,7 @@ export function PhotoIntakeReviewCard({
             placeholder={raw ? `Lido: ${raw} — pesquisar marca` : 'Pesquisar marca...'}
             className={`${inputClass} ${selectedBrandName ? 'border-slate-200' : 'border-amber-300'}`}
           />
-          {readHint(selectedBrandName)}
+          {selectedBrandName && selectedBrandName === suggestedFrom.brand?.value ? suggestedHint(suggestedFrom.brand.from) : readHint(selectedBrandName)}
         </div>
       );
     }
@@ -290,6 +320,7 @@ export function PhotoIntakeReviewCard({
             className={`${inputClass} ${modelId ? 'border-slate-200' : 'border-amber-300'}`}
           />
           {!modelId && raw && <span data-catalog-state="unmatched" className="mt-1 block text-xs font-semibold text-amber-700">Lido na foto: “{raw}” — escolha da lista ou cadastre o modelo</span>}
+          {modelId && modelId === suggestedFrom.model?.id && suggestedHint(suggestedFrom.model.from)}
         </div>
       );
     }
