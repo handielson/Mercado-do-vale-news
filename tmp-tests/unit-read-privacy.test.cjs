@@ -19,6 +19,9 @@ for (const file of ['vps_server.cjs', 'vps_server.js', 'server.js']) {
     assert.equal(fn('/smartphone-photo-intakes?status=all'), true);
     assert.equal(fn('/smartphone-brand-margins'), true);
     assert.equal(fn('/smartphone-photo-color-mappings'), true);
+    assert.equal(fn('/models/price-summary?ids=a,b'), true);
+    assert.equal(fn('/models/abc/smartphone-price-groups'), true);
+    assert.equal(fn('/models'), false, 'lista de modelos continua como estava');
     assert.equal(fn('/products/abc'), false, 'leitura pública de produto continua aberta');
   });
 }
@@ -29,7 +32,8 @@ test('patch aplica nas rotas antigas e preserva CRLF', () => {
   assert.match(patched, /preHandler: requireSyncKeyOrAdmin \}, async \(req, reply\) => \{\r\n\}\);\r\nfastify\.get\('\/units\/by-identifier/);
   assert.match(patched, /proxyPath\.startsWith\('\/units'\) \|\|\r\n/);
   assert.match(patched, /proxyPath\.startsWith\('\/smartphone-'\) \|\|\r\n/);
-  assert.equal(patched.split('\r\n').length, old.split('\r\n').length + 2);
+  assert.match(patched, /proxyPath\.startsWith\('\/models\/price-summary'\) \|\|\r\n/);
+  assert.equal(patched.split('\r\n').length, old.split('\r\n').length + 4);
 });
 
 test('patch recusa servidor sem requireSyncKeyOrAdmin', () => {

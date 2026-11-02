@@ -1,3 +1,11 @@
+# v1.2.762-modelos-precos-protegidos
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.762-modelos-precos-protegidos` (local; push da tag pendente).
+Site: sem alteração (continua `v1.2.761`). API: `--unit-read-privacy-only`.
+Segurança: proxy exige administrador em `/models/price-summary` e `/models/:id/smartphone-price-*` (respondiam sem login, com custos).
+
+---
+
 # v1.2.761-modelos-precos-em-lote
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.761-modelos-precos-em-lote` (local; push da tag pendente).

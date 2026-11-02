@@ -2105,6 +2105,8 @@ function isVpsProxySensitiveGetPath(proxyPath) {
   return (
     proxyPath.startsWith('/units') ||
     proxyPath.startsWith('/smartphone-') ||
+    proxyPath.startsWith('/models/price-summary') ||
+    /^\/models\/[^/?]+\/smartphone-price-/.test(proxyPath) ||
     proxyPath.startsWith('/company-settings') ||
     proxyPath.startsWith('/admin/') ||
     proxyPath.startsWith('/table-data/') ||

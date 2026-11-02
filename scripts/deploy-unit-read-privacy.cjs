@@ -2,7 +2,7 @@
 // Antes: GET /units e GET /units/by-identifier/:q respondiam sem login (IMEI, custo, status),
 // e o /vps-proxy do site acrescentava a chave interna nessas leituras para qualquer visitante.
 // Depois: a rota exige chave interna ou login de administrador, e o proxy trata /units e /smartphone-* como sensíveis
-// (o pré-cadastro por foto também respondia sem login pelo proxy).
+// (o pré-cadastro por foto também respondia sem login pelo proxy) e os preços/custos por modelo.
 const { deployProductReadPrivacy } = require('./deploy-product-read-privacy.cjs');
 
 const ENTRIES = ['server.js', 'vps_server.js', 'vps_server.cjs'];
@@ -15,6 +15,9 @@ const PROXY_NEW = "function isVpsProxySensitiveGetPath(proxyPath) {\n  return (\
 // Pré-cadastro por foto (IMEIs, fotos, custos), margens e cores mapeadas: também só para administrador pelo proxy.
 const SMARTPHONE_OLD = "    proxyPath.startsWith('/units') ||\n";
 const SMARTPHONE_NEW = "    proxyPath.startsWith('/units') ||\n    proxyPath.startsWith('/smartphone-') ||\n";
+// Preços e custos por modelo (página de Modelos): só para administrador pelo proxy.
+const MODEL_PRICES_OLD = "    proxyPath.startsWith('/smartphone-') ||\n";
+const MODEL_PRICES_NEW = "    proxyPath.startsWith('/smartphone-') ||\n    proxyPath.startsWith('/models/price-summary') ||\n    /^\\/models\\/[^/?]+\\/smartphone-price-/.test(proxyPath) ||\n";
 
 function patchUnitReadPrivacy(source) {
   let updated = String(source).replace(/\r\n/g, '\n');
@@ -31,6 +34,10 @@ function patchUnitReadPrivacy(source) {
   if (!updated.includes(SMARTPHONE_NEW)) {
     if (updated.split(SMARTPHONE_OLD).length !== 2) throw new Error('Âncora /units do proxy ausente ou repetida');
     updated = updated.replace(SMARTPHONE_OLD, SMARTPHONE_NEW);
+  }
+  if (!updated.includes(MODEL_PRICES_NEW)) {
+    if (updated.split(MODEL_PRICES_OLD).length !== 2) throw new Error('Âncora /smartphone- do proxy ausente ou repetida');
+    updated = updated.replace(MODEL_PRICES_OLD, MODEL_PRICES_NEW);
   }
   return String(source).includes('\r\n') ? updated.replace(/\n/g, '\r\n') : updated;
 }
