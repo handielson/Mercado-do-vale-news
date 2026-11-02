@@ -64,7 +64,7 @@ export const PublicHeader: React.FC = () => {
         if (!badge) return null;
 
         return (
-            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${badge.color}`}>
+            <span className={`hidden sm:inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${badge.color}`}>
                 <span>{badge.icon}</span>
                 {badge.label}
             </span>
@@ -138,7 +138,7 @@ export const PublicHeader: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                     <StoreStatusBadge />
 
                     {/* Promoções — só no desktop */}
@@ -162,7 +162,7 @@ export const PublicHeader: React.FC = () => {
 
                             {/* Admin: Customer Type Selector for Preview */}
                             {customer?.customer_type === 'ADMIN' && (
-                                <div className="relative">
+                                <div className="relative hidden sm:block">
                                     <select
                                         className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white text-slate-700 font-medium hover:bg-slate-50 transition-colors cursor-pointer"
                                         value={customer.admin_preview_type || 'retail'}
@@ -188,7 +188,8 @@ export const PublicHeader: React.FC = () => {
                             <div className="relative">
                                 <button
                                     onClick={() => setShowUserMenu(!showUserMenu)}
-                                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 rounded-full transition-colors border border-slate-300 shadow-sm"
+                                    aria-label="Menu da conta"
+                                    className="flex min-h-[44px] sm:min-h-0 items-center gap-2 px-1.5 sm:px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 rounded-full transition-colors border border-slate-300 shadow-sm"
                                 >
                                     {customer.avatar_url ? (
                                         <img 
@@ -201,8 +202,8 @@ export const PublicHeader: React.FC = () => {
                                             <User size={16} />
                                         </div>
                                     )}
-                                    <span className="font-medium pr-1">{customer.name.split(' ')[0] || user.email?.split('@')[0]}</span>
-                                    <ChevronDown size={14} className="text-slate-400" />
+                                    <span className="hidden sm:inline font-medium pr-1">{customer.name.split(' ')[0] || user.email?.split('@')[0]}</span>
+                                    <ChevronDown size={14} className="hidden sm:block text-slate-400" />
                                 </button>
 
                                 {showUserMenu && (
@@ -224,6 +225,24 @@ export const PublicHeader: React.FC = () => {
                                                 <p className="text-xs text-slate-500 truncate">{user.email}</p>
                                             </div>
                                         </div>
+
+                                        {customer?.customer_type === 'ADMIN' && (
+                                            <label className="sm:hidden block px-4 py-2 border-b border-slate-100 text-xs font-semibold text-slate-500">
+                                                Ver catálogo como
+                                                <select
+                                                    data-admin-preview-mobile
+                                                    className="mt-1 h-11 w-full px-3 text-base border border-slate-300 rounded-lg bg-white text-slate-700 font-medium"
+                                                    value={customer.admin_preview_type || 'retail'}
+                                                    onChange={async (e) => {
+                                                        if (setAdminPreviewType) await setAdminPreviewType(e.target.value as 'retail' | 'resale' | 'wholesale');
+                                                    }}
+                                                >
+                                                    <option value="retail">👁️ Varejo</option>
+                                                    <option value="resale">👁️ Revenda</option>
+                                                    <option value="wholesale">👁️ Atacado</option>
+                                                </select>
+                                            </label>
+                                        )}
 
                                         {customer?.customer_type === 'ADMIN' && (
                                             <Link

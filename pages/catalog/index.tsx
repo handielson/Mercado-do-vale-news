@@ -764,11 +764,12 @@ function CatalogContent() {
                 {customer ? (
                     <Link
                         to="/favoritos"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:scale-105 active:scale-95 rounded-full text-sm font-semibold shadow-sm transition-all duration-200"
+                        aria-label="Meus Favoritos"
+                        className="inline-flex shrink-0 items-center gap-2 px-3 sm:px-4 py-2 min-h-[44px] sm:min-h-0 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:scale-105 active:scale-95 rounded-full text-sm font-semibold shadow-sm transition-all duration-200"
                     >
                         <Heart size={15} fill="currentColor" />
                         <span className="hidden sm:inline">Meus Favoritos</span>
-                        <span className="sm:hidden">Favoritos</span>
+                        <span className="sr-only sm:hidden">Favoritos</span>
                         {favorites.size > 0 && (
                             <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                                 {favorites.size}

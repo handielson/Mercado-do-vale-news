@@ -129,7 +129,7 @@ export function CheckinWidget() {
                     </div>
                 )}
 
-                <div className="relative flex items-center gap-3">
+                <div className="relative flex min-w-0 items-center gap-2 sm:gap-3">
                     {/* Icone Esquerdo */}
                     <div className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-500
                         ${isDone
@@ -156,8 +156,8 @@ export function CheckinWidget() {
                     </div>
 
                     {/* Texto Central */}
-                    <div className="relative flex flex-col items-start leading-tight min-w-0">
-                        <span className={`text-[11px] sm:text-[13px] font-bold truncate ${isDone ? 'text-green-800' : 'text-slate-800'}`}>
+                    <div className="relative flex min-w-0 flex-col items-start leading-tight">
+                        <span className={`block max-w-full text-[11px] sm:text-[13px] font-bold truncate ${isDone ? 'text-green-800' : 'text-slate-800'}`}>
                             {isDone ? 'Check-in Realizado' : 'Resgatar Moedas'}
                         </span>
                         <div className="flex items-center gap-1 mt-0.5">
@@ -176,7 +176,7 @@ export function CheckinWidget() {
                 </div>
 
                 {/* Botao de Info / Seta */}
-                <div className="relative pr-1.5 pl-2 border-l border-slate-200/50 flex items-center h-full">
+                <div className="relative shrink-0 pr-1.5 pl-2 border-l border-slate-200/50 flex items-center h-full">
                     {isDone ? (
                         <button
                             onClick={(e) => { e.stopPropagation(); setShowInfo(true); }}

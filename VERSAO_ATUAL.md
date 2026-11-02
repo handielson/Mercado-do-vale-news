@@ -1,3 +1,13 @@
+# v1.2.738-vitrine-celular-logado
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.738-vitrine-celular-logado` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-101825-v1238-vitrine-celular`. API: sem alteração.
+Vitrine no celular com login: a página ficava mais larga que a tela e dava para arrastar para o lado. Topo compacto (só o avatar; "Ver como" do admin vai para o menu da conta), "Resgatar Moedas" encolhe e Favoritos vira só o coração no celular.
+
+Validações: teste estático novo, tsc, build e Playwright (iPhone 13) logado e sem login.
+
+---
+
 # v1.2.737-modelo-celular
 
 Data: 01/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.737-modelo-celular` (local; push da tag pendente).
