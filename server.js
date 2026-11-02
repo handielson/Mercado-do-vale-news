@@ -2176,6 +2176,7 @@ function normalizeVpsProxyPath(input) {
 function isVpsProxySensitiveGetPath(proxyPath) {
   return (
     proxyPath.startsWith('/units') ||
+    proxyPath.startsWith('/smartphone-') ||
     proxyPath.startsWith('/company-settings') ||
     proxyPath.startsWith('/admin/') ||
     proxyPath.startsWith('/table-data/') ||

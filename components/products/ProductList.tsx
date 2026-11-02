@@ -67,6 +67,7 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
             onEdit={onEditProduct}
             onDelete={onDeleteProduct}
             forceDetailsExpanded={selectionMode}
+            priceVariants={variants}
             tiktokProductLink={tiktokProductLinks[familyProduct.id] || null}
             familyStockSummary={<div className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800" aria-label="Estoque disponível para venda">
                 <p className="font-semibold">Disponível para vender: {variants.reduce((total, product) => total + Math.max(0, Number(product.stock_quantity) || 0), 0)} un.</p>

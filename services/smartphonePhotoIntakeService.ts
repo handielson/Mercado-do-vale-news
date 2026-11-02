@@ -4,6 +4,7 @@ import { vpsClient } from './vpsClient';
 import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 import type {
   SmartphoneBrandPriceMargin,
+  SmartphonePhotoColorMapping,
   SmartphonePhotoIntake,
   SmartphonePhotoIntakeGroupPriceResult,
   SmartphonePhotoIntakePriceConfirmation,
@@ -128,6 +129,21 @@ async function saveMargin(
   );
 }
 
+async function listColorMappings(): Promise<SmartphonePhotoColorMapping[]> {
+  const companyId = await getCompanyId();
+  const query = companyId ? `?company_id=${encodeURIComponent(companyId)}` : '';
+  const response = await vpsClient.get<SmartphonePhotoColorMapping[] | { items?: SmartphonePhotoColorMapping[] }>(`/smartphone-photo-color-mappings${query}`);
+  return Array.isArray(response) ? response : response.items || [];
+}
+
+function updateColorMapping(id: string, colorId: string): Promise<SmartphonePhotoColorMapping> {
+  return vpsClient.patch<SmartphonePhotoColorMapping>(`/smartphone-photo-color-mappings/${encodeURIComponent(id)}`, { color_id: colorId });
+}
+
+async function deleteColorMapping(id: string): Promise<void> {
+  await vpsClient.delete(`/smartphone-photo-color-mappings/${encodeURIComponent(id)}`);
+}
+
 export const smartphonePhotoIntakeService = {
   upload,
   list,
@@ -142,4 +158,7 @@ export const smartphonePhotoIntakeService = {
   loadProtectedPhoto,
   listMargins,
   saveMargin,
+  listColorMappings,
+  updateColorMapping,
+  deleteColorMapping,
 };

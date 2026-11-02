@@ -125,3 +125,15 @@ export interface SmartphonePhotoIntakeGroupPriceResult {
   intake: SmartphonePhotoIntake;
   updated_count: number;
 }
+
+/** Ligação: cor como vem na etiqueta → cor do catálogo (cadastro por foto). */
+export interface SmartphonePhotoColorMapping {
+  id: string;
+  company_id: string | null;
+  source_color: string;
+  color_id: string;
+  color_name: string | null;
+  color_active?: number | boolean | null;
+  created_at?: string;
+  updated_at?: string;
+}

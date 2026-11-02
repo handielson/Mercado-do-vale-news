@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CheckCircle2, Layers3, ListChecks, Loader2, RefreshCw, Settings2, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Layers3, ListChecks, Loader2, Palette, RefreshCw, Settings2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { BrandMarginEditor } from '../../../components/products/photo-intake/BrandMarginEditor';
+import { ColorMappingEditor } from '../../../components/products/photo-intake/ColorMappingEditor';
 import { PhotoCapturePanel } from '../../../components/products/photo-intake/PhotoCapturePanel';
 import { PhotoIntakeQueue } from '../../../components/products/photo-intake/PhotoIntakeQueue';
 import { PhotoIntakeReviewCard } from '../../../components/products/photo-intake/PhotoIntakeReviewCard';
@@ -15,6 +16,7 @@ import type { Color } from '../../../types/color';
 import type { Model, ModelInput } from '../../../types/model';
 import type {
   SmartphoneBrandPriceMargin,
+  SmartphonePhotoColorMapping,
   SmartphonePhotoIntake,
   SmartphonePhotoIntakePriceConfirmation,
   SmartphonePhotoIntakeUpdate,
@@ -22,7 +24,7 @@ import type {
 
 import { photoQueueGroupKey } from '../../../services/modelBlingMapping.mjs';
 
-type ViewMode = 'queue' | 'margins';
+type ViewMode = 'queue' | 'margins' | 'colors';
 const GROUPABLE_STATUSES = new Set(['waiting_price_confirmation', 'review_required', 'ready_to_finalize']);
 const normalizeGroupValue = (value?: string | null) => String(value || '').replace(/\s+/g, '').toUpperCase();
 
@@ -57,6 +59,7 @@ export function SmartphonePhotoIntakePage() {
   const [colors, setColors] = useState<Color[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [margins, setMargins] = useState<SmartphoneBrandPriceMargin[]>([]);
+  const [colorMappings, setColorMappings] = useState<SmartphonePhotoColorMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [groupQueue, setGroupQueue] = useState(true);
@@ -101,6 +104,8 @@ export function SmartphonePhotoIntakePage() {
       colorService.listActive(),
       smartphonePhotoIntakeService.listMargins(),
     ]);
+    // Cores mapeadas não podem travar a página se a consulta falhar.
+    smartphonePhotoIntakeService.listColorMappings().then(setColorMappings).catch(() => setColorMappings([]));
     setBrands(brandRows);
     setModels(modelRows);
     setColors(colorRows);
@@ -281,6 +286,26 @@ export function SmartphonePhotoIntakePage() {
     }
   };
 
+  const changeColorMapping = async (mapping: SmartphonePhotoColorMapping, colorId: string) => {
+    try {
+      const saved = await smartphonePhotoIntakeService.updateColorMapping(mapping.id, colorId);
+      setColorMappings(current => current.map(item => item.id === mapping.id ? { ...item, ...saved } : item));
+      toast.success(`"${mapping.source_color}" agora vira ${saved?.color_name || 'a cor escolhida'}.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível trocar a cor.');
+    }
+  };
+
+  const deleteColorMapping = async (mapping: SmartphonePhotoColorMapping) => {
+    try {
+      await smartphonePhotoIntakeService.deleteColorMapping(mapping.id);
+      setColorMappings(current => current.filter(item => item.id !== mapping.id));
+      toast.success(`Ligação de "${mapping.source_color}" apagada. A próxima leitura vai pedir a cor.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível apagar a ligação.');
+    }
+  };
+
   const finalizeSelected = async (sku?: string) => {
     if (!selected) return;
     setBusy(true);
@@ -339,6 +364,14 @@ export function SmartphonePhotoIntakePage() {
           </button>
           <button
             type="button"
+            onClick={() => setView('colors')}
+            data-view-colors
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold ${view === 'colors' ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-700'}`}
+          >
+            <Palette size={17} /> Cores mapeadas
+          </button>
+          <button
+            type="button"
             onClick={() => void loadAll()}
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -349,7 +382,9 @@ export function SmartphonePhotoIntakePage() {
         </div>
       </header>
 
-      {view === 'margins' ? (
+      {view === 'colors' ? (
+        <ColorMappingEditor mappings={colorMappings} colors={colors} loading={loading} onChange={changeColorMapping} onDelete={deleteColorMapping} />
+      ) : view === 'margins' ? (
         <BrandMarginEditor brands={brands} margins={margins} loading={loading} onSave={saveMargin} />
       ) : (
         <div className="space-y-5">

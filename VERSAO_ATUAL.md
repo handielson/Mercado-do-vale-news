@@ -1,3 +1,13 @@
+# v1.2.750-cores-mapeadas-precos-familia
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.750-cores-mapeadas-precos-familia` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-153412-v1250-cores-precos`. API: `--photo-intake-only` e `--unit-read-privacy-only`.
+Aba "Cores mapeadas" no cadastro por foto (trocar/apagar); card da família mostra a faixa de preço das variações (antes R$ 0,00); proxy exige administrador em /smartphone-*.
+
+Validações: testes novos, testes da lista/card/foto/proxy (sem falha nova), tsc, build, Playwright (iPhone 13).
+
+---
+
 # v1.2.749-units-leitura-protegida
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.749-units-leitura-protegida` (local; push da tag pendente).

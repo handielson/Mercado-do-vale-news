@@ -30,7 +30,7 @@ import { stockLocationService } from '../../services/stockLocationService';
 import { unitService } from '../../services/units';
 import { deleteImageFromBank, uploadImagesToBank } from '../../services/productImageBank';
 import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct, validateShopeeItemForProduct } from './productCardShopee.js';
-import { getAdminProductCardStatus, getAdminProductCardSummary } from './productCardStatus.js';
+import { getAdminProductCardStatus, getAdminProductCardSummary, getPriceTierRange } from './productCardStatus.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeBulkAutoPreset, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
 import TikTokShopSyncModal from '../../pages/admin/settings/components/TikTokShopSyncModal';
 import type { TikTokShopProductLink } from '../../services/tiktokShopService';
@@ -43,6 +43,8 @@ interface ProductCardProps {
     forceDetailsExpanded?: boolean;
     onEdit?: (product: Product) => void;
     onDelete?: (product: Product) => void;
+    /** Card de família: os preços mostrados são a faixa das variações (o pai não tem preço próprio). */
+    priceVariants?: Product[];
     selectionMode?: boolean;
     isSelected?: boolean;
     onToggleSelect?: (product: Product) => void;
@@ -294,7 +296,7 @@ function useNearViewport(ref: React.RefObject<HTMLElement | null>): boolean {
     return near;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariants, familyStockSummary, forceDetailsExpanded = false, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariants, familyStockSummary, forceDetailsExpanded = false, onEdit, onDelete, priceVariants, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
     const [detailsExpanded, setDetailsExpanded] = useState(false);
     const detailsId = useId();
     const showDetails = detailsExpanded || forceDetailsExpanded;
@@ -1977,19 +1979,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                 )}
 
                 {/* Prices */}
-                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100">
-                    <div>
-                        <p className="text-[10px] text-slate-500 uppercase font-semibold">Varejo</p>
-                        <p className="text-sm font-bold text-blue-600">{formatPrice(product.price_retail)}</p>
-                    </div>
-                    <div>
-                        <p className="text-[10px] text-slate-500 uppercase font-semibold">Revenda</p>
-                        <p className="text-sm font-semibold text-slate-700">{formatPrice(product.price_reseller)}</p>
-                    </div>
-                    <div>
-                        <p className="text-[10px] text-slate-500 uppercase font-semibold">Atacado</p>
-                        <p className="text-sm font-semibold text-slate-700">{formatPrice(product.price_wholesale)}</p>
-                    </div>
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100" data-card-prices={priceVariants?.length ? 'family' : 'product'}>
+                    {([
+                        ['price_retail', 'Varejo', 'text-sm font-bold text-blue-600'],
+                        ['price_reseller', 'Revenda', 'text-sm font-semibold text-slate-700'],
+                        ['price_wholesale', 'Atacado', 'text-sm font-semibold text-slate-700'],
+                    ] as const).map(([field, label, valueClass]) => {
+                        // Família: faixa das variações (o pai fica sem preço e mostrava R$ 0,00).
+                        const familyRange = priceVariants?.length ? getPriceTierRange(priceVariants, field) : undefined;
+                        return (
+                            <div key={field} className="min-w-0">
+                                <p className="text-[10px] text-slate-500 uppercase font-semibold">{label}</p>
+                                {familyRange === null
+                                    ? <p className="text-xs font-semibold text-amber-700">Sem preço</p>
+                                    : <p className={cn(valueClass, familyRange && familyRange.includes(' a ') && 'text-xs leading-snug')}>{familyRange ?? formatPrice(Number(product[field] || 0))}</p>}
+                            </div>
+                        );
+                    })}
                 </div>
                 </div>
             </div>

@@ -849,6 +849,46 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     return rows[0];
   });
 
+  // Cores mapeadas: nome da cor como vem na etiqueta → cor do catálogo (gravado ao escolher a cor na conferência).
+  // Tela para conferir, trocar ou apagar uma ligação errada (apagada, a próxima leitura volta a pedir a cor).
+  fastify.get('/smartphone-photo-color-mappings', { preHandler: requireSyncKey }, async (request) => {
+    await ensureSchema();
+    const companyId = await resolvePhotoIntakeCompanyId(request.query?.company_id);
+    const [rows] = await pool.query(
+      `SELECT map.id, map.company_id, map.source_color, map.color_id, c.name AS color_name, c.active AS color_active,
+              map.created_at, map.updated_at
+         FROM smartphone_photo_color_mappings map
+         LEFT JOIN colors c ON c.id=map.color_id
+        WHERE (? IS NULL OR map.company_id=? OR map.company_id IS NULL)
+        ORDER BY map.source_color`,
+      [companyId, companyId],
+    );
+    return rows;
+  });
+
+  fastify.patch('/smartphone-photo-color-mappings/:id', { preHandler: requireSyncKey }, async (request, reply) => {
+    await ensureSchema();
+    const colorId = String(request.body?.color_id || '').trim();
+    if (!colorId) return reply.code(400).send({ error: 'Escolha a cor' });
+    const [colorRows] = await pool.query('SELECT id,name FROM colors WHERE id=? AND active=1 LIMIT 1', [colorId]);
+    if (!colorRows[0]) return reply.code(409).send({ error: 'A cor selecionada não está mais disponível' });
+    const [result] = await pool.query('UPDATE smartphone_photo_color_mappings SET color_id=? WHERE id=?', [colorId, request.params.id]);
+    if (!result.affectedRows) return reply.code(404).send({ error: 'Ligação de cor não encontrada' });
+    const [rows] = await pool.query(
+      `SELECT map.id, map.company_id, map.source_color, map.color_id, c.name AS color_name, c.active AS color_active, map.created_at, map.updated_at
+         FROM smartphone_photo_color_mappings map LEFT JOIN colors c ON c.id=map.color_id WHERE map.id=? LIMIT 1`,
+      [request.params.id],
+    );
+    return rows[0];
+  });
+
+  fastify.delete('/smartphone-photo-color-mappings/:id', { preHandler: requireSyncKey }, async (request, reply) => {
+    await ensureSchema();
+    const [result] = await pool.query('DELETE FROM smartphone_photo_color_mappings WHERE id=? LIMIT 1', [request.params.id]);
+    if (!result.affectedRows) return reply.code(404).send({ error: 'Ligação de cor não encontrada' });
+    return { ok: true };
+  });
+
   fastify.post('/smartphone-photo-intakes/:id/apply-brand-margins', { preHandler: requireSyncKey }, async (request, reply) => {
     await ensureSchema();
     const intake = await loadIntake(request.params.id);

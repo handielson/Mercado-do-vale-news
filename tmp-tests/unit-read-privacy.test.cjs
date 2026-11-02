@@ -16,6 +16,9 @@ for (const file of ['vps_server.cjs', 'vps_server.js', 'server.js']) {
     const fn = new Function(`${body}; return isVpsProxySensitiveGetPath;`)();
     assert.equal(fn('/units?company_id=x&status=all'), true);
     assert.equal(fn('/units/by-identifier/490154203237518'), true);
+    assert.equal(fn('/smartphone-photo-intakes?status=all'), true);
+    assert.equal(fn('/smartphone-brand-margins'), true);
+    assert.equal(fn('/smartphone-photo-color-mappings'), true);
     assert.equal(fn('/products/abc'), false, 'leitura pública de produto continua aberta');
   });
 }
@@ -25,7 +28,8 @@ test('patch aplica nas rotas antigas e preserva CRLF', () => {
   const patched = patchUnitReadPrivacy(old);
   assert.match(patched, /preHandler: requireSyncKeyOrAdmin \}, async \(req, reply\) => \{\r\n\}\);\r\nfastify\.get\('\/units\/by-identifier/);
   assert.match(patched, /proxyPath\.startsWith\('\/units'\) \|\|\r\n/);
-  assert.equal(patched.split('\r\n').length, old.split('\r\n').length + 1);
+  assert.match(patched, /proxyPath\.startsWith\('\/smartphone-'\) \|\|\r\n/);
+  assert.equal(patched.split('\r\n').length, old.split('\r\n').length + 2);
 });
 
 test('patch recusa servidor sem requireSyncKeyOrAdmin', () => {

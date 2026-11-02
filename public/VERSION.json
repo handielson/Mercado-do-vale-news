@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.749-units-leitura-protegida",
+  "version": "v1.2.750-cores-mapeadas-precos-familia",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.749-units-leitura-protegida",
-  "release_vps": "/var/www/mdv-site/releases/20261102-143551-v1248-produtos-consultas",
+  "tag": "v1.2.750-cores-mapeadas-precos-familia",
+  "release_vps": "/var/www/mdv-site/releases/20261102-153412-v1250-cores-precos",
   "api_release": {
     "status": "published",
-    "note": "--unit-read-privacy-only (patch remoto com backup em /var/www/mdv-api/backups/unit-read-privacy-*)"
+    "note": "--photo-intake-only (rotas de cores mapeadas) e --unit-read-privacy-only (proxy /smartphone-*)"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Segurança: a leitura de aparelhos (GET /units e GET /units/by-identifier) respondia sem login — IMEI, custo e situação de cada aparelho — e o /vps-proxy do site acrescentava a chave interna nessas leituras para qualquer visitante. Agora as rotas exigem login de administrador (ou a chave interna) e o proxy trata /units como sensível. Admin, PDV e scripts continuam funcionando (mandam login ou chave).",
+  "summary": "Cadastro por foto: nova aba 'Cores mapeadas' — lista cada cor como vem na etiqueta e a cor do catálogo ligada a ela, com trocar e apagar (apagar pede confirmação; a próxima leitura volta a pedir a cor). Produtos: o card da família no modo Cartões mostrava Varejo/Revenda/Atacado R$ 0,00 (preço do pai, que não tem preço próprio); agora mostra a faixa das variações ou 'Sem preço'. Segurança: o /vps-proxy passa a exigir administrador também para /smartphone-* (pré-cadastro por foto, margens e cores respondiam sem login).",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,25 +31,36 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.749 (Claude); v1.2.742 do Codex",
-    "data_review": "mapeamento 'Laranja Vitality' → Verde (06/10/2026) parece errado; aguardando confirmação do usuário"
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750 (Claude); v1.2.742 do Codex",
+    "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'"
   },
-  "site_source_base": "7f1d56c6",
+  "site_source_base": "e803f89b",
   "changed_files": [
+    "components/products/photo-intake/ColorMappingEditor.tsx",
+    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
+    "services/smartphonePhotoIntakeService.ts",
+    "services/smartphonePhotoIntakeServer.cjs",
+    "types/smartphone-photo-intake.ts",
+    "components/products/ProductCard.tsx",
+    "components/products/ProductList.tsx",
+    "components/products/productCardStatus.js",
     "scripts/deploy-unit-read-privacy.cjs",
-    "deploy-vps-server-only.cjs",
     "vps_server.cjs",
     "vps_server.js",
     "server.js",
     "tmp-tests/unit-read-privacy.test.cjs",
+    "tmp-tests/photo-intake-color-mappings-static.test.mjs",
+    "tmp-tests/product-card-family-prices.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.749-units-leitura-protegida.md"
+    "docs/versoes/2026-11-02-v1.2.750-cores-mapeadas-precos-familia.md"
   ],
   "validations": [
-    "unit-read-privacy (8) aprovado",
-    "45 testes ligados ao proxy/units: mesmos resultados da base",
-    "node --check nos 3 servidores",
-    "antes: GET anônimo /units/by-identifier = 200 pelo site e pela API"
+    "photo-intake-color-mappings-static, product-card-family-prices (2) e unit-read-privacy (8) aprovados",
+    "56 testes da lista/card/foto/proxy: mesmas 8 falhas anteriores, nenhuma nova",
+    "tsc sem erros; node --check nos servidores",
+    "npm run build aprovado",
+    "Playwright iPhone 13: família 'R$ 1.299,00 a R$ 1.399,00'; aba Cores mapeadas lista, apagar pede confirmação e envia DELETE só da ligação escolhida; largura 390",
+    "antes: GET anônimo /smartphone-photo-intakes/:id pelo site passava da proteção (404 'não encontrado')"
   ]
 }

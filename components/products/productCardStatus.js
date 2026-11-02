@@ -103,3 +103,15 @@ export function getAdminProductCardSummary(product) {
   }
   return { price: isParent ? null : price, chips };
 }
+
+/**
+ * Faixa de preço de um campo (price_retail, price_reseller, price_wholesale) entre as variações.
+ * Ignora as sem preço. null quando nenhuma tem preço.
+ */
+export function getPriceTierRange(products, field) {
+  const values = (products || []).map(product => Number(product?.[field] || 0)).filter(value => value > 0);
+  if (!values.length) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return min === max ? BRL.format(min / 100) : `${BRL.format(min / 100)} a ${BRL.format(max / 100)}`;
+}
