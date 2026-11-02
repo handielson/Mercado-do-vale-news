@@ -272,3 +272,13 @@
         padding: 0 !important;
     }
 }
+
+/* iPhone dá zoom ao tocar em campo com letra menor que 16px e a tela fica "deslocada"
+   (barra de baixo some, conteúdo passa da borda). No celular, todo campo do admin usa 16px. */
+@media (max-width: 767px) {
+    [data-admin-layout-build] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+    [data-admin-layout-build] select,
+    [data-admin-layout-build] textarea {
+        font-size: 16px;
+    }
+}

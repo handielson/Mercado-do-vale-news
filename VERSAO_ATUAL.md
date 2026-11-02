@@ -1,3 +1,13 @@
+# v1.2.740-admin-sem-zoom-rodape
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.740-admin-sem-zoom-rodape` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-105519-v1240-admin-sem-zoom`. API: sem alteração.
+Admin no celular: campos com 16px (fim do zoom do iPhone que deslocava a tela), rodapé do cadastro de produto empilhado com o botão principal em cima, características do modelo quebram texto longo. Computador inalterado.
+
+Validações: teste estático novo, testes do formulário (falhas anteriores mantidas), build, Playwright iPhone 13 e desktop.
+
+---
+
 # v1.2.739-leitor-camera
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.739-leitor-camera` (local; push da tag pendente).

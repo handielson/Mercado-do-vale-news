@@ -703,14 +703,14 @@ export function ProductSpecifications({
                 </section>
             )}
             {isSmartphoneCategory && (
-                <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-4">
+                <div className="mt-5 min-w-0 rounded-lg border border-blue-100 bg-blue-50 p-4" data-model-specs-box>
                     <h4 className="text-sm font-semibold text-blue-900">Características do modelo</h4>
                     <p className="mt-1 text-xs text-blue-700">Estas informações vêm do cadastro do modelo. Altere o modelo para atualizar todas as variações.</p>
                     <dl className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                         {Object.entries(modelTechnicalSpecs(templateValues)).map(([key, value]) => (
-                            <div key={key}>
+                            <div key={key} className="min-w-0">
                                 <dt className="text-xs text-slate-500">{customFields?.find(field => normalizeSpecFieldKey(field.key) === key)?.name || FIELD_METADATA[key]?.label || key.replace(/_/g, ' ')}</dt>
-                                <dd className="text-sm text-slate-800">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd>
+                                <dd className="text-sm text-slate-800 break-words [overflow-wrap:anywhere]">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd>
                             </div>
                         ))}
                     </dl>

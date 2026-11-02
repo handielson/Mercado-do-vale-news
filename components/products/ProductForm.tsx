@@ -2843,21 +2843,21 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                         draftSaveStatus === 'saved' ? 'Rascunho salvo automaticamente.' :
                         <>Não foi possível salvar as últimas alterações. <button type="button" className="font-semibold underline" onClick={() => { failedDraftSignatureRef.current = null; setDraftRetryTick(value => value + 1); }}>Tentar novamente</button></>}
                 </div>}
-                <div className="flex justify-end gap-3">
-                <button type="button" onClick={onCancel} disabled={isSavingOperation} className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-3" data-product-form-footer>
+                <button type="button" onClick={onCancel} disabled={isSavingOperation} className="min-h-[44px] sm:min-h-0 w-full sm:w-auto px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50">
                     Cancelar
                 </button>
-                {!variationDraftMode && onSaveDraft && <button type="button" onClick={() => void saveDraft()} disabled={Boolean(isSavingOperation || savingDraft || familyMediaBusy || isCompressing || familyLoading)} className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50">{savingDraft ? 'Salvando rascunho...' : 'Salvar rascunho'}</button>}
-                {!variationDraftMode && isParentProduct && activeSection !== 'variations' && <button type="button" onClick={() => selectSection('variations')} disabled={isSavingOperation} className="rounded-md border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50">Continuar para variações</button>}
+                {!variationDraftMode && onSaveDraft && <button type="button" onClick={() => void saveDraft()} disabled={Boolean(isSavingOperation || savingDraft || familyMediaBusy || isCompressing || familyLoading)} className="min-h-[48px] sm:min-h-0 w-full sm:w-auto rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-base sm:text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50">{savingDraft ? 'Salvando rascunho...' : 'Salvar rascunho'}</button>}
+                {!variationDraftMode && isParentProduct && activeSection !== 'variations' && <button type="button" onClick={() => selectSection('variations')} disabled={isSavingOperation} className="min-h-[48px] sm:min-h-0 w-full sm:w-auto rounded-md border border-blue-300 px-4 py-2 text-base sm:text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50">Continuar para variações</button>}
                 <button
                     type="submit"
                     disabled={isSavingOperation || savingDraft || isCompressing || blocksSubmitForDuplicateEAN}
-                    className={`px-4 py-2 text-white text-sm font-medium rounded-md shadow-lg transition-colors ${blocksSubmitForDuplicateEAN
+                    className={`min-h-[52px] sm:min-h-0 w-full sm:w-auto px-4 py-2 text-white text-base sm:text-sm font-semibold sm:font-medium rounded-md shadow-lg transition-colors ${blocksSubmitForDuplicateEAN
                         ? 'bg-gray-400 cursor-not-allowed'
                         : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
                         } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
-                    <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center gap-2">
                         {isSavingOperation && <Loader2 size={16} className="animate-spin" />}
                         {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : registrationCompletedRef.current ? 'Finalizar rascunho' : variationDraftMode ? 'Confirmar detalhes no rascunho' : isParentProduct ? 'Salvar família e variações' : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
                     </span>
