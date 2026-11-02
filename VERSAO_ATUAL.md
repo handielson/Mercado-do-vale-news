@@ -1,3 +1,13 @@
+# v1.2.747-produtos-lista-compacta
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.747-produtos-lista-compacta` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-142951-v1247-produtos-lista`. API: sem alteração.
+Lista de produtos (parte 4): visualização "Lista" compacta (foto pequena, preço, estoque), padrão no celular; família abre as variações; sem as consultas de cada card.
+
+Validações: testes novos, testes da lista/card (sem falha nova), tsc, build e Playwright (iPhone 13).
+
+---
+
 # v1.2.746-produtos-menu-acoes
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.746-produtos-menu-acoes` (local; push da tag pendente).

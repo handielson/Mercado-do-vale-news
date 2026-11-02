@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.746-produtos-menu-acoes",
+  "version": "v1.2.747-produtos-lista-compacta",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.746-produtos-menu-acoes",
-  "release_vps": "/var/www/mdv-site/releases/20261102-142033-v1246-produtos-menu",
+  "tag": "v1.2.747-produtos-lista-compacta",
+  "release_vps": "/var/www/mdv-site/releases/20261102-142951-v1247-produtos-lista",
   "api_release": {
     "status": "sem alteração",
     "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Lista de produtos (parte 3): no celular a linha de 15 ícones pequenos de cada card virou Shopee, TikTok, Editar e um botão '⋯' que abre um menu de baixo com nome escrito em cada ação (copiar nome/SKU, imprimir etiqueta, locais de estoque, histórico, tags, painel do modelo, Bling, ocultar do site, inativar). Excluir fica no fim, separado, em vermelho, e continua pedindo confirmação. Se o produto está oculto do site, o olho amarelo continua à vista. Computador continua igual.",
+  "summary": "Lista de produtos (parte 4): nova visualização 'Lista' — uma linha por produto com foto pequena, nome, cor/memória, SKU, preço e estoque. Toque no produto abre a edição; na família, abre as variações (cada uma com preço, estoque e toque para editar) e 'Editar produto pai'. No celular, sem escolha salva, a página já abre na Lista (~4 produtos por tela, antes 1). Não monta o card completo, então não faz as consultas de cada card. Cartões e Famílias continuam disponíveis; computador continua abrindo em Cartões.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,24 +31,25 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.746 (Claude); v1.2.742 do Codex",
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.747 (Claude); v1.2.742 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde (06/10/2026) parece errado; aguardando confirmação do usuário"
   },
-  "site_source_base": "b91ffea1",
+  "site_source_base": "3567f9ca",
   "changed_files": [
-    "components/products/ProductCardActionsMenu.tsx",
-    "components/products/ProductCard.tsx",
-    "tmp-tests/product-card-actions-menu-static.test.mjs",
+    "components/products/productCompactRows.js",
+    "components/products/ProductCompactList.tsx",
+    "pages/admin/products/ProductListPage.tsx",
+    "tmp-tests/product-compact-rows.test.mjs",
+    "tmp-tests/product-list-compact-view-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.746-produtos-menu-acoes.md"
+    "docs/versoes/2026-11-02-v1.2.747-produtos-lista-compacta.md"
   ],
   "validations": [
-    "product-card-actions-menu-static aprovado",
-    "44 testes da lista/card/filtros: mesmas 8 falhas anteriores, nenhuma nova",
+    "product-compact-rows (4) e product-list-compact-view-static aprovados",
+    "45 testes da lista/card/filtros: mesmas 8 falhas anteriores, nenhuma nova",
     "tsc sem erros",
     "npm run build aprovado",
-    "Playwright iPhone 13: 4 botões na linha do card, menu com 9 ações + Excluir separado, Excluir pede confirmação, largura 390",
-    "Playwright 1366px: 12 ícones como antes, sem '⋯'"
+    "Playwright iPhone 13: abre na Lista sem preferência, linhas de ~90px, família abre variações sem nenhuma consulta nova, toque no produto abre a edição, largura 390, sem erros na página"
   ]
 }

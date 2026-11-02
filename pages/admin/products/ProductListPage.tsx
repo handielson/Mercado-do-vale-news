@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, Share2, Images, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store, Camera, LayoutGrid, ListTree, FileText } from 'lucide-react';
+import { Plus, Package, Share2, Images, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store, Camera, LayoutGrid, List, ListTree, FileText } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { Print3dProductEntry } from '../../../components/products/Print3dProductEntry';
 import { ProductList } from '../../../components/products/ProductList';
 import { ProductFamilyList, type ProductFamilyGroup } from '../../../components/products/ProductFamilyList';
+import { ProductCompactList } from '../../../components/products/ProductCompactList';
 import { Product } from '../../../types/product';
 import { ExportCatalogModal } from '../../../components/admin/ExportCatalogModal';
 import { BulkActionBar } from '../../../components/products/BulkActionBar';
@@ -31,6 +32,8 @@ import {
  */
 const productActionClass = 'inline-flex min-h-[44px] md:min-h-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-60';
 
+type ProductViewMode = 'cards' | 'families' | 'compact';
+
 export const ProductListPage: React.FC = () => {
     const navigate = useNavigate();
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -45,9 +48,12 @@ export const ProductListPage: React.FC = () => {
     const [tiktokProductLinks, setTikTokProductLinks] = useState<Record<string, TikTokShopProductLink>>({});
     const [mercadoLivreLinkedIds, setMercadoLivreLinkedIds] = useState<Set<string>>(new Set());
     const [updatingPrint3dFamilyIds, setUpdatingPrint3dFamilyIds] = useState<Set<string>>(new Set());
-    const [viewMode, setViewMode] = useState<'cards' | 'families'>(() => {
+    const [viewMode, setViewMode] = useState<ProductViewMode>(() => {
         try {
-            return localStorage.getItem('admin_products_view_mode') === 'families' ? 'families' : 'cards';
+            const stored = localStorage.getItem('admin_products_view_mode');
+            if (stored === 'families' || stored === 'compact' || stored === 'cards') return stored;
+            // Sem preferência salva: no celular começa na lista compacta.
+            return typeof window !== 'undefined' && window.innerWidth < 768 ? 'compact' : 'cards';
         } catch {
             return 'cards';
         }
@@ -257,7 +263,7 @@ export const ProductListPage: React.FC = () => {
         });
     }, []);
 
-    const handleViewModeChange = (nextMode: 'cards' | 'families') => {
+    const handleViewModeChange = (nextMode: ProductViewMode) => {
         setViewMode(nextMode);
         setCurrentPage(1);
         setPageInput('1');
@@ -476,9 +482,14 @@ export const ProductListPage: React.FC = () => {
             <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-2 sm:flex-row sm:items-center sm:justify-between sm:p-3">
                 <div className="hidden sm:block">
                     <p className="text-sm font-semibold text-slate-800">Visualização dos produtos</p>
-                    <p className="text-xs text-slate-500">Cartões e Famílias mostram cada produto pai uma vez, com as variações dentro.</p>
+                    <p className="text-xs text-slate-500">Lista é a mais rápida no celular. Cartões e Famílias mostram cada produto pai uma vez, com as variações dentro.</p>
                 </div>
                 <div className="inline-flex self-start rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label="Visualização dos produtos">
+                    <button type="button" onClick={() => handleViewModeChange('compact')} data-view-compact
+                        aria-pressed={viewMode === 'compact'}
+                        className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold ${viewMode === 'compact' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
+                        <List size={16} /> Lista
+                    </button>
                     <button type="button" onClick={() => handleViewModeChange('cards')}
                         aria-pressed={viewMode === 'cards'}
                         className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold ${viewMode === 'cards' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
@@ -493,7 +504,17 @@ export const ProductListPage: React.FC = () => {
             </div>
 
             {/* Products List */}
-            {viewMode === 'cards' ? (
+            {viewMode === 'compact' ? (
+                <ProductCompactList
+                    groups={visibleFamilyGroups}
+                    isLoading={isLoading || (searchPending && familyGroups.length === 0)}
+                    selectionMode={selectionMode}
+                    selectedIds={selectedIds}
+                    onEdit={handleEditProduct}
+                    onToggleProduct={handleToggleSelect}
+                    onToggleFamily={handleToggleFamily}
+                />
+            ) : viewMode === 'cards' ? (
                 <ProductList
                     products={products}
                     groups={visibleFamilyGroups}
