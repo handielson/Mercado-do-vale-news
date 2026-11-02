@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.741-imei-cadastrado-na-hora",
+  "version": "v1.2.742-mercado-livre-estoque-leitura-sku",
   "date": "2026-11-02",
-  "status": "published",
+  "status": "publication_in_progress",
   "branch": "main",
-  "tag": "v1.2.741-imei-cadastrado-na-hora",
-  "release_vps": "/var/www/mdv-site/releases/20261102-113731-v1241-imei-na-hora",
+  "tag": "v1.2.742-mercado-livre-estoque-leitura-sku",
+  "release_vps": "/var/www/mdv-site/releases/20261102-124714-mercado-livre-erp-readonly",
   "api_release": {
-    "status": "sem alteração",
-    "note": "usa GET /units/by-identifier existente"
+    "status": "publication_in_progress",
+    "note": "Deploy seletivo do handler GET de estoque por SKU exato único. Escrita de estoque, preço e publicação não foram habilitadas."
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "IMEI/serial já cadastrado aparece na hora: ao completar os 15 dígitos (digitado ou lido pela câmera) o campo consulta a tabela de aparelhos e mostra 'Já cadastrado em DD/MM/AAAA — situação (produto) · Ver aparelho'. 'Adicionar à Lista' recusa aparelho já cadastrado. Só um botão 'Adicionar à Lista' (o do topo das Especificações).",
+  "summary": "Consulta somente leitura do saldo de anúncios Mercado Livre usando SKU exato único na família local quando ainda não existe vínculo salvo; ambiguidades e famílias acima de 200 produtos são recusadas.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,29 +31,26 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741"
+    "tag_push": "pending",
+    "api": "pending",
+    "site_manifest": "pending"
   },
-  "site_source_base": "f5bc918f",
+  "site_source_base": "57ed5449",
   "changed_files": [
-    "services/registeredIdentifier.ts",
-    "services/deviceIdentifiers.mjs",
-    "components/ui/RegisteredIdentifierNotice.tsx",
-    "components/ui/IMEIInput.tsx",
-    "components/products/sections/ProductSpecifications.tsx",
-    "components/products/ProductForm.tsx",
-    "tmp-tests/registered-identifier-instant-check-static.test.mjs",
-    "tmp-tests/device-identifiers.test.cjs",
-    "tmp-tests/product-form-batch-add-button-static.test.mjs",
-    "tmp-tests/print3d-product-specifications-render.test.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-mercado-livre-stock-read.cjs",
+    "services/mercadoLivreListingStock.cjs",
+    "scripts/publish-vps-plan.cjs",
+    "tmp-tests/mercado-livre-listing-stock-read.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.741-imei-cadastrado-na-hora.md"
+    "docs/versoes/2026-11-02-v1.2.742-mercado-livre-estoque-leitura-sku.md"
   ],
   "validations": [
-    "registered-identifier-instant-check-static e device-identifiers aprovados",
-    "40 testes de formulário/IMEI/especificações aprovados (0 falhas)",
-    "tsc sem erros",
-    "npm run build aprovado",
-    "Playwright iPhone 13: IMEI repetido avisado ao completar 15 dígitos com link; IMEI livre sem aviso; Adicionar à Lista recusa o repetido; 1 botão Adicionar à Lista"
+    "Teste de leitura/deploy: 13/13 aprovados, incluindo rollback quando o restart da API falha",
+    "Suíte Mercado Livre: 115/115 aprovados; contrato estático aprovado",
+    "publish-vps-plan --self-test aprovado; plano prevê deploy seletivo da API e atualização do manifesto do site, sem deploy API genérico",
+    "node --check dos módulos alterados aprovado; git diff --check aprovado",
+    "npm.cmd run build aprovado; aviso não fatal do Vite sobre __dirname/configLoader:native"
   ]
 }

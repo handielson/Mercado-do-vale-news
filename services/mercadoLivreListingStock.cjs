@@ -13,8 +13,14 @@ function responseHeader(response, name) {
   return entry?.[1] == null ? null : String(entry[1]);
 }
 
+function skuOf(source) {
+  const attribute = Array.isArray(source?.attributes)
+    ? source.attributes.find(row => row?.id === 'SELLER_SKU')?.value_name : '';
+  return String(attribute || '').trim();
+}
+
 function createListingStockHandlers({ pool, settings, request }) {
-  async function read(req) {
+  async function read(req, { requireSavedLink = false } = {}) {
     const itemId = String(req.params?.itemId || '').toUpperCase();
     const parentId = String(req.query?.parentId || '');
     if (!/^MLB\d{1,30}$/.test(itemId) || !/^[0-9a-f-]{36}$/i.test(parentId))
@@ -25,7 +31,16 @@ function createListingStockHandlers({ pool, settings, request }) {
     const [linked] = await pool.query(`SELECT p.id,p.sku,COALESCE(ml.variation_id,'') variation_id FROM mercado_livre_products ml
       JOIN products p ON p.id COLLATE utf8mb4_unicode_ci=ml.product_id COLLATE utf8mb4_unicode_ci
       WHERE ml.item_id=? AND (p.id=? OR p.parent_id=?) ORDER BY ml.variation_id`, [itemId, parentId, parentId]);
-    if (!linked.length) throw fail('Este anúncio não está vinculado à família selecionada.', 404);
+    let familyProducts = linked;
+    if (!familyProducts.length) {
+      if (requireSavedLink) throw fail('Este anúncio não está vinculado à família selecionada.', 404);
+      const [products] = await pool.query(
+        'SELECT id,sku FROM products WHERE COALESCE(is_parent,0)=0 AND (id=? OR parent_id=?) LIMIT 201', [parentId, parentId]);
+      if (products.length > 200)
+        throw fail('A família excede 200 produtos; não é possível garantir unicidade do SKU para consulta de saldo.', 409);
+      familyProducts = products;
+      if (!familyProducts.length) throw fail('O produto informado não existe no catálogo do Mercado do Vale.', 404);
+    }
 
     const itemResponse = await request(`/items/${itemId}?include_attributes=all`);
     const item = await itemResponse.json();
@@ -39,6 +54,28 @@ function createListingStockHandlers({ pool, settings, request }) {
         || variations.some(row => !/^\d{1,30}$/.test(String(row.id || ''))))
       throw fail('Não foi possível validar as variações do anúncio.');
     const linksByVariation = new Map(linked.map(row => [String(row.variation_id || ''), String(row.sku || '')]));
+    const matchedVariationIds = new Set();
+    if (!linked.length) {
+      const remoteRows = variations.length
+        ? variations.map(row => ({ id: String(row.id), source: row }))
+        : [{ id: '', source: item }];
+      const usedProducts = new Set();
+      for (const row of remoteRows) {
+        const remoteSku = skuOf(row.source).toLocaleLowerCase('en-US');
+        if (!remoteSku) continue;
+        const matches = familyProducts.filter(product => String(product.sku || '').trim()
+          .toLocaleLowerCase('en-US') === remoteSku);
+        if (matches.length > 1)
+          throw fail('O SKU remoto corresponde a mais de um produto da família; saldo não identificado.', 409);
+        if (!matches.length) continue;
+        if (usedProducts.has(String(matches[0].id)))
+          throw fail('O SKU do anúncio aparece em mais de uma variação; saldo não identificado.', 409);
+        usedProducts.add(String(matches[0].id));
+        linksByVariation.set(row.id, String(matches[0].sku || ''));
+        matchedVariationIds.add(row.id);
+      }
+    }
+    let matchMethod = linked.length ? 'saved_listing_link' : 'exact_catalog_sku_read_only';
     const userResponse = await request(`/users/${seller}`);
     const user = await userResponse.json();
     if (String(user.id) !== seller || !Array.isArray(user.tags) || user.tags.length > 100 ||
@@ -61,6 +98,7 @@ function createListingStockHandlers({ pool, settings, request }) {
           throw fail('O Mercado Livre retornou uma localização ou quantidade inválida.');
         return { type, storeId: String(location.store_id || ''), networkNodeId: String(location.network_node_id || ''), quantity: qty };
       });
+      if (!linked.length && !matchedVariationIds.size) matchMethod = 'warehouse_location_only';
       const version = responseHeader(stockResponse, 'x-version');
       return { itemId, parentId, sellerId: seller, status: String(item.status || ''),
         subStatus: Array.isArray(item.sub_status) ? item.sub_status.map(String) : [],
@@ -68,18 +106,22 @@ function createListingStockHandlers({ pool, settings, request }) {
         stockVersion: version && /^\d{1,30}$/.test(version) ? version : null,
         quantityByVariation: false,
         reason: variations.length ? 'O endpoint retorna saldo por localização do User Product, não por variação; não atribua esses valores a um SKU.' : '',
-        locations, variations: variations.map(row => ({ id: String(row.id), sku: linksByVariation.get(String(row.id)) || '' })) };
+        locations, variations: variations.map(row => ({ id: String(row.id), sku: linksByVariation.get(String(row.id)) || '' })),
+        matchMethod };
     }
 
-    const quantities = variations.length
-      ? variations.map(row => ({ variationId: String(row.id), sku: linksByVariation.get(String(row.id)) || '', quantity: quantity(row.available_quantity) }))
+    if (!linked.length && !matchedVariationIds.size)
+      throw fail('O SKU do anúncio não corresponde a um produto único da família informada.', 409);
+    const relevantVariations = linked.length ? variations : variations.filter(row => matchedVariationIds.has(String(row.id)));
+    const quantities = relevantVariations.length
+      ? relevantVariations.map(row => ({ variationId: String(row.id), sku: linksByVariation.get(String(row.id)) || '', quantity: quantity(row.available_quantity) }))
       : [{ variationId: '', sku: linksByVariation.get('') || '', quantity: quantity(item.available_quantity) }];
     if (quantities.some(row => row.quantity === null))
       throw fail('O Mercado Livre não informou quantidade válida para todos os itens/variações.');
     return { itemId, parentId, sellerId: seller, status: String(item.status || ''),
       subStatus: Array.isArray(item.sub_status) ? item.sub_status.map(String) : [],
       mode: 'item_available_quantity', userProductId: '',
-      stockVersion: null, quantityByVariation: true, reason: '', locations: [], quantities };
+      stockVersion: null, quantityByVariation: true, reason: '', locations: [], quantities, matchMethod };
   }
 
   async function update(req) {
@@ -95,7 +137,7 @@ function createListingStockHandlers({ pool, settings, request }) {
         || !/^\d{0,30}$/.test(variationId))
       throw fail('Informe quantidades inteiras válidas e o ID exato da variação.', 400);
 
-    const current = await read({ params: { itemId }, query: { parentId } });
+    const current = await read({ params: { itemId }, query: { parentId } }, { requireSavedLink: true });
     if (current.mode !== 'item_available_quantity' || current.userProductId)
       throw fail('Escrita bloqueada para User Products ou warehouse_management; é necessário mapear localizações e usar x-version.');
     if (!['active', 'paused'].includes(current.status)) throw fail('Somente anúncio ativo ou pausado pode receber saldo.');
@@ -173,7 +215,7 @@ function createListingStockHandlers({ pool, settings, request }) {
     if (input.confirm !== true) throw fail('Confirme explicitamente a atualização dos depósitos seller_warehouse.', 400);
     if (!userProductIdPattern.test(userProductId) || !/^\d{1,30}$/.test(String(input.expectedVersion || '')))
       throw fail('Informe o User Product e a versão de estoque consultados.', 400);
-    const current = await read({ params: { itemId }, query: { parentId } });
+    const current = await read({ params: { itemId }, query: { parentId } }, { requireSavedLink: true });
     if (current.mode !== 'warehouse_management' || current.userProductId !== userProductId)
       throw fail('O anúncio não corresponde ao User Product multiorigem informado.');
     if (current.variations.length)

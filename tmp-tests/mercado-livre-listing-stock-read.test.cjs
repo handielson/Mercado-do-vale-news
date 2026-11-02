@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createListingStockHandlers } = require('../services/mercadoLivreListingStock.cjs');
+const { deployMercadoLivreStockRead } = require('../scripts/deploy-mercado-livre-stock-read.cjs');
 
 const itemId = 'MLB4282518399';
 const parentId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -12,13 +13,15 @@ function response(body, headers = {}) {
   return { json: async () => body, headers: { get: name => headers[name.toLowerCase()] || null } };
 }
 
-function harness({ linked = [{ id: 'product-1', sku: 'LJH074', variation_id: '' }], item, user,
+function harness({ linked = [{ id: 'product-1', sku: 'LJH074', variation_id: '' }], familyProducts = [], item, user,
   userProductStock, stockHeaders = {} }) {
   const calls = [];
   const dbQueries = [];
+  let queryCount = 0;
   const pool = { query: async (sql, values) => {
     dbQueries.push({ sql, values });
-    return [linked];
+    queryCount += 1;
+    return [queryCount === 1 ? linked : familyProducts];
   } };
   const request = async (url, options = {}) => {
     calls.push({ url, method: options.method || 'GET' });
@@ -70,6 +73,87 @@ test('maps variation quantities to the exact locally linked SKUs', async () => {
   assert.ok(h.calls.every(call => call.method === 'GET'));
 });
 
+test('reads an unlinked single-item listing by exact catalog SKU without persisting a link', async () => {
+  const h = harness({
+    linked: [],
+    familyProducts: [{ id: 'product-1', sku: 'LJH074' }, { id: 'product-2', sku: 'OTHER' }],
+    item: { id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
+      attributes: [{ id: 'SELLER_SKU', value_name: 'ljh074' }], available_quantity: 4, variations: [] },
+    user: { id: sellerId, tags: [] },
+  });
+  const result = await h.read({ params: { itemId }, query: { parentId } });
+
+  assert.equal(result.matchMethod, 'exact_catalog_sku_read_only');
+  assert.deepEqual(result.quantities, [{ variationId: '', sku: 'LJH074', quantity: 4 }]);
+  assert.equal(h.dbQueries.length, 2);
+  assert.ok(h.dbQueries.every(query => /^\s*SELECT/i.test(query.sql)));
+  assert.match(h.dbQueries[1].sql, /COALESCE\(is_parent,0\)=0/);
+  assert.ok(h.calls.every(call => call.method === 'GET'));
+});
+
+test('reads only variations with an exact unique family SKU match', async () => {
+  const h = harness({
+    linked: [],
+    familyProducts: [{ id: 'product-1', sku: 'PHONE-BLK' }, { id: 'product-2', sku: 'PHONE-WHT' }],
+    item: { id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [], variations: [
+      { id: 11, attributes: [{ id: 'SELLER_SKU', value_name: 'phone-blk' }], available_quantity: 3 },
+      { id: 12, seller_custom_field: 'PHONE-WHT', available_quantity: 99 },
+      { id: 13, attributes: [{ id: 'SELLER_SKU', value_name: 'PHONE-WHT' }], available_quantity: 2 },
+    ] },
+    user: { id: sellerId, tags: [] },
+  });
+  const result = await h.read({ params: { itemId }, query: { parentId } });
+
+  assert.deepEqual(result.quantities, [
+    { variationId: '11', sku: 'PHONE-BLK', quantity: 3 },
+    { variationId: '13', sku: 'PHONE-WHT', quantity: 2 },
+  ]);
+  assert.equal(result.matchMethod, 'exact_catalog_sku_read_only');
+});
+
+test('rejects ambiguous SKUs and oversized families without querying remote stock', async () => {
+  const duplicate = harness({
+    linked: [],
+    familyProducts: [{ id: 'product-1', sku: 'DUPLICATE' }, { id: 'product-2', sku: 'duplicate' }],
+    item: { id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
+      attributes: [{ id: 'SELLER_SKU', value_name: 'duplicate' }], available_quantity: 1, variations: [] },
+    user: { id: sellerId, tags: [] },
+  });
+  await assert.rejects(duplicate.read({ params: { itemId }, query: { parentId } }), error => {
+    assert.equal(error.statusCode, 409);
+    assert.match(error.message, /mais de um produto/);
+    return true;
+  });
+  assert.equal(duplicate.calls.length, 1);
+
+  const oversized = harness({
+    linked: [],
+    familyProducts: Array.from({ length: 201 }, (_, index) => ({ id: `product-${index}`, sku: `SKU-${index}` })),
+  });
+  await assert.rejects(oversized.read({ params: { itemId }, query: { parentId } }), error => {
+    assert.equal(error.statusCode, 409);
+    assert.match(error.message, /excede 200 produtos/);
+    return true;
+  });
+  assert.equal(oversized.calls.length, 0);
+});
+
+test('does not treat seller_custom_field as the listing SKU', async () => {
+  const h = harness({
+    linked: [],
+    familyProducts: [{ id: 'product-1', sku: 'PHONE-WHT' }],
+    item: { id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
+      seller_custom_field: 'PHONE-WHT', available_quantity: 5, variations: [] },
+    user: { id: sellerId, tags: [] },
+  });
+  await assert.rejects(h.read({ params: { itemId }, query: { parentId } }), error => {
+    assert.equal(error.statusCode, 409);
+    assert.match(error.message, /não corresponde a um produto único/);
+    return true;
+  });
+  assert.ok(h.calls.every(call => call.method === 'GET'));
+});
+
 test('reads seller warehouse and Full locations without assigning them to a product SKU', async () => {
   const h = harness({
     linked: [{ id: 'product-1', sku: 'LJH074', variation_id: '77' }],
@@ -94,6 +178,29 @@ test('reads seller warehouse and Full locations without assigning them to a prod
   assert.ok(h.calls.every(call => call.method === 'GET'));
 });
 
+test('reads unlinked User Product locations even when no exact SKU is available', async () => {
+  const h = harness({
+    linked: [],
+    familyProducts: [{ id: 'product-1', sku: 'LJH074' }],
+    item: { id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
+      user_product_id: 'MLBU123', variations: [{ id: 77 }] },
+    user: { id: sellerId, tags: ['warehouse_management'] },
+    userProductStock: { id: 'MLBU123', user_id: sellerId, locations: [
+      { type: 'seller_warehouse', store_id: '10', network_node_id: 'node-a', quantity: 3 },
+      { type: 'meli_facility', store_id: 'full', network_node_id: 'node-b', quantity: 8 },
+    ] },
+  });
+  const result = await h.read({ params: { itemId }, query: { parentId } });
+
+  assert.equal(result.mode, 'warehouse_management');
+  assert.equal(result.matchMethod, 'warehouse_location_only');
+  assert.deepEqual(result.locations.map(row => [row.type, row.quantity]), [
+    ['seller_warehouse', 3], ['meli_facility', 8],
+  ]);
+  assert.deepEqual(result.variations, [{ id: '77', sku: '' }]);
+  assert.ok(h.calls.every(call => call.method === 'GET'));
+});
+
 test('rejects a listing owned by another Mercado Livre seller', async () => {
   const h = harness({
     item: { id: itemId, seller_id: '999', status: 'active', sub_status: [], tags: [],
@@ -112,4 +219,58 @@ test('registers listing stock writes behind a dedicated key and advertises only 
   assert.match(server, /'listing_stock_write_v1'[\s\S]*'user_product_stock_write_v1'/);
   assert.doesNotMatch(server.match(/const ERP_STOCK_WRITE_CAPABILITIES = Object\.freeze\(\[([\s\S]*?)\]\);/)?.[1] || '', /listing_price_write_v1/);
   assert.match(server, /request\.headers\['x-erp-write-key'\]/);
+});
+
+test('read-only stock deploy backs up and replaces only the stock module without touching env or price/publication services', async () => {
+  const deployEntry = fs.readFileSync(path.join(__dirname, '../deploy-vps-server-only.cjs'), 'utf8');
+  assert.match(deployEntry, /process\.argv\.includes\('--mercado-livre-stock-read-only'\)[\s\S]*deployMercadoLivreStockRead/);
+  const events = [];
+  const result = await deployMercadoLivreStockRead({
+    appDir: '/var/www/mdv-api',
+    apiProc: { name: 'mdv-api' },
+    root: 'C:/candidate',
+    exec: async command => { events.push(['exec', command]); return ''; },
+    upload: async (source, destination) => events.push(['upload', source, destination]),
+  });
+
+  assert.equal(result.target, '/var/www/mdv-api/services/mercadoLivreListingStock.cjs');
+  assert.deepEqual(events.map(event => event[0]), ['exec', 'exec', 'upload', 'exec', 'exec', 'exec', 'exec']);
+  assert.equal(events[2][1], path.join('C:/candidate', 'services/mercadoLivreListingStock.cjs'));
+  assert.match(events[0][1], /backups\/mercado-livre-stock-read-/);
+  assert.match(events[1][1], /cp -p .*mercadoLivreListingStock\.cjs/);
+  assert.match(events[3][1], /node --check .*mercadoLivreListingStock\.cjs\.next\.cjs/);
+  assert.match(events[4][1], /mv .*mercadoLivreListingStock\.cjs\.next\.cjs .*mercadoLivreListingStock\.cjs/);
+  assert.equal(events[5][1], 'pm2 restart mdv-api');
+  assert.match(events[6][1], /rm -f .*mercadoLivreListingStock\.cjs\.next\.cjs/);
+  assert.ok(events.every(event => !event.slice(1).join(' ').includes('.env')));
+  assert.ok(events.every(event => !/mercadoLivre(?:Server|Publication|ListingPrice)\.cjs/.test(event.slice(1).join(' '))));
+});
+
+test('read-only stock deploy refuses any target except the Mercado do Vale API', async () => {
+  const events = [];
+  await assert.rejects(deployMercadoLivreStockRead({
+    appDir: '/var/www/other', apiProc: { name: 'other' },
+    exec: async command => events.push(command), upload: async () => events.push('upload'),
+  }), /Unexpected API target/);
+  assert.deepEqual(events, []);
+});
+
+test('restores the backed-up stock module when the API restart fails', async () => {
+  const events = [];
+  let restarts = 0;
+  await assert.rejects(deployMercadoLivreStockRead({
+    appDir: '/var/www/mdv-api',
+    apiProc: { name: 'mdv-api' },
+    root: 'C:/candidate',
+    exec: async command => {
+      events.push(command);
+      if (command === 'pm2 restart mdv-api' && restarts++ === 0) throw new Error('restart failed');
+      return '';
+    },
+    upload: async () => events.push('upload'),
+  }), /restart failed/);
+
+  assert.ok(events.some(command => /cp -p .*backups\/mercado-livre-stock-read-.*mercadoLivreListingStock\.cjs .*services\/mercadoLivreListingStock\.cjs/.test(command)));
+  assert.equal(events.filter(command => command === 'pm2 restart mdv-api').length, 2);
+  assert.match(events.at(-1), /rm -f .*mercadoLivreListingStock\.cjs\.next\.cjs/);
 });

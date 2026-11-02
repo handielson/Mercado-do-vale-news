@@ -24,6 +24,8 @@ const API_PATTERNS = [
   /^services\/marketingCampaignApi\.cjs$/,
   /^services\/mercadoLivrePublication\.cjs$/,
   /^services\/mercadoLivreListingPrice\.cjs$/,
+  /^services\/mercadoLivreListingStock\.cjs$/,
+  /^scripts\/deploy-mercado-livre-stock-read\.cjs$/,
   /^services\/mobileSalesPushService\.cjs$/,
   /^services\/marketplaceSaleFinancials\.cjs$/,
   /^services\/productManualCost\.cjs$/,
@@ -138,8 +140,10 @@ function matchesAny(file, patterns) {
 function classifyFiles(files) {
   const normalized = unique(files.map(normalizeFile));
   const localOnly = file => file === 'services/localCatalogPreviewServer.cjs';
+  const apiOnlyService = file => file === 'services/mercadoLivreListingStock.cjs';
   const siteFiles = normalized.filter((file) => matchesAny(file, SITE_PATTERNS)
     && !localOnly(file)
+    && !apiOnlyService(file)
     && !/^services\/(?:priorityStockDecrement|saleStockReconciliation)\.cjs$/.test(file));
   const apiFiles = normalized.filter((file) => matchesAny(file, API_PATTERNS) && !localOnly(file));
   const n8nFiles = normalized.filter((file) => matchesAny(file, N8N_WORKFLOW_PATTERNS));
@@ -265,6 +269,12 @@ function buildPlan(options) {
   const catalogMedia = allFiles.includes('scripts/deploy-catalog-media.cjs');
   const salesDelivery = allFiles.includes('scripts/deploy-sales-delivery.cjs');
   const shopeeFilelink = allFiles.includes('scripts/deploy-shopee-filelink.cjs');
+  const mercadoLivreStockReadOnly = classification.apiFiles.includes('services/mercadoLivreListingStock.cjs')
+    && classification.apiFiles.every(file => [
+      'deploy-vps-server-only.cjs',
+      'scripts/deploy-mercado-livre-stock-read.cjs',
+      'services/mercadoLivreListingStock.cjs',
+    ].includes(file));
   const mercadoLivreApiFiles = new Set([
     'deploy-vps-server-only.cjs',
     'services/mercadoLivreServer.cjs',
@@ -275,14 +285,16 @@ function buildPlan(options) {
   const mercadoLivreOnly = classification.apiFiles.length > 0
     && classification.apiFiles.some(file => file.startsWith('services/mercadoLivre'))
     && classification.apiFiles.every(file => mercadoLivreApiFiles.has(file));
-  if (classification.needs.api && mercadoLivreOnly) deployCommands.push('node deploy-vps-server-only.cjs --mercado-livre-only');
+  if (classification.needs.api && mercadoLivreStockReadOnly) deployCommands.push('node deploy-vps-server-only.cjs --mercado-livre-stock-read-only');
+  else if (classification.needs.api && mercadoLivreOnly) deployCommands.push('node deploy-vps-server-only.cjs --mercado-livre-only');
   if (classification.needs.api && shopeeFilelink) deployCommands.push('node deploy-vps-server-only.cjs --shopee-filelink-only');
   if (classification.needs.api && catalogMedia && !shopeeFilelink) deployCommands.push('node deploy-vps-server-only.cjs --catalog-media-only');
   if (classification.needs.api && salesDelivery && !catalogMedia && !shopeeFilelink) deployCommands.push('node deploy-vps-server-only.cjs --sales-delivery-only');
   if (classification.needs.site) {
     deployCommands.push(`$env:VPS_SITE_RELEASE_NAME='${releaseName}'; npm.cmd run deploy:vps-site`);
   }
-  if (classification.needs.api && !metaAttendance && !salesDelivery && !catalogMedia && !shopeeFilelink && !mercadoLivreOnly) {
+  if (classification.needs.api && !metaAttendance && !salesDelivery && !catalogMedia && !shopeeFilelink
+      && !mercadoLivreOnly && !mercadoLivreStockReadOnly) {
     deployCommands.push('node deploy-vps-server-only.cjs');
   }
   deployCommands.push(...n8nDeployCommands(classification.n8nFiles));
@@ -401,6 +413,16 @@ function runSelfTest() {
   assert(fiscalVault.target === 'multiple', 'server-side vault modules must deploy site and API');
   const listingPrice = classifyFiles(['services/mercadoLivreListingPrice.cjs']);
   assert(listingPrice.target === 'multiple', 'Mercado Livre listing price handler must deploy site and API');
+  const listingStock = classifyFiles(['services/mercadoLivreListingStock.cjs']);
+  assert(listingStock.target === 'api', 'Mercado Livre stock handler is API-only');
+  assert(listingStock.needs.api && !listingStock.needs.site, 'Mercado Livre stock handler must not trigger a site deploy by itself');
+  const listingStockPlan = buildPlan({
+    mockFiles: ['deploy-vps-server-only.cjs', 'scripts/deploy-mercado-livre-stock-read.cjs', 'services/mercadoLivreListingStock.cjs', 'tmp-tests/mercado-livre-listing-stock-read.test.cjs', 'public/VERSION.json'],
+    slug: 'mercado-livre-stock-read',
+  });
+  assert(listingStockPlan.deployCommands[0] === 'node deploy-vps-server-only.cjs --mercado-livre-stock-read-only', 'stock read route must deploy only its API module');
+  assert(listingStockPlan.deployCommands[1].includes('npm.cmd run deploy:vps-site'), 'stock read version manifest must deploy with the site');
+  assert(listingStockPlan.deployCommands.length === 2, 'stock read release must not append the generic API deployment');
   const listingPricePlan = buildPlan({
     mockFiles: ['services/mercadoLivreListingPrice.cjs', 'tmp-tests/mercado-livre-product-links.test.cjs', 'public/VERSION.json'],
     slug: 'ml-quantity-price',

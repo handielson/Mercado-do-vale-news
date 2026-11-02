@@ -965,6 +965,13 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--mercado-livre-stock-read-only')) {
+    await require('./scripts/deploy-mercado-livre-stock-read.cjs').deployMercadoLivreStockRead({
+      appDir, apiProc, exec, upload, root: __dirname,
+    });
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--central-printing-only')) {
     await require('./scripts/deploy-central-printing.cjs')({ appDir, apiProc, exec, upload, root: __dirname });
     conn.end();
