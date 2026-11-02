@@ -15,7 +15,7 @@ import { CurrencyInput } from '../../../components/ui/CurrencyInput';
 import { toast } from 'sonner';
 import { MODEL_SEO_BATCH_SIZE, selectFirstModelIds } from './modelBulkSelection.js';
 import { ModelPricesPanel } from '../../../components/settings/ModelPricesPanel';
-import { smartphonePriceGroups } from '../../../services/smartphonePriceGroups';
+import { smartphonePriceGroups, type ModelPriceSummary } from '../../../services/smartphonePriceGroups';
 import { ModelActionsMenu } from '../../../components/settings/ModelActionsMenu';
 import { familyWorkspacePath } from '../../../services/productFormDrafts';
 
@@ -69,9 +69,11 @@ interface ModelRowProps {
     onRefresh: () => void;
     onOpenParent: (m: Model) => void;
     openingParent: boolean;
+    /** Resumo vindo da consulta em lote: undefined = carregando; null = indisponível (a linha busca sozinha). */
+    summary?: ModelPriceSummary | null;
 }
 
-function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit, onDelete, onRefresh, onOpenParent, openingParent }: ModelRowProps) {
+function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit, onDelete, onRefresh, onOpenParent, openingParent, summary }: ModelRowProps) {
     const [products, setProducts] = useState<ProductRow[]>([]);
     const [loadingPrices, setLoadingPrices] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -88,6 +90,25 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
     // histórico por produto
     const [history, setHistory] = useState<Record<string, PriceSnapshot[]>>({});
     const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+
+    const applyProductRows = useCallback((input: ProductRow[]) => {
+        const rows = [...input].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+        setProducts(rows);
+        if (rows.length > 0) {
+            // Média ponderada pelo estoque para o display inicial
+            const total = rows.reduce((s, p) => s + (Number(p.stock_quantity) || 0), 0);
+            const wavg = (field: keyof PriceState) =>
+                total > 0
+                    ? Math.round(rows.reduce((s, p) => s + (Number(p[field]) * (Number(p.stock_quantity) || 0)), 0) / total)
+                    : Number(rows[0][field]) || 0;
+            setPrices({
+                price_cost: wavg('price_cost'),
+                price_retail: wavg('price_retail'),
+                price_reseller: wavg('price_reseller'),
+                price_wholesale: wavg('price_wholesale'),
+            });
+        }
+    }, []);
 
     const loadPrices = useCallback(async () => {
         setLoadingPrices(true);
@@ -106,33 +127,26 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                 noCache: true,
             });
 
-            const rows: ProductRow[] = [...(data || [])]
-                .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-            setProducts(rows);
-
-            if (rows.length > 0) {
-                // Média ponderada pelo estoque para o display inicial
-                const total = rows.reduce((s, p) => s + (p.stock_quantity || 0), 0);
-                const wavg = (field: keyof PriceState) =>
-                    total > 0
-                        ? Math.round(rows.reduce((s, p) => s + ((p[field] as number) * (p.stock_quantity || 0)), 0) / total)
-                        : rows[0][field] || 0;
-
-                setPrices({
-                    price_cost: wavg('price_cost'),
-                    price_retail: wavg('price_retail'),
-                    price_reseller: wavg('price_reseller'),
-                    price_wholesale: wavg('price_wholesale'),
-                });
-            }
+            applyProductRows([...(data || [])]);
         } catch (e: any) {
             console.error(e);
         } finally {
             setLoadingPrices(false);
         }
-    }, [model.id]);
+    }, [model.id, applyProductRows]);
 
-    useEffect(() => { loadPrices(); }, [loadPrices]);
+    // Preço vem da consulta em lote da página; só busca sozinho se ela não estiver disponível.
+    useEffect(() => {
+        if (summary === undefined) return;
+        if (summary === null) { void loadPrices(); return; }
+        setPhoneModel(summary.enabled);
+        if (summary.enabled) {
+            setGroupAudit({ divergent: summary.divergent, unresolved: summary.unresolved });
+        } else {
+            applyProductRows(summary.products as ProductRow[]);
+        }
+        setLoadingPrices(false);
+    }, [summary, loadPrices, applyProductRows]);
 
     async function handleSave() {
         if (phoneModel !== false) { setExpanded(true); return; }
@@ -523,6 +537,21 @@ export function ModelsPage() {
     const currentPage = Math.min(page, pageCount);
     const pageStart = (currentPage - 1) * pageSize;
     const visibleModels = filtered.slice(pageStart, pageStart + pageSize);
+    const visibleIdsKey = visibleModels.map(m => m.id).join(',');
+    const [priceSummary, setPriceSummary] = useState<{ key: string; items: Record<string, ModelPriceSummary> | null } | null>(null);
+    useEffect(() => {
+        if (!visibleIdsKey) return;
+        let cancelled = false;
+        smartphonePriceGroups.summary(visibleIdsKey.split(','))
+            .then(result => { if (!cancelled) setPriceSummary({ key: visibleIdsKey, items: result?.items || {} }); })
+            .catch(() => { if (!cancelled) setPriceSummary({ key: visibleIdsKey, items: null }); });
+        return () => { cancelled = true; };
+    }, [visibleIdsKey]);
+    const summaryFor = (id: string): ModelPriceSummary | null | undefined => {
+        if (!priceSummary || priceSummary.key !== visibleIdsKey) return undefined;
+        if (!priceSummary.items) return null;
+        return priceSummary.items[id] ?? null;
+    };
 
     const toggleSelectAll = () => {
         if (selectedModelIds.size === filtered.length && filtered.length > 0) {
@@ -743,6 +772,7 @@ export function ModelsPage() {
                                     onRefresh={loadData}
                                     onOpenParent={handleOpenParent}
                                     openingParent={false}
+                                    summary={summaryFor(model.id)}
                                 />
                             ))
                         )}

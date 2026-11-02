@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.760-menu-organizacao",
+  "version": "v1.2.761-modelos-precos-em-lote",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.760-menu-organizacao",
-  "release_vps": "/var/www/mdv-site/releases/20261102-203916-v1260-menu-organizacao",
+  "tag": "v1.2.761-modelos-precos-em-lote",
+  "release_vps": "/var/www/mdv-site/releases/20261102-214224-v1261-modelos-lote",
   "api_release": {
-    "status": "sem alteração",
-    "note": "release só de frontend"
+    "status": "published",
+    "note": "--photo-intake-only (leva smartphonePriceGroupsServer.cjs com a rota /models/price-summary)"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Menu lateral (parte 3): grupo novo 'Sistema (técnico)' com Status, Backup, MySQL e Synology (saíram de 'Empresa & Sistema', que virou 'Empresa'); 'Mercado do Vale · Atendimento' virou 'Vendas & Atendimento'; ícones distintos dentro de cada grupo (Rascunhos, Locais, Lista de Impressão, Ofertas, Caixa, Promoções, Shopee, TikTok, Mercado Livre, Telegram, Gateways, Equipe, Taxas, Displays, Synology…); nomes corrigidos: 'Lista de Impressão', 'Saúde da Bateria', 'Visão financeira', 'Bot do Telegram'. A busca continua achando pelos nomes antigos.",
+  "summary": "Modelos (parte 1): os preços das 25 linhas da página vêm numa consulta só (GET /models/price-summary) em vez de 2 consultas por linha (46 por página; a página levava 9–14 s). Celular: avisos de grupos divergentes/incompletos iguais; demais: produtos ativos com a mesma média ponderada. Se a consulta falhar, cada linha busca sozinha como antes.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,22 +31,23 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.760 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.761 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'"
   },
-  "site_source_base": "6d6f3181",
+  "site_source_base": "63b07973",
   "changed_files": [
-    "layouts/AdminLayout.tsx",
-    "tmp-tests/admin-menu-organization-static.test.mjs",
-    "tmp-tests/inventory-print-list-static.test.mjs",
+    "services/smartphonePriceGroupsServer.cjs",
+    "services/smartphonePriceGroups.ts",
+    "pages/admin/settings/ModelsPage.tsx",
+    "tmp-tests/models-price-summary.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.760-menu-organizacao.md"
+    "docs/versoes/2026-11-02-v1.2.761-modelos-precos-em-lote.md"
   ],
   "validations": [
-    "admin-menu-organization-static reescrito e aprovado (estava desatualizado e falhando)",
-    "inventory-print-list-static atualizado ('Lista de Impressão')",
-    "testes do AdminLayout: nenhuma falha nova",
-    "tsc; npm run build"
+    "models-price-summary (3) e smartphone-price-groups (27) aprovados",
+    "testes de Modelos/preços: mesmas 5 falhas anteriores",
+    "tsc; node --check; npm run build",
+    "Playwright com dados reais (só leitura): sem a rota nova = 46 consultas e mesmos preços; com a rota = 0 consultas por linha e preços idênticos"
   ]
 }

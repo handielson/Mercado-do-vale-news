@@ -1,3 +1,11 @@
+# v1.2.761-modelos-precos-em-lote
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.761-modelos-precos-em-lote` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-214224-v1261-modelos-lote`. API: `--photo-intake-only` (rota nova `/models/price-summary`).
+Modelos (parte 1): preços da página numa consulta só (antes 46 por página).
+
+---
+
 # v1.2.760-menu-organizacao
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.760-menu-organizacao` (local; push da tag pendente).

@@ -14,7 +14,12 @@ export type SmartphonePriceGroup = {
     products: Array<SmartphoneSalePrices & { id: string; sku: string; name: string; color: string; stock_quantity: number; price_cost: number | null; unit_costs?: number[]; available_unit_count?: number }>;
 };
 export type SmartphonePriceReference = { controlled: boolean; prices?: SmartphoneSalePrices | null; divergent?: boolean; incomplete?: boolean; established?: boolean; group_id?: string; moving_average_cost?: number | null };
+/** Resumo da página de Modelos: celular → só avisos; demais → produtos ativos (sem pais) com preços. */
+export type ModelPriceSummary =
+    | { enabled: true; divergent: number; unresolved: number }
+    | { enabled: false; products: Array<{ id: string; name: string; sku: string; specs: any; stock_quantity: number; price_cost: number; price_retail: number; price_reseller: number; price_wholesale: number }> };
 export const smartphonePriceGroups = {
+    summary: (modelIds: string[]) => vpsClient.get<{ items: Record<string, ModelPriceSummary> }>(`/models/price-summary?ids=${modelIds.map(encodeURIComponent).join(',')}`, { timeoutMs: 20000 }),
     list: (modelId: string) => vpsClient.get<{ enabled: boolean; groups: SmartphonePriceGroup[]; unresolved: Array<{ id: string; sku: string; name: string }> }>(`/models/${encodeURIComponent(modelId)}/smartphone-price-groups`, { timeoutMs: 15000 }),
     reference: (modelId: string, product: object) => vpsClient.post<SmartphonePriceReference>(`/models/${encodeURIComponent(modelId)}/smartphone-price-reference`, product),
     save: async (group: SmartphonePriceGroup, prices: SmartphoneSalePrices) => {

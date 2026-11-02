@@ -216,11 +216,43 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey, inv
     return { controlled: true, prices: salePrices, divergent: peers.length > 0 && !salePrices, group_id: config.id, established: Boolean(saved || peers.length),
       moving_average_cost: valuations[config.id]?.moving_average_cost ?? null };
   });
-  fastify.get('/models/:id/smartphone-price-groups', { preHandler: requireSyncKey }, async (req, reply) => {
+  // Resumo de preços de vários modelos numa consulta só (página de Modelos: antes eram 2 consultas por linha).
+  // Celular: só os avisos (grupos divergentes / cadastros incompletos); demais: produtos ativos (sem pais) com preços.
+  fastify.get('/models/price-summary', { preHandler: requireSyncKey }, async (req, reply) => {
     await ensureSmartphonePriceGroupsSchema(pool);
     reply.header('Cache-Control', 'no-store');
-    const model = await loadModel(pool, req.params.id);
-    if (!model) return reply.code(404).send({ error: 'Modelo não encontrado' });
+    const ids = [...new Set(String(req.query?.ids || '').split(',').map(id => id.trim()).filter(Boolean))];
+    if (!ids.length) return { items: {} };
+    if (ids.length > 50) return reply.code(400).send({ error: 'No máximo 50 modelos por consulta' });
+    const marks = ids.map(() => '?').join(',');
+    const [models] = await pool.query(`SELECT m.id,m.name,m.company_id,m.template_values,c.name AS category_name
+      FROM models m LEFT JOIN categories c ON c.id=m.category_id WHERE m.id IN (${marks})`, ids);
+    const items = {};
+    const plainIds = [];
+    for (const model of models) {
+      if (core.isSmartphoneCategory(model.category_name)) {
+        const result = await buildSmartphonePriceGroups(model);
+        items[model.id] = { enabled: true, divergent: result.groups.filter(g => g.divergent).length, unresolved: result.unresolved.length };
+      } else {
+        plainIds.push(model.id);
+        items[model.id] = { enabled: false, products: [] };
+      }
+    }
+    if (plainIds.length) {
+      const [rows] = await pool.query(`SELECT id,model_id,name,sku,specs,stock_quantity,price_cost,price_retail,price_reseller,price_wholesale
+        FROM products WHERE model_id IN (${plainIds.map(() => '?').join(',')}) AND status='active' AND (is_parent = 0 OR is_parent IS NULL)`, plainIds);
+      for (const row of rows) {
+        let specs = row.specs;
+        if (typeof specs === 'string') { try { specs = JSON.parse(specs); } catch { specs = {}; } }
+        items[row.model_id].products.push({ id: row.id, name: row.name, sku: row.sku, specs: specs || {},
+          stock_quantity: Number(row.stock_quantity) || 0, price_cost: Number(row.price_cost) || 0, price_retail: Number(row.price_retail) || 0,
+          price_reseller: Number(row.price_reseller) || 0, price_wholesale: Number(row.price_wholesale) || 0 });
+      }
+    }
+    return { items };
+  });
+
+  async function buildSmartphonePriceGroups(model) {
     if (!core.isSmartphoneCategory(model.category_name)) return { enabled: false, groups: [], unresolved: [] };
     const [products] = await pool.query(`SELECT id,model_id,company_id,name,sku,specs,is_print3d,is_parent,is_combo,offer_type,status,stock_quantity,
       price_cost,price_retail,price_reseller,price_wholesale FROM products WHERE model_id=? AND COALESCE(is_parent,0)=0 AND COALESCE(is_combo,0)=0 AND offer_type IS NULL`, [model.id]);
@@ -264,6 +296,14 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey, inv
     return { enabled: true, unresolved, groups: [...groups.values()].map(g => ({
       ...presentGroup(g.config, saved.find(s => s.id === g.config.id), g.products, model), ...valuations[g.config.id],
     })) };
+  }
+
+  fastify.get('/models/:id/smartphone-price-groups', { preHandler: requireSyncKey }, async (req, reply) => {
+    await ensureSmartphonePriceGroupsSchema(pool);
+    reply.header('Cache-Control', 'no-store');
+    const model = await loadModel(pool, req.params.id);
+    if (!model) return reply.code(404).send({ error: 'Modelo não encontrado' });
+    return buildSmartphonePriceGroups(model);
   });
 
   fastify.put('/models/:id/smartphone-price-groups/:groupId', { preHandler: requireSyncKey }, async (req, reply) => {
