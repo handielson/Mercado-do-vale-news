@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.747-produtos-lista-compacta",
+  "version": "v1.2.748-produtos-menos-consultas",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.747-produtos-lista-compacta",
-  "release_vps": "/var/www/mdv-site/releases/20261102-142951-v1247-produtos-lista",
+  "tag": "v1.2.748-produtos-menos-consultas",
+  "release_vps": "/var/www/mdv-site/releases/20261102-143551-v1248-produtos-consultas",
   "api_release": {
     "status": "sem alteração",
     "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Lista de produtos (parte 4): nova visualização 'Lista' — uma linha por produto com foto pequena, nome, cor/memória, SKU, preço e estoque. Toque no produto abre a edição; na família, abre as variações (cada uma com preço, estoque e toque para editar) e 'Editar produto pai'. No celular, sem escolha salva, a página já abre na Lista (~4 produtos por tela, antes 1). Não monta o card completo, então não faz as consultas de cada card. Cartões e Famílias continuam disponíveis; computador continua abrindo em Cartões.",
+  "summary": "Lista de produtos (parte 5): no modo Cartões cada card fazia 5–6 consultas ao abrir a página (180 com 24 produtos). Agora: modelos de etiqueta só ao abrir 'Imprimir'; canais/ofertas e IMEIs só ao 'Expandir detalhes' (e a volta para a aba não refaz a consulta de todos os cards); vídeo e foto reserva só quando o card chega perto da tela; a rota antiga de vídeo só é usada se a principal falhar. Abertura da página: ~10 consultas; rolando os 24 produtos: 98 no total. Nada muda no que aparece.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,25 +31,23 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.747 (Claude); v1.2.742 do Codex",
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.748 (Claude); v1.2.742 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde (06/10/2026) parece errado; aguardando confirmação do usuário"
   },
-  "site_source_base": "3567f9ca",
+  "site_source_base": "ca2d29f1",
   "changed_files": [
-    "components/products/productCompactRows.js",
-    "components/products/ProductCompactList.tsx",
-    "pages/admin/products/ProductListPage.tsx",
-    "tmp-tests/product-compact-rows.test.mjs",
-    "tmp-tests/product-list-compact-view-static.test.mjs",
+    "components/products/ProductCard.tsx",
+    "components/products/LabelPrintModal.tsx",
+    "tmp-tests/product-card-fewer-requests-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.747-produtos-lista-compacta.md"
+    "docs/versoes/2026-11-02-v1.2.748-produtos-menos-consultas.md"
   ],
   "validations": [
-    "product-compact-rows (4) e product-list-compact-view-static aprovados",
-    "45 testes da lista/card/filtros: mesmas 8 falhas anteriores, nenhuma nova",
+    "product-card-fewer-requests-static aprovado",
+    "47 testes da lista/card/filtros: mesmas 8 falhas anteriores, nenhuma nova",
     "tsc sem erros",
     "npm run build aprovado",
-    "Playwright iPhone 13: abre na Lista sem preferência, linhas de ~90px, família abre variações sem nenhuma consulta nova, toque no produto abre a edição, largura 390, sem erros na página"
+    "Playwright iPhone 13 (24 produtos, modo Cartões): 180 → ~10 consultas na abertura, 98 após rolar tudo; expandir detalhes busca canais e IMEIs só daquele card"
   ]
 }

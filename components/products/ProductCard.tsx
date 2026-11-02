@@ -275,10 +275,32 @@ const getUnitIdentifierChips = (units: Awaited<ReturnType<typeof unitService.lis
  * ProductCard Component
  * Displays product information in a card format with image, prices, and status
  */
+/** true quando o card está na tela ou a até ~1,5 tela de distância (e continua true depois). */
+function useNearViewport(ref: React.RefObject<HTMLElement | null>): boolean {
+    const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined');
+    useEffect(() => {
+        if (near) return;
+        const element = ref.current;
+        if (!element) return;
+        const observer = new IntersectionObserver(entries => {
+            if (entries.some(entry => entry.isIntersecting)) {
+                setNear(true);
+                observer.disconnect();
+            }
+        }, { rootMargin: '150% 0px' });
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [near, ref]);
+    return near;
+}
+
 export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariants, familyStockSummary, forceDetailsExpanded = false, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
     const [detailsExpanded, setDetailsExpanded] = useState(false);
     const detailsId = useId();
     const showDetails = detailsExpanded || forceDetailsExpanded;
+    // Consultas do card (vídeo, foto reserva) só quando ele chega perto da tela.
+    const cardRef = useRef<HTMLDivElement>(null);
+    const isNearViewport = useNearViewport(cardRef);
     const equivalentProductIds = product.equivalent_product_ids?.length
         ? product.equivalent_product_ids
         : [product.id];
@@ -409,6 +431,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
             return;
         }
 
+        if (!isNearViewport) return;
         setVideoInfo((prev) => ({ ...prev, checking: true }));
         let isMounted = true;
 
@@ -420,6 +443,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
             if (primary?.exists) {
                 return { exists: true, url: primary.url || canonicalUrl };
             }
+            // A principal respondeu "sem vídeo": não repete na rota antiga (só se ela falhar).
+            if (primary) return { exists: false, url: null };
 
             // Fallback para endpoint público legado
             try {
@@ -452,11 +477,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
             });
             
         return () => { isMounted = false; };
-    }, [product.sku, product.video_url]);
+    }, [product.sku, product.video_url, isNearViewport]);
 
     useEffect(() => {
         let cancelled = false;
 
+        // Os IMEIs/séries só aparecem em "Expandir detalhes": busca quando abrir.
+        if (!showDetails) return;
         if (!product.track_inventory || !product.id || Number(product.stock_quantity || 0) <= 0) {
             setUnitIdentifierChips([]);
             return;
@@ -474,7 +501,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
         return () => {
             cancelled = true;
         };
-    }, [equivalentProductIdsKey, product.stock_quantity, product.track_inventory]);
+    }, [equivalentProductIdsKey, product.stock_quantity, product.track_inventory, showDetails]);
 
     // Handle Upload video
     const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1065,6 +1092,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
 
         setProductImages([]);
         setFetchedImages([]);
+        if (!isNearViewport) return () => { isMounted = false; };
 
         const resolveFallbackImages = async () => {
             try {
@@ -1111,7 +1139,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
         resolveFallbackImages();
 
         return () => { isMounted = false; };
-    }, [product.id, product.images, product.model_id, product.specs?.color]);
+    }, [product.id, product.images, product.model_id, product.specs?.color, isNearViewport]);
 
     const rawCoverImage = fetchedImages.length > 0 ? fetchedImages[0] : null;
     const coverImage = getCacheBustedUrl(rawCoverImage, product.updated || product.created);
@@ -1158,6 +1186,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
 
     return (
         <div
+            ref={cardRef}
             className={cn(
                 "self-start rounded-xl border overflow-hidden transition-all duration-200",
                 isParentProduct ? "bg-blue-50/60" : "bg-white",
@@ -1673,7 +1702,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                     <div className="min-w-0">
                         {familyVariants}
                         {/* Badge Pai / Variação */}
-                        <ProductPublicationChannels product={product} shopeeLinked={shopeeVisualState.isSynced} shopeeStoreCodes={shopeeVisualState.storeCodes} tiktokStatus={hasTikTokLink ? currentTikTokStatus : ''} onShopee={handleOpenShopeeModal} onTikTok={() => setIsTikTokModalOpen(true)} />
+                        {showDetails && <ProductPublicationChannels product={product} shopeeLinked={shopeeVisualState.isSynced} shopeeStoreCodes={shopeeVisualState.storeCodes} tiktokStatus={hasTikTokLink ? currentTikTokStatus : ''} onShopee={handleOpenShopeeModal} onTikTok={() => setIsTikTokModalOpen(true)} />}
                         {!familyVariants && product.parent_id ? (
                             <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200">
                                 ↳ Variação

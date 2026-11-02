@@ -435,6 +435,8 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     }, [centralJob?.id, centralJob?.status]);
 
     React.useEffect(() => {
+        // Busca os modelos só quando a janela abre (o card monta a janela fechada).
+        if (!isOpen) return;
         let cancelled = false;
 
         labelPrintTemplatesService.get()
@@ -455,7 +457,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [isOpen]);
 
     React.useEffect(() => {
         if (product) {

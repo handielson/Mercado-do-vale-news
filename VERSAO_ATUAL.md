@@ -1,3 +1,13 @@
+# v1.2.748-produtos-menos-consultas
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.748-produtos-menos-consultas` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-143551-v1248-produtos-consultas`. API: sem alteração.
+Lista de produtos (parte 5): card consulta só o que está na tela — etiqueta ao abrir, canais/IMEIs ao expandir, vídeo/foto perto da tela. 180 → ~10 consultas na abertura (24 produtos).
+
+Validações: teste novo, testes da lista/card (sem falha nova), tsc, build e Playwright (iPhone 13).
+
+---
+
 # v1.2.747-produtos-lista-compacta
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.747-produtos-lista-compacta` (local; push da tag pendente).
