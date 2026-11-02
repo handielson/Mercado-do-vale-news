@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.744-produtos-card-preco-estoque",
+  "version": "v1.2.745-produtos-topo-enxuto",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.744-produtos-card-preco-estoque",
-  "release_vps": "/var/www/mdv-site/releases/20261102-135358-v1244-produtos-card",
+  "tag": "v1.2.745-produtos-topo-enxuto",
+  "release_vps": "/var/www/mdv-site/releases/20261102-141136-v1245-produtos-topo",
   "api_release": {
     "status": "sem alteração",
     "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Lista de produtos (parte 1): o card fechado mostra preço, estoque ('3 em estoque') ou a situação (Sem estoque / Vendido / Inativo) e o alerta 'Sem preço', sem precisar expandir detalhes; no celular a paginação vira só '‹ Página X de Y ›' com botões de 44px (antes cortava 'Itens por pág.' e 'Ir').",
+  "summary": "Lista de produtos (parte 2): no celular o topo ficou enxuto — título curto, 'Selecionar' e 'Atualizar' viram ícones, os 11 atalhos ficam atrás de 'Mais ações' e os filtros atrás de um botão 'Filtros (N)' com a busca sempre visível. O primeiro produto aparece a ~490px do topo (antes ~3000px). Computador continua igual.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,25 +31,25 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 e v1.2.744 (Claude); v1.2.742 do Codex",
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.745 (Claude); v1.2.742 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde (06/10/2026) parece errado; aguardando confirmação do usuário"
   },
-  "site_source_base": "11980cde",
+  "site_source_base": "d71630b6",
   "changed_files": [
-    "components/products/productCardStatus.js",
-    "components/products/ProductCard.tsx",
     "pages/admin/products/ProductListPage.tsx",
-    "tmp-tests/product-card-summary.test.mjs",
-    "tmp-tests/product-list-mobile-part1-static.test.mjs",
+    "components/products/ProductFilters.tsx",
+    "tmp-tests/product-list-mobile-part2-static.test.mjs",
+    "tmp-tests/product-list-actions.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.744-produtos-card-preco-estoque.md"
+    "docs/versoes/2026-11-02-v1.2.745-produtos-topo-enxuto.md"
   ],
   "validations": [
-    "product-card-summary (4) e product-list-mobile-part1-static aprovados",
-    "51 testes da lista/card: mesmas 8 falhas anteriores, nenhuma nova",
+    "product-list-mobile-part2-static e part1 aprovados",
+    "product-list-actions ajustado (novas variáveis) e aprovado",
+    "testes da lista/filtros: nenhuma falha nova",
     "tsc sem erros",
     "npm run build aprovado",
-    "Playwright iPhone 13: '12 em estoque · Sem preço', 'R$ 199,90 · 4 em estoque', 'R$ 2.499,00 · Vendido'; paginação sem nada cortado"
+    "Playwright iPhone 13: primeiro card em y≈487 (antes ~3000), 'Filtros (1)', 11 atalhos em 'Mais ações', largura 390 sem rolagem lateral"
   ]
 }

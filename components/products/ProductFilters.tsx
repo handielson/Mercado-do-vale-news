@@ -51,6 +51,8 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
     const [filters, setFilters] = useState<ProductFiltersState>(INITIAL_FILTERS);
     const [brandOptions, setBrandOptions] = useState<string[]>([]);
     const [categoryOptions, setCategoryOptions] = useState<Category[]>([]);
+    // Celular: só a busca fica aberta; os outros filtros ficam atrás do botão "Filtros (N)".
+    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const categoryGroups = useMemo(() => buildCategorySelectGroups(categoryOptions), [categoryOptions]);
 
     useEffect(() => {
@@ -95,14 +97,37 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
         filters.shopeeStatus !== 'all' ||
         filters.videoStatus !== 'all';
 
+    const activeFilterCount = [
+        filters.status !== 'all',
+        filters.imageStatus !== 'all',
+        filters.brand !== 'all',
+        filters.categoryId !== 'all',
+        filters.videoStatus !== 'all',
+        (filters.salesChannel || 'all') !== 'all',
+        filters.shopeeStore !== 'all',
+        filters.sortBy !== 'newest',
+        showParentVisibility && filters.parentVisibility !== 'hide_parents',
+    ].filter(Boolean).length;
+
     const cardClass = 'min-w-0 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 shadow-sm transition-colors focus-within:border-blue-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100';
+    const extraFilterClass = mobileFiltersOpen ? '' : 'hidden sm:block';
     const labelClass = 'mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500';
     const controlClass = 'w-full min-w-0 bg-transparent text-sm font-medium text-slate-800 outline-none';
 
     return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+        <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:p-3">
+            <div className="mb-2 flex items-center justify-between gap-3 sm:mb-3">
+                <button
+                    type="button"
+                    data-mobile-filters-toggle
+                    aria-expanded={mobileFiltersOpen}
+                    onClick={() => setMobileFiltersOpen(open => !open)}
+                    className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 sm:hidden"
+                >
+                    <SlidersHorizontal className="h-4 w-4 text-blue-600" />
+                    Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+                </button>
+                <div className="hidden items-center gap-2 text-sm font-semibold text-slate-700 sm:flex">
                     <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                         <SlidersHorizontal className="h-4 w-4" />
                     </span>
@@ -133,7 +158,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                     />
                 </label>
 
-                <label className={cardClass}>
+                <label className={`${cardClass} ${extraFilterClass}`}>
                     <span className={labelClass}>Status</span>
                     <select aria-label="Status do produto" value={filters.status}
                         onChange={(event) => applyChange({ status: event.target.value as ProductStatus | 'all' })}
@@ -146,7 +171,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                     </select>
                 </label>
 
-                <label className={cardClass}>
+                <label className={`${cardClass} ${extraFilterClass}`}>
                     <span className={labelClass}>Marca</span>
                     <select aria-label="Marca" value={filters.brand} onChange={(event) => applyChange({ brand: event.target.value })} className={controlClass}>
                         <option value="all">Todas</option>
@@ -154,7 +179,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                     </select>
                 </label>
 
-                <label className={cardClass}>
+                <label className={`${cardClass} ${extraFilterClass}`}>
                     <span className={labelClass}>Categoria</span>
                     <select aria-label="Categoria" value={filters.categoryId} onChange={(event) => applyChange({ categoryId: event.target.value, categoryIds: event.target.value === 'all' ? undefined : categorySubtreeIds(categoryOptions, event.target.value) })} className={controlClass}>
                         <option value="all">Todas</option>
@@ -166,7 +191,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                     </select>
                 </label>
 
-                <label className={cardClass}>
+                <label className={`${cardClass} ${extraFilterClass}`}>
                     <span className={labelClass}>Fotos</span>
                     <select aria-label="Fotos" value={filters.imageStatus}
                         onChange={(event) => applyChange({ imageStatus: event.target.value as ProductFiltersState['imageStatus'] })}
@@ -177,7 +202,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                     </select>
                 </label>
 
-                <label className={cardClass}>
+                <label className={`${cardClass} ${extraFilterClass}`}>
                     <span className={labelClass}>Vídeo</span>
                     <select aria-label="Vídeo" value={filters.videoStatus}
                         onChange={(event) => applyChange({ videoStatus: event.target.value as ProductFiltersState['videoStatus'] })}
@@ -188,7 +213,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                     </select>
                 </label>
 
-                <label className={cardClass}>
+                <label className={`${cardClass} ${extraFilterClass}`}>
                     <span className={labelClass}>Canal de venda</span>
                     <select
                         aria-label="Canal de venda"
@@ -213,7 +238,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                     </select>
                 </label>
 
-                <label className={`${cardClass} border-orange-200 bg-orange-50/60`}>
+                <label className={`${cardClass} ${extraFilterClass} border-orange-200 bg-orange-50/60`}>
                     <span className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-700">
                         <Store className="h-3 w-3" /> Loja Shopee
                     </span>
@@ -236,7 +261,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                 </label>
 
                 {filters.salesChannel !== 'all' && (
-                    <label className={cardClass}>
+                    <label className={`${cardClass} ${extraFilterClass}`}>
                         <span className={labelClass}>
                             {filters.salesChannel === 'shopee' && filters.shopeeStore !== 'all' ? 'Situação na loja' : 'Situação no canal'}
                         </span>
@@ -263,7 +288,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                 )}
 
                 {showParentVisibility && (
-                    <label className={cardClass}>
+                    <label className={`${cardClass} ${extraFilterClass}`}>
                         <span className={labelClass}>Produtos pai</span>
                         <select aria-label="Visibilidade dos produtos pai" value={filters.parentVisibility}
                             onChange={(event) => applyChange({ parentVisibility: event.target.value as ProductFiltersState['parentVisibility'] })}
@@ -275,7 +300,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange, 
                     </label>
                 )}
 
-                <label className={cardClass}>
+                <label className={`${cardClass} ${extraFilterClass}`}>
                     <span className={labelClass}>Ordenação</span>
                     <select aria-label="Ordenação" value={filters.sortBy}
                         onChange={(event) => applyChange({ sortBy: event.target.value as ProductFiltersState['sortBy'] })}

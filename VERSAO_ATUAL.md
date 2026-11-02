@@ -1,3 +1,13 @@
+# v1.2.745-produtos-topo-enxuto
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.745-produtos-topo-enxuto` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-141136-v1245-produtos-topo`. API: sem alteração.
+Lista de produtos (parte 2): topo enxuto no celular — ícones em Selecionar/Atualizar, atalhos em "Mais ações", filtros em "Filtros (N)" com a busca sempre à mostra.
+
+Validações: testes novos, testes da lista/filtros (sem falha nova), tsc, build e Playwright (iPhone 13).
+
+---
+
 # v1.2.744-produtos-card-preco-estoque
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.744-produtos-card-preco-estoque` (local; push da tag pendente).

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store, Camera, LayoutGrid, ListTree, FileText } from 'lucide-react';
+import { Plus, Package, Share2, Images, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store, Camera, LayoutGrid, ListTree, FileText } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { Print3dProductEntry } from '../../../components/products/Print3dProductEntry';
@@ -29,7 +29,7 @@ import {
  * Products are loaded instantly from localStorage cache and silently refreshed
  * in the background. A manual "Atualizar" button forces a fresh fetch.
  */
-const productActionClass = 'inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-60';
+const productActionClass = 'inline-flex min-h-[44px] md:min-h-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-60';
 
 export const ProductListPage: React.FC = () => {
     const navigate = useNavigate();
@@ -38,6 +38,7 @@ export const ProductListPage: React.FC = () => {
 
     // Bulk selection state
     const [selectionMode, setSelectionMode] = useState(false);
+    const [showMoreActions, setShowMoreActions] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [pageInput, setPageInput] = useState('1');
@@ -389,27 +390,34 @@ export const ProductListPage: React.FC = () => {
             <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-900">Produtos</h1>
-                        <p className="mt-1 text-sm text-slate-500">Gerencie o catálogo de produtos do sistema</p>
+                        <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Produtos</h1>
+                        <p className="mt-1 hidden text-sm text-slate-500 sm:block">Gerencie o catálogo de produtos do sistema</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                         <button onClick={() => selectionMode ? handleExitSelection() : setSelectionMode(true)}
                             className={selectionMode ? 'inline-flex items-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700' : productActionClass}
-                            title={selectionMode ? 'Sair do modo seleção' : 'Ativar modo seleção para edição em lote'}>
+                            title={selectionMode ? 'Sair do modo seleção' : 'Ativar modo seleção para edição em lote'} aria-label={selectionMode ? 'Cancelar seleção' : 'Selecionar'}>
                             {selectionMode ? <XSquare className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
-                            {selectionMode ? 'Cancelar seleção' : 'Selecionar'}
+                            <span className="hidden sm:inline">{selectionMode ? 'Cancelar seleção' : 'Selecionar'}</span>
                         </button>
-                        <button onClick={handleRefresh} disabled={isRefreshing} className={productActionClass} title="Atualizar dados sem recarregar a página">
+                        <button onClick={handleRefresh} disabled={isRefreshing} className={productActionClass} title="Atualizar dados sem recarregar a página" aria-label="Atualizar">
                             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                            {isRefreshing ? 'Atualizando...' : 'Atualizar'}
-                            {cacheAge && !isRefreshing && <span className="text-xs text-slate-400">({cacheAge})</span>}
+                            <span className="hidden sm:inline">{isRefreshing ? 'Atualizando...' : 'Atualizar'}</span>
+                            {cacheAge && !isRefreshing && <span className="hidden text-xs text-slate-400 sm:inline">({cacheAge})</span>}
                         </button>
                         <button onClick={handleNewProduct} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
                             <Plus className="h-4 w-4" /> Novo Produto
                         </button>
                     </div>
                 </div>
-                <nav aria-label="Ações dos produtos" className="grid gap-3 xl:grid-cols-3">
+                {/* Celular: os atalhos ficam atrás de "Mais ações" para a lista aparecer logo. */}
+                <button type="button" data-more-actions-toggle aria-expanded={showMoreActions} aria-controls="product-actions-nav"
+                    onClick={() => setShowMoreActions(open => !open)}
+                    className="inline-flex min-h-[44px] w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 md:hidden">
+                    <span className="inline-flex items-center gap-2"><LayoutGrid className="h-4 w-4 text-blue-600" /> Mais ações</span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showMoreActions ? 'rotate-180' : ''}`} />
+                </button>
+                <nav id="product-actions-nav" aria-label="Ações dos produtos" className={`${showMoreActions ? 'grid' : 'hidden'} gap-3 md:grid xl:grid-cols-3`}>
                     <section aria-labelledby="product-actions-registration" className="rounded-xl border border-slate-200 bg-white p-3">
                         <h2 id="product-actions-registration" className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Cadastro</h2>
                         <div className="flex flex-wrap gap-2">
@@ -465,8 +473,8 @@ export const ProductListPage: React.FC = () => {
             {channelLoading && <p role="status" className="mt-3 text-sm text-slate-600">Consultando situação dos produtos no canal…</p>}
             {channelError && <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{channelError}</p>}
 
-            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-2 sm:flex-row sm:items-center sm:justify-between sm:p-3">
+                <div className="hidden sm:block">
                     <p className="text-sm font-semibold text-slate-800">Visualização dos produtos</p>
                     <p className="text-xs text-slate-500">Cartões e Famílias mostram cada produto pai uma vez, com as variações dentro.</p>
                 </div>
