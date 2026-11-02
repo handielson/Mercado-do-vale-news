@@ -28,14 +28,14 @@ export const ModelListFieldInput: React.FC<ModelListFieldInputProps> = ({
     const disabled = loading || saving;
 
     return (
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem_2.5rem] items-center gap-2">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_2.75rem_2.75rem] md:grid-cols-[minmax(0,1fr)_2.5rem_2.5rem] items-center gap-2">
             <div className="relative min-w-0">
                 <select
                     value={String(value ?? '')}
                     onChange={(event) => onChange(event.target.value)}
                     disabled={disabled}
                     aria-label={field.label}
-                    className="h-10 w-full min-w-0 truncate rounded-lg border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                    className="h-11 md:h-10 w-full min-w-0 truncate rounded-lg border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                 >
                     <option value="">{loading ? 'Carregando...' : 'Selecione...'}</option>
                     {options.map(option => (
@@ -55,7 +55,7 @@ export const ModelListFieldInput: React.FC<ModelListFieldInputProps> = ({
                 disabled={disabled}
                 title="Adicionar opcao"
                 aria-label="Adicionar opcao"
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-11 w-11 md:h-10 md:w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
                 <Plus className="h-4 w-4" />
             </button>
@@ -66,7 +66,7 @@ export const ModelListFieldInput: React.FC<ModelListFieldInputProps> = ({
                 disabled={disabled || !selectedOption}
                 title="Editar opcao selecionada"
                 aria-label="Editar opcao selecionada"
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-11 w-11 md:h-10 md:w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
                 <Pencil className="h-4 w-4" />
             </button>

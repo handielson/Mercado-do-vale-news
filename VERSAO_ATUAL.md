@@ -1,3 +1,13 @@
+# v1.2.737-modelo-celular
+
+Data: 01/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.737-modelo-celular` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-012750-v1237-modelo-celular`. API: sem alteração.
+Tela Novo/Editar Modelo no celular: tela cheia (sem a margem de 24px herdada da página), abas rolando, Template em uma coluna, nome técnico dos campos só no computador, "Preencher" do Bling abaixo do campo, toques de 44px e campos com 16px. Computador inalterado.
+
+Validações: teste estático novo, testes da tela de modelos (3 falhas anteriores mantidas), tsc, build, Playwright iPhone 13 e desktop.
+
+---
+
 # v1.2.736-foto-cadastrar-modelo
 
 Data: 01/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.736-foto-cadastrar-modelo` (local; push da tag pendente).

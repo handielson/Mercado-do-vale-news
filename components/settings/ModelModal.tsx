@@ -494,14 +494,15 @@ const TemplateFieldInput: React.FC<TemplateFieldInputProps> = ({ field, value, o
     return (
         <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">
-                {field.label} <span className="text-slate-400 font-mono">({field.key})</span>
+                {field.label} <span className="hidden md:inline text-slate-400 font-mono">({field.key})</span>
             </label>
             <input
                 type={field.field_type === 'number' ? 'number' : 'text'}
+                inputMode={field.field_type === 'number' ? 'decimal' : undefined}
                 value={value || ''}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={field.placeholder || ''}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full min-h-[44px] md:min-h-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
         </div>
     );
@@ -1391,7 +1392,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         (field.field_type === 'select' || field.field_type === 'table_relation') ? (
             <div key={field.id}>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
-                    {field.label} <span className="text-slate-400 font-mono">({field.key})</span>
+                    {field.label} <span className="hidden md:inline text-slate-400 font-mono">({field.key})</span>
                 </label>
                 <ModelListFieldInput
                     field={field}
@@ -1437,7 +1438,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         return (
             <div key={`shopee-attribute-${attrId}`}>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
-                    {label} {attr.mandatory && <span className="text-orange-600">*</span>} <span className="text-slate-400 font-mono">(shopee:{attrId})</span>
+                    {label} {attr.mandatory && <span className="text-orange-600">*</span>} <span className="hidden md:inline text-slate-400 font-mono">(shopee:{attrId})</span>
                 </label>
                 {hasOptions && attr.input_kind !== 'multiselect' ? (
                     <select
@@ -1762,10 +1763,10 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 sm:p-6 overflow-hidden">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-full flex flex-col animate-in fade-in zoom-in-95 overflow-hidden">
+        <div className="fixed inset-0 !mt-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-6 overflow-hidden" data-model-modal>
+            <div className="bg-white rounded-none sm:rounded-xl shadow-2xl w-full max-w-7xl h-full flex flex-col animate-in fade-in zoom-in-95 overflow-hidden [&_input]:text-base [&_select]:text-base [&_textarea]:text-base md:[&_input]:text-sm md:[&_select]:text-sm md:[&_textarea]:text-sm">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-slate-200">
+                <div className="flex items-center justify-between px-4 py-3 sm:p-6 border-b border-slate-200">
                     <h2 className="text-xl font-bold text-slate-800">
                         {model ? 'Editar Modelo' : 'Novo Modelo'}
                     </h2>
@@ -1783,7 +1784,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     <button
                         disabled={parentMediaBusy}
                         onClick={() => setActiveTab('basic')}
-                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'basic'
+                        className={`flex-none md:flex-1 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'basic'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1796,7 +1797,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     <button
                         disabled={parentMediaBusy}
                         onClick={() => setActiveTab('json')}
-                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'json'
+                        className={`flex-none md:flex-1 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'json'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1809,7 +1810,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     <button
                         disabled={parentMediaBusy}
                         onClick={() => setActiveTab('template')}
-                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'template'
+                        className={`flex-none md:flex-1 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'template'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1822,7 +1823,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     <button
                         disabled={parentMediaBusy}
                         onClick={() => setActiveTab('seo')}
-                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'seo'
+                        className={`flex-none md:flex-1 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'seo'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1835,7 +1836,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     <button
                         disabled={parentMediaBusy}
                         onClick={() => setActiveTab('photos')}
-                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'photos'
+                        className={`flex-none md:flex-1 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'photos'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1849,7 +1850,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     <button
                         disabled={parentMediaBusy}
                         onClick={() => setActiveTab('tags')}
-                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'tags'
+                        className={`flex-none md:flex-1 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'tags'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1861,7 +1862,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     <button
                         disabled={parentMediaBusy}
                         onClick={() => setActiveTab('shopee')}
-                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'shopee'
+                        className={`flex-none md:flex-1 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'shopee'
                             ? 'text-orange-600 border-b-2 border-orange-500'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1887,7 +1888,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 <label className="block text-sm font-semibold text-blue-900 mb-2">
                                     Vincular modelo pelo SKU pai do Bling (opcional)
                                 </label>
-                                <div className="flex gap-2">
+                                <div className="flex flex-col gap-2 sm:flex-row">
                                     <input
                                         type="text"
                                         placeholder="Digite o SKU do pai no Bling"
@@ -1899,13 +1900,13 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                                 handleFetchBlingDataBySku();
                                             }
                                         }}
-                                        className="flex-1 px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                        className="min-w-0 flex-1 min-h-[44px] md:min-h-0 px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                                     />
                                     <button
                                         type="button"
                                         onClick={handleFetchBlingDataBySku}
                                         disabled={fetchingBlingData || !blingSkuInput.trim()}
-                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+                                        className="min-h-[44px] md:min-h-0 shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
                                     >
                                         {fetchingBlingData ? 'Buscando...' : 'Preencher'}
                                     </button>
@@ -1946,7 +1947,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                             {/* Brand Select */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Marca <span className="text-red-500">*</span> <span className="text-slate-400 font-mono text-xs">(models.brand_id)</span>
+                                    Marca <span className="text-red-500">*</span> <span className="hidden md:inline text-slate-400 font-mono text-xs">(models.brand_id)</span>
                                 </label>
                                 {loading ? (
                                     <div className="text-sm text-slate-500">Carregando marcas...</div>
@@ -1994,7 +1995,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                             {/* Name Input */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Nome do Modelo <span className="text-red-500">*</span> <span className="text-slate-400 font-mono text-xs">(models.name)</span>
+                                    Nome do Modelo <span className="text-red-500">*</span> <span className="hidden md:inline text-slate-400 font-mono text-xs">(models.name)</span>
                                 </label>
                                 <input
                                     ref={inputRef}
@@ -2020,7 +2021,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                             {/* Categoria Padrao */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Categoria Padrão <span className="text-slate-400 font-mono text-xs">(models.category_id)</span>
+                                    Categoria Padrão <span className="hidden md:inline text-slate-400 font-mono text-xs">(models.category_id)</span>
                                 </label>
                                 <CategorySelect
                                     value={categoryId}
@@ -2084,7 +2085,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                             {/* EAN Codes */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Códigos EAN/GTIN (Referência) <span className="text-slate-400 font-mono text-xs">(models.eans)</span>
+                                    Códigos EAN/GTIN (Referência) <span className="hidden md:inline text-slate-400 font-mono text-xs">(models.eans)</span>
                                 </label>
                                 <div className="space-y-2">
                                     <div className="flex gap-2">
@@ -2136,7 +2137,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                             <div className="border-t border-slate-200 pt-4">
                                 <div className="flex items-center justify-between mb-2">
                                     <label className="block text-sm font-medium text-slate-700">
-                                        Descrição Padrão <span className="text-slate-400 font-mono text-xs">(models.description)</span>
+                                        Descrição Padrão <span className="hidden md:inline text-slate-400 font-mono text-xs">(models.description)</span>
                                     </label>
                                     <button
                                         type="button"
@@ -2180,7 +2181,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                             <div>
                                 <div className="flex items-center justify-between gap-2 mb-2">
                                     <label className="block text-sm font-medium text-slate-700">
-                                        Brindes <span className="text-slate-400 font-mono text-xs">(template_values.brindes)</span>
+                                        Brindes <span className="hidden md:inline text-slate-400 font-mono text-xs">(template_values.brindes)</span>
                                     </label>
                                     <button
                                         type="button"
@@ -2388,7 +2389,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         <>
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                                 <p className="text-sm text-blue-900">
-                                    📋 <strong>Template de Modelo</strong> <span className="text-slate-500 font-mono text-xs">(models.template_values)</span>: Configure valores padrão que serão preenchidos automaticamente ao cadastrar produtos deste modelo.
+                                    📋 <strong>Template de Modelo</strong> <span className="hidden md:inline text-slate-500 font-mono text-xs">(models.template_values)</span>: Configure valores padrão que serão preenchidos automaticamente ao cadastrar produtos deste modelo.
                                 </p>
                                 <p className="text-xs text-blue-700 mt-1">
                                     Campos únicos (Cor, IMEI, Serial, EAN, SKU) não são preenchidos automaticamente.
@@ -2444,7 +2445,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 )}
 
                                 {/* Spec Fields */}
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-model-template-fields>
                                     {visibleSpecFields.map((field) => renderTemplateField(field))}
                                 </div>
 
@@ -2562,7 +2563,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         <div className="space-y-4">
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                                 <p className="text-sm text-blue-900">
-                                    🏷️ <strong>Tags de Venda Cruzada (Cross-Sell)</strong> <span className="text-slate-500 font-mono text-xs">(tags_venda)</span>.<br/>
+                                    🏷️ <strong>Tags de Venda Cruzada (Cross-Sell)</strong> <span className="hidden md:inline text-slate-500 font-mono text-xs">(tags_venda)</span>.<br/>
                                     Estas tags forçam o sistema a conectar produtos de categorias diferentes na vitrine "Aproveite e leve junto".
                                 </p>
                             </div>
@@ -3018,7 +3019,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200 bg-slate-50">
+                <div className="flex items-center justify-end gap-3 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-6 border-t border-slate-200 bg-slate-50">
                     <button
                         onClick={onClose}
                         disabled={saving || parentMediaBusy}
@@ -3029,7 +3030,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     <button
                         onClick={handleSave}
                         disabled={saving || loading || parentMediaBusy}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="min-h-[44px] px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {saving ? 'Salvando...' : 'Salvar'}
                     </button>

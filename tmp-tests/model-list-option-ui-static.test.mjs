@@ -30,7 +30,7 @@ assert.match(fieldInput, /disabled=\{[^}]*!selectedOption[^}]*\}/, 'edit action 
 assert.match(fieldInput, /<select[\s\S]*value=\{String\(value\s*\?\?\s*['"]{2}\)\}[\s\S]*onChange=\{/, 'select must be controlled');
 assert.ok((fieldInput.match(/type=["']button["']/g) || []).length >= 2, 'both action buttons must use type=button');
 assert.match(fieldInput, /String\(option\.value\)\s*===\s*String\(value\)/, 'selected option must compare values as strings');
-assert.ok((fieldInput.match(/h-10\s+w-10|w-10\s+h-10/g) || []).length >= 2, 'action buttons must have stable h-10/w-10 dimensions');
+assert.ok((fieldInput.match(/(?:md:)?h-10\s+(?:md:)?w-10|(?:md:)?w-10\s+(?:md:)?h-10/g) || []).length >= 2, 'action buttons must have stable h-10/w-10 dimensions (44px no celular)');
 assert.match(fieldInput, /min-w-0/, 'list field must allow text to shrink without overflow');
 assert.match(fieldInput, /value:\s*string\s*;/, 'value prop must be exactly string');
 assert.match(fieldInput, /onAdd:\s*\(\)\s*=>\s*void\s*;/, 'onAdd prop must not receive field');

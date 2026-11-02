@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.736-foto-cadastrar-modelo",
+  "version": "v1.2.737-modelo-celular",
   "date": "2026-11-01",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.736-foto-cadastrar-modelo",
-  "release_vps": "/var/www/mdv-site/releases/20261102-011422-v1236-foto-cadastrar-modelo",
+  "tag": "v1.2.737-modelo-celular",
+  "release_vps": "/var/www/mdv-site/releases/20261102-012750-v1237-modelo-celular",
   "api_release": {
     "status": "sem alteração",
-    "note": "release só de frontend; usa POST /models existente"
+    "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Cadastro por foto: quando o modelo lido não existe no catálogo, botão 'Cadastrar “Redmi Note 17” na Xiaomi' cria o modelo direto na conferência (nome sem a cor, categoria do modelo irmão, EAN da caixa se válido) e já deixa escolhido.",
+  "summary": "Tela Novo/Editar Modelo no celular: tela cheia, abas rolando para o lado, campos do Template em uma coluna, nome técnico dos campos só no computador, botão 'Preencher' do Bling abaixo do campo, toques de 44px e fonte de 16px (iPhone não dá zoom). Computador inalterado.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,22 +31,24 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 e v1.2.736"
+    "tag_push": "pendente: v1.2.735, v1.2.736 e v1.2.737"
   },
-  "site_source_base": "9f839646",
+  "site_source_base": "21715c33",
   "changed_files": [
-    "services/photoIntakeCatalogFields.mjs",
-    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
-    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
-    "tmp-tests/photo-intake-catalog-fields.test.cjs",
+    "components/settings/ModelModal.tsx",
+    "components/settings/ModelListFieldInput.tsx",
+    "tmp-tests/model-modal-mobile-static.test.mjs",
+    "tmp-tests/model-list-option-ui-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-01-v1.2.736-foto-cadastrar-modelo.md"
+    "docs/versoes/2026-11-01-v1.2.737-modelo-celular.md"
   ],
   "validations": [
-    "photo-intake-catalog-fields (7) aprovado: nome sem cor/memória/marca, categoria do irmão por marca, botão e recarga da lista",
+    "model-modal-mobile-static aprovado",
+    "testes da tela de modelos: 17 ok; 3 com falha anterior (model-list-option-ui 'legacy JSON apply', model-shopee-attributes-json-section, shopee-universal-attribute-defaults)",
     "tsc sem erros",
     "npm run build aprovado",
-    "Playwright Pixel 7: botão, formulário com 'Redmi Note 17', POST /models com marca e categoria, modelo já selecionado"
+    "Playwright iPhone 13: tela cheia, Template em 1 coluna sem sobreposição, nada passando da tela em Básico/JSON/Template/SEO, campos 16px",
+    "Playwright desktop 1366px: Template em 2 colunas, igual ao anterior"
   ]
 }
