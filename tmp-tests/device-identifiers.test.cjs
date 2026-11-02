@@ -28,3 +28,20 @@ test('dica do código de barras e link do aparelho já cadastrado', async () => 
   assert.equal(front.registeredUnitLink({ code: 'already_registered', matched_value: '865643073183577' }), '/admin/serializados?search=865643073183577');
   assert.equal(front.registeredUnitLink({ code: 'required', matched_value: 'x' }), null);
 });
+
+test('leitor da câmera escolhe o valor certo para cada campo', async () => {
+  const { pickScannedValues } = await import('../services/deviceIdentifiers.mjs');
+  const reads = [
+    { text: '6941764465282', y: 300 },
+    { text: '865643073183569', y: 200 },
+    { text: '865643073183577', y: 100 },
+    { text: '183577', y: 50 },
+    { text: '0074490208440B19', y: 250 },
+    { text: '865643073183578', y: 90 },
+  ];
+  assert.deepEqual(pickScannedValues('imei', reads), ['865643073183577', '865643073183569'], 'IMEIs válidos de cima para baixo');
+  assert.deepEqual(pickScannedValues('ean', reads), ['6941764465282']);
+  assert.deepEqual(pickScannedValues('serial', reads), ['0074490208440B19'], 'serial não pode pegar IMEI/EAN/lixo curto');
+  assert.deepEqual(pickScannedValues('imei', [{ text: 'IMEI1:865643073183577 IMEI2:865643073183569' }]), ['865643073183577', '865643073183569'], 'DataMatrix com os dois');
+  assert.deepEqual(pickScannedValues('imei', []), []);
+});

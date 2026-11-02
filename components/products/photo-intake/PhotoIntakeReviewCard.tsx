@@ -5,6 +5,7 @@ import { CurrencyInput } from '../../ui/CurrencyInput';
 import { SearchableSelect } from '../../ui/SearchableSelect';
 import { VersionSelect } from '../selectors/VersionSelect';
 import { ProtectedIntakePhoto } from './ProtectedIntakePhoto';
+import { BarcodeScanButton } from '../../ui/BarcodeScanButton';
 import { PhotoIntakeBlingMapping } from './PhotoIntakeBlingMapping';
 import type { Color } from '../../../types/color';
 import type { Model, ModelInput } from '../../../types/model';
@@ -372,6 +373,8 @@ export function PhotoIntakeReviewCard({
                 <input
                   value={newModelName}
                   onChange={event => setNewModelName(event.target.value)}
+                  onFocus={event => event.currentTarget.select()}
+                  onClick={event => event.currentTarget.select()}
                   autoCapitalize="words"
                   enterKeyHint="done"
                   className="mt-1 h-12 w-full rounded-lg border border-violet-200 bg-white px-3 text-base"
@@ -567,6 +570,7 @@ export function PhotoIntakeReviewCard({
                 return (
                 <label key={field.key} className="block min-w-0">
                   <span className="mb-1 block text-xs font-medium text-slate-500">{field.label}</span>
+                  <span className="flex min-w-0 items-center gap-2">
                   <input
                     {...(identifierInputProps(field.kind) as React.InputHTMLAttributes<HTMLInputElement>)}
                     enterKeyHint={NEXT_SCAN_FIELD[field.key] ? 'next' : 'done'}
@@ -580,6 +584,20 @@ export function PhotoIntakeReviewCard({
                     onChange={event => setDraft(current => ({ ...current, [field.key]: event.target.value, review_confirmed: false }))}
                     className={`h-12 md:h-10 min-w-0 w-full rounded-lg border px-3 text-base md:text-sm focus:outline-none focus:ring-2 ${identifierState?.state === 'invalid' ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : identifierState?.state === 'ok' && field.kind !== 'serial' ? 'border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100' : 'border-slate-200 focus:border-blue-400 focus:ring-blue-100'} ${field.mono ? 'font-mono' : ''}`}
                   />
+                  {field.kind && (
+                    <BarcodeScanButton
+                      kind={field.kind}
+                      disabled={busy}
+                      allowPair={field.key === 'detected_imei_1'}
+                      onScan={values => setDraft(current => ({
+                        ...current,
+                        [field.key]: values[0] || '',
+                        ...(field.key === 'detected_imei_1' && values[1] ? { detected_imei_2: values[1] } : {}),
+                        review_confirmed: false,
+                      }))}
+                    />
+                  )}
+                  </span>
                   {identifierState?.message && <span data-identifier-state={identifierState.state} className={`mt-1 block text-xs ${identifierState.state === 'invalid' ? 'text-red-600' : identifierState.state === 'ok' ? 'text-emerald-700' : 'text-amber-700'}`}>{identifierState.message}</span>}
                   {barcode?.state === 'match' && <span data-barcode-state="match" className="mt-1 flex items-center gap-1 text-xs font-semibold text-emerald-700"><CheckCircle2 size={12} />Confere com o código de barras</span>}
                   {barcode?.state === 'differs' && (

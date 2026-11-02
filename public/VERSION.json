@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.738-vitrine-celular-logado",
+  "version": "v1.2.739-leitor-camera",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.738-vitrine-celular-logado",
-  "release_vps": "/var/www/mdv-site/releases/20261102-101825-v1238-vitrine-celular",
+  "tag": "v1.2.739-leitor-camera",
+  "release_vps": "/var/www/mdv-site/releases/20261102-103459-v1239-leitor-camera",
   "api_release": {
     "status": "sem alteração",
     "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Vitrine no celular com login: a página ficava mais larga que a tela (585px num celular de 390px) e o navegador deixava arrastar para o lado. Topo compacto (só avatar; 'Ver como' do admin e selo do tipo de cliente vão para o menu/desktop), check-in 'Resgatar Moedas' encolhe e Favoritos vira só o coração no celular.",
+  "summary": "Leitor pela câmera: botão 📷 ao lado de IMEI, serial e EAN (cadastro de produto, entrada de estoque e conferência do cadastro por foto). Lê ao vivo pela câmera traseira — leitor nativo no Android, zxing (WebAssembly do próprio site) no iPhone —, filtra o valor certo para cada campo (IMEI com Luhn, EAN válido, serial) e no IMEI 1 oferece 'Usar os dois (IMEI 1 e IMEI 2)'. Plano B: tirar foto. Cabeçalho das Especificações Técnicas quebra linha no celular.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,23 +31,31 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.738"
+    "tag_push": "pendente: v1.2.735 a v1.2.739"
   },
-  "site_source_base": "74e1f415",
+  "site_source_base": "bfd2b62d",
   "changed_files": [
-    "components/PublicHeader.tsx",
-    "components/catalog/CheckinWidget.tsx",
-    "pages/catalog/index.tsx",
-    "tmp-tests/public-header-mobile-width-static.test.mjs",
+    "components/ui/BarcodeScanButton.tsx",
+    "services/barcodeScanner.ts",
+    "services/deviceIdentifiers.mjs",
+    "components/ui/IMEIInput.tsx",
+    "components/ui/EANInput.tsx",
+    "components/products/sections/ProductSpecifications.tsx",
+    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
+    "tmp-tests/barcode-scan-button-static.test.mjs",
+    "tmp-tests/device-identifiers.test.cjs",
+    "tmp-tests/print3d-product-specifications-render.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.738-vitrine-celular-logado.md"
+    "docs/versoes/2026-11-02-v1.2.739-leitor-camera.md"
   ],
   "validations": [
-    "public-header-mobile-width-static aprovado",
-    "testes da vitrine/topo: ok; catalog-mobile-navigation-static com falha anterior (breadcrumb do produto)",
+    "barcode-scan-button-static e device-identifiers (pickScannedValues) aprovados",
+    "testes de ProductSpecifications/IMEI/EAN/cadastro por foto aprovados; product-form-batch-add-button-static com falha anterior",
+    "corrigidos: print3d-product-specifications-render (stub do botão novo) e smartphone-photo-intake-navigation-static (campo do modelo novo seleciona ao tocar)",
     "tsc sem erros",
-    "npm run build aprovado",
-    "Playwright iPhone 13 com dados públicos reais: largura 390/390 logado como admin (antes 585) e sem login; 'Ver como' dentro do menu da conta"
+    "npm run build aprovado (leitor em arquivo separado, carregado só ao abrir a câmera)",
+    "Playwright com câmera simulada: leu os 2 IMEIs em ~1 s, 'Usar os dois' preencheu IMEI 1 e 2; EAN preenchido e fechado sozinho",
+    "Playwright iPhone 13: tela de produto 390/390 com cabeçalho das especificações dentro do cartão"
   ]
 }

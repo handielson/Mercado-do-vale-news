@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { cn } from '../../utils/cn';
+import { BarcodeScanButton } from './BarcodeScanButton';
 
 interface IMEIInputProps {
   value: string;
@@ -14,6 +15,10 @@ interface IMEIInputProps {
   onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   id?: string;
   technicalName?: string;
+  /** Mostra o botão 📷 para ler o IMEI pela câmera (padrão: sim). */
+  scan?: boolean;
+  /** Quando a câmera lê IMEI 1 e IMEI 2 juntos ("usar os dois"). */
+  onScanPair?: (imeis: string[]) => void;
 }
 
 /**
@@ -35,7 +40,9 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
   onKeyDown,
   onBlur,
   id,
-  technicalName
+  technicalName,
+  scan = true,
+  onScanPair,
 }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -58,13 +65,16 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
       {label && (
         <label className="text-sm font-medium text-slate-700">
           {label} {required && <span className="text-red-500">*</span>}
-          {technicalName && <span className="ml-2 text-xs text-slate-400 font-mono">{technicalName}</span>}
+          {technicalName && <span className="ml-2 hidden md:inline text-xs text-slate-400 font-mono">{technicalName}</span>}
         </label>
       )}
+      <div className="flex min-w-0 items-center gap-2">
       <input
         id={id}
         type="text"
         inputMode="numeric"
+        pattern="[0-9]*"
+        autoComplete="off"
         value={value}
         onChange={handleChange}
         onKeyDown={onKeyDown}
@@ -72,13 +82,24 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
         placeholder={placeholder}
         maxLength={15}
         className={cn(
-          "flex h-10 w-full rounded-md border bg-white px-3 py-2 text-sm uppercase tracking-wider placeholder:normal-case focus-visible:outline-none focus-visible:ring-2",
+          "flex h-11 md:h-10 min-w-0 w-full rounded-md border bg-white px-3 py-2 text-base md:text-sm uppercase tracking-wider placeholder:normal-case focus-visible:outline-none focus-visible:ring-2",
           isInvalid && "border-red-300 focus-visible:ring-red-500",
           isValid && "border-green-300 focus-visible:ring-green-500",
           !isInvalid && !isValid && "border-slate-200 focus-visible:ring-blue-500",
           className
         )}
       />
+      {scan && (
+        <BarcodeScanButton
+          kind="imei"
+          allowPair={Boolean(onScanPair)}
+          onScan={values => {
+            onChange(values[0] || '');
+            if (values.length > 1 && onScanPair) onScanPair(values);
+          }}
+        />
+      )}
+      </div>
       <div className="flex items-center justify-between text-[10px] mt-0.5">
         <span className={cn(
           "font-medium",

@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Plus, Wand2 } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { BarcodeScanButton } from './BarcodeScanButton';
 
 interface EANInputProps {
     value: string[];
@@ -101,7 +102,7 @@ export const EANInput: React.FC<EANInputProps> = ({
         <div className={cn('flex flex-col gap-2', className)}>
             <label className="text-sm font-medium text-slate-700">
                 {label}
-                <span className="ml-2 text-xs text-slate-400 font-mono">eans[]</span>
+                <span className="ml-2 hidden md:inline text-xs text-slate-400 font-mono">eans[]</span>
             </label>
 
             <div className="space-y-2">
@@ -111,16 +112,18 @@ export const EANInput: React.FC<EANInputProps> = ({
 
                     return (
                         <div key={index} className="flex items-center gap-2">
-                            <div className="flex-1">
+                            <div className="min-w-0 flex-1">
                                 <input
                                     type="text"
                                     inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    autoComplete="off"
                                     value={ean}
                                     onChange={(e) => handleEANChange(index, e.target.value)}
                                     placeholder="7891234567890"
                                     maxLength={13}
                                     className={cn(
-                                        'w-full rounded-md border bg-white px-3 py-2 text-sm tracking-wider focus-visible:outline-none focus-visible:ring-2',
+                                        'w-full min-h-[44px] md:min-h-0 rounded-md border bg-white px-3 py-2 text-base md:text-sm tracking-wider focus-visible:outline-none focus-visible:ring-2',
                                         isInvalid && 'border-red-300 focus-visible:ring-red-500',
                                         isValid && 'border-green-300 focus-visible:ring-green-500',
                                         !isInvalid && !isValid && 'border-slate-300 focus-visible:ring-blue-500'
@@ -148,6 +151,15 @@ export const EANInput: React.FC<EANInputProps> = ({
                                 </div>
                             </div>
 
+                            <BarcodeScanButton
+                                kind="ean"
+                                className="self-start"
+                                onScan={values => {
+                                    const code = values[0] || '';
+                                    // UPC-A (12) vira EAN-13 com 0 na frente; o campo guarda 13 dígitos.
+                                    handleEANChange(index, code.length === 12 ? `0${code}` : code);
+                                }}
+                            />
                             {eans.length > 1 && (
                                 <button
                                     type="button"

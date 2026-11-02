@@ -1,3 +1,13 @@
+# v1.2.739-leitor-camera
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.739-leitor-camera` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-103459-v1239-leitor-camera`. API: sem alteração.
+Botão 📷 ao lado de IMEI, serial e EAN (cadastro de produto, entrada de estoque e conferência do cadastro por foto): lê o código de barras ao vivo pela câmera (nativo no Android, zxing no iPhone), escolhe o valor certo para cada campo e no IMEI 1 oferece "Usar os dois". Plano B: tirar foto.
+
+Validações: testes novos e existentes, tsc, build, Playwright com câmera simulada e iPhone 13.
+
+---
+
 # v1.2.738-vitrine-celular-logado
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.738-vitrine-celular-logado` (local; push da tag pendente).

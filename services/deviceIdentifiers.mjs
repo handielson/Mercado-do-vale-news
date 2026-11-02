@@ -79,3 +79,41 @@ export function registeredUnitLink(issue) {
   const search = String(issue.matched_value ?? '').trim();
   return search ? `/admin/serializados?search=${encodeURIComponent(search)}` : null;
 }
+
+/**
+ * Filtra o que a câmera leu para o tipo de campo.
+ * imei: toda sequência de 15 dígitos válida (Luhn) — DataMatrix pode trazer várias;
+ * ean: GTIN válido; serial: texto lido que não é IMEI nem EAN.
+ * @param {'imei' | 'ean' | 'serial'} kind
+ * @param {Array<{ text: string, y?: number }>} reads leituras (y = posição vertical, para ordenar de cima para baixo)
+ * @returns {string[]} valores únicos, na ordem da etiqueta
+ */
+export function pickScannedValues(kind, reads) {
+  const ordered = [...(Array.isArray(reads) ? reads : [])]
+    .filter(read => read && String(read.text ?? '').trim())
+    .sort((a, b) => (Number(a.y) || 0) - (Number(b.y) || 0));
+  const out = [];
+  const push = value => { if (value && !out.includes(value)) out.push(value); };
+  for (const read of ordered) {
+    const text = String(read.text).trim();
+    const digits = onlyDigits(text);
+    if (kind === 'imei') {
+      for (const match of text.matchAll(/\d{15,}/g)) {
+        for (let start = 0; start + 15 <= match[0].length; start += 15) {
+          const candidate = match[0].slice(start, start + 15);
+          if (isValidImei(candidate)) push(candidate);
+        }
+      }
+    } else if (kind === 'ean') {
+      if (/^\d+$/.test(text) && isValidGtin(digits)) push(digits);
+    } else if (kind === 'serial') {
+      const isImei = /^\d{15}$/.test(text) && isValidImei(text);
+      const isEan = /^\d+$/.test(text) && isValidGtin(text);
+      const clean = text.replace(/\s+/g, '').toUpperCase();
+      // Só números com 15 dígitos (IMEI lido errado) ou curtos (sufixos de DataMatrix) não são serial.
+      const digitsOnlyNoise = /^\d+$/.test(clean) && (clean.length === 15 || clean.length <= 8);
+      if (!isImei && !isEan && !digitsOnlyNoise && clean.length >= 8 && clean.length <= 40 && /^[0-9A-Z/\-_.]+$/.test(clean)) push(clean);
+    }
+  }
+  return out;
+}

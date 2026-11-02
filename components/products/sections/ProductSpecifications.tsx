@@ -3,6 +3,7 @@ import { UseFormWatch, UseFormSetValue, FieldErrors } from 'react-hook-form';
 import { ProductInput } from '../../../types/product';
 import { CategoryConfig, FieldRequirement } from '../../../types/category';
 import { IMEIInput } from '../../ui/IMEIInput';
+import { BarcodeScanButton } from '../../ui/BarcodeScanButton';
 import { ColorSelect } from '../selectors/ColorSelect';
 import { MaterialSelect } from '../selectors/MaterialSelect';
 import { CapacitySelect } from '../selectors/CapacitySelect';
@@ -237,7 +238,8 @@ export function ProductSpecifications({
             return (
                 <div key={key} className="space-y-1 min-w-0">
                     <FieldLabel label={metadata.label} required={isRequired} />
-                    <div className="relative">
+                    <div className="flex min-w-0 items-center gap-2">
+                    <div className="relative min-w-0 flex-1">
                         <input
                             id={`field-${key}`}
                             type={metadata.type}
@@ -279,13 +281,27 @@ export function ProductSpecifications({
                                     }
                                 }
                             }}
-                            className={`w-full rounded-md border p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${(errors?.specs?.[key] || uniqueError) ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
+                            autoCapitalize={key === 'serial' ? 'characters' : undefined}
+                            autoCorrect={key === 'serial' ? 'off' : undefined}
+                            spellCheck={key === 'serial' ? false : undefined}
+                            className={`w-full min-h-[44px] md:min-h-0 rounded-md border p-2 text-base md:text-sm focus:ring-2 focus:ring-blue-500 outline-none ${(errors?.specs?.[key] || uniqueError) ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
                                 } ${isChecking ? 'pr-8' : ''} ${key === 'serial' ? 'uppercase' : ''}`}
                             placeholder={metadata.placeholder}
                         />
                         {isChecking && (
                             <Loader2 size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
                         )}
+                    </div>
+                    {key === 'serial' && (
+                        <BarcodeScanButton
+                            kind="serial"
+                            onScan={values => {
+                                const value = normalizeSerializedTextInput(key, values[0] || '');
+                                setValue(fieldKey, value, { shouldDirty: true });
+                                if (value) checkUniqueInDb(key, value);
+                            }}
+                        />
+                    )}
                     </div>
                     {errors?.specs?.[key] && (
                         <p className="text-xs text-red-600 mt-1">{(errors.specs[key] as any)?.message}</p>
@@ -326,18 +342,18 @@ export function ProductSpecifications({
     };
 
     return (
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 animate-in fade-in slide-in-from-top-4">
-            <div className="flex items-center justify-between mb-4">
+        <div className="bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 animate-in fade-in slide-in-from-top-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4" data-specs-header>
                 <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                     <Package size={18} className="text-blue-600" />
                     Especificações Técnicas
                 </h3>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {onAddToBatchList && (
                         <button
                             type="button"
                             onClick={() => onAddToBatchList()}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                            className="flex min-h-[44px] md:min-h-0 items-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
                         >
                             <CheckCircle2 size={14} />
                             Adicionar à Lista
@@ -347,7 +363,7 @@ export function ProductSpecifications({
                         <button
                             type="button"
                             onClick={onRefresh}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="flex min-h-[44px] md:min-h-0 items-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                             title="Recarregar campos customizados"
                         >
                             <RefreshCw size={14} />
@@ -368,7 +384,15 @@ export function ProductSpecifications({
                             label="IMEI 1"
                             technicalName="specs.imei1"
                             value={watch('specs.imei1') || ''}
-                            onChange={(val) => setValue('specs.imei1', val)}
+                            onChange={(val) => setValue('specs.imei1', val, { shouldDirty: true })}
+                            onScanPair={(imeis) => {
+                                setValue('specs.imei1', imeis[0], { shouldDirty: true });
+                                checkUniqueInDb('imei1', imeis[0]);
+                                if (imeis[1] && shouldShowBaseSpecField('imei2')) {
+                                    setValue('specs.imei2', imeis[1], { shouldDirty: true });
+                                    checkUniqueInDb('imei2', imeis[1]);
+                                }
+                            }}
                             required={getBaseSpecRequirement('imei1') === 'required'}
                             placeholder="Digite 15 dígitos"
                             onBlur={(e) => { if (e.target.value.length === 15) checkUniqueInDb('imei1', e.target.value); }}
