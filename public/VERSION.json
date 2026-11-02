@@ -9,7 +9,7 @@
     "status": "published",
     "module": "Cadastro por foto (--photo-intake-only): mapeamento de cor pela cor original da etiqueta + aplicação na fila pendente",
     "backup_prefix": "/var/www/mdv-api/backups/photo-intake-",
-    "backup": "pendente"
+    "backup": "/var/www/mdv-api/backups/photo-intake-1793625992432"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Cadastro por foto — cores: a cor escolhida não some mais ao associar o modelo (a tela só troca o que o servidor mudou e 'Associar modelo' salva a cor junto); o mapeamento passa a ser gravado pela cor como veio da etiqueta (antes gravava o nome traduzido, ex.: 'Midnight Black'→'Preto', e podia desviar todo 'Preto'); mapeamento novo vale na hora para os outros aparelhos da fila com a mesma cor; cor vem sugerida pela palavra de cor (Negro/Black→Preto, Green→Verde...). Inclui no site a v1.2.742 (Mercado Livre, leitura de estoque por SKU).",
@@ -54,7 +54,8 @@
     "testes do cadastro por foto aprovados (navegação, servidor, deploy, fila, Bling 18, preços, core, barras)",
     "tsc sem erros",
     "npm run build aprovado",
-    "Playwright Pixel 7: cor escolhida (Forest Owl→Verde) mantida após Associar modelo e enviada no PATCH; 'Negro Ocaso' sugerido como Preto"
+    "Playwright Pixel 7: cor escolhida (Forest Owl→Verde) mantida após Associar modelo e enviada no PATCH; 'Negro Ocaso' sugerido como Preto",
+    "publicado: API --photo-intake-only (pm2 online), /status 200, rota protegida 401 sem login; site 200 com /VERSION.json v1.2.743"
   ],
   "includes_previous": [
     "v1.2.742-mercado-livre-estoque-leitura-sku"
