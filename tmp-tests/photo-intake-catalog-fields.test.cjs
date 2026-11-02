@@ -100,3 +100,31 @@ test('botão cadastra o modelo novo com marca, categoria do irmão e EAN e já s
   assert.match(page, /onCreateModel=\{createModelFromIntake\}/);
   assert.match(page, /modelService\.create\(input\)[\s\S]*modelService\.listActive\(\)[\s\S]*setModels\(modelRows\)/, 'recarrega a lista depois de criar');
 });
+
+test('associar modelo não apaga a cor escolhida e ainda não salva', async () => {
+  const { mergePhotoIntakeDraft } = await import('../services/photoIntakeDraftMerge.mjs');
+  const before = { matched_model_id: null, matched_color_id: null, detected_color: 'Forest Owl', price_cost: 0 };
+  const local = { ...before, matched_color_id: 'verde', detected_color: 'Verde', price_cost: 120000 };
+  const after = { ...before, matched_model_id: 'm1', price_cost: 0 };
+  const merged = mergePhotoIntakeDraft(before, after, local, { sameRecord: true });
+  assert.equal(merged.matched_model_id, 'm1', 'o modelo associado pelo servidor entra');
+  assert.equal(merged.matched_color_id, 'verde', 'a cor escolhida continua');
+  assert.equal(merged.detected_color, 'Verde');
+  assert.equal(merged.price_cost, 120000, 'campo que o servidor não mudou mantém o digitado');
+  const serverPrice = mergePhotoIntakeDraft(before, { ...after, price_cost: 99000 }, local, { sameRecord: true });
+  assert.equal(serverPrice.price_cost, 99000, 'se o servidor mudou o campo, vale o servidor');
+  const other = mergePhotoIntakeDraft(before, after, local, { sameRecord: false });
+  assert.equal(other.matched_color_id, null, 'outro aparelho começa do zero');
+});
+
+test('cor sugerida pela palavra de cor da etiqueta', async () => {
+  const { guessCatalogColor } = await import('../services/photoIntakeCatalogFields.mjs');
+  const colors = ['Preto', 'Branco', 'Azul', 'Verde', 'Roxo', 'Dourado', 'Prata', 'Cinza', 'Laranja', 'Titânio'].map(name => ({ id: name.toLowerCase(), name }));
+  assert.deepEqual(guessCatalogColor(colors, 'Negro Ocaso'), { id: 'preto', exact: false });
+  assert.deepEqual(guessCatalogColor(colors, 'Mint Green'), { id: 'verde', exact: false });
+  assert.deepEqual(guessCatalogColor(colors, 'Laranja Vitality'), { id: 'laranja', exact: false });
+  assert.deepEqual(guessCatalogColor(colors, 'Mecha Silver'), { id: 'prata', exact: false });
+  assert.deepEqual(guessCatalogColor(colors, 'titânio'), { id: 'titânio', exact: true });
+  assert.equal(guessCatalogColor(colors, 'Forest Owl'), null, 'sem palavra de cor não chuta');
+  assert.equal(guessCatalogColor(colors, 'Black White'), null, 'duas cores diferentes não chuta');
+});

@@ -1,16 +1,18 @@
 {
-  "version": "v1.2.742-mercado-livre-estoque-leitura-sku",
+  "version": "v1.2.743-foto-mapeamento-cores",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.742-mercado-livre-estoque-leitura-sku",
-  "release_vps": "/var/www/mdv-site/releases/20261102-125239-v1-2-742-mercado-livre-estoque-leitura-sku",
+  "tag": "v1.2.743-foto-mapeamento-cores",
+  "release_vps": "/var/www/mdv-site/releases/20261102-132547-v1243-foto-cores",
   "api_release": {
     "status": "published",
-    "note": "Deploy seletivo do handler GET de estoque por SKU exato único. POST de estoque segue com chave e gate separados; escrita de preço e publicação não foram habilitadas."
+    "module": "Cadastro por foto (--photo-intake-only): mapeamento de cor pela cor original da etiqueta + aplicação na fila pendente",
+    "backup_prefix": "/var/www/mdv-api/backups/photo-intake-",
+    "backup": "pendente"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Consulta somente leitura do saldo de anúncios Mercado Livre usando SKU exato único na família local quando ainda não existe vínculo salvo; ambiguidades e famílias acima de 200 produtos são recusadas.",
+  "summary": "Cadastro por foto — cores: a cor escolhida não some mais ao associar o modelo (a tela só troca o que o servidor mudou e 'Associar modelo' salva a cor junto); o mapeamento passa a ser gravado pela cor como veio da etiqueta (antes gravava o nome traduzido, ex.: 'Midnight Black'→'Preto', e podia desviar todo 'Preto'); mapeamento novo vale na hora para os outros aparelhos da fila com a mesma cor; cor vem sugerida pela palavra de cor (Negro/Black→Preto, Green→Verde...). Inclui no site a v1.2.742 (Mercado Livre, leitura de estoque por SKU).",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,27 +33,30 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pushed with release tag",
-    "api": "published",
-    "site_manifest": "published"
+    "tag_push": "pendente: v1.2.735 a v1.2.741 e v1.2.743 (Claude); v1.2.742 do Codex",
+    "data_review": "mapeamento 'Laranja Vitality' → Verde (06/10/2026) parece errado; aguardando confirmação do usuário"
   },
-  "site_source_base": "57ed5449",
+  "site_source_base": "15fe96a",
   "changed_files": [
-    "deploy-vps-server-only.cjs",
-    "scripts/deploy-mercado-livre-stock-read.cjs",
-    "services/mercadoLivreListingStock.cjs",
-    "scripts/publish-vps-plan.cjs",
-    "tmp-tests/mercado-livre-listing-stock-read.test.cjs",
+    "services/photoIntakeDraftMerge.mjs",
+    "services/photoIntakeCatalogFields.mjs",
+    "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
+    "services/smartphonePhotoIntakeServer.cjs",
+    "tmp-tests/photo-intake-color-mapping-static.test.mjs",
+    "tmp-tests/photo-intake-catalog-fields.test.cjs",
+    "tmp-tests/smartphone-photo-intake-navigation-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.742-mercado-livre-estoque-leitura-sku.md"
+    "docs/versoes/2026-11-02-v1.2.743-foto-mapeamento-cores.md"
   ],
   "validations": [
-    "Teste de leitura/deploy 13/13; restauração automática validada quando o restart falha",
-    "Suíte Mercado Livre 115/115 e contrato estático aprovados",
-    "publish-vps-plan --self-test, node --check nos módulos/entrypoints, git diff --check aprovados",
-    "Build de produção aprovado; aviso Vite não fatal sobre __dirname/configLoader:native",
-    "GET real pelo ERP preview 8818: MLB7880776080 reconhecido como SKU MNLDAACS, quantity 3, sem salvar vínculo ou criar movimentação",
-    "API VPS /status e MySQL saudáveis após deploy seletivo"
+    "photo-intake-color-mapping-static e photo-intake-catalog-fields (9) aprovados",
+    "testes do cadastro por foto aprovados (navegação, servidor, deploy, fila, Bling 18, preços, core, barras)",
+    "tsc sem erros",
+    "npm run build aprovado",
+    "Playwright Pixel 7: cor escolhida (Forest Owl→Verde) mantida após Associar modelo e enviada no PATCH; 'Negro Ocaso' sugerido como Preto"
+  ],
+  "includes_previous": [
+    "v1.2.742-mercado-livre-estoque-leitura-sku"
   ]
 }

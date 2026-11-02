@@ -123,3 +123,38 @@ export function siblingModelCategory(models, name, brandId) {
   }
   return best?.category_id || null;
 }
+
+// Palavra de cor (pt/en/es) → nome base da cor no cadastro.
+const COLOR_FAMILY_WORDS = Object.freeze({
+  PRETO: 'PRETO', NEGRO: 'PRETO', BLACK: 'PRETO',
+  BRANCO: 'BRANCO', BLANCO: 'BRANCO', WHITE: 'BRANCO',
+  AZUL: 'AZUL', BLUE: 'AZUL',
+  VERDE: 'VERDE', GREEN: 'VERDE',
+  ROXO: 'ROXO', MORADO: 'ROXO', PURPLE: 'ROXO', LILAS: 'ROXO', VIOLETA: 'ROXO', VIOLET: 'ROXO',
+  DOURADO: 'DOURADO', DORADO: 'DOURADO', GOLD: 'DOURADO',
+  PRATA: 'PRATA', PLATA: 'PRATA', SILVER: 'PRATA',
+  CINZA: 'CINZA', GRIS: 'CINZA', GRAY: 'CINZA', GREY: 'CINZA',
+  LARANJA: 'LARANJA', NARANJA: 'LARANJA', ORANGE: 'LARANJA',
+  ROSA: 'ROSA', PINK: 'ROSA',
+  VERMELHO: 'VERMELHO', ROJO: 'VERMELHO', RED: 'VERMELHO',
+  AMARELO: 'AMARELO', AMARILLO: 'AMARELO', YELLOW: 'AMARELO',
+});
+
+/**
+ * Cor sugerida a partir do que a etiqueta trouxe ("Negro Ocaso" → Preto, "Mint Green" → Verde).
+ * Só sugere quando a leitura aponta para UMA única cor do cadastro.
+ * @param {Array<{ id: string, name: string }>} colors cores ativas do cadastro
+ * @param {string} raw cor lida
+ * @returns {{ id: string, exact: boolean } | null}
+ */
+export function guessCatalogColor(colors, raw) {
+  const list = Array.isArray(colors) ? colors : [];
+  const exact = list.find(color => normalizeCatalogText(color.name) === normalizeCatalogText(raw));
+  if (exact) return { id: exact.id, exact: true };
+  const words = stripAccents(raw).toUpperCase().split(/[^A-Z]+/).filter(Boolean);
+  const families = new Set(words.map(word => COLOR_FAMILY_WORDS[word]).filter(Boolean));
+  if (families.size !== 1) return null;
+  const [family] = families;
+  const match = list.filter(color => normalizeCatalogText(color.name) === family);
+  return match.length === 1 ? { id: match[0].id, exact: false } : null;
+}

@@ -1,3 +1,13 @@
+# v1.2.743-foto-mapeamento-cores
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.743-foto-mapeamento-cores` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-132547-v1243-foto-cores`. API: cadastro por foto publicado (`--photo-intake-only`). Site inclui a v1.2.742 (Codex, Mercado Livre).
+Cores no cadastro por foto: a cor escolhida não some ao associar o modelo; mapeamento gravado pela cor como veio da etiqueta e aplicado na hora aos outros aparelhos da fila; cor sugerida pela palavra de cor.
+
+Validações: testes novos e do cadastro por foto, tsc, build e Playwright (Pixel 7).
+
+---
+
 # v1.2.742-mercado-livre-estoque-leitura-sku
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.742-mercado-livre-estoque-leitura-sku`.

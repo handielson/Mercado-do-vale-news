@@ -21,7 +21,8 @@ import { DEFAULT_PRODUCT_VERSION } from '../../../services/smartphoneModelSpecs.
 import { ModelPricesPanel } from '../../settings/ModelPricesPanel';
 import { isScannerValueComplete, nextScannerBurst, SCANNER_IDLE_MS, SCANNER_MIN_FAST_KEYS } from '../../../services/scannerFieldAdvance.mjs';
 import { barcodeHint, describeIdentifier, identifierInputProps, isValidGtin, registeredUnitLink } from '../../../services/deviceIdentifiers.mjs';
-import { findCatalogOption, guessCatalogBrand, guessCatalogModel, siblingModelCategory, suggestModelName } from '../../../services/photoIntakeCatalogFields.mjs';
+import { mergePhotoIntakeDraft } from '../../../services/photoIntakeDraftMerge.mjs';
+import { findCatalogOption, guessCatalogColor, guessCatalogBrand, guessCatalogModel, siblingModelCategory, suggestModelName } from '../../../services/photoIntakeCatalogFields.mjs';
 import { loadPhotoIntakeCatalogLists, type PhotoIntakeCatalogLists } from '../../../services/photoIntakeCatalogLists';
 
 interface PhotoIntakeReviewCardProps {
@@ -206,12 +207,26 @@ export function PhotoIntakeReviewCard({
   }, [priceReference, loadingPriceReference, draft.price_retail, draft.price_reseller, draft.price_wholesale]);
   const groupPriceLocked = loadingPriceReference || !!priceReferenceError || Boolean(priceReference?.established || priceReference?.incomplete);
 
+  // Quando o registro volta do servidor, só os campos que o servidor mudou são trocados:
+  // o que o usuário escolheu e ainda não salvou (ex.: a cor) não some ao associar o modelo.
+  const serverDraftRef = useRef<{ id: string; draft: SmartphonePhotoIntakeUpdate } | null>(null);
   useEffect(() => {
-    resetScanBurst();
-    setDraft(buildDraft(intake));
-    setSelectedModelId(intake.matched_model_id || '');
-    setSku('');
-    setPriceEditorOpen(false);
+    const nextServerDraft = buildDraft(intake);
+    const previous = serverDraftRef.current;
+    const sameRecord = previous?.id === intake.id;
+    setDraft(current => mergePhotoIntakeDraft(
+      (previous?.draft || null) as Record<string, unknown> | null,
+      nextServerDraft as Record<string, unknown>,
+      current as Record<string, unknown>,
+      { sameRecord },
+    ) as SmartphonePhotoIntakeUpdate);
+    serverDraftRef.current = { id: intake.id, draft: nextServerDraft };
+    setSelectedModelId(current => intake.matched_model_id || (sameRecord ? current : ''));
+    if (!sameRecord) {
+      resetScanBurst();
+      setSku('');
+      setPriceEditorOpen(false);
+    }
   }, [intake]);
 
   const sortedModels = useMemo(
@@ -231,7 +246,7 @@ export function PhotoIntakeReviewCard({
   useEffect(() => { refreshCatalogLists(); }, []);
   const brandNames = useMemo(() => (catalogLists?.brands || []).map(brand => brand.name), [catalogLists]);
   // Marca/modelo já vêm preenchidos com o melhor palpite do que a foto leu; o usuário só troca se errado.
-  const [suggestedFrom, setSuggestedFrom] = useState<{ brand?: { from: string; value: string }; model?: { from: string; id: string } }>({});
+  const [suggestedFrom, setSuggestedFrom] = useState<{ brand?: { from: string; value: string }; model?: { from: string; id: string }; color?: { from: string; id: string } }>({});
   useEffect(() => {
     if (!catalogLists) return;
     const readBrand = intake.detected_brand || '';
@@ -241,13 +256,20 @@ export function PhotoIntakeReviewCard({
     const modelLinked = Boolean(intake.matched_model_id && models.some(model => model.id === intake.matched_model_id));
     const modelGuess = modelLinked ? null : guessCatalogModel(models, readModel, { brandId, brandName: brandGuess?.value || readBrand });
     const guessedModel = modelGuess ? models.find(model => model.id === modelGuess.id) : null;
+    // Cor: só sugere quando ainda não há cor escolhida (mapeamento salvo ou escolha do usuário vencem).
+    const readColor = String((intake.extracted_data as { color_original?: string } | null)?.color_original || intake.detected_color || '').trim();
+    const colorGuess = intake.matched_color_id ? null : guessCatalogColor(colors, readColor);
+    const guessedColor = colorGuess ? colors.find(color => color.id === colorGuess.id) : null;
     setSuggestedFrom({
       brand: brandGuess && !brandGuess.exact ? { from: readBrand, value: brandGuess.value } : undefined,
       model: guessedModel && !modelGuess?.exact ? { from: readModel, id: guessedModel.id } : undefined,
+      color: guessedColor ? { from: readColor, id: guessedColor.id } : undefined,
     });
-    if (!brandGuess && !guessedModel) return;
+    if (!brandGuess && !guessedModel && !guessedColor) return;
     setDraft(current => ({
       ...current,
+      // Não troca uma cor que o usuário já escolheu nesta tela.
+      ...(guessedColor && !current.matched_color_id ? { matched_color_id: guessedColor.id, detected_color: guessedColor.name } : {}),
       ...(brandGuess && !brandGuess.exact ? { detected_brand: brandGuess.value, matched_brand_id: brandId } : {}),
       ...(guessedModel ? {
         matched_model_id: guessedModel.id,
@@ -256,7 +278,7 @@ export function PhotoIntakeReviewCard({
       } : {}),
     }));
     if (guessedModel) setSelectedModelId(guessedModel.id);
-  }, [intake, catalogLists, models, brandNames]);
+  }, [intake, catalogLists, models, brandNames, colors]);
 
   // Cadastro rápido do modelo quando ele ainda não existe no catálogo.
   const [newModelName, setNewModelName] = useState<string | null>(null);
@@ -650,6 +672,9 @@ export function PhotoIntakeReviewCard({
                 {!draft.matched_color_id && draft.detected_color && (
                   <p className="mt-1 text-xs font-semibold text-amber-700">A cor foi lida, mas ainda precisa ser vinculada a uma cor cadastrada.</p>
                 )}
+                {draft.matched_color_id && draft.matched_color_id === suggestedFrom.color?.id && (
+                  <p data-catalog-state="suggested-color" className="mt-1 text-xs text-blue-700">Sugerido pelo que a foto leu: “{suggestedFrom.color.from}” — troque se não for. Ao salvar, essa cor fica gravada para as próximas.</p>
+                )}
                 <div className="mt-1.5 flex flex-wrap gap-3 text-xs font-bold">
                   <a href="/admin/settings/colors" target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">
                     Cadastrar nova cor <ExternalLink className="inline" size={12} />
@@ -699,7 +724,7 @@ export function PhotoIntakeReviewCard({
               </div>
               <button
                 type="button"
-                onClick={() => selectedModelId && void onAttachModel(selectedModelId)}
+                onClick={() => selectedModelId && void onUpdate({ ...draft, matched_model_id: selectedModelId })}
                 disabled={!selectedModelId || busy}
                 className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-bold text-white hover:bg-violet-800 disabled:opacity-50"
               >

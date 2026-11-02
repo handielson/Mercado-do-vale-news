@@ -257,6 +257,32 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     return schemaPromise;
   };
 
+  // Mapeamento de cor vale para a fila toda: os outros aparelhos pendentes da mesma empresa com a mesma
+  // cor lida (e ainda sem cor escolhida) recebem a cor na hora, sem precisar ler a foto de novo.
+  async function applyColorMappingToPendingIntakes(intake, aliases, color) {
+    const keys = new Set(aliases.map((alias) => slugify(alias)).filter(Boolean));
+    if (!keys.size || !color?.id) return 0;
+    const [rows] = await pool.query(
+      `SELECT id, detected_color, extracted_data FROM smartphone_photo_intakes
+        WHERE id <> ? AND company_id <=> ? AND matched_color_id IS NULL
+          AND status IN ('waiting_model_registration','waiting_price_confirmation','review_required','ready_to_finalize')
+        LIMIT 500`,
+      [intake.id, intake.company_id || null],
+    );
+    let updated = 0;
+    for (const row of rows) {
+      const extracted = safeJson(row.extracted_data, {}) || {};
+      const readColors = [row.detected_color, extracted.color_original, extracted.color].map((value) => slugify(value)).filter(Boolean);
+      if (!readColors.some((key) => keys.has(key))) continue;
+      const [result] = await pool.query(
+        'UPDATE smartphone_photo_intakes SET matched_color_id=?, detected_color=? WHERE id=? AND matched_color_id IS NULL',
+        [color.id, color.name, row.id],
+      );
+      updated += Number(result?.affectedRows || 0);
+    }
+    return updated;
+  }
+
   // Unidade já existente com o mesmo IMEI/serial, com data, status e produto para o aviso.
   async function findRegisteredUnitIssue(identifiers, intakeId) {
     const values = [identifiers.imei1, identifiers.imei2, identifiers.serial].filter(Boolean);
@@ -637,8 +663,12 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     if ('matched_color_id' in body && body.matched_color_id) {
       const [colorRows] = await pool.query('SELECT id,name FROM colors WHERE id=? AND active=1 LIMIT 1', [body.matched_color_id]);
       if (!colorRows[0]) return reply.code(409).send({ error: 'A cor selecionada não está mais disponível' });
-      const extractedColor = safeJson(intake.extracted_data, {})?.color || safeJson(intake.extracted_data, {})?.cor || intake.detected_color;
-      const aliases = [...new Set([extractedColor, intake.detected_color].map(value => String(value || '').trim()).filter(Boolean))];
+      // O mapeamento é gravado pela cor COMO VEIO DA ETIQUETA (color_original), que é o que a próxima leitura procura.
+      // Antes gravava o nome traduzido ("Midnight Black" → "Preto") e passava a mandar todo "Preto" para a cor escolhida.
+      const extracted = safeJson(intake.extracted_data, {}) || {};
+      const originalColor = String(extracted.color_original || '').trim();
+      const fallbackColor = extracted.color || extracted.cor || intake.detected_color;
+      const aliases = [...new Set((originalColor ? [originalColor] : [fallbackColor]).map(value => String(value || '').trim()).filter(Boolean))];
       for (const alias of aliases) {
         const sourceKey = slugify(alias);
         if (!sourceKey || sourceKey === slugify(colorRows[0].name)) continue;
@@ -648,6 +678,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
           [crypto.randomUUID(), intake.company_id || null, sourceKey, alias, colorRows[0].id],
         );
       }
+      await applyColorMappingToPendingIntakes(intake, aliases, colorRows[0]);
       body.detected_color = colorRows[0].name;
     } else if ('detected_color' in body) {
       const color = await resolveCatalogColor(body.detected_color, intake.company_id);

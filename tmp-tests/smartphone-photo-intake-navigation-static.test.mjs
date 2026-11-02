@@ -13,7 +13,8 @@ assert.match(reviewCard, /detected_storage, draft.detected_version, priceRefresh
 assert.match(reviewCard, /detected_version: version,[\s\S]*prices_confirmed: false/, 'trocar versao deve exigir nova confirmacao');
 assert.match(reviewCard, /const canFinalize[\s\S]*Boolean\(draft.prices_confirmed\)[\s\S]*draft.detected_version[\s\S]*intake.detected_version/, 'nao finalizar com versao local ainda nao salva e confirmada');
 assert.match(reviewCard, /<SearchableSelect[\s\S]*options=\{sortedModels\.map\(model => model.id\)\}[\s\S]*onChange=\{setSelectedModelId\}[\s\S]*placeholder="Pesquisar modelo cadastrado/, 'modelo do sistema deve pesquisar por nome e preservar o ID selecionado');
-assert.match(reviewCard, /onClick=\{\(\) => selectedModelId && void onAttachModel\(selectedModelId\)\}/, 'associacao continua explicita no botao');
+// Associar modelo salva junto o que está na tela (a cor escolhida e o mapeamento dela não se perdem).
+assert.match(reviewCard, /onClick=\{\(\) => selectedModelId && void onUpdate\(\{ \.\.\.draft, matched_model_id: selectedModelId \}\)\}/, 'associacao continua explicita no botao');
 // Guarda de UI acoplada ao JSX: ao mover os campos, mover esta verificacao com eles.
 for (const input of reviewCard.matchAll(/<input\b[\s\S]*?\/>/g)) {
   if (/type="checkbox"/.test(input[0])) continue;
