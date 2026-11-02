@@ -1,3 +1,13 @@
+# v1.2.756-contador-sem-rolagem
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.756-contador-sem-rolagem` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-195902-v1256-contador`. API: sem alteração. Site inclui as versões do Codex até a anterior.
+Espaço do Contador sem barras de rolagem desnecessárias: caixas de texto que crescem, abas em 3 colunas e listas no celular, barra "Comparar" fora do contador/admin.
+
+Validações: teste novo, testes do contador/fiscal (sem falha nova), tsc, build, Playwright com dados reais (só leitura).
+
+---
+
 # v1.2.755-mercado-livre-unlinked-parallel-stock-reads
 
 Data: 02/11/2026. Status: em publicação. Branch: `main`. Tag: `v1.2.755-mercado-livre-unlinked-parallel-stock-reads`.

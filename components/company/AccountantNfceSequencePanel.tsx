@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { accountantPortalService, type AccountantCompany, type NfceProductionSequenceStatus } from '../../services/accountantPortalService';
+import { AutoTextarea } from '../ui/AutoTextarea';
 
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm';
 
@@ -36,7 +37,7 @@ export function AccountantNfceSequencePanel() {
     <label className="block text-sm">Empresa<select className={input} value={companyId} onChange={event=>{setCompanyId(event.target.value);setMessage('');setError('')}}>{companies.map(company=><option key={company.id} value={company.id}>{company.name} — {company.cnpj}</option>)}</select></label>
     {status&&<div className="text-sm"><strong>Séries cadastradas:</strong> {status.sequences.length?<ul className="mt-1 space-y-1">{status.sequences.map(item=><li key={item.series}>Série {String(item.series).padStart(3,'0')} · próximo nº {item.nextNumber} · conferida por {item.checkedBy} em {new Date(item.checkedAt).toLocaleString('pt-BR')}</li>)}</ul>:'nenhuma'}<p className="mt-1 text-amber-800">Cadastrar a numeração não ativa a emissão fiscal. Nunca reutilize número reservado; saltos de numeração precisam do procedimento fiscal aplicável.</p></div>}
     <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Série<input className={input} type="number" min="2" max="889" value={series} onChange={event=>setSeries(event.target.value)} /></label><label className="text-sm">Último número usado nesta série<input className={input} type="number" min="0" max="999999998" value={lastNumber} onChange={event=>setLastNumber(event.target.value)} /></label></div>
-    <label className="block text-sm">Justificativa da conferência<textarea className={input} value={reason} onChange={event=>setReason(event.target.value)} /></label>
+    <label className="block text-sm">Justificativa da conferência<AutoTextarea className={input} value={reason} onChange={event=>setReason(event.target.value)} /></label>
     <button type="button" disabled={busy||!status} onClick={()=>void save()} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy?'Salvando...':'Salvar numeração conferida'}</button>
     {error&&<p role="alert" className="text-sm text-red-700">{error}</p>}{message&&<p role="status" className="text-sm text-emerald-800">{message}</p>}
   </section>;

@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.755-mercado-livre-unlinked-parallel-stock-reads",
+  "version": "v1.2.756-contador-sem-rolagem",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.755-mercado-livre-unlinked-parallel-stock-reads",
-  "release_vps": "/var/www/mdv-site/releases/20261102-182739-ml-stock-read-unlinked-parallel",
+  "tag": "v1.2.756-contador-sem-rolagem",
+  "release_vps": "/var/www/mdv-site/releases/20261102-195902-v1256-contador",
   "api_release": {
-    "status": "published",
-    "note": "Deploy seletivo; perfil do vendedor consultado em paralelo também para anúncios não vinculados, sem devolver saldo antes do vínculo exato por SKU; gates de escrita desligados"
+    "status": "sem alteração",
+    "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Consultas de saldo agrupam anúncios escalonados e consultam perfil do vendedor em paralelo enquanto validam anúncios vinculados ou por SKU exato; escritas seguem desligadas.",
+  "summary": "Espaço do Contador: sem barras de rolagem desnecessárias — caixas de texto crescem com o conteúdo (14 campos), abas em 3 colunas no celular, tabelas do Faturamento viram listas no celular (sem rolagem lateral), barra 'Comparar' da loja não aparece mais no contador/admin e não alarga a página no celular. Computador mantém as tabelas.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,21 +31,27 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750 (Claude); v1.2.742 do Codex",
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750 e v1.2.756 (Claude); v1.2.742 e v1.2.751+ do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'"
   },
-  "site_source_base": "e803f89b",
+  "site_source_base": "2fa8d15c",
   "changed_files": [
-    "services/mercadoLivreListingStock.cjs",
-    "tmp-tests/mercado-livre-listing-stock-read.test.cjs",
+    "components/ui/AutoTextarea.tsx",
+    "components/company/CompanyTaxValidationPanel.tsx",
+    "components/fiscal/FiscalProductTaxPanel.tsx",
+    "components/company/AccountantNfceSequencePanel.tsx",
+    "pages/accountant/AccountantPortalPage.tsx",
+    "App.tsx",
+    "components/catalog/CompareBar.tsx",
+    "tmp-tests/accountant-portal-layout-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.755-mercado-livre-unlinked-parallel-stock-reads.md"
+    "docs/versoes/2026-11-02-v1.2.756-contador-sem-rolagem.md"
   ],
   "validations": [
-    "node --test tmp-tests/mercado-livre-listing-stock-read.test.cjs (17 aprovados)",
-    "node --check services/mercadoLivreListingStock.cjs; node --check vps_server.js; node --check vps_server.cjs",
-    "npm.cmd run build",
-    "Publicação seletiva da leitura de estoque e validação pública; gates de escrita confirmados desligados"
+    "accountant-portal-layout-static aprovado",
+    "testes do contador/fiscal/comparar: mesmas 3 falhas anteriores",
+    "tsc; npm run build",
+    "Playwright com dados reais (só leitura), 390px e 1440px: 0 barras internas nas 3 abas, largura 390 (antes 437 e até 8 barras)"
   ]
 }

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ExternalLink, Plus, Save, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { AutoTextarea } from '../ui/AutoTextarea';
 import {
   emptyFiscalTaxProfile, fiscalIssueText, fiscalTaxProfileService,
   type FiscalProductDetail, type FiscalProductFilter, type FiscalProductsPage, type FiscalTaxBlockKind, type FiscalTaxProfile,
@@ -126,7 +127,7 @@ function ProfilesSection({ companyId, onChanged }: { companyId: string; onChange
             <Field name="Registro (CRC)"><input className={input} value={editing.reviewerRegistration} onChange={e => patch({ reviewerRegistration: e.target.value })} /></Field>
             <Field name="Data"><input type="date" className={input} value={editing.reviewedAt} onChange={e => patch({ reviewedAt: e.target.value })} /></Field>
           </div>
-          <Field name="Observações"><textarea className={input} rows={2} value={editing.notes} onChange={e => patch({ notes: e.target.value })} /></Field>
+          <Field name="Observações"><AutoTextarea className={input} rows={2} value={editing.notes} onChange={e => patch({ notes: e.target.value })} /></Field>
         </fieldset>
         {editing.completeness && editing.completeness.errors.length > 0 && <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700"><b>Para aprovar, falta:</b> {editing.completeness.errors.join('; ')}.</div>}
         {shownWarnings.length > 0 && <ul className="space-y-1 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{shownWarnings.map(w => <li key={w} className="flex gap-2"><AlertTriangle size={14} className="mt-0.5 shrink-0" />{w}</li>)}</ul>}

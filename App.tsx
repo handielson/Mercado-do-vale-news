@@ -19,6 +19,8 @@ const currentStorefrontPath = () => router.state.location.pathname;
 function MercadoDoValeCompareBar() {
   const pathname = React.useSyncExternalStore(subscribeStorefrontRoute, currentStorefrontPath, () => '/');
   if (pathname === '/loja-3d' || pathname.startsWith('/loja-3d/')) return null;
+  // Comparar é da vitrine: não aparece no admin nem no Espaço do Contador.
+  if (pathname.startsWith('/admin') || pathname === '/contador' || pathname.startsWith('/contador/')) return null;
   return <CompareBar />;
 }
 
