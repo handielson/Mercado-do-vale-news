@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.735-foto-marca-modelo-sugeridos",
+  "version": "v1.2.736-foto-cadastrar-modelo",
   "date": "2026-11-01",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.735-foto-marca-modelo-sugeridos",
-  "release_vps": "/var/www/mdv-site/releases/20261102-010635-v1235-foto-sugestao",
+  "tag": "v1.2.736-foto-cadastrar-modelo",
+  "release_vps": "/var/www/mdv-site/releases/20261102-011422-v1236-foto-cadastrar-modelo",
   "api_release": {
     "status": "sem alteração",
-    "note": "release só de frontend; API segue a da v1.2.734"
+    "note": "release só de frontend; usa POST /models existente"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Cadastro por foto: marca e modelo já vêm preenchidos com o melhor palpite do que a foto leu (submarca → marca do cadastro, ex.: REDMI → Xiaomi; modelo sem a cor grudada, ex.: 'Redmi Note 17 Black' → Redmi Note 17), com aviso 'Sugerido pelo que a foto leu' para trocar se não for.",
+  "summary": "Cadastro por foto: quando o modelo lido não existe no catálogo, botão 'Cadastrar “Redmi Note 17” na Xiaomi' cria o modelo direto na conferência (nome sem a cor, categoria do modelo irmão, EAN da caixa se válido) e já deixa escolhido.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -30,21 +30,23 @@
     "version_name": "1.1.5",
     "version_code": 9
   },
-  "pending_deployments": {},
-  "site_source_base": "1c792acc",
+  "pending_deployments": {
+    "tag_push": "pendente: v1.2.735 e v1.2.736"
+  },
+  "site_source_base": "9f839646",
   "changed_files": [
     "services/photoIntakeCatalogFields.mjs",
     "components/products/photo-intake/PhotoIntakeReviewCard.tsx",
+    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
     "tmp-tests/photo-intake-catalog-fields.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-01-v1.2.735-foto-marca-modelo-sugeridos.md"
+    "docs/versoes/2026-11-01-v1.2.736-foto-cadastrar-modelo.md"
   ],
   "validations": [
-    "photo-intake-catalog-fields (5) aprovado: palpite de marca (família e marca própria), modelo mais específico, respeita marca, não casa só 'Redmi'",
+    "photo-intake-catalog-fields (7) aprovado: nome sem cor/memória/marca, categoria do irmão por marca, botão e recarga da lista",
     "tsc sem erros",
     "npm run build aprovado",
-    "Playwright Pixel 7: REDMI → Xiaomi e 'Redmi Note 17 Black' → Redmi Note 17 preenchidos com aviso",
-    "tags v1.2.732–v1.2.734 enviadas ao GitHub pelo usuário"
+    "Playwright Pixel 7: botão, formulário com 'Redmi Note 17', POST /models com marca e categoria, modelo já selecionado"
   ]
 }

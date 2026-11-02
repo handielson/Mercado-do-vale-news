@@ -7,7 +7,7 @@ import { VersionSelect } from '../selectors/VersionSelect';
 import { ProtectedIntakePhoto } from './ProtectedIntakePhoto';
 import { PhotoIntakeBlingMapping } from './PhotoIntakeBlingMapping';
 import type { Color } from '../../../types/color';
-import type { Model } from '../../../types/model';
+import type { Model, ModelInput } from '../../../types/model';
 import type {
   SmartphoneBrandPriceMargin,
   SmartphonePhotoIntake,
@@ -19,8 +19,8 @@ import { smartphonePriceGroups, SmartphonePriceReference } from '../../../servic
 import { DEFAULT_PRODUCT_VERSION } from '../../../services/smartphoneModelSpecs.mjs';
 import { ModelPricesPanel } from '../../settings/ModelPricesPanel';
 import { isScannerValueComplete, nextScannerBurst, SCANNER_IDLE_MS, SCANNER_MIN_FAST_KEYS } from '../../../services/scannerFieldAdvance.mjs';
-import { barcodeHint, describeIdentifier, identifierInputProps, registeredUnitLink } from '../../../services/deviceIdentifiers.mjs';
-import { findCatalogOption, guessCatalogBrand, guessCatalogModel } from '../../../services/photoIntakeCatalogFields.mjs';
+import { barcodeHint, describeIdentifier, identifierInputProps, isValidGtin, registeredUnitLink } from '../../../services/deviceIdentifiers.mjs';
+import { findCatalogOption, guessCatalogBrand, guessCatalogModel, siblingModelCategory, suggestModelName } from '../../../services/photoIntakeCatalogFields.mjs';
 import { loadPhotoIntakeCatalogLists, type PhotoIntakeCatalogLists } from '../../../services/photoIntakeCatalogLists';
 
 interface PhotoIntakeReviewCardProps {
@@ -35,6 +35,8 @@ interface PhotoIntakeReviewCardProps {
   onAttachModel: (modelId: string) => Promise<boolean>;
   onRetry: () => Promise<boolean>;
   onRefreshColors: () => Promise<void>;
+  /** Cadastra um modelo novo direto da conferência; devolve o modelo criado. */
+  onCreateModel?: (input: ModelInput) => Promise<Model | null>;
   onFinalize: (sku?: string) => Promise<void>;
   onRemoveFromQueue: () => Promise<void>;
   fieldsRef: React.Ref<HTMLDivElement>;
@@ -100,6 +102,7 @@ export function PhotoIntakeReviewCard({
   onAttachModel,
   onRetry,
   onRefreshColors,
+  onCreateModel,
   onFinalize,
   onRemoveFromQueue,
   fieldsRef,
@@ -253,6 +256,36 @@ export function PhotoIntakeReviewCard({
     }));
     if (guessedModel) setSelectedModelId(guessedModel.id);
   }, [intake, catalogLists, models, brandNames]);
+
+  // Cadastro rápido do modelo quando ele ainda não existe no catálogo.
+  const [newModelName, setNewModelName] = useState<string | null>(null);
+  const [creatingModel, setCreatingModel] = useState(false);
+  const [createModelError, setCreateModelError] = useState('');
+  useEffect(() => { setNewModelName(null); setCreateModelError(''); }, [intake.id]);
+  const createModelFromLabel = async () => {
+    const name = String(newModelName ?? '').trim();
+    const brandId = catalogLists?.brands.find(brand => brand.name === selectedBrandName)?.id || null;
+    if (!onCreateModel || !name || !brandId) return;
+    setCreatingModel(true); setCreateModelError('');
+    try {
+      const ean = String(draft.detected_ean ?? '').replace(/\D/g, '');
+      const model = await onCreateModel({
+        name,
+        brand_id: brandId,
+        active: true,
+        category_id: siblingModelCategory(models, name, brandId) || undefined,
+        eans: ean && isValidGtin(ean) ? [ean] : undefined,
+      });
+      if (!model) throw new Error('O modelo foi criado, mas não apareceu na lista. Toque em Atualizar.');
+      setSelectedModelId(model.id);
+      setDraft(current => ({ ...current, matched_model_id: model.id, matched_brand_id: brandId, detected_model: model.name, review_confirmed: false }));
+      setNewModelName(null);
+    } catch (error) {
+      setCreateModelError(error instanceof Error ? error.message : 'Não foi possível cadastrar o modelo.');
+    } finally {
+      setCreatingModel(false);
+    }
+  };
   // Etiqueta pode trazer submarca (ex.: "Redmi"); com o modelo vinculado, a marca vem do modelo.
   const linkedModelBrandName = catalogLists?.brands.find(brand => brand.id === models.find(model => model.id === draft.matched_model_id)?.brand_id)?.name || null;
   const selectedBrandName = findCatalogOption(brandNames, String(draft.detected_brand ?? '')) || linkedModelBrandName;
@@ -320,6 +353,40 @@ export function PhotoIntakeReviewCard({
             className={`${inputClass} ${modelId ? 'border-slate-200' : 'border-amber-300'}`}
           />
           {!modelId && raw && <span data-catalog-state="unmatched" className="mt-1 block text-xs font-semibold text-amber-700">Lido na foto: “{raw}” — escolha da lista ou cadastre o modelo</span>}
+          {!modelId && onCreateModel && newModelName === null && (
+            <button
+              type="button"
+              data-create-model
+              disabled={busy || !selectedBrandName}
+              onClick={() => setNewModelName(suggestModelName(raw, { brandName: selectedBrandName || '', colorNames: colors.map(color => color.name) }))}
+              className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-3 text-sm font-bold text-violet-800 disabled:opacity-50"
+            >
+              <Sparkles size={16} />
+              {selectedBrandName ? `Cadastrar “${suggestModelName(raw, { brandName: selectedBrandName, colorNames: colors.map(color => color.name) }) || 'novo modelo'}” na ${selectedBrandName}` : 'Escolha a marca para cadastrar o modelo'}
+            </button>
+          )}
+          {!modelId && newModelName !== null && (
+            <div data-create-model-form className="mt-2 space-y-2 rounded-lg border border-violet-200 bg-violet-50 p-3">
+              <label className="block text-xs font-medium text-violet-900">
+                Nome do modelo ({selectedBrandName})
+                <input
+                  value={newModelName}
+                  onChange={event => setNewModelName(event.target.value)}
+                  autoCapitalize="words"
+                  enterKeyHint="done"
+                  className="mt-1 h-12 w-full rounded-lg border border-violet-200 bg-white px-3 text-base"
+                />
+              </label>
+              <p className="text-xs text-violet-700">Confira o nome sem a cor. Depois dá para completar fotos e especificações em Modelos.</p>
+              {createModelError && <p className="text-xs font-semibold text-red-600">{createModelError}</p>}
+              <div className="flex gap-2">
+                <button type="button" disabled={creatingModel || !newModelName.trim()} onClick={() => void createModelFromLabel()} className="min-h-[44px] flex-1 rounded-lg bg-violet-700 px-3 text-sm font-bold text-white disabled:opacity-50">
+                  {creatingModel ? 'Cadastrando…' : 'Cadastrar e usar'}
+                </button>
+                <button type="button" disabled={creatingModel} onClick={() => { setNewModelName(null); setCreateModelError(''); }} className="min-h-[44px] rounded-lg border border-violet-200 bg-white px-3 text-sm">Cancelar</button>
+              </div>
+            </div>
+          )}
           {modelId && modelId === suggestedFrom.model?.id && suggestedHint(suggestedFrom.model.from)}
         </div>
       );

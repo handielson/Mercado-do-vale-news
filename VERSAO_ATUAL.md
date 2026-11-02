@@ -1,3 +1,13 @@
+# v1.2.736-foto-cadastrar-modelo
+
+Data: 01/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.736-foto-cadastrar-modelo` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-011422-v1236-foto-cadastrar-modelo`. API: sem alteração.
+Cadastro por foto: quando o modelo lido não existe, o botão "Cadastrar “Redmi Note 17” na Xiaomi" abre o nome já limpo (sem cor/memória), cria o modelo com a categoria do modelo irmão e o EAN da caixa (se válido) e já deixa escolhido.
+
+Validações: testes (7), tsc, build e Playwright (Pixel 7).
+
+---
+
 # v1.2.735-foto-marca-modelo-sugeridos
 
 Data: 01/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.735-foto-marca-modelo-sugeridos` (local; push da tag pendente).

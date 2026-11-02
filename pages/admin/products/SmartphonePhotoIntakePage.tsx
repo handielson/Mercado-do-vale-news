@@ -12,7 +12,7 @@ import { modelService } from '../../../services/models';
 import { smartphonePhotoIntakeService } from '../../../services/smartphonePhotoIntakeService';
 import type { Brand } from '../../../types/brand';
 import type { Color } from '../../../types/color';
-import type { Model } from '../../../types/model';
+import type { Model, ModelInput } from '../../../types/model';
 import type {
   SmartphoneBrandPriceMargin,
   SmartphonePhotoIntake,
@@ -105,6 +105,15 @@ export function SmartphonePhotoIntakePage() {
     setModels(modelRows);
     setColors(colorRows);
     setMargins(marginRows);
+  }, []);
+
+  // Cadastro rápido de modelo pela conferência: cria e recarrega a lista para já selecionar.
+  const createModelFromIntake = useCallback(async (input: ModelInput): Promise<Model | null> => {
+    await modelService.create(input);
+    const modelRows = await modelService.listActive();
+    setModels(modelRows);
+    const wanted = input.name.trim().toLocaleLowerCase('pt-BR');
+    return modelRows.find(model => model.brand_id === input.brand_id && model.name.trim().toLocaleLowerCase('pt-BR') === wanted) || null;
   }, []);
 
   const refreshColors = useCallback(async () => {
@@ -425,6 +434,7 @@ export function SmartphonePhotoIntakePage() {
                     'Foto analisada novamente.',
                   )}
                   onRefreshColors={refreshColors}
+                  onCreateModel={createModelFromIntake}
                   onFinalize={finalizeSelected}
                   onRemoveFromQueue={() => removeFromQueue(selected)}
                   fieldsRef={fieldsRef}

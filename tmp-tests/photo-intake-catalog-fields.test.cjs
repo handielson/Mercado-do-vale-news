@@ -72,3 +72,31 @@ test('conferência já vem com marca/modelo sugeridos e avisa de onde veio', () 
   assert.match(card, /modelLinked \? null :/, 'não troca um modelo já vinculado');
   assert.match(card, /Sugerido pelo que a foto leu: “\{from\}” — troque se não for/);
 });
+
+test('nome e categoria sugeridos para cadastrar modelo novo', async () => {
+  const { suggestModelName, siblingModelCategory } = await import('../services/photoIntakeCatalogFields.mjs');
+  assert.equal(suggestModelName('Redmi Note 17 Black'), 'Redmi Note 17');
+  assert.equal(suggestModelName('Xiaomi Redmi Note 17 Pro 8GB+256GB Midnight Black', { brandName: 'Xiaomi' }), 'Redmi Note 17 Pro');
+  assert.equal(suggestModelName('realme C71 Forest Owl', { colorNames: ['Forest Owl'] }), 'realme C71');
+  assert.equal(suggestModelName('Redmi Note 15 4G'), 'Redmi Note 15 4G', 'não corta 4G/5G');
+  assert.equal(suggestModelName('Black'), 'Black', 'nunca esvazia o nome');
+  const models = [
+    { id: 'a', name: 'Redmi Note 15 4G', brand_id: 'x', category_id: 'cel' },
+    { id: 'b', name: 'Redmi 15C', brand_id: 'x', category_id: 'smart' },
+    { id: 'c', name: 'Capa para Redmi Note 15', brand_id: 'x', category_id: 'capas' },
+    { id: 'd', name: 'Galaxy A56', brand_id: 's', category_id: 'smart' },
+  ];
+  assert.equal(siblingModelCategory(models, 'Redmi Note 17', 'x'), 'cel');
+  assert.equal(siblingModelCategory(models, 'Galaxy A57', 'x'), null, 'respeita a marca');
+});
+
+test('botão cadastra o modelo novo com marca, categoria do irmão e EAN e já seleciona', () => {
+  const fs = require('node:fs');
+  const card = fs.readFileSync('components/products/photo-intake/PhotoIntakeReviewCard.tsx', 'utf8');
+  assert.match(card, /data-create-model[\s\S]*suggestModelName\(raw/, 'botão sugere o nome limpo');
+  assert.match(card, /onCreateModel\(\{[\s\S]*brand_id: brandId[\s\S]*siblingModelCategory\(models, name, brandId\)[\s\S]*isValidGtin\(ean\) \? \[ean\]/, 'cria com marca, categoria do irmão e EAN válido');
+  assert.match(card, /matched_model_id: model\.id[\s\S]*detected_model: model\.name/, 'modelo criado já fica escolhido');
+  const page = fs.readFileSync('pages/admin/products/SmartphonePhotoIntakePage.tsx', 'utf8');
+  assert.match(page, /onCreateModel=\{createModelFromIntake\}/);
+  assert.match(page, /modelService\.create\(input\)[\s\S]*modelService\.listActive\(\)[\s\S]*setModels\(modelRows\)/, 'recarrega a lista depois de criar');
+});

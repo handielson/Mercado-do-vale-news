@@ -88,3 +88,38 @@ export function guessCatalogModel(models, raw, context = {}) {
   }
   return best ? { id: best.id, exact: false } : null;
 }
+
+const COLOR_WORDS = new Set([
+  'BLACK', 'WHITE', 'BLUE', 'GREEN', 'PURPLE', 'GOLD', 'SILVER', 'GRAY', 'GREY', 'PINK', 'RED', 'YELLOW',
+  'ORANGE', 'MIDNIGHT', 'TITANIUM', 'GRAPHITE', 'OCEAN', 'SKY', 'MINT', 'LAVENDER', 'CORAL', 'SAND', 'ICE',
+  'AURORA', 'STARRY', 'GLACIER', 'FOREST', 'MOONLIGHT', 'SUNSET', 'TWILIGHT', 'LIME', 'OLIVE', 'BRONZE',
+  'PRETO', 'BRANCO', 'AZUL', 'VERDE', 'ROXO', 'DOURADO', 'PRATA', 'CINZA', 'ROSA', 'VERMELHO', 'AMARELO', 'LARANJA',
+]);
+
+/**
+ * Nome sugerido para cadastrar um modelo novo a partir do texto da etiqueta:
+ * tira a marca da frente, memória ("8GB+256GB") e a cor que gruda no fim.
+ */
+export function suggestModelName(raw, { brandName = '', colorNames = [] } = {}) {
+  let words = String(raw ?? '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  const brand = normalizeCatalogText(brandName);
+  if (brand && words.length > 1 && normalizeCatalogText(words[0]) === brand) words = words.slice(1);
+  words = words.filter(word => !/^\d+\s*(GB|TB)(\+\d+\s*(GB|TB))?$/i.test(word) && !/^\d+\+\d+(GB|TB)?$/i.test(word));
+  const colorWords = new Set([...COLOR_WORDS, ...colorNames.flatMap(name => String(name).split(/\s+/)).map(normalizeCatalogText).filter(Boolean)]);
+  while (words.length > 1 && colorWords.has(normalizeCatalogText(words[words.length - 1]))) words.pop();
+  return words.join(' ');
+}
+
+/** Categoria do modelo "irmão" mais parecido da mesma marca (ex.: Redmi Note 15 → Redmi Note 17). */
+export function siblingModelCategory(models, name, brandId) {
+  const target = modelSlug(name).split(' ');
+  let best = null;
+  for (const model of Array.isArray(models) ? models : []) {
+    if (!model?.category_id || (brandId && model.brand_id !== brandId)) continue;
+    const words = modelSlug(model.name).split(' ');
+    let shared = 0;
+    while (shared < Math.min(words.length, target.length) && words[shared] === target[shared]) shared += 1;
+    if (shared > 0 && (!best || shared > best.shared)) best = { shared, category_id: model.category_id };
+  }
+  return best?.category_id || null;
+}
