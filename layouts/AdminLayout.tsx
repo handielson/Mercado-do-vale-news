@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, X, Camera, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, X, Camera, ChevronDown, FilePenLine, Warehouse, ListChecks, BadgePercent, Wallet, ShieldCheck, Percent, Layers, ShoppingBasket, Music2, Handshake, Send, Landmark, UserCog, Calculator, Tv, Cloud, CloudCog } from 'lucide-react';
 
 import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -120,7 +120,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const menuGroups = useMemo(() => [
     {
-      title: 'Mercado do Vale · Atendimento',
+      title: 'Vendas & Atendimento',
       items: [
         { to: '/admin', icon: <LayoutDashboard size={18} />, label: 'Dashboard', keywords: 'inicio home painel' },
         { to: '/admin/pdv', icon: <ShoppingCart size={18} />, label: 'PDV', keywords: 'caixa venda rapida balcao' },
@@ -148,21 +148,21 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       title: 'Produtos & Estoque',
       items: [
         { to: '/admin/products', icon: <Package size={18} />, label: 'Produtos', keywords: 'catalogo itens mercadoria' },
-        { to: '/admin/products/drafts', icon: <Package size={18} />, label: 'Rascunhos de anúncios', keywords: 'cadastros incompletos continuar rascunho' },
+        { to: '/admin/products/drafts', icon: <FilePenLine size={18} />, label: 'Rascunhos de anúncios', keywords: 'cadastros incompletos continuar rascunho' },
         { to: '/admin/products/storefronts', icon: <Globe size={18} />, label: 'Publicação nos sites', keywords: 'precos canais lojas publicar' },
         { to: '/admin/inventory', icon: <ClipboardList size={18} />, label: 'Estoque', keywords: 'quantidade inventario' },
-        { to: '/admin/inventory/locations', icon: <Boxes size={18} />, label: 'Locais de Estoque', keywords: 'depositos locais prateleira caixa balcao almoxarifado' },
+        { to: '/admin/inventory/locations', icon: <Warehouse size={18} />, label: 'Locais de Estoque', keywords: 'depositos locais prateleira caixa balcao almoxarifado' },
         { to: '/admin/products/labels', icon: <Barcode size={18} />, label: 'Etiquetas', keywords: 'imprimir etiqueta codigo barras ean sku' },
-        { to: '/admin/inventory/print-list', icon: <Printer size={18} />, label: 'Lista de Impressao', keywords: 'separacao caixa imprimir ean sku conferencia' },
-        { to: '/admin/products/offers', icon: <Store size={18} />, label: 'Ofertas', keywords: 'kits anuncios shopee marketplace combos' },
+        { to: '/admin/inventory/print-list', icon: <ListChecks size={18} />, label: 'Lista de Impressão', keywords: 'lista de impressao separacao caixa imprimir ean sku conferencia' },
+        { to: '/admin/products/offers', icon: <BadgePercent size={18} />, label: 'Ofertas', keywords: 'kits anuncios shopee marketplace combos' },
       ]
     },
     {
       title: 'Financeiro',
       items: [
-        { to: '/admin/financeiro', icon: <Banknote size={18} />, label: 'Financeiro', keywords: 'dinheiro pagamentos taxas contas' },
-        { to: '/admin/caixa', icon: <CreditCard size={18} />, label: 'Caixa', keywords: 'abertura fechamento sangria suprimento pdv' },
-        { to: '/admin/caixa/auditoria', icon: <Shield size={18} />, label: 'Auditoria de Caixa', keywords: 'historico retificacao reimpressao conferencia' },
+        { to: '/admin/financeiro', icon: <Banknote size={18} />, label: 'Visão financeira', keywords: 'financeiro dinheiro pagamentos taxas contas' },
+        { to: '/admin/caixa', icon: <Wallet size={18} />, label: 'Caixa', keywords: 'abertura fechamento sangria suprimento pdv' },
+        { to: '/admin/caixa/auditoria', icon: <ShieldCheck size={18} />, label: 'Auditoria de Caixa', keywords: 'historico retificacao reimpressao conferencia' },
         { to: '/admin/pix-avulso', icon: <QrCode size={18} />, label: 'Pix Avulso', keywords: 'pix mercado pago qr code caixa recebimento avulso' },
         { to: '/admin/contabilidade', icon: <BookOpen size={18} />, label: 'Contabilidade', keywords: 'imposto simples nacional das nfe faturamento tributavel' },
       ]
@@ -170,7 +170,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     {
       title: 'Loja Online & Marketing',
       items: [
-        { to: '/admin/promotions', icon: <Ticket size={18} />, label: 'Promoções', keywords: 'desconto oferta' },
+        { to: '/admin/promotions', icon: <Percent size={18} />, label: 'Promoções', keywords: 'desconto oferta' },
         { to: '/admin/coupons', icon: <Ticket size={18} />, label: 'Cupons', keywords: 'codigo desconto' },
         { to: '/admin/cashback', icon: <Coins size={18} />, label: 'Moedas do Vale', keywords: 'cashback pontos fidelidade' },
         { to: '/admin/settings/banners', icon: <Image size={18} />, label: 'Banners', keywords: 'imagens carrossel' },
@@ -189,46 +189,51 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/settings/categories', icon: <Tags size={18} />, label: 'Categorias', keywords: 'departamentos sessoes' },
         { to: '/admin/settings/brands', icon: <BadgeCheck size={18} />, label: 'Marcas', keywords: 'fabricantes apple xiaomi' },
         { to: '/admin/settings/models', icon: <Smartphone size={18} />, label: 'Modelos', keywords: 'iphone s24' },
-        { to: '/admin/settings/fields', icon: <FileText size={18} />, label: 'Campos Customizados', keywords: 'especificacoes atributos' },
+        { to: '/admin/settings/fields', icon: <Layers size={18} />, label: 'Campos Customizados', keywords: 'especificacoes atributos' },
         { to: '/admin/settings/system-tags', icon: <Tag size={18} />, label: 'Tags do Sistema', keywords: 'etiquetas lacrado vitrine' },
         { to: '/admin/settings/colors', icon: <Palette size={18} />, label: 'Cores', keywords: 'tinta azul preto' },
         { to: '/admin/settings/storages', icon: <HardDrive size={18} />, label: 'Armazenamento', keywords: 'capaciade gb tb' },
         { to: '/admin/settings/rams', icon: <MemoryStick size={18} />, label: 'Memória RAM', keywords: 'ram gb' },
         { to: '/admin/settings/versions', icon: <GitBranch size={18} />, label: 'Versões', keywords: 'global india china' },
-        { to: '/admin/settings/battery-healths', icon: <BatteryCharging size={18} />, label: 'Saúde Bateria', keywords: 'porcentagem %' },
+        { to: '/admin/settings/battery-healths', icon: <BatteryCharging size={18} />, label: 'Saúde da Bateria', keywords: 'saude bateria porcentagem %' },
       ]
     },
     {
       title: 'Integrações',
       items: [
         { to: '/admin/settings/bling', icon: <Link2 size={18} />, label: 'Bling', keywords: 'erp integracao' },
-        { to: '/admin/settings/shopee', icon: <Store size={18} />, label: 'Shopee', keywords: 'shopee marketplace integracao loja api' },
-        { to: '/admin/settings/tiktok-shop', icon: <Store size={18} />, label: 'TikTok Shop', keywords: 'tiktok shop marketplace integracao loja api' },
-        { to: '/admin/settings/mercado-livre', icon: <Store size={18} />, label: 'Mercado Livre', keywords: 'mercado livre marketplace etiqueta dce envio estoque bling' },
+        { to: '/admin/settings/shopee', icon: <ShoppingBasket size={18} />, label: 'Shopee', keywords: 'shopee marketplace integracao loja api' },
+        { to: '/admin/settings/tiktok-shop', icon: <Music2 size={18} />, label: 'TikTok Shop', keywords: 'tiktok shop marketplace integracao loja api' },
+        { to: '/admin/settings/mercado-livre', icon: <Handshake size={18} />, label: 'Mercado Livre', keywords: 'mercado livre marketplace etiqueta dce envio estoque bling' },
         { to: '/admin/settings/whatsapp', icon: <MessageCircle size={18} />, label: 'WhatsApp', keywords: 'conexao evolution atendimento contato' },
         { to: '/admin/whatsapp/novo-bot', icon: <Bot size={18} />, label: 'Novo Bot', keywords: 'n8n novo bot reset bloquear cliente fluxo memoria contexto' },
         { to: '/admin/whatsapp/mensagens', icon: <MessageSquareDashed size={18} />, label: 'Mensagens WhatsApp', keywords: 'whatsapp conversas atendimento mensagens historico humano' },
-        { to: '/admin/settings/telegram', icon: <Bot size={18} />, label: 'Automações Bot', keywords: 'robo respostas' },
+        { to: '/admin/settings/telegram', icon: <Send size={18} />, label: 'Bot do Telegram', keywords: 'automacoes bot telegram robo respostas' },
         { to: '/admin/settings/email', icon: <Mail size={18} />, label: 'E-mail', keywords: 'email templates html cadastro promocao compra' },
-        { to: '/admin/settings/integrations', icon: <Link2 size={18} />, label: 'Gateways Pagamento', keywords: 'mercado pago pagar.me stripe' },
+        { to: '/admin/settings/integrations', icon: <Landmark size={18} />, label: 'Gateways Pagamento', keywords: 'mercado pago pagar.me stripe' },
       ]
     },
     {
-      title: 'Empresa & Sistema',
+      title: 'Empresa',
       items: [
         { to: '/admin/settings/company', icon: <Settings size={18} />, label: 'Dados da Empresa', keywords: 'cnpj endereco horarios' },
-        { to: '/admin/team', icon: <Users size={18} />, label: 'Equipe', keywords: 'funcionarios vendedores' },
+        { to: '/admin/team', icon: <UserCog size={18} />, label: 'Equipe', keywords: 'funcionarios vendedores' },
         { to: '/admin/settings/shipping', icon: <Truck size={18} />, label: 'Frete', keywords: 'entrega correios transportadora' },
-        { to: '/admin/settings/payment-fees', icon: <CreditCard size={18} />, label: 'Taxas', keywords: 'juros maquina cartao' },
-        { to: '/admin/settings/displays', icon: <Smartphone size={18} />, label: 'Displays Android', keywords: 'android tablet tv pix caixa propaganda qr code' },
+        { to: '/admin/settings/payment-fees', icon: <Calculator size={18} />, label: 'Taxas', keywords: 'juros maquina cartao' },
+        { to: '/admin/settings/displays', icon: <Tv size={18} />, label: 'Displays Android', keywords: 'android tablet tv pix caixa propaganda qr code' },
         { to: '/admin/settings/documents', icon: <FileText size={18} />, label: 'Documentos', keywords: 'termos recibos' },
-        { to: '/admin/settings/warranty-templates', icon: <Shield size={18} />, label: 'Garantias', keywords: 'padrao tempo meses' },
+        { to: '/admin/settings/warranty-templates', icon: <ShieldCheck size={18} />, label: 'Garantias', keywords: 'padrao tempo meses' },
         { to: '/admin/settings/permissions', icon: <Shield size={18} />, label: 'Permissões', keywords: 'acesso regras', adminOnly: true },
+      ]
+    },
+    {
+      title: 'Sistema (técnico)',
+      items: [
         { to: '/admin/settings/system-status', icon: <Activity size={18} />, label: 'Status do sistema', keywords: 'servidor vps hostinger uptime saude diagnostico whatsapp waha instagram integracoes backup nas' },
         { to: '/admin/settings/system-backup', icon: <DatabaseBackup size={18} />, label: 'Backup Sistema', keywords: 'backup restore restaurar synology vps banco agendamento' },
         { to: '/admin/settings/mysql', icon: <Database size={18} />, label: 'MySQL Explorer', keywords: 'banco dados query sql tables' },
-        { to: '/admin/settings/synology-cdn', icon: <Server size={18} />, label: 'CDN Synology', keywords: 'arquivos imagens videos upload nas' },
-        { to: '/admin/settings/synology-config', icon: <Shield size={18} />, label: 'Config Synology', keywords: 'tunel cloudflare runbook restaurar diagnostico' },
+        { to: '/admin/settings/synology-cdn', icon: <Cloud size={18} />, label: 'CDN Synology', keywords: 'arquivos imagens videos upload nas' },
+        { to: '/admin/settings/synology-config', icon: <CloudCog size={18} />, label: 'Config Synology', keywords: 'tunel cloudflare runbook restaurar diagnostico' }
       ]
     }
   ], []);

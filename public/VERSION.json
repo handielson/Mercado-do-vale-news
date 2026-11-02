@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.759-menu-mais-usados",
+  "version": "v1.2.760-menu-organizacao",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.759-menu-mais-usados",
-  "release_vps": "/var/www/mdv-site/releases/20261102-203219-v1259-menu-mais-usados",
+  "tag": "v1.2.760-menu-organizacao",
+  "release_vps": "/var/www/mdv-site/releases/20261102-203916-v1260-menu-organizacao",
   "api_release": {
     "status": "sem alteração",
-    "note": "release só de frontend (usa GET /admin/navigation-log existente)"
+    "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Menu lateral (parte 2): seção 'Mais usados' no topo com as 6 telas que a pessoa mais abre, contadas pelo histórico de navegação do admin (só as visitas dela). No celular em 2 colunas; no computador em lista. Some durante a busca e com o menu recolhido.",
+  "summary": "Menu lateral (parte 3): grupo novo 'Sistema (técnico)' com Status, Backup, MySQL e Synology (saíram de 'Empresa & Sistema', que virou 'Empresa'); 'Mercado do Vale · Atendimento' virou 'Vendas & Atendimento'; ícones distintos dentro de cada grupo (Rascunhos, Locais, Lista de Impressão, Ofertas, Caixa, Promoções, Shopee, TikTok, Mercado Livre, Telegram, Gateways, Equipe, Taxas, Displays, Synology…); nomes corrigidos: 'Lista de Impressão', 'Saúde da Bateria', 'Visão financeira', 'Bot do Telegram'. A busca continua achando pelos nomes antigos.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,22 +31,22 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.759 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.760 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'"
   },
-  "site_source_base": "f0978862",
+  "site_source_base": "6d6f3181",
   "changed_files": [
-    "services/adminMenuFrequent.mjs",
     "layouts/AdminLayout.tsx",
-    "tmp-tests/admin-menu-frequent.test.mjs",
+    "tmp-tests/admin-menu-organization-static.test.mjs",
+    "tmp-tests/inventory-print-list-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.759-menu-mais-usados.md"
+    "docs/versoes/2026-11-02-v1.2.760-menu-organizacao.md"
   ],
   "validations": [
-    "admin-menu-frequent (4) aprovado",
+    "admin-menu-organization-static reescrito e aprovado (estava desatualizado e falhando)",
+    "inventory-print-list-static atualizado ('Lista de Impressão')",
     "testes do AdminLayout: nenhuma falha nova",
-    "tsc; npm run build",
-    "Playwright com dados reais (só leitura): Produtos, Dashboard, PDV, Modelos, Vendas, Gerador de Artes; 13 linhas visíveis no celular"
+    "tsc; npm run build"
   ]
 }

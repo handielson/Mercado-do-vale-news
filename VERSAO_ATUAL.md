@@ -1,3 +1,11 @@
+# v1.2.760-menu-organizacao
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.760-menu-organizacao` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-203916-v1260-menu-organizacao`. API: sem alteração.
+Menu lateral (parte 3): grupo "Sistema (técnico)", ícones distintos, nomes corrigidos.
+
+---
+
 # v1.2.759-menu-mais-usados
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.759-menu-mais-usados` (local; push da tag pendente).

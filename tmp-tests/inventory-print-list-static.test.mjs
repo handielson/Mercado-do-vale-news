@@ -26,7 +26,7 @@ assert.doesNotMatch(page, /adjustStockLocation|transferStockLocation|decrement_s
 
 assert.match(routes, /InventoryPrintListPage/, 'routes must lazy-load InventoryPrintListPage');
 assert.match(routes, /\/admin\/inventory\/print-list/, 'routes must expose print-list route');
-assert.match(layout, /\/admin\/inventory\/print-list[\s\S]*Lista de Impressao/, 'admin menu must link the print list');
+assert.match(layout, /\/admin\/inventory\/print-list[\s\S]*Lista de Impressão/, 'admin menu must link the print list');
 assert.match(estoque, /Criar lista de impressao para caixa\/separacao/, 'Estoque.md must track print list status');
 
 console.log('inventory print list static checks passed');
