@@ -1,3 +1,13 @@
+# v1.2.751-erp-mercado-livre-readonly
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.751-erp-mercado-livre-readonly`.
+Release VPS: `/var/www/mdv-site/releases/20261102-155832-mercado-livre-erp-readonly`. API: `--mercado-livre-only`.
+Bridge Mercado Livre de leitura para o ERP; gates de preço, estoque e publicação desligados. Nenhuma escrita ou alteração no sistema Mercado do Vale.
+
+Validações: suíte Mercado Livre (115 testes), checks de sintaxe, build e conferência pública pós-deploy.
+
+---
+
 # v1.2.750-cores-mapeadas-precos-familia
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.750-cores-mapeadas-precos-familia` (local; push da tag pendente).

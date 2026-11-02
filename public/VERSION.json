@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.750-cores-mapeadas-precos-familia",
+  "version": "v1.2.751-erp-mercado-livre-readonly",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.750-cores-mapeadas-precos-familia",
-  "release_vps": "/var/www/mdv-site/releases/20261102-153412-v1250-cores-precos",
+  "tag": "v1.2.751-erp-mercado-livre-readonly",
+  "release_vps": "/var/www/mdv-site/releases/20261102-155832-mercado-livre-erp-readonly",
   "api_release": {
     "status": "published",
-    "note": "--photo-intake-only (rotas de cores mapeadas) e --unit-read-privacy-only (proxy /smartphone-*)"
+    "note": "--mercado-livre-only; chave de leitura ERP configurada; gates de preço, estoque e publicação desligados"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Cadastro por foto: nova aba 'Cores mapeadas' — lista cada cor como vem na etiqueta e a cor do catálogo ligada a ela, com trocar e apagar (apagar pede confirmação; a próxima leitura volta a pedir a cor). Produtos: o card da família no modo Cartões mostrava Varejo/Revenda/Atacado R$ 0,00 (preço do pai, que não tem preço próprio); agora mostra a faixa das variações ou 'Sem preço'. Segurança: o /vps-proxy passa a exigir administrador também para /smartphone-* (pré-cadastro por foto, margens e cores respondiam sem login).",
+  "summary": "Bridge de leitura Mercado Livre para o ERP: autenticação por chave dedicada e consultas de status, anúncios, preço e estoque. Recursos de escrita de preço, estoque e publicação permanecem desligados.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -36,31 +36,19 @@
   },
   "site_source_base": "e803f89b",
   "changed_files": [
-    "components/products/photo-intake/ColorMappingEditor.tsx",
-    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
-    "services/smartphonePhotoIntakeService.ts",
-    "services/smartphonePhotoIntakeServer.cjs",
-    "types/smartphone-photo-intake.ts",
-    "components/products/ProductCard.tsx",
-    "components/products/ProductList.tsx",
-    "components/products/productCardStatus.js",
-    "scripts/deploy-unit-read-privacy.cjs",
-    "vps_server.cjs",
-    "vps_server.js",
-    "server.js",
-    "tmp-tests/unit-read-privacy.test.cjs",
-    "tmp-tests/photo-intake-color-mappings-static.test.mjs",
-    "tmp-tests/product-card-family-prices.test.mjs",
+    "deploy-vps-server-only.cjs",
+    "services/mercadoLivreServer.cjs",
+    "services/mercadoLivrePublication.cjs",
+    "services/mercadoLivreListingPrice.cjs",
+    "services/mercadoLivreListingStock.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.750-cores-mapeadas-precos-familia.md"
+    "docs/versoes/2026-11-02-v1.2.751-erp-mercado-livre-readonly.md"
   ],
   "validations": [
-    "photo-intake-color-mappings-static, product-card-family-prices (2) e unit-read-privacy (8) aprovados",
-    "56 testes da lista/card/foto/proxy: mesmas 8 falhas anteriores, nenhuma nova",
-    "tsc sem erros; node --check nos servidores",
-    "npm run build aprovado",
-    "Playwright iPhone 13: família 'R$ 1.299,00 a R$ 1.399,00'; aba Cores mapeadas lista, apagar pede confirmação e envia DELETE só da ligação escolhida; largura 390",
-    "antes: GET anônimo /smartphone-photo-intakes/:id pelo site passava da proteção (404 'não encontrado')"
+    "npm.cmd run test:mercado-livre (115 aprovados; integração estática aprovada)",
+    "node --check nos módulos Mercado Livre e servidores",
+    "npm.cmd run build",
+    "GET público /status, /mercado-livre/settings e versão do site; gates de escrita confirmados desligados"
   ]
 }
