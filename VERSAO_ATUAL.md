@@ -1,3 +1,11 @@
+# v1.2.758-menu-celular-espaco
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.758-menu-celular-espaco` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-201702-v1258-menu-celular`. API: sem alteração.
+Menu lateral no celular (parte 1): menu inteiro rola, topo e rodapé compactos — 12 linhas visíveis (antes 1).
+
+---
+
 # v1.2.757-custo-variacoes
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.757-custo-variacoes` (local; push da tag pendente).

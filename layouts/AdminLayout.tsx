@@ -334,17 +334,17 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       </header>
       {mobileMenuOpen && <div className="md:hidden fixed inset-0 z-40 bg-slate-950/60" onClick={closeMobileMenu} aria-hidden="true" data-admin-mobile-backdrop />}
       <aside className={cn(
-        "admin-sidebar-scroll fixed inset-y-0 left-0 w-[85vw] max-w-[320px] bg-slate-900 text-white p-6 space-y-4 md:sticky md:top-0 md:h-screen md:max-w-none md:flex-none md:translate-x-0 flex flex-col z-50 shadow-2xl overflow-y-auto transition-[width,padding,transform] duration-200",
+        "admin-sidebar-scroll fixed inset-y-0 left-0 w-[85vw] max-w-[320px] bg-slate-900 text-white px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] space-y-3 md:space-y-4 md:p-6 md:sticky md:top-0 md:h-screen md:max-w-none md:flex-none md:translate-x-0 flex flex-col z-50 shadow-2xl overflow-y-auto transition-[width,padding,transform] duration-200",
         sidebarCollapsed ? "md:w-[72px] md:p-3" : "md:w-64",
         mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
         DEV_MODE ? "md:top-10 md:h-[calc(100vh-2.5rem)]" : ""
       )}>
         <div className={cn("px-2 pb-2", sidebarCollapsed && "md:px-0")}>
-          <div className="mb-2 flex items-center justify-between md:hidden"><span className="text-xs font-bold uppercase tracking-widest text-slate-400">Menu</span><button type="button" onClick={closeMobileMenu} aria-label="Fechar menu" className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800"><X size={22} /></button></div>
+          <div className="mb-1 flex items-center justify-between md:hidden" data-mobile-menu-header><span className="text-xs font-bold uppercase tracking-widest text-slate-400">Menu</span><button type="button" onClick={closeMobileMenu} aria-label="Fechar menu" className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800"><X size={22} /></button></div>
           <button type="button" onClick={toggleSidebar} aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} className={cn("hidden md:flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white mb-3", sidebarCollapsed ? "mx-auto" : "ml-auto")}>
             {sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
           </button>
-          <div className={cn("flex items-center gap-3", sidebarCollapsed && "md:hidden")}>
+          <div className={cn("hidden md:flex items-center gap-3", sidebarCollapsed && "md:hidden")}>
             <Link to="/" target="_blank" title="Abrir site Mercado do Vale" className="block min-w-0 hover:opacity-80 transition-opacity">
               {settings.logo_dark || settings.logo_main ? (
                 <img src={settings.logo_dark || settings.logo_main} alt={settings.company_name} className="h-10 max-w-[78px] object-contain object-left" />
@@ -370,15 +370,14 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             <Link to="/" target="_blank" title="Abrir site Mercado do Vale" aria-label="Abrir site Mercado do Vale" className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 font-bold text-white">M</Link>
             <Link to="/loja-3d" target="_blank" title="Abrir site 3DMV" aria-label="Abrir site 3DMV" className="flex h-10 w-10 items-center justify-center rounded-lg border border-violet-300/70 text-violet-200"><Printer size={18} /></Link>
           </div>
-          <p className={cn("mt-1 text-[9px] font-medium text-violet-300/80", sidebarCollapsed && "md:hidden")}>Área reservada para a logomarca 3DMV</p>
-          <div className={cn("flex items-center gap-1.5 mt-2 mb-4", sidebarCollapsed && "md:hidden")}>
+          <div className={cn("hidden md:flex items-center gap-1.5 mt-2 mb-4", sidebarCollapsed && "md:hidden")}>
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
               Painel: {customer?.customer_type || 'ADMIN'}
             </p>
           </div>
           
-          <div className={cn("relative mt-2", sidebarCollapsed && "md:hidden")}>
+          <div className={cn("relative md:mt-2", sidebarCollapsed && "md:hidden")}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input 
               type="text" 
@@ -389,19 +388,19 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
               spellCheck={false}
               value={search}
               onChange={handleMenuSearchChange}
-              className="w-full bg-slate-800 border border-slate-700 text-white placeholder-slate-400 text-xs rounded-lg py-2 pl-9 pr-3 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+              className="w-full bg-slate-800 border border-slate-700 text-white placeholder-slate-400 text-base md:text-xs rounded-lg py-2.5 md:py-2 pl-9 pr-3 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
             />
           </div>
         </div>
 
-        <nav aria-label="Menu administrativo" className={cn("admin-sidebar-scroll space-y-1 flex-1 overflow-y-auto pr-2 -mr-2 pb-4", sidebarCollapsed && "md:pr-0 md:mr-0")}>
+        <nav aria-label="Menu administrativo" className={cn("admin-sidebar-scroll space-y-0.5 md:space-y-1 flex-none md:flex-1 md:overflow-y-auto md:pr-2 md:-mr-2 pb-2 md:pb-4", sidebarCollapsed && "md:pr-0 md:mr-0")}>
           {filteredGroups.length === 0 ? (
             <div className="text-center py-6 text-slate-500 text-xs">
               Nenhuma página encontrada.
             </div>
           ) : (
             filteredGroups.map((group, groupIndex) => (
-              <div key={groupIndex} className={cn("mb-4", sidebarCollapsed && "md:mb-2 md:border-t md:border-slate-800 md:pt-2")}>
+              <div key={groupIndex} className={cn("mb-0.5 md:mb-4", sidebarCollapsed && "md:mb-2 md:border-t md:border-slate-800 md:pt-2")}>
                 <button type="button" onClick={() => setOpenMobileGroup(current => current === group.title ? null : group.title)} aria-expanded={!!search.trim() || openMobileGroup === group.title} className="md:hidden flex min-h-[44px] w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold uppercase tracking-widest text-slate-300 hover:bg-slate-800"><span className="min-w-0">{group.title}</span><ChevronDown size={16} className={cn("shrink-0 transition-transform", (search.trim() || openMobileGroup === group.title) && "rotate-180")} /></button>
                 <div className={cn("hidden md:block pt-2 pb-2 px-3 text-[10px] font-bold uppercase tracking-widest", group.title === 'Loja 3D' ? 'text-violet-200 bg-violet-500/10 rounded-lg border-l-2 border-violet-400' : 'text-slate-400 bg-transparent', sidebarCollapsed && "md:hidden")}>
                   {group.title}
@@ -431,7 +430,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         {appVersion?.version && (
           <div
             title={appVersionTooltip}
-            className={cn("mx-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-[10px] text-slate-400", sidebarCollapsed && "md:hidden")}
+            className={cn("hidden md:block mx-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-[10px] text-slate-400", sidebarCollapsed && "md:hidden")}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold uppercase tracking-widest text-slate-500">Versao</span>
@@ -446,8 +445,13 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         )}
 
         {user && (
-          <div className="pt-4 border-t border-slate-800">
-            <div className={cn("flex items-center gap-3 mb-4 px-2", sidebarCollapsed && "md:justify-center md:px-0")}>
+          <div className="pt-3 md:pt-4 border-t border-slate-800" data-menu-footer>
+            <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 text-xs md:hidden">
+              <Link to="/" target="_blank" className="font-semibold text-blue-300">Abrir site</Link>
+              <Link to="/loja-3d" target="_blank" className="font-semibold text-violet-300">Abrir 3DMV</Link>
+              {appVersion?.version && <span className="ml-auto font-mono text-[10px] text-slate-500" title={appVersionTooltip}>{appVersion.version.replace(/^(v\d+\.\d+\.\d+).*/, '$1')}</span>}
+            </div>
+            <div className={cn("flex items-center gap-3 mb-1 md:mb-4 px-2", sidebarCollapsed && "md:justify-center md:px-0")}>
               <div className={cn("w-9 h-9 rounded-xl bg-gradient-to-br flex items-center justify-center text-xs font-bold shadow-lg", isPrint3dArea ? "from-violet-500 to-violet-700" : "from-blue-500 to-blue-700")}>
                 {customer?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
               </div>

@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.757-custo-variacoes",
+  "version": "v1.2.758-menu-celular-espaco",
   "date": "2026-11-02",
   "status": "published",
   "branch": "main",
-  "tag": "v1.2.757-custo-variacoes",
-  "release_vps": "/var/www/mdv-site/releases/20261102-200918-v1257-custo-variacoes",
+  "tag": "v1.2.758-menu-celular-espaco",
+  "release_vps": "/var/www/mdv-site/releases/20261102-201702-v1258-menu-celular",
   "api_release": {
     "status": "sem alteração",
     "note": "release só de frontend"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Produto pai → 'Variações cadastradas': o custo aparecia cru ('170000.00') porque o servidor devolve centavos como texto e a tela só formatava número. Agora mostra 'R$ 1.700,00'; custo zero aparece como 'Sem custo' em amarelo. O valor salvo não mudou.",
+  "summary": "Menu lateral (parte 1): no celular o menu inteiro rola (antes a lista rolava numa caixinha de 214px e cabia 1 item); topo só com 'Menu', fechar e busca; sai o texto 'Área reservada para a logomarca 3DMV' e o 'Painel: ADMIN' do celular; versão vira uma linha pequena no rodapé, junto com 'Abrir site' e 'Abrir 3DMV'. Cabem 12 linhas na tela. Computador igual (só sem o texto da logomarca).",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -31,19 +31,22 @@
     "version_code": 9
   },
   "pending_deployments": {
-    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 e v1.2.757 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
+    "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.758 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'"
   },
-  "site_source_base": "7de1cf44",
+  "site_source_base": "fd8aaa23",
   "changed_files": [
-    "components/products/ProductFamilyInheritance.tsx",
-    "tmp-tests/product-family-variant-cost-display.test.mjs",
+    "layouts/AdminLayout.tsx",
+    "tmp-tests/admin-menu-mobile-part1-static.test.mjs",
+    "tmp-tests/admin-3dmv-brand-shortcut-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.757-custo-variacoes.md"
+    "docs/versoes/2026-11-02-v1.2.758-menu-celular-espaco.md"
   ],
   "validations": [
-    "product-family-variant-cost-display aprovado",
-    "tsc; npm run build"
+    "admin-menu-mobile-part1-static aprovado; admin-3dmv-brand-shortcut-static atualizado (texto removido a pedido)",
+    "testes do AdminLayout: nenhuma falha nova",
+    "tsc; npm run build",
+    "Playwright com dados reais (só leitura), 390x664: lista começa em 126px (antes 239), 12 linhas visíveis (antes 1); 1440px igual"
   ]
 }
