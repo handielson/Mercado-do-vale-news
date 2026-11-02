@@ -1,3 +1,11 @@
+# v1.2.757-custo-variacoes
+
+Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.757-custo-variacoes` (local; push da tag pendente).
+Release VPS: `/var/www/mdv-site/releases/20261102-200918-v1257-custo-variacoes`. API: sem alteração.
+"Variações cadastradas" mostra o custo em reais ("R$ 1.700,00" em vez de "170000.00"); custo zero aparece como "Sem custo".
+
+---
+
 # v1.2.756-contador-sem-rolagem
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.756-contador-sem-rolagem` (local; push da tag pendente).

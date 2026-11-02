@@ -21,7 +21,8 @@ type Plan = { fingerprint: string; changed_count: number; changes: Array<{ child
 
 function display(value: unknown, field?: string) {
   if (field === 'custom_fields') return (value as any)?.inherit_parent_cost === true ? 'Herdar custo do pai' : 'Custo próprio';
-  if (field === 'price_cost' && typeof value === 'number') return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
+  // O servidor devolve o custo em centavos, às vezes como texto ("170000.00" = R$ 1.700,00).
+  if (field === 'price_cost' && value !== null && value !== '' && Number.isFinite(Number(value))) return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) / 100);
   if (value == null || value === '') return 'vazio';
   const text = typeof value === 'string' ? value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : JSON.stringify(value);
   return text.length > 120 ? `${text.slice(0, 120)}…` : text;
@@ -108,7 +109,7 @@ export const ProductFamilyInheritance: React.FC<{ parent: Product }> = ({ parent
       <thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">Variação / SKU</th><th className="p-3">Custo</th><th className="p-3">Origem do custo</th><th className="p-3"></th></tr></thead>
       <tbody>{children.map(child => <tr key={child.id} className="border-t border-slate-100">
         <td className="p-3"><div className="font-semibold text-slate-800">{child.specs?.color || child.name}</div><div className="text-slate-500">{child.sku}</div></td>
-        <td className="p-3 whitespace-nowrap">{child.price_cost == null ? 'Não informado' : display(child.price_cost, 'price_cost')}</td>
+        <td className="p-3 whitespace-nowrap" data-variant-cost>{child.price_cost == null || child.price_cost === '' ? 'Não informado' : Number(child.price_cost) > 0 ? display(child.price_cost, 'price_cost') : <span className="font-semibold text-amber-700">Sem custo</span>}</td>
         <td className="p-3 text-slate-600">{child.custom_fields?.inherit_parent_cost === true ? 'Produto pai' : 'Próprio'}</td>
         <td className="p-3 text-right"><button type="button" disabled={busy} onClick={() => openVariation(child)} className="rounded-lg border border-slate-200 px-3 py-2 font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50">Editar</button></td>
       </tr>)}</tbody>
