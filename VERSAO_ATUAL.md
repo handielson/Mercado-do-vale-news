@@ -1,3 +1,10 @@
+# v1.2.778-bot-celulares-baratos-acessorio
+
+Data: 03/11/2026. Status: **pronta, publicação no n8n pendente**. Branch: `main`.
+Bot WhatsApp: celulares baratos/promoções viram lista de celulares do mais barato; acessório na lista não trava em "memória e cor".
+
+---
+
 # v1.2.770-pdv-desconto-visivel
 
 Data: 03/11/2026. Status: **pronta, não publicada**. Branch: `main`.

@@ -1,26 +1,26 @@
 {
-  "version": "v1.2.770-pdv-desconto-visivel",
+  "version": "v1.2.778-bot-celulares-baratos-acessorio",
   "date": "2026-11-03",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.770-pdv-desconto-visivel",
+  "tag": "v1.2.778-bot-celulares-baratos-acessorio",
   "release_vps": "/var/www/mdv-site/releases/20261103-232452-ml-billing-error-diagnostic",
   "api_release": {
     "status": "sem alteração",
-    "note": "release só de frontend; publicação pendente"
+    "note": "só n8n"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "PDV: 'Desconto da venda' sempre visível na seção Pagamento (antes escondido numa linha fechada), em R$ ou % com atalhos 5/10/15%, mostrando 'De R$ X por R$ Y'. Vale para Pix, dinheiro e cartão. Travado quando já há pagamento lançado ou cupom aplicado; nunca passa do total.",
+  "summary": "Bot WhatsApp (n8n): 'celulares em conta/mais baratos' e 'quais as promoções' (sem produto) passam a listar a categoria Celulares do mais barato (até 8, título 'Celulares mais em conta') em vez de busca por texto (que mandava uma capa ou nada); com um acessório na lista, escolher/pedir foto não cai mais em 'Essa combinação de memória e cor não está disponível' em loop. Só 3 Code nodes; grafo igual.",
   "n8n_release": {
-    "status": "published",
+    "status": "pending",
     "workflow_id": "SkrkB4vyKVDnQ68t",
     "nodes": [
-      "Pagamento - Politica",
-      "Agente Geral - Atendimento",
-      "Agente Inicial - Classificador"
+      "Vendas - Preparar Busca",
+      "Vendas - Contexto Produtos",
+      "Vendas - Verificar Pos Lista"
     ],
-    "patch": "tmp-tests/n8n-payjoy-link-entry-patch.cjs (payjoy-link-entry-v1)",
-    "target_sha256": "7d04055d8645a64c8ec399fdbf9bf30f174a52cb397663e75542c73c41888091"
+    "before_sha256": "7d04055d8645a64c8ec399fdbf9bf30f174a52cb397663e75542c73c41888091",
+    "target_sha256": "36113bfc01e2c49d36a737727a53da4fefc65f219c480d73d67310add5801945"
   },
   "gestao_mdv_android": {
     "version_name": "0.13.9",
@@ -35,21 +35,18 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.770-pdv-desconto-visivel: pronta, não publicada"
   },
-  "site_source_base": "99b26544",
+  "site_source_base": "7e2de5be",
   "changed_files": [
-    "components/pdv/SaleDiscountControl.tsx",
-    "components/pdv/saleDiscount.js",
-    "components/pdv/PaymentSection.tsx",
-    "pages/pdv/PDVPage.tsx",
-    "tmp-tests/pdv-sale-discount.test.mjs",
+    "scripts/n8n-cheapest-promo-accessory-fix.cjs",
+    "scripts/deploy-n8n-cheapest-promo-accessory-fix.cjs",
+    "tmp-tests/n8n-cheapest-promo-accessory-fix.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-03-v1.2.770-pdv-desconto-visivel.md"
+    "docs/versoes/2026-11-03-v1.2.778-bot-celulares-baratos-acessorio.md"
   ],
   "validations": [
-    "pdv-sale-discount (3) aprovado",
-    "44 testes do PDV: mesmas 5 falhas anteriores",
-    "tsc; npm run build",
-    "Playwright com dados reais (só leitura): item de R$ 29,90 + 10% → total R$ 26,91"
+    "n8n-cheapest-promo-accessory-fix (6) aprovado no fluxo atual e no candidato",
+    "regressão de vendas n8n: 128/128 no atual e 128/128 no candidato",
+    "conversa real reproduzida com dados de teste"
   ]
 }
