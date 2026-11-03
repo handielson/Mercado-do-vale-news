@@ -3,7 +3,7 @@ import { print3dPublicMeasurementSpecs } from '@/utils/print3dMeasurements.js';
 import { compareMemoryConfigurations } from '@/utils/productMemoryOrder.js';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers, Pencil, FileImage, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers, Pencil, FileImage, ChevronRight, Plus } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { useVpsAuth } from '@/contexts/VpsAuthContext';
@@ -1538,9 +1538,14 @@ export const PublicProductPage: React.FC = () => {
                                                             ? 'border-slate-950 bg-white text-slate-950 ring-2 ring-slate-950 shadow-sm'
                                                             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:bg-white';
 
+                                                    // admin-variant-add-units-v1: atalho do admin para incluir mais pecas desta variacao.
+                                                    const addUnitsUrl = isAdmin && sib.id
+                                                        ? `/admin/products/${encodeURIComponent(sib.id)}/${encodeURIComponent(getPublicProductRouteTarget(sib))}?tab=inventory&addUnit=1`
+                                                        : '';
+
                                                     return (
+                                                        <div key={sib.id} className="inline-flex items-stretch gap-1">
                                                         <button
-                                                            key={sib.id}
                                                             type="button"
                                                             onClick={() => {
                                                                 if (isOutOfStock) return;
@@ -1564,6 +1569,18 @@ export const PublicProductPage: React.FC = () => {
                                                                 <span className="pointer-events-none absolute inset-x-[-20%] top-1/2 h-px -rotate-12 bg-slate-400/60" />
                                                             )}
                                                         </button>
+                                                        {addUnitsUrl && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => navigate(addUnitsUrl)}
+                                                                title={`Incluir mais peças: ${group.memoryLabel} ${buttonLabel}`}
+                                                                aria-label={`Incluir mais peças de ${group.memoryLabel} ${buttonLabel}`}
+                                                                className="inline-flex min-h-11 w-9 items-center justify-center rounded-lg border border-amber-300 bg-amber-100 text-amber-900 hover:border-amber-400 hover:bg-amber-200"
+                                                            >
+                                                                <Plus size={16} />
+                                                            </button>
+                                                        )}
+                                                        </div>
                                                     );
                                                 })}
                                             </div>

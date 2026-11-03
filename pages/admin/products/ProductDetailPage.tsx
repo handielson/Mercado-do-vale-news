@@ -107,8 +107,11 @@ export const ProductDetailPage: React.FC = () => {
     const location = useLocation();
     const print3dEntry = new URLSearchParams(location.search).get('print3d') === '1';
 
-    const [activeTab, setActiveTab] = useState<TabType>('product');
-    useEffect(() => { setActiveTab('product'); }, [id]);
+    // admin-variant-add-units-v1: ?tab=inventory&addUnit=1 abre direto "Adicionar Unidade" (atalho da loja).
+    const requestedTab = new URLSearchParams(location.search).get('tab') === 'inventory' ? 'inventory' : 'product';
+    const requestedAddUnit = new URLSearchParams(location.search).get('addUnit') === '1';
+    const [activeTab, setActiveTab] = useState<TabType>(requestedTab);
+    useEffect(() => { setActiveTab(requestedTab); }, [id, requestedTab]);
     const selectTab = (nextTab: TabType) => {
         setActiveTab(nextTab);
         window.requestAnimationFrame(() => document.getElementById('product-tab-menu')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
@@ -121,7 +124,8 @@ export const ProductDetailPage: React.FC = () => {
     const [isLoadingProduct, setIsLoadingProduct] = useState(false);
     const [isLoadingUnits, setIsLoadingUnits] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [showUnitForm, setShowUnitForm] = useState(false);
+    const [showUnitForm, setShowUnitForm] = useState(requestedAddUnit);
+    useEffect(() => { if (requestedAddUnit) setShowUnitForm(true); }, [id, requestedAddUnit]);
     const [autoResponderTags, setAutoResponderTags] = useState<AutoResponderTag[]>([]);
     const [productTagIds, setProductTagIds] = useState<number[]>([]);
     const [isLoadingTags, setIsLoadingTags] = useState(false);
