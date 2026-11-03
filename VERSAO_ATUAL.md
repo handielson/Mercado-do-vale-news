@@ -2332,8 +2332,9 @@ Nota operacional: o comando de inspeção `--help` não é aceito por `deploy-vp
 
 # v1.2.767-ml-payment-details-get
 
-Data: 03/11/2026. Status: pendente. Branch: `main`. Tag: `v1.2.767-ml-payment-details-get`.
-Release VPS: `/var/www/mdv-site/releases/20261103-200702-payment-details-get`. API: `--mercado-livre-only`.
+Data: 03/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.767-ml-payment-details-get`.
+Release VPS: `/var/www/mdv-site/releases/20261103-201000-payment-details-get-record`. API: publicada com `--mercado-livre-only`; escrita de anúncio, preço e estoque desabilitada.
 Mercado Livre: consulta GET autenticada dos detalhes de pagamento Mercado Pago, restrita a pedidos do vendedor conectado e a campos financeiros permitidos; sem alterações em pedidos, anúncios, preço ou estoque.
 Validação: `node tmp-tests/mercado-livre-erp-payment-details.test.cjs` (3/3).
+
 

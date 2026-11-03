@@ -1,15 +1,15 @@
 {
   "version": "v1.2.767-ml-payment-details-get",
   "date": "2026-11-03",
-  "status": "pending",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.767-ml-payment-details-get",
-  "release_vps": "/var/www/mdv-site/releases/20261103-200702-payment-details-get",
+  "release_vps": "/var/www/mdv-site/releases/20261103-201000-payment-details-get-record",
   "api_release": {
-    "status": "pending",
+    "status": "published",
     "mode": "--mercado-livre-only",
-    "backup": "pendente",
-    "note": "Publicar somente GET autenticado de detalhes de pagamentos vinculados ao vendedor."
+    "backup": "/var/www/mdv-api/backups/mercado-livre-1793736520380",
+    "note": "GET somente leitura publicado; após reinício: API online, escrita de publicação, preço e estoque desabilitada."
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "API: adiciona consulta somente leitura dos detalhes de pagamento Mercado Pago para pedidos do Mercado Livre, validando vendedor e permitindo apenas campos financeiros necessários ao ERP.",
@@ -46,6 +46,12 @@
   ],
   "validations": [
     "node tmp-tests/mercado-livre-erp-payment-details.test.cjs (3/3)",
-    "node --check services/mercadoLivreServer.cjs"
+    "node --check services/mercadoLivreServer.cjs",
+    "node --check vps_server.js",
+    "node --check vps_server.cjs",
+    "npm.cmd run build; guards n8n e Supabase passaram",
+    "produção: API /status HTTP 200, mysql.ok=true",
+    "produção: GET sem chave HTTP 401",
+    "produção: site HTTP 200; VERSION.json confere"
   ]
 }
