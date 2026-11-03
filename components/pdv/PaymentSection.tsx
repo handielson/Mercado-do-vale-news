@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import InstallmentCalculator from './InstallmentCalculator';
 import { CurrencyInput } from '../ui/CurrencyInput';
+import { SaleDiscountControl } from './SaleDiscountControl';
 import { getBestCreditFeeByInstallment } from '../../utils/paymentFeeCalculations';
 
 interface PaymentSectionProps {
@@ -38,6 +39,10 @@ interface PaymentSectionProps {
     // Props opcionais para desconto promocional
     promotionalDiscount?: number;
     onPromotionalDiscountChange?: (discount: number) => void;
+    /** Total antes do desconto da venda (itens + entrega do cliente), em centavos. */
+    discountBase?: number;
+    /** Motivo de o desconto estar travado (pagamento lançado, cupom). */
+    discountLockedReason?: string | null;
     // Props opcionais para desconto extra final (aplicado por ultimo)
     finalAdjustmentDiscount?: number;
     maxFinalAdjustmentDiscount?: number;
@@ -71,6 +76,8 @@ export default function PaymentSection({
     onSelectInstallment,
     promotionalDiscount,
     onPromotionalDiscountChange,
+    discountBase,
+    discountLockedReason,
     finalAdjustmentDiscount,
     maxFinalAdjustmentDiscount,
     onFinalAdjustmentDiscountChange,
@@ -290,6 +297,11 @@ export default function PaymentSection({
                 Pagamento
             </h3>
 
+            {onPromotionalDiscountChange && (
+                <SaleDiscountControl base={discountBase ?? (total + (promotionalDiscount || 0))} value={promotionalDiscount || 0}
+                    onChange={onPromotionalDiscountChange} lockedReason={discountLockedReason} />
+            )}
+
             <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
                 <p className="text-sm text-slate-600">Total da venda</p>
                 <p className="text-3xl font-bold text-blue-800">{formatCurrency(total)}</p>
@@ -300,19 +312,6 @@ export default function PaymentSection({
                     <div><span className="block text-slate-600">Troco em dinheiro</span><strong className="text-green-700">{formatCurrency(change)}</strong></div>
                 </div>
                 {summary.nonCashExcess > 0 && <p role="alert" className="mt-3 text-sm font-semibold text-red-700">Os pagamentos sem dinheiro excedem a venda em {formatCurrency(summary.nonCashExcess)}. Remova o lançamento e corrija o valor.</p>}
-                {onPromotionalDiscountChange && (
-                    <details className="mt-4 border-t border-blue-200 pt-3">
-                        <summary className="cursor-pointer text-sm font-medium text-blue-900">
-                            Desconto da venda{promotionalDiscount ? ` · ${formatCurrency(promotionalDiscount)}` : ''}
-                        </summary>
-                        <div className="mt-3 flex items-end gap-2">
-                            <CurrencyInput label="Desconto promocional" value={promotionalDiscount || 0}
-                                onChange={onPromotionalDiscountChange} />
-                            <button type="button" onClick={() => onPromotionalDiscountChange(0)}
-                                className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Limpar</button>
-                        </div>
-                    </details>
-                )}
             </div>
 
             {/* Pagamentos Adicionados */}

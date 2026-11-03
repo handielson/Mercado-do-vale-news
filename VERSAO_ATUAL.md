@@ -1,3 +1,10 @@
+# v1.2.770-pdv-desconto-visivel
+
+Data: 03/11/2026. Status: **pronta, não publicada**. Branch: `main`.
+PDV: "Desconto da venda" sempre visível, em R$ ou %, para qualquer forma de pagamento.
+
+---
+
 # v1.2.769-ml-billing-error-diagnostic
 
 Data: 03/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.769-ml-billing-error-diagnostic`.

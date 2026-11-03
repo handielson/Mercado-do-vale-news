@@ -50,6 +50,7 @@ import {
 } from '../../utils/pdvSaleFinalizationLog';
 import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 import { useCashSession } from '../../hooks/useCashSession';
+import { discountLockReason } from '../../components/pdv/saleDiscount.js';
 import CashOpeningModal from '../../components/pdv/CashOpeningModal';
 
 type FinalizeStep = {
@@ -1627,6 +1628,8 @@ export default function PDVPage() {
                             onSelectInstallment={handleSelectInstallment}
                             promotionalDiscount={promotionalDiscount}
                             onPromotionalDiscountChange={setPromotionalDiscount}
+                            discountBase={Math.max(0, itemsTotal + deliveryCostCustomer)}
+                            discountLockedReason={discountLockReason({ payments, couponCode: appliedCoupon?.code || null })}
                             finalAdjustmentDiscount={appliedFinalAdjustmentDiscount}
                             maxFinalAdjustmentDiscount={maxFinalAdjustmentDiscount}
                             selectedCustomer={selectedCustomer}
