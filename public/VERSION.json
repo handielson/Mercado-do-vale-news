@@ -1,18 +1,18 @@
 {
-  "version": "v1.2.766-vendas-ordem-historico",
+  "version": "v1.2.767-ml-payment-details-get",
   "date": "2026-11-03",
-  "status": "published",
+  "status": "pending",
   "branch": "main",
-  "tag": "v1.2.766-vendas-ordem-historico",
-  "release_vps": "/var/www/mdv-site/releases/20261103-113718-v1266-vendas-ordem",
+  "tag": "v1.2.767-ml-payment-details-get",
+  "release_vps": "/var/www/mdv-site/releases/20261103-200702-payment-details-get",
   "api_release": {
-    "status": "published",
-    "mode": "--sales-marketplaces-only",
-    "backup": "/var/www/mdv-api/backups/sales-marketplaces-1793716603306",
-    "note": "carga completa refeita: Shopee MV 1263 pedidos desde 02/11/2025 (antes 500, desde 23/06/2026)"
+    "status": "pending",
+    "mode": "--mercado-livre-only",
+    "backup": "pendente",
+    "note": "Publicar somente GET autenticado de detalhes de pagamentos vinculados ao vendedor."
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Vendas: lista ordenada pelo instante real da venda (antes comparava o texto da data e misturava PDV, Shopee e Mercado Livre, que usam fusos/formatos diferentes). Histórico do cache de marketplace ampliado: carga completa de 1 ano até 3000 pedidos por canal (a Shopee MV parava em 500, só até junho), revisão de 60 dias até 1000.",
+  "summary": "API: adiciona consulta somente leitura dos detalhes de pagamento Mercado Pago para pedidos do Mercado Livre, validando vendedor e permitindo apenas campos financeiros necessários ao ERP.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -38,21 +38,14 @@
   },
   "site_source_base": "f36a5926",
   "changed_files": [
-    "pages/admin/sales/SalesPage.tsx",
-    "services/adminMarketplaceSalesService.ts",
-    "services/marketplaceSalesStore.cjs",
     "services/mercadoLivreServer.cjs",
-    "vps_server.js",
-    "vps_server.cjs",
-    "tmp-tests/marketplace-sales-store.test.cjs",
+    "tmp-tests/mercado-livre-erp-payment-details.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-03-v1.2.766-vendas-ordem-historico.md"
+    "docs/versoes/2026-11-03-v1.2.767-ml-payment-details-get.md"
   ],
   "validations": [
-    "marketplace-sales-store.test.cjs 5/5 (limites e ordenação)",
-    "marketplace-sales-cache-and-stock-match-static ok",
-    "testes Mercado Livre (core, print-agent, erp-read-key, stock-read, price) 57/57 e contrato estático ok",
-    "produção: lista com 2100 linhas, ordem correta entre PDV/Shopee/Mercado Livre/TikTok, delta em 497 ms"
+    "node tmp-tests/mercado-livre-erp-payment-details.test.cjs (3/3)",
+    "node --check services/mercadoLivreServer.cjs"
   ]
 }

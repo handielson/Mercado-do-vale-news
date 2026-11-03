@@ -2329,3 +2329,11 @@ Validações: `npm.cmd run test:mercado-livre` (118 aprovados; contrato estátic
 Nota operacional: o comando de inspeção `--help` não é aceito por `deploy-vps-server-only.cjs` e executou o deploy padrão da API. O script forçou os flags de escrita de estoque, preço e publicação a `0`; o log confirmou migração fiscal da empresa aplicada/validada e sincronização do ambiente remoto. Nenhum dado comercial ou estoque foi alterado.
 
 ---
+
+# v1.2.767-ml-payment-details-get
+
+Data: 03/11/2026. Status: pendente. Branch: `main`. Tag: `v1.2.767-ml-payment-details-get`.
+Release VPS: `/var/www/mdv-site/releases/20261103-200702-payment-details-get`. API: `--mercado-livre-only`.
+Mercado Livre: consulta GET autenticada dos detalhes de pagamento Mercado Pago, restrita a pedidos do vendedor conectado e a campos financeiros permitidos; sem alterações em pedidos, anúncios, preço ou estoque.
+Validação: `node tmp-tests/mercado-livre-erp-payment-details.test.cjs` (3/3).
+

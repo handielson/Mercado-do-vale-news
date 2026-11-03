@@ -3,6 +3,7 @@ const { createListingPriceHandlers } = require('./mercadoLivreListingPrice.cjs')
 const { createListingStockHandlers } = require('./mercadoLivreListingStock.cjs');
 
 const ML_API_ORIGIN = 'https://api.mercadolibre.com';
+const MERCADO_PAGO_API_ORIGIN = 'https://api.mercadopago.com';
 const ML_AUTH_ORIGIN = 'https://auth.mercadolivre.com.br';
 const DEFAULT_REDIRECT_URL = 'https://www.mercadodovale.com.br/api/mercado-livre/oauth/callback';
 const ERP_STOCK_WRITE_CAPABILITIES = Object.freeze([
@@ -15,6 +16,7 @@ const ERP_PUBLICATION_CAPABILITIES = Object.freeze([
   'listing_publish_preview_v1',
   'listing_publish_v1',
 ]);
+const ERP_ORDER_PAYMENT_DETAILS_READ_AVAILABLE = true;
 // The dedicated standard-price endpoint is unavailable; standard offer prices
 // are updated through a price-only PUT /items request. The price service blocks
 // automated pricing, promotions, quantity pricing and unsupported channels.
@@ -472,6 +474,120 @@ async function loadMercadoLivreOrderDetailForErp(pool, orderIdValue) {
     items: [mercadoLivreOrderToErpReview(order)] };
 }
 
+function erpPaymentMoney(value, label, allowNegative = false) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    throw Object.assign(new Error(`Valor de ${label} do pagamento Mercado Livre inválido.`), { statusCode: 502 });
+  }
+  const normalized = String(value);
+  if (!/^-?\d{1,15}(?:\.\d{1,6})?$/.test(normalized) ||
+      (!allowNegative && normalized.startsWith('-'))) {
+    throw Object.assign(new Error(`Valor de ${label} do pagamento Mercado Livre inválido.`), { statusCode: 502 });
+  }
+  return normalized;
+}
+
+function erpPaymentDate(value, label) {
+  if (value == null || value === '') return '';
+  if (typeof value !== 'string' || value.length > 40 ||
+      !/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) || Number.isNaN(Date.parse(value))) {
+    throw Object.assign(new Error(`Data de ${label} do pagamento Mercado Livre inválida.`), { statusCode: 502 });
+  }
+  return value;
+}
+
+function mercadoLivrePaymentDetailToErp(payment, expectedId, currencyFallback) {
+  if (!payment || typeof payment !== 'object' || Array.isArray(payment) ||
+      String(payment.id || '') !== expectedId) {
+    throw Object.assign(new Error('O detalhe de pagamento não corresponde ao pedido solicitado.'), { statusCode: 502 });
+  }
+  const status = String(payment.status || '');
+  const currency = String(payment.currency_id || currencyFallback || '');
+  if (!/^[A-Za-z0-9_-]{1,50}$/.test(status) || !/^[A-Z]{3}$/.test(currency)) {
+    throw Object.assign(new Error('Identificação do detalhe de pagamento inválida.'), { statusCode: 502 });
+  }
+  const fees = payment.fee_details ?? [];
+  if (!Array.isArray(fees) || fees.length > 20) {
+    throw Object.assign(new Error('Lista de tarifas do pagamento inválida.'), { statusCode: 502 });
+  }
+  const feeDetails = fees.map(fee => {
+    const type = String(fee?.type || '');
+    const feePayer = String(fee?.fee_payer || '');
+    if (!fee || typeof fee !== 'object' || Array.isArray(fee) ||
+        !/^[A-Za-z][A-Za-z0-9_-]{0,49}$/.test(type) ||
+        (feePayer && !/^[A-Za-z][A-Za-z0-9_-]{0,49}$/.test(feePayer))) {
+      throw Object.assign(new Error('Tarifa do pagamento contém valores inválidos.'), { statusCode: 502 });
+    }
+    return { type, fee_payer: feePayer,
+      amount: erpPaymentMoney(fee.amount, 'tarifa', true) };
+  });
+  const transaction = payment.transaction_details && typeof payment.transaction_details === 'object'
+    ? payment.transaction_details : {};
+  return {
+    payment_id: expectedId,
+    status,
+    currency,
+    status_detail: String(payment.status_detail || '').slice(0, 80),
+    payment_method_id: String(payment.payment_method_id || '').slice(0, 50),
+    payment_type_id: String(payment.payment_type_id || '').slice(0, 50),
+    transaction_amount: erpPaymentMoney(payment.transaction_amount, 'valor da transação'),
+    total_paid_amount: erpPaymentMoney(payment.transaction_details?.total_paid_amount ?? payment.total_paid_amount, 'valor pago'),
+    transaction_amount_refunded: erpPaymentMoney(payment.transaction_amount_refunded, 'valor reembolsado'),
+    coupon_amount: erpPaymentMoney(payment.coupon_amount, 'cupom'),
+    taxes_amount: erpPaymentMoney(payment.taxes_amount, 'impostos'),
+    shipping_amount: erpPaymentMoney(payment.shipping_amount ?? payment.shipping_cost, 'envio'),
+    marketplace_fee: erpPaymentMoney(payment.marketplace_fee, 'tarifa do marketplace', true),
+    net_received_amount: erpPaymentMoney(transaction.net_received_amount ?? payment.net_received_amount, 'valor líquido'),
+    overpaid_amount: erpPaymentMoney(transaction.overpaid_amount ?? payment.overpaid_amount, 'valor excedente'),
+    money_release_date: erpPaymentDate(payment.money_release_date, 'liberação'),
+    date_approved: erpPaymentDate(payment.date_approved, 'aprovação'),
+    date_last_updated: erpPaymentDate(payment.date_last_updated, 'última alteração'),
+    fee_details: feeDetails,
+  };
+}
+
+async function loadMercadoLivreOrderPaymentDetailsForErp(pool, orderIdValue) {
+  const orderId = String(orderIdValue ?? '');
+  if (!/^\d{1,30}$/.test(orderId)) {
+    throw Object.assign(new Error('Identificação do pedido inválida.'), { statusCode: 400 });
+  }
+  const settings = await loadSettings(pool);
+  const sellerId = String(settings.user_id || '').trim();
+  if (!/^\d{1,30}$/.test(sellerId)) {
+    throw Object.assign(new Error('Conecte a conta do Mercado Livre.'), { statusCode: 409 });
+  }
+  const order = await (await mlRequest(pool, `/orders/${orderId}`)).json();
+  if (String(order?.id || '') !== orderId || String(order?.seller?.id || '') !== sellerId) {
+    throw Object.assign(new Error('Pedido não encontrado para o vendedor conectado.'), { statusCode: 404 });
+  }
+  const orderPayments = order.payments == null ? [] : order.payments;
+  if (!Array.isArray(orderPayments) || orderPayments.length > 20) {
+    throw Object.assign(new Error('Lista de pagamentos do pedido Mercado Livre inválida.'), { statusCode: 502 });
+  }
+  const paymentIds = orderPayments.map(row => String(row?.id || ''));
+  if (paymentIds.some(id => !/^\d{1,30}$/.test(id)) || new Set(paymentIds).size !== paymentIds.length) {
+    throw Object.assign(new Error('Identificação de pagamento no pedido Mercado Livre inválida.'), { statusCode: 502 });
+  }
+  const payments = [];
+  for (let start = 0; start < paymentIds.length; start += 5) {
+    const batch = paymentIds.slice(start, start + 5);
+    const details = await Promise.all(batch.map(async paymentId => {
+      const detail = await (await mlRequest(pool, `/v1/payments/${paymentId}`, {}, true,
+        MERCADO_PAGO_API_ORIGIN)).json();
+      if (detail?.collector_id != null && String(detail.collector_id) !== sellerId) {
+        throw Object.assign(new Error('Pagamento não pertence ao vendedor conectado.'), { statusCode: 404 });
+      }
+      if (detail?.order?.id != null && String(detail.order.id) !== orderId) {
+        throw Object.assign(new Error('Pagamento não corresponde ao pedido solicitado.'), { statusCode: 404 });
+      }
+      return mercadoLivrePaymentDetailToErp(detail, paymentId, order.currency_id);
+    }));
+    payments.push(...details);
+  }
+  return { read_only: true, source: 'mercado_pago_payment_details', order_id: orderId,
+    seller_id: sellerId, payments };
+}
+
 function validErpOrderDate(value, endOfDay = false) {
   if (value == null || value === '') return '';
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -728,16 +844,16 @@ function isNonBlockingValidation(resource, status, body) {
     && Array.isArray(body.cause) && body.cause.length > 0 && body.cause.every(cause => cause?.type === 'warning');
 }
 
-async function mlRequest(pool, resource, options = {}, retry = true) {
+async function mlRequest(pool, resource, options = {}, retry = true, apiOrigin = ML_API_ORIGIN) {
   const token = await getAccessToken(pool);
-  const response = await fetch(`${ML_API_ORIGIN}${resource}`, {
+  const response = await fetch(`${apiOrigin}${resource}`, {
     ...options,
     headers: { authorization: `Bearer ${token}`, ...(options.body ? { 'content-type': 'application/json' } : {}), ...(options.headers || {}) },
   });
   if (response.status === 401 && retry) {
     await pool.query('UPDATE mercado_livre_settings SET token_expires_at = NOW() WHERE id = 1');
     await refreshAccessToken(pool);
-    return mlRequest(pool, resource, options, false);
+    return mlRequest(pool, resource, options, false, apiOrigin);
   }
   if (!response.ok) {
     if (resource === '/items/validate' && response.status === 400) {
@@ -920,6 +1036,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         connected: Boolean(settings.access_token && settings.refresh_token && settings.user_id),
         userId: String(settings.user_id || ''),
         nickname: String(settings.nickname || '').slice(0, 100),
+        paymentDetailsReadAvailable: ERP_ORDER_PAYMENT_DETAILS_READ_AVAILABLE,
         erpCapabilities: [
           ...ERP_PUBLICATION_CAPABILITIES,
           ...ERP_STOCK_WRITE_CAPABILITIES,
@@ -1230,6 +1347,23 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
     }
   };
   registerAliases(fastify, 'get', '/mercado-livre/erp/orders/:orderId', erpReadRoute, getErpOrderDetail);
+  const getErpOrderPaymentDetails = async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      return await loadMercadoLivreOrderPaymentDetailsForErp(pool, request.params?.orderId);
+    } catch (error) {
+      const authorizationBlocked = [401, 403].includes(error.remoteStatus);
+      const status = error.statusCode || (error.remoteStatus === 404 ? 404
+        : [401, 403].includes(error.remoteStatus) ? 409 : 502);
+      const message = authorizationBlocked ? 'A conexão OAuth atual não permite consultar os pagamentos.'
+        : status === 404 ? 'Pedido ou pagamento não encontrado para o vendedor conectado.'
+        : status === 400 || status === 409 ? error.message
+          : 'Consulta detalhada de pagamentos do Mercado Livre indisponível.';
+      return reply.code(status).send({ error: message });
+    }
+  };
+  registerAliases(fastify, 'get', '/mercado-livre/erp/orders/:orderId/payments',
+    erpReadRoute, getErpOrderPaymentDetails);
   registerAliases(fastify, 'get', '/mercado-livre/products/candidates', protectedRoute, presentListingError(listingHandlers.candidates));
   registerAliases(fastify, 'post', '/mercado-livre/products/link', protectedRoute, linkProduct);
   registerAliases(fastify, 'get', '/mercado-livre/products/links', protectedRoute, async () => {
@@ -1260,6 +1394,7 @@ module.exports = {
   mercadoLivreOrderToErpReview,
   loadMercadoLivreOrdersForErp,
   loadMercadoLivreOrderDetailForErp,
+  loadMercadoLivreOrderPaymentDetailsForErp,
   loadMercadoLivreErpProducts,
   validErpOrderDate,
   selectDcePdfDocument,
