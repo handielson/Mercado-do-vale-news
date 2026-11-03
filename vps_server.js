@@ -7750,7 +7750,8 @@ function normalizeMobileShopeeOrderVps(order) {
 }
 
 async function loadMobileShopeeSalesVps(limit = 50, orderSn = '', connectionId = 'primary', startDate = '', endDate = '') {
-  const safeLimit = Math.max(1, Math.min(500, Number(limit) || 50));
+  // marketplace-sales-store-v2: a sincronizacao do cache busca ate 5000; a rota /admin/mobile-sales continua limitada a 500.
+  const safeLimit = Math.max(1, Math.min(5000, Number(limit) || 50));
   const normalizedConnectionId = String(connectionId || 'primary').trim() || 'primary';
   const creds = await getShopeeCatalogCredentialsVps(normalizedConnectionId === 'primary' ? undefined : normalizedConnectionId);
   let orderNumbers = [];
@@ -7859,7 +7860,8 @@ function normalizeMobileTikTokOrderVps(order) {
 }
 
 async function loadMobileTikTokSalesVps(limit = 50, orderId = '', startDate = '', endDate = '') {
-  const safeLimit = Math.max(1, Math.min(500, Number(limit) || 50));
+  // marketplace-sales-store-v2: a sincronizacao do cache busca ate 5000; a rota /admin/mobile-sales continua limitada a 500.
+  const safeLimit = Math.max(1, Math.min(5000, Number(limit) || 50));
   const settings = await loadTikTokShopOAuthSettingsVps();
   let orders = [];
   if (orderId) {

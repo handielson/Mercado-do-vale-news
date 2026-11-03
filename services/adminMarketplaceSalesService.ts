@@ -207,7 +207,8 @@ function marketplaceSaleKey(sale: Pick<MarketplaceSale, 'channel' | 'connection_
 export function mergeMarketplaceSales(current: MarketplaceSale[], incoming: MarketplaceSale[]): MarketplaceSale[] {
     const byKey = new Map(current.map((sale) => [marketplaceSaleKey(sale), sale]));
     for (const sale of incoming) byKey.set(marketplaceSaleKey(sale), sale);
-    return [...byKey.values()].sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)));
+    const instant = (value: string) => { const time = Date.parse(value); return Number.isFinite(time) ? time : 0; };
+    return [...byKey.values()].sort((a, b) => instant(b.occurred_at) - instant(a.occurred_at));
 }
 
 async function channelResolver(): Promise<(source: string, connectionId?: string) => { channel: MarketplaceSalesChannel; label: string; connectionId?: string } | null> {

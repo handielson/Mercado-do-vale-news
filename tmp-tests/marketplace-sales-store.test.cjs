@@ -42,7 +42,7 @@ test('primeira sincronizacao e completa, depois profunda periodica, depois so re
   const source = { channel: 'shopee', connectionId: 'primary', label: 'Shopee MV', load: async (args) => { calls.push(args); return [{ external_id: 'A', occurred_at: '2026-11-03T10:00:00Z', status: 'READY' }]; } };
   const store = createMarketplaceSalesStore({ pool, listSources: async () => [source], now: () => clock, logger: { warn() {} } });
   assert.equal((await store.syncSource(source)).mode, 'full');
-  assert.equal(calls[0].limit, 500);
+  assert.equal(calls[0].limit, 3000, 'historico de 1 ano precisa caber (Shopee MV passa de 500 pedidos)');
   assert.equal(calls[0].startDate, new Date(clock - 366 * 86400000).toISOString());
   clock += 2 * 60 * 1000;
   assert.equal((await store.syncSource(source)).mode, 'recent');
@@ -80,6 +80,16 @@ test('servidor expoe leitura do cache e sincroniza so em segundo plano', () => {
     assert.match(server, /syncInBackgroundIfStale\(\);\s*const result = await marketplaceSalesStoreVps\.listSales/);
     assert.match(server, /fastify\.post\('\/admin\/marketplace-sales\/sync'/);
   }
+  for (const file of ['vps_server.js', 'vps_server.cjs']) {
+    const server = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+    assert.equal((server.match(/Math\.min\(5000, Number\(limit\) \|\| 50\)/g) || []).length, 2, 'loaders Shopee/TikTok aceitam o limite da sincronizacao');
+    assert.match(server, /const limit = Math\.max\(1, Math\.min\(500, Number\(request\.query\?\.limit\) \|\| 50\)\);\s*const connectionId/, 'rota /admin/mobile-sales continua limitada a 500');
+  }
+  const ml = fs.readFileSync(path.join(__dirname, '..', 'services', 'mercadoLivreServer.cjs'), 'utf8');
+  assert.match(ml, /loadMercadoLivreSales\(pool, Math\.min\(500, Number\(request\.query\?\.limit\) \|\| 500\)/, 'rota /mercado-livre/orders continua limitada a 500');
+  const page = fs.readFileSync(path.join(__dirname, '..', 'pages', 'admin', 'sales', 'SalesPage.tsx'), 'utf8');
+  assert.match(page, /sort\(\(a, b\) => saleInstant\(b\.occurredAt\) - saleInstant\(a\.occurredAt\)\)/, 'lista ordenada pelo instante real, nao pelo texto da data');
+  assert.doesNotMatch(page, /occurredAt\)\.localeCompare/, 'datas de canais diferentes nao podem ser comparadas como texto');
   const deploy = fs.readFileSync(path.join(__dirname, '..', 'deploy-vps-server-only.cjs'), 'utf8');
   assert.match(deploy, /services\/marketplaceSalesStore\.cjs/, 'deploy precisa enviar o servico do cache');
 });

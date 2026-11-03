@@ -1,3 +1,11 @@
+# v1.2.766-vendas-ordem-historico
+
+Data: 03/11/2026. Status: pendente. Branch: `main`. Tag: `v1.2.766-vendas-ordem-historico`.
+Release VPS: pendente. API: `--sales-marketplaces-only`.
+Vendas: ordem pelo instante real da venda; histórico de marketplace de 1 ano (até 3000 pedidos por canal).
+
+---
+
 # v1.2.765-vendas-marketplace-cache
 
 Data: 03/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.765-vendas-marketplace-cache`.

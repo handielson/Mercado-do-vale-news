@@ -13,6 +13,11 @@ import { PAYJOY_SALE_NOTE, isPayJoySale } from '../../../utils/saleInformation.j
 // marketplace-sales-local-first-v1: o refresh agora so pede o delta salvo na VPS, entao pode ser a cada minuto.
 const AUTO_REFRESH_MS = 60_000;
 
+function saleInstant(value: unknown): number {
+    const time = Date.parse(String(value || ''));
+    return Number.isFinite(time) ? time : 0;
+}
+
 export default function SalesPage() {
     const [searchParams] = useSearchParams();
     const [sales, setSales] = useState<SaleWithItems[]>([]);
@@ -284,7 +289,8 @@ export default function SalesPage() {
                 if (new Date(row.occurredAt) > new Date(dateTo + 'T23:59:59')) return false;
             }
             return true;
-        }).sort((a, b) => String(b.occurredAt).localeCompare(String(a.occurredAt)));
+        // sales-sort-by-instant-v1: cada canal grava a data num formato/fuso diferente; ordenar pelo instante real.
+        }).sort((a, b) => saleInstant(b.occurredAt) - saleInstant(a.occurredAt));
     }, [sales, marketplaceSales, searchTerm, statusFilter, dateFrom, dateTo]);
 
     const getMarketplaceStatusLabel = (status: MarketplaceSaleStatus) => ({

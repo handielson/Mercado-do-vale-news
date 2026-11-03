@@ -251,7 +251,7 @@ async function loadMercadoLivreSales(pool, limitValue = 50, saleId = '', startDa
   const sellerId = String(settings.user_id || '').trim();
   if (!/^\d+$/.test(sellerId)) throw Object.assign(new Error('Conecte a conta do Mercado Livre.'), { statusCode: 409 });
 
-  const limit = Math.max(1, Math.min(500, Number(limitValue) || 50));
+  const limit = Math.max(1, Math.min(5000, Number(limitValue) || 50));
   const startDate = String(startDateValue || '').trim();
   const endDate = String(endDateValue || '').trim();
   const sales = [];
@@ -452,6 +452,24 @@ async function loadMercadoLivreOrdersForErp(pool, options = {}) {
   }
   return { seller_id: sellerId, offset, limit, total,
     items: rows.map(mercadoLivreOrderToErpReview) };
+}
+
+async function loadMercadoLivreOrderDetailForErp(pool, orderIdValue) {
+  const orderId = String(orderIdValue ?? '');
+  if (!/^\d{1,30}$/.test(orderId)) {
+    throw Object.assign(new Error('Identificação do pedido inválida.'), { statusCode: 400 });
+  }
+  const settings = await loadSettings(pool);
+  const sellerId = String(settings.user_id || '').trim();
+  if (!/^\d{1,30}$/.test(sellerId)) {
+    throw Object.assign(new Error('Conecte a conta do Mercado Livre.'), { statusCode: 409 });
+  }
+  const order = await (await mlRequest(pool, `/orders/${orderId}`)).json();
+  if (String(order?.id || '') !== orderId || String(order?.seller?.id || '') !== sellerId) {
+    throw Object.assign(new Error('Pedido não encontrado para o vendedor conectado.'), { statusCode: 404 });
+  }
+  return { seller_id: sellerId, offset: 0, limit: 1, total: 1,
+    items: [mercadoLivreOrderToErpReview(order)] };
 }
 
 function validErpOrderDate(value, endOfDay = false) {
@@ -1015,7 +1033,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   registerAliases(fastify, 'get', '/mercado-livre/print-jobs', protectedRoute, listJobs);
 
   const listOrders = async (request, reply) => {
-    const sales = await loadMercadoLivreSales(pool, request.query?.limit || 500, '', request.query?.start_date, request.query?.end_date);
+    const sales = await loadMercadoLivreSales(pool, Math.min(500, Number(request.query?.limit) || 500), '', request.query?.start_date, request.query?.end_date);
     reply.header('Cache-Control', 'no-store');
     return { channel: 'mercado_livre', count: sales.length, sales };
   };
@@ -1202,6 +1220,16 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
     }
   };
   registerAliases(fastify, 'get', '/mercado-livre/erp/orders', erpReadRoute, listErpOrders);
+  const getErpOrderDetail = async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      return await loadMercadoLivreOrderDetailForErp(pool, request.params?.orderId);
+    } catch (error) {
+      return reply.code(error.statusCode || 502).send({ error: error.statusCode
+        ? error.message : 'Consulta de detalhe do pedido Mercado Livre indisponível.' });
+    }
+  };
+  registerAliases(fastify, 'get', '/mercado-livre/erp/orders/:orderId', erpReadRoute, getErpOrderDetail);
   registerAliases(fastify, 'get', '/mercado-livre/products/candidates', protectedRoute, presentListingError(listingHandlers.candidates));
   registerAliases(fastify, 'post', '/mercado-livre/products/link', protectedRoute, linkProduct);
   registerAliases(fastify, 'get', '/mercado-livre/products/links', protectedRoute, async () => {
@@ -1231,6 +1259,7 @@ module.exports = {
   createPkcePair,
   mercadoLivreOrderToErpReview,
   loadMercadoLivreOrdersForErp,
+  loadMercadoLivreOrderDetailForErp,
   loadMercadoLivreErpProducts,
   validErpOrderDate,
   selectDcePdfDocument,

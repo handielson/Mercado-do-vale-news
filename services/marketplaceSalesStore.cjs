@@ -8,12 +8,12 @@ const DEFAULTS = Object.freeze({
   recentWindowMs: 3 * DAY_MS,
   recentLimit: 150,
   deepWindowMs: 60 * DAY_MS,
-  deepLimit: 500,
+  deepLimit: 1000,
   deepEveryMs: 6 * 60 * 60 * 1000,
   fullWindowMs: 366 * DAY_MS,
-  fullLimit: 500,
+  fullLimit: 3000,
   minSyncIntervalMs: 60 * 1000,
-  readLimit: 3000,
+  readLimit: 5000,
 });
 
 function toMysqlDate(value) {

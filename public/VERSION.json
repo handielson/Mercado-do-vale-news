@@ -1,18 +1,17 @@
 {
-  "version": "v1.2.765-vendas-marketplace-cache",
+  "version": "v1.2.766-vendas-ordem-historico",
   "date": "2026-11-03",
-  "status": "published",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.765-vendas-marketplace-cache",
-  "release_vps": "/var/www/mdv-site/releases/20261103-111731-v1265-vendas-cache",
+  "tag": "v1.2.766-vendas-ordem-historico",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "published",
+    "status": "pendente",
     "mode": "--sales-marketplaces-only",
-    "backup": "/var/www/mdv-api/backups/sales-marketplaces-1793715335245",
-    "note": "marketplaceSalesStore.cjs + /admin/marketplace-sales; primeira sincronização completa em ~45 s (ML 118, Shopee G 34, Shopee MV 500, TikTok 35 pedidos)"
+    "note": "loaders Shopee/TikTok/Mercado Livre aceitam até 5000 na sincronização; rotas públicas continuam limitadas a 500; carga completa refeita"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Vendas: pedidos de Shopee, TikTok Shop e Mercado Livre passam a ser guardados no MySQL da VPS (tabela marketplace_sales_cache) por uma sincronização em segundo plano (janela recente a cada 2 min, varredura de 60 dias a cada 6 h, histórico de 1 ano na primeira vez). A página abre na hora com o que já está salvo no navegador e depois pede à VPS só o que mudou (changed_since); antes cada abertura consultava as APIs ao vivo (~45 s na Shopee MV).",
+  "summary": "Vendas: lista ordenada pelo instante real da venda (antes comparava o texto da data e misturava PDV, Shopee e Mercado Livre, que usam fusos/formatos diferentes). Histórico do cache de marketplace ampliado: carga completa de 1 ano até 3000 pedidos por canal (a Shopee MV parava em 500, só até junho), revisão de 60 dias até 1000.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -36,28 +35,22 @@
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'"
   },
-  "site_source_base": "5ee22067",
+  "site_source_base": "f36a5926",
   "changed_files": [
+    "pages/admin/sales/SalesPage.tsx",
+    "services/adminMarketplaceSalesService.ts",
     "services/marketplaceSalesStore.cjs",
+    "services/mercadoLivreServer.cjs",
     "vps_server.js",
     "vps_server.cjs",
-    "deploy-vps-server-only.cjs",
-    "services/adminMarketplaceSalesService.ts",
-    "pages/admin/sales/SalesPage.tsx",
     "tmp-tests/marketplace-sales-store.test.cjs",
-    "tmp-tests/marketplace-sales-cache-and-stock-match-static.test.mjs",
-    "tmp-tests/sales-page-marketplaces-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-03-v1.2.765-vendas-marketplace-cache.md"
+    "docs/versoes/2026-11-03-v1.2.766-vendas-ordem-historico.md"
   ],
   "validations": [
-    "marketplace-sales-store.test.cjs: 5 testes + teste SQL real em banco MySQL descartável na VPS (criado e apagado)",
-    "marketplace-sales-cache-and-stock-match-static aprovado",
-    "sales-page-marketplaces-static: assertivas de cache atualizadas; falha restante pré-existente (modal somente leitura)",
-    "tsc dos arquivos alterados sem erros novos",
-    "produção = vps_server.js local (diff sem diferenças além de CRLF) antes do deploy",
-    "produção: GET /admin/marketplace-sales em 275 ms (antes ~45 s pela Shopee MV); página lista Shopee MV/G, Mercado Livre e TikTok",
-    "build feito num ambiente Linux limpo (npm install a partir do package.json, lock desatualizado: faltavam zxing-wasm e deps)"
+    "marketplace-sales-store.test.cjs 5/5 (limites e ordenação)",
+    "marketplace-sales-cache-and-stock-match-static ok",
+    "testes Mercado Livre (core, print-agent, erp-read-key, stock-read, price) 57/57 e contrato estático ok"
   ]
 }
