@@ -28696,6 +28696,23 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
         continue;
       }
 
+      // product-family-model-guard-v1: cadastro manual novo (sem Bling) de um modelo que ja tem familia
+      // precisa entrar como variacao dela; antes virava um produto solto e duplicava o estoque.
+      if (!matchedExisting && !p.bling_id && p.model_id && !p.parent_id && !optionalBool(p.is_parent)) {
+        const [existingRows] = p.id ? await pool.query('SELECT id FROM products WHERE id=? LIMIT 1', [p.id]) : [[]];
+        if (!existingRows.length) {
+          const [familyRows] = await pool.query('SELECT id, name FROM products WHERE model_id=? AND is_parent=1 ORDER BY created_at ASC LIMIT 1', [p.model_id]);
+          if (familyRows.length) {
+            results.errors.push({
+              id: p.id, name: p.name, code: 'MODEL_HAS_FAMILY',
+              family_parent_id: familyRows[0].id, family_parent_name: familyRows[0].name,
+              error: `O modelo já tem a família "${familyRows[0].name}". Cadastre como variação dessa família ou inclua peças numa variação existente.`,
+            });
+            continue;
+          }
+        }
+      }
+
       await require('./services/productSku.cjs').withProductSku(pool, p, async (skuDb) => {
       await withSmartphonePriceWrite(skuDb, p, async (priceDb, controlledProduct) => {
       Object.assign(p, controlledProduct);

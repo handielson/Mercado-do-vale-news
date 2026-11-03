@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { getFamilyChildState } from '../../services/productClonePrefill.js';
+import { getProductVariationSpecs } from '../../services/modelProductAggregator.js';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -377,6 +379,24 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
 
     const isPrint3d = Boolean(watch('is_print3d'));
     const isParentProduct = Boolean(watch('is_parent'));
+    // product-family-model-guard-v1: produto novo de um modelo que ja tem familia nao pode virar cadastro solto.
+    // O formulario mostra a familia e leva para "+ peças" numa variacao existente ou para criar a variacao dentro dela.
+    const navigateFromForm = useNavigate();
+    const guardModelId = String(watch('model_id') || '');
+    const guardParentId = String(watch('parent_id') || '');
+    const familyGuardApplies = !initialData?.id && !variationDraftMode && !isParentProduct && !guardParentId && Boolean(guardModelId);
+    const [modelFamily, setModelFamily] = useState<{ parent: Product; variants: Product[] } | null>(null);
+    useEffect(() => {
+        if (!familyGuardApplies) { setModelFamily(null); return; }
+        let cancelled = false;
+        vpsApiService.getProducts({ model_id: guardModelId, status: 'all', noCache: true, limit: 500 }).then(rows => {
+            if (cancelled) return;
+            const list = (Array.isArray(rows) ? rows : []) as Product[];
+            const parent = list.find(item => Number(item.is_parent) === 1);
+            setModelFamily(parent ? { parent, variants: list.filter(item => String(item.parent_id || '') === String(parent.id)) } : null);
+        }).catch(() => { if (!cancelled) setModelFamily(null); });
+        return () => { cancelled = true; };
+    }, [familyGuardApplies, guardModelId]);
     const familyModelId = watch('model_id');
     const familyParentName = watch('name');
     useEffect(() => {
@@ -1508,6 +1528,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
     // Wrapper para onSubmit que mostra toast de erro e calcula preço médio
     const handleFormSubmit = handleSubmit(
         async (data) => {
+            if (modelFamily) { toast.error(`O modelo já tem a família "${modelFamily.parent.name}". Use "+ peças" numa variação existente ou "Criar nova variação nesta família".`); return; }
             if (familyMediaBusy || (isParentProduct && familyPhotoLoading)) { toast.warning('Aguarde o carregamento das cores e fotos das variações antes de salvar.'); return; }
             if (isParentProduct && familyPhotoError) { toast.error(familyPhotoError); return; }
             if (parentTemplateLoading || copyingParent || parentTemplateError) { toast.warning(parentTemplateError || 'Aguarde a recuperação da base de impressão.'); return; }
@@ -2219,6 +2240,38 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                     onClick={() => selectSection(section)}
                     className={`min-w-0 whitespace-normal break-words rounded-lg px-3 py-2 text-center text-sm font-semibold ${activeSection === section ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{index + 1}. {label}</button>)}
             </nav>
+            {modelFamily && <section role="alert" data-model-family-guard className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 space-y-3">
+                <div>
+                    <p className="font-semibold text-amber-900">Este modelo já tem uma família cadastrada: {modelFamily.parent.name}</p>
+                    <p className="mt-1 text-sm text-amber-900">Para não duplicar o produto e o estoque, ele não pode ser salvo como produto novo. Escolha uma das opções:</p>
+                    <button type="button" onClick={() => navigateFromForm(`/admin/products/models/${encodeURIComponent(guardModelId)}`)}
+                        className="mt-2 text-sm font-semibold text-violet-800 underline">Abrir a página da família</button>
+                </div>
+                <div>
+                    <p className="text-sm font-semibold text-slate-800">1. A cor e a memória já existem? Inclua as peças nela:</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {[...modelFamily.variants].sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR', { numeric: true })).map(variant => {
+                            const specs = getProductVariationSpecs(variant);
+                            const variantLabel = [specs.color, [specs.ram, specs.storage].filter(Boolean).join('/')].filter(Boolean).join(' · ') || variant.sku || variant.name;
+                            return <button key={variant.id} type="button"
+                                onClick={() => navigateFromForm(`/admin/products/${encodeURIComponent(variant.id)}?tab=inventory&addUnit=1`)}
+                                aria-label={`Incluir peças em ${variantLabel}`}
+                                className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50">
+                                + peças · {variantLabel} ({Math.max(0, Number(variant.stock_quantity) || 0)} un.)
+                            </button>;
+                        })}
+                        {modelFamily.variants.length === 0 && <span className="text-sm text-slate-600">A família ainda não tem variações.</span>}
+                    </div>
+                </div>
+                <div>
+                    <p className="text-sm font-semibold text-slate-800">2. É uma cor ou memória nova?</p>
+                    <button type="button"
+                        onClick={() => navigateFromForm('/admin/products/new', { state: getFamilyChildState(modelFamily.parent) })}
+                        className="mt-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">
+                        Criar nova variação nesta família
+                    </button>
+                </div>
+            </section>}
             {hasValidationErrors && validationErrorList.length > 0 && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm mb-6 animate-in fade-in slide-in-from-top-4">
                     <h3 className="font-semibold text-red-800 flex items-center gap-2 mb-2">
@@ -2874,7 +2927,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 {/* Produto novo: salvar so na ultima etapa. Edicao: pode salvar a qualquer momento (botao secundario). */}
                 {(!nextStep || isEditingExisting) && <button
                     type="submit"
-                    disabled={isSavingOperation || savingDraft || isCompressing || blocksSubmitForDuplicateEAN}
+                    disabled={isSavingOperation || savingDraft || isCompressing || blocksSubmitForDuplicateEAN || Boolean(modelFamily)}
                     className={`min-h-[52px] sm:min-h-0 w-full sm:w-auto px-4 py-2 text-base sm:text-sm font-semibold sm:font-medium rounded-md transition-colors ${blocksSubmitForDuplicateEAN
                         ? 'bg-gray-400 text-white cursor-not-allowed'
                         : nextStep

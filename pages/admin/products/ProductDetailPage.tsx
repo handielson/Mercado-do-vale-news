@@ -333,7 +333,7 @@ export const ProductDetailPage: React.FC = () => {
                                 className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                             >
                                 <Package className="h-4 w-4" />
-                                Ver painel do modelo
+                                Ver página da família
                             </button>
                         )}
                         <a
@@ -471,7 +471,7 @@ export const ProductDetailPage: React.FC = () => {
                                                 onClick={() => navigate(modelPanelHref)}
                                                 className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
                                             >
-                                                Ver painel do modelo
+                                                Ver página da família
                                             </button>
                                         )}
                                         <button

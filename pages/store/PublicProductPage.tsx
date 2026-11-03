@@ -1508,10 +1508,10 @@ export const PublicProductPage: React.FC = () => {
                                         type="button"
                                         onClick={() => navigate(adminModelPanelUrl)}
                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-300 hover:bg-amber-100 transition-all text-sm font-semibold shadow-sm"
-                                        title="Abrir painel do modelo"
+                                        title="Abrir página da família"
                                     >
                                         <Settings size={16} className="text-amber-700" />
-                                        Painel do modelo
+                                        Página da família
                                     </button>
                                 )}
                             </div>

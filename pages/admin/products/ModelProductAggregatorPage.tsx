@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CopyPlus, ExternalLink, FileText, ImageOff, Loader2, MapPin, Pencil, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CopyPlus, ExternalLink, FileText, ImageOff, Loader2, MapPin, Pencil, Plus, RefreshCw } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { modelService } from '../../../services/models';
@@ -10,7 +10,7 @@ import { unitService } from '../../../services/units';
 import { isLocalCatalogPreviewRuntime } from '../../../services/localCatalogPreview';
 import { stockLocationService } from '../../../services/stockLocationService';
 import { aggregateModelProducts, getModelIdentifierSections } from '../../../services/modelProductAggregator.js';
-import { getProductCloneState } from '../../../services/productClonePrefill.js';
+import { getFamilyChildState, getProductCloneState } from '../../../services/productClonePrefill.js';
 import { familyWorkspacePath } from '../../../services/productFormDrafts';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 import { PAYJOY_SALE_NOTE } from '../../../utils/saleInformation.js';
@@ -91,6 +91,12 @@ export const ModelProductAggregatorPage: React.FC = () => {
     const [visibilityReason, setVisibilityReason] = useState('');
     const [savingVisibility, setSavingVisibility] = useState(false);
     const [openingParentForm, setOpeningParentForm] = useState(false);
+    // family-page-v1: o painel do modelo e a pagina administrativa da familia (uma familia por modelo).
+    const [familyParent, setFamilyParent] = useState<any | null>(null);
+    const addUnitsPath = (product: any) => {
+        const id = product?.id || product?.raw?.id || product?.products?.[0]?.id || product?.products?.[0]?.raw?.id;
+        return id ? `/admin/products/${encodeURIComponent(String(id))}?tab=inventory&addUnit=1` : '';
+    };
     const requestVisibility = (unit: any) => {
         setVisibilityUnit(unit);
         setVisibilityReason(unit.status === 'hidden' ? 'Aparelho localizado e conferido.' : 'Aparelho não localizado no estoque.');
@@ -124,6 +130,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
             if (!model) throw new Error('Modelo nao encontrado.');
             const safeProducts = (Array.isArray(products) ? products : [])
                 .filter((product: any) => !isArchivedProductRecord(product));
+            setFamilyParent(safeProducts.find((product: any) => Number(product.is_parent) === 1) || null);
 
             const unitLists = await Promise.all(
                 safeProducts.map((product: any) => unitService.listByProduct(product.id).catch(() => []))
@@ -198,11 +205,23 @@ export const ModelProductAggregatorPage: React.FC = () => {
                         <ArrowLeft className="h-5 w-5" />
                     </button>
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-900">Painel do modelo</h1>
+                        <h1 className="text-3xl font-bold text-slate-900">Página da família</h1>
                         <p className="mt-1 text-sm text-slate-500">{modelName}</p>
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
+                    {familyParent && <button type="button"
+                        onClick={() => navigate('/admin/products/new', { state: getFamilyChildState(familyParent) })}
+                        className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700">
+                        <Plus className="h-4 w-4" />
+                        Nova variação (cor/memória)
+                    </button>}
+                    {data?.parentProducts?.[0]?.editUrl && <button type="button"
+                        onClick={() => navigate(data.parentProducts[0].editUrl)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm font-semibold text-violet-800 hover:bg-violet-50">
+                        <Pencil className="h-4 w-4" />
+                        Editar dados da família
+                    </button>}
                     <button
                         type="button"
                         onClick={load}
@@ -319,7 +338,15 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                     <div className="flex flex-col gap-5 p-4 sm:flex-row">
                                                         <ModelVariationImage products={colorGroup.products} color={colorGroup.color} />
                                                         <div className="min-w-0 flex-1 space-y-4">
-                                                        <h3 className="text-base font-bold text-slate-900">{colorGroup.color}</h3>
+                                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                                            <h3 className="text-base font-bold text-slate-900">{colorGroup.color}</h3>
+                                                            {(colorGroup.skuGroups || colorGroup.products).slice(0, 1).map((product: any) => addUnitsPath(product) && <button key="add-units" type="button"
+                                                                onClick={() => navigate(addUnitsPath(product))}
+                                                                aria-label={`Incluir peças em ${memoryGroup.label} ${colorGroup.color}`}
+                                                                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 print:hidden">
+                                                                <Plus className="h-4 w-4" /> Incluir peças
+                                                            </button>)}
+                                                        </div>
                                                         <div className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
                                                         <div className="min-w-0">
                                                             <p className="mb-1 text-xs font-semibold uppercase text-slate-400">SKU</p>
@@ -358,6 +385,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                         key={product.key || product.id}
                                                                         product={product}
                                                                         onNavigate={navigate}
+                                                                        allowDuplicate={!(product.raw?.parent_id || product.products?.[0]?.raw?.parent_id)}
                                                                         onDuplicate={() => {
                                                                             const source = product.raw || product.products?.[0]?.raw || product.products?.[0] || product;
                                                                             navigate('/admin/products/new', { state: getProductCloneState(source) });
@@ -500,7 +528,7 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
     </div>
 );
 
-const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void; onDuplicate: () => void }> = ({ product, onNavigate, onDuplicate }) => (
+const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void; onDuplicate: () => void; allowDuplicate?: boolean }> = ({ product, onNavigate, onDuplicate, allowDuplicate = true }) => (
     <div className="flex flex-wrap items-center gap-1.5">
         {product.duplicateCount > 1 && <span className="font-mono text-xs font-bold text-slate-700">{product.sku || 'Sem SKU'}</span>}
         <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -523,7 +551,8 @@ const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => voi
                 <Pencil className="h-3.5 w-3.5" />
                 Editar
             </button>
-            <button
+            {/* family-page-v1: em variacao de familia, mais pecas entram por "Incluir peças"; "Adicionar igual" criava cadastro duplicado. */}
+            {allowDuplicate && <button
                 type="button"
                 onClick={onDuplicate}
                 className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
@@ -531,7 +560,7 @@ const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => voi
             >
                 <CopyPlus className="h-3.5 w-3.5" />
                 Adicionar igual
-            </button>
+            </button>}
             <button
                 type="button"
                 onClick={() => onNavigate(product.stockLocationUrl)}
