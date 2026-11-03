@@ -1,18 +1,16 @@
 {
-  "version": "v1.2.769-ml-billing-error-diagnostic",
+  "version": "v1.2.770-pdv-desconto-visivel",
   "date": "2026-11-03",
-  "status": "published",
+  "status": "ready",
   "branch": "main",
-  "tag": "v1.2.769-ml-billing-error-diagnostic",
+  "tag": "v1.2.770-pdv-desconto-visivel",
   "release_vps": "/var/www/mdv-site/releases/20261103-232452-ml-billing-error-diagnostic",
   "api_release": {
-    "status": "published",
-    "mode": "--mercado-livre-only",
-    "backup": "/var/www/mdv-api/backups/mercado-livre-1793748394616",
-    "note": "O GET de faturamento continua somente leitura; erros upstream expõem apenas status HTTP e códigos técnicos seguros. Gates de escrita permanecem desligados."
+    "status": "sem alteração",
+    "note": "release só de frontend; publicação pendente"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "API: diagnóstico sanitizado de erros no GET de faturamento por pedido do Mercado Livre; sem liberar escrita ou expor corpo do upstream.",
+  "summary": "PDV: 'Desconto da venda' sempre visível na seção Pagamento (antes escondido numa linha fechada), em R$ ou % com atalhos 5/10/15%, mostrando 'De R$ X por R$ Y'. Vale para Pix, dinheiro e cartão. Travado quando já há pagamento lançado ou cupom aplicado; nunca passa do total.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -34,23 +32,24 @@
   },
   "pending_deployments": {
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
-    "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'"
+    "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
+    "site": "v1.2.770-pdv-desconto-visivel: pronta, não publicada"
   },
-  "site_source_base": "f36a5926",
+  "site_source_base": "99b26544",
   "changed_files": [
-    "services/mercadoLivreServer.cjs",
-    "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
+    "components/pdv/SaleDiscountControl.tsx",
+    "components/pdv/saleDiscount.js",
+    "components/pdv/PaymentSection.tsx",
+    "pages/pdv/PDVPage.tsx",
+    "tmp-tests/pdv-sale-discount.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-03-v1.2.769-ml-billing-error-diagnostic.md"
+    "docs/versoes/2026-11-03-v1.2.770-pdv-desconto-visivel.md"
   ],
   "validations": [
-    "node tmp-tests/mercado-livre-erp-billing-details.test.cjs (3/3)",
-    "node tmp-tests/mercado-livre-erp-read-key.test.cjs (5/5)",
-    "node --check server.js; node --check services/mercadoLivreServer.cjs; node --check vps_server.js; node --check vps_server.cjs",
-    "npm.cmd run build; n8n secret, Supabase e Nginx route guards passaram",
-    "API mdv-api online após deploy --mercado-livre-only; gates publicação/preço/estoque desligados",
-    "GET de faturamento sem chave responde HTTP 401",
-    "consulta do pedido autorizado retorna HTTP 502 upstreamStatus sanitizado; nenhum detalhe gravado"
+    "pdv-sale-discount (3) aprovado",
+    "44 testes do PDV: mesmas 5 falhas anteriores",
+    "tsc; npm run build",
+    "Playwright com dados reais (só leitura): item de R$ 29,90 + 10% → total R$ 26,91"
   ]
 }
