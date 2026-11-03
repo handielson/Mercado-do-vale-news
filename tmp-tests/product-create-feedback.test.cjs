@@ -35,8 +35,9 @@ test('child prefill inherits parent content, but never its SKU or marketplace id
  assert.deepEqual(child.images,parent.images);assert.equal(parent.is_parent,true);
 });
 test('parent variations are the last stage, while standalone children retain production and prices',()=>{
- const nav=form.slice(form.indexOf('<nav id='),form.indexOf('</nav>'));
- const start=nav.indexOf('{([')+2,end=nav.indexOf('] as const).map')+1;
+ // product-form-steps-v1: abas e rodape usam a mesma lista formSections.
+ const nav=form.slice(form.indexOf('const formSections = ('),form.indexOf('as ReadonlyArray<readonly [FormSection, string]>'));
+ const start=nav.indexOf('([')+1,end=nav.indexOf('] as const)')+1;
  assert(start>1 && end>start);
  const expression=nav.slice(start,end);
  const sections=(isParentProduct,isPrint3d,variationDraftMode=false)=>{
@@ -52,13 +53,17 @@ test('parent variations are the last stage, while standalone children retain pro
  assert(!basic.includes('<ProductFamilyEditor'));
  assert.match(form,/id="product-variations-section" className=\{activeSection === 'variations'/);
  assert.match(form,/\['files','production'\].includes\(activeSection\)/);
- assert.match(form,/type="button" onClick=\{\(\) => selectSection\('variations'\)\}/);
+ // product-form-steps-v1: o "Proximo" do rodape leva a etapa seguinte (variacoes e a ultima do pai).
+ assert.match(form,/\{nextStep && <button type="button" onClick=\{\(\) => selectSection\(nextStep\[0\]\)\}/);
 });
 
 test('form sections wrap in responsive rows and remain directly navigable without horizontal scrolling',()=>{
  const nav=form.slice(form.indexOf('<nav id='),form.indexOf('</nav>')+6);
+ const sectionsSource=form.slice(form.indexOf('const formSections = (')+'const formSections = '.length,form.indexOf(' as ReadonlyArray<readonly [FormSection, string]>'));
+ const listCtx={exports:{},variationDraftMode:false,isPrint3d:true,isParentProduct:true};
+ vm.runInNewContext(ts.transpileModule('exports.sections='+sectionsSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,listCtx);
  const jsx=(type,props)=>({type,props}); const selected=[];
- const context={exports:{},require:()=>({jsx,jsxs:jsx}),variationDraftMode:false,isPrint3d:true,isParentProduct:true,activeSection:'basic',selectSection:section=>selected.push(section)};
+ const context={exports:{},require:()=>({jsx,jsxs:jsx}),variationDraftMode:false,isPrint3d:true,isParentProduct:true,activeSection:'basic',selectSection:section=>selected.push(section),formSections:listCtx.exports.sections};
  vm.runInNewContext(ts.transpileModule('exports.nav=('+nav+');',{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,context);
  const menu=context.exports.nav;
  assert.match(menu.props.className,/grid-cols-2/); assert.match(menu.props.className,/xl:grid-cols-5/);

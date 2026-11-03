@@ -2194,23 +2194,30 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
         await persistDraft(snapshot, draftFingerprint(snapshot), true);
     };
 
+    // product-form-steps-v1: as secoes sao etapas em sequencia; o rodape leva para a proxima ate a ultima, onde se salva.
+    const formSections = ([
+        ['basic', 'Dados básicos'],
+        ['specs', 'Características'],
+        ['media', 'Fotos e descrição'],
+        ['channels', 'Canais de venda'],
+        ...(isPrint3d ? [['files', 'Arquivos e URL'] as const, ['production', 'Parâmetros e placas'] as const] : []),
+        ...(!isParentProduct || isPrint3d ? [['commercial', isPrint3d ? 'Preços' : 'Estoque e preços'] as const] : []),
+        ['fiscal', 'Fiscal e garantia'],
+        ...(!variationDraftMode && isParentProduct ? [['variations', 'Variações'] as const] : []),
+    ] as const) as ReadonlyArray<readonly [FormSection, string]>;
+    const activeStepIndex = Math.max(0, formSections.findIndex(([section]) => section === activeSection));
+    const previousStep = activeStepIndex > 0 ? formSections[activeStepIndex - 1] : null;
+    const nextStep = activeStepIndex < formSections.length - 1 ? formSections[activeStepIndex + 1] : null;
+    const isEditingExisting = Boolean(initialData?.id);
+
     return (
         <form onChangeCapture={markDraftEdited}
             onClickCapture={event => { const button = (event.target as HTMLElement).closest('button'); if (button?.type === 'button' && !button.closest('nav')) markDraftEdited(); }}
             onSubmit={event => { event.stopPropagation(); if (!savingDraftRef.current) void handleFormSubmit(event); }} className="space-y-6 pb-20">
             <nav id={variationDraftMode ? 'variation-form-sections' : 'product-form-sections'} aria-label="Seções do cadastro" className="sticky top-0 z-20 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur scroll-mt-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {([
-                    ['basic', 'Dados básicos'],
-                    ['specs', 'Características'],
-                    ['media', 'Fotos e descrição'],
-                    ['channels', 'Canais de venda'],
-                    ...(isPrint3d ? [['files', 'Arquivos e URL'] as const, ['production', 'Parâmetros e placas'] as const] : []),
-                    ...(!isParentProduct || isPrint3d ? [['commercial', isPrint3d ? 'Preços' : 'Estoque e preços'] as const] : []),
-                    ['fiscal', 'Fiscal e garantia'],
-                    ...(!variationDraftMode && isParentProduct ? [['variations', 'Variações'] as const] : []),
-                ] as const).map(([section, label]) => <button key={section} type="button" aria-current={activeSection === section ? 'page' : undefined}
+                {formSections.map(([section, label], index) => <button key={section} type="button" aria-current={activeSection === section ? 'page' : undefined}
                     onClick={() => selectSection(section)}
-                    className={`min-w-0 whitespace-normal break-words rounded-lg px-3 py-2 text-center text-sm font-semibold ${activeSection === section ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}
+                    className={`min-w-0 whitespace-normal break-words rounded-lg px-3 py-2 text-center text-sm font-semibold ${activeSection === section ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{index + 1}. {label}</button>)}
             </nav>
             {hasValidationErrors && validationErrorList.length > 0 && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm mb-6 animate-in fade-in slide-in-from-top-4">
@@ -2854,25 +2861,36 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                         draftSaveStatus === 'saved' ? 'Rascunho salvo automaticamente.' :
                         <>Não foi possível salvar as últimas alterações. <button type="button" className="font-semibold underline" onClick={() => { failedDraftSignatureRef.current = null; setDraftRetryTick(value => value + 1); }}>Tentar novamente</button></>}
                 </div>}
+                <p className="text-sm font-medium text-slate-600" data-product-form-step>Etapa {activeStepIndex + 1} de {formSections.length} · {formSections[activeStepIndex]?.[1]}</p>
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-3" data-product-form-footer>
                 <button type="button" onClick={onCancel} disabled={isSavingOperation} className="min-h-[44px] sm:min-h-0 w-full sm:w-auto px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50">
                     Cancelar
                 </button>
                 {!variationDraftMode && onSaveDraft && <button type="button" onClick={() => void saveDraft()} disabled={Boolean(isSavingOperation || savingDraft || familyMediaBusy || isCompressing || familyLoading)} className="min-h-[48px] sm:min-h-0 w-full sm:w-auto rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-base sm:text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50">{savingDraft ? 'Salvando rascunho...' : 'Salvar rascunho'}</button>}
-                {!variationDraftMode && isParentProduct && activeSection !== 'variations' && <button type="button" onClick={() => selectSection('variations')} disabled={isSavingOperation} className="min-h-[48px] sm:min-h-0 w-full sm:w-auto rounded-md border border-blue-300 px-4 py-2 text-base sm:text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50">Continuar para variações</button>}
-                <button
+                {previousStep && <button type="button" onClick={() => selectSection(previousStep[0])} disabled={isSavingOperation}
+                    className="min-h-[48px] sm:min-h-0 w-full sm:w-auto rounded-md border border-slate-300 bg-white px-4 py-2 text-base sm:text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                    ← Voltar: {previousStep[1]}
+                </button>}
+                {/* Produto novo: salvar so na ultima etapa. Edicao: pode salvar a qualquer momento (botao secundario). */}
+                {(!nextStep || isEditingExisting) && <button
                     type="submit"
                     disabled={isSavingOperation || savingDraft || isCompressing || blocksSubmitForDuplicateEAN}
-                    className={`min-h-[52px] sm:min-h-0 w-full sm:w-auto px-4 py-2 text-white text-base sm:text-sm font-semibold sm:font-medium rounded-md shadow-lg transition-colors ${blocksSubmitForDuplicateEAN
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
+                    className={`min-h-[52px] sm:min-h-0 w-full sm:w-auto px-4 py-2 text-base sm:text-sm font-semibold sm:font-medium rounded-md transition-colors ${blocksSubmitForDuplicateEAN
+                        ? 'bg-gray-400 text-white cursor-not-allowed'
+                        : nextStep
+                            ? 'border border-blue-300 bg-white text-blue-700 hover:bg-blue-50'
+                            : 'bg-blue-600 text-white shadow-lg hover:bg-blue-700 shadow-blue-600/20'
                         } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                     <span className="inline-flex items-center justify-center gap-2">
                         {isSavingOperation && <Loader2 size={16} className="animate-spin" />}
                         {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : registrationCompletedRef.current ? 'Finalizar rascunho' : variationDraftMode ? 'Confirmar detalhes no rascunho' : isParentProduct ? 'Salvar família e variações' : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
                     </span>
-                </button>
+                </button>}
+                {nextStep && <button type="button" onClick={() => selectSection(nextStep[0])} disabled={isSavingOperation}
+                    className="min-h-[52px] sm:min-h-0 w-full sm:w-auto rounded-md bg-blue-600 px-4 py-2 text-base sm:text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-60">
+                    Próximo: {nextStep[1]} →
+                </button>}
                 </div>
             </div>
         </form >

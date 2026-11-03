@@ -38,6 +38,24 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
 
   const [search, setSearch] = useState('');
+  // admin-mobile-shortcuts-keyboard-v1: esconde o rodape de atalhos enquanto um campo de texto esta em foco.
+  const [mobileKeyboardOpen, setMobileKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const isTextField = (element: Element | null) => {
+      if (!element) return false;
+      if (element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) return true;
+      if ((element as HTMLElement).isContentEditable) return true;
+      return element instanceof HTMLInputElement && !['button', 'checkbox', 'radio', 'submit', 'reset', 'file', 'range', 'color', 'image'].includes(element.type);
+    };
+    const update = () => setMobileKeyboardOpen(isTextField(document.activeElement));
+    const onFocusOut = () => window.setTimeout(update, 0);
+    document.addEventListener('focusin', update);
+    document.addEventListener('focusout', onFocusOut);
+    return () => {
+      document.removeEventListener('focusin', update);
+      document.removeEventListener('focusout', onFocusOut);
+    };
+  }, []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       const saved = window.localStorage.getItem('mdv-admin-sidebar-collapsed');
@@ -522,14 +540,15 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         )}
         {children}
       </main>
-      <nav aria-label="Atalhos do celular" data-admin-mobile-shortcuts className="md:hidden fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_12px_rgba(15,23,42,0.08)]">
+      {/* admin-mobile-shortcuts-keyboard-v1: com o teclado aberto o rodape fixo flutuava no meio da tela (iOS). */}
+      {!mobileKeyboardOpen && <nav aria-label="Atalhos do celular" data-admin-mobile-shortcuts className="md:hidden fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_12px_rgba(15,23,42,0.08)]">
         {mobileShortcuts.map(shortcut => (
           <Link key={shortcut.to} to={shortcut.to} aria-current={activeShortcutPath === shortcut.to ? 'page' : undefined} className={cn("flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold", activeShortcutPath === shortcut.to ? "text-blue-600" : "text-slate-500")}>
             {shortcut.icon}<span>{shortcut.label}</span>
           </Link>
         ))}
         <button type="button" onClick={openMobileMenu} aria-label="Abrir menu completo" className="flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold text-slate-500"><MenuIcon size={20} /><span>Menu</span></button>
-      </nav>
+      </nav>}
     </div>
   );
 };

@@ -41,3 +41,8 @@ assert.match(review, /enterKeyHint=\{NEXT_SCAN_FIELD\[field\.key\] \? 'next' : '
 assert.match(review, /key: 'detected_imei_1', label: 'IMEI 1', mono: true, kind: 'imei'/);
 assert.match(review, /key: 'detected_ean', label: 'EAN\/GTIN', mono: true, kind: 'ean'/);
 console.log('admin mobile navigation ok');
+
+// admin-mobile-shortcuts-keyboard-v1
+assert.match(layout, /\{!mobileKeyboardOpen && <nav aria-label="Atalhos do celular" data-admin-mobile-shortcuts/, 'rodapé de atalhos some com o teclado aberto (não flutua sobre o formulário)');
+assert.match(layout, /addEventListener\('focusin', update\)/, 'detecta foco em campo de texto');
+console.log('admin mobile shortcuts keyboard ok');

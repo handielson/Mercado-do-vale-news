@@ -14,3 +14,13 @@ assert.match(form, /min-h-\[52px\] sm:min-h-0 w-full sm:w-auto/, 'botão salvar 
 assert.match(specs, /text-sm text-slate-800 break-words \[overflow-wrap:anywhere\]/, 'características do modelo quebram texto longo');
 
 console.log('admin mobile form ergonomics static test passed');
+
+// product-form-steps-v1
+assert.match(form, /const formSections = \(\[/, 'etapas do cadastro definidas numa lista só (abas e rodapé usam a mesma ordem)');
+assert.match(form, /formSections\.map\(\(\[section, label\], index\) =>/, 'abas numeradas a partir da mesma lista');
+assert.match(form, /Próximo: \{nextStep\[1\]\} →/, 'rodapé leva para a próxima etapa');
+assert.match(form, /← Voltar: \{previousStep\[1\]\}/, 'rodapé permite voltar uma etapa');
+assert.match(form, /\{\(!nextStep \|\| isEditingExisting\) && <button\s+type="submit"/, 'produto novo só salva na última etapa; edição salva a qualquer momento');
+assert.match(form, /Etapa \{activeStepIndex \+ 1\} de \{formSections\.length\}/, 'mostra em que etapa está');
+assert.doesNotMatch(form, /Continuar para variações/, 'o "Próximo" substitui o atalho antigo para variações');
+console.log('product form steps ok');
