@@ -1,7 +1,7 @@
 # v1.2.769-ml-billing-error-diagnostic
 
-Data: 03/11/2026. Status: em publicação. Branch: `main`. Tag: `v1.2.769-ml-billing-error-diagnostic`.
-Release VPS: `/var/www/mdv-site/releases/20261103-232452-ml-billing-error-diagnostic`. API: `--mercado-livre-only` (backup pendente).
+Data: 03/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.769-ml-billing-error-diagnostic`.
+Release VPS: `/var/www/mdv-site/releases/20261103-232452-ml-billing-error-diagnostic`. API: `--mercado-livre-only` (backup `/var/www/mdv-api/backups/mercado-livre-1793748394616`).
 Mercado Livre: falhas no GET de faturamento mostram apenas status HTTP e código técnico allowlisted; dados do upstream não são expostos.
 
 ---

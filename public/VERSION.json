@@ -1,14 +1,14 @@
 {
   "version": "v1.2.769-ml-billing-error-diagnostic",
   "date": "2026-11-03",
-  "status": "in_preparation",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.769-ml-billing-error-diagnostic",
   "release_vps": "/var/www/mdv-site/releases/20261103-232452-ml-billing-error-diagnostic",
   "api_release": {
-    "status": "pending",
+    "status": "published",
     "mode": "--mercado-livre-only",
-    "backup": "pendente",
+    "backup": "/var/www/mdv-api/backups/mercado-livre-1793748394616",
     "note": "O GET de faturamento continua somente leitura; erros upstream expõem apenas status HTTP e códigos técnicos seguros. Gates de escrita permanecem desligados."
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
@@ -48,6 +48,9 @@
     "node tmp-tests/mercado-livre-erp-billing-details.test.cjs (3/3)",
     "node tmp-tests/mercado-livre-erp-read-key.test.cjs (5/5)",
     "node --check server.js; node --check services/mercadoLivreServer.cjs; node --check vps_server.js; node --check vps_server.cjs",
-    "npm.cmd run build; n8n secret, Supabase e Nginx route guards passaram"
+    "npm.cmd run build; n8n secret, Supabase e Nginx route guards passaram",
+    "API mdv-api online após deploy --mercado-livre-only; gates publicação/preço/estoque desligados",
+    "GET de faturamento sem chave responde HTTP 401",
+    "consulta do pedido autorizado retorna HTTP 502 upstreamStatus sanitizado; nenhum detalhe gravado"
   ]
 }
