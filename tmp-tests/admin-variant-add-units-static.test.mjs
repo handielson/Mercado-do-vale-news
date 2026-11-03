@@ -12,3 +12,9 @@ assert.match(detail, /get\('tab'\) === 'inventory'/, 'a pagina do produto aceita
 assert.match(detail, /useState\(requestedAddUnit\)/, 'a pagina do produto abre "Adicionar Unidade" pelo atalho');
 
 console.log('admin variant add units static checks passed');
+
+// pdp-compact-variants-v1: opcoes compactas para o preco aparecer sem rolar.
+assert.match(store, /pdp-compact-variants-v1/);
+assert.match(store, /className=\{`min-h-9 px-3 py-1\.5 rounded-lg border text-sm font-medium/, 'botoes de cor menores');
+assert.doesNotMatch(store, /<div key=\{group\.memoryLabel\} className="rounded-xl border border-slate-200 bg-slate-50\/70 p-3">/, 'cada memoria nao fica mais numa caixa propria');
+console.log('pdp compact variants ok');

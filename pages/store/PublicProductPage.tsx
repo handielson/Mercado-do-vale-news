@@ -1519,15 +1519,16 @@ export const PublicProductPage: React.FC = () => {
 
                         {/* Variantes (Cores / Capacidades) */}
                         {shouldShowVariantOptions && (
-                            <div className="pt-2">
-                                <h3 className="text-sm font-semibold text-slate-900 mb-3">Opções disponíveis:</h3>
-                                <div className="space-y-4">
+                            <div className="pt-1">
+                                {/* pdp-compact-variants-v1: opcoes sem caixas e botoes menores, para o preco aparecer sem rolar. */}
+                                <h3 className="text-sm font-semibold text-slate-900 mb-1">Opções disponíveis:</h3>
+                                <div className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-slate-50/70 px-3">
                                     {groupedVariantOptions.map((group) => (
-                                        <div key={group.memoryLabel} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                                            <div className="mb-2">
+                                        <div key={group.memoryLabel} className="py-2">
+                                            <div className="mb-1.5">
                                                 <h4 className="text-sm font-semibold text-slate-800">{group.memoryLabel}</h4>
                                             </div>
-                                            <div className="flex flex-wrap gap-2">
+                                            <div className="flex flex-wrap gap-1.5">
                                                 {group.options.map(({ item: sib, color, ram }) => {
                                                     const isCurrent = sib.id === product.id;
                                                     const isOutOfStock = Boolean(sib.track_inventory) && ((sib.stock_quantity || 0) <= 0);
@@ -1554,7 +1555,7 @@ export const PublicProductPage: React.FC = () => {
                                                             disabled={isOutOfStock}
                                                             aria-disabled={isOutOfStock}
                                                             title={isOutOfStock ? `${buttonLabel} esgotado` : buttonLabel}
-                                                            className={`min-h-11 px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-300 ${variantButtonStateClasses}`}
+                                                            className={`min-h-9 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all duration-300 ${variantButtonStateClasses}`}
                                                             style={{ borderColor: getVariantColorBorder(color) }}
                                                         >
                                                             <span className={isOutOfStock ? 'line-through decoration-2 decoration-slate-500/70' : ''}>
@@ -1575,7 +1576,7 @@ export const PublicProductPage: React.FC = () => {
                                                                 onClick={() => navigate(addUnitsUrl)}
                                                                 title={`Incluir mais peças: ${group.memoryLabel} ${buttonLabel}`}
                                                                 aria-label={`Incluir mais peças de ${group.memoryLabel} ${buttonLabel}`}
-                                                                className="inline-flex min-h-11 w-9 items-center justify-center rounded-lg border border-amber-300 bg-amber-100 text-amber-900 hover:border-amber-400 hover:bg-amber-200"
+                                                                className="inline-flex min-h-9 w-8 items-center justify-center rounded-lg border border-amber-300 bg-amber-100 text-amber-900 hover:border-amber-400 hover:bg-amber-200"
                                                             >
                                                                 <Plus size={16} />
                                                             </button>
