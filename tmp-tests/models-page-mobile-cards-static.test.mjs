@@ -17,7 +17,7 @@ assert.match(layout, /sessionStorage\.setItem\(NAVIGATION_LOG_CACHE_KEY/);
 console.log('models page mobile cards static test passed');
 
 // Parte 3 (computador): tabela sem caixa de rolagem própria; "Salvar" só quando mudou (ou atalho do celular).
-assert.match(s, /overflow-x-auto" data-models-table>\s*<table className="w-full min-w-\[1200px\] table-fixed relative">/);
+assert.match(s, /overflow-x-auto" data-models-table>\s*<table className="w-full min-w-\[1100px\] table-fixed relative">/);
 assert.doesNotMatch(s, /max-h-\[65vh\]/);
 assert.match(s, /\{\(phoneModel !== false \|\| dirty \|\| saving \|\| saved\) && <button\s+data-model-row-save/);
 console.log('models page desktop table static test passed');

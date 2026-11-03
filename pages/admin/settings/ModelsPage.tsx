@@ -459,7 +459,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                             <CurrencyInput
                                 value={prices[key]}
                                 onChange={cents => setPrices(prev => ({ ...prev, [key]: cents }))}
-                                className={`h-7 w-full min-w-0 text-xs py-1 ${dirty && savedPrices && prices[key] !== savedPrices[key] ? 'ring-2 ring-amber-300' : ''}`}
+                                className={`h-7 w-full min-w-0 text-xs py-1 pl-8 pr-1.5 ${dirty && savedPrices && prices[key] !== savedPrices[key] ? 'ring-2 ring-amber-300' : ''}`}
                                 onKeyDown={(e: React.KeyboardEvent) => {
                                     if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
                                 }}
@@ -831,11 +831,11 @@ export function ModelsPage() {
                 </div>
             ) : (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto" data-models-table>
-                <table className="w-full min-w-[1200px] table-fixed relative">
+                <table className="w-full min-w-[1100px] table-fixed relative">
                     <colgroup>
                         <col className="w-12" /><col className="w-[11%]" /><col />
                         <col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" />
-                        <col className="w-16" /><col className="w-24" /><col className="w-40" />
+                        <col className="w-14" /><col className="w-24" /><col className="w-40" />
                     </colgroup>
                     <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
                         <tr>

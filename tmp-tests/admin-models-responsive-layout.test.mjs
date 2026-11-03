@@ -27,7 +27,11 @@ test('precos e acoes dos modelos nao sao comprimidos quando falta largura', () =
   assert.match(layout, /flex-1 min-w-0 p-4/);
   // 02/11/2026: sem caixa de rolagem vertical (max-h); a rolagem lateral continua quando falta largura.
   assert.match(models, /shadow-sm overflow-x-auto" data-models-table/);
-  assert.match(models, /w-full min-w-\[1200px\] table-fixed/);
+  // models-table-fit-1100-v1: com menu lateral aberto em tela de 1536px sobram ~1160px; a tabela precisa caber
+  // sem rolagem, senao a coluna fixa de Acoes cobre o Status.
+  assert.match(models, /w-full min-w-\[1100px\] table-fixed/);
+  assert.match(models, /<col className="w-14" \/><col className="w-24" \/><col className="w-40" \/>/);
+  assert.match(models, /h-7 w-full min-w-0 text-xs py-1 pl-8 pr-1\.5/, 'precos de 4 digitos (R$ 1.199,00) cabem no campo');
 });
 
 test('Tailwind gera as classes de largura e flexibilidade do menu compacto', async () => {
