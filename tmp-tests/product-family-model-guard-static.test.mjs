@@ -20,6 +20,7 @@ assert.match(familyPage, /Página da família/, 'painel do modelo virou a pagina
 assert.match(familyPage, /Nova variação \(cor\/memória\)/, 'pagina da familia cria variacao dentro dela');
 assert.match(familyPage, /Editar dados da família/, 'pagina da familia edita o pai');
 assert.match(familyPage, /Incluir peças em \$\{memoryGroup\.label\} \$\{colorGroup\.color\}/, 'cada cor tem Incluir peças');
-assert.match(familyPage, /allowDuplicate=\{!\(product\.raw\?\.parent_id/, '"Adicionar igual" nao aparece em variacao de familia');
+assert.match(familyPage, /allowDuplicate=\{!familyParent && !\(product\.raw\?\.parent_id/, '"Adicionar igual" nao aparece quando o modelo tem familia');
+assert.match(familyPage, /String\(product\.status \|\| ''\) !== 'inactive'/, 'cadastro solto inativo fica fora da pagina da familia');
 assert.match(form, /Abrir a página da família/, 'aviso do cadastro leva a pagina da familia');
 console.log('product family model guard static checks passed');

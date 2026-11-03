@@ -128,9 +128,14 @@ export const ModelProductAggregatorPage: React.FC = () => {
             ]);
 
             if (!model) throw new Error('Modelo nao encontrado.');
-            const safeProducts = (Array.isArray(products) ? products : [])
+            const visibleProducts = (Array.isArray(products) ? products : [])
                 .filter((product: any) => !isArchivedProductRecord(product));
-            setFamilyParent(safeProducts.find((product: any) => Number(product.is_parent) === 1) || null);
+            const parentRecord = visibleProducts.find((product: any) => Number(product.is_parent) === 1) || null;
+            // family-page-v2: com familia, cadastro solto inativo (ex.: duplicado corrigido) nao aparece na pagina.
+            const safeProducts = parentRecord
+                ? visibleProducts.filter((product: any) => Number(product.is_parent) === 1 || product.parent_id || String(product.status || '') !== 'inactive')
+                : visibleProducts;
+            setFamilyParent(parentRecord);
 
             const unitLists = await Promise.all(
                 safeProducts.map((product: any) => unitService.listByProduct(product.id).catch(() => []))
@@ -385,7 +390,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                         key={product.key || product.id}
                                                                         product={product}
                                                                         onNavigate={navigate}
-                                                                        allowDuplicate={!(product.raw?.parent_id || product.products?.[0]?.raw?.parent_id)}
+                                                                        allowDuplicate={!familyParent && !(product.raw?.parent_id || product.products?.[0]?.raw?.parent_id)}
                                                                         onDuplicate={() => {
                                                                             const source = product.raw || product.products?.[0]?.raw || product.products?.[0] || product;
                                                                             navigate('/admin/products/new', { state: getProductCloneState(source) });
