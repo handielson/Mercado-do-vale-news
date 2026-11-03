@@ -1,3 +1,11 @@
+# v1.2.768-ml-billing-details-get
+
+Data: 03/11/2026. Status: em publicação. Branch: `main`. Tag: `v1.2.768-ml-billing-details-get`.
+Release VPS: `/var/www/mdv-site/releases/20261103-230353-ml-billing-details-get`. API: `--mercado-livre-only` (backup pendente).
+Mercado Livre: GET autenticado de faturamento por pedido, valida vendedor OAuth e retorna apenas pagamentos, tarifas e cobranças allowlisted ao ERP. Nenhum dado é gravado no Mercado do Vale.
+
+---
+
 # v1.2.766-vendas-ordem-historico
 
 Data: 03/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.766-vendas-ordem-historico`.

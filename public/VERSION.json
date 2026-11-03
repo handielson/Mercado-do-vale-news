@@ -1,18 +1,18 @@
 {
-  "version": "v1.2.767-ml-payment-details-get",
+  "version": "v1.2.768-ml-billing-details-get",
   "date": "2026-11-03",
-  "status": "published",
+  "status": "in_preparation",
   "branch": "main",
-  "tag": "v1.2.767-ml-payment-details-get",
-  "release_vps": "/var/www/mdv-site/releases/20261103-201000-payment-details-get-record",
+  "tag": "v1.2.768-ml-billing-details-get",
+  "release_vps": "/var/www/mdv-site/releases/20261103-230353-ml-billing-details-get",
   "api_release": {
-    "status": "published",
+    "status": "pending",
     "mode": "--mercado-livre-only",
-    "backup": "/var/www/mdv-api/backups/mercado-livre-1793736520380",
-    "note": "GET somente leitura publicado; após reinício: API online, escrita de publicação, preço e estoque desabilitada."
+    "backup": "pendente",
+    "note": "GET autenticado somente leitura para detalhes financeiros allowlisted de um pedido; gates de escrita permanecem desligados."
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "API: adiciona consulta somente leitura dos detalhes de pagamento Mercado Pago para pedidos do Mercado Livre, validando vendedor e permitindo apenas campos financeiros necessários ao ERP.",
+  "summary": "API: adiciona GET autenticado de faturamento por pedido do Mercado Livre, validando o vendedor OAuth e expondo somente pagamento, tarifa e cobranças allowlisted ao ERP.",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -39,19 +39,16 @@
   "site_source_base": "f36a5926",
   "changed_files": [
     "services/mercadoLivreServer.cjs",
-    "tmp-tests/mercado-livre-erp-payment-details.test.cjs",
+    "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
+    "tmp-tests/mercado-livre-erp-read-key.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-03-v1.2.767-ml-payment-details-get.md"
+    "docs/versoes/2026-11-03-v1.2.768-ml-billing-details-get.md"
   ],
   "validations": [
-    "node tmp-tests/mercado-livre-erp-payment-details.test.cjs (3/3)",
-    "node --check services/mercadoLivreServer.cjs",
-    "node --check vps_server.js",
-    "node --check vps_server.cjs",
-    "npm.cmd run build; guards n8n e Supabase passaram",
-    "produção: API /status HTTP 200, mysql.ok=true",
-    "produção: GET sem chave HTTP 401",
-    "produção: site HTTP 200; VERSION.json confere"
+    "node tmp-tests/mercado-livre-erp-billing-details.test.cjs (2/2)",
+    "node tmp-tests/mercado-livre-erp-read-key.test.cjs (5/5)",
+    "node --check services/mercadoLivreServer.cjs; node --check vps_server.js; node --check vps_server.cjs",
+    "npm.cmd run build; n8n secret, Supabase e Nginx route guards passaram"
   ]
 }

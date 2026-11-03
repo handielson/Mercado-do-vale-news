@@ -17,6 +17,7 @@ const ERP_PUBLICATION_CAPABILITIES = Object.freeze([
   'listing_publish_v1',
 ]);
 const ERP_ORDER_PAYMENT_DETAILS_READ_AVAILABLE = true;
+const ERP_ORDER_BILLING_DETAILS_READ_AVAILABLE = true;
 // The dedicated standard-price endpoint is unavailable; standard offer prices
 // are updated through a price-only PUT /items request. The price service blocks
 // automated pricing, promotions, quantity pricing and unsupported channels.
@@ -588,6 +589,80 @@ async function loadMercadoLivreOrderPaymentDetailsForErp(pool, orderIdValue) {
     seller_id: sellerId, payments };
 }
 
+async function loadMercadoLivreOrderBillingDetailsForErp(pool, orderIdValue) {
+  const orderId = String(orderIdValue ?? '');
+  if (!/^\d{1,30}$/.test(orderId)) {
+    throw Object.assign(new Error('Identificação do pedido inválida.'), { statusCode: 400 });
+  }
+  const settings = await loadSettings(pool);
+  const sellerId = String(settings.user_id || '').trim();
+  if (!/^\d{1,30}$/.test(sellerId)) {
+    throw Object.assign(new Error('Conecte a conta do Mercado Livre.'), { statusCode: 409 });
+  }
+  const order = await (await mlRequest(pool, `/orders/${orderId}`)).json();
+  if (String(order?.id || '') !== orderId || String(order?.seller?.id || '') !== sellerId) {
+    throw Object.assign(new Error('Pedido não encontrado para o vendedor conectado.'), { statusCode: 404 });
+  }
+  const billingPath = `/billing/integration/group/ML/order/details?order_ids=${encodeURIComponent(orderId)}`;
+  const payload = await (await mlRequest(pool, billingPath)).json();
+  if (!payload || typeof payload !== 'object' || !Array.isArray(payload.results) || payload.results.length > 60) {
+    throw Object.assign(new Error('Resposta de faturamento do pedido inválida.'), { statusCode: 502 });
+  }
+  const matches = payload.results.filter(row => String(row?.order_id || '') === orderId);
+  if (matches.length > 1) {
+    throw Object.assign(new Error('O faturamento retornou linhas duplicadas para o pedido.'), { statusCode: 502 });
+  }
+  const row = matches[0];
+  if (!row) return { read_only: true, source: 'mercado_livre_order_billing_details',
+    order_id: orderId, seller_id: sellerId, available: false, payment_info: [], sale_fee: null, charges: [] };
+
+  const rawPayments = row.payment_info == null ? [] : Array.isArray(row.payment_info) ? row.payment_info : [row.payment_info];
+  if (rawPayments.length > 20) {
+    throw Object.assign(new Error('Lista de pagamentos do faturamento inválida.'), { statusCode: 502 });
+  }
+  const paymentInfo = rawPayments.map(payment => {
+    const paymentId = String(payment?.payment_id || '');
+    if (!/^[A-Za-z0-9_-]{1,50}$/.test(paymentId)) {
+      throw Object.assign(new Error('Identificação de pagamento no faturamento inválida.'), { statusCode: 502 });
+    }
+    return { payment_id: paymentId, status: String(payment.status || '').slice(0, 40),
+      payment_method_id: String(payment.payment_method_id || '').slice(0, 50),
+      transaction_amount: erpPaymentMoney(payment.transaction_amount, 'valor da transação'),
+      date_approved: erpPaymentDate(payment.date_approved, 'aprovação'),
+      money_release_date: erpPaymentDate(payment.money_release_date, 'liberação') };
+  });
+  let saleFee = null;
+  if (row.sale_fee != null) {
+    if (typeof row.sale_fee !== 'object' || Array.isArray(row.sale_fee)) {
+      throw Object.assign(new Error('Composição da tarifa de venda inválida.'), { statusCode: 502 });
+    }
+    saleFee = { gross: erpPaymentMoney(row.sale_fee.gross, 'tarifa bruta', true),
+      net: erpPaymentMoney(row.sale_fee.net, 'tarifa líquida', true),
+      rebate: erpPaymentMoney(row.sale_fee.rebate, 'abatimento da tarifa', true),
+      discount: erpPaymentMoney(row.sale_fee.discount, 'desconto da tarifa', true),
+      discount_reason: String(row.sale_fee.discount_reason || '').slice(0, 120) };
+  }
+  const rawCharges = row.details == null ? [] : row.details;
+  if (!Array.isArray(rawCharges) || rawCharges.length > 150) {
+    throw Object.assign(new Error('Lista de cobranças do faturamento inválida.'), { statusCode: 502 });
+  }
+  const charges = rawCharges.filter(detail => detail?.charge_info && typeof detail.charge_info === 'object').map(detail => {
+    const charge = detail?.charge_info || {};
+    const detailId = String(charge.detail_id || '');
+    if (!/^\d{1,30}$/.test(detailId)) {
+      throw Object.assign(new Error('Identificação de cobrança no faturamento inválida.'), { statusCode: 502 });
+    }
+    return { detail_id: detailId,
+      description: String(charge.detail_description || charge.transaction_detail || '').slice(0, 160),
+      date: String(charge.detail_date || charge.creation_date_time || '').slice(0, 40),
+      amount: erpPaymentMoney(charge.detail_amount, 'cobrança', true),
+      type: String(charge.detail_type || '').slice(0, 40),
+      sub_type: String(charge.detail_sub_type || '').slice(0, 40) };
+  });
+  return { read_only: true, source: 'mercado_livre_order_billing_details',
+    order_id: orderId, seller_id: sellerId, available: true, payment_info: paymentInfo, sale_fee: saleFee, charges };
+}
+
 function validErpOrderDate(value, endOfDay = false) {
   if (value == null || value === '') return '';
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -1037,6 +1112,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         userId: String(settings.user_id || ''),
         nickname: String(settings.nickname || '').slice(0, 100),
         paymentDetailsReadAvailable: ERP_ORDER_PAYMENT_DETAILS_READ_AVAILABLE,
+        billingDetailsReadAvailable: ERP_ORDER_BILLING_DETAILS_READ_AVAILABLE,
         erpCapabilities: [
           ...ERP_PUBLICATION_CAPABILITIES,
           ...ERP_STOCK_WRITE_CAPABILITIES,
@@ -1364,6 +1440,22 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   };
   registerAliases(fastify, 'get', '/mercado-livre/erp/orders/:orderId/payments',
     erpReadRoute, getErpOrderPaymentDetails);
+  const getErpOrderBillingDetails = async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      return await loadMercadoLivreOrderBillingDetailsForErp(pool, request.params?.orderId);
+    } catch (error) {
+      const authorizationBlocked = [401, 403].includes(error.remoteStatus);
+      const status = error.statusCode || (error.remoteStatus === 404 ? 404 : authorizationBlocked ? 409 : 502);
+      const message = authorizationBlocked ? 'A conexão OAuth atual não permite consultar o faturamento.'
+        : status === 404 ? 'Pedido não encontrado para o vendedor conectado.'
+        : status === 400 || status === 409 ? error.message
+          : 'Consulta do faturamento do pedido Mercado Livre indisponível.';
+      return reply.code(status).send({ error: message });
+    }
+  };
+  registerAliases(fastify, 'get', '/mercado-livre/erp/orders/:orderId/billing-details',
+    erpReadRoute, getErpOrderBillingDetails);
   registerAliases(fastify, 'get', '/mercado-livre/products/candidates', protectedRoute, presentListingError(listingHandlers.candidates));
   registerAliases(fastify, 'post', '/mercado-livre/products/link', protectedRoute, linkProduct);
   registerAliases(fastify, 'get', '/mercado-livre/products/links', protectedRoute, async () => {
@@ -1395,6 +1487,7 @@ module.exports = {
   loadMercadoLivreOrdersForErp,
   loadMercadoLivreOrderDetailForErp,
   loadMercadoLivreOrderPaymentDetailsForErp,
+  loadMercadoLivreOrderBillingDetailsForErp,
   loadMercadoLivreErpProducts,
   validErpOrderDate,
   selectDcePdfDocument,

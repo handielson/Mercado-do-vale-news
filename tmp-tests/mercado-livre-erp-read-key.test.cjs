@@ -136,6 +136,7 @@ test('a chave ERP autoriza consultas GET selecionadas e não revela configuraç�
       const response = await app.inject({ method: 'GET', url: path, headers: { 'x-erp-read-key': key } });
       assert.equal(response.statusCode, 200);
       assert.deepEqual(response.json(), { connected: true, userId: '7', nickname: 'Conta de teste',
+        paymentDetailsReadAvailable: true, billingDetailsReadAvailable: true,
         erpCapabilities: ['erp_snapshot_authority_v1', 'listing_publish_preview_v1', 'listing_publish_v1',
           'listing_stock_write_v1', 'user_product_stock_write_v1', 'listing_price_write_v1'],
         erpWriteGates: { stock: false, price: false, publish: false } });
