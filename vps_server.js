@@ -28831,6 +28831,24 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
         }
       }
 
+      // product-slug-on-create-v1: variacoes criadas sem slug davam 410 "Produto indisponivel" no link direto.
+      // Produto (nao pai) sem slug recebe o mesmo endereco que o site ja usa (nome slugificado), unico.
+      if (!String(p.slug || '').trim() && !optionalBool(p.is_parent) && String(p.name || '').trim()) {
+        const [currentSlugRows] = p.id ? await pool.query('SELECT slug FROM products WHERE id=? LIMIT 1', [p.id]) : [[]];
+        if (!currentSlugRows.length || !String(currentSlugRows[0].slug || '').trim()) {
+          const baseSlug = slugifyPublicProductRouteTargetVps(p.name);
+          if (baseSlug) {
+            let candidateSlug = baseSlug;
+            for (let suffix = 2; suffix < 50; suffix += 1) {
+              const [slugOwners] = await pool.query('SELECT id FROM products WHERE slug=? AND id<>? LIMIT 1', [candidateSlug, p.id || '']);
+              if (!slugOwners.length) break;
+              candidateSlug = `${baseSlug}-${suffix}`;
+            }
+            p.slug = candidateSlug;
+          }
+        }
+      }
+
       await require('./services/productSku.cjs').withProductSku(pool, p, async (skuDb) => {
       await withSmartphonePriceWrite(skuDb, p, async (priceDb, controlledProduct) => {
       Object.assign(p, controlledProduct);

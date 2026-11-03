@@ -149,7 +149,8 @@ export async function uploadImagesToBank(
             formData.append('file', webpNamed);
             formData.append('path', storagePath);
 
-            const res = await fetch(directVpsUrl('/images/upload'), {
+            // uploads-via-proxy-v1: chamada direta exigia a chave de sincronizacao (401 desde 01/11/2026).
+            const res = await fetch(proxyUrl('/images/upload', 'POST'), {
                 method: 'POST',
                 headers: await authHeaders(),
                 body: formData,

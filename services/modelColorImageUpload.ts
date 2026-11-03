@@ -1,9 +1,10 @@
 import { buildAuthHeaders } from './authSession';
-import { VPS_DIRECT_BASE_URL, getVpsSyncHeaders } from './vpsProxyBase';
+import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
+// uploads-via-proxy-v1: desde a troca do SYNC_SECRET (01/11/2026) o site nao carrega mais a chave de sincronizacao,
+// entao a chamada direta para a VPS respondia 401. O /api/vps-proxy valida o admin e repassa o multipart.
 function directVpsUrl(path: string): string {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${VPS_DIRECT_BASE_URL}${normalizedPath}`;
+  return buildVpsUrl(path, { method: 'POST' });
 }
 
 async function authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {

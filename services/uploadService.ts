@@ -1,6 +1,6 @@
 import { vpsClient } from './vpsClient';
 import { getAuthSessionToken } from './authSession';
-import { VPS_DIRECT_BASE_URL, getVpsSyncHeaders } from './vpsProxyBase';
+import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
 /**
  * Serviço para gerenciar uploads de arquivos via VPS/Synology.
@@ -19,7 +19,8 @@ type SynologyUploadResponse = {
 
 async function uploadBannerFormData(formData: FormData): Promise<{ url: string }> {
     const token = await getAuthSessionToken();
-    const res = await fetch(`${VPS_DIRECT_BASE_URL}/banners/upload`, {
+    // uploads-via-proxy-v1: /banners/upload exige a chave de sincronizacao; vai pelo proxy com o login do admin.
+    const res = await fetch(buildVpsUrl('/banners/upload', { method: 'POST' }), {
         method: 'POST',
         headers: {
             Accept: 'application/json',

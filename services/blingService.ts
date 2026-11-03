@@ -1294,9 +1294,9 @@ async function uploadBlingImageToVps(
     formData.append('file', file);
     formData.append('path', storagePath);
 
-    // Multipart nao pode passar por /api/vps-proxy: o proxy Fastify nao preserva
-    // file/path ao reinjetar o request. Os uploads de imagem usam a VPS direta.
-    const response = await fetch(directVpsImageUrl('/images/upload'), {
+    // uploads-via-proxy-v1: o /api/vps-proxy repassa multipart desde 08/08/2026 (request.raw). A chamada direta
+    // exigia a chave de sincronizacao, que o site nao carrega mais desde 01/11/2026 (401).
+    const response = await fetch(buildVpsUrl('/images/upload', { method: 'POST' }), {
         method: 'POST',
         headers: await blingImageUploadHeaders(),
         body: formData,
