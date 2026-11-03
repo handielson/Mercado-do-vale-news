@@ -13954,6 +13954,57 @@ fastify.get('/admin/mobile-sales', { preHandler: requireAdminBearerToken }, asyn
     });
   }
 });
+// marketplace-sales-store-v1: vendas de marketplace servidas do MySQL; APIs so na sincronizacao em segundo plano.
+const { createMarketplaceSalesStore } = require('./services/marketplaceSalesStore.cjs');
+const marketplaceSalesStoreVps = createMarketplaceSalesStore({
+  pool,
+  logger: console,
+  listSources: async () => {
+    const sources = [{
+      channel: 'shopee', connectionId: 'primary', label: 'Shopee MV',
+      load: ({ limit, startDate, endDate }) => loadMobileShopeeSalesVps(limit, '', 'primary', startDate, endDate),
+    }];
+    const [connections] = await pool.query(`SELECT id, display_name FROM shopee_shop_connections WHERE active = 1 AND authorization_status = 'connected' AND shopee_shop_id IS NOT NULL ORDER BY created_at ASC`).catch(() => [[]]);
+    for (const connection of connections || []) {
+      const connectionId = String(connection.id);
+      sources.push({
+        channel: 'shopee', connectionId, label: String(connection.display_name || 'Shopee'),
+        load: ({ limit, startDate, endDate }) => loadMobileShopeeSalesVps(limit, '', connectionId, startDate, endDate),
+      });
+    }
+    sources.push({
+      channel: 'mercado_livre', connectionId: '', label: 'Mercado Livre',
+      load: ({ limit, startDate, endDate }) => loadMercadoLivreSales(pool, limit, '', startDate, endDate),
+    });
+    sources.push({
+      channel: 'tiktok', connectionId: '', label: 'TikTok Shop',
+      load: ({ limit, startDate, endDate }) => loadMobileTikTokSalesVps(limit, '', startDate, endDate),
+    });
+    return sources;
+  },
+});
+fastify.get('/admin/marketplace-sales', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    marketplaceSalesStoreVps.syncInBackgroundIfStale();
+    const result = await marketplaceSalesStoreVps.listSales({
+      startDate: String(request.query?.start_date || '').trim(),
+      endDate: String(request.query?.end_date || '').trim(),
+      changedSince: String(request.query?.changed_since || '').trim(),
+    });
+    reply.header('Cache-Control', 'no-store');
+    return result;
+  } catch (error) {
+    return reply.code(500).send({ error: 'Falha ao carregar vendas de marketplace.', detail: error.message || String(error) });
+  }
+});
+fastify.post('/admin/marketplace-sales/sync', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  const sync = marketplaceSalesStoreVps.syncAll();
+  const finished = await Promise.race([sync.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 20_000))]);
+  reply.header('Cache-Control', 'no-store');
+  return { ok: true, finished };
+});
+setTimeout(() => marketplaceSalesStoreVps.syncInBackgroundIfStale(), 15_000).unref?.();
+setInterval(() => marketplaceSalesStoreVps.syncInBackgroundIfStale(), 2 * 60_000).unref?.();
 const { createProductManualCostService } = require('./services/productManualCost.cjs');
 const productManualCostVps = createProductManualCostService({ pool });
 fastify.patch('/admin/products/:id/cost', { preHandler: requireAdminBearerToken }, async (request, reply) => {

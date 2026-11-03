@@ -10,7 +10,8 @@ import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../.
 import toast from 'react-hot-toast';
 import { PAYJOY_SALE_NOTE, isPayJoySale } from '../../../utils/saleInformation.js';
 
-const AUTO_REFRESH_MS = 5 * 60_000;
+// marketplace-sales-local-first-v1: o refresh agora so pede o delta salvo na VPS, entao pode ser a cada minuto.
+const AUTO_REFRESH_MS = 60_000;
 
 export default function SalesPage() {
     const [searchParams] = useSearchParams();
@@ -68,11 +69,7 @@ export default function SalesPage() {
         const requestId = ++loadRequestSequence.current;
         activeLoads.current += 1;
         setIsMarketplaceLoading(true);
-        if (!silent) {
-            setIsLoading(true);
-            setMarketplaceSales([]);
-            setMarketplaceWarnings([]);
-        }
+        if (!silent) setIsLoading(true);
         try {
             const activeFilters: SaleFilters = { ...filters };
             if (statusFilter !== 'all' && statusFilter !== 'pending') {
@@ -89,6 +86,12 @@ export default function SalesPage() {
                 start_date: activeFilters.start_date,
                 end_date: activeFilters.end_date,
             };
+            if (!silent) {
+                // Mostra na hora o que este navegador ja tem para o periodo; a VPS so completa o que mudou.
+                const cachedMarketplace = getCachedMarketplaceSales(marketplaceFilters);
+                setMarketplaceSales(cachedMarketplace?.sales || []);
+                setMarketplaceWarnings(cachedMarketplace?.warnings || []);
+            }
             // Start both sources together, but release the table as soon as the faster PDV query finishes.
             const marketplaceRequest = getMarketplaceSales(marketplaceFilters, { force: forceMarketplace }).then(
                 (data) => ({ ok: true as const, data }),
@@ -359,7 +362,7 @@ export default function SalesPage() {
                         Atualizar
                     </button>
                     <span className="text-xs text-slate-400">
-                        {isMarketplaceLoading ? 'Atualizando marketplaces...' : 'Atualização automática a cada 5 minutos'}
+                        {isMarketplaceLoading ? 'Atualizando marketplaces...' : 'Atualização automática a cada minuto'}
                     </span>
                 </div>
             </div>

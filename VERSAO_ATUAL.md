@@ -1,3 +1,11 @@
+# v1.2.765-vendas-marketplace-cache
+
+Data: 03/11/2026. Status: pendente. Branch: `main`. Tag: `v1.2.765-vendas-marketplace-cache`.
+Release VPS: pendente. API: `--sales-marketplaces-only` (cache MySQL de vendas de marketplace).
+Vendas: pedidos de Shopee/TikTok/Mercado Livre abrem na hora (cache local + VPS) e só o que mudou é buscado.
+
+---
+
 # v1.2.764-modelos-tabela-salvar
 
 Data: 02/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.764-modelos-tabela-salvar` (local; push da tag pendente).

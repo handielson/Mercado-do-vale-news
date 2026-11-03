@@ -1,26 +1,27 @@
 {
-  "version": "v1.2.764-modelos-tabela-salvar",
-  "date": "2026-11-02",
-  "status": "published",
+  "version": "v1.2.765-vendas-marketplace-cache",
+  "date": "2026-11-03",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.764-modelos-tabela-salvar",
-  "release_vps": "/var/www/mdv-site/releases/20261102-221603-v1264-modelos-tabela",
+  "tag": "v1.2.765-vendas-marketplace-cache",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "sem alteração",
-    "note": "release só de frontend"
+    "status": "pendente",
+    "mode": "--sales-marketplaces-only",
+    "note": "novo services/marketplaceSalesStore.cjs + rotas /admin/marketplace-sales e /admin/marketplace-sales/sync"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Modelos (parte 3, computador): a tabela não fica mais dentro de uma caixa com rolagem própria (65% da tela) — rola junto com a página; rolagem lateral só quando a tela é estreita demais (preços não são espremidos). O ícone 'Salvar' de cada linha só aparece quando um preço muda (o campo alterado fica destacado); nos celulares continua como atalho para os preços por configuração.",
+  "summary": "Vendas: pedidos de Shopee, TikTok Shop e Mercado Livre passam a ser guardados no MySQL da VPS (tabela marketplace_sales_cache) por uma sincronização em segundo plano (janela recente a cada 2 min, varredura de 60 dias a cada 6 h, histórico de 1 ano na primeira vez). A página abre na hora com o que já está salvo no navegador e depois pede à VPS só o que mudou (changed_since); antes cada abertura consultava as APIs ao vivo (~45 s na Shopee MV).",
   "n8n_release": {
     "status": "published",
     "workflow_id": "SkrkB4vyKVDnQ68t",
     "nodes": [
-      "Vendas - Preparar Busca",
-      "Vendas - Contexto Produtos",
-      "Vendas - Verificar Pos Lista",
-      "Resolver Acao de Conversacao"
+      "Pagamento - Politica",
+      "Agente Geral - Atendimento",
+      "Agente Inicial - Classificador"
     ],
-    "target_sha256": "628afe00443d0aec779e59835f0678801e8c4098bb8f522b01f8b77d188f57bb"
+    "patch": "tmp-tests/n8n-payjoy-link-entry-patch.cjs (payjoy-link-entry-v1)",
+    "target_sha256": "7d04055d8645a64c8ec399fdbf9bf30f174a52cb397663e75542c73c41888091"
   },
   "gestao_mdv_android": {
     "version_name": "0.13.9",
@@ -34,19 +35,26 @@
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'"
   },
-  "site_source_base": "ac06ce3f",
+  "site_source_base": "5ee22067",
   "changed_files": [
-    "pages/admin/settings/ModelsPage.tsx",
-    "tmp-tests/models-page-mobile-cards-static.test.mjs",
-    "tmp-tests/admin-models-responsive-layout.test.mjs",
+    "services/marketplaceSalesStore.cjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "services/adminMarketplaceSalesService.ts",
+    "pages/admin/sales/SalesPage.tsx",
+    "tmp-tests/marketplace-sales-store.test.cjs",
+    "tmp-tests/marketplace-sales-cache-and-stock-match-static.test.mjs",
+    "tmp-tests/sales-page-marketplaces-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-02-v1.2.764-modelos-tabela-salvar.md"
+    "docs/versoes/2026-11-03-v1.2.765-vendas-marketplace-cache.md"
   ],
   "validations": [
-    "models-page-mobile-cards-static e admin-models-responsive-layout aprovados (este atualizado: sem max-h)",
-    "testes de Modelos/AdminLayout: mesmas 5 falhas anteriores",
-    "tsc; npm run build",
-    "Playwright com dados reais (só leitura), 1440 e 1280px: caixa sem rolagem própria, sem rolagem lateral, Salvar só nas 4 linhas de celular e +1 após editar"
+    "marketplace-sales-store.test.cjs: 5 testes + teste SQL real em banco MySQL descartável na VPS (criado e apagado)",
+    "marketplace-sales-cache-and-stock-match-static aprovado",
+    "sales-page-marketplaces-static: assertivas de cache atualizadas; falha restante pré-existente (modal somente leitura)",
+    "tsc dos arquivos alterados sem erros novos",
+    "produção = vps_server.js local (diff sem diferenças além de CRLF) antes do deploy"
   ]
 }

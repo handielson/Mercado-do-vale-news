@@ -24,6 +24,7 @@ const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_P
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketplaceSaleFinancialsPath = 'services/marketplaceSaleFinancials.cjs';
 const productManualCostPath = 'services/productManualCost.cjs';
+const marketplaceSalesStorePath = 'services/marketplaceSalesStore.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
 const metaAttendanceServicePaths = ['services/metaAttendanceCore.cjs', 'services/metaAttendanceServer.cjs', 'services/metaAttendanceReplies.cjs', 'services/metaAttendanceTransport.cjs', 'services/metaAttendanceMedia.cjs'];
 const phonePriceListServicePaths = [
@@ -260,6 +261,11 @@ async function uploadMobileSalesPushFiles(appDir) {
     remotePathJoin(appDir, productManualCostPath),
   );
   console.log(`Uploaded ${productManualCostPath}`);
+  await upload(
+    path.join(__dirname, marketplaceSalesStorePath),
+    remotePathJoin(appDir, marketplaceSalesStorePath),
+  );
+  console.log(`Uploaded ${marketplaceSalesStorePath}`);
 }
 
 async function uploadMarketingCampaignFiles(appDir) {
@@ -1005,6 +1011,11 @@ async function main() {
     await upload(path.join(__dirname, mercadoLivrePublicationPath), `${publicationTarget}.next.cjs`);
     await exec(`node --check ${publicationTarget}.next.cjs`);
     await exec(`mv ${publicationTarget}.next.cjs ${publicationTarget}`);
+    // marketplace-sales-store-v1: cache MySQL das vendas de marketplace usado por /admin/marketplace-sales.
+    const marketplaceSalesStoreTarget = `${appDir}/${marketplaceSalesStorePath}`;
+    await exec(`if [ -f ${marketplaceSalesStoreTarget} ]; then cp -p ${marketplaceSalesStoreTarget} ${backupDir}/marketplaceSalesStore.cjs; fi`);
+    await upload(path.join(__dirname, marketplaceSalesStorePath), `${marketplaceSalesStoreTarget}.next.cjs`);
+    await exec(`node --check ${marketplaceSalesStoreTarget}.next.cjs && mv ${marketplaceSalesStoreTarget}.next.cjs ${marketplaceSalesStoreTarget}`);
     await exec(`node --check ${serverTarget}.next.cjs && node --check ${mercadoLivreTarget}.next.cjs`);
     await exec(`mv ${serverTarget}.next.cjs ${serverTarget} && mv ${mercadoLivreTarget}.next.cjs ${mercadoLivreTarget}`);
     console.log((await exec('pm2 restart mdv-api --update-env')).trim());

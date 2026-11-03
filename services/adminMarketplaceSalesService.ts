@@ -119,36 +119,56 @@ export interface MarketplaceSalesResult {
     warnings: string[];
 }
 
-const MARKETPLACE_SALES_CACHE_PREFIX = 'mdv:marketplace-sales:v1:';
-const MARKETPLACE_SALES_CACHE_TTL_MS = 5 * 60 * 1000;
+// marketplace-sales-local-first-v1: a lista abre com o que ja esta salvo neste navegador
+// e depois busca na VPS somente o que mudou (changed_since). A VPS le do proprio MySQL;
+// as APIs de Shopee/TikTok/Mercado Livre so sao consultadas pela sincronizacao em segundo plano.
+const MARKETPLACE_SALES_CACHE_PREFIX = 'mdv:marketplace-sales:v2:';
 
 interface MarketplaceSalesCacheEntry {
     savedAt: number;
+    serverTime: string;
     result: MarketplaceSalesResult;
+}
+
+interface StoredSalesResponse {
+    sales?: Array<Record<string, unknown> & { source_channel?: string; connection_id?: string }>;
+    server_time?: string;
+    syncing?: boolean;
+    sources?: Array<{
+        channel: string;
+        connection_id?: string;
+        label?: string;
+        initial_sync_done?: boolean;
+        last_error?: string | null;
+    }>;
 }
 
 function marketplaceSalesCacheKey(filters: { start_date?: string; end_date?: string }): string {
     return `${MARKETPLACE_SALES_CACHE_PREFIX}${filters.start_date || ''}:${filters.end_date || ''}`;
 }
 
-export function getCachedMarketplaceSales(filters: { start_date?: string; end_date?: string } = {}): MarketplaceSalesResult | null {
+function readMarketplaceSalesCache(filters: { start_date?: string; end_date?: string }): MarketplaceSalesCacheEntry | null {
     if (typeof window === 'undefined') return null;
     try {
-        const raw = window.sessionStorage.getItem(marketplaceSalesCacheKey(filters));
+        const raw = window.localStorage.getItem(marketplaceSalesCacheKey(filters));
         const cached = raw ? JSON.parse(raw) as MarketplaceSalesCacheEntry : null;
-        if (!cached || Date.now() - Number(cached.savedAt) > MARKETPLACE_SALES_CACHE_TTL_MS || !Array.isArray(cached.result?.sales)) return null;
-        return cached.result;
+        if (!cached || !Array.isArray(cached.result?.sales) || !cached.serverTime) return null;
+        return cached;
     } catch {
         return null;
     }
 }
 
-function cacheMarketplaceSales(filters: { start_date?: string; end_date?: string }, result: MarketplaceSalesResult): void {
+export function getCachedMarketplaceSales(filters: { start_date?: string; end_date?: string } = {}): MarketplaceSalesResult | null {
+    return readMarketplaceSalesCache(filters)?.result || null;
+}
+
+function cacheMarketplaceSales(filters: { start_date?: string; end_date?: string }, result: MarketplaceSalesResult, serverTime: string): void {
     if (typeof window === 'undefined') return;
     try {
-        window.sessionStorage.setItem(marketplaceSalesCacheKey(filters), JSON.stringify({ savedAt: Date.now(), result } satisfies MarketplaceSalesCacheEntry));
+        window.localStorage.setItem(marketplaceSalesCacheKey(filters), JSON.stringify({ savedAt: Date.now(), serverTime, result } satisfies MarketplaceSalesCacheEntry));
     } catch {
-        // A listagem continua funcionando quando o navegador bloqueia o armazenamento local.
+        // Sem espaco ou armazenamento bloqueado: a lista continua vindo da VPS.
     }
 }
 
@@ -158,13 +178,6 @@ function normalizeStatus(value: unknown): MarketplaceSaleStatus {
     if (/REFUND|RETURN/.test(status)) return 'refunded';
     if (/UNPAID|PAYMENT_REQUIRED|PAYMENT_IN_PROCESS|PENDING_PAYMENT|CONFIRMED/.test(status)) return 'pending';
     return 'completed';
-}
-
-function queryString(filters: { start_date?: string; end_date?: string }, extra: Record<string, string> = {}): string {
-    const query = new URLSearchParams({ limit: '500', ...extra });
-    if (filters.start_date) query.set('start_date', filters.start_date);
-    if (filters.end_date) query.set('end_date', filters.end_date);
-    return query.toString();
 }
 
 function mapSales(
@@ -187,59 +200,79 @@ function mapSales(
     })).filter((sale) => sale.external_id && sale.occurred_at);
 }
 
-export async function getMarketplaceSales(filters: { start_date?: string; end_date?: string } = {}, options: { force?: boolean } = {}): Promise<MarketplaceSalesResult> {
-    const cached = !options.force ? getCachedMarketplaceSales(filters) : null;
-    if (cached) return cached;
-    let connectionLoadFailed = false;
-    const connections = await listShopeeConnections().catch(() => {
-        connectionLoadFailed = true;
-        return [];
-    });
-    const secondaryConnections = connections.filter((connection) => (
+function marketplaceSaleKey(sale: Pick<MarketplaceSale, 'channel' | 'connection_id' | 'external_id'>): string {
+    return `${sale.channel}|${sale.connection_id || ''}|${sale.external_id}`;
+}
+
+export function mergeMarketplaceSales(current: MarketplaceSale[], incoming: MarketplaceSale[]): MarketplaceSale[] {
+    const byKey = new Map(current.map((sale) => [marketplaceSaleKey(sale), sale]));
+    for (const sale of incoming) byKey.set(marketplaceSaleKey(sale), sale);
+    return [...byKey.values()].sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)));
+}
+
+async function channelResolver(): Promise<(source: string, connectionId?: string) => { channel: MarketplaceSalesChannel; label: string; connectionId?: string } | null> {
+    const connections = await listShopeeConnections().catch(() => []);
+    const secondary = connections.filter((connection) => (
         connection.active !== false
         && connection.authorization_status === 'connected'
         && connection.shopee_shop_id
     ));
-    const requests: Array<{ label: string; channel: MarketplaceSalesChannel; connectionId?: string; promise: Promise<SalesResponse> }> = [
-        {
-            label: 'Shopee MV',
-            channel: 'shopee_mv',
-            connectionId: PRIMARY_SHOPEE_CONNECTION_ID,
-            promise: vpsClient.get<SalesResponse>(`/admin/mobile-sales?${queryString(filters, { channel: 'shopee', connection_id: PRIMARY_SHOPEE_CONNECTION_ID })}`),
-        },
-        ...secondaryConnections.map((connection, index) => ({
-            label: index === 0 ? 'Shopee G' : `Shopee ${connection.display_name}`,
-            channel: 'shopee_g' as const,
-            connectionId: connection.id,
-            promise: vpsClient.get<SalesResponse>(`/admin/mobile-sales?${queryString(filters, { channel: 'shopee', connection_id: connection.id })}`),
-        })),
-        {
-            label: 'Mercado Livre',
-            channel: 'mercado_livre',
-            promise: vpsClient.get<SalesResponse>(`/mercado-livre/orders?${queryString(filters)}`),
-        },
-        {
-            label: 'TikTok Shop',
-            channel: 'tiktok',
-            promise: vpsClient.get<SalesResponse>(`/admin/mobile-sales?${queryString(filters, { channel: 'tiktok' })}`),
-        },
-    ];
-
-    const results = await Promise.allSettled(requests.map((request) => request.promise));
-    const sales: MarketplaceSale[] = [];
-    const warnings: string[] = connectionLoadFailed ? ['Shopee G: não foi possível consultar as conexões'] : [];
-    results.forEach((result, index) => {
-        const request = requests[index];
-        if (result.status === 'rejected') {
-            warnings.push(`${request.label} indisponível`);
-            return;
+    return (source, connectionId) => {
+        if (source === 'mercado_livre') return { channel: 'mercado_livre', label: 'Mercado Livre' };
+        if (source === 'tiktok') return { channel: 'tiktok', label: 'TikTok Shop' };
+        if (source !== 'shopee') return null;
+        if (!connectionId || connectionId === PRIMARY_SHOPEE_CONNECTION_ID) {
+            return { channel: 'shopee_mv', label: 'Shopee MV', connectionId: PRIMARY_SHOPEE_CONNECTION_ID };
         }
-        sales.push(...mapSales(result.value, request.channel, request.label, request.connectionId));
-        if (result.value.warning) warnings.push(`${request.label}: ${result.value.warning}`);
-    });
-    sales.sort((a, b) => String(b.occurred_at).localeCompare(String(a.occurred_at)));
+        const index = secondary.findIndex((connection) => connection.id === connectionId);
+        const connection = secondary[index];
+        return {
+            channel: 'shopee_g',
+            label: index <= 0 ? 'Shopee G' : `Shopee ${connection?.display_name || ''}`.trim(),
+            connectionId,
+        };
+    };
+}
+
+export async function getMarketplaceSales(filters: { start_date?: string; end_date?: string } = {}, options: { force?: boolean } = {}): Promise<MarketplaceSalesResult> {
+    if (options.force) {
+        // Pede uma sincronizacao imediata (a VPS espera no maximo ~20 s) antes de ler o delta.
+        await vpsClient.post('/admin/marketplace-sales/sync', {}).catch(() => null);
+    }
+    const cached = readMarketplaceSalesCache(filters);
+    const query = new URLSearchParams();
+    if (filters.start_date) query.set('start_date', filters.start_date);
+    if (filters.end_date) query.set('end_date', filters.end_date);
+    if (cached?.serverTime) query.set('changed_since', cached.serverTime);
+    const [response, resolve] = await Promise.all([
+        vpsClient.get<StoredSalesResponse>(`/admin/marketplace-sales?${query.toString()}`, { timeoutMs: 30_000 }),
+        channelResolver(),
+    ]);
+
+    const grouped = new Map<string, { info: NonNullable<ReturnType<typeof resolve>>; sales: NonNullable<SalesResponse['sales']> }>();
+    for (const sale of Array.isArray(response?.sales) ? response.sales : []) {
+        const info = resolve(String(sale.source_channel || ''), sale.connection_id ? String(sale.connection_id) : undefined);
+        if (!info) continue;
+        const key = `${info.channel}|${info.connectionId || ''}|${info.label}`;
+        if (!grouped.has(key)) grouped.set(key, { info, sales: [] });
+        grouped.get(key)!.sales.push(sale as never);
+    }
+    const incoming: MarketplaceSale[] = [];
+    for (const { info, sales } of grouped.values()) {
+        incoming.push(...mapSales({ sales }, info.channel, info.label, info.connectionId));
+    }
+
+    const warnings: string[] = [];
+    for (const source of Array.isArray(response?.sources) ? response.sources : []) {
+        const info = resolve(source.channel, source.connection_id);
+        const label = info?.label || source.label || source.channel;
+        if (source.last_error) warnings.push(`${label}: ${source.last_error}`);
+        else if (!source.initial_sync_done) warnings.push(`${label}: carregando o histórico pela primeira vez`);
+    }
+
+    const sales = mergeMarketplaceSales(cached?.result.sales || [], incoming);
     const result = { sales, warnings };
-    cacheMarketplaceSales(filters, result);
+    cacheMarketplaceSales(filters, result, String(response?.server_time || cached?.serverTime || ''));
     return result;
 }
 
