@@ -18,6 +18,8 @@ test('edição de produto preserva o SKU central em todas as camadas', () => {
   assert.match(form, /readOnly=\{Boolean\(initialData\?\.id\)\}/);
   assert.match(productForm, /mergedData\.sku = initialData\.sku/);
   assert.match(service, /skuWasSubmitted && incomingSku !== systemSku/);
+  // sku-blank-keeps-system-v1: SKU vazio mantem o do sistema (salvar familia em partes).
+  assert.match(service, /const skuWasSubmitted = input\.sku !== undefined && input\.sku !== null && String\(input\.sku\)\.trim\(\) !== '';/);
   assert.match(service, /sku: oldProduct\.sku \|\| null/);
   assert.match(preview, /preserveSystemSku/);
   assert.match(genericProductWriter, /delete safePayload\.sku/);

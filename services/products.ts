@@ -571,7 +571,9 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
     if (!oldProduct) throw new Error(`Produto não encontrado: ${id}`);
 
     const systemSku = String(oldProduct.sku || '').trim();
-    const skuWasSubmitted = input.sku !== undefined && input.sku !== null;
+    // sku-blank-keeps-system-v1: SKU vazio nao e tentativa de troca. Depois de salvar a familia em partes, o
+    // formulario reenvia o pai com sku '' e o bloqueio impedia salvar as variacoes restantes.
+    const skuWasSubmitted = input.sku !== undefined && input.sku !== null && String(input.sku).trim() !== '';
     const incomingSku = skuWasSubmitted ? String(input.sku).trim() : systemSku;
     if (skuWasSubmitted && incomingSku !== systemSku) {
         throw new Error('O SKU é definido pelo sistema no cadastro inicial e não pode ser alterado.');
