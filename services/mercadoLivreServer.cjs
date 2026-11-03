@@ -940,7 +940,17 @@ async function mlRequest(pool, resource, options = {}, retry = true, apiOrigin =
       }
     }
     const body = await response.text();
-    throw Object.assign(new Error(`Mercado Livre API ${response.status}: ${body.slice(0, 800)}`), { remoteStatus: response.status });
+    let remoteCode = '';
+    try {
+      const payload = JSON.parse(body);
+      const candidate = payload?.code || payload?.error_code || payload?.error?.code || payload?.error;
+      if (typeof candidate === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/i.test(candidate)) {
+        remoteCode = candidate.toLowerCase();
+      }
+    } catch {}
+    throw Object.assign(new Error(`Mercado Livre API ${response.status}: ${body.slice(0, 800)}`), {
+      remoteStatus: response.status, ...(remoteCode ? { remoteCode } : {}),
+    });
   }
   return response;
 }
@@ -1451,7 +1461,14 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         : status === 404 ? 'Pedido não encontrado para o vendedor conectado.'
         : status === 400 || status === 409 ? error.message
           : 'Consulta do faturamento do pedido Mercado Livre indisponível.';
-      return reply.code(status).send({ error: message });
+      const diagnostic = {};
+      if (Number.isInteger(error.remoteStatus) && error.remoteStatus >= 400 && error.remoteStatus <= 599) {
+        diagnostic.upstreamStatus = error.remoteStatus;
+      }
+      if (typeof error.remoteCode === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/i.test(error.remoteCode)) {
+        diagnostic.upstreamCode = error.remoteCode;
+      }
+      return reply.code(status).send({ error: message, ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     }
   };
   registerAliases(fastify, 'get', '/mercado-livre/erp/orders/:orderId/billing-details',

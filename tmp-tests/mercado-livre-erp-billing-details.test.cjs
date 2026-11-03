@@ -101,3 +101,30 @@ test('não consulta faturamento se o pedido não é do vendedor e representa fat
     else process.env.MERCADO_LIVRE_ERP_READ_KEY = oldKey;
   }
 });
+
+test('erros upstream expõem somente código técnico allowlisted', async () => {
+  const oldKey = process.env.MERCADO_LIVRE_ERP_READ_KEY;
+  const oldFetch = global.fetch;
+  process.env.MERCADO_LIVRE_ERP_READ_KEY = readKey;
+  global.fetch = async url => {
+    const path = new URL(url).pathname;
+    if (path === '/orders/126') return response({ id: 126, seller: { id: 7 } });
+    if (path === '/billing/integration/group/ML/order/details') {
+      return response({ error: 'upstream_timeout', private: 'never expose this' }, 502);
+    }
+    throw new Error(`unexpected request ${path}`);
+  };
+  const app = appFor({ query: async () => [[settings]] });
+  try {
+    const result = await app.inject({ method: 'GET', url: '/api/mercado-livre/erp/orders/126/billing-details',
+      headers: { 'x-erp-read-key': readKey } });
+    assert.equal(result.statusCode, 502);
+    assert.deepEqual(result.json(), { error: 'Consulta do faturamento do pedido Mercado Livre indisponível.',
+      diagnostic: { upstreamStatus: 502, upstreamCode: 'upstream_timeout' } });
+    assert.equal(result.body.includes('never expose this'), false);
+  } finally {
+    await app.close(); global.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
+    else process.env.MERCADO_LIVRE_ERP_READ_KEY = oldKey;
+  }
+});

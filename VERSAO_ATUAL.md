@@ -1,3 +1,11 @@
+# v1.2.769-ml-billing-error-diagnostic
+
+Data: 03/11/2026. Status: em publicação. Branch: `main`. Tag: `v1.2.769-ml-billing-error-diagnostic`.
+Release VPS: `/var/www/mdv-site/releases/20261103-232452-ml-billing-error-diagnostic`. API: `--mercado-livre-only` (backup pendente).
+Mercado Livre: falhas no GET de faturamento mostram apenas status HTTP e código técnico allowlisted; dados do upstream não são expostos.
+
+---
+
 # v1.2.768-ml-billing-details-get
 
 Data: 03/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.768-ml-billing-details-get`.
