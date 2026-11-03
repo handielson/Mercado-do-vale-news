@@ -993,6 +993,15 @@ async function main() {
   }
   if (process.argv.includes('--sales-marketplaces-only')) {
     if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+    // deploy-committed-files-guard-v1: so publica arquivos iguais ao commit; trabalho nao commitado
+    // (de outra pessoa ou agente) nao pode subir junto para producao.
+    {
+      const guardFiles = ['vps_server.js', 'vps_server.cjs', mercadoLivreServicePath, mercadoLivrePublicationPath, marketplaceSalesStorePath];
+      const { spawnSync } = require('child_process');
+      const dirty = spawnSync('git', ['status', '--porcelain', '--', ...guardFiles], { cwd: __dirname, encoding: 'utf8' });
+      if (dirty.status !== 0) throw new Error('Nao foi possivel conferir o git antes de publicar.');
+      if (dirty.stdout.trim()) throw new Error(`Publicacao cancelada: arquivos com alteracoes nao commitadas:\n${dirty.stdout.trim()}`);
+    }
     const runtimePath = String(apiProc.pm2_env?.pm_exec_path || '');
     const runtimeFile = runtimePath.endsWith('/server.js')
       ? 'server.js'
