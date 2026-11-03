@@ -1,14 +1,15 @@
 {
   "version": "v1.2.765-vendas-marketplace-cache",
   "date": "2026-11-03",
-  "status": "pendente",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.765-vendas-marketplace-cache",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261103-111731-v1265-vendas-cache",
   "api_release": {
-    "status": "pendente",
+    "status": "published",
     "mode": "--sales-marketplaces-only",
-    "note": "novo services/marketplaceSalesStore.cjs + rotas /admin/marketplace-sales e /admin/marketplace-sales/sync"
+    "backup": "/var/www/mdv-api/backups/sales-marketplaces-1793715335245",
+    "note": "marketplaceSalesStore.cjs + /admin/marketplace-sales; primeira sincronização completa em ~45 s (ML 118, Shopee G 34, Shopee MV 500, TikTok 35 pedidos)"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Vendas: pedidos de Shopee, TikTok Shop e Mercado Livre passam a ser guardados no MySQL da VPS (tabela marketplace_sales_cache) por uma sincronização em segundo plano (janela recente a cada 2 min, varredura de 60 dias a cada 6 h, histórico de 1 ano na primeira vez). A página abre na hora com o que já está salvo no navegador e depois pede à VPS só o que mudou (changed_since); antes cada abertura consultava as APIs ao vivo (~45 s na Shopee MV).",
@@ -55,6 +56,8 @@
     "marketplace-sales-cache-and-stock-match-static aprovado",
     "sales-page-marketplaces-static: assertivas de cache atualizadas; falha restante pré-existente (modal somente leitura)",
     "tsc dos arquivos alterados sem erros novos",
-    "produção = vps_server.js local (diff sem diferenças além de CRLF) antes do deploy"
+    "produção = vps_server.js local (diff sem diferenças além de CRLF) antes do deploy",
+    "produção: GET /admin/marketplace-sales em 275 ms (antes ~45 s pela Shopee MV); página lista Shopee MV/G, Mercado Livre e TikTok",
+    "build feito num ambiente Linux limpo (npm install a partir do package.json, lock desatualizado: faltavam zxing-wasm e deps)"
   ]
 }
