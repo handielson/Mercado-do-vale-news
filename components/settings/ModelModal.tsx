@@ -743,7 +743,11 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     const hiddenSpecFields = templateFields
         .filter(f => f.category === 'spec')
         .filter(field => !isFieldEnabledForCategory(field) || isFieldBlockedForCategory(field) || isDuplicateTemplateField(field));
-    const hiddenSpecAliases = hiddenSpecFields.flatMap(field => [field.key, field.label]);
+    // model-versao-save-v1: o campo duplicado "version" tem rotulo "Versao"; sem este filtro o alias dele apagava
+    // o valor do campo visivel "versao" ao salvar. Alias de campo visivel nunca e tratado como oculto.
+    const visibleSpecAliases = new Set(visibleSpecFields.flatMap(field => [field.key, field.label]).map(alias => normalizeFieldAlias(alias)));
+    const hiddenSpecAliases = hiddenSpecFields.flatMap(field => [field.key, field.label])
+        .filter(alias => !visibleSpecAliases.has(normalizeFieldAlias(alias)));
     const isHiddenSpecKey = (key: string) => hiddenSpecAliases.some(alias => {
         return normalizeFieldAlias(alias) === normalizeFieldAlias(key);
     });
