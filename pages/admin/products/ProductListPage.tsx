@@ -525,6 +525,7 @@ export const ProductListPage: React.FC = () => {
                     selectedIds={selectedIds}
                     onToggleSelect={handleToggleSelect}
                     tiktokProductLinks={tiktokProductLinks}
+                    onAddVariation={handleAddVariation}
                 />
             ) : (
                 <ProductFamilyList

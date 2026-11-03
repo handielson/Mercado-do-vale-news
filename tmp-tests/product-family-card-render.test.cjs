@@ -12,7 +12,8 @@ const mod = { exports: {} };
 const icon = () => null;
 vm.runInNewContext(compiled, { exports: mod.exports, module: mod, require(name) {
   if (name === 'react') return React;
-  if (name === 'lucide-react') return { ChevronDown: icon, Copy: icon, Package: icon, Pencil: icon };
+  if (name === 'lucide-react') return { ChevronDown: icon, Copy: icon, Package: icon, Pencil: icon, Plus: icon };
+  if (name === 'react-router-dom') return { useNavigate: () => () => {} };
   if (name === 'sonner') return { toast: {} };
   if (name === './CatalogTitleEditor') return { CatalogTitleEditor: () => null };
   if (name === './ProductCard') return { ProductCard: props => React.createElement('section', { 'data-product': props.product.id }, props.product.name, props.familyStockSummary, props.familyVariants) };
@@ -21,7 +22,7 @@ vm.runInNewContext(compiled, { exports: mod.exports, module: mod, require(name) 
 } });
 const parent = { id: 'parent', name: 'Nome oficial do pai', sku: 'PAI', images: [], specs: {} };
 const child = { id: 'child', name: 'Nome diferente do filho', sku: 'FILHO', parent_id: parent.id, images: ['filho.jpg'], stock_quantity: 3, specs: { color: 'Preto', ram: '8GB', storage: '256GB' } };
-const group = { key: 'family', isFamily: true, parent, representative: child, familyProducts: [parent, child], totalStock: 3 };
+const group = { key: 'family', isFamily: true, parent, representative: child, familyProducts: [parent, child], matchedProducts: [], totalStock: 3 };
 function render(extra = {}) {
   return renderToStaticMarkup(React.createElement(mod.exports.ProductList, { products: [parent, child], groups: [group], isLoading: false, onEditProduct() {}, ...extra }));
 }
@@ -43,15 +44,20 @@ test('detalhes usam o pai e mantêm seleção e edição explícitas dos filhos'
   assert.doesNotMatch(html, /Editar somente/);
   assert.match(html, /8GB RAM/);
 });
-test('resumo mostra apenas estoque positivo e fica antes dos detalhes da família', () => {
+test('resumo lista cada cor com atalho "+ peças" (inclusive zerada) e fica antes dos detalhes da família', () => {
   const empty = { ...child, id: 'empty', sku: 'ZERADO', stock_quantity: 0, specs: { ...child.specs, color: 'Azul' } };
   const html = render({ groups: [{ ...group, familyProducts: [parent, child, empty] }] });
   const summary = html.slice(html.indexOf('aria-label="Estoque disponível para venda"'), html.indexOf('aria-label="SKUs da família"'));
-  assert.match(summary, /Disponível para vender: 3 un/);
+  assert.match(summary, /Disponível para vender: 3 un/, 'o total soma so estoque positivo');
   assert.match(summary, /Preto \(3 un\.\)/);
   assert.match(summary, /8GB\/256GB/);
-  assert.match(summary, /<ul[^>]*><li[^>]*>Preto \(3 un\.\)<\/li><\/ul>/);
-  assert.doesNotMatch(summary, /Azul|ZERADO/);
+  assert.match(summary, /class="text-slate-400">Azul \(0 un\.\)/, 'cor zerada aparece apagada para poder receber pecas');
+  assert.match(summary, /aria-label="Incluir mais peças de Preto · 8GB RAM · 256GB armazenamento"/);
+  assert.match(summary, /aria-label="Incluir mais peças de Azul · 8GB RAM · 256GB armazenamento"/);
+  assert.doesNotMatch(summary, /Nova variação/, 'sem pai marcado como familia nao oferece nova variacao');
+  const familyParent = { ...parent, is_parent: 1 };
+  const withParent = render({ groups: [{ ...group, parent: familyParent, familyProducts: [familyParent, child] }], onAddVariation() {} });
+  assert.match(withParent, /Nova variação \(cor\/memória\)/);
 });
 test('todos os cards preservam mídia, atalhos, nome e SKU antes da expansão', () => {
   const card = fs.readFileSync('components/products/ProductCard.tsx', 'utf8');

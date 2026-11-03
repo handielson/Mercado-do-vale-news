@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
-import { Copy, Package, Pencil } from 'lucide-react';
+import { Copy, Package, Pencil, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import type { TikTokShopProductLink } from '../../services/tiktokShopService';
@@ -18,9 +19,10 @@ interface ProductListProps {
     selectedIds?: Set<string>;
     onToggleSelect?: (product: Product) => void;
     tiktokProductLinks?: Record<string, TikTokShopProductLink>;
+    onAddVariation?: (parent: Product) => void;
 }
 
-function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, selectedIds, onToggleSelect, tiktokProductLinks }: {
+function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, selectedIds, onToggleSelect, tiktokProductLinks, onAddVariation }: {
     group: ProductFamilyGroup;
     onEditProduct?: (product: Product) => void;
     onDeleteProduct?: (product: Product) => void;
@@ -28,7 +30,9 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
     selectedIds: Set<string>;
     onToggleSelect?: (product: Product) => void;
     tiktokProductLinks: Record<string, TikTokShopProductLink>;
+    onAddVariation?: (parent: Product) => void;
 }) {
+    const navigate = useNavigate();
     const variants = group.familyProducts.filter(product => String(product.id) !== String(group.parent?.id));
     const familyProduct = group.parent || group.representative;
     const matchedVariantId = variants.find(variant => group.matchedProducts.some(product => product.id === variant.id))?.id;
@@ -70,17 +74,36 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
             priceVariants={variants}
             tiktokProductLink={tiktokProductLinks[familyProduct.id] || null}
             familyStockSummary={<div className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800" aria-label="Estoque disponível para venda">
+                {/* family-card-stock-actions-v1: cada cor tem "+ peças" (abre Adicionar Unidade) e a familia tem "Nova variação". */}
                 <p className="font-semibold">Disponível para vender: {variants.reduce((total, product) => total + Math.max(0, Number(product.stock_quantity) || 0), 0)} un.</p>
                 {sortedMemoryGroups.map(memoryGroup => {
-                    const available = memoryGroup.products.filter(product => Number(product.stock_quantity) > 0);
-                    if (!available.length) return null;
+                    if (!memoryGroup.products.length) return null;
+                    const specs = getProductVariationSpecs(memoryGroup.products[0]);
                     return <div key={memoryGroup.title} className="mt-2">
-                        {memoryGroup.title && <p className="font-medium">{[getProductVariationSpecs(available[0]).ram, getProductVariationSpecs(available[0]).storage].filter(Boolean).join('/')}</p>}
-                        <ul className="mt-1 space-y-0.5">
-                            {available.map(product => <li key={product.id}>{label(product)} ({Number(product.stock_quantity)} un.)</li>)}
+                        {memoryGroup.title && <p className="font-medium">{[specs.ram, specs.storage].filter(Boolean).join('/')}</p>}
+                        <ul className="mt-1 space-y-1">
+                            {[...memoryGroup.products].sort((a, b) => label(a).localeCompare(label(b), 'pt-BR')).map(product => {
+                                const stock = Math.max(0, Number(product.stock_quantity) || 0);
+                                return <li key={product.id} className="flex items-center justify-between gap-2">
+                                    <span className={stock > 0 ? '' : 'text-slate-400'}>{label(product)} ({stock} un.)</span>
+                                    <button type="button"
+                                        onClick={(event) => { event.stopPropagation(); navigate(`/admin/products/${encodeURIComponent(product.id)}?tab=inventory&addUnit=1`); }}
+                                        title={`Incluir mais peças de ${label(product)}${memoryGroup.title ? ` · ${memoryGroup.title}` : ''}`}
+                                        aria-label={`Incluir mais peças de ${label(product)}${memoryGroup.title ? ` · ${memoryGroup.title}` : ''}`}
+                                        className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-emerald-300 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100">
+                                        <Plus size={11} /> peças
+                                    </button>
+                                </li>;
+                            })}
                         </ul>
                     </div>;
                 })}
+                {onAddVariation && group.parent && Number(group.parent.is_parent) === 1 && <button type="button"
+                    onClick={(event) => { event.stopPropagation(); onAddVariation(group.parent!); }}
+                    aria-label={`Cadastrar nova variação de ${familyProduct.name}`}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-1 rounded-md border border-violet-300 bg-white px-2 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-50">
+                    <Plus size={13} /> Nova variação (cor/memória)
+                </button>}
             </div>}
             familyVariants={<div className="mt-2 space-y-2 rounded-lg border border-violet-200 bg-violet-50/40 p-2" aria-label="SKUs da família">
                 <p className="text-xs font-semibold text-violet-700">{variants.length} variações · Estoque da família: {group.totalStock} un.</p>
@@ -132,6 +155,7 @@ export const ProductList: React.FC<ProductListProps> = ({
     selectedIds = new Set(),
     onToggleSelect,
     tiktokProductLinks = {},
+    onAddVariation,
 }) => {
     // Loading State: Show skeleton cards
     if (isLoading) {
@@ -183,7 +207,7 @@ export const ProductList: React.FC<ProductListProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {groups ? groups.map(group => group.isFamily
                 ? <FamilyCard key={group.key} group={group} onEditProduct={onEditProduct} onDeleteProduct={onDeleteProduct}
-                    selectionMode={selectionMode} selectedIds={selectedIds} onToggleSelect={onToggleSelect} tiktokProductLinks={tiktokProductLinks} />
+                    selectionMode={selectionMode} selectedIds={selectedIds} onToggleSelect={onToggleSelect} tiktokProductLinks={tiktokProductLinks} onAddVariation={onAddVariation} />
                 : <ProductCard key={group.key} product={group.representative} onEdit={onEditProduct} onDelete={onDeleteProduct}
                     selectionMode={selectionMode} isSelected={selectedIds.has(group.representative.id)} onToggleSelect={onToggleSelect}
                     tiktokProductLink={tiktokProductLinks[group.representative.id] || null} />) : products.map((product) => (
