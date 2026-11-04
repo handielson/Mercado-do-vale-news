@@ -4,12 +4,12 @@
   "status": "ready",
   "branch": "main",
   "tag": "v1.2.782-ml-billing-safe-log",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261104-053810-ml-billing-safe-logs",
   "api_release": {
-    "status": "pending",
+    "status": "published",
     "mode": "--mercado-livre-only",
-    "backup": "pendente",
-    "source_commit": "pendente"
+    "backup": "/var/www/mdv-api/backups/mercado-livre-1793770726820",
+    "source_commit": "64b6b89b"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Mercado Livre: GET de faturamento registra somente classe/status/código técnico allowlisted em falhas, sem IDs nem payload.",
@@ -37,7 +37,7 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic"
   },
-  "site_source_base": "pendente",
+  "site_source_base": "64b6b89b",
   "changed_files": [
     "services/mercadoLivreServer.cjs",
     "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
