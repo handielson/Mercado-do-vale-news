@@ -1,10 +1,10 @@
 # v1.2.779-ml-billing-batch
 
-Data: 03/11/2026. Status: API publicada; release do site em andamento. Branch: `main`. Tag: `v1.2.779-ml-billing-batch`.
+Data: 03/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.779-ml-billing-batch`.
 Mercado Livre: GET de faturamento em lotes de até 60 pedidos; capturas ficam apenas no staging e não são consultadas novamente. Resposta parcial 206 não é salva.
 ERP: sem criação de venda, lançamento financeiro ou movimento de estoque.
 API: `--mercado-livre-only`; backup `/var/www/mdv-api/backups/mercado-livre-1793750769348`.
-Release do site planejada: `/var/www/mdv-site/releases/20261104-000638-ml-billing-batch`.
+Release do site: `/var/www/mdv-site/releases/20261104-000924-ml-billing-batch`.
 O site também inclui o desconto no PDV preparado em v1.2.770.
 
 ---
