@@ -1,3 +1,13 @@
+# v1.2.780-ml-billing-safe-diagnostic
+
+Data: 03/11/2026. Status: pronta para publicar. Branch: `main`. Tag: `v1.2.780-ml-billing-safe-diagnostic`.
+Mercado Livre: os GETs de faturamento identificam classe de falha de transporte, JSON ou resposta inválida sem expor payloads externos; HTTP upstream e código allowlisted continuam visíveis.
+ERP: nenhuma venda, lançamento financeiro ou movimentação de estoque é criada por essa consulta. Preço, publicação e estoque permanecem desligados.
+API: `--mercado-livre-only`; backup: pendente.
+Release do site: pendente.
+
+---
+
 # v1.2.779-ml-billing-batch
 
 Data: 03/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.779-ml-billing-batch`.

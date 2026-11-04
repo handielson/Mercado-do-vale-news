@@ -1,18 +1,18 @@
 {
-  "version": "v1.2.779-ml-billing-batch",
+  "version": "v1.2.780-ml-billing-safe-diagnostic",
   "date": "2026-11-03",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.779-ml-billing-batch",
-  "release_vps": "/var/www/mdv-site/releases/20261104-000924-ml-billing-batch",
+  "tag": "v1.2.780-ml-billing-safe-diagnostic",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "published",
+    "status": "pending",
     "mode": "--mercado-livre-only",
-    "backup": "/var/www/mdv-api/backups/mercado-livre-1793750769348",
-    "source_commit": "174ba31a"
+    "backup": "pendente",
+    "source_commit": "50db5acd"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Mercado Livre: faturamento de pedidos por GET em lotes de até 60, captura allowlisted só no staging e proteção contra reconsulta. A release do site também leva o desconto do PDV v1.2.770.",
+  "summary": "Mercado Livre: GET de faturamento classifica falhas de transporte e resposta sem expor payloads externos.",
   "n8n_release": {
     "status": "pending",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -35,27 +35,19 @@
   "pending_deployments": {
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
-    "site": "v1.2.779-ml-billing-batch: publicada em /var/www/mdv-site/releases/20261104-000924-ml-billing-batch"
+    "site": "pendente: v1.2.780-ml-billing-safe-diagnostic"
   },
-  "site_source_base": "174ba31a",
+  "site_source_base": "50db5acd",
   "changed_files": [
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-03-v1.2.778-bot-celulares-baratos-acessorio.md",
-    "docs/versoes/2026-11-03-v1.2.779-ml-billing-batch.md",
-    "package-lock.json",
+    "docs/versoes/2026-11-03-v1.2.780-ml-billing-safe-diagnostic.md",
     "public/VERSION.json",
-    "scripts/deploy-n8n-cheapest-promo-accessory-fix.cjs",
-    "scripts/n8n-cheapest-promo-accessory-fix.cjs",
     "services/mercadoLivreServer.cjs",
-    "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
-    "tmp-tests/n8n-cheapest-promo-accessory-fix.test.cjs"
+    "tmp-tests/mercado-livre-erp-billing-details.test.cjs"
   ],
   "validations": [
-    "n8n-cheapest-promo-accessory-fix (6) aprovado no fluxo atual e no candidato",
-    "regressão de vendas n8n: 128/128 no atual e 128/128 no candidato",
-    "conversa real reproduzida com dados de teste",
-    "Mercado Livre billing batch: 5/5; node --check services/mercadoLivreServer.cjs",
-    "ERP: 126 testes Python e 6/6 E2E da inbox",
-    "npm ci --no-audit --no-fund; npm run build"
+    "node --test tmp-tests/mercado-livre-erp-billing-details.test.cjs (7/7)",
+    "node --check services/mercadoLivreServer.cjs",
+    "ERP bridge focused test (1/1)"
   ]
 }
