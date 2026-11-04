@@ -135,7 +135,11 @@ export async function loadSkuListings(productId: string, fallbackProduct: any): 
 export async function updateListingPrice(listing: ChannelListing, priceCents: number) {
   if (!Number.isInteger(priceCents) || priceCents <= 0) throw new Error('Informe um preço válido.');
   if (listing.channel === 'site') {
-    await vpsClient.patch(`/table-data/products/${encodeURIComponent(listing.meta.productId)}`, { price_retail: priceCents });
+    const saved: any = await vpsClient.patch(`/table-data/products/${encodeURIComponent(listing.meta.productId)}`, { price_retail: priceCents });
+    // Celular com grupo de preço: o servidor mantém o preço do grupo e ignora o valor enviado.
+    if (saved && Number(saved.price_retail) !== priceCents) {
+      throw new Error('Este produto segue o grupo de preço do modelo (mesma memória). Altere o preço pelo grupo de preços no cadastro.');
+    }
     return;
   }
   if (listing.channel === 'shopee_m' || listing.channel === 'shopee_g') {
@@ -155,4 +159,12 @@ export async function updateListingPrice(listing: ChannelListing, priceCents: nu
     return;
   }
   throw new Error('Edite o preço do Mercado Livre pela opção "Editar no Mercado Livre".');
+}
+
+export type TikTokFeeSummary = {
+  orders_considered: number; orders_with_statement: number; error_count: number; errors: Array<{ code: number | null; message: string }>;
+  revenue_cents: number; currency: string | null; fields: Array<{ path: string; total_cents: number; orders: number; pct_of_revenue: number | null }>;
+};
+export function loadTikTokFeeSummary(limit = 20): Promise<TikTokFeeSummary> {
+  return vpsClient.get(`/tiktok-shop/finance/fee-summary?limit=${limit}`, { timeoutMs: 60000 });
 }

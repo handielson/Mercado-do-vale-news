@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.785-shopee-rotas-protegidas",
+  "version": "v1.2.786-financeiro-produto-custo-tiktok",
   "date": "2026-11-04",
-  "status": "published",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.785-shopee-rotas-protegidas",
-  "release_vps": "/var/www/mdv-site/releases/20261104-200803-v1285-shopee-auth",
+  "tag": "v1.2.786-financeiro-produto-custo-tiktok",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "published",
-    "note": "--sales-marketplaces-only do commit 7422071e; backup /var/www/mdv-api/backups/sales-marketplaces-1793833709861"
+    "status": "pendente",
+    "note": "GET /tiktok-shop/finance/fee-summary (services/tiktokFinanceFees.cjs, incluído no deploy)"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Segurança: /api/shopee-catalog e /api/shopee-actions (preço, estoque, anúncios, pedidos) respondiam sem login pela internet; agora exigem login de admin ou x-sync-key. O admin envia o token automaticamente nessas duas rotas (services/shopeeApiAuth.ts); o agente de impressão já usa x-sync-key.",
+  "summary": "Página do Produto: custo e preço/lucro por canal dentro do Resumo financeiro (custo editado pelo ajuste manual existente, fonte única price_cost; celular com IMEI e variação que herda do pai ficam bloqueados); 'Adicionar igual' removido (criava cadastro duplicado); aviso quando o grupo de preço do celular segura o preço do site; taxas reais do TikTok pelo extrato dos pedidos concluídos na janela de taxas.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -24,28 +24,33 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic"
   },
-  "site_source_base": "bc562530",
+  "site_source_base": "c5fafc61",
   "changed_files": [
+    "pages/admin/products/ModelProductAggregatorPage.tsx",
+    "components/products/ChannelPricingPanel.tsx",
+    "services/channelPricing.ts",
+    "utils/channelProfit.js",
+    "utils/channelProfit.test.mjs",
+    "services/tiktokFinanceFees.cjs",
     "vps_server.js",
     "vps_server.cjs",
-    "services/shopeeApiAuth.ts",
-    "index.tsx",
-    "tmp-tests/shopee-api-auth.test.mjs",
-    "tmp-tests/vps-shopee-actions-read-fastify-static.test.mjs",
-    "tmp-tests/vps-shopee-actions-refresh-fastify-static.test.mjs",
-    "tmp-tests/vps-shopee-catalog-read-fastify-static.test.mjs",
+    "deploy-vps-server-only.cjs",
+    "tmp-tests/tiktok-finance-fees.test.cjs",
+    "tmp-tests/product-admin-page-channels.test.mjs",
+    "tmp-tests/model-product-clone-prefill.test.mjs",
+    "tmp-tests/product-family-model-guard-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-04-v1.2.785-shopee-rotas-protegidas.md"
+    "docs/versoes/2026-11-04-v1.2.786-financeiro-produto-custo-tiktok.md"
   ],
   "validations": [
-    "shopee-api-auth (3) + 17 testes vps-shopee-*-static: ok",
-    "node --check vps_server.js e vps_server.cjs",
-    "produção: /api/shopee-catalog e POST /api/shopee-actions sem login → 401; com x-sync-key → 200; admin no Chrome lê Shopee M/G (R$ 179,00) pela rota protegida"
+    "product-admin-page-channels (6) + channelProfit (5) + tiktok-finance-fees (3) + shopee-api-auth (3) + family-variant-label-print (4): 21/21",
+    "model-product-clone-prefill, product-family-model-guard, pdp-admin-edit-actions, model-aggregator-no-legacy-runtime, vps-shopee-*-read: ok",
+    "tsc sem erro nos arquivos alterados; node --check vps_server.js/.cjs, deploy-vps-server-only.cjs"
   ],
   "site_release": {
-    "status": "published",
-    "release": "/var/www/mdv-site/releases/20261104-200803-v1285-shopee-auth",
-    "published_at": "2026-11-04T23:08:03Z"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   }
 }

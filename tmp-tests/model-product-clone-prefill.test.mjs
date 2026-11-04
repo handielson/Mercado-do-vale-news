@@ -92,8 +92,11 @@ assert.equal(rawPrefill.specs.imei2, '', 'clone bruto deve limpar IMEI 2');
 assert.equal(rawPrefill.specs.serial, '', 'clone bruto deve limpar serial');
 
 const aggregatorPage = readFileSync(new URL('../pages/admin/products/ModelProductAggregatorPage.tsx', import.meta.url), 'utf8');
-assert.match(aggregatorPage, /getProductCloneState/, 'painel do modelo deve usar o helper de clone');
-assert.match(aggregatorPage, /Adicionar igual/, 'atalhos por SKU devem mostrar botao Adicionar igual');
+// product-page-no-duplicate-v1: a Página do Produto não cria mais cadastro copiado ("Adicionar igual" gerava SKU duplicado);
+// mais unidades entram por "Incluir peças". O helper de clone continua disponível para outras telas.
+assert.doesNotMatch(aggregatorPage, />\s*Adicionar igual\s*</, 'Página do Produto não mostra mais Adicionar igual');
+assert.doesNotMatch(aggregatorPage, /getProductCloneState\(/, 'Página do Produto não abre cadastro copiado');
+assert.match(aggregatorPage, /Incluir peças/, 'mais unidades entram por Incluir peças');
 
 const formPage = readFileSync(new URL('../pages/admin/products/ProductFormPage.tsx', import.meta.url), 'utf8');
 assert.match(formPage, /cloneProduct/, 'pagina de novo produto deve aceitar cloneProduct pelo estado de navegacao');

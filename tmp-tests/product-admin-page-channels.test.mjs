@@ -68,9 +68,17 @@ test('Página do Produto renderiza título, canais, estoque, taxas e lucro por S
   assert.deepEqual(plain(calls.ids), ['p1']);
   assert.equal(calls.summary.skuCount, 1);
   assert.equal(calls.badges.length, 1, 'badges de canal em cada SKU');
-  assert.equal(calls.pricing.length, 1, 'painel de preço/lucro em cada SKU');
+  assert.equal(calls.pricing.length, 1, 'custo e preço/lucro de cada SKU no Resumo financeiro');
   assert.equal(calls.pricing[0].productId, 'p1');
   assert.equal(calls.pricing[0].costCents, 9000, 'usa o custo do cadastro');
+  assert.equal(calls.pricing[0].registeredCostCents, 9000);
+  assert.equal(calls.pricing[0].costLock, null, 'produto sem IMEI edita o custo do cadastro');
+  assert.match(html, /Custo, preço e lucro por canal/);
+  const financial = html.indexOf('Resumo financeiro do modelo');
+  const block = html.indexOf('Custo, preço e lucro por canal');
+  const variations = html.lastIndexOf('Variações do modelo');
+  assert.ok(financial > -1 && block > financial && variations > block, 'bloco de custo/lucro fica dentro do Resumo financeiro, antes das variações');
+  assert.doesNotMatch(html, />\s*Adicionar igual\s*</, 'sem Adicionar igual (cadastro duplicado)');
 });
 
 test('badges abrem o anúncio da Shopee/ML e mostram herança do TikTok do pai', () => {
@@ -89,7 +97,7 @@ test('badges abrem o anúncio da Shopee/ML e mostram herança do TikTok do pai',
 
 function loadPricing(fetchLog, vpsLog, tiktokLog) {
   return load('services/channelPricing.ts', {
-    './vpsClient': { vpsClient: { patch: async (path, body) => { vpsLog.push({ path, body }); }, get: async () => ({ settings: [] }), put: async () => ({}) } },
+    './vpsClient': { vpsClient: { patch: async (path, body) => { vpsLog.push({ path, body }); return { price_retail: body.price_retail === 77700 ? 70000 : body.price_retail }; }, get: async () => ({ settings: [] }), put: async () => ({}) } },
     './shopeeProducts': { shopeeProductService: {}, getShopeeStoreCode: (id) => (id === 'primary' ? 'M' : 'G') },
     './shopeeConnections': { normalizeShopeeConnectionId: (v) => String(v || '') || 'primary', withShopeeConnection: (url, c) => (c === 'primary' ? url : `${url}${url.includes('?') ? '&' : '?'}connection_id=${c}`) },
     './mercadoLivreService': { mercadoLivreService: {} },
@@ -118,6 +126,7 @@ test('Shopee sem variação, site e TikTok gravam no lugar certo; preço inváli
   await svc.updateListingPrice({ channel: 'tiktok', meta: { tiktokProductId: '77', skuId: '88', currency: 'BRL' } }, 19900);
   assert.deepEqual(plain(tiktokLog[0]), { product_id: '77', sku_id: '88', amount_cents: 19900, currency: 'BRL' });
   await assert.rejects(svc.updateListingPrice({ channel: 'site', meta: { productId: 'p1' } }, 0));
+  await assert.rejects(svc.updateListingPrice({ channel: 'site', meta: { productId: 'p1' } }, 77700), /grupo de preço/, 'avisa quando o grupo de preço do celular segura o valor');
   await assert.rejects(svc.updateListingPrice({ channel: 'mercado_livre', meta: {} }, 1000), /Editar no Mercado Livre/);
 });
 
@@ -130,4 +139,13 @@ test('API: tabela de taxas por canal e preço atual do TikTok', () => {
   assert.match(server, /CHANNEL_FEE_CHANNELS = new Set\(\['site', 'shopee_m', 'shopee_g', 'mercado_livre', 'tiktok'\]\)/);
   assert.match(server, /price_cents: Number\.isFinite\(remotePrice\)/, `${file}: status do TikTok devolve o preço atual do SKU`);
   }
+});
+
+test('custo: usa o ajuste manual existente (fonte única) e respeita bloqueios', () => {
+  const panel = fs.readFileSync('components/products/ChannelPricingPanel.tsx', 'utf8');
+  assert.match(panel, /updateProductManualCost\(productId, \{ cost_cents: value, expected_cost_cents: registeredCostCents/);
+  assert.doesNotMatch(panel, /price_cost\s*:/, 'não grava price_cost por outro caminho');
+  const page = fs.readFileSync('pages/admin/products/ModelProductAggregatorPage.tsx', 'utf8');
+  assert.match(page, /Aparelho com IMEI: o custo vem da compra de cada unidade/);
+  assert.match(page, /herda o custo do produto pai/);
 });

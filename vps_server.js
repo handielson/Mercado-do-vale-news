@@ -14106,6 +14106,21 @@ fastify.post('/tiktok-shop/products/:productId/publish', { preHandler: requireSy
 fastify.get('/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 
+// tiktok-finance-fees-v1: taxas reais do TikTok (extrato dos pedidos concluídos), só leitura.
+const tiktokFinanceFeesVps = require('./services/tiktokFinanceFees.cjs').createTikTokFinanceFeesService({
+  pool,
+  loadSettings: () => loadTikTokShopOAuthSettingsVps(),
+  callApi: (settings, request) => callTikTokShopOpenApiVps(settings, request),
+});
+fastify.get('/tiktok-shop/finance/fee-summary', { preHandler: requireSyncKeyOrAdmin }, async (request, reply) => {
+  try {
+    reply.header('Cache-Control', 'no-store');
+    return await tiktokFinanceFeesVps.feeSummary({ limit: request.query?.limit });
+  } catch (error) {
+    return reply.code(502).send({ error: 'Não foi possível consultar o extrato do TikTok Shop.', detail: String(error?.message || '').slice(0, 200) });
+  }
+});
+
 // channel-profit-v1: tabela de taxas por canal (site, shopee_m, shopee_g, mercado_livre, tiktok).
 const CHANNEL_FEE_CHANNELS = new Set(['site', 'shopee_m', 'shopee_g', 'mercado_livre', 'tiktok']);
 fastify.get('/channel-fee-settings', { preHandler: requireSyncKeyOrAdmin }, async (_req, reply) => {

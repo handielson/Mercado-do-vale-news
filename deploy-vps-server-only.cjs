@@ -25,6 +25,7 @@ const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketplaceSaleFinancialsPath = 'services/marketplaceSaleFinancials.cjs';
 const productManualCostPath = 'services/productManualCost.cjs';
 const marketplaceSalesStorePath = 'services/marketplaceSalesStore.cjs';
+const tiktokFinanceFeesPath = 'services/tiktokFinanceFees.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
 const metaAttendanceServicePaths = ['services/metaAttendanceCore.cjs', 'services/metaAttendanceServer.cjs', 'services/metaAttendanceReplies.cjs', 'services/metaAttendanceTransport.cjs', 'services/metaAttendanceMedia.cjs'];
 const phonePriceListServicePaths = [
@@ -266,6 +267,11 @@ async function uploadMobileSalesPushFiles(appDir) {
     remotePathJoin(appDir, marketplaceSalesStorePath),
   );
   console.log(`Uploaded ${marketplaceSalesStorePath}`);
+  await upload(
+    path.join(__dirname, tiktokFinanceFeesPath),
+    remotePathJoin(appDir, tiktokFinanceFeesPath),
+  );
+  console.log(`Uploaded ${tiktokFinanceFeesPath}`);
 }
 
 async function uploadMarketingCampaignFiles(appDir) {
@@ -996,7 +1002,7 @@ async function main() {
     // deploy-committed-files-guard-v1: so publica arquivos iguais ao commit; trabalho nao commitado
     // (de outra pessoa ou agente) nao pode subir junto para producao.
     {
-      const guardFiles = ['vps_server.js', 'vps_server.cjs', mercadoLivreServicePath, mercadoLivrePublicationPath, marketplaceSalesStorePath];
+      const guardFiles = ['vps_server.js', 'vps_server.cjs', mercadoLivreServicePath, mercadoLivrePublicationPath, marketplaceSalesStorePath, tiktokFinanceFeesPath];
       const { spawnSync } = require('child_process');
       const dirty = spawnSync('git', ['status', '--porcelain', '--', ...guardFiles], { cwd: __dirname, encoding: 'utf8' });
       if (dirty.status !== 0) throw new Error('Nao foi possivel conferir o git antes de publicar.');
@@ -1025,6 +1031,11 @@ async function main() {
     await exec(`if [ -f ${marketplaceSalesStoreTarget} ]; then cp -p ${marketplaceSalesStoreTarget} ${backupDir}/marketplaceSalesStore.cjs; fi`);
     await upload(path.join(__dirname, marketplaceSalesStorePath), `${marketplaceSalesStoreTarget}.next.cjs`);
     await exec(`node --check ${marketplaceSalesStoreTarget}.next.cjs && mv ${marketplaceSalesStoreTarget}.next.cjs ${marketplaceSalesStoreTarget}`);
+    // tiktok-finance-fees-v1: módulo exigido pelo server.js (taxas reais do TikTok); sobe antes da troca do servidor.
+    const tiktokFinanceFeesTarget = `${appDir}/${tiktokFinanceFeesPath}`;
+    await exec(`if [ -f ${tiktokFinanceFeesTarget} ]; then cp -p ${tiktokFinanceFeesTarget} ${backupDir}/tiktokFinanceFees.cjs; fi`);
+    await upload(path.join(__dirname, tiktokFinanceFeesPath), `${tiktokFinanceFeesTarget}.next.cjs`);
+    await exec(`node --check ${tiktokFinanceFeesTarget}.next.cjs && mv ${tiktokFinanceFeesTarget}.next.cjs ${tiktokFinanceFeesTarget}`);
     await exec(`node --check ${serverTarget}.next.cjs && node --check ${mercadoLivreTarget}.next.cjs`);
     await exec(`mv ${serverTarget}.next.cjs ${serverTarget} && mv ${mercadoLivreTarget}.next.cjs ${mercadoLivreTarget}`);
     console.log((await exec('pm2 restart mdv-api --update-env')).trim());

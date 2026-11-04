@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import { Loader2, Settings2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { CurrencyInput } from '../ui/CurrencyInput';
-import { CHANNELS, calculateChannelProfit, defaultChannelFee, isChannelFeeConfigured } from '../../utils/channelProfit.js';
-import { loadChannelFees, loadSkuListings, saveChannelFee, updateListingPrice, type ChannelFee, type ChannelFeeMap, type ChannelId, type ChannelListing } from '../../services/channelPricing';
+import { CHANNELS, calculateChannelProfit, defaultChannelFee, isChannelFeeConfigured, suggestTikTokFeesFromSummary } from '../../utils/channelProfit.js';
+import { loadChannelFees, loadSkuListings, loadTikTokFeeSummary, saveChannelFee, updateListingPrice, type ChannelFee, type ChannelFeeMap, type ChannelId, type ChannelListing, type TikTokFeeSummary } from '../../services/channelPricing';
 import { MercadoLivreListingPrice } from './sections/MercadoLivreListingPrice';
+import { updateProductManualCost } from '../../services/adminMarketplaceSalesService';
 
 const money = (cents: number | null | undefined) => cents === null || cents === undefined ? '—'
   : (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -61,6 +62,7 @@ export function ChannelFeeSettingsModal({ onClose }: { onClose: () => void }) {
               className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${channel === item.id ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{item.label}</button>)}
           </div>
           {!draft ? <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Carregando…</p> : <>
+            {channel === 'tiktok' && <TikTokRealFees onApply={(patch) => set(patch)} />}
             {fees && !fees[channel].saved && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Ainda não salvo — mostrando o padrão{channel.startsWith('shopee') ? ' (tabela Shopee 20% + taxa fixa CNPJ usada hoje no sistema)' : ' (sem taxas)'}. Confira e salve.</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-sm">Comissão (%)<input inputMode="decimal" className="mt-1 block w-full rounded-lg border p-2" value={pctInput(draft.commissionPct)} onChange={e => set({ commissionPct: parsePct(e.target.value) })} /></label>
@@ -85,6 +87,50 @@ export function ChannelFeeSettingsModal({ onClose }: { onClose: () => void }) {
           </>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// tiktok-finance-fees-v1: taxas reais do TikTok pelo extrato dos pedidos concluídos; preenche o formulário para revisar e salvar.
+function TikTokRealFees({ onApply }: { onApply: (patch: Partial<ChannelFee>) => void }) {
+  const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState<TikTokFeeSummary | null>(null);
+  const [error, setError] = useState('');
+  const load = async () => {
+    setLoading(true); setError('');
+    try { setSummary(await loadTikTokFeeSummary(20)); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível consultar o TikTok.'); }
+    finally { setLoading(false); }
+  };
+  const suggestion = summary ? suggestTikTokFeesFromSummary(summary) : null;
+  const label = (path: string) => path.replace(/^statement_transactions\[\]\./, '').replace(/_amount$/, '').replace(/_/g, ' ');
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-300 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-800">Taxas reais do TikTok</p>
+        <button type="button" disabled={loading} onClick={() => void load()} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60">{loading ? 'Consultando extratos…' : summary ? 'Consultar de novo' : 'Buscar dos pedidos concluídos'}</button>
+      </div>
+      <p className="text-[11px] text-slate-500">Lê o extrato financeiro dos últimos pedidos concluídos/entregues no TikTok Shop e calcula quanto cada taxa representou sobre a receita.</p>
+      {error && <p className="text-xs text-red-700">{error}</p>}
+      {summary && <>
+        <p className="text-xs text-slate-600">{summary.orders_with_statement} de {summary.orders_considered} pedidos com extrato · receita {money(summary.revenue_cents)}{summary.error_count ? ` · ${summary.error_count} sem extrato (${summary.errors[0]?.message || 'erro'})` : ''}</p>
+        {summary.orders_with_statement === 0 ? <p className="text-xs text-amber-800">Nenhum extrato disponível ainda (o TikTok só gera depois da liquidação do pedido, ou o app ainda não tem a permissão de Finanças).</p> : <>
+          <div className="max-h-48 overflow-y-auto rounded border bg-white">
+            <table className="w-full text-[11px]"><tbody>
+              {summary.fields.filter(field => !field.path.includes('sku_')).map(field => <tr key={field.path} className="border-b last:border-0">
+                <td className="px-2 py-1 text-slate-600">{label(field.path)}</td>
+                <td className={`px-2 py-1 text-right font-mono ${field.total_cents < 0 ? 'text-red-700' : 'text-slate-700'}`}>{money(field.total_cents)}</td>
+                <td className="px-2 py-1 text-right text-slate-500">{field.pct_of_revenue !== null ? `${field.pct_of_revenue.toLocaleString('pt-BR')}%` : ''}</td>
+              </tr>)}
+            </tbody></table>
+          </div>
+          {suggestion && <div className="flex flex-wrap items-center justify-between gap-2 rounded bg-white p-2 text-xs">
+            <span>Sugestão: comissão <strong>{suggestion.commissionPct.toLocaleString('pt-BR')}%</strong> · outras taxas <strong>{suggestion.otherPct.toLocaleString('pt-BR')}%</strong> · frete por pedido <strong>{money(suggestion.shippingCents)}</strong></span>
+            <button type="button" onClick={() => onApply({ commissionPct: suggestion.commissionPct, otherPct: suggestion.otherPct, shippingCents: suggestion.shippingCents })} className="rounded bg-blue-600 px-2 py-1 font-semibold text-white">Usar no formulário</button>
+          </div>}
+          <p className="text-[11px] text-slate-500">Confira os valores e clique em "Salvar taxas deste canal".</p>
+        </>}
+      </>}
     </div>
   );
 }
@@ -142,7 +188,36 @@ function ListingRow({ listing, costCents, fee, onSaved, product }: { listing: Ch
   );
 }
 
-export function SkuChannelPricing({ productId, product, costCents, costSource }: { productId: string; product: any; costCents: number; costSource: string }) {
+function CostEditor({ productId, registeredCostCents, costLock, inventoryUrl, onSaved }: { productId: string; registeredCostCents: number | null; costLock: string | null; inventoryUrl: string; onSaved: () => void }) {
+  const [value, setValue] = useState(registeredCostCents || 0);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setValue(registeredCostCents || 0); }, [registeredCostCents]);
+  if (costLock) return <p className="text-xs text-slate-600">{costLock}{inventoryUrl && <> <a href={inventoryUrl} className="font-semibold text-blue-700 hover:underline">Abrir peças</a></>}</p>;
+  const changed = value !== (registeredCostCents || 0);
+  const save = async () => {
+    setSaving(true);
+    try {
+      // Mesmo endpoint/regra do ajuste manual de custo: grava products.price_cost + histórico, com conferência de concorrência.
+      await updateProductManualCost(productId, { cost_cents: value, expected_cost_cents: registeredCostCents, context: 'product_page_financial' });
+      toast.success(`Custo atualizado para ${money(value)}.`);
+      onSaved();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível salvar o custo.');
+    } finally { setSaving(false); }
+  };
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <div className="w-44"><CurrencyInput value={value} onChange={setValue} label="Custo de compra (cadastro)" disabled={saving} /></div>
+      {changed && <button type="button" disabled={saving} onClick={() => void save()} className="mb-0.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">{saving ? 'Salvando…' : 'Salvar custo'}</button>}
+      {changed && <button type="button" disabled={saving} onClick={() => setValue(registeredCostCents || 0)} className="mb-2 text-xs text-slate-500 underline">Desfazer</button>}
+    </div>
+  );
+}
+
+export function SkuChannelPricing({ productId, product, label, costCents, costSource, registeredCostCents = null, costLock = null, inventoryUrl = '', onCostSaved }: {
+  productId: string; product: any; label?: string; costCents: number; costSource: string;
+  registeredCostCents?: number | null; costLock?: string | null; inventoryUrl?: string; onCostSaved?: () => void;
+}) {
   const fees = useChannelFees();
   const [open, setOpen] = useState(false);
   const [listings, setListings] = useState<ChannelListing[] | null>(null);
@@ -155,17 +230,24 @@ export function SkuChannelPricing({ productId, product, costCents, costSource }:
     return () => { active = false; };
   }, [open, productId, refresh]);
   return (
-    <details className="rounded-lg border border-blue-100 bg-blue-50/40" onToggle={event => setOpen((event.target as HTMLDetailsElement).open)}>
-      <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-blue-800">Preço e lucro por canal · {product?.sku || 'SKU'}</summary>
-      <div className="space-y-2 px-3 pb-3">
-        <p className="text-[11px] text-slate-500">Custo usado: <strong>{money(costCents)}</strong> ({costSource}).</p>
-        {!listings ? <p className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />Consultando preços nos canais…</p>
-          : listings.map(listing => <ListingRow key={listing.key} listing={listing} costCents={costCents} product={product}
-              fee={fees ? fees[listing.channel] : null}
-              onSaved={() => setRefresh(value => value + 1)} />)}
-        {listings && <button type="button" onClick={() => setRefresh(value => value + 1)} className="text-xs font-semibold text-blue-700 hover:underline">Consultar preços novamente</button>}
+    <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-800">{label || 'SKU'} <span className="font-mono text-xs font-normal text-slate-500">{product?.sku || ''}</span></p>
+        <p className="text-xs text-slate-500">Custo: <strong className={costCents > 0 ? 'text-slate-800' : 'text-amber-700'}>{costCents > 0 ? money(costCents) : 'não informado'}</strong> <span className="text-slate-400">({costSource})</span></p>
       </div>
-    </details>
+      <div className="mt-2"><CostEditor productId={productId} registeredCostCents={registeredCostCents} costLock={costLock} inventoryUrl={inventoryUrl} onSaved={() => { onCostSaved?.(); setRefresh(value => value + 1); }} /></div>
+      <details className="mt-2" onToggle={event => setOpen((event.target as HTMLDetailsElement).open)}>
+        <summary className="cursor-pointer text-xs font-semibold text-blue-800">Preço e lucro por canal</summary>
+        <div className="mt-2 space-y-2">
+          {costCents <= 0 && <p className="rounded bg-amber-50 p-2 text-[11px] text-amber-800">Sem custo informado: o lucro abaixo considera custo zero.</p>}
+          {!listings ? <p className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />Consultando preços nos canais…</p>
+            : listings.map(listing => <ListingRow key={listing.key} listing={listing} costCents={costCents} product={product}
+                fee={fees ? fees[listing.channel] : null}
+                onSaved={() => setRefresh(value => value + 1)} />)}
+          {listings && <button type="button" onClick={() => setRefresh(value => value + 1)} className="text-xs font-semibold text-blue-700 hover:underline">Consultar preços novamente</button>}
+        </div>
+      </details>
+    </div>
   );
 }
 

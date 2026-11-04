@@ -11,7 +11,7 @@ import { unitService } from '../../../services/units';
 import { isLocalCatalogPreviewRuntime } from '../../../services/localCatalogPreview';
 import { stockLocationService } from '../../../services/stockLocationService';
 import { aggregateModelProducts, getModelIdentifierSections } from '../../../services/modelProductAggregator.js';
-import { getFamilyChildState, getProductCloneState } from '../../../services/productClonePrefill.js';
+import { getFamilyChildState } from '../../../services/productClonePrefill.js';
 import { familyWorkspacePath } from '../../../services/productFormDrafts';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 import { PAYJOY_SALE_NOTE } from '../../../utils/saleInformation.js';
@@ -195,6 +195,31 @@ export const ModelProductAggregatorPage: React.FC = () => {
     const [tiktokProductId, setTiktokProductId] = useState<string | null>(null);
     const mlManageUrl = (product: any) => `/admin/settings/mercado-livre?productId=${encodeURIComponent(skuProductIds(product)[0] || '')}&sku=${encodeURIComponent(product?.sku || '')}`;
 
+    // product-financial-v1: um item por SKU com a origem do custo (cadastro, peças com IMEI ou herdado do pai).
+    const financialSkus = useMemo(() => (data?.memoryGroups || []).flatMap((memoryGroup: any) =>
+        memoryGroup.colors.flatMap((colorGroup: any) => (colorGroup.skuGroups || colorGroup.products).map((product: any) => {
+            const ids = skuProductIds(product);
+            const raw = product.raw || product.products?.[0]?.raw || product.products?.[0] || product;
+            const units = (colorGroup.units || []).filter((unit: any) => ids.includes(String(unit.productId)));
+            const custom = (() => { try { return typeof raw?.custom_fields === 'string' ? JSON.parse(raw.custom_fields) : (raw?.custom_fields || {}); } catch { return {}; } })();
+            const unitCosts = units.filter((unit: any) => unit.status === 'available').map((unit: any) => Number(unit.costValue || 0)).filter((value: number) => value > 0);
+            const registeredCost = Number(raw?.price_cost || 0);
+            const costLock = units.length > 0 ? 'Aparelho com IMEI: o custo vem da compra de cada unidade (média móvel). Ajuste na peça.'
+                : custom?.inherit_parent_cost === true ? 'Esta variação herda o custo do produto pai: altere no cadastro da família.' : null;
+            const costCents = units.length > 0 && unitCosts.length ? Math.round(unitCosts.reduce((a: number, b: number) => a + b, 0) / unitCosts.length) : registeredCost;
+            return {
+                key: `${memoryGroup.key}-${colorGroup.key}-${product.key || product.id}`,
+                productId: ids[0],
+                product: raw,
+                label: [memoryGroup.label, colorGroup.color].filter(Boolean).join(' · '),
+                costCents,
+                registeredCostCents: Number.isFinite(Number(raw?.price_cost)) && raw?.price_cost !== null && raw?.price_cost !== undefined ? Number(raw.price_cost) : null,
+                costSource: units.length > 0 ? 'média do custo das peças disponíveis' : 'custo do cadastro',
+                costLock,
+                inventoryUrl: ids[0] ? `/admin/products/${encodeURIComponent(ids[0])}?tab=inventory` : '',
+            };
+        }).filter((sku: any) => sku.productId))), [data]);
+
     const modelName = useMemo(() => String(data?.model?.name || 'Modelo'), [data]);
     const memoryGroups = useMemo(() => [...(data?.memoryGroups || [])].sort((a, b) =>
         Number(a.isIncomplete) - Number(b.isIncomplete)
@@ -337,6 +362,14 @@ export const ModelProductAggregatorPage: React.FC = () => {
                         <SummaryCard label="Valor investido" value={money(data.totals.investedValue)} />
                         <SummaryCard label="Valor já retornado" value={money(data.totals.returnedValue)} />
                         </section>
+                        {/* product-financial-v1: custo (fonte única: custo do cadastro / custo das peças) e preço/lucro por canal, por SKU. */}
+                        <section className="mt-5 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <h3 className="text-sm font-semibold text-slate-800">Custo, preço e lucro por canal</h3>
+                                <p className="text-xs text-slate-500">Custo e preços são os mesmos do cadastro e dos anúncios — editar aqui altera a origem.</p>
+                            </div>
+                            {financialSkus.map((sku: any) => <SkuChannelPricing key={sku.key} {...sku} onCostSaved={() => void load()} />)}
+                        </section>
                     </details>
 
                     <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
@@ -426,11 +459,6 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                         product={product}
                                                                         onNavigate={navigate}
                                                                         onPrintLabel={() => setLabelProduct(product.raw || product.products?.[0]?.raw || null)}
-                                                                        allowDuplicate={!familyParent && !(product.raw?.parent_id || product.products?.[0]?.raw?.parent_id)}
-                                                                        onDuplicate={() => {
-                                                                            const source = product.raw || product.products?.[0]?.raw || product.products?.[0] || product;
-                                                                            navigate('/admin/products/new', { state: getProductCloneState(source) });
-                                                                        }}
                                                                     />
                                                                     <SkuChannelBadges
                                                                         channels={mergeChannels(skuProductIds(product), channels.byProductId)}
@@ -438,17 +466,6 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                         mlManageUrl={mlManageUrl(product)}
                                                                         onTikTok={() => setTiktokProductId(skuProductIds(product)[0] || null)}
                                                                     />
-                                                                    {skuProductIds(product)[0] && (() => {
-                                                                        const raw = product.raw || product.products?.[0]?.raw || product.products?.[0] || product;
-                                                                        const registeredCost = Number(raw?.price_cost || 0);
-                                                                        const costCents = registeredCost > 0 ? registeredCost : Number(colorGroup.averageStockCost || 0);
-                                                                        return <SkuChannelPricing
-                                                                            productId={skuProductIds(product)[0]}
-                                                                            product={raw}
-                                                                            costCents={costCents}
-                                                                            costSource={registeredCost > 0 ? 'custo do cadastro' : costCents > 0 ? 'custo médio das peças em estoque' : 'sem custo cadastrado'}
-                                                                        />;
-                                                                    })()}
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -638,7 +655,9 @@ const ModelStockLocations: React.FC<{ memoryGroups: any[]; rowsByProductId: Reco
     );
 };
 
-const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void; onDuplicate: () => void; onPrintLabel?: () => void; allowDuplicate?: boolean }> = ({ product, onNavigate, onDuplicate, onPrintLabel, allowDuplicate = true }) => (
+// product-page-no-duplicate-v1: "Adicionar igual" saiu da Página do Produto — criava outro cadastro (SKU duplicado);
+// mais unidades do mesmo produto entram por "Incluir peças".
+const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void; onPrintLabel?: () => void }> = ({ product, onNavigate, onPrintLabel }) => (
     <div className="flex flex-wrap items-center gap-1.5">
         {product.duplicateCount > 1 && <span className="font-mono text-xs font-bold text-slate-700">{product.sku || 'Sem SKU'}</span>}
         <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -661,16 +680,6 @@ const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => voi
                 <Pencil className="h-3.5 w-3.5" />
                 Editar
             </button>
-            {/* family-page-v1: em variacao de familia, mais pecas entram por "Incluir peças"; "Adicionar igual" criava cadastro duplicado. */}
-            {allowDuplicate && <button
-                type="button"
-                onClick={onDuplicate}
-                className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
-                title={`Abre novo cadastro preenchido a partir do SKU ${product.sku || 'produto'}, limpando IMEI e serial`}
-            >
-                <CopyPlus className="h-3.5 w-3.5" />
-                Adicionar igual
-            </button>}
             <button
                 type="button"
                 onClick={() => onNavigate(product.stockLocationUrl)}

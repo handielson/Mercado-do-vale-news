@@ -76,3 +76,33 @@ export function calculateChannelProfit({ priceCents, costCents, fee }) {
     marginPct: price > 0 ? Math.round((profitCents / price) * 10000) / 100 : 0,
   };
 }
+
+// tiktok-finance-fees-v1: sugestão para a tabela do TikTok a partir do extrato real (GET /tiktok-shop/finance/fee-summary).
+// Só campos do nível do pedido (statement_transactions[].x) com total negativo (custo para a loja);
+// totais agregados e campos de SKU ficam fora para não contar duas vezes.
+const TOTAL_FIELD = /^(total_|net_)?(fees?|settlement|revenue|adjustment)_amount$|^total_/;
+export function suggestTikTokFeesFromSummary(summary) {
+  const revenue = Number(summary?.revenue_cents || 0);
+  const orders = Number(summary?.orders_with_statement || 0);
+  const parts = { commission: [], other: [], shipping: [] };
+  for (const field of summary?.fields || []) {
+    const match = /^statement_transactions\[\]\.([a-z0-9_]+)$/.exec(String(field.path || ''));
+    if (!match) continue;
+    const key = match[1];
+    if (TOTAL_FIELD.test(key) || !(Number(field.total_cents) < 0)) continue;
+    const cost = Math.abs(Number(field.total_cents));
+    if (/shipping|logistic|delivery/.test(key)) parts.shipping.push({ key, cost });
+    else if (/commission/.test(key) && !/affiliate|creator|partner/.test(key)) parts.commission.push({ key, cost });
+    else parts.other.push({ key, cost });
+  }
+  const sum = (list) => list.reduce((total, item) => total + item.cost, 0);
+  const pctOf = (value) => (revenue > 0 ? Math.round((value / revenue) * 10000) / 100 : 0);
+  return {
+    revenueCents: revenue,
+    orders,
+    commissionPct: pctOf(sum(parts.commission)),
+    otherPct: pctOf(sum(parts.other)),
+    shippingCents: orders > 0 ? Math.round(sum(parts.shipping) / orders) : 0,
+    parts,
+  };
+}
