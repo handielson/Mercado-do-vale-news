@@ -1,9 +1,9 @@
 # v1.2.782-ml-billing-safe-log
 
-Data: 04/11/2026. Status: API publicada; site em publicação. Branch: `main`. Tag: `v1.2.782-ml-billing-safe-log`.
+Data: 04/11/2026. Status: publicada e validada. Branch: `main`. Tag: `v1.2.782-ml-billing-safe-log`.
 Mercado Livre: falhas do GET de faturamento registram somente `scope`, status HTTP upstream e código/classe técnica allowlisted. O log não inclui ID do pedido, vendedor, mensagem livre nem payload externo.
 Escopo somente leitura; preço, anúncios e estoque continuam desligados. Nenhuma captura de pedido foi realizada nesta versão.
-API publicada a partir do commit `64b6b89b`; backup `/var/www/mdv-api/backups/mercado-livre-1793770726820`. Site em `/var/www/mdv-site/releases/20261104-053810-ml-billing-safe-logs`.
+API publicada a partir do commit `64b6b89b`; backup `/var/www/mdv-api/backups/mercado-livre-1793770726820`. Site publicado em `/var/www/mdv-site/releases/20261104-053810-ml-billing-safe-logs`. Validação pública: site e API HTTP 200, MySQL ativo, rota sem chave HTTP 401. A escrita de preço, estoque e anúncios continua desligada.
 
 ---
 
