@@ -1,7 +1,7 @@
 {
   "version": "v1.2.783-etiqueta-por-variacao",
   "date": "2026-11-04",
-  "status": "ready",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.783-etiqueta-por-variacao",
   "release_vps": "/var/www/mdv-site/releases/20261104-053810-ml-billing-safe-logs",
@@ -43,5 +43,10 @@
     "tsc sem erro nos arquivos alterados",
     "npm run build ok",
     "tela (dados de teste): card Preto → R$ 1.299,00; Azul sem preço → R$ 1.099,00 do pai; Página da família e página do produto abrem a etiqueta do SKU certo"
-  ]
+  ],
+  "site_release": {
+    "status": "published",
+    "release": "/var/www/mdv-site/releases/20261104-113600-v1283-etiqueta",
+    "published_at": "2026-11-04T14:36:00Z"
+  }
 }

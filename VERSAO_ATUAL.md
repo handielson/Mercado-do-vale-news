@@ -1,6 +1,6 @@
 # v1.2.783-etiqueta-por-variacao
 
-Data: 04/11/2026. Status: **pronta, não publicada**. Branch: `main`.
+Data: 04/11/2026. Status: **publicada em 04/11/2026 11:36** (`/var/www/mdv-site/releases/20261104-113600-v1283-etiqueta`). Branch: `main`.
 Etiqueta de preço em cada variação: card da família, Página da família e página do produto.
 
 ---
