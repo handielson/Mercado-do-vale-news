@@ -195,3 +195,46 @@ test('erros upstream expõem somente código técnico allowlisted', async () => 
     else process.env.MERCADO_LIVRE_ERP_READ_KEY = oldKey;
   }
 });
+
+test('falha de transporte no faturamento expõe classe técnica fixa, sem mensagem externa', async () => {
+  const oldKey = process.env.MERCADO_LIVRE_ERP_READ_KEY;
+  const oldFetch = global.fetch;
+  process.env.MERCADO_LIVRE_ERP_READ_KEY = readKey;
+  global.fetch = async () => { throw new TypeError('fetch failed: private host and token'); };
+  const app = appFor({ query: async () => [[settings]] });
+  try {
+    const result = await app.inject({ method: 'GET',
+      url: '/api/mercado-livre/erp/orders/billing-details?order_ids=128',
+      headers: { 'x-erp-read-key': readKey } });
+    assert.equal(result.statusCode, 502);
+    assert.deepEqual(result.json(), { error: 'Consulta do faturamento dos pedidos Mercado Livre indisponível.',
+      diagnostic: { failureClass: 'transport_error' } });
+    assert.equal(result.body.includes('private host'), false);
+    assert.equal(result.body.includes('token'), false);
+  } finally {
+    await app.close(); global.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
+    else process.env.MERCADO_LIVRE_ERP_READ_KEY = oldKey;
+  }
+});
+
+test('resposta de faturamento em formato inválido é classificada sem ecoar valores', async () => {
+  const oldKey = process.env.MERCADO_LIVRE_ERP_READ_KEY;
+  const oldFetch = global.fetch;
+  process.env.MERCADO_LIVRE_ERP_READ_KEY = readKey;
+  global.fetch = async () => response({ results: 'private malformed payload' });
+  const app = appFor({ query: async () => [[settings]] });
+  try {
+    const result = await app.inject({ method: 'GET',
+      url: '/api/mercado-livre/erp/orders/billing-details?order_ids=129',
+      headers: { 'x-erp-read-key': readKey } });
+    assert.equal(result.statusCode, 502);
+    assert.deepEqual(result.json(), { error: 'Consulta do faturamento dos pedidos Mercado Livre indisponível.',
+      diagnostic: { failureClass: 'invalid_response' } });
+    assert.equal(result.body.includes('private malformed payload'), false);
+  } finally {
+    await app.close(); global.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
+    else process.env.MERCADO_LIVRE_ERP_READ_KEY = oldKey;
+  }
+});

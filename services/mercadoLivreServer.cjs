@@ -660,6 +660,13 @@ function mercadoLivreBillingDetailsToErp(row, orderId, sellerId) {
     order_id: orderId, seller_id: sellerId, available: true, payment_info: paymentInfo, sale_fee: saleFee, charges };
 }
 
+function mercadoLivreBillingFailureClass(error) {
+  if (error?.name === 'TypeError') return 'transport_error';
+  if (error?.name === 'SyntaxError') return 'invalid_json';
+  if (error?.statusCode === 502) return 'invalid_response';
+  return 'internal_error';
+}
+
 async function loadMercadoLivreOrderBillingBatchForErp(pool, orderIdsValue) {
   const orderIds = Array.isArray(orderIdsValue) ? orderIdsValue.map(value => String(value ?? '')) : [];
   if (!orderIds.length || orderIds.length > 60 || orderIds.some(id => !/^\d{1,30}$/.test(id)) ||
@@ -1500,6 +1507,9 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
       if (typeof error.remoteCode === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/i.test(error.remoteCode)) {
         diagnostic.upstreamCode = error.remoteCode;
       }
+      if (!Object.keys(diagnostic).length && status === 502) {
+        diagnostic.failureClass = mercadoLivreBillingFailureClass(error);
+      }
       return reply.code(status).send({ error: message, ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     }
   };
@@ -1524,6 +1534,9 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
       }
       if (typeof error.remoteCode === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/i.test(error.remoteCode)) {
         diagnostic.upstreamCode = error.remoteCode;
+      }
+      if (!Object.keys(diagnostic).length && status === 502) {
+        diagnostic.failureClass = mercadoLivreBillingFailureClass(error);
       }
       return reply.code(status).send({ error: message, ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     }
