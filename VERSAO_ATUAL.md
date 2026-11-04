@@ -1,9 +1,9 @@
 # v1.2.781-ml-billing-query-contract
 
-Data: 04/11/2026. Status: preparada para publicação. Branch: `main`. Tag: `v1.2.781-ml-billing-query-contract`.
+Data: 04/11/2026. Status: API publicada; site em publicação. Branch: `main`. Tag: `v1.2.781-ml-billing-query-contract`.
 Mercado Livre: remove parâmetro `seller_id` não documentado do GET de faturamento por pedido; validação de vendedor permanece antes da consulta no serviço.
 Escopo somente leitura; sem vendas, lançamentos financeiros, anúncios, preço ou estoque.
-API e site: pendentes até validação da publicação.
+API publicada em `/var/www/mdv-api/backups/mercado-livre-1793769633454` a partir do commit `e53aceef`. Site em `/var/www/mdv-site/releases/20261104-052011-ml-billing-contract`.
 
 ---
 

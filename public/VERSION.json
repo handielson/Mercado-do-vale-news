@@ -4,12 +4,12 @@
   "status": "ready",
   "branch": "main",
   "tag": "v1.2.781-ml-billing-query-contract",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261104-052011-ml-billing-contract",
   "api_release": {
-    "status": "pending",
+    "status": "published",
     "mode": "--mercado-livre-only",
-    "backup": "pendente",
-    "source_commit": "pendente"
+    "backup": "/var/www/mdv-api/backups/mercado-livre-1793769633454",
+    "source_commit": "e53aceef"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Mercado Livre: GET de faturamento por pedido usa somente order_ids no contrato documentado; vendedor continua conferido pela API.",
@@ -37,7 +37,7 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic"
   },
-  "site_source_base": "pendente",
+  "site_source_base": "e53aceef",
   "changed_files": [
     "services/mercadoLivreServer.cjs",
     "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
