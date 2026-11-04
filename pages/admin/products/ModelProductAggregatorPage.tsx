@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CopyPlus, ExternalLink, FileText, ImageOff, Loader2, MapPin, Pencil, Plus, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CopyPlus, ExternalLink, FileText, ImageOff, Loader2, MapPin, Pencil, Plus, Printer, RefreshCw } from 'lucide-react';
+import { LazyLabelPrintModal } from '../../../components/products/LazyLabelPrintModal';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { modelService } from '../../../services/models';
@@ -93,6 +94,8 @@ export const ModelProductAggregatorPage: React.FC = () => {
     const [openingParentForm, setOpeningParentForm] = useState(false);
     // family-page-v1: o painel do modelo e a pagina administrativa da familia (uma familia por modelo).
     const [familyParent, setFamilyParent] = useState<any | null>(null);
+    // family-variant-label-v1: etiqueta de preço por SKU da família.
+    const [labelProduct, setLabelProduct] = useState<any | null>(null);
     const addUnitsPath = (product: any) => {
         const id = product?.id || product?.raw?.id || product?.products?.[0]?.id || product?.products?.[0]?.raw?.id;
         return id ? `/admin/products/${encodeURIComponent(String(id))}?tab=inventory&addUnit=1` : '';
@@ -390,6 +393,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                         key={product.key || product.id}
                                                                         product={product}
                                                                         onNavigate={navigate}
+                                                                        onPrintLabel={() => setLabelProduct(product.raw || product.products?.[0]?.raw || null)}
                                                                         allowDuplicate={!familyParent && !(product.raw?.parent_id || product.products?.[0]?.raw?.parent_id)}
                                                                         onDuplicate={() => {
                                                                             const source = product.raw || product.products?.[0]?.raw || product.products?.[0] || product;
@@ -488,6 +492,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                     </div>
                 </div>
             </div>}
+            <LazyLabelPrintModal product={labelProduct} parent={familyParent} onClose={() => setLabelProduct(null)} />
         </div>
     );
 };
@@ -533,7 +538,7 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
     </div>
 );
 
-const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void; onDuplicate: () => void; allowDuplicate?: boolean }> = ({ product, onNavigate, onDuplicate, allowDuplicate = true }) => (
+const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void; onDuplicate: () => void; onPrintLabel?: () => void; allowDuplicate?: boolean }> = ({ product, onNavigate, onDuplicate, onPrintLabel, allowDuplicate = true }) => (
     <div className="flex flex-wrap items-center gap-1.5">
         {product.duplicateCount > 1 && <span className="font-mono text-xs font-bold text-slate-700">{product.sku || 'Sem SKU'}</span>}
         <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -575,6 +580,15 @@ const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => voi
                 <MapPin className="h-3.5 w-3.5" />
                 Estoque
             </button>
+            {onPrintLabel && (product.raw || product.products?.[0]?.raw) && <button
+                type="button"
+                onClick={onPrintLabel}
+                className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                title={`Imprimir etiqueta de preço do SKU ${product.sku || 'produto'}`}
+            >
+                <Printer className="h-3.5 w-3.5" />
+                Etiqueta
+            </button>}
         </div>
     </div>
 );

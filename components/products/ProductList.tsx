@@ -1,12 +1,13 @@
 
 import React, { useEffect, useState } from 'react';
-import { Copy, Package, Pencil, Plus } from 'lucide-react';
+import { Copy, Package, Pencil, Plus, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import type { TikTokShopProductLink } from '../../services/tiktokShopService';
 import type { ProductFamilyGroup } from './ProductFamilyList';
 import { ProductCard } from './ProductCard';
+import { LazyLabelPrintModal } from './LazyLabelPrintModal';
 import { getProductVariationSpecs } from '../../services/modelProductAggregator.js';
 
 interface ProductListProps {
@@ -37,6 +38,8 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
     const familyProduct = group.parent || group.representative;
     const matchedVariantId = variants.find(variant => group.matchedProducts.some(product => product.id === variant.id))?.id;
     const [selectedId, setSelectedId] = useState(matchedVariantId || variants[0]?.id || group.representative.id);
+    // family-variant-label-v1: etiqueta de preço de cada variação (o botão do card imprime o pai).
+    const [labelProduct, setLabelProduct] = useState<Product | null>(null);
     useEffect(() => {
         if (matchedVariantId) setSelectedId(matchedVariantId);
     }, [matchedVariantId]);
@@ -86,6 +89,7 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
                                 const stock = Math.max(0, Number(product.stock_quantity) || 0);
                                 return <li key={product.id} className="flex items-center justify-between gap-2">
                                     <span className={stock > 0 ? '' : 'text-slate-400'}>{label(product)} ({stock} un.)</span>
+                                    <span className="flex shrink-0 items-center gap-1">
                                     <button type="button"
                                         onClick={(event) => { event.stopPropagation(); navigate(`/admin/products/${encodeURIComponent(product.id)}?tab=inventory&addUnit=1`); }}
                                         title={`Incluir mais peças de ${label(product)}${memoryGroup.title ? ` · ${memoryGroup.title}` : ''}`}
@@ -93,6 +97,14 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
                                         className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-emerald-300 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100">
                                         <Plus size={11} /> peças
                                     </button>
+                                    <button type="button"
+                                        onClick={(event) => { event.stopPropagation(); setLabelProduct(product); }}
+                                        title={`Imprimir etiqueta de ${label(product)}${memoryGroup.title ? ` · ${memoryGroup.title}` : ''} · ${product.sku || product.id}`}
+                                        aria-label={`Etiqueta de ${label(product)}${memoryGroup.title ? ` · ${memoryGroup.title}` : ''} · ${product.sku || product.id}`}
+                                        className="inline-flex shrink-0 items-center rounded-md border border-slate-300 bg-white p-1 text-slate-600 hover:bg-blue-50 hover:text-blue-700">
+                                        <Printer size={12} />
+                                    </button>
+                                    </span>
                                 </li>;
                             })}
                         </ul>
@@ -135,9 +147,16 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
                         className="ml-1 inline-flex items-center rounded p-1 text-blue-600 hover:bg-blue-100">
                         <Pencil size={13} />
                     </button>}
+                    <button type="button" onClick={(event) => { event.stopPropagation(); setLabelProduct(product); }}
+                        title={`Imprimir etiqueta de ${label(product)}${memoryGroup.title ? ` · ${memoryGroup.title}` : ''} · ${product.sku || product.id}`}
+                        aria-label={`Imprimir etiqueta da variação ${label(product)} · ${product.sku || product.id}`}
+                        className="ml-0.5 inline-flex items-center rounded p-1 text-slate-500 hover:bg-blue-100 hover:text-blue-700">
+                        <Printer size={13} />
+                    </button>
                 </div>)}</div>
                 </div>)}
             </div>} />
+        <LazyLabelPrintModal product={labelProduct} parent={group.parent} onClose={() => setLabelProduct(null)} />
     </div>;
 }
 

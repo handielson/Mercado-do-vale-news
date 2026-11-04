@@ -1,29 +1,16 @@
 {
-  "version": "v1.2.782-ml-billing-safe-log",
+  "version": "v1.2.783-etiqueta-por-variacao",
   "date": "2026-11-04",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.782-ml-billing-safe-log",
+  "tag": "v1.2.783-etiqueta-por-variacao",
   "release_vps": "/var/www/mdv-site/releases/20261104-053810-ml-billing-safe-logs",
   "api_release": {
-    "status": "published",
-    "mode": "--mercado-livre-only",
-    "backup": "/var/www/mdv-api/backups/mercado-livre-1793770726820",
-    "source_commit": "64b6b89b"
+    "status": "sem alteração",
+    "note": "só site"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Mercado Livre: GET de faturamento registra somente classe/status/código técnico allowlisted em falhas, sem IDs nem payload.",
-  "n8n_release": {
-    "status": "pending",
-    "workflow_id": "SkrkB4vyKVDnQ68t",
-    "nodes": [
-      "Vendas - Preparar Busca",
-      "Vendas - Contexto Produtos",
-      "Vendas - Verificar Pos Lista"
-    ],
-    "before_sha256": "7d04055d8645a64c8ec399fdbf9bf30f174a52cb397663e75542c73c41888091",
-    "target_sha256": "36113bfc01e2c49d36a737727a53da4fefc65f219c480d73d67310add5801945"
-  },
+  "summary": "Etiqueta de preço por variação: no card da família (ícone de impressora ao lado de '+ peças' em cada cor, e na lista de SKUs), na Página da família (botão 'Etiqueta' em cada SKU) e na página do produto ('Imprimir etiqueta'). Antes só o botão do card existia e imprimia o produto pai. Variação sem preço próprio usa o preço do pai.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -37,17 +24,24 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic"
   },
-  "site_source_base": "64b6b89b",
+  "site_source_base": "6195fabe",
   "changed_files": [
-    "services/mercadoLivreServer.cjs",
-    "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
+    "components/products/labelPrintProduct.js",
+    "components/products/LazyLabelPrintModal.tsx",
+    "components/products/ProductList.tsx",
+    "pages/admin/products/ModelProductAggregatorPage.tsx",
+    "pages/admin/products/ProductDetailPage.tsx",
+    "tmp-tests/family-variant-label-print.test.mjs",
+    "tmp-tests/model-panel-variation-image.test.mjs",
+    "tmp-tests/product-family-card-render.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-04-v1.2.782-ml-billing-safe-log.md"
+    "docs/versoes/2026-11-04-v1.2.783-etiqueta-por-variacao.md"
   ],
   "validations": [
-    "node --test tmp-tests/mercado-livre-erp-billing-details.test.cjs (8/8)",
-    "node --check services/mercadoLivreServer.cjs",
-    "node --check server.js"
+    "family-variant-label-print (4) + product-family-card-render + model-panel-variation-image: 10/10",
+    "tsc sem erro nos arquivos alterados",
+    "npm run build ok",
+    "tela (dados de teste): card Preto → R$ 1.299,00; Azul sem preço → R$ 1.099,00 do pai; Página da família e página do produto abrem a etiqueta do SKU certo"
   ]
 }

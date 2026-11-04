@@ -1,3 +1,10 @@
+# v1.2.783-etiqueta-por-variacao
+
+Data: 04/11/2026. Status: **pronta, não publicada**. Branch: `main`.
+Etiqueta de preço em cada variação: card da família, Página da família e página do produto.
+
+---
+
 # v1.2.782-ml-billing-safe-log
 
 Data: 04/11/2026. Status: publicada e validada. Branch: `main`. Tag: `v1.2.782-ml-billing-safe-log`.

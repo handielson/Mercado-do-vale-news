@@ -12,7 +12,8 @@ const mod = { exports: {} };
 const icon = () => null;
 vm.runInNewContext(compiled, { exports: mod.exports, module: mod, require(name) {
   if (name === 'react') return React;
-  if (name === 'lucide-react') return { ChevronDown: icon, Copy: icon, Package: icon, Pencil: icon, Plus: icon };
+  if (name === 'lucide-react') return { ChevronDown: icon, Copy: icon, Package: icon, Pencil: icon, Plus: icon, Printer: icon };
+  if (name === './LazyLabelPrintModal') return { LazyLabelPrintModal: () => null };
   if (name === 'react-router-dom') return { useNavigate: () => () => {} };
   if (name === 'sonner') return { toast: {} };
   if (name === './CatalogTitleEditor') return { CatalogTitleEditor: () => null };

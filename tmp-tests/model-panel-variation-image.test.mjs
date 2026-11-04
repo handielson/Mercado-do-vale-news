@@ -36,6 +36,7 @@ vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.Mo
         if (id.endsWith('/modelProductAggregator.js')) return { aggregateModelProducts, getModelIdentifierSections };
         if (id.endsWith('/productFamilyImages.js')) return { productImageList, resolveProductFamilyImages };
         if (id.endsWith('/localCatalogPreview')) return { isLocalCatalogPreviewRuntime: () => false };
+        if (id.endsWith('/LazyLabelPrintModal')) return { LazyLabelPrintModal: () => null };
         return {};
     },
 }, { filename: 'ModelProductAggregatorPage.js' });

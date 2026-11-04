@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, ExternalLink, MapPin, Package, Plus, Tags } from 'lucide-react';
+import { ArrowLeft, ExternalLink, MapPin, Package, Plus, Printer, Tags } from 'lucide-react';
+import { LazyLabelPrintModal } from '../../../components/products/LazyLabelPrintModal';
 import { Product, ProductInput } from '../../../types/product';
 import { Unit, UnitInput } from '../../../types/unit';
 import { productService } from '../../../services/products';
@@ -117,6 +118,9 @@ export const ProductDetailPage: React.FC = () => {
         window.requestAnimationFrame(() => document.getElementById('product-tab-menu')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     };
     const [product, setProduct] = useState<Product | undefined>();
+    // family-variant-label-v1: etiqueta de preço desta variação/produto (e do pai, para o preço herdado).
+    const [labelOpen, setLabelOpen] = useState(false);
+    const [labelParent, setLabelParent] = useState<Product | null>(null);
     const formProduct = useMemo(() => product && print3dEntry ? { ...product, is_print3d: true } : product, [product, print3dEntry]);
     const [units, setUnits] = useState<Unit[]>([]);
     const [stats, setStats] = useState({ total: 0, available: 0, reserved: 0, sold: 0, rma: 0 });
@@ -297,6 +301,14 @@ export const ProductDetailPage: React.FC = () => {
         );
     }
 
+    const openLabel = async () => {
+        // Variação sem preço próprio usa o preço do pai na etiqueta.
+        if (product?.parent_id && !(Number(product.price_retail) > 0) && labelParent?.id !== product.parent_id) {
+            try { setLabelParent(await productService.getById(product.parent_id) || null); } catch { setLabelParent(null); }
+        }
+        setLabelOpen(true);
+    };
+
     if (!product) {
         return null;
     }
@@ -352,7 +364,15 @@ export const ProductDetailPage: React.FC = () => {
                         >
                             <MapPin className="h-4 w-4" /> Locais de estoque
                         </button>}
+                        <button
+                            type="button"
+                            onClick={() => void openLabel()}
+                            className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                        >
+                            <Printer className="h-4 w-4" /> Imprimir etiqueta
+                        </button>
                     </div>
+                    {labelOpen && <LazyLabelPrintModal product={product} parent={labelParent} onClose={() => setLabelOpen(false)} />}
                 </div>
             </div>
 
