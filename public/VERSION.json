@@ -4,10 +4,12 @@
   "status": "ready",
   "branch": "main",
   "tag": "v1.2.779-ml-billing-batch",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261104-000638-ml-billing-batch",
   "api_release": {
-    "status": "pendente",
-    "note": "API --mercado-livre-only: GET de faturamento em lotes de até 60 pedidos; sem gravação remota."
+    "status": "published",
+    "mode": "--mercado-livre-only",
+    "backup": "/var/www/mdv-api/backups/mercado-livre-1793750769348",
+    "source_commit": "174ba31a"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Mercado Livre: faturamento de pedidos por GET em lotes de até 60, captura allowlisted só no staging e proteção contra reconsulta. A release do site também leva o desconto do PDV v1.2.770.",
@@ -33,9 +35,9 @@
   "pending_deployments": {
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
-    "site": "v1.2.779-ml-billing-batch: preparada; publicação pendente"
+    "site": "v1.2.779-ml-billing-batch: publicação do site em andamento"
   },
-  "site_source_base": "7e2de5be",
+  "site_source_base": "174ba31a",
   "changed_files": [
     "VERSAO_ATUAL.md",
     "docs/versoes/2026-11-03-v1.2.778-bot-celulares-baratos-acessorio.md",
