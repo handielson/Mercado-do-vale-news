@@ -1,6 +1,6 @@
 # v1.2.784-pagina-do-produto-canais-lucro
 
-Data: 04/11/2026. Status: **pendente de publicação**. Branch: `main`.
+Data: 04/11/2026. Status: **publicada em 04/11/2026 19:56** (`/var/www/mdv-site/releases/20261104-195640-v1284-pagina-produto`). Branch: `main`. Tag: `v1.2.784-pagina-do-produto-canais-lucro`. API publicada (`--sales-marketplaces-only`, backup `/var/www/mdv-api/backups/sales-marketplaces-1793832936749`).
 Página do Produto (antiga Página da família): canais de venda conectados, onde está no estoque, preço e lucro por canal com edição do valor de venda e tabela de taxas por canal. API: tabela `channel_fee_settings`, rotas `/channel-fee-settings` e preço no status do TikTok.
 
 ---

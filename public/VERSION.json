@@ -1,13 +1,13 @@
 {
   "version": "v1.2.784-pagina-do-produto-canais-lucro",
   "date": "2026-11-04",
-  "status": "pendente",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.784-pagina-do-produto-canais-lucro",
-  "release_vps": "/var/www/mdv-site/releases/20261104-053810-ml-billing-safe-logs",
+  "release_vps": "/var/www/mdv-site/releases/20261104-195640-v1284-pagina-produto",
   "api_release": {
-    "status": "pendente",
-    "note": "tabela channel_fee_settings, rotas /channel-fee-settings, price_cents no status do TikTok"
+    "status": "published",
+    "note": "node deploy-vps-server-only.cjs --sales-marketplaces-only (commit e9b0bc29); backup /var/www/mdv-api/backups/sales-marketplaces-1793832936749; tabela channel_fee_settings criada"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Página do Produto (antiga Página da família): canais de venda conectados (Shopee M/G, Mercado Livre, TikTok) com badges por SKU, onde está no estoque, preço e lucro por canal com edição do valor de venda enviada ao canal, e tabela de taxas por canal editável salva na VPS.",
@@ -50,11 +50,12 @@
     "product-admin-page-channels (5) + channelProfit (4): 9/9",
     "pdp-admin-edit-actions-static e product-family-model-guard-static ok com o novo nome",
     "tsc sem erro nos arquivos alterados; node --check vps_server.js e vps_server.cjs",
-    "leitura real na VPS: SVF10UBAU site/Shopee M/Shopee G R$ 179,00"
+    "leitura real na VPS: SVF10UBAU site/Shopee M/Shopee G R$ 179,00",
+    "produção: VERSION.json v1.2.784, /status 200, /channel-fee-settings 401 sem chave e 200 com chave; Página do Produto no Chrome logado: canais, estoque e lucro (site/Shopee M/G/TikTok R$ 179,00), console sem erros"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "published",
+    "release": "/var/www/mdv-site/releases/20261104-195640-v1284-pagina-produto",
+    "published_at": "2026-11-04T22:56:40Z"
   }
 }
