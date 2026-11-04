@@ -62,7 +62,7 @@ test('faturamento do pedido é GET autenticado, confere vendedor e expõe soment
     assert.deepEqual(requests.map(row => row.url.pathname), [
       '/orders/123', '/billing/integration/group/ML/order/details']);
     assert.equal(requests[1].url.searchParams.get('order_ids'), '123');
-    assert.equal(requests[1].url.searchParams.get('seller_id'), '7');
+    assert.equal(requests[1].url.searchParams.has('seller_id'), false);
     assert(requests.every(row => row.method === 'GET'));
   } finally {
     await app.close(); global.fetch = oldFetch;
@@ -93,7 +93,7 @@ test('lê faturamento de pedidos em lote, limita 60 IDs e conserva somente dados
     assert.equal(result.statusCode, 200);
     assert.equal(requests.length, 1);
     assert.equal(requests[0].url.searchParams.get('order_ids'), '123,124');
-    assert.equal(requests[0].url.searchParams.get('seller_id'), '7');
+    assert.equal(requests[0].url.searchParams.has('seller_id'), false);
     assert.equal(requests[0].method, 'GET');
     assert.deepEqual(result.json().items.map(item => [item.order_id, item.available]), [['123', true], ['124', false]]);
     assert.equal(JSON.stringify(result.json()).includes('PRIVATE'), false);

@@ -678,7 +678,7 @@ async function loadMercadoLivreOrderBillingBatchForErp(pool, orderIdsValue) {
   if (!/^\d{1,30}$/.test(sellerId)) {
     throw Object.assign(new Error('Conecte a conta do Mercado Livre.'), { statusCode: 409 });
   }
-  const billingPath = `/billing/integration/group/ML/order/details?order_ids=${encodeURIComponent(orderIds.join(','))}&seller_id=${encodeURIComponent(sellerId)}`;
+  const billingPath = `/billing/integration/group/ML/order/details?order_ids=${encodeURIComponent(orderIds.join(','))}`;
   const billingResponse = await mlRequest(pool, billingPath);
   if (billingResponse.status === 206) {
     throw Object.assign(new Error('O Mercado Livre retornou faturamento parcial; aguarde antes de consultar novamente.'),

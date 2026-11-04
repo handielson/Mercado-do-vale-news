@@ -1,3 +1,12 @@
+# v1.2.781-ml-billing-query-contract
+
+Data: 04/11/2026. Status: preparada para publicação. Branch: `main`. Tag: `v1.2.781-ml-billing-query-contract`.
+Mercado Livre: remove parâmetro `seller_id` não documentado do GET de faturamento por pedido; validação de vendedor permanece antes da consulta no serviço.
+Escopo somente leitura; sem vendas, lançamentos financeiros, anúncios, preço ou estoque.
+API e site: pendentes até validação da publicação.
+
+---
+
 # v1.2.780-ml-billing-safe-diagnostic
 
 Data: 03/11/2026. Status: publicada. Branch: `main`. Tag: `v1.2.780-ml-billing-safe-diagnostic`.
