@@ -1,6 +1,6 @@
 # v1.2.786-financeiro-produto-custo-tiktok
 
-Data: 04/11/2026. Status: **pendente de publicação**. Branch: `main`.
+Data: 04/11/2026. Status: **publicada em 04/11/2026 20:21** (`/var/www/mdv-site/releases/20261104-202145-v1286-financeiro`). Branch: `main`. Tag: `v1.2.786-financeiro-produto-custo-tiktok`. API publicada (backup `/var/www/mdv-api/backups/sales-marketplaces-1793834457138`). Pendente: escopo de Finanças no app do TikTok.
 Página do Produto: custo e preço/lucro por canal no Resumo financeiro (custo pela fonte única), sem "Adicionar igual", aviso de grupo de preço e taxas reais do TikTok pelo extrato.
 
 ---
