@@ -1,6 +1,6 @@
 # v1.2.785-shopee-rotas-protegidas
 
-Data: 04/11/2026. Status: **pendente de publicação**. Branch: `main`.
+Data: 04/11/2026. Status: **publicada em 04/11/2026 20:08** (`/var/www/mdv-site/releases/20261104-200803-v1285-shopee-auth`). Branch: `main`. Tag: `v1.2.785-shopee-rotas-protegidas`. API publicada (backup `/var/www/mdv-api/backups/sales-marketplaces-1793833709861`).
 Segurança: `/api/shopee-catalog` e `/api/shopee-actions` passam a exigir login de admin ou `x-sync-key` (antes respondiam sem login, inclusive alteração de preço e estoque).
 
 ---

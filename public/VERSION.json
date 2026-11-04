@@ -1,13 +1,13 @@
 {
   "version": "v1.2.785-shopee-rotas-protegidas",
   "date": "2026-11-04",
-  "status": "pendente",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.785-shopee-rotas-protegidas",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261104-200803-v1285-shopee-auth",
   "api_release": {
-    "status": "pendente",
-    "note": "/api/shopee-catalog e /api/shopee-actions exigem admin ou x-sync-key"
+    "status": "published",
+    "note": "--sales-marketplaces-only do commit 7422071e; backup /var/www/mdv-api/backups/sales-marketplaces-1793833709861"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Segurança: /api/shopee-catalog e /api/shopee-actions (preço, estoque, anúncios, pedidos) respondiam sem login pela internet; agora exigem login de admin ou x-sync-key. O admin envia o token automaticamente nessas duas rotas (services/shopeeApiAuth.ts); o agente de impressão já usa x-sync-key.",
@@ -40,11 +40,12 @@
   ],
   "validations": [
     "shopee-api-auth (3) + 17 testes vps-shopee-*-static: ok",
-    "node --check vps_server.js e vps_server.cjs"
+    "node --check vps_server.js e vps_server.cjs",
+    "produção: /api/shopee-catalog e POST /api/shopee-actions sem login → 401; com x-sync-key → 200; admin no Chrome lê Shopee M/G (R$ 179,00) pela rota protegida"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "published",
+    "release": "/var/www/mdv-site/releases/20261104-200803-v1285-shopee-auth",
+    "published_at": "2026-11-04T23:08:03Z"
   }
 }
