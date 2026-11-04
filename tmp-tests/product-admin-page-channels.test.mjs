@@ -149,3 +149,9 @@ test('custo: usa o ajuste manual existente (fonte única) e respeita bloqueios',
   assert.match(page, /Aparelho com IMEI: o custo vem da compra de cada unidade/);
   assert.match(page, /herda o custo do produto pai/);
 });
+
+test('Shopee M: link do anúncio usa o ID da loja principal dos dados da empresa', () => {
+  const src = fs.readFileSync('components/products/ModelPublicationChannels.tsx', 'utf8');
+  assert.match(src, /getCompanyData\(\)/, 'carrega os dados da empresa');
+  assert.match(src, /shopIdByConnection\.set\(PRIMARY_SHOPEE_CONNECTION_ID, String\(primaryShopId\)\)/, 'loja principal (M) recebe o shopee_shop_id da empresa');
+});

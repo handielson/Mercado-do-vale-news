@@ -1,3 +1,10 @@
+# v1.2.787-shopee-m-link
+
+Data: 04/11/2026. Status: **pendente de publicação**. Branch: `main`.
+Página do Produto: o badge Shopee M abre o anúncio (ID da loja principal vem dos dados da empresa).
+
+---
+
 # v1.2.786-financeiro-produto-custo-tiktok
 
 Data: 04/11/2026. Status: **publicada em 04/11/2026 20:21** (`/var/www/mdv-site/releases/20261104-202145-v1286-financeiro`). Branch: `main`. Tag: `v1.2.786-financeiro-produto-custo-tiktok`. API publicada (backup `/var/www/mdv-api/backups/sales-marketplaces-1793834457138`). Pendente: escopo de Finanças no app do TikTok.

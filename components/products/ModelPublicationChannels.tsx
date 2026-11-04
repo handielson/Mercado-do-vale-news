@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { shopeeProductService, getShopeeStoreCode } from '../../services/shopeeProducts';
-import { listShopeeConnections, normalizeShopeeConnectionId } from '../../services/shopeeConnections';
+import { listShopeeConnections, normalizeShopeeConnectionId, PRIMARY_SHOPEE_CONNECTION_ID } from '../../services/shopeeConnections';
+import { getCompanyData } from '../../services/companyService';
 import { mercadoLivreService } from '../../services/mercadoLivreService';
 import { tiktokShopService, type TikTokShopProductLink } from '../../services/tiktokShopService';
 import { buildShopeeProductUrl } from './productCardShopee.js';
@@ -29,10 +30,14 @@ export function useModelPublicationChannels(productIds: string[], parentId: stri
       listShopeeConnections(),
       mercadoLivreService.getProductLinks(),
       tiktokShopService.getProductLinks(ids),
-    ]).then(([shopeeRows, connections, ml, tiktok]) => {
+      getCompanyData(),
+    ]).then(([shopeeRows, connections, ml, tiktok, company]) => {
       if (!active) return;
       const shopIdByConnection = new Map((connections.status === 'fulfilled' ? connections.value : [])
         .map(connection => [normalizeShopeeConnectionId(connection.id), connection.shopee_shop_id]));
+      // shopee-primary-link-v1: a loja principal (M) não fica em /shopee-connections; o ID dela está nos dados da empresa (igual ao card).
+      const primaryShopId = company.status === 'fulfilled' ? (company.value as any)?.shopee_shop_id : null;
+      if (primaryShopId && !shopIdByConnection.get(PRIMARY_SHOPEE_CONNECTION_ID)) shopIdByConnection.set(PRIMARY_SHOPEE_CONNECTION_ID, String(primaryShopId));
       const result: Record<string, ProductChannels> = {};
       const entry = (id: string) => (result[id] ||= { shopee: [], ml: [], tiktok: null, tiktokInherited: false });
       if (shopeeRows.status === 'fulfilled') {

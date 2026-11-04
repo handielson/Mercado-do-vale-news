@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.786-financeiro-produto-custo-tiktok",
+  "version": "v1.2.787-shopee-m-link",
   "date": "2026-11-04",
-  "status": "published",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.786-financeiro-produto-custo-tiktok",
-  "release_vps": "/var/www/mdv-site/releases/20261104-202145-v1286-financeiro",
+  "tag": "v1.2.787-shopee-m-link",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "published",
-    "note": "--sales-marketplaces-only do commit 115cd536 (inclui services/tiktokFinanceFees.cjs); backup /var/www/mdv-api/backups/sales-marketplaces-1793834457138"
+    "status": "sem alteração",
+    "note": "só site"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Página do Produto: custo e preço/lucro por canal dentro do Resumo financeiro (custo editado pelo ajuste manual existente, fonte única price_cost; celular com IMEI e variação que herda do pai ficam bloqueados); 'Adicionar igual' removido (criava cadastro duplicado); aviso quando o grupo de preço do celular segura o preço do site; taxas reais do TikTok pelo extrato dos pedidos concluídos na janela de taxas.",
+  "summary": "Página do Produto: badge Shopee M passa a abrir o anúncio (ID da loja principal vem dos dados da empresa, como no card; a lista /shopee-connections só tem as lojas extras).",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -23,37 +23,23 @@
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic",
-    "tiktok_finance_scope": "liberar o escopo de Finanças no app TikTok Shop (Partner Center) e reautorizar a loja para /tiktok-shop/finance/fee-summary"
+    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
   },
-  "site_source_base": "c5fafc61",
+  "site_source_base": "c5cbfce8",
   "changed_files": [
-    "pages/admin/products/ModelProductAggregatorPage.tsx",
-    "components/products/ChannelPricingPanel.tsx",
-    "services/channelPricing.ts",
-    "utils/channelProfit.js",
-    "utils/channelProfit.test.mjs",
-    "services/tiktokFinanceFees.cjs",
-    "vps_server.js",
-    "vps_server.cjs",
-    "deploy-vps-server-only.cjs",
-    "tmp-tests/tiktok-finance-fees.test.cjs",
+    "components/products/ModelPublicationChannels.tsx",
     "tmp-tests/product-admin-page-channels.test.mjs",
-    "tmp-tests/model-product-clone-prefill.test.mjs",
-    "tmp-tests/product-family-model-guard-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-04-v1.2.786-financeiro-produto-custo-tiktok.md"
+    "docs/versoes/2026-11-04-v1.2.787-shopee-m-link.md"
   ],
   "validations": [
-    "product-admin-page-channels (6) + channelProfit (5) + tiktok-finance-fees (3) + shopee-api-auth (3) + family-variant-label-print (4): 21/21",
-    "model-product-clone-prefill, product-family-model-guard, pdp-admin-edit-actions, model-aggregator-no-legacy-runtime, vps-shopee-*-read: ok",
-    "tsc sem erro nos arquivos alterados; node --check vps_server.js/.cjs, deploy-vps-server-only.cjs",
-    "produção: /status 200; /tiktok-shop/finance/fee-summary 401 sem chave; com chave consultou 9 pedidos e o TikTok respondeu 105005 (app sem permissão de Finanças) — pendente liberar o escopo no app e reautorizar",
-    "Chrome logado: Resumo financeiro com 'Custo, preço e lucro por canal' e custo editável; sem 'Adicionar igual'; console sem erros"
+    "product-admin-page-channels: 7/7 (novo caso: Shopee M usa shopee_shop_id da empresa)",
+    "tsc sem erro no arquivo alterado"
   ],
   "site_release": {
-    "status": "published",
-    "release": "/var/www/mdv-site/releases/20261104-202145-v1286-financeiro",
-    "published_at": "2026-11-04T23:21:45Z"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   }
 }
