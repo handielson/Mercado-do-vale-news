@@ -1,3 +1,12 @@
+# v1.2.779-ml-billing-batch
+
+Data: 03/11/2026. Status: **preparada para publicação**. Branch de destino: `main`.
+Mercado Livre: GET de faturamento em lotes de até 60 pedidos; capturas ficam apenas no staging e não são consultadas novamente. Resposta parcial 206 não é salva.
+ERP: sem criação de venda, lançamento financeiro ou movimento de estoque.
+A publicação do site também inclui o desconto no PDV preparado em v1.2.770.
+
+---
+
 # v1.2.778-bot-celulares-baratos-acessorio
 
 Data: 03/11/2026. Status: **pronta, publicação no n8n pendente**. Branch: `main`.

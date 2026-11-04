@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.778-bot-celulares-baratos-acessorio",
+  "version": "v1.2.779-ml-billing-batch",
   "date": "2026-11-03",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.778-bot-celulares-baratos-acessorio",
-  "release_vps": "/var/www/mdv-site/releases/20261103-232452-ml-billing-error-diagnostic",
+  "tag": "v1.2.779-ml-billing-batch",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "sem alteração",
-    "note": "só n8n"
+    "status": "pendente",
+    "note": "API --mercado-livre-only: GET de faturamento em lotes de até 60 pedidos; sem gravação remota."
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Bot WhatsApp (n8n): 'celulares em conta/mais baratos' e 'quais as promoções' (sem produto) passam a listar a categoria Celulares do mais barato (até 8, título 'Celulares mais em conta') em vez de busca por texto (que mandava uma capa ou nada); com um acessório na lista, escolher/pedir foto não cai mais em 'Essa combinação de memória e cor não está disponível' em loop. Só 3 Code nodes; grafo igual.",
+  "summary": "Mercado Livre: faturamento de pedidos por GET em lotes de até 60, captura allowlisted só no staging e proteção contra reconsulta. A release do site também leva o desconto do PDV v1.2.770.",
   "n8n_release": {
     "status": "pending",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -33,20 +33,27 @@
   "pending_deployments": {
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
-    "site": "v1.2.770-pdv-desconto-visivel: pronta, não publicada"
+    "site": "v1.2.779-ml-billing-batch: preparada; publicação pendente"
   },
   "site_source_base": "7e2de5be",
   "changed_files": [
-    "scripts/n8n-cheapest-promo-accessory-fix.cjs",
-    "scripts/deploy-n8n-cheapest-promo-accessory-fix.cjs",
-    "tmp-tests/n8n-cheapest-promo-accessory-fix.test.cjs",
-    "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-03-v1.2.778-bot-celulares-baratos-acessorio.md"
+    "docs/versoes/2026-11-03-v1.2.778-bot-celulares-baratos-acessorio.md",
+    "docs/versoes/2026-11-03-v1.2.779-ml-billing-batch.md",
+    "package-lock.json",
+    "public/VERSION.json",
+    "scripts/deploy-n8n-cheapest-promo-accessory-fix.cjs",
+    "scripts/n8n-cheapest-promo-accessory-fix.cjs",
+    "services/mercadoLivreServer.cjs",
+    "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
+    "tmp-tests/n8n-cheapest-promo-accessory-fix.test.cjs"
   ],
   "validations": [
     "n8n-cheapest-promo-accessory-fix (6) aprovado no fluxo atual e no candidato",
     "regressão de vendas n8n: 128/128 no atual e 128/128 no candidato",
-    "conversa real reproduzida com dados de teste"
+    "conversa real reproduzida com dados de teste",
+    "Mercado Livre billing batch: 5/5; node --check services/mercadoLivreServer.cjs",
+    "ERP: 126 testes Python e 6/6 E2E da inbox",
+    "npm ci --no-audit --no-fund; npm run build"
   ]
 }

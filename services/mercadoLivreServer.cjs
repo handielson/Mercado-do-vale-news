@@ -603,19 +603,16 @@ async function loadMercadoLivreOrderBillingDetailsForErp(pool, orderIdValue) {
   if (String(order?.id || '') !== orderId || String(order?.seller?.id || '') !== sellerId) {
     throw Object.assign(new Error('Pedido não encontrado para o vendedor conectado.'), { statusCode: 404 });
   }
-  const billingPath = `/billing/integration/group/ML/order/details?order_ids=${encodeURIComponent(orderId)}`;
-  const payload = await (await mlRequest(pool, billingPath)).json();
-  if (!payload || typeof payload !== 'object' || !Array.isArray(payload.results) || payload.results.length > 60) {
-    throw Object.assign(new Error('Resposta de faturamento do pedido inválida.'), { statusCode: 502 });
-  }
-  const matches = payload.results.filter(row => String(row?.order_id || '') === orderId);
-  if (matches.length > 1) {
-    throw Object.assign(new Error('O faturamento retornou linhas duplicadas para o pedido.'), { statusCode: 502 });
-  }
-  const row = matches[0];
+  const batch = await loadMercadoLivreOrderBillingBatchForErp(pool, [orderId]);
+  return batch.items[0];
+}
+
+function mercadoLivreBillingDetailsToErp(row, orderId, sellerId) {
   if (!row) return { read_only: true, source: 'mercado_livre_order_billing_details',
     order_id: orderId, seller_id: sellerId, available: false, payment_info: [], sale_fee: null, charges: [] };
-
+  if (String(row.order_id || '') !== orderId) {
+    throw Object.assign(new Error('O faturamento retornou um pedido inesperado.'), { statusCode: 502 });
+  }
   const rawPayments = row.payment_info == null ? [] : Array.isArray(row.payment_info) ? row.payment_info : [row.payment_info];
   if (rawPayments.length > 20) {
     throw Object.assign(new Error('Lista de pagamentos do faturamento inválida.'), { statusCode: 502 });
@@ -661,6 +658,40 @@ async function loadMercadoLivreOrderBillingDetailsForErp(pool, orderIdValue) {
   });
   return { read_only: true, source: 'mercado_livre_order_billing_details',
     order_id: orderId, seller_id: sellerId, available: true, payment_info: paymentInfo, sale_fee: saleFee, charges };
+}
+
+async function loadMercadoLivreOrderBillingBatchForErp(pool, orderIdsValue) {
+  const orderIds = Array.isArray(orderIdsValue) ? orderIdsValue.map(value => String(value ?? '')) : [];
+  if (!orderIds.length || orderIds.length > 60 || orderIds.some(id => !/^\d{1,30}$/.test(id)) ||
+      new Set(orderIds).size !== orderIds.length) {
+    throw Object.assign(new Error('Informe de 1 a 60 pedidos únicos para consultar o faturamento.'), { statusCode: 400 });
+  }
+  const settings = await loadSettings(pool);
+  const sellerId = String(settings.user_id || '').trim();
+  if (!/^\d{1,30}$/.test(sellerId)) {
+    throw Object.assign(new Error('Conecte a conta do Mercado Livre.'), { statusCode: 409 });
+  }
+  const billingPath = `/billing/integration/group/ML/order/details?order_ids=${encodeURIComponent(orderIds.join(','))}&seller_id=${encodeURIComponent(sellerId)}`;
+  const billingResponse = await mlRequest(pool, billingPath);
+  if (billingResponse.status === 206) {
+    throw Object.assign(new Error('O Mercado Livre retornou faturamento parcial; aguarde antes de consultar novamente.'),
+      { statusCode: 503, remoteStatus: 206 });
+  }
+  const payload = await billingResponse.json();
+  if (!payload || typeof payload !== 'object' || !Array.isArray(payload.results) || payload.results.length > 60) {
+    throw Object.assign(new Error('Resposta de faturamento do pedido inválida.'), { statusCode: 502 });
+  }
+  const requested = new Set(orderIds);
+  const rowsByOrder = new Map();
+  for (const row of payload.results) {
+    const id = String(row?.order_id || '');
+    if (!requested.has(id) || rowsByOrder.has(id)) {
+      throw Object.assign(new Error('O faturamento retornou pedido não solicitado ou linhas duplicadas.'), { statusCode: 502 });
+    }
+    rowsByOrder.set(id, row);
+  }
+  return { read_only: true, source: 'mercado_livre_order_billing_details', seller_id: sellerId,
+    items: orderIds.map(id => mercadoLivreBillingDetailsToErp(rowsByOrder.get(id), id, sellerId)) };
 }
 
 function validErpOrderDate(value, endOfDay = false) {
@@ -1462,7 +1493,8 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         : status === 400 || status === 409 ? error.message
           : 'Consulta do faturamento do pedido Mercado Livre indisponível.';
       const diagnostic = {};
-      if (Number.isInteger(error.remoteStatus) && error.remoteStatus >= 400 && error.remoteStatus <= 599) {
+      if (error.remoteStatus === 206 ||
+          (Number.isInteger(error.remoteStatus) && error.remoteStatus >= 400 && error.remoteStatus <= 599)) {
         diagnostic.upstreamStatus = error.remoteStatus;
       }
       if (typeof error.remoteCode === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/i.test(error.remoteCode)) {
@@ -1473,6 +1505,31 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
   };
   registerAliases(fastify, 'get', '/mercado-livre/erp/orders/:orderId/billing-details',
     erpReadRoute, getErpOrderBillingDetails);
+  const getErpOrderBillingDetailsBatch = async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      const raw = request.query?.order_ids;
+      const orderIds = typeof raw === 'string' ? raw.split(',') : [];
+      return await loadMercadoLivreOrderBillingBatchForErp(pool, orderIds);
+    } catch (error) {
+      const authorizationBlocked = [401, 403].includes(error.remoteStatus);
+      const status = error.statusCode || (authorizationBlocked ? 409 : 502);
+      const message = authorizationBlocked ? 'A conexão OAuth atual não permite consultar o faturamento.'
+        : status === 400 || status === 409 || status === 503 ? error.message
+          : 'Consulta do faturamento dos pedidos Mercado Livre indisponível.';
+      const diagnostic = {};
+      if (error.remoteStatus === 206 ||
+          (Number.isInteger(error.remoteStatus) && error.remoteStatus >= 400 && error.remoteStatus <= 599)) {
+        diagnostic.upstreamStatus = error.remoteStatus;
+      }
+      if (typeof error.remoteCode === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/i.test(error.remoteCode)) {
+        diagnostic.upstreamCode = error.remoteCode;
+      }
+      return reply.code(status).send({ error: message, ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
+    }
+  };
+  registerAliases(fastify, 'get', '/mercado-livre/erp/orders/billing-details',
+    erpReadRoute, getErpOrderBillingDetailsBatch);
   registerAliases(fastify, 'get', '/mercado-livre/products/candidates', protectedRoute, presentListingError(listingHandlers.candidates));
   registerAliases(fastify, 'post', '/mercado-livre/products/link', protectedRoute, linkProduct);
   registerAliases(fastify, 'get', '/mercado-livre/products/links', protectedRoute, async () => {
@@ -1505,6 +1562,7 @@ module.exports = {
   loadMercadoLivreOrderDetailForErp,
   loadMercadoLivreOrderPaymentDetailsForErp,
   loadMercadoLivreOrderBillingDetailsForErp,
+  loadMercadoLivreOrderBillingBatchForErp,
   loadMercadoLivreErpProducts,
   validErpOrderDate,
   selectDcePdfDocument,

@@ -62,7 +62,74 @@ test('faturamento do pedido é GET autenticado, confere vendedor e expõe soment
     assert.deepEqual(requests.map(row => row.url.pathname), [
       '/orders/123', '/billing/integration/group/ML/order/details']);
     assert.equal(requests[1].url.searchParams.get('order_ids'), '123');
+    assert.equal(requests[1].url.searchParams.get('seller_id'), '7');
     assert(requests.every(row => row.method === 'GET'));
+  } finally {
+    await app.close(); global.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
+    else process.env.MERCADO_LIVRE_ERP_READ_KEY = oldKey;
+  }
+});
+
+test('lê faturamento de pedidos em lote, limita 60 IDs e conserva somente dados allowlisted', async () => {
+  const oldKey = process.env.MERCADO_LIVRE_ERP_READ_KEY;
+  const oldFetch = global.fetch;
+  process.env.MERCADO_LIVRE_ERP_READ_KEY = readKey;
+  const requests = [];
+  global.fetch = async (url, options = {}) => {
+    const parsed = new URL(url); requests.push({ url: parsed, method: options.method || 'GET' });
+    if (parsed.pathname === '/billing/integration/group/ML/order/details') return response({ results: [
+      { order_id: '123', payer_nickname: 'PRIVATE BUYER', payment_info: [
+        { payment_id: 'pay_123', status: 'approved', transaction_amount: 150, payer_id: 999 }],
+        sale_fee: { gross: 40, net: 35 }, details: [] },
+    ] });
+    throw new Error(`unexpected external request ${parsed.pathname}`);
+  };
+  const app = appFor({ query: async () => [[settings]] });
+  try {
+    const result = await app.inject({ method: 'GET',
+      url: '/api/mercado-livre/erp/orders/billing-details?order_ids=123,124',
+      headers: { 'x-erp-read-key': readKey } });
+    assert.equal(result.statusCode, 200);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url.searchParams.get('order_ids'), '123,124');
+    assert.equal(requests[0].url.searchParams.get('seller_id'), '7');
+    assert.equal(requests[0].method, 'GET');
+    assert.deepEqual(result.json().items.map(item => [item.order_id, item.available]), [['123', true], ['124', false]]);
+    assert.equal(JSON.stringify(result.json()).includes('PRIVATE'), false);
+    assert.equal(JSON.stringify(result.json()).includes('999'), false);
+    const tooMany = Array.from({ length: 61 }, (_, index) => String(index + 1)).join(',');
+    const rejected = await app.inject({ method: 'GET',
+      url: `/api/mercado-livre/erp/orders/billing-details?order_ids=${tooMany}`,
+      headers: { 'x-erp-read-key': readKey } });
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(requests.length, 1);
+  } finally {
+    await app.close(); global.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
+    else process.env.MERCADO_LIVRE_ERP_READ_KEY = oldKey;
+  }
+});
+
+test('não trata resposta parcial do Mercado Livre como lote completo', async () => {
+  const oldKey = process.env.MERCADO_LIVRE_ERP_READ_KEY;
+  const oldFetch = global.fetch;
+  process.env.MERCADO_LIVRE_ERP_READ_KEY = readKey;
+  global.fetch = async url => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/billing/integration/group/ML/order/details') {
+      return response({ results: [{ order_id: '127' }] }, 206);
+    }
+    throw new Error(`unexpected external request ${parsed.pathname}`);
+  };
+  const app = appFor({ query: async () => [[settings]] });
+  try {
+    const result = await app.inject({ method: 'GET',
+      url: '/mercado-livre/erp/orders/billing-details?order_ids=127',
+      headers: { 'x-erp-read-key': readKey } });
+    assert.equal(result.statusCode, 503);
+    assert.deepEqual(result.json(), { error: 'O Mercado Livre retornou faturamento parcial; aguarde antes de consultar novamente.',
+      diagnostic: { upstreamStatus: 206 } });
   } finally {
     await app.close(); global.fetch = oldFetch;
     if (oldKey === undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
