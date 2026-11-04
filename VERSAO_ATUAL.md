@@ -1,3 +1,10 @@
+# v1.2.785-shopee-rotas-protegidas
+
+Data: 04/11/2026. Status: **pendente de publicação**. Branch: `main`.
+Segurança: `/api/shopee-catalog` e `/api/shopee-actions` passam a exigir login de admin ou `x-sync-key` (antes respondiam sem login, inclusive alteração de preço e estoque).
+
+---
+
 # v1.2.784-pagina-do-produto-canais-lucro
 
 Data: 04/11/2026. Status: **publicada em 04/11/2026 19:56** (`/var/www/mdv-site/releases/20261104-195640-v1284-pagina-produto`). Branch: `main`. Tag: `v1.2.784-pagina-do-produto-canais-lucro`. API publicada (`--sales-marketplaces-only`, backup `/var/www/mdv-api/backups/sales-marketplaces-1793832936749`).

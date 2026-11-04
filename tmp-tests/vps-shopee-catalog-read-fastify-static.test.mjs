@@ -35,7 +35,7 @@ const requiredActions = [
 for (const file of ['vps_server.js', 'vps_server.cjs']) {
   const source = readFileSync(file, 'utf8');
 
-  assert.match(source, /fastify\.all\('\/api\/shopee-catalog', handleShopeeCatalogVps\)/, `${file} must expose /api/shopee-catalog through Fastify`);
+  assert.match(source, /fastify\.all\('\/api\/shopee-catalog', \{ preHandler: requireSyncKeyOrAdmin \}, handleShopeeCatalogVps\)/, `${file} must expose /api/shopee-catalog through Fastify`);
   assert.match(source, /async function handleShopeeCatalogVps/, `${file} must implement Shopee catalog handler`);
   assert.match(source, /async function getShopeeCatalogCredentialsVps/, `${file} must load Shopee catalog credentials`);
   assert.match(source, /select=shopee_partner_id,shopee_partner_key,shopee_access_token,shopee_shop_id,shopee_refresh_token&limit=1/, `${file} must load Shopee catalog tokens from company_settings`);

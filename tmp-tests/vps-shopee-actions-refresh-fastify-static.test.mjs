@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 for (const file of ['vps_server.js', 'vps_server.cjs']) {
   const source = readFileSync(file, 'utf8');
 
-  assert.match(source, /fastify\.all\('\/api\/shopee-actions', handleShopeeActionsVps\)/, `${file} must expose /api/shopee-actions through Fastify`);
+  assert.match(source, /fastify\.all\('\/api\/shopee-actions', \{ preHandler: requireSyncKeyOrAdmin \}, handleShopeeActionsVps\)/, `${file} must expose /api/shopee-actions through Fastify`);
   assert.match(source, /case 'refresh_token'/, `${file} must support explicit Shopee token refresh action`);
   assert.match(source, /refreshShopeeCatalogTokenVps\(creds\)/, `${file} must reuse central Shopee refresh helper`);
   assert.match(source, /success: true/, `${file} must preserve successful refresh response shape`);

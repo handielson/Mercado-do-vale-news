@@ -13787,8 +13787,9 @@ fastify.get('/admin/bling/connection-status', { preHandler: requireAdminBearerTo
 fastify.get('/api/auth/callback/bling', handleBlingOAuthCallbackVps);
 fastify.all('/api/shopee', handleShopeeOAuthVps);
 fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);
-fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
-fastify.all('/api/shopee-actions', handleShopeeActionsVps);
+// shopee-api-auth-v1: catálogo e ações da Shopee (preço, estoque, anúncios, pedidos) só com admin ou x-sync-key.
+fastify.all('/api/shopee-catalog', { preHandler: requireSyncKeyOrAdmin }, handleShopeeCatalogVps);
+fastify.all('/api/shopee-actions', { preHandler: requireSyncKeyOrAdmin }, handleShopeeActionsVps);
 fastify.get('/shopee-connections', { preHandler: requireSyncKey }, async (_request, reply) => {
   const [rows] = await pool.query(`SELECT id, display_name, seller_type, shopee_shop_id, authorization_status, active, connected_at, created_at, updated_at FROM shopee_shop_connections ORDER BY created_at ASC`);
   return reply.send({ connections: rows });

@@ -4,6 +4,10 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import { prefetchCashbackSettings } from './components/catalog/CashbackBadge';
+import { installShopeeApiAuthFetch } from './services/shopeeApiAuth';
+
+// shopee-api-auth-v1: rotas da Shopee exigem login de admin; acrescenta o token só nelas.
+installShopeeApiAuthFetch();
 
 const MV_LEGACY_HOST = 'mv.mercadodovale.com.br';
 const CANONICAL_MERCADO_ORIGIN = 'https://www.mercadodovale.com.br';

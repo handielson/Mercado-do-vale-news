@@ -24,7 +24,7 @@ const requiredActions = [
 for (const file of ['vps_server.js', 'vps_server.cjs']) {
   const source = readFileSync(file, 'utf8');
 
-  assert.match(source, /fastify\.all\('\/api\/shopee-actions', handleShopeeActionsVps\)/, `${file} must expose /api/shopee-actions through Fastify`);
+  assert.match(source, /fastify\.all\('\/api\/shopee-actions', \{ preHandler: requireSyncKeyOrAdmin \}, handleShopeeActionsVps\)/, `${file} must expose /api/shopee-actions through Fastify`);
   assert.match(source, /async function handleShopeeActionsVps/, `${file} must implement Shopee actions handler`);
   assert.match(source, /request\.method !== 'POST' && request\.method !== 'GET'/, `${file} must allow only GET and POST for Shopee actions`);
   assert.match(source, /action obrigat(?:Ã³|ó)ria/, `${file} must validate missing action`);

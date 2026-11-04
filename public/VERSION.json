@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.784-pagina-do-produto-canais-lucro",
+  "version": "v1.2.785-shopee-rotas-protegidas",
   "date": "2026-11-04",
-  "status": "published",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.784-pagina-do-produto-canais-lucro",
-  "release_vps": "/var/www/mdv-site/releases/20261104-195640-v1284-pagina-produto",
+  "tag": "v1.2.785-shopee-rotas-protegidas",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "published",
-    "note": "node deploy-vps-server-only.cjs --sales-marketplaces-only (commit e9b0bc29); backup /var/www/mdv-api/backups/sales-marketplaces-1793832936749; tabela channel_fee_settings criada"
+    "status": "pendente",
+    "note": "/api/shopee-catalog e /api/shopee-actions exigem admin ou x-sync-key"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Página do Produto (antiga Página da família): canais de venda conectados (Shopee M/G, Mercado Livre, TikTok) com badges por SKU, onde está no estoque, preço e lucro por canal com edição do valor de venda enviada ao canal, e tabela de taxas por canal editável salva na VPS.",
+  "summary": "Segurança: /api/shopee-catalog e /api/shopee-actions (preço, estoque, anúncios, pedidos) respondiam sem login pela internet; agora exigem login de admin ou x-sync-key. O admin envia o token automaticamente nessas duas rotas (services/shopeeApiAuth.ts); o agente de impressão já usa x-sync-key.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -24,38 +24,27 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic"
   },
-  "site_source_base": "e3991089",
+  "site_source_base": "bc562530",
   "changed_files": [
-    "pages/admin/products/ModelProductAggregatorPage.tsx",
-    "components/products/ModelPublicationChannels.tsx",
-    "components/products/ChannelPricingPanel.tsx",
-    "services/channelPricing.ts",
-    "utils/channelProfit.js",
-    "utils/channelProfit.test.mjs",
-    "components/products/ProductCard.tsx",
-    "components/products/ProductForm.tsx",
-    "pages/admin/products/ProductDetailPage.tsx",
-    "pages/store/PublicProductPage.tsx",
     "vps_server.js",
     "vps_server.cjs",
-    "tmp-tests/product-admin-page-channels.test.mjs",
-    "tmp-tests/pdp-admin-edit-actions-static.test.mjs",
-    "tmp-tests/product-family-model-guard-static.test.mjs",
-    "tmp-tests/model-panel-variation-image.test.mjs",
+    "services/shopeeApiAuth.ts",
+    "index.tsx",
+    "tmp-tests/shopee-api-auth.test.mjs",
+    "tmp-tests/vps-shopee-actions-read-fastify-static.test.mjs",
+    "tmp-tests/vps-shopee-actions-refresh-fastify-static.test.mjs",
+    "tmp-tests/vps-shopee-catalog-read-fastify-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-04-v1.2.784-pagina-do-produto-canais-lucro.md"
+    "docs/versoes/2026-11-04-v1.2.785-shopee-rotas-protegidas.md"
   ],
   "validations": [
-    "product-admin-page-channels (5) + channelProfit (4): 9/9",
-    "pdp-admin-edit-actions-static e product-family-model-guard-static ok com o novo nome",
-    "tsc sem erro nos arquivos alterados; node --check vps_server.js e vps_server.cjs",
-    "leitura real na VPS: SVF10UBAU site/Shopee M/Shopee G R$ 179,00",
-    "produção: VERSION.json v1.2.784, /status 200, /channel-fee-settings 401 sem chave e 200 com chave; Página do Produto no Chrome logado: canais, estoque e lucro (site/Shopee M/G/TikTok R$ 179,00), console sem erros"
+    "shopee-api-auth (3) + 17 testes vps-shopee-*-static: ok",
+    "node --check vps_server.js e vps_server.cjs"
   ],
   "site_release": {
-    "status": "published",
-    "release": "/var/www/mdv-site/releases/20261104-195640-v1284-pagina-produto",
-    "published_at": "2026-11-04T22:56:40Z"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   }
 }
