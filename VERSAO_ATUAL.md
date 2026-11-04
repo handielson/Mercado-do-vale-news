@@ -1,6 +1,6 @@
 # v1.2.787-shopee-m-link
 
-Data: 04/11/2026. Status: **pendente de publicação**. Branch: `main`.
+Data: 04/11/2026. Status: **publicada em 04/11/2026 20:51** (`/var/www/mdv-site/releases/20261104-205116-v1287-shopee-m-link`). Branch: `main`. Tag: `v1.2.787-shopee-m-link`.
 Página do Produto: o badge Shopee M abre o anúncio (ID da loja principal vem dos dados da empresa).
 
 ---

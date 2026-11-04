@@ -1,10 +1,10 @@
 {
   "version": "v1.2.787-shopee-m-link",
   "date": "2026-11-04",
-  "status": "pendente",
+  "status": "published",
   "branch": "main",
   "tag": "v1.2.787-shopee-m-link",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261104-205116-v1287-shopee-m-link",
   "api_release": {
     "status": "sem alteração",
     "note": "só site"
@@ -35,11 +35,12 @@
   ],
   "validations": [
     "product-admin-page-channels: 7/7 (novo caso: Shopee M usa shopee_shop_id da empresa)",
-    "tsc sem erro no arquivo alterado"
+    "tsc sem erro no arquivo alterado",
+    "Chrome logado: Shopee M → https://shopee.com.br/product/321114781/55669790650 e Shopee G → https://shopee.com.br/product/1063100526/58221304511"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "published",
+    "release": "/var/www/mdv-site/releases/20261104-205116-v1287-shopee-m-link",
+    "published_at": "2026-11-04T23:51:16Z"
   }
 }
