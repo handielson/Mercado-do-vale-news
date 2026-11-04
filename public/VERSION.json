@@ -1,18 +1,18 @@
 {
-  "version": "v1.2.781-ml-billing-query-contract",
+  "version": "v1.2.782-ml-billing-safe-log",
   "date": "2026-11-04",
   "status": "ready",
   "branch": "main",
-  "tag": "v1.2.781-ml-billing-query-contract",
-  "release_vps": "/var/www/mdv-site/releases/20261104-052011-ml-billing-contract",
+  "tag": "v1.2.782-ml-billing-safe-log",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "published",
+    "status": "pending",
     "mode": "--mercado-livre-only",
-    "backup": "/var/www/mdv-api/backups/mercado-livre-1793769633454",
-    "source_commit": "e53aceef"
+    "backup": "pendente",
+    "source_commit": "pendente"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Mercado Livre: GET de faturamento por pedido usa somente order_ids no contrato documentado; vendedor continua conferido pela API.",
+  "summary": "Mercado Livre: GET de faturamento registra somente classe/status/código técnico allowlisted em falhas, sem IDs nem payload.",
   "n8n_release": {
     "status": "pending",
     "workflow_id": "SkrkB4vyKVDnQ68t",
@@ -37,16 +37,17 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic"
   },
-  "site_source_base": "e53aceef",
+  "site_source_base": "pendente",
   "changed_files": [
     "services/mercadoLivreServer.cjs",
     "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-04-v1.2.781-ml-billing-query-contract.md"
+    "docs/versoes/2026-11-04-v1.2.782-ml-billing-safe-log.md"
   ],
   "validations": [
-    "node --test tmp-tests/mercado-livre-erp-billing-details.test.cjs (7/7)",
-    "node --check services/mercadoLivreServer.cjs"
+    "node --test tmp-tests/mercado-livre-erp-billing-details.test.cjs (8/8)",
+    "node --check services/mercadoLivreServer.cjs",
+    "node --check server.js"
   ]
 }

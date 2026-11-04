@@ -667,6 +667,30 @@ function mercadoLivreBillingFailureClass(error) {
   return 'internal_error';
 }
 
+function mercadoLivreBillingDiagnostic(error, status) {
+  const diagnostic = {};
+  if (error?.remoteStatus === 206 ||
+      (Number.isInteger(error?.remoteStatus) && error.remoteStatus >= 400 && error.remoteStatus <= 599)) {
+    diagnostic.upstreamStatus = error.remoteStatus;
+  }
+  if (typeof error?.remoteCode === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/i.test(error.remoteCode)) {
+    diagnostic.upstreamCode = error.remoteCode;
+  }
+  if (!Object.keys(diagnostic).length && status === 502) {
+    diagnostic.failureClass = mercadoLivreBillingFailureClass(error);
+  }
+  return diagnostic;
+}
+
+function logMercadoLivreBillingFailure(request, scope, status, diagnostic) {
+  request.log?.warn({
+    event: 'mercado_livre_billing_read_failed', scope, httpStatus: status,
+    ...(Number.isInteger(diagnostic.upstreamStatus) ? { upstreamStatus: diagnostic.upstreamStatus } : {}),
+    ...(typeof diagnostic.upstreamCode === 'string' ? { upstreamCode: diagnostic.upstreamCode } : {}),
+    ...(typeof diagnostic.failureClass === 'string' ? { failureClass: diagnostic.failureClass } : {}),
+  }, 'Mercado Livre billing read failed');
+}
+
 async function loadMercadoLivreOrderBillingBatchForErp(pool, orderIdsValue) {
   const orderIds = Array.isArray(orderIdsValue) ? orderIdsValue.map(value => String(value ?? '')) : [];
   if (!orderIds.length || orderIds.length > 60 || orderIds.some(id => !/^\d{1,30}$/.test(id)) ||
@@ -1499,17 +1523,8 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         : status === 404 ? 'Pedido não encontrado para o vendedor conectado.'
         : status === 400 || status === 409 ? error.message
           : 'Consulta do faturamento do pedido Mercado Livre indisponível.';
-      const diagnostic = {};
-      if (error.remoteStatus === 206 ||
-          (Number.isInteger(error.remoteStatus) && error.remoteStatus >= 400 && error.remoteStatus <= 599)) {
-        diagnostic.upstreamStatus = error.remoteStatus;
-      }
-      if (typeof error.remoteCode === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/i.test(error.remoteCode)) {
-        diagnostic.upstreamCode = error.remoteCode;
-      }
-      if (!Object.keys(diagnostic).length && status === 502) {
-        diagnostic.failureClass = mercadoLivreBillingFailureClass(error);
-      }
+      const diagnostic = mercadoLivreBillingDiagnostic(error, status);
+      logMercadoLivreBillingFailure(request, 'single', status, diagnostic);
       return reply.code(status).send({ error: message, ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     }
   };
@@ -1527,17 +1542,8 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
       const message = authorizationBlocked ? 'A conexão OAuth atual não permite consultar o faturamento.'
         : status === 400 || status === 409 || status === 503 ? error.message
           : 'Consulta do faturamento dos pedidos Mercado Livre indisponível.';
-      const diagnostic = {};
-      if (error.remoteStatus === 206 ||
-          (Number.isInteger(error.remoteStatus) && error.remoteStatus >= 400 && error.remoteStatus <= 599)) {
-        diagnostic.upstreamStatus = error.remoteStatus;
-      }
-      if (typeof error.remoteCode === 'string' && /^[a-z][a-z0-9_.-]{0,63}$/i.test(error.remoteCode)) {
-        diagnostic.upstreamCode = error.remoteCode;
-      }
-      if (!Object.keys(diagnostic).length && status === 502) {
-        diagnostic.failureClass = mercadoLivreBillingFailureClass(error);
-      }
+      const diagnostic = mercadoLivreBillingDiagnostic(error, status);
+      logMercadoLivreBillingFailure(request, 'batch', status, diagnostic);
       return reply.code(status).send({ error: message, ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     }
   };

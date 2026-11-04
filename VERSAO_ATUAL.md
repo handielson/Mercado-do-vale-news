@@ -1,3 +1,12 @@
+# v1.2.782-ml-billing-safe-log
+
+Data: 04/11/2026. Status: preparada para publicação. Branch: `main`. Tag: `v1.2.782-ml-billing-safe-log`.
+Mercado Livre: falhas do GET de faturamento registram somente `scope`, status HTTP upstream e código/classe técnica allowlisted. O log não inclui ID do pedido, vendedor, mensagem livre nem payload externo.
+Escopo somente leitura; preço, anúncios e estoque continuam desligados. Nenhuma captura de pedido foi realizada nesta versão.
+API e site: pendentes até validação da publicação.
+
+---
+
 # v1.2.781-ml-billing-query-contract
 
 Data: 04/11/2026. Status: publicada e validada. Branch: `main`. Tag: `v1.2.781-ml-billing-query-contract`.

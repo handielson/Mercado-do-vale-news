@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const pino = require('pino');
 const { registerMercadoLivreRoutes } = require('../services/mercadoLivreServer.cjs');
 
 const readKey = 'erp-order-billing-details-test-read-key'.padEnd(40, 'b');
@@ -9,8 +10,8 @@ function response(payload, status = 200) {
   return { ok: status >= 200 && status < 300, status,
     json: async () => payload, text: async () => JSON.stringify(payload) };
 }
-function appFor(pool) {
-  const app = require('fastify')();
+function appFor(pool, loggerInstance) {
+  const app = require('fastify')(loggerInstance ? { loggerInstance } : {});
   registerMercadoLivreRoutes(app, { pool,
     requireSyncKeyOrAdmin: async (_request, reply) => reply.code(401).send({ error: 'Unauthorized' }) });
   return app;
@@ -191,6 +192,42 @@ test('erros upstream expõem somente código técnico allowlisted', async () => 
     assert.equal(result.body.includes('never expose this'), false);
   } finally {
     await app.close(); global.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
+    else process.env.MERCADO_LIVRE_ERP_READ_KEY = oldKey;
+  }
+});
+
+test('registra diagnóstico técnico seguro da falha de faturamento sem IDs nem payload privado', async () => {
+  const oldKey = process.env.MERCADO_LIVRE_ERP_READ_KEY;
+  const oldFetch = global.fetch;
+  process.env.MERCADO_LIVRE_ERP_READ_KEY = readKey;
+  global.fetch = async url => {
+    const path = new URL(url).pathname;
+    if (path === '/orders/126') return response({ id: 126, seller: { id: 7 } });
+    if (path === '/billing/integration/group/ML/order/details') {
+      return response({ error: 'upstream_timeout', private: 'never log this body' }, 502);
+    }
+    throw new Error(`unexpected request ${path}`);
+  };
+  const entries = [];
+  const logger = pino({ level: 'warn' }, { write: line => entries.push(JSON.parse(line)) });
+  const app = appFor({ query: async () => [[settings]] }, logger);
+  try {
+    const result = await app.inject({ method: 'GET', url: '/api/mercado-livre/erp/orders/126/billing-details',
+      headers: { 'x-erp-read-key': readKey } });
+    assert.equal(result.statusCode, 502);
+    const entry = entries.find(row => row.event === 'mercado_livre_billing_read_failed');
+    assert(entry);
+    assert.deepEqual({ scope: entry.scope, httpStatus: entry.httpStatus,
+      upstreamStatus: entry.upstreamStatus, upstreamCode: entry.upstreamCode },
+    { scope: 'single', httpStatus: 502, upstreamStatus: 502, upstreamCode: 'upstream_timeout' });
+    const logged = JSON.stringify(entry);
+    assert.equal(logged.includes('126'), false);
+    assert.equal(logged.includes('never log this body'), false);
+    assert.equal(logged.includes('PRIVATE'), false);
+    assert.deepEqual(result.json().diagnostic, { upstreamStatus: 502, upstreamCode: 'upstream_timeout' });
+  } finally {
+    await app.close(); global.fetch = oldFetch; logger.flush();
     if (oldKey === undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
     else process.env.MERCADO_LIVRE_ERP_READ_KEY = oldKey;
   }
