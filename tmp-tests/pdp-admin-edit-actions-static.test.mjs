@@ -29,8 +29,8 @@ assert.match(
 
 assert.match(
   source,
-  /title="Abrir página da família"[\s\S]*?Página da família/,
-  'PDP admin action row must render the Página da família button (antigo Painel do modelo)',
+  /title="Abrir página do produto"[\s\S]*?Página do Produto/,
+  'PDP admin action row must render the Página do Produto button (antiga Página da família / Painel do modelo)',
 );
 
 assert.match(

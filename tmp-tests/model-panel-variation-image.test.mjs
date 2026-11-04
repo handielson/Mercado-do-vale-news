@@ -37,6 +37,8 @@ vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.Mo
         if (id.endsWith('/productFamilyImages.js')) return { productImageList, resolveProductFamilyImages };
         if (id.endsWith('/localCatalogPreview')) return { isLocalCatalogPreviewRuntime: () => false };
         if (id.endsWith('/LazyLabelPrintModal')) return { LazyLabelPrintModal: () => null };
+        if (id.endsWith('/ModelPublicationChannels')) return { useModelPublicationChannels: () => ({ loading: false, failed: false, byProductId: {}, reload() {} }), mergeChannels: () => ({ shopee: [], ml: [], tiktok: null, tiktokInherited: false }), ModelChannelsSummary: () => null, SkuChannelBadges: () => null };
+        if (id.endsWith('/ChannelPricingPanel')) return { ChannelFeesButton: () => null, SkuChannelPricing: () => null };
         return {};
     },
 }, { filename: 'ModelProductAggregatorPage.js' });

@@ -16,11 +16,12 @@ assert.match(form, /getFamilyChildState\(modelFamily\.parent\)/, 'form: cria a v
 assert.match(form, /blocksSubmitForDuplicateEAN \|\| Boolean\(modelFamily\)/, 'form: salvar bloqueado enquanto houver familia');
 assert.match(form, /if \(modelFamily\) \{ toast\.error/, 'form: submit tambem bloqueado no handler');
 const familyPage = readFileSync('pages/admin/products/ModelProductAggregatorPage.tsx', 'utf8');
-assert.match(familyPage, /Página da família/, 'painel do modelo virou a pagina da familia');
+assert.match(familyPage, />Página do Produto</, 'painel do modelo virou a Página do Produto (antiga pagina da familia)');
+assert.doesNotMatch(familyPage, /Página da família/, 'nome antigo Página da família não volta');
 assert.match(familyPage, /Nova variação \(cor\/memória\)/, 'pagina da familia cria variacao dentro dela');
 assert.match(familyPage, /Editar dados da família/, 'pagina da familia edita o pai');
 assert.match(familyPage, /Incluir peças em \$\{memoryGroup\.label\} \$\{colorGroup\.color\}/, 'cada cor tem Incluir peças');
 assert.match(familyPage, /allowDuplicate=\{!familyParent && !\(product\.raw\?\.parent_id/, '"Adicionar igual" nao aparece quando o modelo tem familia');
 assert.match(familyPage, /String\(product\.status \|\| ''\) !== 'inactive'/, 'cadastro solto inativo fica fora da pagina da familia');
-assert.match(form, /Abrir a página da família/, 'aviso do cadastro leva a pagina da familia');
+assert.match(form, /Abrir a página do produto/, 'aviso do cadastro leva a Página do Produto');
 console.log('product family model guard static checks passed');

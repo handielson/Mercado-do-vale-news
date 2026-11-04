@@ -16,6 +16,9 @@ import { familyWorkspacePath } from '../../../services/productFormDrafts';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 import { PAYJOY_SALE_NOTE } from '../../../utils/saleInformation.js';
 import { productImageList, resolveProductFamilyImages } from '../../../services/productFamilyImages.js';
+import { ModelChannelsSummary, SkuChannelBadges, mergeChannels, useModelPublicationChannels } from '../../../components/products/ModelPublicationChannels';
+import TikTokShopSyncModal from '../settings/components/TikTokShopSyncModal';
+import { ChannelFeesButton, SkuChannelPricing } from '../../../components/products/ChannelPricingPanel';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -33,6 +36,12 @@ function ModelVariationImage({ products, color }: { products: any[]; color: stri
             )}
         </div>
     );
+}
+
+// model-channels-v1: ids de cadastro de um SKU (agrupado ou não).
+function skuProductIds(product: any): string[] {
+    const list = Array.isArray(product?.products) && product.products.length ? product.products : [product];
+    return [...new Set(list.map((item: any) => String(item?.id || item?.raw?.id || '')).filter(Boolean))] as string[];
 }
 
 function money(cents: number): string {
@@ -96,6 +105,8 @@ export const ModelProductAggregatorPage: React.FC = () => {
     const [familyParent, setFamilyParent] = useState<any | null>(null);
     // family-variant-label-v1: etiqueta de preço por SKU da família.
     const [labelProduct, setLabelProduct] = useState<any | null>(null);
+    // model-stock-locations-v1: locais brutos por cadastro (mesma fonte do modal "Onde está no estoque" do card).
+    const [stockRowsByProductId, setStockRowsByProductId] = useState<Record<string, any[]>>({});
     const addUnitsPath = (product: any) => {
         const id = product?.id || product?.raw?.id || product?.products?.[0]?.id || product?.products?.[0]?.raw?.id;
         return id ? `/admin/products/${encodeURIComponent(String(id))}?tab=inventory&addUnit=1` : '';
@@ -153,6 +164,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                 safeProducts.map((product: any, index: number) => [product.id, locationLists[index] || []])
             );
 
+            setStockRowsByProductId(locationsByProductId);
             setData(aggregateModelProducts({
                 model,
                 categoriesById: Object.fromEntries(categories.map((category) => [category.id, category])),
@@ -174,6 +186,14 @@ export const ModelProductAggregatorPage: React.FC = () => {
     useEffect(() => {
         load();
     }, [load]);
+
+    const allSkuGroups = useMemo(() => (data?.memoryGroups || []).flatMap((memoryGroup: any) =>
+        memoryGroup.colors.flatMap((colorGroup: any) => colorGroup.skuGroups || colorGroup.products)), [data]);
+    const parentId = familyParent?.id ? String(familyParent.id) : null;
+    const channelProductIds = useMemo(() => [...allSkuGroups.flatMap(skuProductIds), ...(parentId ? [parentId] : [])], [allSkuGroups, parentId]);
+    const channels = useModelPublicationChannels(channelProductIds, parentId);
+    const [tiktokProductId, setTiktokProductId] = useState<string | null>(null);
+    const mlManageUrl = (product: any) => `/admin/settings/mercado-livre?productId=${encodeURIComponent(skuProductIds(product)[0] || '')}&sku=${encodeURIComponent(product?.sku || '')}`;
 
     const modelName = useMemo(() => String(data?.model?.name || 'Modelo'), [data]);
     const memoryGroups = useMemo(() => [...(data?.memoryGroups || [])].sort((a, b) =>
@@ -213,7 +233,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                         <ArrowLeft className="h-5 w-5" />
                     </button>
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-900">Página da família</h1>
+                        <h1 className="text-3xl font-bold text-slate-900">Página do Produto</h1>
                         <p className="mt-1 text-sm text-slate-500">{modelName}</p>
                     </div>
                 </div>
@@ -230,6 +250,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                         <Pencil className="h-4 w-4" />
                         Editar dados da família
                     </button>}
+                    <ChannelFeesButton />
                     <button
                         type="button"
                         onClick={load}
@@ -295,6 +316,17 @@ export const ModelProductAggregatorPage: React.FC = () => {
                             <span className="mt-2 block text-sm font-semibold text-blue-700">{showHidden ? 'Fechar lista de ocultos' : 'Mostrar aparelhos ocultos'}</span>
                         </button>
                     </section>
+                    <ModelChannelsSummary
+                        skuCount={allSkuGroups.length}
+                        groups={allSkuGroups.map((product: any) => mergeChannels(skuProductIds(product), channels.byProductId))}
+                        loading={channels.loading}
+                        failed={channels.failed}
+                        onReload={channels.reload}
+                        parentChannels={parentId ? channels.byProductId[parentId] || null : null}
+                        onParentTikTok={() => setTiktokProductId(parentId)}
+                        parentMlManageUrl={familyParent ? mlManageUrl(familyParent) : undefined}
+                    />
+                    <ModelStockLocations memoryGroups={memoryGroups} rowsByProductId={stockRowsByProductId} />
                     {showHidden && <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 print:hidden">Os aparelhos ocultos aparecem abaixo, em suas respectivas memórias e cores. Use Reativar quando o aparelho for localizado. Se o total for zero, não há aparelhos ocultos neste modelo.</p>}
                     <details className="rounded-xl border border-slate-200 bg-white p-4 print:hidden">
                         <summary className="cursor-pointer text-sm font-semibold text-slate-700">Resumo financeiro do modelo</summary>
@@ -389,8 +421,8 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                         </div>
                                                             <div className="space-y-2 print:hidden">
                                                                 {(colorGroup.skuGroups || colorGroup.products).map((product: any) => (
+                                                                    <div key={product.key || product.id} className="space-y-1.5">
                                                                     <ProductActions
-                                                                        key={product.key || product.id}
                                                                         product={product}
                                                                         onNavigate={navigate}
                                                                         onPrintLabel={() => setLabelProduct(product.raw || product.products?.[0]?.raw || null)}
@@ -400,6 +432,24 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                             navigate('/admin/products/new', { state: getProductCloneState(source) });
                                                                         }}
                                                                     />
+                                                                    <SkuChannelBadges
+                                                                        channels={mergeChannels(skuProductIds(product), channels.byProductId)}
+                                                                        loading={channels.loading}
+                                                                        mlManageUrl={mlManageUrl(product)}
+                                                                        onTikTok={() => setTiktokProductId(skuProductIds(product)[0] || null)}
+                                                                    />
+                                                                    {skuProductIds(product)[0] && (() => {
+                                                                        const raw = product.raw || product.products?.[0]?.raw || product.products?.[0] || product;
+                                                                        const registeredCost = Number(raw?.price_cost || 0);
+                                                                        const costCents = registeredCost > 0 ? registeredCost : Number(colorGroup.averageStockCost || 0);
+                                                                        return <SkuChannelPricing
+                                                                            productId={skuProductIds(product)[0]}
+                                                                            product={raw}
+                                                                            costCents={costCents}
+                                                                            costSource={registeredCost > 0 ? 'custo do cadastro' : costCents > 0 ? 'custo médio das peças em estoque' : 'sem custo cadastrado'}
+                                                                        />;
+                                                                    })()}
+                                                                    </div>
                                                                 ))}
                                                             </div>
                                                         </div>
@@ -493,6 +543,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                 </div>
             </div>}
             <LazyLabelPrintModal product={labelProduct} parent={familyParent} onClose={() => setLabelProduct(null)} />
+            {tiktokProductId && <TikTokShopSyncModal productId={tiktokProductId} onClose={() => setTiktokProductId(null)} onSuccess={() => channels.reload()} />}
         </div>
     );
 };
@@ -537,6 +588,55 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
         <p className="font-bold text-slate-800">{value}</p>
     </div>
 );
+
+// model-stock-locations-v1: "Onde está no estoque" por SKU, como no card do produto.
+const ModelStockLocations: React.FC<{ memoryGroups: any[]; rowsByProductId: Record<string, any[]> }> = ({ memoryGroups, rowsByProductId }) => {
+    const skus = memoryGroups.flatMap((memoryGroup: any) => memoryGroup.colors.flatMap((colorGroup: any) =>
+        (colorGroup.skuGroups || colorGroup.products).map((product: any) => {
+            const rows = skuProductIds(product).flatMap(id => rowsByProductId[id] || []).map((item: any) => ({
+                id: String(item.id || `${item.deposit_id}-${item.location_id}`),
+                depositName: item.deposit?.name || item.depositName || item.deposit_name || 'Depósito sem nome',
+                locationName: item.location?.name || item.locationName || item.location_name || '-',
+                locationCode: item.location?.code || item.locationCode || null,
+                quantity: Number(item.quantity || 0),
+                reserved: Number(item.reserved_quantity ?? item.reserved ?? 0),
+            }));
+            return { key: `${memoryGroup.key}-${colorGroup.key}-${product.key || product.id}`, label: `${memoryGroup.label} · ${colorGroup.color}`, sku: product.sku, rows };
+        })));
+    const total = skus.reduce((sum, sku) => sum + sku.rows.reduce((acc, row) => acc + row.quantity, 0), 0);
+    const reserved = skus.reduce((sum, sku) => sum + sku.rows.reduce((acc, row) => acc + row.reserved, 0), 0);
+    return (
+        <details className="rounded-xl border border-emerald-200 bg-white p-4 print:hidden">
+            <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm font-semibold text-emerald-800">
+                <MapPin className="h-4 w-4" /> Onde está no estoque
+                <span className="text-xs font-normal text-slate-500">· {Math.max(0, total - reserved)} disponível · {reserved} reservado · {total} total</span>
+            </summary>
+            <div className="mt-3 space-y-3">
+                {skus.map(sku => (
+                    <div key={sku.key} className="rounded-lg border border-slate-100">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
+                            <div className="text-sm"><span className="font-semibold text-slate-800">{sku.label}</span> <span className="font-mono text-xs text-slate-500">{sku.sku || 'Sem SKU'}</span></div>
+                            {sku.sku && <a href={`/admin/inventory/locations?search=${encodeURIComponent(sku.sku)}`} className="text-xs font-semibold text-emerald-700 hover:underline">Abrir Locais de Estoque</a>}
+                        </div>
+                        {sku.rows.length === 0 ? <p className="px-3 py-2 text-xs text-slate-500">Nenhum depósito/local cadastrado para este SKU.</p> : sku.rows.map(row => (
+                            <div key={row.id} className="flex items-start justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0">
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-bold text-slate-900">{row.depositName}</p>
+                                    <p className="truncate text-xs text-slate-500">Local: {row.locationName}{row.locationCode ? ` (${row.locationCode})` : ''}</p>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                    <p className="text-sm font-black text-emerald-700">{Math.max(0, row.quantity - row.reserved)} disp.</p>
+                                    <p className="text-[11px] text-slate-500">{row.quantity} total</p>
+                                    {row.reserved > 0 && <p className="text-[11px] text-amber-600">{row.reserved} reservado</p>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ))}
+            </div>
+        </details>
+    );
+};
 
 const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void; onDuplicate: () => void; onPrintLabel?: () => void; allowDuplicate?: boolean }> = ({ product, onNavigate, onDuplicate, onPrintLabel, allowDuplicate = true }) => (
     <div className="flex flex-wrap items-center gap-1.5">

@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.783-etiqueta-por-variacao",
+  "version": "v1.2.784-pagina-do-produto-canais-lucro",
   "date": "2026-11-04",
-  "status": "published",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.783-etiqueta-por-variacao",
+  "tag": "v1.2.784-pagina-do-produto-canais-lucro",
   "release_vps": "/var/www/mdv-site/releases/20261104-053810-ml-billing-safe-logs",
   "api_release": {
-    "status": "sem alteração",
-    "note": "só site"
+    "status": "pendente",
+    "note": "tabela channel_fee_settings, rotas /channel-fee-settings, price_cents no status do TikTok"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Etiqueta de preço por variação: no card da família (ícone de impressora ao lado de '+ peças' em cada cor, e na lista de SKUs), na Página da família (botão 'Etiqueta' em cada SKU) e na página do produto ('Imprimir etiqueta'). Antes só o botão do card existia e imprimia o produto pai. Variação sem preço próprio usa o preço do pai.",
+  "summary": "Página do Produto (antiga Página da família): canais de venda conectados (Shopee M/G, Mercado Livre, TikTok) com badges por SKU, onde está no estoque, preço e lucro por canal com edição do valor de venda enviada ao canal, e tabela de taxas por canal editável salva na VPS.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -24,29 +24,37 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic"
   },
-  "site_source_base": "6195fabe",
+  "site_source_base": "e3991089",
   "changed_files": [
-    "components/products/labelPrintProduct.js",
-    "components/products/LazyLabelPrintModal.tsx",
-    "components/products/ProductList.tsx",
     "pages/admin/products/ModelProductAggregatorPage.tsx",
+    "components/products/ModelPublicationChannels.tsx",
+    "components/products/ChannelPricingPanel.tsx",
+    "services/channelPricing.ts",
+    "utils/channelProfit.js",
+    "utils/channelProfit.test.mjs",
+    "components/products/ProductCard.tsx",
+    "components/products/ProductForm.tsx",
     "pages/admin/products/ProductDetailPage.tsx",
-    "tmp-tests/family-variant-label-print.test.mjs",
+    "pages/store/PublicProductPage.tsx",
+    "vps_server.js",
+    "vps_server.cjs",
+    "tmp-tests/product-admin-page-channels.test.mjs",
+    "tmp-tests/pdp-admin-edit-actions-static.test.mjs",
+    "tmp-tests/product-family-model-guard-static.test.mjs",
     "tmp-tests/model-panel-variation-image.test.mjs",
-    "tmp-tests/product-family-card-render.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-04-v1.2.783-etiqueta-por-variacao.md"
+    "docs/versoes/2026-11-04-v1.2.784-pagina-do-produto-canais-lucro.md"
   ],
   "validations": [
-    "family-variant-label-print (4) + product-family-card-render + model-panel-variation-image: 10/10",
-    "tsc sem erro nos arquivos alterados",
-    "npm run build ok",
-    "tela (dados de teste): card Preto → R$ 1.299,00; Azul sem preço → R$ 1.099,00 do pai; Página da família e página do produto abrem a etiqueta do SKU certo"
+    "product-admin-page-channels (5) + channelProfit (4): 9/9",
+    "pdp-admin-edit-actions-static e product-family-model-guard-static ok com o novo nome",
+    "tsc sem erro nos arquivos alterados; node --check vps_server.js e vps_server.cjs",
+    "leitura real na VPS: SVF10UBAU site/Shopee M/Shopee G R$ 179,00"
   ],
   "site_release": {
-    "status": "published",
-    "release": "/var/www/mdv-site/releases/20261104-113600-v1283-etiqueta",
-    "published_at": "2026-11-04T14:36:00Z"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   }
 }

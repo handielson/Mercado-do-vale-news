@@ -2245,7 +2245,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                     <p className="font-semibold text-amber-900">Este modelo já tem uma família cadastrada: {modelFamily.parent.name}</p>
                     <p className="mt-1 text-sm text-amber-900">Para não duplicar o produto e o estoque, ele não pode ser salvo como produto novo. Escolha uma das opções:</p>
                     <button type="button" onClick={() => navigateFromForm(`/admin/products/models/${encodeURIComponent(guardModelId)}`)}
-                        className="mt-2 text-sm font-semibold text-violet-800 underline">Abrir a página da família</button>
+                        className="mt-2 text-sm font-semibold text-violet-800 underline">Abrir a página do produto</button>
                 </div>
                 <div>
                     <p className="text-sm font-semibold text-slate-800">1. A cor e a memória já existem? Inclua as peças nela:</p>

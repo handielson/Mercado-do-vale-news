@@ -1,3 +1,10 @@
+# v1.2.784-pagina-do-produto-canais-lucro
+
+Data: 04/11/2026. Status: **pendente de publicação**. Branch: `main`.
+Página do Produto (antiga Página da família): canais de venda conectados, onde está no estoque, preço e lucro por canal com edição do valor de venda e tabela de taxas por canal. API: tabela `channel_fee_settings`, rotas `/channel-fee-settings` e preço no status do TikTok.
+
+---
+
 # v1.2.783-etiqueta-por-variacao
 
 Data: 04/11/2026. Status: **publicada em 04/11/2026 11:36** (`/var/www/mdv-site/releases/20261104-113600-v1283-etiqueta`). Branch: `main`.

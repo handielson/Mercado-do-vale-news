@@ -7159,11 +7159,17 @@ async function handleTikTokShopProductStatusVps(request, reply) {
       [remoteStatus, productId],
     );
     reply.header('Cache-Control', 'no-store');
+    // channel-profit-v1: preço atual do SKU vinculado (para lucro/edição na Página do Produto).
+    const remoteSkus = Array.isArray(product.skus) ? product.skus : [];
+    const remoteSku = remoteSkus.find((sku) => String(sku?.id || '') === String(link.tiktok_sku_id || '')) || (remoteSkus.length === 1 ? remoteSkus[0] : null);
+    const remotePrice = Number(remoteSku?.price?.sale_price ?? remoteSku?.price?.tax_exclusive_price);
     return reply.code(200).send({
       ...link,
       status: remoteStatus,
       last_synced_at: new Date().toISOString(),
       request_id: requestId,
+      price_cents: Number.isFinite(remotePrice) && remotePrice > 0 ? Math.round(remotePrice * 100) : null,
+      price_currency: remoteSku?.price?.currency || null,
     });
   } catch (err) {
     console.warn('[tiktok-shop-product] status refresh failed', {
@@ -14162,6 +14168,33 @@ fastify.get('/tiktok-shop/products/:productId/status', { preHandler: requireSync
 fastify.post('/tiktok-shop/products/:productId/publish', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopPublishDraftVps);
 fastify.get('/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
+
+// channel-profit-v1: tabela de taxas por canal (site, shopee_m, shopee_g, mercado_livre, tiktok).
+const CHANNEL_FEE_CHANNELS = new Set(['site', 'shopee_m', 'shopee_g', 'mercado_livre', 'tiktok']);
+fastify.get('/channel-fee-settings', { preHandler: requireSyncKeyOrAdmin }, async (_req, reply) => {
+  const [rows] = await pool.query('SELECT channel, config, updated_at FROM channel_fee_settings');
+  reply.header('Cache-Control', 'no-store');
+  return {
+    settings: rows.map((row) => ({
+      channel: row.channel,
+      config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config,
+      updated_at: row.updated_at,
+    })),
+  };
+});
+fastify.put('/channel-fee-settings/:channel', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const channel = String(req.params.channel || '');
+  if (!CHANNEL_FEE_CHANNELS.has(channel)) return reply.code(400).send({ error: 'Canal inválido.' });
+  const config = req.body?.config;
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return reply.code(400).send({ error: 'config obrigatório.' });
+  const serialized = JSON.stringify(config);
+  if (serialized.length > 8000) return reply.code(400).send({ error: 'Configuração grande demais.' });
+  await pool.query(
+    'INSERT INTO channel_fee_settings (channel, config) VALUES (?, CAST(? AS JSON)) ON DUPLICATE KEY UPDATE config = VALUES(config)',
+    [channel, serialized],
+  );
+  return { ok: true, channel, config };
+});
 fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);
 fastify.all('/api/telegram-webhook', handleTelegramWebhookVps);
 
@@ -41981,6 +42014,15 @@ async function runMigrations() {
     [DEFAULT_DELIVERY_COMPLETION_WHATSAPP_TEMPLATE]
   );
 
+
+  // channel-profit-v1: taxas editáveis por canal de venda (lucro na Página do Produto).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS channel_fee_settings (
+      channel VARCHAR(32) NOT NULL PRIMARY KEY,
+      config JSON NOT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS whatsapp_automation_templates (

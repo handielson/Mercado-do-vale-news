@@ -1179,7 +1179,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
         { key: 'stock-locations', label: 'Locais de estoque', icon: <MapPin className="h-5 w-5 text-emerald-600" />, onSelect: handleOpenStockLocationModal },
         { key: 'history', label: 'Histórico do produto', icon: <History className="h-5 w-5 text-amber-700" />, onSelect: () => setIsJournalModalOpen(true) },
         { key: 'tags', label: 'Tags', hint: currentTags.length > 0 ? `${currentTags.length} aplicada${currentTags.length > 1 ? 's' : ''}` : undefined, icon: <Tags className="h-5 w-5 text-purple-600" />, onSelect: () => setIsTagsModalOpen(true) },
-        ...(product.model_id ? [{ key: 'model', label: 'Página da família', icon: <Package className="h-5 w-5 text-slate-600" />, onSelect: () => { window.location.href = `/admin/products/models/${encodeURIComponent(product.model_id!)}`; } }] : []),
+        ...(product.model_id ? [{ key: 'model', label: 'Página do Produto', icon: <Package className="h-5 w-5 text-slate-600" />, onSelect: () => { window.location.href = `/admin/products/models/${encodeURIComponent(product.model_id!)}`; } }] : []),
         ...(product.bling_id ? [{ key: 'bling-sync', label: 'Sincronizar estoque (Bling)', disabled: isSyncing, icon: <RefreshCw className="h-5 w-5 text-green-600" />, onSelect: handleSyncStock }] : []),
         { key: 'catalog-visibility', label: isHiddenFromCatalog ? 'Mostrar no site' : 'Ocultar do site', hint: isHiddenFromCatalog ? 'está oculto' : undefined, disabled: isTogglingCatalogVisibility, icon: isHiddenFromCatalog ? <Eye className="h-5 w-5 text-sky-600" /> : <EyeOff className="h-5 w-5 text-amber-600" />, onSelect: handleToggleCatalogVisibility },
         { key: 'status', label: currentStatus === ProductStatus.ACTIVE ? 'Inativar produto' : 'Ativar produto', disabled: isTogglingStatus, icon: currentStatus === ProductStatus.ACTIVE ? <PowerOff className="h-5 w-5 text-slate-500" /> : <Power className="h-5 w-5 text-green-600" />, onSelect: handleToggleStatus },
@@ -1590,7 +1590,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                                     window.location.href = `/admin/products/models/${encodeURIComponent(product.model_id)}`;
                                 }}
                                 className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors max-md:hidden"
-                                title="Ver página da família"
+                                title="Ver página do produto"
                             >
                                 <Package className="w-4 h-4 text-slate-600" />
                             </button>
@@ -1817,7 +1817,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                                     window.location.href = `/admin/products/models/${encodeURIComponent(product.model_id)}`;
                                 }}
                                 className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
-                                title="Ver página da família"
+                                title="Ver página do produto"
                             >
                                 <Package className="w-4 h-4 text-slate-600" />
                             </button>
