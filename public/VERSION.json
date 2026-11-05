@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.795-bling-desconectado-comprovante",
-  "date": "2026-11-04",
+  "version": "v1.2.796-entrada-unica-servidor",
+  "date": "2026-11-05",
   "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.795-bling-desconectado-comprovante",
+  "tag": "v1.2.796-entrada-unica-servidor",
   "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Comprovante de intervenção da Shopee: título e 'SHOPEE | 1/1' não se sobrepõem mais; quando a falha é a conexão/renovação do Bling, o comprovante manda reconectar o Bling (Admin > Configurações > Bling > Reconectar Bling) em vez de corrigir NCM. API registra status HTTP e código de erro da renovação do Bling (sem tokens).",
+  "summary": "Entrada única, etapa 1: porta única no servidor (POST /catalog-entries/preview, POST /catalog-entries, GET /catalog-entries/:id) que resolve família, variação, preço e estoque de uma lista de itens numa transação, com prévia, hash do lote e registro (catalog_entry_batches/lines). POST /units e /units/batch recusam aparelho em produto pai. Publica junto a parte de API da v1.2.795 (código de erro da renovação do Bling). Sem tela ainda (etapa 2).",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -23,27 +23,35 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "scripts/shopee-separation-summary.cjs",
-    "scripts/shopee-auto-print.cjs",
+    "services/catalogEntryCore.cjs",
+    "services/catalogEntryServer.cjs",
+    "services/smartphoneModelFamily.cjs",
     "vps_server.js",
     "vps_server.cjs",
-    "tmp-tests/shopee-intervention-bling-static.test.cjs",
+    "deploy-vps-server-only.cjs",
+    "tmp-tests/catalog-entry-core.test.cjs",
+    "tmp-tests/catalog-entry-server.test.cjs",
+    "tmp-tests/catalog-entry-routes.test.cjs",
+    "tmp-tests/catalog-entry-units-guard-static.test.mjs",
+    "tmp-tests/helpers/catalogEntryFakeDb.cjs",
+    "tmp-tests/smartphone-model-family.test.cjs",
+    "docs/superpowers/specs/2026-11-05-entrada-unica-design.md",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-05-v1.2.795-bling-desconectado-comprovante.md"
+    "docs/versoes/2026-11-05-v1.2.796-entrada-unica-servidor.md"
   ],
   "validations": [
-    "shopee-intervention-bling-static 3/3",
-    "shopee-intervention-receipt ok",
-    "shopee-dual-thermal-print-flow-static ok",
-    "shopee-pf-label 4/4",
-    "node --check vps_server.js/.cjs"
+    "catalog-entry core/server/routes + smartphone-model-family + model-family-repair: 79/79",
+    "catalog-entry-units-guard-static ok",
+    "node --check vps_server.js/.cjs/deploy ok",
+    "revisão por tarefa + revisão final do branch (opus) + re-revisão: todos os achados resolvidos"
   ],
   "site_release": {
     "status": "sem mudança"
   },
   "api_release": {
-    "status": "pendente (aguarda OK)"
+    "status": "pendente",
+    "note": "--catalog-entry-only"
   },
   "printer_agent_release": {
     "status": "pendente (botão Atualizar serviço, aguarda OK)"
