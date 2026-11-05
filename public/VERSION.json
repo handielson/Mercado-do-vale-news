@@ -27,11 +27,11 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "scripts/shopee-auto-print.cjs",
-    "tmp-tests/shopee-pf-label.test.cjs",
-    "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-05-v1.2.790-etiqueta-pf-shopee-g.md"
+    "docs/versoes/2026-11-05-v1.2.790-etiqueta-pf-shopee-g.md",
+    "public/VERSION.json",
+    "scripts/shopee-auto-print.cjs",
+    "tmp-tests/shopee-pf-label.test.cjs"
   ],
   "validations": [
     "tmp-tests/shopee-pf-label.test.cjs 3/3",
@@ -44,6 +44,7 @@
     "published_at": "2026-11-04T22:50:00-03:00"
   },
   "printer_agent_release": {
-    "status": "pendente"
+    "status": "publicada",
+    "note": "PC da loja em 89831f5d, checkout limpo; botão Atualizar serviço testado (pull + npm + reinício ok); backup dos arquivos soltos em printer-service\\backup-v1290-git"
   }
 }
