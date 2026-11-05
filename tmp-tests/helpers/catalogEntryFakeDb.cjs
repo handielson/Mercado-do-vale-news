@@ -97,6 +97,8 @@ function fakeDb(seed = {}) {
     if (s.startsWith('SHOW COLUMNS')) return [['matched_color_id', 'review_confirmed', 'review_confirmed_at', 'intake_photo_path', 'intake_id'].map(Field => ({ Field }))];
     if (s.startsWith('SELECT * FROM smartphone_photo_intakes WHERE status IN')) return [[]];
     if (/^SELECT (\*|id,status) FROM smartphone_photo_intakes WHERE id ?= ?\?/.test(s)) return [structuredClone(state.intakes.filter(i => i.id === args[0]))];
+    if (s.startsWith('SELECT id FROM smartphone_photo_intakes WHERE id IN (?) ORDER BY id FOR UPDATE'))
+      return [state.intakes.filter(i => args[0].includes(i.id)).map(i => ({ id: i.id })).sort((a, b) => a.id.localeCompare(b.id))];
     if (s.startsWith("SELECT id FROM companies WHERE slug='mercado-do-vale'")) return [[{ id: 'c' }]];
     if (s.startsWith('SELECT id FROM units WHERE (imei_1 IN')) {
       const n = (args.length - 1) / 3; const vals = args.slice(0, n).map(String); const own = args[args.length - 1];

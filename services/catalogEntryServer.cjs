@@ -7,6 +7,7 @@ const { ensureSmartphoneModelFamily } = require('./smartphoneModelFamily.cjs');
 const { productSkuPrefix, nextProductSku, assignAutomaticProductSku } = require('./productSku.cjs');
 const { ensureSmartphonePriceGroupsSchema, inheritSmartphonePrices, loadModel } = require('./smartphonePriceGroupsServer.cjs');
 const core = require('./smartphonePriceGroupsCore.cjs');
+const { getPhotoIntakeVersion } = require('./smartphonePhotoIntakeCore.cjs');
 
 const SKU_LOCK = 'mdv:product-auto-sku';
 // Mesmo valor de DEFAULT_PRODUCT_VERSION (smartphoneModelSpecs.mjs, ESM — não dá para require aqui).
@@ -372,11 +373,22 @@ async function resolveItem(ctx, item, line) {
 // Linha da aba Foto: o pré-cadastro é a fonte (modelo, cor, memória, IMEI, preços, custo, EAN); do cliente vale só o local.
 // A finalização roda na transação do lote (prévia: ROLLBACK). Recusas 4xx dela viram erro da linha.
 const PHOTO_ALREADY_SAVED = 'Este aparelho da fila de foto já foi salvo.';
+const PHOTO_DIGEST_FIELDS = ['status', 'company_id', 'matched_model_id', 'matched_color_id', 'matched_product_id', 'detected_brand', 'detected_color',
+  'detected_ram', 'detected_storage', 'detected_imei_1', 'detected_imei_2', 'detected_serial', 'detected_ean', 'price_cost', 'price_retail',
+  'price_reseller', 'price_wholesale', 'prices_confirmed', 'review_confirmed', 'validation_errors', 'validation_warnings', 'updated_at'];
+// Resumo do que a finalização usa: entra na PlanLine (e no hash), então editar o pré-cadastro
+// na tela antiga entre a prévia e a confirmação dá 409.
+function photoIntakeDigest(row) {
+  const data = Object.fromEntries(PHOTO_DIGEST_FIELDS.map(key => [key, row[key] instanceof Date ? row[key].toISOString() : row[key] ?? null]));
+  data.version = getPhotoIntakeVersion(row);
+  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+}
 async function resolvePhotoItem(ctx, item, line) {
   const { conn } = ctx;
   if (typeof ctx.deps.finalizePhotoIntake !== 'function') throw lineError('Entrada por foto indisponível neste servidor.');
   // Já concluído (antes ou por outra linha deste lote): nunca finaliza de novo nem devolve a resposta idempotente.
-  const [[current]] = await conn.query('SELECT id,status FROM smartphone_photo_intakes WHERE id=? FOR UPDATE', [item.photo_intake_id]);
+  const [[current]] = await conn.query('SELECT * FROM smartphone_photo_intakes WHERE id=? FOR UPDATE', [item.photo_intake_id]);
+  if (current) line.photo_intake_digest = photoIntakeDigest(current);
   if (current?.status === 'completed') throw lineError(PHOTO_ALREADY_SAVED);
   let result;
   try {
@@ -451,6 +463,10 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
     }
     await conn.beginTransaction();
     open = true;
+    // Mesma ordem da rota antiga (pré-cadastro antes de modelo/produtos): trava todos os pré-cadastros do lote
+    // antes de qualquer linha, em ordem fixa, para não haver deadlock com uma finalização pela tela antiga.
+    const photoIds = [...new Set(rawItems.map(raw => String(raw?.photo_intake_id ?? '').trim()).filter(Boolean))].sort();
+    if (photoIds.length) await conn.query('SELECT id FROM smartphone_photo_intakes WHERE id IN (?) ORDER BY id FOR UPDATE', [photoIds]);
     const ctx = { conn, deps, defaultCompanyId, batchId: crypto.randomUUID(), created: new Set(),
       models: new Map(), categories: new Map(), locations: new Map(), requestHeaders };
     const normalized = rawItems.map((raw, index) => (raw?.photo_intake_id ? normalizePhotoEntryItem : normalizeEntryItem)(raw, index));

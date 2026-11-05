@@ -195,6 +195,59 @@ test('o hash do lote inclui photo_intake_id', async t => {
   assert.equal(db.state.intakes[1].status, 'ready_to_finalize');
 });
 
+test('editar o pré-cadastro entre a prévia e a confirmação dá 409', async t => {
+  const { db } = await setup(t);
+  const p = await preview(db, [photoLine()]);
+  assert.equal(p.ok, true, JSON.stringify(p.plan));
+  assert.match(p.plan[0].photo_intake_digest, /^[0-9a-f]{64}$/);
+  db.state.intakes[0].price_retail = 140000; // edição na tela antiga
+  await assert.rejects(runCatalogEntry(db.pool, [photoLine()], { commit: true, expectedHash: p.hash, deps: db.deps }),
+    error => error.statusCode === 409);
+  assert.equal(db.state.intakes[0].status, 'ready_to_finalize');
+  assert.equal(db.state.units.length, 0);
+});
+
+test('o lote trava todos os pré-cadastros em ordem antes de qualquer linha', async t => {
+  const { db } = await setup(t, { intakes: [intake(), intake({ id: 'I0', detected_imei_1: IMEI_B, photo_private_path: 'smartphone-intakes/c/I0.jpg' })] });
+  await preview(db, [photoLine(), photoLine({ photo_intake_id: 'I0' })]);
+  const norm = db.log.map(sql => sql.replace(/\s+/g, ' ').trim());
+  const lock = norm.findIndex(sql => sql === 'SELECT id FROM smartphone_photo_intakes WHERE id IN (?) ORDER BY id FOR UPDATE');
+  const begin = norm.indexOf('BEGIN');
+  const firstLine = norm.findIndex(sql => sql.startsWith('SELECT * FROM smartphone_photo_intakes WHERE id=?'));
+  const firstModel = norm.findIndex(sql => /FROM models/.test(sql));
+  assert.ok(begin >= 0 && lock > begin, 'trava depois do BEGIN');
+  assert.ok(lock < firstLine && lock < firstModel, 'trava antes de qualquer linha e de qualquer modelo');
+  assert.equal(norm.filter(sql => sql.includes('WHERE id IN (?) ORDER BY id FOR UPDATE')).length, 1);
+});
+
+test('linha de foto com vínculo Bling valida o filho sem repassar authorization nem cookie', async t => {
+  const { buildBlingFamily, saveIntakeBlingMapping } = await import('../services/modelBlingMapping.mjs');
+  const row = intake();
+  const family = saveIntakeBlingMapping(buildBlingFamily({ id: 100, codigo: 'PAI', nome: 'Redmi Note 14' }, [{ id: 101, codigo: 'FILHO', nome: 'Verde' }]), row, 101);
+  const base = fakeDb().state.models;
+  const models = base.map(m => (m.id === 'm1' ? { ...m, template_values: JSON.stringify({ bling_family: family }) } : m));
+  const { db, app } = await setup(t, { models, intakes: [row] });
+  const seen = [];
+  app.get('/api/bling', async request => {
+    seen.push({ ...request.headers });
+    return { data: { id: 101, codigo: 'FILHO', situacao: 'A', variacao: { produtoPai: { id: 100 } } } };
+  });
+  const headers = { authorization: 'Bearer sessao', cookie: 'sid=1', 'x-sync-key': 'chave' };
+  const r = await previewAndCommit(db, [photoLine()], { requestHeaders: headers });
+  assert.deepEqual(r.plan[0].errors, []);
+  assert.equal(seen.length, 2, 'prévia e confirmação validam o filho');
+  for (const h of seen) {
+    assert.equal(h.authorization, undefined);
+    assert.equal(h.cookie, undefined);
+    assert.equal(h['x-sync-key'], 'chave');
+  }
+  const [variation] = children(db);
+  assert.equal(variation.sku, 'FILHO');
+  assert.equal(String(variation.bling_id), '101');
+  assert.equal(String(variation.bling_parent_id), '100');
+  assert.equal(db.state.intakes[0].status, 'completed');
+});
+
 test('requestHeaders chega a finalizePhotoIntake como headers', async t => {
   const { db } = await setup(t);
   const seen = [];
