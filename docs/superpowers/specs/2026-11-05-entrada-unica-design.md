@@ -142,7 +142,10 @@ Preço de celular já tem fonte única: `smartphone_price_groups`, aplicado por 
   - `/admin/products/new`, `/admin/products/bulk` e `/admin/products/photo-intake` redirecionam para `/admin/entrada` na aba correspondente;
   - o formulário grande perde o modo cadastro e fica só para edição;
   - `EntradaPage` e `ProductEntryPage` são apagadas.
-- **Servidor** (última etapa): criação de produto por `POST /products/batch` e por `vpsDbInsert` de `products` só é aceita sem `id` novo quando vem da sincronização (chave de origem); unidade nova só pela porta única. As rotas antigas ficam para atualização.
+- **Servidor** (última etapa):
+  - criar produto **novo** (id inexistente) por `POST /products/batch` ou `vpsDbInsert('products')` passa a responder 409 com "use a Entrada", exceto quando o corpo traz `sync_origin` ∈ {`bling`, `shopee`, `mercado_livre`, `tiktok`} (rotinas de sincronização);
+  - `POST /units` e `POST /units/batch` param de criar unidade (409 "use a Entrada"); a Entrada grava unidades pela função interna do `catalogEntryServer.cjs`;
+  - atualização (`PUT /products/:id`, `PUT /units/:id`, `PATCH …`) continua igual.
 
 ## 6. Etapas de entrega
 Cada etapa sai como versão própria, publicada pelo `publicar.md`, com testes:
