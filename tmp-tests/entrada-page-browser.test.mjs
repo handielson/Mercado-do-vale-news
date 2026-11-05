@@ -81,8 +81,7 @@ test('abas e lista vazia', { timeout: 120000 }, async t => {
     for (const n of ['Manual', 'Bipar', 'Planilha', 'Foto']) await page.getByRole('tab', { name: n }).waitFor();
     assert.match(await text(page), /Nenhum item na lista/);
     await page.getByRole('tab', { name: 'Planilha' }).click();
-    assert.match(await text(page), /Em breve nesta tela \(use as telas atuais por enquanto\)/);
-    assert.equal(await page.locator('a[href="/admin/products/bulk"]').count(), 1);
+    await page.getByRole('button', { name: 'Baixar modelo da planilha' }).waitFor();
     await page.getByRole('tab', { name: 'Foto' }).click();
     assert.equal(await page.locator('a[href="/admin/products/photo-intake"]').count(), 1);
     assert.deepEqual(errors, []);

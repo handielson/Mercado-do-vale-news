@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { catalogEntries, EntryItem } from '../../../services/catalogEntries';
 import { ScanEntryTab } from '../../../components/entrada/ScanEntryTab';
+import { SpreadsheetEntryTab } from '../../../components/entrada/SpreadsheetEntryTab';
 import { ManualEntryTab } from '../../../components/entrada/ManualEntryTab';
 import { EntryListPanel, EntryLine, EntryResult, EntryState } from '../../../components/entrada/EntryListPanel';
 import { addLines, applyPreview, commitErrorKind, emptyState, errorText, loadDraft, newBatchId, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
@@ -157,7 +158,7 @@ export const CatalogEntryPage: React.FC = () => {
                 <div role="tabpanel">
                     {tab === 'manual' && <ManualEntryTab onAddLines={onAddLines} busy={busy} prefill={modeloParam ? { model_id: modeloParam } : undefined} />}
                     {tab === 'bipar' && <ScanEntryTab onAddLines={onAddLines} busy={busy} existingState={state} prefill={variacaoParam ? { variation_id: variacaoParam } : undefined} />}
-                    {tab === 'planilha' && <ComingSoon to="/admin/products/bulk" label="Cadastro em massa (tela atual)" />}
+                    {tab === 'planilha' && <SpreadsheetEntryTab onAddLines={onAddLines} busy={busy} existingState={state} />}
                     {tab === 'foto' && <ComingSoon to="/admin/products/photo-intake" label="Cadastro por foto (tela atual)" />}
                 </div>
             </div>
