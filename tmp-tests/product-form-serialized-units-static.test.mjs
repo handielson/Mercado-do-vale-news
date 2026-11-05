@@ -8,7 +8,7 @@ const form = readFileSync('components/products/ProductForm.tsx', 'utf8');
 
 assert.doesNotMatch(form, /unitService/, 'ProductForm não importa nem chama o serviço de unidades');
 assert.doesNotMatch(form, /groupSerializedBatchItemsForUnits|UnitStatus\.AVAILABLE/, 'sem agrupamento em produto base + unidades');
-assert.match(form, /const isNewRegistration = !initialData \|\| Boolean\(initialDraft && !initialData.id\);/, 'Resumed drafts without a product ID remain new registrations');
+assert.match(form, /const isNewRegistration = !initialData\?\.id;/, 'Resumed drafts, EAN prefill and clones (all without a product ID) are new registrations');
 
 assert.match(
   form,

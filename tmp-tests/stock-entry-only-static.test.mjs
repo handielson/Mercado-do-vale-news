@@ -25,21 +25,52 @@ function walk(dir, out = []) {
 // As definições (não chamadas): vpsApiService.createUnit/createUnitsBatch e o unitService.create,
 // que embrulha vpsApiService.createUnit. Continuam para o script de manutenção e a leitura.
 const DEFINITIONS = [
-  { file: join('services', 'vpsApiService.ts'), line: /async createUnit(sBatch)?\(|\[vpsApiService\] createUnit(sBatch)? error/ },
+  { file: join('services', 'vpsApiService.ts'), line: /async createUnit(sBatch)?\(|\[vpsApiService\] createUnit(sBatch)? error|fetch\(proxyUrl\('\/units(\/batch)?', 'POST'\), \{/ },
   { file: join('services', 'units.ts'), line: /const data = await vpsApiService\.createUnit\(toPayload\(input\)\);/ },
 ];
+// O explorador de tabelas grava em /table-data/<tabela> genérico; o servidor bloqueia insert em units (409, Task 1).
+const ALLOWED_FILES = new Set([join('pages', 'admin', 'settings', 'MySQLExplorerPage.tsx')]);
+const SCANNED_DIRS = ['pages', 'components', 'services', 'hooks', 'utils', 'contexts', 'layouts', 'core'];
+
+// Linha que cria unidade: chamadas conhecidas, createRow('units') ou o caminho literal da coleção de
+// unidades ('/units', '/units/batch', '/table-data/units[/bulk]') com POST a até 3 linhas (fetch em várias linhas).
+export function findUnitWrites(text) {
+  const lines = text.split('\n');
+  const hits = [];
+  lines.forEach((line, index) => {
+    const call = /\bunitService\.create\b|\bcreateUnitsBatch\b|\bcreateUnit\b|\bcreateRow\(\s*['"`]units['"`]/.test(line);
+    const unitPath = /['"`]\/(table-data\/)?units(\/batch|\/bulk)?(\?[^'"`]*)?['"`]/.test(line);
+    const nearPost = unitPath && lines.slice(Math.max(0, index - 3), index + 4).some(near => /['"`]POST['"`]|\.post\s*[<(]/.test(near));
+    if (call || nearPost) hits.push(index);
+  });
+  return hits;
+}
+
+test('o detector pega as formas conhecidas de criar unidade (e não a leitura)', () => {
+  const caught = [
+    "await this.writeSafe('POST', '/units', body);",
+    "await vpsClient.post<any>('/units/batch', items);",
+    "await vpsClient.post('/table-data/units/bulk', rows);",
+    "const row = await createRow('units', data);",
+    "const res = await fetch(proxyUrl('/units', 'POST'), {",
+    "const res = await fetch(buildVpsUrl(\n  '/units'\n), {\n  method: 'POST',",
+  ];
+  for (const sample of caught) assert(findUnitWrites(sample).length > 0, sample);
+  for (const sample of ["const units = await this.fetchSafe('/units?product_id=1');", "fetch(proxyUrl(`/units/${id}`, 'PUT'), { method: 'PUT' })"])
+    assert.deepEqual(findUnitWrites(sample), [], sample);
+});
 
 // Review Focus 1
 test('nenhum caminho do SPA cria unidade fora da Entrada', () => {
   const offenders = [];
-  for (const file of [...walk('pages'), ...walk('components'), ...walk('services')]) {
-    read(file).split('\n').forEach((line, index) => {
-      const creates = /\bunitService\.create\b|\bcreateUnitsBatch\b|\bcreateUnit\b/.test(line)
-        || /\.post\b[^\n]*['"`]\/(table-data\/)?units(\/batch|\/bulk)?['"`]/.test(line);
-      if (!creates) return;
-      if (DEFINITIONS.some(def => def.file === file && def.line.test(line))) return;
+  for (const file of SCANNED_DIRS.flatMap(dir => walk(dir))) {
+    if (ALLOWED_FILES.has(file)) continue;
+    const lines = read(file).split('\n');
+    for (const index of findUnitWrites(lines.join('\n'))) {
+      const line = lines[index];
+      if (DEFINITIONS.some(def => def.file === file && def.line.test(line))) continue;
       offenders.push(`${file}:${index + 1}: ${line.trim()}`);
-    });
+    }
   }
   assert.deepEqual(offenders, [], 'unidade só nasce pela Entrada (catalogEntryServer.cjs)');
 });
@@ -75,7 +106,9 @@ test('editar família e adicionar cor nova com IMEI: cria só o produto filho, s
 
 test('familyRegistration não grava unidade nem guarda IMEI pendente', () => {
   const source = read('components/products/familyRegistration.js');
-  assert.doesNotMatch(source, /createUnit|pendingUnits|checkpoint\.units/);
+  assert.doesNotMatch(source, /createUnit|checkpoint\.units|pendingUnits\[[^\]]+\]\s*=(?!=)/);
+  // pendingUnits só é lido, para tratar como variação nova o filho de rascunho antigo (antes da etapa 6).
+  assert.match(source, /Boolean\(checkpoint\.pendingUnits\?\.\[row\.key\]\)/);
 });
 
 test('formulário em modo cadastro não cria unidade, lista de seriais nem estoque', () => {
@@ -83,7 +116,7 @@ test('formulário em modo cadastro não cria unidade, lista de seriais nem estoq
   for (const gone of [/unitService/, /serialList(?!: \[\],)/, /handleAddToBatchList/, /groupSerializedBatchItemsForUnits/, /Lista para Cadastro em Massa/, /onAddToBatchList/, /singleSerializedIdentity/, /isSerializedStockCalculated/, /handleBatchItemImageUpload/, /handleBatchItemBlingLink/, /buildSerializedBatchPlan/])
     assert.doesNotMatch(form, gone, `${gone} saiu do formulário`);
   assert.match(form, /serialList: \[\],/, 'rascunho continua mandando a lista vazia (o servidor de rascunhos exige o campo)');
-  assert.match(form, /const isNewRegistration = !initialData \|\| Boolean\(initialDraft && !initialData\.id\);/);
+  assert.match(form, /const isNewRegistration = !initialData\?\.id;/);
   // cadastro novo: IMEI/serial fora dos specs e estoque 0, antes de salvar produto único ou família.
   const strip = form.indexOf('// stock-entry-only-v1: cadastro novo grava só o catálogo');
   assert(strip > form.indexOf('if (variationDraftMode) {'), 'depois do rascunho de variação');
@@ -91,7 +124,7 @@ test('formulário em modo cadastro não cria unidade, lista de seriais nem estoq
   assert.match(form.slice(strip, strip + 400), /if \(isNewRegistration\) \{\s*mergedData\.specs = stripSerializedIdentityFromSpecs\(mergedData\.specs \|\| \{\}\);\s*mergedData\.stock_quantity = 0;\s*\}/);
   // quantidade em estoque: só na edição; no cadastro, o aviso.
   const stock = form.slice(form.indexOf('{/* Campo: Quantidade em Estoque */}'), form.indexOf('{/* 6. PRECIFICAÇÃO */}'));
-  assert.match(stock, /\{isNewRegistration \|\| \(variationDraftMode && !initialData\?\.id\) \? \([\s\S]*Estoque e aparelhos entram pela tela Entrada[\s\S]*\) : watch\('track_inventory'\) !== false && \(/);
+  assert.match(stock, /\{isNewRegistration \? \([\s\S]*Estoque e aparelhos entram pela tela Entrada[\s\S]*\) : watch\('track_inventory'\) !== false && \(/);
   assert.match(stock, /value=\{watch\('stock_quantity'\) \|\| 0\}/, 'edição continua igual');
   // IMEI/serial somem no cadastro e nas linhas de família (cadastro e edição).
   assert.match(form, /hideUnitIdentity=\{isNewRegistration \|\| variationDraftMode\}/);
@@ -159,4 +192,65 @@ test('depois do cadastro aparece "Dar entrada no estoque"; o 3D segue para a cal
   assert.equal(edit.toasts.length, 0, 'edição não oferece entrada');
   const noProduct = await runBatchComplete({ savedProduct: undefined });
   assert.equal(noProduct.toasts.length, 0);
+});
+
+// I1: a variação falha depois do create (vídeo, 3D, rede); a nova tentativa não grava o estoque digitado.
+test('nova tentativa da variação nova não envia estoque (nem 0) e continua sem IMEI', async () => {
+  const calls = []; let fail = true;
+  const api = {
+    create: async data => { calls.push(['create', data.name, data.stock_quantity]); return { ...data, id: 'c-' + data.name, sku: 'S' }; },
+    update: async (id, data) => { calls.push(['update', id, 'stock_quantity' in data ? data.stock_quantity : 'omitido', data.specs?.imei1]); return { ...data, id }; },
+    saveProduction: async () => { if (fail) throw new Error('boom'); },
+  };
+  const checkpoint = { parent: null, children: {} };
+  const rows = [{ key: 'azul', data: { name: 'Azul', stock_quantity: 5, specs: { color: 'Azul', imei1: '869084081597944' } }, inheritImages: true }];
+  await assert.rejects(saveFamilyRegistration({ name: 'Pai' }, rows, checkpoint, api), /boom/);
+  fail = false;
+  await saveFamilyRegistration({ name: 'Pai' }, rows, checkpoint, api);
+  assert.deepEqual(calls.filter(call => !['Pai', 'c-Pai'].includes(call[1])), [['create', 'Azul', 0], ['update', 'c-Azul', 'omitido', undefined]]);
+  // a tela recebeu o ID (refresh) e o rascunho foi reaberto: continua variação nova
+  rows[0].data.id = 'c-Azul';
+  await saveFamilyRegistration({ name: 'Pai' }, rows, checkpoint, api);
+  assert.deepEqual(calls.at(-1), ['update', 'c-Azul', 'omitido', undefined]);
+  // checkpoint de rascunho antigo (pendingUnits, antes desta etapa), sem newChildren
+  const legacy = { parent: { id: 'pai' }, children: { azul: { id: 'c-Azul' } }, pendingUnits: { azul: { imei1: '869084081597944' } } };
+  await saveFamilyRegistration({ name: 'Pai' }, rows, legacy, api);
+  assert.deepEqual(calls.at(-1), ['update', 'c-Azul', 'omitido', undefined]);
+  // filho que já existia antes do cadastro continua igual (edição não muda)
+  await saveFamilyRegistration({ name: 'Pai' }, [{ key: 'v', data: { id: 'velho', name: 'Velho', stock_quantity: 7, specs: {} }, inheritImages: true }], { parent: { id: 'pai' }, children: {} }, api);
+  assert.deepEqual(calls.at(-1).slice(0, 3), ['update', 'velho', 7]);
+});
+
+test('update de produto sem stock_quantity mantém o estoque atual; campo some na variação nova', () => {
+  const products = read('services/products.ts');
+  assert.match(products, /stock_quantity: input\.stock_quantity === undefined \? \(oldProduct\.stock_quantity \?\? 0\) : \(input\.stock_quantity \|\| 0\),/);
+  assert.match(products, /shopeeService\.updateStock\(id, payload\.stock_quantity\)/);
+  const form = read('components/products/ProductForm.tsx');
+  assert.match(form, /if \(!mergedData\.track_inventory\) \{\s*mergedData\.stock_quantity = 0;/, 'edição sem controle de estoque continua gravando 0');
+  const listing = read('components/products/VariationListing.tsx');
+  assert.match(listing, /\{fresh \|\| !data\.id \? <p[^>]*data-unit-entry-hint>Estoque e aparelhos entram pela tela Entrada\.<\/p> : <label className="text-sm">Estoque desta variação/);
+});
+
+// I2: EAN pré-preenchido (Bipar → "Cadastre em Produtos → Novo produto") e clone chegam sem id: são cadastro novo.
+test('EAN pré-preenchido e clone contam como cadastro novo; produto existente não', async () => {
+  const form = read('components/products/ProductForm.tsx');
+  const expression = form.match(/const isNewRegistration = (.*);/)[1];
+  const isNew = initialData => vm.runInNewContext(expression, { initialData, initialDraft: undefined });
+  const { buildProductClonePrefill } = await import('../services/productClonePrefill.js');
+  const clone = buildProductClonePrefill({ id: 'orig', sku: 'X1', name: 'Poco', stock_quantity: 4, specs: { color: 'Azul', imei1: '869084081597944' } });
+  assert.equal(clone.id, undefined, 'clone não leva o id');
+  assert.equal(isNew(clone), true, 'clone');
+  assert.equal(isNew({ ean: '7891234567895' }), true, 'EAN pré-preenchido');
+  assert.equal(isNew({ ean: '7891234567895', is_print3d: true }), true);
+  assert.equal(isNew(undefined), true);
+  assert.equal(isNew({ id: 'p1', name: 'Existente' }), false, 'edição');
+  const page = read('pages/admin/products/ProductFormPage.tsx');
+  assert.match(page, /setProduct\(\{ \.\.\.prefill, \.\.\.\(print3dEntry \? \{ is_print3d: true \} : \{\}\) \} as unknown as Product\);/);
+  assert.match(page, /setProduct\(\{ ean: eanFromState, \.\.\.\(print3dEntry \? \{ is_print3d: true \} : \{\}\) \} as unknown as Product\);/);
+});
+
+// M6: EAN repetido bloqueia o cadastro e leva o produto existente para a Entrada.
+test('EAN duplicado oferece "Dar entrada no estoque" do produto existente', () => {
+  const form = read('components/products/ProductForm.tsx');
+  assert.match(form, /\{blocksSubmitForDuplicateEAN && existingProduct\?\.id && <p[^>]*data-duplicate-ean-entry>[\s\S]*?<Link to=\{entryAddUnitsPath\(existingProduct\.id\)!\}[^>]*>Dar entrada no estoque<\/Link>/);
 });

@@ -656,7 +656,8 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
         origin: input.origin || null,
         weight_kg,
         dimensions,
-        stock_quantity: input.stock_quantity || 0,
+        // stock-entry-only-v1: estoque omitido mantém o atual (a nova tentativa da família não zera uma Entrada).
+        stock_quantity: input.stock_quantity === undefined ? (oldProduct.stock_quantity ?? 0) : (input.stock_quantity || 0),
         status: input.status,
         track_inventory: input.track_inventory ? 1 : 0,
         is_gift: input.is_gift ? 1 : 0,
@@ -728,7 +729,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
 
     // Shopee Sync Automático
     const shopeePriceChanged = oldProduct.price_retail !== savedProduct.price_retail;
-    const shopeeStockChanged = Boolean(input.track_inventory && oldProduct.stock_quantity !== input.stock_quantity);
+    const shopeeStockChanged = Boolean(input.track_inventory && oldProduct.stock_quantity !== payload.stock_quantity);
     const hasShopeeLinks = (shopeePriceChanged || shopeeStockChanged)
         ? (await shopeeProductService.getByProductIds([id])).some((link) => Number(link.shopee_item_id) > 0)
         : false;
@@ -738,7 +739,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
                 shopeeService.updatePrice(id, savedProduct.price_retail).catch(e => console.error("Shopee Price Sync Error:", e));
             }
             if (shopeeStockChanged) {
-                shopeeService.updateStock(id, input.stock_quantity || 0).catch(e => console.error("Shopee Stock Sync Error:", e));
+                shopeeService.updateStock(id, payload.stock_quantity).catch(e => console.error("Shopee Stock Sync Error:", e));
             }
         });
     }

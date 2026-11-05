@@ -8,7 +8,7 @@ import { SalesUnitSelect } from './selectors/SalesUnitSelect';
 import { FAMILY_INHERITANCE_GROUPS as groups } from './familyRegistration.js';
 
 export function VariationListing({ parent, data, onChange, disabled, fresh = false, hidePrices = false }: {
-    parent: ProductInput; data: Partial<ProductInput>; onChange: (data: Partial<ProductInput>) => void; disabled: boolean; fresh?: boolean; hidePrices?: boolean;
+    parent: ProductInput; data: Partial<ProductInput> & { id?: string }; onChange: (data: Partial<ProductInput>) => void; disabled: boolean; fresh?: boolean; hidePrices?: boolean;
 }) {
     const flags: string[] = data.specs?._inherit_parent_fields || (fresh ? Object.values(groups).flat() : []);
     const descriptionInherited = data.specs?._inherit_parent_description !== false;
@@ -65,9 +65,10 @@ export function VariationListing({ parent, data, onChange, disabled, fresh = fal
             </fieldset>
         </section>
         <section className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">Estoque desta variação<input type="number" min="0" step="1" value={data.stock_quantity ?? 0} onChange={e => set({ stock_quantity: Math.max(0, Math.floor(Number(e.target.value))) })} className="mt-1 w-full rounded border p-2" /></label>
+            {/* stock-entry-only-v1: variação nova (ou ainda no rascunho) nasce sem estoque; quantidade entra pela Entrada. */}
+            {fresh || !data.id ? <p className="rounded border border-blue-200 bg-blue-50 p-2 text-sm text-blue-800" data-unit-entry-hint>Estoque e aparelhos entram pela tela Entrada.</p> : <label className="text-sm">Estoque desta variação<input type="number" min="0" step="1" value={data.stock_quantity ?? 0} onChange={e => set({ stock_quantity: Math.max(0, Math.floor(Number(e.target.value))) })} className="mt-1 w-full rounded border p-2" /></label>}
             <p className="text-xs text-slate-500 sm:self-center">Estoque é sempre próprio do filho. Para produtos 3D: encomendas sem limite e prazo a combinar. Arquivos de impressão e dados fiscais continuam no cadastro detalhado.</p>
         </section>
-        <p className="text-xs text-slate-500">Cor e demais atributos permanecem próprios do filho. Estoque, arquivos e detalhes adicionais continuam disponíveis em Editar detalhes após incluir a variação.</p>
+        <p className="text-xs text-slate-500">Cor e demais atributos permanecem próprios do filho. Arquivos e detalhes adicionais continuam disponíveis em Editar detalhes após incluir a variação.</p>
     </fieldset>;
 }

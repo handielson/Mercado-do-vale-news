@@ -265,14 +265,18 @@ export async function saveFamilyRegistration(parentData, rows, checkpoint, api) 
     try {
       if (!id) validateFamilyIdentifiers(checkpoint.parent, [row]);
       // stock-entry-only-v1: variação nova nasce só como produto de catálogo, sem estoque.
-      // IMEI/serial da linha são ignorados (também na nova tentativa, quando a tela já recebeu o ID);
-      // aparelhos e estoque entram pela tela Entrada.
+      // IMEI/serial da linha são ignorados; aparelhos e estoque entram pela tela Entrada.
+      // Na nova tentativa (o checkpoint ou a tela já têm o ID) o estoque não vai no update: uma
+      // Entrada feita entre a falha e a nova tentativa não pode ser sobrescrita. pendingUnits vem
+      // de rascunhos antigos, de antes desta etapa.
       checkpoint.newChildren ||= {};
-      if (!id) {
+      const isNewChild = !row.data.id || Boolean(checkpoint.newChildren[row.key]) || Boolean(checkpoint.pendingUnits?.[row.key]);
+      if (isNewChild) {
         checkpoint.newChildren[row.key] = true;
-        payload.stock_quantity = 0;
+        if (id) delete payload.stock_quantity;
+        else payload.stock_quantity = 0;
+        for (const key of ['serial', 'serial_number', 'imei1', 'imei2']) delete payload.specs[key];
       }
-      if (checkpoint.newChildren[row.key]) for (const key of ['serial', 'serial_number', 'imei1', 'imei2']) delete payload.specs[key];
       const saved = id ? await api.update(id, payload) : await api.create(payload);
       if (!saved?.id) throw new Error('O salvamento não confirmou o ID.');
       checkpoint.children[row.key] = saved;

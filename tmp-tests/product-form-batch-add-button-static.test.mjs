@@ -14,7 +14,7 @@ assert.doesNotMatch(form, /Lista para Cadastro em Massa/, 'a lista de cadastro e
 // Produto novo ou rascunho ainda sem id (rascunho automático) continua sendo cadastro novo.
 assert.match(
   form,
-  /const isNewRegistration = !initialData \|\| Boolean\(initialDraft && !initialData\.id\);/,
+  /const isNewRegistration = !initialData\?\.id;/,
   'new registration must mean a new product or an unsaved draft, never an existing product',
 );
 assert.match(

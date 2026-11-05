@@ -111,7 +111,9 @@ function draftFingerprint(snapshot: ProductFormSnapshot): string {
 }
 
 export function ProductForm({ initialData, initialDraft, onSaveDraft, initialProductionSetup, parentProductionSetup, onProductionSetupChange, defaultIsPrint3d = false, onSubmit, onCancel, onBatchComplete, isLoading, variationDraftMode = false }: ProductFormProps) {
-    const isNewRegistration = !initialData || Boolean(initialDraft && !initialData.id);
+    // stock-entry-only-v1: cadastro novo = sem id. Inclui rascunho sem id, EAN pré-preenchido, clone e
+    // variação nova da família (variationDraftMode sem id); edição de produto existente fica de fora.
+    const isNewRegistration = !initialData?.id;
     const [savingDraft, setSavingDraft] = useState(false);
     const savingDraftRef = useRef(false);
     const [draftSaveStatus, setDraftSaveStatus] = useState<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
@@ -1450,9 +1452,9 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 }
             }
 
-            // Clear stock_quantity if not tracking inventory
+            // Clear stock_quantity if not tracking inventory (0 explícito: estoque omitido no update mantém o atual)
             if (!mergedData.track_inventory) {
-                mergedData.stock_quantity = undefined;
+                mergedData.stock_quantity = 0;
                 console.log('✅ Cleared stock_quantity (inventory tracking disabled)');
             }
 
@@ -2115,7 +2117,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
 
                     {/* Campo: Quantidade em Estoque */}
                     {/* stock-entry-only-v1: no cadastro (e na variação nova da família) a quantidade não é informada; o produto nasce com estoque 0. */}
-                    {isNewRegistration || (variationDraftMode && !initialData?.id) ? (
+                    {isNewRegistration ? (
                         <p className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800" data-unit-entry-hint>
                             Estoque e aparelhos entram pela tela Entrada. Depois de salvar, use <strong>Dar entrada no estoque</strong>.
                         </p>
@@ -2342,6 +2344,10 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                         draftSaveStatus === 'saved' ? 'Rascunho salvo automaticamente.' :
                         <>Não foi possível salvar as últimas alterações. <button type="button" className="font-semibold underline" onClick={() => { failedDraftSignatureRef.current = null; setDraftRetryTick(value => value + 1); }}>Tentar novamente</button></>}
                 </div>}
+                {/* stock-entry-only-v1: EAN já cadastrado → o produto existe; a quantidade entra pela Entrada. */}
+                {blocksSubmitForDuplicateEAN && existingProduct?.id && <p className="text-sm text-red-700" data-duplicate-ean-entry>
+                    Este EAN já pertence a {existingProduct.name}. <Link to={entryAddUnitsPath(existingProduct.id)!} className="font-semibold underline">Dar entrada no estoque</Link>
+                </p>}
                 <p className="text-sm font-medium text-slate-600" data-product-form-step>Etapa {activeStepIndex + 1} de {formSections.length} · {formSections[activeStepIndex]?.[1]}</p>
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-3" data-product-form-footer>
                 <button type="button" onClick={onCancel} disabled={isSavingOperation} className="min-h-[44px] sm:min-h-0 w-full sm:w-auto px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50">
