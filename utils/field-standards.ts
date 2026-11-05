@@ -45,6 +45,7 @@ export enum UnitStatus {
 
 export enum ProductCondition {
   NEW = 'new',
+  SEMINOVO = 'seminovo',
   USED = 'used',
   OPEN_BOX = 'open_box',
 }

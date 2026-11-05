@@ -145,13 +145,14 @@ export function UnitForm({ productId, initialData, onSubmit, onCancel, isLoading
                         className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
                         <option value={ProductCondition.NEW}>Novo (Lacrado)</option>
+                        <option value={ProductCondition.SEMINOVO}>Seminovo</option>
                         <option value={ProductCondition.USED}>Usado</option>
                         <option value={ProductCondition.OPEN_BOX}>Open Box (Vitrine)</option>
                     </select>
                 </div>
 
                 {/* Bateria (Só aparece se USADO e Config permitir) */}
-                {condition === ProductCondition.USED && config.battery_health !== 'off' && (
+                {(condition === ProductCondition.USED || condition === ProductCondition.SEMINOVO) && config.battery_health !== 'off' && (
                     <div className="animate-in fade-in slide-in-from-top-2">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             Saúde da Bateria (%) {config.battery_health === 'required' && <span className="text-red-500">*</span>}

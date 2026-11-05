@@ -18,6 +18,8 @@ import { PAYJOY_SALE_NOTE } from '../../../utils/saleInformation.js';
 import { productImageList, resolveProductFamilyImages } from '../../../services/productFamilyImages.js';
 import { ModelChannelsSummary, SkuChannelBadges, mergeChannels, useModelPublicationChannels } from '../../../components/products/ModelPublicationChannels';
 import TikTokShopSyncModal from '../settings/components/TikTokShopSyncModal';
+import { ProductConditionBadge } from '../../../components/catalog/ProductConditionBadge';
+import { productCondition, productConditionLabel } from '../../../utils/productCondition.js';
 import { ChannelFeesButton, SkuChannelPricing } from '../../../components/products/ChannelPricingPanel';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -211,7 +213,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                 key: `${memoryGroup.key}-${colorGroup.key}-${product.key || product.id}`,
                 productId: ids[0],
                 product: raw,
-                label: [memoryGroup.label, colorGroup.color].filter(Boolean).join(' · '),
+                label: [memoryGroup.label, colorGroup.color, productCondition(raw) !== 'new' ? productConditionLabel(productCondition(raw)) : ''].filter(Boolean).join(' · '),
                 costCents,
                 registeredCostCents: Number.isFinite(Number(raw?.price_cost)) && raw?.price_cost !== null && raw?.price_cost !== undefined ? Number(raw.price_cost) : null,
                 costSource: units.length > 0 ? 'média do custo das peças disponíveis' : 'custo do cadastro',
@@ -427,6 +429,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                 {(colorGroup.skuGroups || colorGroup.products).map((product: any) => (
                                                                     <div key={product.key || product.id} className="font-mono text-xs text-slate-700">
                                                                         {product.sku ? <button type="button" onClick={() => copySku(product.sku)} className="text-blue-700 hover:underline" title="Copiar SKU">{product.sku}</button> : '-'}
+                                                                        {' '}<ProductConditionBadge product={product.raw || product.products?.[0]?.raw || product} />
                                                                         {product.duplicateCount > 1 && (
                                                                             <span className="font-sans text-amber-600"> ({product.duplicateCount} cadastros)</span>
                                                                         )}

@@ -2,6 +2,7 @@ import type { CatalogProduct, ProductVariant, ProductGroup } from '@/types/catal
 import { ProductStatus } from '@/utils/field-standards';
 import { getColorHex } from './colors';
 import { generateCatalogGroupKey, getCatalogFamilyName } from './productGroupingCore.js';
+import { productCondition } from '../utils/productCondition.js';
 
 /**
  * Color option with hex value
@@ -79,7 +80,10 @@ function normalizeRAMAndStorage(ram?: string, storage?: string): { ram: string; 
  * Falls back to brand + model name for products without model_id.
  */
 export function generateGroupKey(product: CatalogProduct): string {
-    return generateCatalogGroupKey(product);
+    // product-condition-v1: seminovo/usado/caixa aberta formam card próprio, nunca dentro do card do novo.
+    const condition = productCondition(product);
+    const key = generateCatalogGroupKey(product);
+    return condition === 'new' ? key : `${key}|condition:${condition}`;
 }
 
 /**

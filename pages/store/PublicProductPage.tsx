@@ -38,6 +38,7 @@ import { colorService } from '@/services/colors';
 import { buildProductVideoPlaylist, isMp4VideoUrl, isSafeProductVideoSibling, orderProductVideoSiblings, resolveProductVideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
 import { getCatalogTitle } from '../../services/catalogTitle.js';
+import { ProductConditionBadge, ProductConditionNote } from '../../components/catalog/ProductConditionBadge';
 import { getPublicProductDisambiguatedRouteTarget, getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
 import { buildCategoryBreadcrumb } from './categoryBreadcrumb.js';
 import { customFieldsService } from '@/services/custom-fields';
@@ -1425,9 +1426,11 @@ export const PublicProductPage: React.FC = () => {
                     {/* Informações do Produto (Direita) */}
                     <div className="space-y-6">
                         <div>
+                            <ProductConditionBadge product={product} className="mb-2" />
                             <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
                                 {catalogDisplayTitle}
                             </h1>
+                            <ProductConditionNote product={product} className="mt-3" />
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-slate-500">
                                 <span>
                                     SKU: <span className="font-mono">{product.sku || '—'}</span>

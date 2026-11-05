@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import * as core from '../services/productGroupingCore.js';
+import * as conditionModule from '../utils/productCondition.js';
 import { getCatalogCardDisplayName } from '../components/catalog/modernProductCardState.js';
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
@@ -11,6 +12,7 @@ const compile = source => ts.transpileModule(source, { compilerOptions: {
 } }).outputText;
 const grouping = { exports: {}, require: id => {
   if (id.endsWith('productGroupingCore.js')) return core;
+  if (id.endsWith('productCondition.js')) return conditionModule;
   if (id.includes('field-standards')) return { ProductStatus: { ACTIVE: 'active' } };
   if (id === './colors') return { getColorHex: () => '#000000' };
   throw Error('Unexpected dependency ' + id);
@@ -60,3 +62,16 @@ assert.equal(destination({ filter_categories: ['cat', 'other'] }), undefined);
 assert.equal(destination({}), undefined);
 assert.match(source, /section.show_view_all && viewAllUrl/);
 assert.match(source, /reloadDocument=\{!section.view_all_url\}/);
+
+// product-condition-v1: seminovo/usado da mesma família vira card próprio, sem entrar no card do novo.
+{
+  const used = { ...child('used-black', '8GB', '256GB', 'Preto', 150000), specs: { ram: '8GB', storage: '256GB', color: 'Preto', condition: 'seminovo', condition_note: 'Placa trocada na autorizada' } };
+  const groups = grouping.exports.groupProductsByVariants([...products, used], false);
+  const family = groups.find(g => g.groupKey === 'family:family');
+  const seminovo = groups.find(g => g.groupKey === 'family:family|condition:seminovo');
+  assert.ok(family && seminovo, 'novo e seminovo em cards separados');
+  assert.ok(!family.variants.flatMap(v => v.products).some(p => p.id === 'used-black'), 'seminovo não entra no card do novo');
+  assert.deepEqual(Array.from(seminovo.variants.flatMap(v => v.products), p => p.id), ['used-black']);
+  assert.deepEqual(Array.from(family.variants.flatMap(v => v.products), p => p.price_retail), [200000, 210000, 240000], 'preço do novo não muda');
+  console.log('Seminovo forms its own catalog card.');
+}

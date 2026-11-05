@@ -1,3 +1,4 @@
+import { productCondition } from '../../utils/productCondition.js';
 import { buildProductVariationPrefill } from '../../services/productClonePrefill.js';
 import { DEFAULT_PRODUCT_VERSION } from '../../services/smartphoneModelSpecs.mjs';
 
@@ -191,9 +192,9 @@ export function buildModelPhotoVariationRows(parent, rows, colors, imageRows) {
   return drafts;
 }
 
+// product-condition-v1: mesma regra do site e do robô (new | seminovo | used | open_box).
 export function productUnitCondition(specs = {}) {
-  const value = String(specs.condition || specs.condicao || 'new').toLowerCase();
-  return ['used', 'usado', 'seminovo'].includes(value) ? 'used' : value === 'open_box' ? 'open_box' : 'new';
+  return productCondition(specs);
 }
 
 export function familyChildPayload(parent, child, inheritImages = true) {

@@ -1,3 +1,10 @@
+# v1.2.788-condicao-seminovo-usado
+
+Data: 04/11/2026. Status: **pendente de publicação**. Branch: `main`.
+Condição Novo / Seminovo / Usado / Caixa aberta com observação: cadastro, site (card próprio + selo + observação), admin e feed da Meta. WhatsApp (n8n) na etapa 2.
+
+---
+
 # v1.2.787-shopee-m-link
 
 Data: 04/11/2026. Status: **publicada em 04/11/2026 20:51** (`/var/www/mdv-site/releases/20261104-205116-v1287-shopee-m-link`). Branch: `main`. Tag: `v1.2.787-shopee-m-link`.

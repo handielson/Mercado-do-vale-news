@@ -39,6 +39,8 @@ vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.Mo
         if (id.endsWith('/LazyLabelPrintModal')) return { LazyLabelPrintModal: () => null };
         if (id.endsWith('/ModelPublicationChannels')) return { useModelPublicationChannels: () => ({ loading: false, failed: false, byProductId: {}, reload() {} }), mergeChannels: () => ({ shopee: [], ml: [], tiktok: null, tiktokInherited: false }), ModelChannelsSummary: () => null, SkuChannelBadges: () => null };
         if (id.endsWith('/ChannelPricingPanel')) return { ChannelFeesButton: () => null, SkuChannelPricing: () => null };
+        if (id.endsWith('/productCondition.js')) return { productCondition: () => 'new', productConditionLabel: () => 'Novo' };
+        if (id.endsWith('/ProductConditionBadge')) return { ProductConditionBadge: () => null, ProductConditionNote: () => null };
         return {};
     },
 }, { filename: 'ModelProductAggregatorPage.js' });

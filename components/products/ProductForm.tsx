@@ -64,6 +64,7 @@ import { getBlingSkuSpecAutofill } from './blingSkuSpecAutofill.js';
 import { resolveExistingProductImages, resolveSiblingProductImages } from './blingSkuExistingImages.js';
 import { UnitStatus } from '../../utils/field-standards';
 import { productService } from '../../services/products';
+import { PRODUCT_CONDITIONS, CONDITION_NOTE_MAX, isNotNewCondition } from '../../utils/productCondition.js';
 import { productUnitCondition, saveFamilyRegistration, smartphoneFamilyConfigurationKey, partitionSmartphoneFamilyRowsForSave, validateNewSmartphoneFamilyPrices } from './familyRegistration.js';
 import { smartphonePriceGroups } from '../../services/smartphonePriceGroups';
 import { uploadProductVideo, validateProductVideo } from '../../services/productVideoUpload';
@@ -2320,10 +2321,13 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                     Tipo de Produto
                 </h3>
                 <div className="grid gap-4 sm:grid-cols-3">
-                    <label className="text-sm">Condição<select aria-label="Condição do produto" value={productUnitCondition(watch('specs'))} onChange={e => setValue('specs.condition', e.target.value, { shouldDirty: true })} className="mt-1 w-full rounded-md border p-2"><option value="new">Novo</option><option value="used">Usado</option><option value="open_box">Caixa aberta</option></select></label>
+                    <label className="text-sm">Condição<select aria-label="Condição do produto" value={productUnitCondition(watch('specs'))} onChange={e => setValue('specs.condition', e.target.value, { shouldDirty: true })} className="mt-1 w-full rounded-md border p-2">{PRODUCT_CONDITIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                                 <SalesUnitSelect value={watch('specs.unit') || ''} onChange={value => setValue('specs.unit', value, { shouldDirty: true })} />
                     <label className="text-sm">Produção<select aria-label="Origem da produção" value={watch('specs.production') || ''} onChange={e => setValue('specs.production', e.target.value)} className="mt-1 w-full rounded-md border p-2"><option value="">Não informada</option><option value="own">Própria</option><option value="third_party">Terceiros</option></select></label>
                 </div>
+                {isNotNewCondition(productUnitCondition(watch('specs'))) && <label className="block text-sm">Observação da condição <span className="text-xs text-slate-500">(aparece no site e na mensagem do WhatsApp)</span>
+                    <textarea aria-label="Observação da condição" maxLength={CONDITION_NOTE_MAX} rows={2} value={watch('specs.condition_note') || ''} onChange={e => setValue('specs.condition_note', e.target.value, { shouldDirty: true })} placeholder="Ex.: Trocado a placa principal pela assistência autorizada, o restante está novo." className="mt-1 w-full rounded-md border p-2" />
+                </label>}
                 <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
                     <input
                         type="checkbox"

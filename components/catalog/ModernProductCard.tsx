@@ -29,6 +29,7 @@ import {
     selectCatalogCardProduct,
 } from './modernProductCardState.js';
 import { getCatalogFamilyName } from '@/services/productGroupingCore.js';
+import { ProductConditionBadge } from './ProductConditionBadge';
 import { getCatalogTitle } from '@/services/catalogTitle.js';
 import { resolveProductFamilyImages } from '@/services/productFamilyImages.js';
 
@@ -539,6 +540,7 @@ export function ModernProductCard({
                     </div>
                     {/* Info */}
                     <div className="flex-1 min-w-0">
+                        <ProductConditionBadge product={productForDisplay} className="mb-0.5" />
                         <p className="text-[11px] font-semibold text-slate-900 line-clamp-2 leading-tight">
                             {cardDisplayName}
                         </p>
@@ -764,6 +766,7 @@ export function ModernProductCard({
                     {/* Title & Brand */}
                     <div>
                         <ProductRatingBadge productId={product.id} className="mb-0.5" />
+                        <ProductConditionBadge product={productForDisplay} className="mb-1" />
                         <h3
                             onClick={handleTitleClick}
                             className="font-medium text-xs sm:text-sm text-slate-900 line-clamp-3 hover:text-blue-600 transition-colors cursor-pointer"

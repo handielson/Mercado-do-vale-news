@@ -18,7 +18,7 @@ export interface Unit {
     serial_number?: string;            // Serial number (optional)
 
     // Condition & Health
-    condition: 'new' | 'used' | 'open_box';
+    condition: 'new' | 'seminovo' | 'used' | 'open_box';
     battery_health?: number;           // 0-100 (obrigatório se usado)
 
     // Status using Enum (NO magic strings)
@@ -55,7 +55,7 @@ export interface UnitInput {
     imei_1?: string;
     imei_2?: string;
     serial_number?: string;
-    condition: 'new' | 'used' | 'open_box';
+    condition: 'new' | 'seminovo' | 'used' | 'open_box';
     battery_health?: number;
     status: UnitStatus;
     cost_price?: number;

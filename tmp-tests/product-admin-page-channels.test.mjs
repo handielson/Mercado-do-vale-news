@@ -11,6 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { aggregateModelProducts, getModelIdentifierSections } from '../services/modelProductAggregator.js';
 import { productImageList, resolveProductFamilyImages } from '../services/productFamilyImages.js';
 import * as channelProfit from '../utils/channelProfit.js';
+import * as productConditionModule from '../utils/productCondition.js';
 
 const require = createRequire(import.meta.url);
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -58,6 +59,8 @@ test('Página do Produto renderiza título, canais, estoque, taxas e lucro por S
       SkuChannelPricing: (props) => { calls.pricing.push(props); return null; },
     },
     '/TikTokShopSyncModal': { default: () => null },
+    '/productCondition.js': productConditionModule,
+    '/ProductConditionBadge': { ProductConditionBadge: () => null, ProductConditionNote: () => null },
   });
   const html = renderToStaticMarkup(React.createElement(page.ModelProductAggregatorPage));
   assert.match(html, />Página do Produto</);

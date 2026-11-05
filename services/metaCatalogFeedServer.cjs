@@ -50,7 +50,8 @@ function buildMetaCatalogFeed(products, settings, now = new Date(), categories =
       title,
       description: text(String(product.description || '').replace(/<[^>]*>/g, ' '), 9999) || title,
       availability: !tracked || stock > 0 ? 'in stock' : 'out of stock',
-      condition: ['used', 'open_box'].includes(specs.condition) ? 'used' : specs.condition === 'refurbished' ? 'refurbished' : 'new',
+      // product-condition-v1: seminovo/usado/caixa aberta nunca vão como "new" para a Meta.
+      condition: ['used', 'usado', 'seminovo', 'semi-novo', 'semi novo', 'open_box'].includes(String(specs.condition || specs.condicao || '').trim().toLowerCase()) ? 'used' : specs.condition === 'refurbished' ? 'refurbished' : 'new',
       price: money(price),
       link: `${SITE}/produto/${encodeURIComponent(product.id)}`,
       image_link: images[0],

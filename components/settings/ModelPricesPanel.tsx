@@ -1,3 +1,4 @@
+import { productConditionLabel } from '../../utils/productCondition.js';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -65,7 +66,7 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline, onSaved,
     const filteredGroups = groups.filter(g => !onlyDivergent || g.divergent).sort((a, b) =>
         `${a.ram} ${a.storage} ${a.version || '~'}`.localeCompare(`${b.ram} ${b.storage} ${b.version || '~'}`, 'pt-BR', { numeric: true }));
     const activeGroup = filteredGroups.find(g => g.id === selectedGroupId) || filteredGroups[0];
-    const groupLabel = (group: SmartphonePriceGroup) => [group.ram, group.storage, group.version || 'Versão não informada', group.condition !== 'new' ? group.condition : ''].filter(Boolean).join(' · ');
+    const groupLabel = (group: SmartphonePriceGroup) => [group.ram, group.storage, group.version || 'Versão não informada', group.condition !== 'new' ? productConditionLabel(group.condition) : ''].filter(Boolean).join(' · ');
 
     const body = <div className="p-4 space-y-4 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">

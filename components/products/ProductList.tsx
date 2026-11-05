@@ -1,4 +1,5 @@
 
+import { ProductConditionBadge } from '../catalog/ProductConditionBadge';
 import React, { useEffect, useState } from 'react';
 import { Copy, Package, Pencil, Plus, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -88,7 +89,7 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
                             {[...memoryGroup.products].sort((a, b) => label(a).localeCompare(label(b), 'pt-BR')).map(product => {
                                 const stock = Math.max(0, Number(product.stock_quantity) || 0);
                                 return <li key={product.id} className="flex items-center justify-between gap-2">
-                                    <span className={stock > 0 ? '' : 'text-slate-400'}>{label(product)} ({stock} un.)</span>
+                                    <span className={stock > 0 ? '' : 'text-slate-400'}>{label(product)} <ProductConditionBadge product={product} /> ({stock} un.)</span>
                                     <span className="flex shrink-0 items-center gap-1">
                                     <button type="button"
                                         onClick={(event) => { event.stopPropagation(); navigate(`/admin/products/${encodeURIComponent(product.id)}?tab=inventory&addUnit=1`); }}

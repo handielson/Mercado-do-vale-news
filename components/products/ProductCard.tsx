@@ -1,4 +1,5 @@
 
+import { ProductConditionBadge } from '../catalog/ProductConditionBadge';
 import React, { useId, useState, useEffect, useRef , type ReactNode } from 'react';
 import { Barcode, ChevronDown, ChevronUp, Copy, Edit, Eye, EyeOff, ImagePlus, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -1670,6 +1671,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                                 {product.name}
                             </a>
                         </h3>
+                        <ProductConditionBadge product={product} />
                         {familyStockSummary}
                         <CatalogTitleEditor product={product} inline />
                         {!familyVariants && <>

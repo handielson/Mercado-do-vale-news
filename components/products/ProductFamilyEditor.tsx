@@ -1,3 +1,4 @@
+import { productCondition, productConditionLabel } from '../../utils/productCondition.js';
 import React, { useEffect, useState } from 'react';
 import type { Print3dSetup } from '../../services/print3dRegistration';
 import { createPortal } from 'react-dom';
@@ -290,7 +291,7 @@ export function ProductFamilyEditor({ parent, rows, onChange, disabled, smartpho
             {(row.inheritImages ? parent.images : row.data.images)?.[0] && <img src={(row.inheritImages ? parent.images : row.data.images)?.[0]} alt="" className="h-12 w-12 object-contain" />}
             <div className="flex-1"><p className="font-medium">{row.data.name}</p>
                 <p className="text-sm text-slate-600">{FAMILY_VARIATION_ATTRIBUTES.filter(attribute => row.data.specs?.[attribute.key]).map(attribute => `${attribute.label}: ${row.data.specs?.[attribute.key]}`).join(' · ')}</p>
-                <p className="text-xs text-slate-500">{row.data.sku || 'SKU automático ao salvar'} · {row.data.specs?.condition === 'used' ? 'Usado' : 'Novo'} · Estoque: {row.data.stock_quantity ?? 0}</p></div>
+                <p className="text-xs text-slate-500">{row.data.sku || 'SKU automático ao salvar'} · {productConditionLabel(productCondition(row.data))} · Estoque: {row.data.stock_quantity ?? 0}</p></div>
             <button type="button" disabled={disabled || busy} aria-expanded={smartphone ? expandedRows.includes(row.key) : undefined}
                 onClick={() => smartphone ? setExpandedRows(current => current.includes(row.key) ? current.filter(key => key !== row.key) : [...current, row.key]) : setEditing(row)} className="text-blue-700 underline">{smartphone && expandedRows.includes(row.key) ? 'Recolher detalhes' : 'Editar detalhes'}</button>
             {!row.data.id && <button type="button" disabled={disabled || busy} onClick={() => onChange(rows.filter(r => r.key !== row.key))} className="text-red-700">Remover rascunho</button>}

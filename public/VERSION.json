@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.787-shopee-m-link",
+  "version": "v1.2.788-condicao-seminovo-usado",
   "date": "2026-11-04",
-  "status": "published",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.787-shopee-m-link",
-  "release_vps": "/var/www/mdv-site/releases/20261104-205116-v1287-shopee-m-link",
+  "tag": "v1.2.788-condicao-seminovo-usado",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "sem alteração",
-    "note": "só site"
+    "status": "pendente",
+    "note": "services/metaCatalogFeedServer.cjs (seminovo/usado → used no feed da Meta) via --meta-catalog-feed-only"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Página do Produto: badge Shopee M passa a abrir o anúncio (ID da loja principal vem dos dados da empresa, como no card; a lista /shopee-connections só tem as lojas extras).",
+  "summary": "Condição Novo / Seminovo / Usado / Caixa aberta com observação (specs.condition_note): cadastro, peças, site (card próprio separado do novo, selo e observação na página), admin (selo na lista, família e Página do Produto) e feed da Meta. Mensagem do WhatsApp (n8n) fica para a etapa 2.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -25,22 +25,41 @@
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic",
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
   },
-  "site_source_base": "c5cbfce8",
+  "site_source_base": "63e5a496",
   "changed_files": [
-    "components/products/ModelPublicationChannels.tsx",
-    "tmp-tests/product-admin-page-channels.test.mjs",
-    "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-04-v1.2.787-shopee-m-link.md"
+    "components/catalog/ModernProductCard.tsx",
+    "components/catalog/ProductConditionBadge.tsx",
+    "components/products/ProductCard.tsx",
+    "components/products/ProductFamilyEditor.tsx",
+    "components/products/ProductForm.tsx",
+    "components/products/ProductList.tsx",
+    "components/products/VariationListing.tsx",
+    "components/products/familyRegistration.js",
+    "components/settings/ModelPricesPanel.tsx",
+    "components/units/UnitForm.tsx",
+    "docs/versoes/2026-11-04-v1.2.788-condicao-seminovo-usado.md",
+    "pages/admin/products/ModelProductAggregatorPage.tsx",
+    "pages/store/PublicProductPage.tsx",
+    "public/VERSION.json",
+    "services/metaCatalogFeedServer.cjs",
+    "services/productGrouping.ts",
+    "tmp-tests/catalog-sections-family-grouping.test.mjs",
+    "tmp-tests/model-panel-variation-image.test.mjs",
+    "tmp-tests/product-admin-page-channels.test.mjs",
+    "tmp-tests/product-condition-used.test.mjs",
+    "types/unit.ts",
+    "utils/field-standards.ts",
+    "utils/productCondition.js",
+    "utils/productCondition.test.mjs"
   ],
   "validations": [
-    "product-admin-page-channels: 7/7 (novo caso: Shopee M usa shopee_shop_id da empresa)",
-    "tsc sem erro no arquivo alterado",
-    "Chrome logado: Shopee M → https://shopee.com.br/product/321114781/55669790650 e Shopee G → https://shopee.com.br/product/1063100526/58221304511"
+    "product-condition-used (5) + productCondition (3) + catalog-sections-family-grouping (com caso seminovo) + meta-catalog-feed + family-registration + página do produto: ok",
+    "catalog-parent-media-contract e model-prices-panel-vps-products-static já falhavam antes (sem relação)"
   ],
   "site_release": {
-    "status": "published",
-    "release": "/var/www/mdv-site/releases/20261104-205116-v1287-shopee-m-link",
-    "published_at": "2026-11-04T23:51:16Z"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   }
 }

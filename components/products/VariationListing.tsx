@@ -1,3 +1,4 @@
+import { PRODUCT_CONDITIONS, CONDITION_NOTE_MAX, isNotNewCondition, productCondition } from '../../utils/productCondition.js';
 import React from 'react';
 import { ProductInput } from '../../types/product';
 import { RichTextEditor } from '../ui/RichTextEditor';
@@ -50,7 +51,8 @@ export function VariationListing({ parent, data, onChange, disabled, fresh = fal
             <fieldset disabled={inherits(groups.details)} className="grid gap-3 md:grid-cols-2">
                 <label className="text-sm">Categoria<CategorySelect value={String(effective('category_id', groups.details) || '')} onChange={category_id => set({ category_id })} /></label>
                 <label className="text-sm">Marca<input value={String(effective('brand', groups.details) || '')} onChange={e => set({ brand: e.target.value })} className="mt-1 w-full rounded border p-2" /></label>
-                <label className="text-sm">Condição<select value={(inherits(groups.details) ? parent.specs?.condition : data.specs?.condition) || 'new'} onChange={e => set({ specs: { ...data.specs, condition: e.target.value } })} className="mt-1 w-full rounded border p-2"><option value="new">Novo</option><option value="used">Usado</option><option value="open_box">Caixa aberta</option></select></label>
+                <label className="text-sm">Condição<select value={productCondition(inherits(groups.details) ? parent.specs : data.specs)} onChange={e => set({ specs: { ...data.specs, condition: e.target.value } })} className="mt-1 w-full rounded border p-2">{PRODUCT_CONDITIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                {isNotNewCondition(productCondition(inherits(groups.details) ? parent.specs : data.specs)) && <label className="text-sm md:col-span-2">Observação da condição (site e WhatsApp)<textarea aria-label="Observação da condição" maxLength={CONDITION_NOTE_MAX} rows={2} value={String((inherits(groups.details) ? parent.specs?.condition_note : data.specs?.condition_note) || '')} onChange={e => set({ specs: { ...data.specs, condition_note: e.target.value } })} placeholder="Ex.: Trocado a placa principal pela assistência autorizada, o restante está novo." className="mt-1 w-full rounded border p-2" /></label>}
                 <SalesUnitSelect value={(inherits(groups.details) ? parent.specs?.unit : data.specs?.unit) || ''} onChange={unit => set({ specs: { ...data.specs, unit } })} />
             </fieldset>
         </section>
