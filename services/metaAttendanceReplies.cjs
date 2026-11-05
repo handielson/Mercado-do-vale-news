@@ -21,6 +21,60 @@ function eligibleEvent(event, runtime, receivedAt, now = Date.now()) {
       && now - ms(event.occurredAt) < 20 * 60 * 1000
     : false;
 }
+// meta-split-product-boundary-v1: a lista não pode ser cortada no meio de um produto.
+// Corta em blocos (marca + item, cada item "N. ..." até o separador seguinte); só quebra
+// um bloco sozinho maior que o limite por linha, depois por espaço e, em último caso, no limite.
+const META_TEXT_LIMIT = 900;
+const len = value => [...value].length;
+const isSeparator = line => /^\s*[━─—_=\-]{3,}\s*$/.test(line);
+const isBrand = line => /^\s*🏷️/.test(line);
+const isItem = line => /^\s*\d{1,3}\.\s/.test(line);
+function hardSplit(value, limit) {
+  const out = [];
+  let rest = value;
+  while (len(rest) > limit) {
+    const points = [...rest];
+    const head = points.slice(0, limit).join('');
+    const cut = Math.max(head.lastIndexOf('\n'), head.lastIndexOf(' '));
+    const piece = cut > 0 ? head.slice(0, cut) : head;
+    out.push(piece.trimEnd());
+    rest = rest.slice(piece.length).replace(/^[ \n]+/, '');
+  }
+  if (rest.trim()) out.push(rest.trimEnd());
+  return out;
+}
+function splitMetaText(text, limit = META_TEXT_LIMIT) {
+  const clean = String(text || '').trim();
+  if (!clean) return [];
+  if (len(clean) <= limit) return [clean];
+  const units = [];
+  let current = [];
+  let onlyHeader = false;
+  for (const line of clean.split('\n')) {
+    const startsUnit = (isBrand(line) || isItem(line) || (!line.trim() && current.length && !onlyHeader)) && current.length && !(isItem(line) && onlyHeader);
+    if (startsUnit) { units.push(current.join('\n')); current = []; onlyHeader = false; }
+    if (!line.trim() && !current.length) continue;
+    current.push(line);
+    if (isBrand(line)) onlyHeader = true;
+    else if (line.trim() && !isSeparator(line)) onlyHeader = false;
+  }
+  if (current.length) units.push(current.join('\n'));
+  const chunks = [];
+  let chunk = '';
+  for (const unit of units.map(value => value.trim()).filter(Boolean)) {
+    const joined = chunk ? chunk + '\n' + unit : unit;
+    if (len(joined) <= limit) { chunk = joined; continue; }
+    if (chunk) chunks.push(chunk);
+    if (len(unit) <= limit) { chunk = unit; continue; }
+    const pieces = hardSplit(unit, limit);
+    chunks.push(...pieces.slice(0, -1));
+    chunk = pieces.at(-1) || '';
+  }
+  if (chunk) chunks.push(chunk);
+  // Separators only divide products inside one message: never at the start or the end of one.
+  return chunks.map(value => value.replace(/^(?:\s*[━─—_=\-]{3,}\s*\n)+/, '').replace(/(?:\n\s*[━─—_=\-]{3,}\s*)+$/, '').trim()).filter(Boolean);
+}
+
 function normalizeResponse(response, event) {
   if (!response || response.eventKey !== event.eventKey || response.conversationKey !== event.conversationKey
     || !Array.isArray(response.messages) || response.messages.length > 100) throw bad('invalid_engine_response');
@@ -34,9 +88,8 @@ function normalizeResponse(response, event) {
       if (typeof message.url !== 'string') throw bad('invalid_engine_image');
       blocks.push({type:'image',url:message.url});
     }
-    // Instagram's smaller text limit applies to both channels. Split by Unicode code point.
-    const points = [...text.trim()];
-    for (let offset=0; offset<points.length; offset+=900) blocks.push({type:'text',text:points.slice(offset,offset+900).join('')});
+    // Instagram's smaller text limit applies to both channels (900 Unicode code points).
+    for (const part of splitMetaText(text)) blocks.push({type:'text',text:part});
   }
   if (blocks.length > 150) throw bad('too_many_reply_blocks');
   return blocks;
@@ -235,4 +288,4 @@ function createMetaAttendanceReplies({pool, fetch: fetchImpl = globalThis.fetch,
   }
   return {operate,tick,context,canSend,normalizeResponse};
 }
-module.exports={createMetaAttendanceReplies,replyConfig,eligibleEvent,normalizeResponse};
+module.exports={createMetaAttendanceReplies,replyConfig,eligibleEvent,normalizeResponse,splitMetaText};

@@ -1,16 +1,15 @@
 {
-  "version": "v1.2.791-lista-3-celulares-por-marca",
+  "version": "v1.2.792-preco-familia-meta-lista",
   "date": "2026-11-04",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.791-lista-3-celulares-por-marca",
-  "release_vps": "/var/www/mdv-site/releases/20261104-225000-v1289-comprovante-qr",
+  "tag": "v1.2.792-preco-familia-meta-lista",
+  "release_vps": "pendente",
   "api_release": {
-    "status": "publicada",
-    "note": "meta-catalog-feed + sales-marketplaces; server.js sha eff76620; backups /var/www/mdv-api/backups/meta-catalog-feed-1793843156587 e sales-marketplaces-1793843168623"
+    "status": "pendente"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô do WhatsApp: a lista de celulares volta a sair com até 3 aparelhos por mensagem e sem misturar marcas. Desde a v1.2.663 (22/10) o nó 'Vendas - Catalogo sem IA' reagrupava os blocos em no máximo 3 mensagens. Sem mudança no site/API/agente de impressão.",
+  "summary": "Cadastro de família: preços que a API devolve em texto (\"0.00\", \"130000.00\") não travam mais o salvamento ('use valores válidos acima de zero'). Página do produto: o preço não aparece mais duplicado ao lado de 'Opções disponíveis'. Facebook/Instagram: a lista só é dividida entre produtos (antes cortava a cada 900 caracteres, no meio do texto).",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -27,29 +26,22 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "scripts/n8n-catalog-brand-chunks.cjs",
-    "scripts/deploy-n8n-catalog-brand-chunks.cjs",
-    "tmp-tests/n8n-sales-catalog-timeout-guard.cjs",
-    "tmp-tests/n8n-sales-catalog-timeout-guard.test.cjs",
+    "components/products/familyRegistration.js",
+    "pages/store/PublicProductPage.tsx",
+    "services/metaAttendanceReplies.cjs",
+    "tmp-tests/family-registration.test.mjs",
+    "tmp-tests/admin-variant-add-units-static.test.mjs",
+    "tmp-tests/meta-attendance-replies.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-05-v1.2.791-lista-3-celulares-por-marca.md"
+    "docs/versoes/2026-11-05-v1.2.792-preco-familia-meta-lista.md"
   ],
   "validations": [
-    "n8n-sales-catalog-timeout-guard.test 9/9 no candidato (o teste ponta a ponta falha no fluxo atual: reproduz o problema)",
-    "gate comercial 130/130 no candidato (sha256 3d0eb376…)"
+    "family-registration.test 21/21",
+    "admin-variant-add-units-static ok",
+    "meta-attendance-replies.test 18/18"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261104-225000-v1289-comprovante-qr",
-    "published_at": "2026-11-04T22:50:00-03:00"
-  },
-  "n8n_release": {
-    "status": "publicada",
-    "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "0be411f7",
-    "after": "3d0eb376",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-05T11-53-26-903Z-30abcf43.aes256gcm.json",
-    "published_at": "2026-11-05T08:53:00-03:00"
+    "status": "pendente"
   }
 }

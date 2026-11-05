@@ -41,7 +41,8 @@ test('preço incompleto mantém o grupo todo no rascunho; valores inválidos con
   const rows = [row('Preto', { price_retail: 240000, price_reseller: 230000, price_wholesale: 220000 }), row('Branco', { price_retail: 240000 })];
   const partial = partitionSmartphoneFamilyRowsForSave(rows);
   assert.equal(partial.ready.length, 0); assert.equal(partial.pending.length, 2);
-  for (const value of [NaN, -1, Infinity, 1.2, '240000']) assert.throws(() => partitionSmartphoneFamilyRowsForSave([row('Preto', { price_retail: value })]), /Confira os preços/);
+  // family-price-normalize-v1: '240000' (texto numérico da API) agora é aceito; texto não numérico continua bloqueado.
+  for (const value of [NaN, -1, Infinity, 1.2, '2400,00', 'abc']) assert.throws(() => partitionSmartphoneFamilyRowsForSave([row('Preto', { price_retail: value })]), /Confira os preços/);
   assert.throws(() => partitionSmartphoneFamilyRowsForSave([row('Preto', { price_retail: 200000, price_reseller: 230000, price_wholesale: 220000 })]), /ordem dos preços/);
   assert.equal(partitionSmartphoneFamilyRowsForSave([{ key: 'sem-memoria', data: { name: 'pendente' } }]).pending.length, 1);
 });
@@ -261,4 +262,16 @@ test('failed unit save remains pending after UI refreshes the confirmed child ID
   row.data.id=checkpoint.children.x.id;fails=false;
   await saveFamilyRegistration({name:'Pai'},[row],checkpoint,api);
   assert.equal(creates,2);assert.equal(units,1);assert.equal(checkpoint.units.x.condition,'used');
+});
+
+// family-price-normalize-v1: preço DECIMAL em texto vindo da API (pai "0.00") não trava o salvamento.
+test('preço em texto da API ("0.00", "130000.00") não bloqueia a família', () => {
+  const draft = (key, color, prices, specs = {}) => ({ key, data: { name: 'C17 Plus - ' + color, specs: { color, ...specs }, ...prices } });
+  const pending = draft('b', 'Branco', { price_retail: '0.00', price_reseller: 0, price_wholesale: '0.00' });
+  const ready = draft('n', 'Verde', { price_retail: '130000.00', price_reseller: 125000, price_wholesale: '115000.00' }, { ram: '6GB', storage: '256GB' });
+  const result = partitionSmartphoneFamilyRowsForSave([pending, ready]);
+  assert.deepEqual(result.pending.map(row => row.key), ['b'], 'sem RAM/armazenamento e sem preço fica no rascunho');
+  assert.deepEqual(result.ready.map(row => row.key), ['n']);
+  assert.equal(result.ready[0].data.price_retail, 130000, 'preço convertido para número');
+  assert.throws(() => partitionSmartphoneFamilyRowsForSave([draft('x', 'Azul', { price_retail: 'abc' })]), /use valores válidos/);
 });

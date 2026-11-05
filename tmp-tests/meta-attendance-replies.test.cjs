@@ -230,3 +230,29 @@ test('PayJoy approval state is accepted only for its claimed Meta conversation a
   assert.equal(updates[0][2],require('node:crypto').createHash('sha256').update(e.conversationKey).digest('hex'));
   await assert.rejects(service.operate('state',KEY,{conversationState:{foreignKey:{}},expectedRevision:1,eventVersion:100}),/invalid_conversation_state/);
 });
+
+// meta-split-product-boundary-v1: Facebook/Instagram não podem receber produto cortado no meio.
+test('lista longa para Facebook/Instagram só quebra entre produtos', () => {
+  const { splitMetaText } = require('../services/metaAttendanceReplies.cjs');
+  const sep = '━━━━━━━━━━━━━━━━━━━━━━';
+  const item = (n, name) => `${n}. ${name}\n   ✨ Tela IPS LCD de 6,67", bateria de 6.300 mAh, câmera de 50 MP e carregamento de 45 W.\n   📱 8GB/256GB\n      💰 R$ 1.190,00 à vista no PIX\n      💳 Cartão: 12x de R$ 110,97 (total R$ 1.331,61)\n      🎨 Cores: Verde, Branco`;
+  const brands = [['Xiaomi / Redmi', 1], ['POCO', 8], ['Realme', 15]];
+  const text = ['📱 Orçamento', ...brands.map(([brand, start]) => [`🏷️ *${brand}*`, ...Array.from({ length: 7 }, (_, i) => item(start + i, `${brand} ${start + i}`))].join(`\n${sep}\n`))].join('\n\n');
+  const parts = splitMetaText(text);
+  assert.ok(parts.length > 1);
+  for (const part of parts) {
+    assert.ok([...part].length <= 900, 'limite do Instagram');
+    assert.match(part, /🎨 Cores: Verde, Branco$/, 'termina no fim de um produto');
+    assert.ok(!/^ent|^[a-z]/.test(part), 'não começa no meio de uma palavra');
+  }
+  for (let n = 1; n <= 21; n++) {
+    const holders = parts.filter(part => new RegExp(`^${n}\\. `, 'm').test(part));
+    assert.equal(holders.length, 1, `item ${n} inteiro em uma mensagem`);
+    assert.match(holders[0], new RegExp(`${n}\\. [\\s\\S]*?carregamento de 45 W\\.[\\s\\S]*?Cores`), `item ${n} completo`);
+  }
+  for (const [brand, start] of brands) {
+    const holder = parts.find(part => part.includes(`🏷️ *${brand}*`));
+    assert.match(holder, new RegExp(`🏷️ \\*${brand.replace('/', '\\/')}\\*\\n(?:━+\\n)?${start}\\. `), 'marca fica junto do primeiro item');
+  }
+  assert.deepEqual(splitMetaText('Oi! Tudo bem?'), ['Oi! Tudo bem?']);
+});

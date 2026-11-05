@@ -17,6 +17,18 @@ export const FAMILY_INHERITANCE_GROUPS = Object.freeze({
 });
 
 const FAMILY_SALE_PRICE_FIELDS = FAMILY_INHERITANCE_GROUPS.prices;
+// family-price-normalize-v1: a API devolve alguns preços DECIMAL como texto ("130000.00");
+// o rascunho herdado do pai trazia "0.00" e travava o salvamento ("use valores válidos acima de zero").
+export function familyPriceValue(value) {
+  if (typeof value === 'string' && /^\s*-?\d+(?:\.\d+)?\s*$/.test(value)) return Number(value);
+  return value;
+}
+function withNumericFamilyPrices(row) {
+  if (!FAMILY_SALE_PRICE_FIELDS.some(field => typeof row.data[field] === 'string')) return row;
+  const data = { ...row.data };
+  for (const field of FAMILY_SALE_PRICE_FIELDS) data[field] = familyPriceValue(data[field]);
+  return { ...row, data };
+}
 export function smartphoneFamilyConfigurationKey(data) {
   const specs = data?.specs || {};
   const clean = value => String(value || '').trim().toLocaleLowerCase('pt-BR').replace(/\s+/g, '');
@@ -45,7 +57,7 @@ export function validateNewSmartphoneFamilyPrices(rows) {
   for (const row of rows.filter(item => !item.data.id)) {
     const key = smartphoneFamilyConfigurationKey(row.data);
     if (!key) throw new Error(`Complete RAM e armazenamento de ${row.data.name} antes de salvar.`);
-    const values = FAMILY_SALE_PRICE_FIELDS.map(field => row.data[field]);
+    const values = FAMILY_SALE_PRICE_FIELDS.map(field => familyPriceValue(row.data[field]));
     if (values.some(value => !Number.isSafeInteger(value) || value <= 0)) {
       throw new Error(`Informe varejo, revenda e atacado acima de zero para ${row.data.name}.`);
     }
@@ -61,6 +73,7 @@ export function validateNewSmartphoneFamilyPrices(rows) {
 
 // Publish complete configurations independently; unfinished groups remain private.
 export function partitionSmartphoneFamilyRowsForSave(rows) {
+  rows = rows.map(row => (row.data.id ? row : withNumericFamilyPrices(row)));
   const pendingGroups = new Set();
   for (const row of rows.filter(item => !item.data.id)) {
     const group = smartphoneFamilyConfigurationKey(row.data);

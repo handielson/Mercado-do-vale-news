@@ -1526,11 +1526,7 @@ export const PublicProductPage: React.FC = () => {
                                 {/* pdp-compact-variants-v1: opcoes sem caixas e botoes menores, para o preco aparecer sem rolar. */}
                                 <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3">
                                     <h3 className="text-sm font-semibold text-slate-900">Opções disponíveis:</h3>
-                                    {/* pdp-compact-variants-v1: preco da variacao escolhida ao lado das opcoes, sempre visivel. */}
-                                    {!shouldShowVariantPriceRange && !isKitSelected && <span className="text-base font-bold text-green-700" data-variant-inline-price>
-                                        R$ {formatDisplayPrice(customerType !== 'wholesale' ? pixPrice : displayPrice)}
-                                        <span className="ml-1 text-xs font-semibold text-green-700/80">{customerType !== 'wholesale' ? 'no Pix' : ''}</span>
-                                    </span>}
+                                    {/* pdp-no-duplicate-price-v1: o preço fica só no quadro "À vista no Pix" logo abaixo (antes repetia aqui). */}
                                 </div>
                                 <div className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-slate-50/70 px-3">
                                     {groupedVariantOptions.map((group) => (

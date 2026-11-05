@@ -18,5 +18,6 @@ assert.match(store, /pdp-compact-variants-v1/);
 assert.match(store, /className=\{`min-h-9 px-3 py-1\.5 rounded-lg border text-sm font-medium/, 'botoes de cor menores');
 assert.doesNotMatch(store, /<div key=\{group\.memoryLabel\} className="rounded-xl border border-slate-200 bg-slate-50\/70 p-3">/, 'cada memoria nao fica mais numa caixa propria');
 console.log('pdp compact variants ok');
-assert.match(store, /data-variant-inline-price/, 'preco da variacao escolhida aparece junto das opcoes');
+assert.doesNotMatch(store, /data-variant-inline-price/, 'preco nao se repete ao lado das opcoes (pdp-no-duplicate-price-v1)');
+assert.match(store, /pdp-no-duplicate-price-v1/);
 console.log('pdp inline price ok');

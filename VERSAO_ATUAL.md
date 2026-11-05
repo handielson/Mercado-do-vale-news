@@ -1,3 +1,10 @@
+# v1.2.792-preco-familia-meta-lista
+
+Data: 05/11/2026. Status: **pendente de publicação**. Branch: `main`.
+Família salva com preço em texto da API; preço sem duplicar na página do produto; lista no Facebook/Instagram dividida só entre produtos.
+
+---
+
 # v1.2.791-lista-3-celulares-por-marca
 
 Data: 05/11/2026. Branch: `main`. Publicada (n8n 3d0eb376…). Só o robô do WhatsApp (n8n); site/API/impressão seguem as versões anteriores (v1.2.790-etiqueta-pf-shopee-g).
