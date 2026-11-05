@@ -11,6 +11,7 @@ const test = require('node:test');
 const root = path.resolve(__dirname, '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const MSG = 'Entrada de estoque é feita pela tela Entrada (Admin → Entrada).';
+const SYNC = 'chave-teste';
 
 function slice(src, start, end) {
   const from = src.indexOf(start);
@@ -45,7 +46,7 @@ function load() {
   const register = (method) => (url, _opts, handler) => { handlers[`${method} ${url}`] = handler; };
   const context = {
     fastify: { post: register('POST'), patch: register('PATCH'), put() {}, delete() {}, get() {} },
-    pool, process: { env: {} }, require, crypto: require('node:crypto'),
+    pool, process: { env: { SYNC_SECRET: SYNC } }, require, crypto: require('node:crypto'),
     requireSyncKey() {}, requireSyncKeyOrAdmin() {},
     isValidTable: name => /^[a-zA-Z0-9_]+$/.test(name),
     getPrimaryKey: async () => 'id',
@@ -101,6 +102,47 @@ test('PATCH /table-data/products/:pk com stock_quantity responde 409 e nao grava
   assert.equal(reply.statusCode, 409);
   assert.equal(reply.payload.error, MSG);
   assert.equal(writes.length, 0);
+});
+
+const maintenancePatch = headers => ({ ...req('products', { status: 'inactive', stock_quantity: 0, hide_from_catalog: 1 }, { pkValue: 'p1' }), headers });
+
+test('manutencao: PATCH com x-sync-key correta e x-stock-maintenance: 1 passa', async () => {
+  const { handlers, writes } = load();
+  const reply = fakeReply();
+  const result = await handlers['PATCH /table-data/:name/:pkValue'](maintenancePatch({ 'x-sync-key': SYNC, 'x-stock-maintenance': '1' }), reply);
+  assert.equal(reply.statusCode, 200);
+  assert.equal(result.id, 'p1');
+  assert.deepEqual(writes.map(w => w.sql), ['patchProductWithGroupPrices']);
+  assert.deepEqual(writes[0].params, ['p1', { status: 'inactive', stock_quantity: 0, hide_from_catalog: 1 }]);
+});
+
+test('manutencao: sem x-stock-maintenance (ou com valor diferente de 1) continua 409', async () => {
+  const { handlers, writes } = load();
+  for (const headers of [{ 'x-sync-key': SYNC }, { 'x-sync-key': SYNC, 'x-stock-maintenance': '0' }]) {
+    const reply = fakeReply();
+    await handlers['PATCH /table-data/:name/:pkValue'](maintenancePatch(headers), reply);
+    assert.equal(reply.statusCode, 409);
+    assert.equal(reply.payload.error, MSG);
+  }
+  assert.equal(writes.length, 0);
+});
+
+test('manutencao: cabecalho sem a sync key certa continua 409', async () => {
+  const { handlers, writes } = load();
+  for (const headers of [{ 'x-stock-maintenance': '1' }, { 'x-sync-key': 'outra', 'x-stock-maintenance': '1' },
+    { 'x-api-key': SYNC, 'x-stock-maintenance': '1' }]) {
+    const reply = fakeReply();
+    await handlers['PATCH /table-data/:name/:pkValue'](maintenancePatch(headers), reply);
+    assert.equal(reply.statusCode, 409, JSON.stringify(headers));
+  }
+  assert.equal(writes.length, 0);
+});
+
+test('script de manutencao manda x-stock-maintenance no PATCH de products', () => {
+  const script = read('scripts/rebuild-smartphone-serialized-units.cjs');
+  const patch = slice(script, 'await api(`/table-data/products/', 'body: JSON.stringify(');
+  assert.match(patch, /method: 'PATCH'/);
+  assert.match(patch, /headers: \{ 'x-stock-maintenance': '1' \}/);
 });
 
 test('products sem stock_quantity segue como hoje (insert, bulk e PATCH)', async () => {

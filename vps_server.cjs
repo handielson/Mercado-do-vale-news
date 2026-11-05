@@ -29562,11 +29562,16 @@ function stockEntryLockPayload() {
   return { error: STOCK_ENTRY_LOCK_MESSAGE, code: 'STOCK_ENTRY_LOCKED' };
 }
 
-function isStockMaintenanceRequest(request, items) {
+// Só cabeçalhos: x-sync-key igual ao SYNC_SECRET e x-stock-maintenance: 1 (o /api/vps-proxy não repassa este).
+function hasStockMaintenanceHeaders(request) {
   const key = request.headers?.['x-sync-key'];
   const secret = process.env.SYNC_SECRET;
   if (!key || !secret || key !== secret) return false;
-  if (String(request.headers?.['x-stock-maintenance'] || '').trim() !== '1') return false;
+  return String(request.headers?.['x-stock-maintenance'] || '').trim() === '1';
+}
+
+function isStockMaintenanceRequest(request, items) {
+  if (!hasStockMaintenanceHeaders(request)) return false;
   return Array.isArray(items) && items.length > 0
     && items.every(item => item && typeof item === 'object' && item.origin === 'maintenance');
 }
@@ -29577,9 +29582,15 @@ function isStockEntryLockedTableInsert(name) {
 
 // /table-data/products (MySQL Explorer) não grava stock_quantity: o saldo vem das unidades e dos locais.
 // Vale só para as rotas HTTP; chamadores internos (vpsDbPatch etc.) seguem iguais.
+// Exceção: manutenção por cabeçalhos (scripts/rebuild-smartphone-serialized-units.cjs). Campo no corpo
+// (como origin) viraria coluna no PATCH, por isso aqui não se exige origin.
 function hasStockEntryLockedProductColumns(name, rows) {
   if (String(name || '').toLowerCase() !== 'products') return false;
   return rows.some(row => row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'stock_quantity'));
+}
+
+function isStockEntryLockedProductWrite(request, name, rows) {
+  return hasStockEntryLockedProductColumns(name, rows) && !hasStockMaintenanceHeaders(request);
 }
 
 // Cria 1 unidade
@@ -30575,7 +30586,7 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return reply.code(400).send({ error: 'Body must be a JSON object' });
   }
-  if (hasStockEntryLockedProductColumns(name, [body])) return reply.code(409).send(stockEntryLockPayload());
+  if (isStockEntryLockedProductWrite(req, name, [body])) return reply.code(409).send(stockEntryLockPayload());
   if (name === 'orders' && !require('./services/orderStorefront.cjs').isLegacyMdvOrderCreate(body)) {
     return reply.code(403).send({ error: 'Pedidos de outro site exigem checkout próprio.' });
   }
@@ -30649,7 +30660,7 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
   if (!Array.isArray(rows) || rows.length === 0) {
     return reply.code(400).send({ error: 'Body must be a non-empty array' });
   }
-  if (hasStockEntryLockedProductColumns(name, rows)) return reply.code(409).send(stockEntryLockPayload());
+  if (isStockEntryLockedProductWrite(req, name, rows)) return reply.code(409).send(stockEntryLockPayload());
   if (name === 'orders' && !rows.every(row => require('./services/orderStorefront.cjs').isLegacyMdvOrderCreate(row))) {
     return reply.code(403).send({ error: 'Pedidos de outro site exigem checkout próprio.' });
   }
@@ -33077,7 +33088,7 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
     return reply.code(400).send({ error: 'Body must be a JSON object' });
   }
   // stock-entry-lock-v1: saldo de produto não se edita por aqui.
-  if (hasStockEntryLockedProductColumns(name, [body])) return reply.code(409).send(stockEntryLockPayload());
+  if (isStockEntryLockedProductWrite(req, name, [body])) return reply.code(409).send(stockEntryLockPayload());
   if (name === 'orders') {
     if (pkCol !== 'id' || !require('./services/orderStorefront.cjs').isLegacyMdvOrderPatch(body)) {
       return reply.code(403).send({ error: 'Origem do pedido é imutável nesta rota.' });
