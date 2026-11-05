@@ -57,7 +57,11 @@
     "published_at": "2026-11-05T12:25:00-03:00"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "--catalog-entry-only (client_batch_id)"
+    "status": "publicada",
+    "note": "--catalog-entry-only; backup /var/www/mdv-api/backups/catalog-entry-1793897392648; catalog_entry_batches com client_batch_id e client_items_hash"
+  },
+  "nginx_release": {
+    "status": "publicada",
+    "note": "só o bloco GENERATED SPA ROUTES de /etc/nginx/sites-available/mdv-site-production.conf (+ /admin/entrada, /admin/products/drafts); backup em /root/nginx-backups; nginx -t ok + reload"
   }
 }
