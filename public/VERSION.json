@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.802-entrada-atalhos",
+  "version": "v1.2.803-entrada-estoque",
   "date": "2026-11-05",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.802-entrada-atalhos",
-  "release_vps": "/var/www/mdv-site/releases/20261105-190000-v1302-entrada-atalhos",
+  "tag": "v1.2.803-entrada-estoque",
+  "release_vps": "/var/www/mdv-site/releases/20261105-210000-v1303-entrada-estoque",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Entrada única, etapa 5: os atalhos '+ peças', 'Incluir peças' e 'Adicionar Unidade' abrem a Entrada presa na variação (Bipar para celular, Manual para o resto) e 'Nova variação' abre a Manual com o modelo. A porta única aceita linha por product_id (grava direto na variação existente).",
+  "summary": "Entrada única, etapa 6: estoque e aparelhos só entram pela Entrada. O servidor recusa POST /units, /units/batch e insert em /table-data/units (exceto o script de manutenção). O formulário Novo produto cadastra o catálogo sem estoque e oferece 'Dar entrada no estoque'. Cadastro em massa e Smartphones por foto abrem a Entrada; o Bipar busca produto por código de barras ou SKU.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,40 +23,44 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "services/catalogEntryCore.cjs",
-    "services/catalogEntryServer.cjs",
-    "services/catalogEntries.ts",
-    "services/entryShortcuts.js",
-    "components/entrada/FixedVariationCard.tsx",
-    "components/entrada/ManualEntryTab.tsx",
-    "components/entrada/ScanEntryTab.tsx",
-    "components/entrada/entryList.js",
-    "pages/admin/entrada/CatalogEntryPage.tsx",
-    "pages/admin/products/ProductDetailPage.tsx",
-    "pages/admin/products/ProductListPage.tsx",
-    "pages/admin/products/ModelProductAggregatorPage.tsx",
-    "pages/store/PublicProductPage.tsx",
-    "components/products/ProductList.tsx",
+    "vps_server.js",
+    "vps_server.cjs",
+    "scripts/rebuild-smartphone-serialized-units.cjs",
     "components/products/ProductForm.tsx",
-    "tmp-tests (catalog-entry-product-id, entrada-shortcut-browser, entry-shortcuts e estáticos atualizados)",
+    "components/products/familyRegistration.js",
+    "components/products/VariationListing.tsx",
+    "components/products/sections/ProductSpecifications.tsx",
+    "pages/admin/products/ProductFormPage.tsx",
+    "services/products.ts",
+    "services/entryShortcuts.js",
+    "components/entrada/BarcodeProductLookup.tsx",
+    "pages/admin/entrada/CatalogEntryPage.tsx",
+    "routes/index.tsx",
+    "pages/admin/products/ProductListPage.tsx",
+    "layouts/AdminLayout.tsx",
+    "components/admin/dashboard/AdminQuickAccessGrid.tsx",
+    "hooks/usePageTitle.ts",
+    "pages/admin/products/SmartphonePhotoIntakePage.tsx",
+    "apagados: EntradaPage, ProductEntryPage, BulkRegistrationPage, components/products/bulk/*, UnitForm, serializedBatch.js, bulk-products.ts, types/bulk-product.ts",
+    "tmp-tests (stock-entry-lock, stock-entry-only-static, entrada-barcode-browser, entrada-redirects-static, product-update-omitted-stock-static e atualizados)",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-05-v1.2.802-entrada-atalhos.md"
+    "docs/versoes/2026-11-05-v1.2.803-entrada-estoque.md"
   ],
   "validations": [
-    "entrada-* + entry-shortcuts: 121/121",
-    "catalog-entry-* + estáticos: 124/124",
+    "entrada-* + formulário + navegação: 204/204",
+    "stock-entry-lock + catalog-entry-*: 136/136",
     "npm run build ok",
-    "revisão por tarefa + revisão final"
+    "conjunto amplo: 21 falhas, todas já existentes no main",
+    "revisão por tarefa + revisão final + re-revisão"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261105-190000-v1302-entrada-atalhos",
-    "published_at": "2026-11-05T19:08:00-03:00"
+    "status": "pendente",
+    "release": "/var/www/mdv-site/releases/20261105-210000-v1303-entrada-estoque"
   },
   "api_release": {
-    "status": "publicada",
-    "note": "v1.2.802 (linha por product_id) publicada em 05/11 ~19:05; backup /var/www/mdv-api/backups/catalog-entry-1793916313000"
+    "status": "pendente",
+    "note": "server.js (vps_server.js) + módulos da porta única"
   },
   "nginx_release": {
     "status": "publicada",
