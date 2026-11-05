@@ -1,13 +1,13 @@
 {
   "version": "v1.2.789-comprovante-qr-bot-seminovo",
   "date": "2026-11-04",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.789-comprovante-qr-bot-seminovo",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261104-225000-v1289-comprovante-qr",
   "api_release": {
-    "status": "pendente",
-    "note": "get_stock_locations com quantidade por local, estoque total e link do produto; feed da Meta (v1.2.788)"
+    "status": "publicada",
+    "note": "meta-catalog-feed + sales-marketplaces; server.js sha eff76620; backups /var/www/mdv-api/backups/meta-catalog-feed-1793843156587 e sales-marketplaces-1793843168623"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Inclui a v1.2.788 (condição Seminovo/Usado com observação). Comprovante de separação Shopee/ML/TikTok: quadro destacado com LOCAL (peças em cada local) e ESTOQUE TOTAL (aviso de ÚLTIMA PEÇA), e QR Code da página do produto em cada item. Robô do WhatsApp (n8n): seminovo/usado não se funde mais ao novo e sai em mensagem própria 'Seminovos | Usados' com a observação.",
@@ -23,8 +23,7 @@
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic",
-    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center",
-    "printer_agent": "atualizar o serviço de impressão do PC da loja (botão Atualizar serviço no painel de impressoras) para o comprovante novo"
+    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
   },
   "site_source_base": "48412089",
   "changed_files": [
@@ -56,8 +55,19 @@
     "página do produto com estoque 0 abre (HTTP 200; API devolve fotos)"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261104-225000-v1289-comprovante-qr",
+    "published_at": "2026-11-04T22:50:00-03:00"
+  },
+  "n8n_release": {
+    "status": "publicada",
+    "workflow": "SkrkB4vyKVDnQ68t",
+    "before": "36113bfc",
+    "after": "0be411f7",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-05T01-49-31-499Z-19e46ce2.aes256gcm.json"
+  },
+  "printer_agent_release": {
+    "status": "publicada",
+    "note": "PC da loja: arquivos copiados (git pull bloqueado por hotfix local); backup em printer-service\\backup-v1289; pm2 shopee-auto-print reiniciado"
   }
 }
