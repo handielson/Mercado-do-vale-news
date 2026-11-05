@@ -243,3 +243,59 @@ test('?variacao= com categoria não identificada não libera a leitura', { timeo
     await page.getByLabel('Custo').count();
     assert.equal(await start(page).count(), 0);
 });
+
+test('I3: preços opcionais da configuração vão em todas as leituras', { timeout: 120000 }, async t => {
+    const { page, errors } = await setup(t);
+    await lock(page);
+    const toggle = page.getByLabel('Informar preços desta configuração');
+    assert.equal(await toggle.isChecked(), false);
+    assert.equal(await page.getByLabel('Varejo').count(), 0);
+    await toggle.check();
+    assert.equal(await start(page).count(), 0, 'preço ligado e vazio não libera a leitura');
+    await page.getByLabel('Varejo').fill('1999,90');
+    await page.getByLabel('Revenda').fill('1899');
+    assert.equal(await start(page).count(), 0);
+    await page.getByLabel('Atacado').fill('1799,50');
+    await start(page).click();
+    await bip(page, '863715061138763');
+    await page.getByRole('button', { name: 'simular um' }).click();
+    await page.getByText('2 aparelhos lidos', { exact: true }).waitFor();
+    const prices = { price_retail: 199990, price_reseller: 189900, price_wholesale: 179950 };
+    assert.deepEqual((await page.evaluate(() => window.added)).map(l => l.item.prices), [prices, prices]);
+    assert.deepEqual(errors, []);
+});
+
+test('I3: desligar os preços volta a mandar prices null', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await lock(page);
+    await page.getByLabel('Informar preços desta configuração').check();
+    await page.getByLabel('Varejo').fill('10');
+    await page.getByLabel('Informar preços desta configuração').uncheck();
+    await start(page).click();
+    await bip(page, '863715061138763');
+    assert.equal((await page.evaluate(() => window.added))[0].item.prices, null);
+});
+
+test('I3: ?variacao= também oferece os preços', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { prefill: { variation_id: 'p1' } });
+    await page.getByText('Redmi 15 · Verde · 8GB/256GB').waitFor();
+    await page.getByLabel('Informar preços desta configuração').check();
+    await page.getByLabel('Varejo').fill('100');
+    await page.getByLabel('Revenda').fill('90');
+    await page.getByLabel('Atacado').fill('80');
+    await page.getByLabel('Custo').fill('50');
+    await start(page).click();
+    await bip(page, '863715061138763');
+    assert.deepEqual((await page.evaluate(() => window.added))[0].item.prices, { price_retail: 10000, price_reseller: 9000, price_wholesale: 8000 });
+});
+
+test('M1: ocupado mostra "Aguarde…" ao lado do leitor', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await begin(page);
+    assert.equal(await page.getByText('Aguarde…').count(), 0);
+    await page.evaluate(() => window.setBusy(true));
+    await page.getByText('Aguarde…').waitFor();
+    assert.equal(await reader(page).isDisabled(), true);
+    await page.evaluate(() => window.setBusy(false));
+    await page.waitForFunction(() => !document.body.innerText.includes('Aguarde…'));
+});

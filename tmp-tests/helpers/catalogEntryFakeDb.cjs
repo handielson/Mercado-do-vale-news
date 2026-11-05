@@ -8,10 +8,14 @@ function fakeDb(seed = {}) {
     categories: [{ id: 'cat-phone', name: 'Smartphones' }, { id: 'cat-acc', name: 'Acessórios' }],
     locations: [{ id: 'L1', company_id: 'c', deposit_id: 'D1' }],
     products: [], units: [], psl: [], groups: [], images: [], batches: [], lines: [], movements: [],
+    // Colunas/índices já existentes em catalog_entry_batches (tabela antiga: passe schema: { columns: [], indexes: [] }).
+    schema: { columns: ['client_batch_id', 'client_items_hash'], indexes: ['uq_catalog_entry_batches_client'] },
     ...structuredClone(seed),
   };
   const log = [];
-  const control = { failRollback: false };
+  // concurrentBatch: { batch, lines } gravado por "outra conexão" logo antes do INSERT do lote (corrida de reenvio).
+  // alterError: erro lançado no próximo ALTER TABLE.
+  const control = { failRollback: false, concurrentBatch: null, alterError: null };
   const calls = { syncStock: [], syncLocations: [] };
   const TABLES = ['products', 'units', 'psl', 'groups', 'batches', 'lines', 'movements'];
   const snap = () => structuredClone(Object.fromEntries(TABLES.map(t => [t, state[t]])));
@@ -35,6 +39,30 @@ function fakeDb(seed = {}) {
     log.push(sql);
     const s = sql.replace(/\s+/g, ' ').trim();
     if (/^CREATE TABLE/.test(s)) return [{}];
+    if (s.includes('FROM information_schema.COLUMNS')) return [[{ n: state.schema.columns.includes(args[0]) ? 1 : 0 }]];
+    if (s.includes('FROM information_schema.STATISTICS')) return [[{ n: state.schema.indexes.includes(args[0]) ? 1 : 0 }]];
+    if (/^ALTER TABLE catalog_entry_batches/.test(s)) {
+      if (control.alterError) { const e = control.alterError; control.alterError = null; throw e; }
+      const col = s.match(/ADD COLUMN (\w+)/); if (col) state.schema.columns.push(col[1]);
+      const idx = s.match(/ADD UNIQUE INDEX (\w+)/); if (idx) state.schema.indexes.push(idx[1]);
+      return [{}];
+    }
+    if (s.startsWith('SELECT id,client_items_hash FROM catalog_entry_batches WHERE client_batch_id=?'))
+      return [structuredClone(state.batches.filter(b => b.client_batch_id === args[0]))];
+    if (s.startsWith('SELECT l.line,l.product_id')) {
+      return [state.lines.filter(l => l.batch_id === args[0]).sort((a, b) => a.line - b.line)
+        .map(l => ({ ...structuredClone(l), sku: state.products.find(p => p.id === l.product_id)?.sku ?? null }))];
+    }
+    if (s.startsWith('INSERT INTO catalog_entry_batches')) {
+      if (control.concurrentBatch) {
+        const { batch, lines = [] } = control.concurrentBatch; control.concurrentBatch = null;
+        for (const target of [state, tx].filter(Boolean)) { target.batches.push(structuredClone(batch)); target.lines.push(...structuredClone(lines)); }
+      }
+      const id = args[args.length - 2];
+      if (id != null && state.batches.some(b => b.client_batch_id === id)) {
+        throw Object.assign(new Error(`Duplicate entry '${id}' for key 'uq_catalog_entry_batches_client'`), { code: 'ER_DUP_ENTRY', errno: 1062 });
+      }
+    }
     if (/GET_LOCK/.test(s)) return [[{ acquired: 1 }]];
     if (/RELEASE_LOCK/.test(s)) return [[{}]];
     if (/^SAVEPOINT (\w+)/.test(s)) { savepoints.set(s.split(' ')[1], snap()); return [{}]; }

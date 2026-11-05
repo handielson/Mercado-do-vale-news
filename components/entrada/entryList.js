@@ -11,8 +11,23 @@ function newKey() {
   return `line-${Date.now().toString(36)}-${counter}`;
 }
 
+/** Chave de idempotência do envio (uuid v4). Fica com a lista até uma confirmação dar certo. */
+export function newBatchId() {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  } catch { /* cai no gerador abaixo */ }
+  const bytes = new Uint8Array(16);
+  try { crypto.getRandomValues(bytes); } catch { for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256); }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+const BATCH_ID = /^[A-Za-z0-9-]{8,36}$/;
+
 export function emptyState() {
-  return { lines: [], plan: null, hash: null, previewedSignature: null };
+  return { lines: [], plan: null, hash: null, previewedSignature: null, clientBatchId: newBatchId() };
 }
 
 function last4(value) {
@@ -113,7 +128,7 @@ export function hasIdentity(state, imeiOrSerial) {
 
 export function saveDraft(state, storage) {
   try {
-    storage.setItem(DRAFT_KEY, JSON.stringify({ lines: state.lines }));
+    storage.setItem(DRAFT_KEY, JSON.stringify({ lines: state.lines, clientBatchId: state.clientBatchId }));
   } catch { /* rascunho é conveniência */ }
 }
 
@@ -124,7 +139,8 @@ export function loadDraft(storage) {
     const parsed = JSON.parse(raw);
     if (!parsed || !Array.isArray(parsed.lines)) return emptyState();
     const lines = parsed.lines.filter(l => l && typeof l.key === 'string' && l.item && typeof l.item === 'object');
-    return { ...emptyState(), lines };
+    const clientBatchId = typeof parsed.clientBatchId === 'string' && BATCH_ID.test(parsed.clientBatchId) ? parsed.clientBatchId : newBatchId();
+    return { ...emptyState(), lines, clientBatchId };
   } catch {
     return emptyState();
   }
@@ -141,4 +157,44 @@ export function isValidImei(value) {
     sum += digit;
   }
   return sum % 10 === 0;
+}
+
+const VPS_ERROR = /^\[VPS\] (\d{3})\b/;
+
+function vpsBody(message) {
+  const at = message.indexOf(' — ');
+  return at >= 0 ? message.slice(at + 3) : '';
+}
+
+/** Campo `error` (ou `code`) do JSON do servidor dentro da mensagem do vpsClient; tolera corpo truncado. */
+function bodyField(message, field) {
+  const body = vpsBody(message);
+  if (!body.startsWith('{')) return null;
+  try {
+    const value = JSON.parse(body)?.[field];
+    return typeof value === 'string' && value ? value : null;
+  } catch {
+    const m = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`).exec(body);
+    if (!m) return null;
+    try { return JSON.parse(`"${m[1]}"`) || null; } catch { return m[1] || null; }
+  }
+}
+
+/** Texto para o operador: só a mensagem do servidor quando ela existe. */
+export function errorText(err) {
+  if (!(err instanceof Error)) return 'erro desconhecido';
+  return bodyField(err.message, 'error') || err.message || 'erro desconhecido';
+}
+
+/**
+ * Como tratar a falha da confirmação. 400/409/422 são recusas do servidor (nada gravado);
+ * qualquer outra coisa (timeout, rede, 5xx) é ambígua: a gravação pode ter acontecido.
+ */
+export function commitErrorKind(err) {
+  const message = err instanceof Error ? err.message : '';
+  const status = VPS_ERROR.exec(message)?.[1];
+  if (status === '409') return bodyField(message, 'code') === 'client_batch_conflict' ? 'client-batch-conflict' : 'conflict';
+  if (status === '422') return 'invalid';
+  if (status === '400') return 'rejected';
+  return 'ambiguous';
 }

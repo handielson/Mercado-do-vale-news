@@ -324,3 +324,77 @@ test('M6: rollback da prévia falhando descarta a conexão em vez de devolvê-la
   await assert.rejects(runCatalogEntry(db.pool, [phone({ prices: PRICES })], { commit: false, deps: db.deps }), /rollback falhou/);
   assert.ok(db.log.includes('DESTROY')); assert.ok(!db.log.includes('RELEASE'));
 });
+
+// I1: idempotência da confirmação por client_batch_id.
+const ACC = { source: 'planilha', model_id: 'm2', color: 'Preta', quantity: 3, cost_cents: 500, location_id: 'L1',
+  prices: { price_retail: 3000, price_reseller: 2500, price_wholesale: 2000 } };
+const CLIENT_ID = '0b7c6f1e-4b8a-4c2e-9f00-1234567890ab';
+
+test('ensureCatalogEntrySchema: CREATE já traz client_batch_id único', async () => {
+  const db = fakeDb();
+  await ensureCatalogEntrySchema(db.pool);
+  const create = db.log.find(sql => /CREATE TABLE IF NOT EXISTS catalog_entry_batches/.test(sql));
+  assert.match(create, /client_batch_id CHAR\(36\) NULL/);
+  assert.match(create, /client_items_hash CHAR\(64\) NULL/);
+  assert.match(create, /UNIQUE KEY uq_catalog_entry_batches_client \(client_batch_id\)/);
+  assert.ok(!db.log.some(sql => /^ALTER TABLE/.test(sql)), 'tabela já atual não recebe ALTER');
+});
+
+test('ensureCatalogEntrySchema: tabela antiga ganha colunas e índice só se faltarem; ALTER concorrente não derruba', async () => {
+  const db = fakeDb({ schema: { columns: [], indexes: [] } });
+  await ensureCatalogEntrySchema(db.pool);
+  assert.deepEqual(db.state.schema.columns, ['client_batch_id', 'client_items_hash']);
+  assert.deepEqual(db.state.schema.indexes, ['uq_catalog_entry_batches_client']);
+  const db2 = fakeDb({ schema: { columns: ['client_batch_id', 'client_items_hash'], indexes: [] } });
+  db2.control.alterError = Object.assign(new Error("Duplicate key name 'uq_catalog_entry_batches_client'"), { code: 'ER_DUP_KEYNAME', errno: 1061 });
+  await ensureCatalogEntrySchema(db2.pool); // outro processo criou o índice no meio: não falha
+  assert.equal(db2.log.filter(sql => /^ALTER TABLE/.test(sql)).length, 1);
+});
+
+test('mesmo client_batch_id duas vezes: a segunda é replay e não grava nada de novo', async () => {
+  const db = fakeDb();
+  const first = await previewAndCommit(db, [ACC], { clientBatchId: CLIENT_ID });
+  assert.equal(first.replay, undefined);
+  assert.equal(db.state.batches[0].client_batch_id, CLIENT_ID);
+  const before = structuredClone({ products: db.state.products, psl: db.state.psl, movements: db.state.movements, batches: db.state.batches, lines: db.state.lines });
+  // Reenvio após resposta perdida: prévia nova (estoque já somado) e mesmo client_batch_id.
+  const preview = await runCatalogEntry(db.pool, [ACC], { commit: false, deps: db.deps });
+  const again = await runCatalogEntry(db.pool, [ACC], { commit: true, expectedHash: preview.hash, deps: db.deps, clientBatchId: CLIENT_ID });
+  assert.equal(again.replay, true);
+  assert.equal(again.batch_id, first.batch_id);
+  assert.equal(again.plan.length, 1);
+  const product = db.state.lines[0].product_id;
+  assert.equal(again.plan[0].product_id, product);
+  assert.equal(again.plan[0].sku, db.state.products.find(p => p.id === product).sku);
+  assert.equal(again.plan[0].stock.kind, 'quantity'); assert.equal(again.plan[0].stock.quantity, 3);
+  assert.deepEqual({ products: db.state.products, psl: db.state.psl, movements: db.state.movements, batches: db.state.batches, lines: db.state.lines }, before);
+  assert.equal(db.state.psl[0].quantity, 3);
+});
+
+test('reenvio concorrente: chave duplicada no INSERT do lote vira replay', async () => {
+  const db = fakeDb();
+  const preview = await runCatalogEntry(db.pool, [ACC], { commit: false, deps: db.deps });
+  const crypto = require('node:crypto');
+  const hash = crypto.createHash('sha256').update(JSON.stringify([ACC])).digest('hex');
+  db.control.concurrentBatch = {
+    batch: { id: 'B-OUTRO', source: 'planilha', created_by: null, plan_hash: preview.hash, line_count: 1, client_batch_id: CLIENT_ID, client_items_hash: hash },
+    lines: [{ id: 'LN', batch_id: 'B-OUTRO', line: 1, product_id: 'PX', unit_id: null, quantity: 3, family_created: 1, variation_created: 1 }],
+  };
+  const r = await runCatalogEntry(db.pool, [ACC], { commit: true, expectedHash: preview.hash, deps: db.deps, clientBatchId: CLIENT_ID });
+  assert.equal(r.replay, true);
+  assert.equal(r.batch_id, 'B-OUTRO');
+  assert.equal(r.plan[0].product_id, 'PX');
+  assert.equal(db.state.batches.length, 1);
+  assert.equal(db.state.psl.length, 0, 'a gravação desta tentativa foi desfeita');
+  assert.ok(db.log.includes('ROLLBACK')); assert.ok(db.log.at(-2).includes('RELEASE_LOCK'));
+});
+
+test('mesmo client_batch_id com outra lista dá 409 e não grava', async () => {
+  const db = fakeDb();
+  await previewAndCommit(db, [ACC], { clientBatchId: CLIENT_ID });
+  const other = [{ ...ACC, quantity: 5 }];
+  const preview = await runCatalogEntry(db.pool, other, { commit: false, deps: db.deps });
+  await assert.rejects(runCatalogEntry(db.pool, other, { commit: true, expectedHash: preview.hash, deps: db.deps, clientBatchId: CLIENT_ID }),
+    e => e.statusCode === 409 && e.publicCode === 'client_batch_conflict');
+  assert.equal(db.state.batches.length, 1); assert.equal(db.state.psl[0].quantity, 3);
+});

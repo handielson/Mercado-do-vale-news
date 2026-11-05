@@ -18,13 +18,30 @@ const schemaPromises = new WeakMap();
 
 class LineError extends Error {}
 const lineError = message => new LineError(message);
-const httpError = (statusCode, message) => Object.assign(new Error(message), { statusCode });
+const httpError = (statusCode, message, publicCode) => Object.assign(new Error(message), { statusCode }, publicCode ? { publicCode } : {});
 // Regras de negócio (inclusive os 409 dos serviços reaproveitados) viram erro da linha; o resto propaga.
 const isRuleError = error => error instanceof LineError || error?.statusCode === 409;
 const norm = value => String(value ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
 const scope = (value, defaultId) => !value || value === 'default' ? defaultId : String(value);
 const slugify = value => norm(value).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 const completePrices = prices => Boolean(prices) && SALE.every(key => Number.isSafeInteger(prices[key]) && prices[key] >= 0);
+
+// Tabela criada antes da idempotência: acrescenta só o que falta. Outro processo pode ter
+// acrescentado no meio (coluna/índice duplicado): isso não é erro.
+const ALREADY_THERE = new Set(['ER_DUP_FIELDNAME', 'ER_DUP_KEYNAME']);
+async function ensureClientBatchColumns(pool) {
+  const alter = async sql => {
+    try { await pool.query(sql); } catch (error) { if (!ALREADY_THERE.has(error?.code)) throw error; }
+  };
+  for (const [column, type] of [['client_batch_id', 'CHAR(36)'], ['client_items_hash', 'CHAR(64)']]) {
+    const [[col]] = await pool.query(`SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='catalog_entry_batches' AND COLUMN_NAME=?`, [column]);
+    if (!Number(col?.n)) await alter(`ALTER TABLE catalog_entry_batches ADD COLUMN ${column} ${type} NULL`);
+  }
+  const [[idx]] = await pool.query(`SELECT COUNT(*) AS n FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='catalog_entry_batches' AND INDEX_NAME=?`, ['uq_catalog_entry_batches_client']);
+  if (!Number(idx?.n)) await alter('ALTER TABLE catalog_entry_batches ADD UNIQUE INDEX uq_catalog_entry_batches_client (client_batch_id)');
+}
 
 function ensureCatalogEntrySchema(pool) {
   if (!schemaPromises.has(pool)) {
@@ -35,7 +52,10 @@ function ensureCatalogEntrySchema(pool) {
         created_by CHAR(36) NULL,
         plan_hash CHAR(64) NOT NULL,
         line_count INT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        client_batch_id CHAR(36) NULL,
+        client_items_hash CHAR(64) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_catalog_entry_batches_client (client_batch_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
       await pool.query(`CREATE TABLE IF NOT EXISTS catalog_entry_lines (
         id CHAR(36) PRIMARY KEY,
@@ -48,6 +68,7 @@ function ensureCatalogEntrySchema(pool) {
         variation_created TINYINT(1) NOT NULL DEFAULT 0,
         INDEX idx_catalog_entry_lines_batch (batch_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await ensureClientBatchColumns(pool);
     })().catch(error => { schemaPromises.delete(pool); throw error; }));
   }
   return schemaPromises.get(pool);
@@ -348,21 +369,42 @@ async function resolveItem(ctx, item, line) {
     family_created: target.familyCreated ? 1 : 0, variation_created: target.variationCreated ? 1 : 0 };
 }
 
-async function recordBatch(conn, batchId, items, plan, hash, userId, writes) {
+async function recordBatch(conn, batchId, items, plan, hash, userId, writes, client) {
   const sources = [...new Set(items.map(item => item.source))];
-  await conn.query('INSERT INTO catalog_entry_batches (id,source,created_by,plan_hash,line_count) VALUES (?,?,?,?,?)',
-    [batchId, sources.length === 1 ? sources[0] : 'misto', userId || null, hash, plan.length]);
+  await conn.query(`INSERT INTO catalog_entry_batches (id,source,created_by,plan_hash,line_count,client_batch_id,client_items_hash)
+    VALUES (?,?,?,?,?,?,?)`,
+  [batchId, sources.length === 1 ? sources[0] : 'misto', userId || null, hash, plan.length, client.id, client.itemsHash]);
   for (const w of writes) {
     await conn.query(`INSERT INTO catalog_entry_lines (id,batch_id,line,product_id,unit_id,quantity,family_created,variation_created)
       VALUES (?,?,?,?,?,?,?,?)`, [crypto.randomUUID(), batchId, w.line, w.product_id, w.unit_id, w.quantity, w.family_created, w.variation_created]);
   }
 }
 
-async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, userId, deps } = {}) {
+const itemsDigest = rawItems => crypto.createHash('sha256').update(JSON.stringify(rawItems)).digest('hex');
+const isDupKey = error => error?.code === 'ER_DUP_ENTRY' || Number(error?.errno) === 1062;
+
+// Lote já gravado com este client_batch_id (reenvio após resposta perdida): devolve o que foi gravado.
+// Mesma chave com outra lista é 409 — nunca grava de novo nem finge que gravou a lista nova.
+async function findReplay(db, client) {
+  const [[batch]] = await db.query('SELECT id,client_items_hash FROM catalog_entry_batches WHERE client_batch_id=?', [client.id]);
+  if (!batch) return null;
+  if (batch.client_items_hash && batch.client_items_hash !== client.itemsHash) {
+    throw httpError(409, 'Este envio já foi gravado com outra lista. Confira a lista antes de reenviar.', 'client_batch_conflict');
+  }
+  const [rows] = await db.query(`SELECT l.line,l.product_id,l.unit_id,l.quantity,l.family_created,l.variation_created,p.sku
+    FROM catalog_entry_lines l LEFT JOIN products p ON p.id=l.product_id WHERE l.batch_id=? ORDER BY l.line`, [batch.id]);
+  const plan = rows.map(row => ({ line: Number(row.line), product_id: row.product_id || null, sku: row.sku ?? null,
+    family: Number(row.family_created) ? 'new' : 'existing', variation: Number(row.variation_created) ? 'new' : 'existing',
+    price_source: null, stock: { kind: row.unit_id ? 'unit' : 'quantity', quantity: Number(row.quantity) }, errors: [] }));
+  return { ok: true, replay: true, batch_id: batch.id, plan, hash: null };
+}
+
+async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, userId, deps, clientBatchId = null } = {}) {
   if (!Array.isArray(rawItems) || !rawItems.length) throw httpError(400, 'Envie ao menos um item.');
   await ensureCatalogEntrySchema(pool);
   await ensureSmartphonePriceGroupsSchema(pool);
   const defaultCompanyId = await deps.getDefaultCompanyId();
+  const client = commit && clientBatchId ? { id: clientBatchId, itemsHash: itemsDigest(rawItems) } : null;
   const conn = await pool.getConnection();
   let locked = false;
   let open = false;
@@ -371,6 +413,11 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
     const [locks] = await conn.query('SELECT GET_LOCK(?, 15) AS acquired', [SKU_LOCK]);
     locked = Number(locks[0]?.acquired) === 1;
     if (!locked) throw httpError(409, 'Não foi possível reservar o SKU. Tente novamente.');
+    // Sob o lock: um reenvio concorrente espera o primeiro terminar e já o enxerga aqui.
+    if (client) {
+      const replay = await findReplay(conn, client);
+      if (replay) return replay;
+    }
     await conn.beginTransaction();
     open = true;
     const ctx = { conn, deps, defaultCompanyId, batchId: crypto.randomUUID(), created: new Set(),
@@ -405,12 +452,18 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
       return { ok, plan, hash };
     }
     if (hash !== expectedHash) throw httpError(409, 'O lote mudou desde a conferência. Confira novamente.');
-    await recordBatch(conn, ctx.batchId, items, plan, hash, userId, writes);
+    await recordBatch(conn, ctx.batchId, items, plan, hash, userId, writes, client || { id: null, itemsHash: null });
     await conn.commit();
     open = false;
     return { ok: true, plan, hash, batch_id: ctx.batchId };
   } catch (error) {
     if (open) await conn.rollback().catch(() => { broken = true; });
+    open = false;
+    // Corrida: outra requisição com o mesmo client_batch_id gravou entre a checagem e o INSERT.
+    if (client && !broken && isDupKey(error)) {
+      const replay = await findReplay(conn, client);
+      if (replay) return replay;
+    }
     throw error;
   } finally {
     // Conexão com ROLLBACK falho pode estar no meio da transação: descarta (o MySQL solta o lock ao fechar).
@@ -420,6 +473,8 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
 }
 
 const MAX_ITEMS = 500;
+// Chave de idempotência gerada pela tela (uuid); aceita só letras, dígitos e hífen, até 36.
+const CLIENT_BATCH_ID = /^[A-Za-z0-9-]{8,36}$/;
 
 // getActorId(request) → id do usuário (ou null). O preHandler de auth não preenche request.user.
 function registerCatalogEntryRoutes(fastify, { pool, auth, deps, getActorId }) {
@@ -437,7 +492,7 @@ function registerCatalogEntryRoutes(fastify, { pool, auth, deps, getActorId }) {
   }
   function fail(reply, error) {
     const status = Number(error?.statusCode);
-    if (status >= 400 && status < 500) return reply.code(status).send({ error: error.message });
+    if (status >= 400 && status < 500) return reply.code(status).send({ error: error.message, ...(error.publicCode ? { code: error.publicCode } : {}) });
     fastify.log?.error?.(error);
     return reply.code(500).send({ error: 'Erro ao processar a entrada.' });
   }
@@ -455,10 +510,15 @@ function registerCatalogEntryRoutes(fastify, { pool, auth, deps, getActorId }) {
   fastify.post('/catalog-entries', opts, async (request, reply) => {
     const items = checkItems(request.body, reply);
     if (!items) return reply;
+    const clientBatchId = request.body.client_batch_id ?? null;
+    if (clientBatchId !== null && !(typeof clientBatchId === 'string' && CLIENT_BATCH_ID.test(clientBatchId))) {
+      return reply.code(400).send({ error: 'client_batch_id inválido.' });
+    }
     try {
       await ready();
       const result = await runCatalogEntry(pool, items, { commit: true, expectedHash: request.body.preview_hash,
-        userId: await actor(request), deps });
+        userId: await actor(request), deps, clientBatchId });
+      if (result.replay) return reply.code(200).send({ batch_id: result.batch_id, plan: result.plan, replay: true });
       if (!result.ok) return reply.code(422).send({ plan: result.plan });
       return reply.code(201).send({ batch_id: result.batch_id, plan: result.plan });
     } catch (error) { return fail(reply, error); }

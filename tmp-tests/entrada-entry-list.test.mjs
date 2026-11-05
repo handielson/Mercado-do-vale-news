@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import {
   emptyState, createLine, addLines, updateLine, removeLine, toItems, applyPreview,
   canConfirm, lineStatus, hasIdentity, saveDraft, loadDraft,
+  errorText, commitErrorKind,
 } from '../components/entrada/entryList.js';
+
+// O estado vazio traz um clientBatchId novo a cada chamada: compara o resto.
+const noId = ({ clientBatchId, ...rest }) => rest;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const mk = (imei1, extra = {}) => createLine({
   name: 'Redmi 15', color: 'Verde',
@@ -80,11 +85,11 @@ test('hasIdentity por imei1, imei2 e serial (sem diferenciar maiúscula)', () =>
 });
 
 test('rascunho: storage que lança, JSON inválido e null devolvem estado vazio', () => {
-  assert.deepEqual(loadDraft({ getItem() { throw new Error('x'); } }), emptyState());
-  assert.deepEqual(loadDraft({ getItem: () => '{x' }), emptyState());
-  assert.deepEqual(loadDraft({ getItem: () => null }), emptyState());
-  assert.deepEqual(loadDraft(null), emptyState());
-  assert.deepEqual(loadDraft({ getItem: () => '{"lines":"zzz"}' }), emptyState());
+  assert.deepEqual(noId(loadDraft({ getItem() { throw new Error('x'); } })), noId(emptyState()));
+  assert.deepEqual(noId(loadDraft({ getItem: () => '{x' })), noId(emptyState()));
+  assert.deepEqual(noId(loadDraft({ getItem: () => null })), noId(emptyState()));
+  assert.deepEqual(noId(loadDraft(null)), noId(emptyState()));
+  assert.deepEqual(noId(loadDraft({ getItem: () => '{"lines":"zzz"}' })), noId(emptyState()));
 });
 
 test('saveDraft + loadDraft devolve linhas sem plano; saveDraft não lança', () => {
@@ -100,4 +105,42 @@ test('saveDraft + loadDraft devolve linhas sem plano; saveDraft não lança', ()
   assert.equal(back.hash, null);
   assert.equal(canConfirm(back), false);
   assert.doesNotThrow(() => saveDraft(s, { setItem() { throw new Error('cheio'); } }));
+});
+
+test('I1: emptyState traz clientBatchId uuid novo; rascunho guarda e devolve o mesmo', () => {
+  const a = emptyState(), b = emptyState();
+  assert.match(a.clientBatchId, UUID);
+  assert.notEqual(a.clientBatchId, b.clientBatchId);
+  const store = {};
+  const storage = { setItem: (k, v) => { store[k] = v; }, getItem: k => store[k] ?? null };
+  const s = addLines(a, [mk('111111111111111')]);
+  assert.equal(s.clientBatchId, a.clientBatchId, 'mudar a lista não troca a chave');
+  assert.equal(removeLine(s, s.lines[0].key).clientBatchId, a.clientBatchId);
+  saveDraft(s, storage);
+  assert.equal(loadDraft(storage).clientBatchId, a.clientBatchId);
+  assert.match(loadDraft({ getItem: () => '{"lines":[],"clientBatchId":"x y"}' }).clientBatchId, UUID, 'chave inválida no rascunho é trocada');
+  assert.match(loadDraft({ getItem: () => '{"lines":[]}' }).clientBatchId, UUID, 'rascunho antigo ganha chave');
+});
+
+test('I1: commitErrorKind separa 409/422/400 (sem gravação) do resto (ambíguo)', () => {
+  const e = m => new Error(m);
+  assert.equal(commitErrorKind(e('[VPS] 409 https://x/catalog-entries — {"error":"O lote mudou"}')), 'conflict');
+  assert.equal(commitErrorKind(e('[VPS] 409 https://x/catalog-entries — {"error":"Este envio já foi gravado com outra lista.","code":"client_batch_conflict"}')), 'client-batch-conflict');
+  assert.equal(commitErrorKind(e('[VPS] 422 https://x — {"plan":[]}')), 'invalid');
+  assert.equal(commitErrorKind(e('[VPS] 400 https://x — {"error":"client_batch_id inválido."}')), 'rejected');
+  for (const m of ['[VPS] 500 https://x — {"error":"Erro ao processar a entrada."}', '[VPS] 502 https://x', 'Failed to fetch', 'The operation was aborted due to timeout', '']) {
+    assert.equal(commitErrorKind(e(m)), 'ambiguous', m);
+  }
+  assert.equal(commitErrorKind('boom'), 'ambiguous');
+});
+
+test('M4: errorText mostra só o campo error do JSON do servidor', () => {
+  const e = m => new Error(m);
+  assert.equal(errorText(e('[VPS] 400 https://api.x/catalog-entries — {"error":"Envie a lista de itens."}')), 'Envie a lista de itens.');
+  assert.equal(errorText(e('[VPS] 409 https://api.x — {"error":"Aspas \\"aqui\\"","code":"c"}')), 'Aspas "aqui"');
+  // corpo truncado pelo vpsClient (240 caracteres) ainda acha o error
+  assert.equal(errorText(e('[VPS] 500 https://api.x — {"error":"Falhou geral","detail":"aaaaaaaa...')), 'Falhou geral');
+  assert.equal(errorText(e('[VPS] 502 https://api.x — <html>Bad gateway</html>')), '[VPS] 502 https://api.x — <html>Bad gateway</html>');
+  assert.equal(errorText(e('Failed to fetch')), 'Failed to fetch');
+  assert.equal(errorText('x'), 'erro desconhecido');
 });

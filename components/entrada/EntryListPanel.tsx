@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { canConfirm, lineStatus } from './entryList.js';
 
 export interface EntryLine { key: string; source: string; item: Record<string, unknown>; label: string }
-export interface EntryState { lines: EntryLine[]; plan: unknown[] | null; hash: string | null; previewedSignature: string | null; previewOk?: boolean }
+export interface EntryState { lines: EntryLine[]; plan: unknown[] | null; hash: string | null; previewedSignature: string | null; previewOk?: boolean; clientBatchId: string }
 
 export type EntryResult =
     | { type: 'success'; rows: { key: string; label: string; productId: string | null }[] }

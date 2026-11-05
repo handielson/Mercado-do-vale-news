@@ -49,6 +49,11 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
     const [cost, setCost] = useState(0);
     const [locationId, setLocationId] = useState('');
     const { locations, locationsError } = useEntryLocations(setLocationId);
+    // Configuração sem preço: o operador informa aqui (vai em todas as leituras) em vez de cair no erro da prévia.
+    const [pricesOn, setPricesOn] = useState(false);
+    const [retail, setRetail] = useState(0);
+    const [reseller, setReseller] = useState(0);
+    const [wholesale, setWholesale] = useState(0);
 
     const [variation, setVariation] = useState<Locked | null>(null);
     const [variationPhone, setVariationPhone] = useState<boolean | null>(null);
@@ -128,7 +133,8 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
             ram, storage, version: version.trim(), condition, color,
         } : null);
 
-    const ready = Boolean(locked && locked.model_id && locked.ram && locked.storage && locked.color && cost > 0 && locationId);
+    const pricesReady = !pricesOn || (retail > 0 && reseller > 0 && wholesale > 0);
+    const ready = Boolean(locked && locked.model_id && locked.ram && locked.storage && locked.color && cost > 0 && locationId && pricesReady);
     const modelLabel = (id: string) => models.find(m => m.id === id)?.name || '';
     const labelOf = (l: Locked) => [l.name, l.color, [l.ram, l.storage].filter(Boolean).join('/')].filter(Boolean).join(' · ');
     const lockLabel = locked ? labelOf(locked) : '';
@@ -160,7 +166,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
             quantity: 1,
             cost_cents: cost,
             location_id: locationId,
-            prices: null,
+            prices: pricesOn ? { price_retail: retail, price_reseller: reseller, price_wholesale: wholesale } : null,
         };
         onAddLines([createLine(item, { source: 'bipar' }) as EntryLine]);
         setCount(n => n + 1);
@@ -195,6 +201,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                     <BarcodeScanButton kind="imei" allowPair disabled={busy} title="Usar câmera"
                         onScan={values => { addRead(values.slice(0, 2)); refocus(); }} />
                     <span className="text-sm text-slate-600 whitespace-nowrap">Usar câmera</span>
+                    {busy && <span role="status" className="text-sm font-medium text-amber-700 whitespace-nowrap">Aguarde…</span>}
                 </div>
                 {feedback && <p role="alert" className="text-sm text-red-600">{feedback.text}</p>}
                 <p aria-live="polite" className="text-sm font-medium text-slate-700">{counter}</p>
@@ -282,6 +289,19 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                             {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                         </select>
                         {locationsError && <p role="alert" className="text-xs text-red-600 mt-1">Não foi possível carregar os locais.</p>}
+                    </div>
+                    <div className="sm:col-span-2 space-y-2">
+                        <label className="flex items-center gap-2 text-sm text-slate-700">
+                            <input type="checkbox" checked={pricesOn} onChange={e => setPricesOn(e.target.checked)} />
+                            Informar preços desta configuração
+                        </label>
+                        {pricesOn && (
+                            <div className="grid gap-3 sm:grid-cols-3">
+                                <CurrencyInput value={retail} onChange={setRetail} label="Varejo" />
+                                <CurrencyInput value={reseller} onChange={setReseller} label="Revenda" />
+                                <CurrencyInput value={wholesale} onChange={setWholesale} label="Atacado" />
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

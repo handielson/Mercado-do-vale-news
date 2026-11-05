@@ -127,3 +127,39 @@ test('sem getActorId o lote fica com created_by nulo (I6)', async () => {
   assert.equal(res.statusCode, 201, res.body);
   assert.equal(db.state.batches[0].created_by, null);
 });
+
+// I1: client_batch_id na rota.
+const CID = '0b7c6f1e-4b8a-4c2e-9f00-1234567890ab';
+test('client_batch_id inválido dá 400', async () => {
+  const { fastify, db } = await app();
+  for (const bad of [123, '', 'x'.repeat(37), 'abc def ghi', "1'; DROP"]) {
+    const res = await post(fastify, '/catalog-entries', { items: [item()], preview_hash: 'x', client_batch_id: bad });
+    assert.equal(res.statusCode, 400, String(bad));
+    assert.equal(res.json().error, 'client_batch_id inválido.');
+  }
+  assert.equal(db.state.batches.length, 0);
+});
+
+test('reenvio com o mesmo client_batch_id responde 200 replay sem gravar de novo', async () => {
+  const { fastify, db } = await app();
+  const preview = (await post(fastify, '/catalog-entries/preview', { items: [item()] })).json();
+  const first = await post(fastify, '/catalog-entries', { items: [item()], preview_hash: preview.hash, client_batch_id: CID });
+  assert.equal(first.statusCode, 201, first.body);
+  assert.equal(first.json().replay, undefined);
+  const again = await post(fastify, '/catalog-entries', { items: [item()], preview_hash: 'qualquer', client_batch_id: CID });
+  assert.equal(again.statusCode, 200, again.body);
+  assert.equal(again.json().replay, true);
+  assert.equal(again.json().batch_id, first.json().batch_id);
+  assert.equal(again.json().plan[0].product_id, db.state.lines[0].product_id);
+  assert.equal(db.state.batches.length, 1); assert.equal(db.state.units.length, 1);
+});
+
+test('mesmo client_batch_id com outra lista dá 409 com code', async () => {
+  const { fastify } = await app();
+  const preview = (await post(fastify, '/catalog-entries/preview', { items: [item()] })).json();
+  await post(fastify, '/catalog-entries', { items: [item()], preview_hash: preview.hash, client_batch_id: CID });
+  const res = await post(fastify, '/catalog-entries', { items: [item({ cost_cents: 1 })], preview_hash: 'x', client_batch_id: CID });
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.json().code, 'client_batch_conflict');
+  assert.match(res.json().error, /já foi gravado com outra lista/);
+});

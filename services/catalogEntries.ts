@@ -28,16 +28,19 @@ export interface PlanLine {
 }
 
 export interface PreviewResult { ok: boolean; plan: PlanLine[]; hash: string }
-export interface CommitResult { batch_id: string; plan: PlanLine[] }
+/** replay: o mesmo client_batch_id já tinha sido gravado; nada foi gravado de novo. */
+export interface CommitResult { batch_id: string; plan: PlanLine[]; replay?: boolean }
+export interface BatchLine { line: number; product_id: string | null; unit_id?: string | null; quantity?: number }
 
 const TIMEOUT = { timeoutMs: 60000 };
 
 export const catalogEntries = {
     preview: (items: EntryItem[]) =>
         vpsClient.post<PreviewResult>('/catalog-entries/preview', { items }, TIMEOUT),
-    commit: (items: EntryItem[], previewHash: string) =>
-        vpsClient.post<CommitResult>('/catalog-entries', { items, preview_hash: previewHash }, TIMEOUT),
+    /** clientBatchId: chave de idempotência; reenviar com a mesma chave não grava duas vezes. */
+    commit: (items: EntryItem[], previewHash: string, clientBatchId: string) =>
+        vpsClient.post<CommitResult>('/catalog-entries', { items, preview_hash: previewHash, client_batch_id: clientBatchId }, TIMEOUT),
     get: (id: string) =>
-        vpsClient.get<{ batch: Record<string, unknown>; lines: Record<string, unknown>[] }>(
+        vpsClient.get<{ batch: Record<string, unknown>; lines: BatchLine[] }>(
             `/catalog-entries/${encodeURIComponent(id)}`, TIMEOUT),
 };

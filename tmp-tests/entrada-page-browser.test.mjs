@@ -13,11 +13,14 @@ const stub = `export const catalogEntries = {
         if (window.previewFail) throw new Error('falha');
         return window.previewResult(items);
     },
-    commit: async (items, hash) => {
-        window.commitCalls ||= []; window.commitCalls.push({ items, hash });
+    commit: async (items, hash, clientBatchId) => {
+        window.commitCalls ||= []; window.commitCalls.push({ items, hash, clientBatchId });
         return window.commitImpl(items, hash);
     },
-    get: async () => ({ batch: {}, lines: [] }),
+    get: async (id) => {
+        window.getCalls ||= []; window.getCalls.push(id);
+        return window.getImpl(id);
+    },
 };`;
 const entry = `import React from 'react';import {createRoot} from 'react-dom/client';import {MemoryRouter} from 'react-router-dom';import {CatalogEntryPage} from '${process.cwd().replaceAll('\\', '/')}/pages/admin/entrada/CatalogEntryPage.tsx';
 const initial = window.__initialEntries || ['/admin/entrada'];
@@ -62,7 +65,9 @@ async function setup(t, { lines = draftLines, url = '/admin/entrada', init } = {
         window.fixtures = fixtures;
         if (lines) localStorage.setItem('mdv-entrada-rascunho-v1', JSON.stringify({ lines }));
         window.previewResult = items => ({ ok: true, hash: 'h1', plan: items.map((_, i) => ({ line: i + 1, product_id: 'p' + (i + 1), sku: 'S' + i, family: 'existing', variation: 'new', price_source: 'group', stock: { kind: 'serialized', quantity: 1 }, errors: [] })) });
-        window.commitImpl = async items => ({ batch_id: 'b1', plan: items.map((_, i) => ({ line: i + 1, product_id: 'p' + (i + 1), sku: 'S' + i, family: 'existing', variation: 'new', price_source: 'group', stock: { kind: 'serialized', quantity: 1 }, errors: [] })) });
+        // Variação criada no lote: o plano da confirmação não tem id (só o lote gravado tem).
+        window.commitImpl = async items => ({ batch_id: 'b1', plan: items.map((_, i) => ({ line: i + 1, product_id: null, sku: 'S' + i, family: 'existing', variation: 'new', price_source: 'group', stock: { kind: 'serialized', quantity: 1 }, errors: [] })) });
+        window.getImpl = async id => ({ batch: { id }, lines: window.commitCalls.at(-1).items.map((_, i) => ({ line: i + 1, product_id: 'p' + (i + 1) })) });
         if (init) new Function(init)();
     }, { lines, url, init, fixtures: defaultFixtures });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
@@ -117,6 +122,7 @@ test('Confirmar limpa lista e rascunho e mostra links', { timeout: 120000 }, asy
     await page.getByText('Entrada confirmada').waitFor();
     assert.equal(await page.locator('a[href="/admin/products/p1"]').count(), 1);
     assert.equal(await page.locator('a[href="/admin/products/p2"]').count(), 1);
+    assert.deepEqual(await page.evaluate(() => window.getCalls), ['b1']);
     assert.deepEqual(await page.evaluate(() => window.commitCalls[0].hash), 'h1');
     assert.match(await text(page), /Nenhum item na lista/);
     const draft = await page.evaluate(() => JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1') || '{"lines":[]}'));
@@ -159,4 +165,90 @@ test('?modelo= pré-seleciona o modelo na aba Manual', { timeout: 120000 }, asyn
     const { page } = await setup(t, { lines: null, url: '/admin/entrada?modelo=m1' });
     await page.getByText('IMEI 1', { exact: true }).waitFor();
     assert.equal(await page.getByRole('combobox', { name: 'Modelo' }).inputValue(), 'Redmi 15');
+});
+
+const confirmReady = page => page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent.includes('Confirmar entrada') && !b.disabled));
+const DRAFT_ID = '11111111-2222-4333-8444-555555555555';
+const draftWithId = `localStorage.setItem('mdv-entrada-rascunho-v1', JSON.stringify({ ...JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1')), clientBatchId: '${DRAFT_ID}' }));`;
+
+test('I1: confirmação envia o clientBatchId do rascunho e troca a chave depois do sucesso', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { init: draftWithId });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await confirmReady(page);
+    await page.getByRole('button', { name: 'Confirmar entrada' }).click();
+    await page.getByText('Entrada confirmada').waitFor();
+    assert.equal(await page.evaluate(() => window.commitCalls[0].clientBatchId), DRAFT_ID);
+    await page.waitForFunction(id => { const d = JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1') || '{}'); return d.clientBatchId && d.clientBatchId !== id; }, DRAFT_ID);
+});
+
+test('I1: erro ambíguo avisa, confere de novo e o reenvio usa a mesma chave', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { init: `${draftWithId} let n = 0; const ok = window.commitImpl; window.commitImpl = async (...a) => { if (n++ === 0) throw new Error('The operation was aborted due to timeout'); return ok(...a); };` });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await confirmReady(page);
+    await page.getByRole('button', { name: 'Confirmar entrada' }).click();
+    await page.getByText('A confirmação pode ter sido gravada. Confira novamente antes de reenviar.').waitFor();
+    await page.waitForFunction(() => window.previewCalls.length === 2);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1')).lines.length), 2, 'lista continua');
+    await confirmReady(page);
+    await page.getByRole('button', { name: 'Confirmar entrada' }).click();
+    await page.getByText('Entrada confirmada').waitFor();
+    assert.deepEqual(await page.evaluate(() => window.commitCalls.map(c => c.clientBatchId)), [DRAFT_ID, DRAFT_ID]);
+});
+
+test('I1: 5xx também é ambíguo (não mostra erro cru)', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { init: `window.commitImpl = async () => { throw new Error('[VPS] 502 https://api.x/catalog-entries — <html>Bad gateway</html>'); };` });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await confirmReady(page);
+    await page.getByRole('button', { name: 'Confirmar entrada' }).click();
+    await page.getByText('A confirmação pode ter sido gravada. Confira novamente antes de reenviar.').waitFor();
+    assert.doesNotMatch(await text(page), /\[VPS\]/);
+});
+
+test('I1: mesma chave com outra lista mostra o aviso do servidor e gera chave nova', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { init: `${draftWithId} let n = 0; const ok = window.commitImpl; window.commitImpl = async (...a) => { if (n++ === 0) throw new Error('[VPS] 409 https://api.x/catalog-entries — {"error":"Este envio já foi gravado com outra lista. Confira a lista antes de reenviar.","code":"client_batch_conflict"}'); return ok(...a); };` });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await confirmReady(page);
+    await page.getByRole('button', { name: 'Confirmar entrada' }).click();
+    await page.getByText('Este envio já foi gravado com outra lista. Confira a lista antes de reenviar.').waitFor();
+    await page.waitForFunction(() => window.previewCalls.length === 2);
+    await confirmReady(page);
+    await page.getByRole('button', { name: 'Confirmar entrada' }).click();
+    await page.getByText('Entrada confirmada').waitFor();
+    const ids = await page.evaluate(() => window.commitCalls.map(c => c.clientBatchId));
+    assert.equal(ids[0], DRAFT_ID); assert.notEqual(ids[1], DRAFT_ID); assert.ok(ids[1]);
+});
+
+test('I2: replay e falha do get usam o plano como reserva para os links', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { init: `window.commitImpl = async items => ({ batch_id: 'b9', replay: true, plan: items.map((_, i) => ({ line: i + 1, product_id: 'q' + (i + 1), errors: [] })) }); window.getImpl = async () => { throw new Error('[VPS] 500 x'); };` });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await confirmReady(page);
+    await page.getByRole('button', { name: 'Confirmar entrada' }).click();
+    await page.getByText('Entrada confirmada').waitFor();
+    assert.equal(await page.locator('a[href="/admin/products/q1"]').count(), 1);
+    assert.equal(await page.locator('a[href="/admin/products/q2"]').count(), 1);
+});
+
+test('M4: erro do servidor mostra só a mensagem do JSON', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { init: `window.previewFail = false; const real = window.previewResult; window.previewResult = () => { throw new Error('[VPS] 400 https://api.x/catalog-entries/preview — {"error":"Lote acima de 500 itens."}'); };` });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await page.getByText('Não foi possível conferir: Lote acima de 500 itens.').waitFor();
+    assert.doesNotMatch(await text(page), /\[VPS\]|https:|\{"error"/);
+});
+
+test('M4: 400 na confirmação mostra só a mensagem e não reenvia prévia', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { init: `window.commitImpl = async () => { throw new Error('[VPS] 400 https://api.x/catalog-entries — {"error":"client_batch_id inválido."}'); };` });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await confirmReady(page);
+    await page.getByRole('button', { name: 'Confirmar entrada' }).click();
+    await page.getByText('Não foi possível confirmar: client_batch_id inválido.').waitFor();
+    assert.equal(await page.evaluate(() => window.previewCalls.length), 1);
+});
+
+test('T2: remover linha limpa o aviso de erro', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { init: `window.previewResult = () => { throw new Error('[VPS] 400 https://api.x — {"error":"Falhou"}'); };` });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await page.getByText('Não foi possível conferir: Falhou').waitFor();
+    await page.getByRole('button', { name: 'Remover' }).first().click();
+    await page.waitForFunction(() => !document.body.innerText.includes('Não foi possível conferir'));
+    assert.equal(await page.getByRole('alert').count(), 0);
 });

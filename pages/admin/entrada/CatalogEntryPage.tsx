@@ -4,7 +4,10 @@ import { catalogEntries, EntryItem } from '../../../services/catalogEntries';
 import { ScanEntryTab } from '../../../components/entrada/ScanEntryTab';
 import { ManualEntryTab } from '../../../components/entrada/ManualEntryTab';
 import { EntryListPanel, EntryLine, EntryResult, EntryState } from '../../../components/entrada/EntryListPanel';
-import { addLines, applyPreview, emptyState, loadDraft, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
+import { addLines, applyPreview, commitErrorKind, emptyState, errorText, loadDraft, newBatchId, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
+
+const AMBIGUOUS = 'A confirmação pode ter sido gravada. Confira novamente antes de reenviar.';
+const clearError = (r: EntryResult): EntryResult => (r?.type === 'error' ? null : r);
 
 export type EntryTab = 'manual' | 'bipar' | 'planilha' | 'foto';
 
@@ -55,6 +58,7 @@ export const CatalogEntryPage: React.FC = () => {
     }, []);
 
     const onRemove = useCallback((key: string) => {
+        setResult(clearError);
         setState(s => removeLine(s, key) as EntryState);
     }, []);
 
@@ -69,7 +73,7 @@ export const CatalogEntryPage: React.FC = () => {
             setState(s => (JSON.stringify(toItems(s)) === sent ? (applyPreview(s, res) as EntryState) : s));
             return true;
         } catch (err) {
-            setResult({ type: 'error', message: `Não foi possível conferir: ${err instanceof Error ? err.message : 'erro desconhecido'}` });
+            setResult({ type: 'error', message: `Não foi possível conferir: ${errorText(err)}` });
             return false;
         } finally {
             setBusy(false);
@@ -89,30 +93,42 @@ export const CatalogEntryPage: React.FC = () => {
         setResult(null);
         setBusy(true);
         try {
-            const res = await catalogEntries.commit(items, current.hash);
+            const res = await catalogEntries.commit(items, current.hash, current.clientBatchId);
+            // Produto criado no lote não tem id no plano: o lote gravado tem (o plano fica de reserva).
+            const saved = new Map<number, string>();
+            try {
+                const batch = await catalogEntries.get(res.batch_id);
+                for (const l of batch?.lines || []) if (l?.product_id) saved.set(Number(l.line), String(l.product_id));
+            } catch { /* links do plano */ }
             const rows = lines.map((line, i) => ({
                 key: line.key,
                 label: line.label,
-                productId: res.plan?.[i]?.product_id ?? null,
+                productId: saved.get(res.plan?.[i]?.line ?? i + 1) ?? res.plan?.[i]?.product_id ?? null,
             }));
-            // Remove só as linhas confirmadas; o que entrou nesse meio tempo continua na lista.
+            // Remove só as linhas confirmadas; o que entrou nesse meio tempo continua na lista (com chave nova).
             const committed = new Set(lines.map(l => l.key));
             setState(s => {
                 const remaining = s.lines.filter(l => !committed.has(l.key));
-                return (remaining.length === 0 ? emptyState() : { ...s, lines: remaining, plan: null, hash: null, previewedSignature: null }) as EntryState;
+                return (remaining.length === 0 ? emptyState()
+                    : { ...s, lines: remaining, plan: null, hash: null, previewedSignature: null, clientBatchId: newBatchId() }) as EntryState;
             });
             setResult({ type: 'success', rows });
         } catch (err) {
-            const m = /\[VPS\] (409|422)\b/.exec(err instanceof Error ? err.message : '');
-            if (m) {
-                const message = m[1] === '409'
-                    ? 'O lote mudou desde a conferência. Confira novamente.'
-                    : 'Há linhas com problema. Confira a lista.';
+            const kind = commitErrorKind(err);
+            if (kind === 'rejected') {
+                setResult({ type: 'error', message: `Não foi possível confirmar: ${errorText(err)}` });
+            } else {
+                const message = kind === 'conflict' ? 'O lote mudou desde a conferência. Confira novamente.'
+                    : kind === 'invalid' ? 'Há linhas com problema. Confira a lista.'
+                    : kind === 'client-batch-conflict' ? errorText(err)
+                    : AMBIGUOUS;
+                // Ambíguo: a gravação pode ter acontecido; nada de reenviar com o hash velho. A chave
+                // continua a mesma, então um reenvio da mesma lista não grava duas vezes.
+                // Chave já usada com outra lista: o operador foi avisado; a próxima confirmação é outro envio.
+                setState(s => ({ ...s, hash: null, ...(kind === 'client-batch-conflict' ? { clientBatchId: newBatchId() } : {}) }) as EntryState);
                 setBusy(false);
                 await runPreview();
                 setResult({ type: 'error', message });
-            } else {
-                setResult({ type: 'error', message: `Não foi possível confirmar: ${err instanceof Error ? err.message : 'erro desconhecido'}` });
             }
         } finally {
             setBusy(false);
