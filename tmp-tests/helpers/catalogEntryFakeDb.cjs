@@ -8,6 +8,7 @@ function fakeDb(seed = {}) {
     categories: [{ id: 'cat-phone', name: 'Smartphones' }, { id: 'cat-acc', name: 'Acessórios' }],
     locations: [{ id: 'L1', company_id: 'c', deposit_id: 'D1' }],
     products: [], units: [], psl: [], groups: [], images: [], batches: [], lines: [], movements: [],
+    intakes: [], // smartphone_photo_intakes (fila de cadastro por foto)
     // Colunas/índices já existentes em catalog_entry_batches (tabela antiga: passe schema: { columns: [], indexes: [] }).
     schema: { columns: ['client_batch_id', 'client_items_hash'], indexes: ['uq_catalog_entry_batches_client'] },
     ...structuredClone(seed),
@@ -17,7 +18,7 @@ function fakeDb(seed = {}) {
   // alterError: erro lançado no próximo ALTER TABLE.
   const control = { failRollback: false, concurrentBatch: null, alterError: null };
   const calls = { syncStock: [], syncLocations: [] };
-  const TABLES = ['products', 'units', 'psl', 'groups', 'batches', 'lines', 'movements'];
+  const TABLES = ['products', 'units', 'psl', 'groups', 'batches', 'lines', 'movements', 'intakes'];
   const snap = () => structuredClone(Object.fromEntries(TABLES.map(t => [t, state[t]])));
   const restore = s => Object.assign(state, structuredClone(s));
   let tx = null; const savepoints = new Map();
@@ -91,6 +92,31 @@ function fakeDb(seed = {}) {
     }
     if (s.startsWith('SELECT (SELECT COUNT(*) FROM units WHERE product_id=?) AS units')) {
       return [[{ units: state.units.filter(u => u.product_id === args[0]).length, locations: state.psl.filter(r => r.product_id === args[1]).length }]];
+    }
+    // Cadastro por foto (finalizePhotoIntake).
+    if (s.startsWith('SHOW COLUMNS')) return [['matched_color_id', 'review_confirmed', 'review_confirmed_at', 'intake_photo_path', 'intake_id'].map(Field => ({ Field }))];
+    if (s.startsWith('SELECT * FROM smartphone_photo_intakes WHERE status IN')) return [[]];
+    if (/^SELECT (\*|id,status) FROM smartphone_photo_intakes WHERE id ?= ?\?/.test(s)) return [structuredClone(state.intakes.filter(i => i.id === args[0]))];
+    if (s.startsWith("SELECT id FROM companies WHERE slug='mercado-do-vale'")) return [[{ id: 'c' }]];
+    if (s.startsWith('SELECT id FROM units WHERE (imei_1 IN')) {
+      const n = (args.length - 1) / 3; const vals = args.slice(0, n).map(String); const own = args[args.length - 1];
+      const has = v => v != null && vals.includes(String(v));
+      return [state.units.filter(u => (has(u.imei_1) || has(u.imei_2) || has(u.serial)) && (u.intake_id == null || u.intake_id !== own)).map(u => ({ id: u.id }))];
+    }
+    if (s.startsWith('SELECT id,model_id,specs,company_id,is_parent FROM products WHERE bling_id=? OR sku=?'))
+      return [structuredClone(state.products.filter(p => (p.bling_id != null && String(p.bling_id) === String(args[0])) || p.sku === args[1]))];
+    if (s.startsWith('UPDATE products SET ean=?,alternative_eans=?')) { Object.assign(state.products.find(p => p.id === args[2]), { ean: args[0], alternative_eans: args[1] }); return [{}]; }
+    if (s.startsWith('UPDATE products SET bling_id=?,bling_parent_id=?')) { Object.assign(state.products.find(p => p.id === args[2]), { bling_id: args[0], bling_parent_id: args[1] }); return [{}]; }
+    if (s.startsWith('UPDATE products SET price_cost=?,price_retail=?,price_reseller=?,price_wholesale=?')) {
+      const p = state.products.find(r => r.id === args[5]);
+      Object.assign(p, { price_cost: args[0], price_retail: args[1], price_reseller: args[2], price_wholesale: args[3], status: 'active',
+        stock_quantity: state.units.filter(u => u.product_id === args[4] && u.status === 'available').length });
+      return [{}];
+    }
+    if (s.startsWith('UPDATE smartphone_photo_intakes SET status=?,matched_product_id=?,unit_id=?')) {
+      Object.assign(state.intakes.find(i => i.id === args[6]), { status: args[0], matched_product_id: args[1], unit_id: args[2],
+        price_retail: args[3], price_reseller: args[4], price_wholesale: args[5], completed_at: 'NOW' });
+      return [{ affectedRows: 1 }];
     }
     if (s.startsWith('INSERT INTO products') || s.startsWith('INSERT INTO units') || s.startsWith('INSERT INTO catalog_entry')) return genericInsert(s, args);
     if (s.startsWith('UPDATE products SET parent_id=')) { state.products.find(p => p.id === args[1]).parent_id = args[0]; return [{}]; }
