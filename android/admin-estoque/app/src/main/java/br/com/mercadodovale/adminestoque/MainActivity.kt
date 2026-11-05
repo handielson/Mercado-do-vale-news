@@ -112,6 +112,7 @@ class MainActivity : Activity() {
     private var currentStockLocationName: String? = null
     private var currentTransferLines: List<StockTransferLine> = emptyList()
     private var currentTransferTargetId: String? = null
+    private var stockTransferFromSearch = false
     private var currentSalesChannel: SalesChannel? = null
     private var currentSaleId: String? = null
     private var currentSalesFilter: SaleStatusGroup = SaleStatusGroup.TO_SHIP
@@ -1952,31 +1953,55 @@ class MainActivity : Activity() {
         currentStockLocationName = null
         currentTransferLines = emptyList()
         currentTransferTargetId = null
+        stockTransferFromSearch = false
         val root = screen()
         root.addView(back("Movimentar estoque") { showDashboard() })
         root.addView(text("Movimentar estoque", 27, green))
 
-        root.addView(text("1. Pesquisar produto individual", 19, Color.rgb(15, 23, 42)))
-        root.addView(text("Pesquise pelo nome, SKU, EAN ou leia o código do produto.", 14, Color.DKGRAY))
+        root.addView(text("1. Ler código de barras do produto", 19, Color.rgb(15, 23, 42)))
+        root.addView(
+            text(
+                "Leia o código de barras: o produto abre direto com a quantidade e o destino. " +
+                    "Se preferir, pesquise pelo nome, SKU ou EAN.",
+                14,
+                Color.DKGRAY,
+            ),
+        )
         val productQuery = field("Nome, SKU ou EAN")
         val productStatus = text("", 14, Color.DKGRAY)
         val productResults = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
+        root.addView(button("Ler código de barras do produto") {
+            ensureCameraPermission(productStatus) {
+                launchScanner { value ->
+                    productQuery.setText(value)
+                    searchStockProduct(value, productStatus, productResults, fromScan = true)
+                }
+            }
+        })
         root.addView(productQuery)
         root.addView(button("Pesquisar produto") {
             searchStockProduct(productQuery.text.toString(), productStatus, productResults)
         })
-        root.addView(button("Ler código do produto") {
-            ensureCameraPermission(productStatus) {
-                launchScanner { value ->
-                    productQuery.setText(value)
-                    searchStockProduct(value, productStatus, productResults)
-                }
-            }
-        })
         root.addView(productStatus)
         root.addView(productResults)
+
+        root.addView(
+            card(
+                "+ Criar novo local de estoque",
+                "Cadastre uma nova caixa, prateleira ou local dentro de um depósito.",
+            ) {
+                showCreateStockLocationDialog(null) { created ->
+                    Toast.makeText(
+                        this,
+                        "Local ${created.displayName} criado.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    if (currentScreen == SCREEN_STOCK) showStockLocations()
+                }
+            },
+        )
 
         root.addView(text("2. Transferência em lote", 19, Color.rgb(15, 23, 42)))
         root.addView(
@@ -2116,6 +2141,7 @@ class MainActivity : Activity() {
         rawQuery: String,
         status: TextView,
         results: LinearLayout,
+        fromScan: Boolean = false,
     ) {
         val query = rawQuery.trim()
         if (query.isBlank()) {
@@ -2131,20 +2157,35 @@ class MainActivity : Activity() {
                 .fold(
                     onSuccess = { body ->
                         runCatching {
-                            ProductLabelProduct.parseList(body)
-                                .filter { it.stockQuantity > 0 }
-                                .take(8)
+                            val all = ProductLabelProduct.parseList(body)
+                            val exact = if (fromScan) {
+                                all.firstOrNull { it.ean.trim() == query } ?: all.firstOrNull {
+                                    it.sku.trim().equals(query, ignoreCase = true)
+                                }
+                            } else {
+                                null
+                            }
+                            exact to all.filter { it.stockQuantity > 0 }.take(8)
                         }.fold(
-                            onSuccess = { products ->
+                            onSuccess = { (exact, products) ->
                                 runOnUiThread {
                                     if (currentScreen != SCREEN_STOCK) return@runOnUiThread
+                                    if (exact != null) {
+                                        if (exact.stockQuantity > 0) {
+                                            loadProductStockSources(exact, status, results, autoOpen = true)
+                                        } else {
+                                            results.addView(stockSearchProductRow(exact, null))
+                                            status.text = "${exact.name} está sem saldo em estoque para movimentar."
+                                        }
+                                        return@runOnUiThread
+                                    }
                                     status.text = if (products.isEmpty()) {
                                         "Nenhum produto com estoque foi encontrado."
                                     } else {
                                         "Selecione o produto que deseja movimentar."
                                     }
                                     if (products.size == 1) {
-                                        loadProductStockSources(products.first(), status, results)
+                                        loadProductStockSources(products.first(), status, results, autoOpen = fromScan)
                                     } else {
                                         products.forEach { product ->
                                             results.addView(
@@ -2176,6 +2217,7 @@ class MainActivity : Activity() {
         product: ProductLabelProduct,
         status: TextView,
         results: LinearLayout,
+        autoOpen: Boolean = false,
     ) {
         status.text = "Localizando ${product.name} nas caixas…"
         results.removeAllViews()
@@ -2191,13 +2233,21 @@ class MainActivity : Activity() {
                             onSuccess = { sources ->
                                 runOnUiThread {
                                     if (currentScreen != SCREEN_STOCK) return@runOnUiThread
+                                    if (autoOpen && sources.size == 1) {
+                                        val source = sources.first()
+                                        currentStockLocationId = null
+                                        currentStockLocationName = null
+                                        stockTransferFromSearch = true
+                                        showStockTransfer(source)
+                                        return@runOnUiThread
+                                    }
                                     results.removeAllViews()
                                     results.addView(stockSearchProductRow(product, null))
                                     results.addView(text("Localizado em:", 17, Color.rgb(15, 23, 42)))
                                     status.text = if (sources.isEmpty()) {
                                         "Este produto não possui saldo disponível em nenhuma caixa."
                                     } else {
-                                        "${sources.size} localização(ões) encontrada(s). Escolha a origem."
+                                        "${sources.size} localização(ões) encontrada(s). Escolha de onde o produto vai sair."
                                     }
                                     sources.forEach { source ->
                                         results.addView(
@@ -2210,8 +2260,9 @@ class MainActivity : Activity() {
                                                         ""
                                                     },
                                             ) {
-                                                currentStockLocationId = source.locationId
-                                                currentStockLocationName = source.locationName
+                                                currentStockLocationId = null
+                                                currentStockLocationName = null
+                                                stockTransferFromSearch = true
                                                 showStockTransfer(source)
                                             },
                                         )
@@ -2906,7 +2957,9 @@ class MainActivity : Activity() {
         } else {
             "${sourceLocationIds.size} caixas"
         }
+        val returnsToSearch = stockTransferFromSearch && lines.size == 1
         val returnsToSingleSource =
+            !returnsToSearch &&
             commonSourceLocationId != null &&
                 currentStockLocationId == commonSourceLocationId &&
                 !currentStockLocationName.isNullOrBlank()
@@ -2919,7 +2972,9 @@ class MainActivity : Activity() {
         currentTransferLines = lines
         val root = screen()
         root.addView(back("Movimentar produtos") {
-            if (returnsToSingleSource) {
+            if (returnsToSearch) {
+                showStockLocations()
+            } else if (returnsToSingleSource) {
                 showStockLocationContents(
                     commonSourceLocationId.orEmpty(),
                     currentStockLocationName ?: sourceLocationName,
@@ -2940,6 +2995,20 @@ class MainActivity : Activity() {
                 Color.DKGRAY,
             ),
         )
+
+        if (lines.size == 1 && !firstItem.imageUrl.isNullOrBlank()) {
+            root.addView(
+                ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    adjustViewBounds = true
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        dp(180),
+                    ).apply { bottomMargin = dp(10) }
+                    loadProductImage(firstItem.imageUrl, this)
+                },
+            )
+        }
 
         val quantityInputs = linkedMapOf<String, EditText>()
         lines.forEach { line ->
@@ -3082,6 +3151,15 @@ class MainActivity : Activity() {
                 }
             }
         })
+        root.addView(button("+ Criar novo local de estoque") {
+            showCreateStockLocationDialog(firstItem.depositId) { created ->
+                if (currentScreen != SCREEN_STOCK_TRANSFER) return@showCreateStockLocationDialog
+                locations = locations.filter { it.id != created.id } + created
+                targetLocationsLoaded = true
+                renderTargetLocations()
+                selectTarget.invoke(created)
+            }
+        })
         root.addView(allTargetsToggle)
         allTargetsContent.addView(
             text("Pesquise ou filtre a caixa de destino:", 15, Color.DKGRAY),
@@ -3170,7 +3248,9 @@ class MainActivity : Activity() {
                             if (failedLines.isEmpty()) {
                                 currentTransferLines = emptyList()
                                 currentTransferTargetId = null
-                                if (returnsToSingleSource) {
+                                if (returnsToSearch) {
+                                    showStockLocations()
+                                } else if (returnsToSingleSource) {
                                     showStockLocationContents(
                                         commonSourceLocationId.orEmpty(),
                                         currentStockLocationName ?: sourceLocationName,
@@ -3228,6 +3308,122 @@ class MainActivity : Activity() {
                 },
             )
         }
+    }
+
+    private fun showCreateStockLocationDialog(
+        preferredDepositId: String?,
+        onCreated: (StockLocationBox) -> Unit,
+    ) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val nameInput = field("Nome do local (ex.: Caixa 12, Prateleira A)")
+        val codeInput = field("Código (opcional)")
+        val depositLabel = text("Depósito", 14, Color.DKGRAY)
+        val depositSpinner = Spinner(this)
+        val dialogStatus = text("Carregando depósitos…", 13, Color.DKGRAY)
+        form.addView(nameInput)
+        form.addView(codeInput)
+        form.addView(depositLabel)
+        form.addView(depositSpinner)
+        form.addView(dialogStatus)
+        var deposits = emptyList<Pair<String, String>>()
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Criar local de estoque")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Criar local", null)
+            .create()
+        dialog.setOnShowListener {
+            val createButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            createButton.isEnabled = false
+            createButton.setOnClickListener {
+                val name = nameInput.text.toString().trim()
+                val depositId = deposits.getOrNull(depositSpinner.selectedItemPosition)?.first
+                when {
+                    name.isBlank() -> dialogStatus.text = "Informe o nome do local."
+                    depositId.isNullOrBlank() -> dialogStatus.text = "Selecione o depósito do local."
+                    else -> {
+                        createButton.isEnabled = false
+                        dialogStatus.text = "Criando local…"
+                        val payload = JSONObject()
+                            .put("deposit_id", depositId)
+                            .put("name", name)
+                            .put("code", codeInput.text.toString().trim())
+                            .put("description", JSONObject.NULL)
+                            .put("is_default", false)
+                        runAsync {
+                            VpsApiClient(token.orEmpty())
+                                .post("/stock-locations/locations", payload)
+                                .fold(
+                                    onSuccess = { body ->
+                                        val created = runCatching { StockLocationBox.parseOne(body) }.getOrNull()
+                                        runOnUiThread {
+                                            if (created == null || created.id.isBlank()) {
+                                                createButton.isEnabled = true
+                                                dialogStatus.text = "Local criado, mas a resposta veio incompleta. Atualize a lista."
+                                            } else {
+                                                dialog.dismiss()
+                                                onCreated(created)
+                                            }
+                                        }
+                                    },
+                                    onFailure = { error ->
+                                        runOnUiThread {
+                                            createButton.isEnabled = true
+                                            dialogStatus.text = error.message ?: "Não foi possível criar o local."
+                                        }
+                                    },
+                                )
+                        }
+                    }
+                }
+            }
+            runAsync {
+                VpsApiClient(token.orEmpty()).get("/stock-locations/deposits").fold(
+                    onSuccess = { body ->
+                        val loaded = runCatching {
+                            val array = org.json.JSONArray(body)
+                            buildList {
+                                for (index in 0 until array.length()) {
+                                    val json = array.getJSONObject(index)
+                                    val id = json.optString("id")
+                                    if (id.isNotBlank()) add(id to json.optString("name", "Depósito"))
+                                }
+                            }
+                        }.getOrDefault(emptyList())
+                        runOnUiThread {
+                            deposits = loaded
+                            depositSpinner.adapter = ArrayAdapter(
+                                this@MainActivity,
+                                android.R.layout.simple_spinner_dropdown_item,
+                                loaded.map { it.second },
+                            )
+                            val preferred = loaded.indexOfFirst { it.first == preferredDepositId }
+                            if (preferred >= 0) depositSpinner.setSelection(preferred)
+                            if (loaded.size <= 1) {
+                                depositLabel.visibility = View.GONE
+                                depositSpinner.visibility = View.GONE
+                            }
+                            createButton.isEnabled = loaded.isNotEmpty()
+                            dialogStatus.text = if (loaded.isEmpty()) {
+                                "Nenhum depósito ativo encontrado."
+                            } else {
+                                ""
+                            }
+                        }
+                    },
+                    onFailure = { error ->
+                        runOnUiThread {
+                            dialogStatus.text = error.message ?: "Não foi possível carregar os depósitos."
+                        }
+                    },
+                )
+            }
+        }
+        dialog.show()
     }
 
     private fun showLabels() {

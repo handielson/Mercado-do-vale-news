@@ -27533,7 +27533,7 @@ fastify.get('/stock-locations/locations', { preHandler: requireSyncKeyOrAdmin },
   return rows.map(mapStockLocation);
 });
 
-fastify.post('/stock-locations/locations', { preHandler: requireSyncKey }, async (req, reply) => {
+fastify.post('/stock-locations/locations', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const input = req.body || {};
   const name = String(input.name || '').trim();
   const code = normalizeStockLocationCode(input.code || input.name);

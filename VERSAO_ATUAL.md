@@ -1,3 +1,9 @@
+# v1.2.799-gestao-mdv-movimentar
+
+Data: 05/11/2026. Status: **pendente de publicação** (APK 0.14.0 gerado; API aguarda OK). Branch: `main`. Gestão MDV: ler código de barras abre o produto com quantidade e destino; criar local de estoque pelo app.
+
+---
+
 # v1.2.798-entrada-unica-tela
 
 Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-122500-v1298-entrada-tela` + API). Branch: `main`. Tela Admin → Entrada (Manual e Bipar).

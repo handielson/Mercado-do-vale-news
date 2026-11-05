@@ -88,6 +88,8 @@ for (const route of [
 }
 
 assert.match(source, /fastify\.post\('\/stock-locations\/transfers', \{ preHandler: requireSyncKeyOrAdmin \}/);
+assert.match(source, /fastify\.post\('\/stock-locations\/locations', \{ preHandler: requireSyncKeyOrAdmin \}/, 'o app com token admin deve poder criar local de estoque');
+assert.match(source, /fastify\.post\('\/stock-locations\/deposits', \{ preHandler: requireSyncKey \}/, 'criar deposito continua restrito a chave de sync');
 assert.match(
   source,
   /isAdmin: normalizeAuthCustomerType\(customer\?\.customer_type\) === 'ADMIN'/,
@@ -142,7 +144,14 @@ assert.match(activity, /private fun showStockLocations\(\)/, 'o app deve ter a p
 assert.match(activity, /Ler QR da caixa[\s\S]*StockLocationBox\.idFromQr/, 'o app deve abrir uma caixa pelo QR impresso');
 assert.match(activity, /private fun showStockLocationContents[\s\S]*stockLocationProductRow/, 'o app deve mostrar os itens da caixa selecionada');
 assert.match(activity, /item\.productName[\s\S]*SKU:[\s\S]*Disponível:[\s\S]*field\("Qtd\."\)/, 'cada item da caixa deve mostrar nome, SKU, saldo e quantidade');
-assert.match(activity, /Pesquisar produto individual[\s\S]*Pesquisar produto[\s\S]*Ler código do produto/, 'a tela inicial deve oferecer pesquisa individual visivel');
+assert.match(activity, /Ler código de barras do produto[\s\S]*launchScanner[\s\S]*searchStockProduct\(value, productStatus, productResults, fromScan = true\)[\s\S]*Pesquisar produto/, 'a leitura do codigo de barras deve ser a acao principal, com pesquisa manual disponivel');
+assert.match(activity, /fromScan[\s\S]*it\.ean\.trim\(\) == query[\s\S]*loadProductStockSources\(exact, status, results, autoOpen = true\)/, 'o codigo lido deve casar exatamente com EAN ou SKU');
+assert.match(activity, /autoOpen && sources\.size == 1[\s\S]*stockTransferFromSearch = true[\s\S]*showStockTransfer\(source\)/, 'com um unico local de origem o produto lido deve abrir direto na movimentacao');
+assert.match(activity, /returnsToSearch[\s\S]*showStockLocations\(\)/, 'a movimentacao aberta pela leitura deve voltar para a tela de leitura');
+assert.match(activity, /private fun showCreateStockLocationDialog[\s\S]*\/stock-locations\/deposits[\s\S]*/, 'o app deve carregar os depositos ao criar local');
+assert.match(activity, /put\("deposit_id", depositId\)[\s\S]*put\("name", name\)[\s\S]*put\("code"[\s\S]*post\("\/stock-locations\/locations", payload\)[\s\S]*StockLocationBox\.parseOne/, 'criar local deve usar o mesmo payload do admin web');
+assert.match(activity, /\+ Criar novo local de estoque[\s\S]*\+ Criar novo local de estoque"\)[\s\S]*selectTarget\.invoke\(created\)/, 'o local criado na movimentacao deve virar o destino');
+assert.match(stockLocationModel, /fun parseOne\(body: String\): StockLocationBox/, 'o modelo deve ler o local criado');
 assert.match(activity, /stockSearchProductRow[\s\S]*ImageView[\s\S]*FIT_CENTER/, 'o resultado individual deve mostrar a foto inteira do produto');
 assert.match(activity, /Localizado em:[\s\S]*source\.locationName[\s\S]*source\.available/, 'o produto pesquisado deve listar suas localizacoes e saldos');
 assert.match(activity, /products\.size == 1[\s\S]*loadProductStockSources/, 'uma pesquisa exata deve abrir automaticamente os locais do produto');
@@ -216,8 +225,8 @@ assert.match(activity, /text = "−"[\s\S]*updateCopies\(-1\)/, 'a quantidade de
 assert.match(activity, /text = "\+"[\s\S]*updateCopies\(1\)/, 'a quantidade deve ter botao para aumentar');
 assert.match(activity, /setSelectAllOnFocus\(true\)/, 'a quantidade deve selecionar todo o valor ao receber foco');
 assert.match(activity, /MotionEvent\.ACTION_UP[\s\S]*selectAll\(\)/, 'um toque na quantidade deve permitir digitar por cima');
-assert.match(buildGradle, /versionCode = 64/, 'o APK atualizado deve ter novo versionCode');
-assert.match(buildGradle, /versionName = "0\.13\.7"/, 'o APK atualizado deve mostrar a nova versao');
+assert.match(buildGradle, /versionCode = 67/, 'o APK atualizado deve ter novo versionCode');
+assert.match(buildGradle, /versionName = "0\.14\.0"/, 'o APK atualizado deve mostrar a nova versao');
 assert.match(buildGradle, /firebase-messaging/, 'o APK deve receber notificacoes pelo Firebase Cloud Messaging');
 assert.match(activity, /salesChannelRow\(SalesChannel\.ONLINE, SalesChannel\.PDV\)/, 'Online e PDV devem ocupar a primeira linha');
 assert.match(activity, /salesChannelRow\(SalesChannel\.SHOPEE, SalesChannel\.TIKTOK\)/, 'Shopee e TikTok devem ocupar a segunda linha');

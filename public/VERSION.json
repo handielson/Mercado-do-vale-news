@@ -1,15 +1,15 @@
 {
-  "version": "v1.2.798-entrada-unica-tela",
+  "version": "v1.2.799-gestao-mdv-movimentar",
   "date": "2026-11-05",
-  "status": "publicada",
+  "status": "pendente de publicação (API)",
   "branch": "main",
-  "tag": "v1.2.798-entrada-unica-tela",
+  "tag": "v1.2.799-gestao-mdv-movimentar",
   "release_vps": "/var/www/mdv-site/releases/20261105-122500-v1298-entrada-tela",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Entrada única, etapa 2: tela Admin → Entrada (/admin/entrada) com as abas Manual e Bipar e a Lista de entrada (conferir e confirmar pela porta única). Bipar trava modelo/configuração/cor/custo/local e lê IMEI em sequência (leitor ou câmera), com atalho ?aba=bipar&variacao=<id>. Confirmação idempotente (client_batch_id) para não duplicar estoque em reenvio. Links para os produtos criados. Planilha e Foto continuam nas telas atuais por enquanto.",
+  "summary": "Gestão MDV 0.14.0 (código 67): em Movimentar estoque, ler o código de barras abre o produto direto com foto, quantidade e destino (com mais de uma origem, lista os locais com saldo para escolher). Novo botão \"+ Criar novo local de estoque\" na tela inicial e na escolha do destino (o local criado já vira o destino). API: POST /stock-locations/locations passa a aceitar token admin (requireSyncKeyOrAdmin) — pendente de publicação.",
   "gestao_mdv_android": {
-    "version_name": "0.13.9",
-    "version_code": 66
+    "version_name": "0.14.0",
+    "version_code": 67
   },
   "android_entregas": {
     "version_name": "1.1.5",

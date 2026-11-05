@@ -15,6 +15,8 @@ O aplicativo nunca incorpora `x-sync-key`, `VITE_VPS_SYNC_KEY`, Supabase ou cred
 - Login restrito a contas administrativas, com sessao persistida no aparelho.
 - Versao instalada visivel nas telas de login e painel.
 - Consulta por nome, SKU, EAN, QR e codigo de barras.
+- Movimentar estoque pela leitura do codigo de barras: o produto abre direto com quantidade e destino.
+- Criacao de novo local de estoque (nome, codigo opcional e deposito) pela tela inicial ou na escolha do destino.
 - Transferencia em lote com pesquisa de varios produtos, origem independente por item, quantidade editavel e destino unico.
 - Listas de caixas e destinos recolhidas por padrao, com abertura pela seta e filtros por faixa.
 - Foto, preco em centavos, estoque e link publico do produto.

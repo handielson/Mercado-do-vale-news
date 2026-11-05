@@ -32,6 +32,18 @@ data class StockLocationBox(
                 ?.toIntOrNull()
 
     companion object {
+        fun parseOne(body: String): StockLocationBox {
+            val json = JSONObject(body)
+            return StockLocationBox(
+                id = json.optString("id"),
+                depositId = json.optString("deposit_id"),
+                name = json.optString("name", "Caixa"),
+                code = json.optString("code"),
+                description = json.optString("description")
+                    .takeIf { it.isNotBlank() && it != "null" },
+            )
+        }
+
         fun parseList(body: String): List<StockLocationBox> {
             val array = JSONArray(body)
             return buildList(array.length()) {
