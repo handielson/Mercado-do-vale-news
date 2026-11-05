@@ -1,3 +1,10 @@
+# v1.2.791-lista-3-celulares-por-marca
+
+Data: 05/11/2026. Branch: `main`. Só o robô do WhatsApp (n8n); site/API/impressão seguem as versões anteriores (v1.2.790-etiqueta-pf-shopee-g).
+Lista de celulares: até 3 aparelhos por mensagem, sem misturar marcas (voltou a funcionar).
+
+---
+
 # v1.2.790-etiqueta-pf-shopee-g
 
 Data: 05/11/2026. Branch: `main`. Só agente de impressão (PC da loja); site/API seguem a v1.2.789-comprovante-qr-bot-seminovo.

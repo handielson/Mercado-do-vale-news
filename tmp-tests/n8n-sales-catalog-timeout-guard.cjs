@@ -10,7 +10,8 @@ const DIRECT = 'Vendas - Catalogo sem IA';
 const AGENT = 'Especialista - Vendas';
 const NEXT = 'Vendas - Precisa Handoff?';
 
-const DIRECT_CODE = `// ${MARKER}: lista oficial pronta deve seguir sem aguardar o modelo.
+// v1 (22/10/2026): reagrupava a lista em até 3 mensagens. Mantido para reconhecer/atualizar o nó antigo.
+const DIRECT_CODE_V1 = `// ${MARKER}: lista oficial pronta deve seguir sem aguardar o modelo.
 const source = $json || {};
 const catalog = String(source.deterministicCatalogOutput || '').trim();
 if (source.salesAvailabilityStatus !== 'confirmed_products_available' || !catalog) {
@@ -32,6 +33,26 @@ for (let i = 0; i < desired; i++) {
 }
 const bounded = groups.every(part => part.length <= 3300);
 const body = [...(bounded ? groups : parts), ...(choicePrompt ? [choicePrompt] : [])].join('[[MSG]]');
+const intro = 'Segue a lista atualizada de celulares disponíveis. 📱[[BR]][[BR]]';
+return [{ json: { ...source, output: intro + body, requiresSpecialistHandoff: false } }];`;
+
+const BRAND_CHUNKS_MARKER = 'catalog-brand-chunks-v1';
+const DIRECT_CODE = `// ${MARKER}: lista oficial pronta deve seguir sem aguardar o modelo.
+const source = $json || {};
+const catalog = String(source.deterministicCatalogOutput || '').trim();
+if (source.salesAvailabilityStatus !== 'confirmed_products_available' || !catalog) {
+  throw new Error('Catalogo direto sem consulta confirmada');
+}
+const parts = catalog.split('[[MSG]]').filter(Boolean);
+// catalog-choice-separate-message-v1: the selection question is sent after the grouped list.
+const choicePrompt = [
+  'Qual modelo voce quer ver em mais detalhes? 😊',
+  'De qual modelo você quer ver fotos? Pode me dizer o número ou o nome. 😊',
+].includes(parts[parts.length - 1] || '')
+  ? parts.pop() : '';
+// ${BRAND_CHUNKS_MARKER}: cada bloco do Contexto Produtos (até 3 aparelhos, uma marca só) sai em mensagem própria;
+// não reagrupar em 3 mensagens (isso misturava marcas e juntava muitos modelos).
+const body = [...parts, ...(choicePrompt ? [choicePrompt] : [])].join('[[MSG]]');
 const intro = 'Segue a lista atualizada de celulares disponíveis. 📱[[BR]][[BR]]';
 return [{ json: { ...source, output: intro + body, requiresSpecialistHandoff: false } }];`;
 
@@ -84,14 +105,15 @@ function patchDirectCatalogPrompt(workflow) {
   assert.ok(direct, 'Direct catalog node missing');
   const previous = String(direct.parameters?.jsCode || '');
   if (previous === DIRECT_CODE) return { changed: false };
+  if (previous === DIRECT_CODE_V1) { direct.parameters.jsCode = DIRECT_CODE; return { changed: true }; }
   const oldParts = "const parts = catalog.split('[[MSG]]').filter(Boolean);\nconst desired = parts.length > 3 ? 3 : parts.length;";
   const oldBody = "const body = (bounded ? groups : parts).join('[[MSG]]');";
   assert.ok(previous.includes(oldParts) && previous.includes(oldBody), 'Direct catalog grouping changed');
-  const updatedParts = DIRECT_CODE.slice(DIRECT_CODE.indexOf("const parts = catalog.split('[[MSG]]')"), DIRECT_CODE.indexOf('const groups = [];')).trimEnd();
+  const updatedParts = DIRECT_CODE_V1.slice(DIRECT_CODE_V1.indexOf("const parts = catalog.split('[[MSG]]')"), DIRECT_CODE_V1.indexOf('const groups = [];')).trimEnd();
   const expected = previous.replace(oldParts, updatedParts)
     .replace(oldBody, "const body = [...(bounded ? groups : parts), ...(choicePrompt ? [choicePrompt] : [])].join('[[MSG]]');");
-  assert.equal(expected, DIRECT_CODE, 'Direct catalog node drifted');
-  direct.parameters.jsCode = DIRECT_CODE;
+  assert.equal(expected, DIRECT_CODE_V1, 'Direct catalog node drifted');
+  direct.parameters.jsCode = DIRECT_CODE_V1;
   return { changed: true };
 }
 
@@ -107,4 +129,4 @@ function validate(workflow) {
   assert.deepEqual(workflow.connections[AGENT].main[0],[{node:'Vendas - Compor Resposta IA',type:'main',index:0}]);
 }
 
-module.exports={MARKER,SOURCE,GATE,DIRECT,AGENT,NEXT,DIRECT_CODE,hasDirectCatalog,patchWorkflow,patchDirectCatalogPrompt,validate};
+module.exports={MARKER,BRAND_CHUNKS_MARKER,DIRECT_CODE_V1,SOURCE,GATE,DIRECT,AGENT,NEXT,DIRECT_CODE,hasDirectCatalog,patchWorkflow,patchDirectCatalogPrompt,validate};
