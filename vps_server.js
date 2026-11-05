@@ -28887,6 +28887,14 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
         continue;
       }
 
+      // stock-entry-lock-v1: produto novo sem bling_id nasce com estoque 0 (a entrada é feita pela tela Entrada).
+      // Produto existente e importação do Bling (com bling_id) continuam conciliando o saldo informado.
+      let skipInitialStock = false;
+      if (!matchedExisting && !p.bling_id && rawProduct.stock_quantity != null) {
+        const [stockLockRows] = p.id ? await pool.query('SELECT id FROM products WHERE id=? LIMIT 1', [p.id]) : [[]];
+        skipInitialStock = !stockLockRows.length;
+      }
+
       // product-family-model-guard-v1: cadastro manual novo (sem Bling) de um modelo que ja tem familia
       // precisa entrar como variacao dela; antes virava um produto solto e duplicava o estoque.
       if (!matchedExisting && !p.bling_id && p.model_id && !p.parent_id && !optionalBool(p.is_parent)) {
@@ -29027,7 +29035,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
         }
       }
       // Never let an unrelated unique-key collision redirect stock to another product.
-      if (rawProduct.stock_quantity != null) {
+      if (rawProduct.stock_quantity != null && !skipInitialStock) {
         const stock = await require('./services/externalStockReconciliation.cjs').reconcileExternalStock(pool, {
           connection: priceDb, productId: p.id, targetQuantity: rawProduct.stock_quantity,
           reason: 'product_import', notes: 'Saldo informado na importação do produto.',
@@ -29590,9 +29598,32 @@ fastify.get('/units/by-identifier/:q', { preHandler: requireSyncKeyOrAdmin }, as
   return rows;
 });
 
+// stock-entry-lock-v1: helpers. Estoque entra pela tela Entrada (services/catalogEntryServer.cjs).
+// Exceção: manutenção (scripts/rebuild-smartphone-serialized-units.cjs) manda origin:'maintenance' em cada
+// item e autentica por x-sync-key. As guardas de pai e de IMEI continuam valendo para ela.
+const STOCK_ENTRY_LOCK_MESSAGE = 'Entrada de estoque é feita pela tela Entrada (Admin → Entrada).';
+const STOCK_ENTRY_LOCKED_TABLES = new Set(['units']);
+
+function stockEntryLockPayload() {
+  return { error: STOCK_ENTRY_LOCK_MESSAGE, code: 'STOCK_ENTRY_LOCKED' };
+}
+
+function isStockMaintenanceRequest(request, items) {
+  const key = request.headers?.['x-sync-key'];
+  const secret = process.env.SYNC_SECRET;
+  if (!key || !secret || key !== secret) return false;
+  return Array.isArray(items) && items.length > 0
+    && items.every(item => item && typeof item === 'object' && item.origin === 'maintenance');
+}
+
+function isStockEntryLockedTableInsert(name) {
+  return STOCK_ENTRY_LOCKED_TABLES.has(String(name || '').toLowerCase());
+}
+
 // Cria 1 unidade
 fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
   const u = req.body || {};
+  if (!isStockMaintenanceRequest(req, [u])) return reply.code(409).send(stockEntryLockPayload());
   if (!u.product_id) return reply.code(400).send({ error: 'product_id required' });
   const id = u.id || require('crypto').randomUUID();
   // catalog-entry-parent-guard-v1: aparelho serializado nunca fica no produto pai.
@@ -29632,6 +29663,7 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
   if (!Array.isArray(items) || items.length === 0) {
     return reply.code(400).send({ error: 'Expected non-empty array' });
   }
+  if (!isStockMaintenanceRequest(req, items)) return reply.code(409).send(stockEntryLockPayload());
   const batchDuplicate = findSerializedIdentifierDuplicateInBatch(items, collectUnitSerializedIdentifiers);
   if (batchDuplicate) {
     return reply.code(409).send(serializedIdentifierConflictPayload({
@@ -30574,6 +30606,8 @@ fastify.post('/sales/finalize-serialized', { preHandler: requireSyncKeyOrAdmin }
 fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, reply) => {
   const { name } = req.params;
   if (!isValidTable(name)) return reply.code(400).send({ error: 'Invalid table name' });
+  // stock-entry-lock-v1: unidade nova so pela Entrada; leitura, PATCH e DELETE de units seguem iguais.
+  if (isStockEntryLockedTableInsert(name)) return reply.code(409).send(stockEntryLockPayload());
 
   const body = req.body;
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -30645,6 +30679,8 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
 fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (req, reply) => {
   const { name } = req.params;
   if (!isValidTable(name)) return reply.code(400).send({ error: 'Invalid table name' });
+  // stock-entry-lock-v1: esta rota so faz INSERT; para units fica bloqueada.
+  if (isStockEntryLockedTableInsert(name)) return reply.code(409).send(stockEntryLockPayload());
 
   const rows = req.body;
   if (!Array.isArray(rows) || rows.length === 0) {

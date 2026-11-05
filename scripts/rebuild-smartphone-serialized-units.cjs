@@ -304,6 +304,8 @@ async function main() {
       body: JSON.stringify(planned.map(({ group_key, source_product_id, source_sku, target_product_id, target_sku, ...unit }) => ({
         ...unit,
         product_id: target_product_id,
+        // stock-entry-lock-v1: o servidor so aceita unidade fora da Entrada como manutencao (com x-sync-key).
+        origin: 'maintenance',
       }))),
     });
     result.inserted = created.inserted || 0;
