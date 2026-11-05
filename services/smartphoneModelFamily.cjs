@@ -7,7 +7,7 @@ const scope = (value, defaultId) => !value || value === 'default' ? defaultId : 
 
 // A transacao pertence ao chamador. A trava do modelo serializa duas confirmacoes
 // antes da consulta/criacao do pai; nenhum estoque, unidade ou preco e alterado aqui.
-async function ensureSmartphoneModelFamily(connection, { modelId, companyId, defaultCompanyId, productId, dryRun = false, expectedRevision } = {}) {
+async function ensureSmartphoneModelFamily(connection, { modelId, companyId, defaultCompanyId, productId, dryRun = false, expectedRevision, anyCategory = false } = {}) {
   const company = scope(companyId, defaultCompanyId);
   if (!modelId || !company) throw conflict('Modelo e empresa são obrigatórios para organizar a família.');
   const [[locked]] = await connection.query('SELECT id FROM models WHERE id=? FOR UPDATE', [modelId]);
@@ -15,7 +15,8 @@ async function ensureSmartphoneModelFamily(connection, { modelId, companyId, def
   const [[model]] = await connection.query(`SELECT m.id,m.name,m.category_id,m.company_id,m.template_values,
     b.name AS brand_name,c.name AS category_name FROM models m
     LEFT JOIN brands b ON b.id=m.brand_id LEFT JOIN categories c ON c.id=m.category_id WHERE m.id=?`, [modelId]);
-  if (!isSmartphoneCategory(model.category_name) || !String(model.name || '').trim()) {
+  // anyCategory: a Entrada única organiza também famílias de outros produtos com modelo.
+  if ((!anyCategory && !isSmartphoneCategory(model.category_name)) || !String(model.name || '').trim()) {
     throw conflict('A criação automática da família exige um modelo de smartphone com nome e categoria.');
   }
   if (model.company_id && scope(model.company_id, defaultCompanyId) !== company) throw conflict('Modelo pertence a outra empresa.');

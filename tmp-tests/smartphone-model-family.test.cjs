@@ -126,3 +126,9 @@ test('finalizacao integra familia antes da unidade e dentro da mesma transacao',
   assert.ok(finalize.indexOf('ensureSmartphoneModelFamily')<finalize.lastIndexOf('await connection.commit()'));
   assert.doesNotMatch(finalize,/parent_id=COALESCE/);
 });
+test('anyCategory cria pai para modelo fora de smartphone; sem a opcao continua bloqueado',async()=>{
+  const db=database(undefined,{category_name:'Acessórios'});
+  await assert.rejects(db.transaction(),/exige um modelo de smartphone/);assert.equal(db.state.writes,0);
+  const r=await db.transaction({anyCategory:true});assert.equal(r.created,true);
+  assert.equal(db.state.rows.filter(p=>p.is_parent).length,1);
+});
