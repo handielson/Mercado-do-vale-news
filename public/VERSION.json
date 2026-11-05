@@ -1,7 +1,7 @@
 {
   "version": "v1.2.802-entrada-atalhos",
   "date": "2026-11-05",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.802-entrada-atalhos",
   "release_vps": "/var/www/mdv-site/releases/20261105-190000-v1302-entrada-atalhos",
@@ -50,12 +50,13 @@
     "revisão por tarefa + revisão final"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "/var/www/mdv-site/releases/20261105-190000-v1302-entrada-atalhos"
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261105-190000-v1302-entrada-atalhos",
+    "published_at": "2026-11-05T19:08:00-03:00"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "--catalog-entry-only"
+    "status": "publicada",
+    "note": "v1.2.802 (linha por product_id) publicada em 05/11 ~19:05; backup /var/www/mdv-api/backups/catalog-entry-1793916313000"
   },
   "nginx_release": {
     "status": "publicada",

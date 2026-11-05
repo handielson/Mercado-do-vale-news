@@ -1,6 +1,6 @@
 # v1.2.802-entrada-atalhos
 
-Data: 05/11/2026. Status: **pendente de publicação**. Branch: `main`. Atalhos (+ peças, Adicionar Unidade, Nova variação) abrem a Entrada.
+Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-190000-v1302-entrada-atalhos` + API). Branch: `main`. Atalhos (+ peças, Adicionar Unidade, Nova variação) abrem a Entrada.
 
 ---
 
