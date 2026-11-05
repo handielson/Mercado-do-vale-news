@@ -42,8 +42,10 @@ export function parseMoney(value) {
   if (typeof value !== 'string') return null;
   let s = value.trim().replace(/^R\$\s*/i, '').replace(/\s+/g, '');
   if (!s) return undefined;
-  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
-  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  if (s.includes(',')) {
+    if (!/^(\d{1,3}(\.\d{3})*|\d+),\d{1,2}$/.test(s)) return null;
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
   const m = /^(\d+)(?:\.(\d+))?$/.exec(s);
   if (!m) return null;
   const cents = Math.round(Number(`0.${m[2] || '0'}`) * 100);
@@ -59,6 +61,24 @@ function text(value) {
 function isBlank(value) {
   return value === null || value === undefined || (typeof value === 'string' && value.trim() === '') ||
     (value instanceof Date && Number.isNaN(value.getTime()));
+}
+
+// Mesmas listas da ManualEntryTab (RAM_OPTIONS / STORAGE_OPTIONS).
+const RAM_OPTIONS = ['2GB', '3GB', '4GB', '6GB', '8GB', '12GB', '16GB', '18GB', '24GB'];
+const STORAGE_OPTIONS = ['16GB', '32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
+const OLD_TEMPLATE_HEADERS = ['acao', 'modelonome', 'categorianome', 'precovarejo'];
+
+/** '' se vazio; texto normalizado ("8gb" -> "8GB"); `{ error }` se fora da lista. */
+function readSize(value, options, label, bareTb) {
+  if (isBlank(value)) return '';
+  const raw = value instanceof Date ? value.toISOString().slice(0, 10) : String(value).trim();
+  const m = value instanceof Date ? null : /^(\d+)\s*(gb|tb)?$/i.exec(raw);
+  if (m) {
+    const unit = m[2] ? m[2].toUpperCase() : (bareTb && ['1', '2'].includes(m[1]) ? 'TB' : 'GB');
+    const out = `${Number(m[1])}${unit}`;
+    if (options.includes(out)) return out;
+  }
+  return { error: `${label} inválida: ${raw}`.replace('Armazenamento inválida', 'Armazenamento inválido') };
 }
 
 const CONDITIONS = { novo: 'new', new: 'new', seminovo: 'seminovo', usado: 'used', used: 'used', caixaaberta: 'open_box', openbox: 'open_box' };
@@ -92,7 +112,8 @@ export function rowsToLines(records, ctx) {
 
   const headerKeys = new Set();
   for (const rec of list) for (const key of Object.keys(rec || {})) headerKeys.add(norm(key));
-  if (list.length > 0 && !headerKeys.has('modelo') && !headerKeys.has('nome')) {
+  if (OLD_TEMPLATE_HEADERS.some(h => headerKeys.has(h))
+    || (list.length > 0 && !headerKeys.has('modelo') && !headerKeys.has('nome'))) {
     return { lines: [], issues: [], fatal: 'Esta planilha não é o modelo da Entrada. Baixe o modelo.' };
   }
   if (list.length > MAX_ROWS) {
@@ -107,7 +128,7 @@ export function rowsToLines(records, ctx) {
   list.forEach((rec, index) => {
     const row = index + 2;
     const cell = {};
-    for (const [key, value] of Object.entries(rec || {})) cell[norm(key)] ??= value;
+    for (const [key, value] of Object.entries(rec || {})) { const k = norm(key); if (!(k in cell) || isBlank(cell[k])) cell[k] = value; }
     const get = name => cell[name];
     if (Object.values(cell).every(isBlank)) return;
 
@@ -195,14 +216,17 @@ export function rowsToLines(records, ctx) {
     }
 
     const note = text(get('observacao'));
+    const sizes = [readSize(get('ram'), RAM_OPTIONS, 'RAM', false), readSize(get('armazenamento'), STORAGE_OPTIONS, 'Armazenamento', true)];
+    sizes.forEach(v => { if (typeof v === 'object') problem(v.error); });
+    const [ram, storage] = sizes.map(v => (typeof v === 'object' ? '' : v));
     const item = {
       source: 'planilha',
       ...(model
         ? { model_id: model.id, category_id: model.category_id ?? null, name: model.name }
         : { category_id: category?.id ?? null, name }),
       configuration: {
-        ram: text(get('ram')),
-        storage: text(get('armazenamento')),
+        ram,
+        storage,
         version: text(get('versao')) || 'Global',
         network: '',
         condition,

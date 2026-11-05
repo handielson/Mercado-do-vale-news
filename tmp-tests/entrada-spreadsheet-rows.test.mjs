@@ -159,3 +159,36 @@ test('linha válida tem o mesmo formato da Manual', () => {
   });
   assert.equal(run({ Modelo: 'Redmi 15', 'Observação': 'x' }).lines[0].item.condition_note, null);
 });
+
+test('parseMoney recusa formatos ambíguos', () => {
+  assert.equal(parseMoney('1,299.00'), null);
+  assert.equal(parseMoney('1,299'), null);
+  assert.equal(parseMoney('1.299,50'), 129950);
+  assert.equal(parseMoney('12,5'), 1250);
+  assert.deepEqual(msgs(run({ Modelo: 'Redmi 15', Custo: '1,299.00' })), ['Custo inválido.']);
+});
+
+test('RAM e armazenamento normalizados', () => {
+  const cfg = (ram, st) => run({ Modelo: 'Redmi 15', RAM: ram, Armazenamento: st });
+  assert.deepEqual(
+    [cfg(8, 256).lines[0].item.configuration.ram, cfg(8, 256).lines[0].item.configuration.storage],
+    ['8GB', '256GB'],
+  );
+  assert.equal(cfg('8 gb', '1').lines[0].item.configuration.storage, '1TB');
+  assert.equal(cfg('', '2tb').lines[0].item.configuration.storage, '2TB');
+  assert.equal(cfg('', '').lines[0].item.configuration.ram, '');
+  assert.deepEqual(msgs(cfg('7GB', '')), ['RAM inválida: 7GB']);
+  assert.deepEqual(msgs(cfg('', '100')), ['Armazenamento inválido: 100']);
+  assert.equal(cfg(new Date(2026, 0, 8), '').lines.length, 0);
+});
+
+test('template antigo do Cadastro em massa', () => {
+  const r = rowsToLines([{ acao: 'create', sku: 'x', nome: 'N', modelo_id: '', modelo_nome: 'M', categoria_nome: 'C', preco_varejo: 1 }], ctx);
+  assert.equal(r.fatal, 'Esta planilha não é o modelo da Entrada. Baixe o modelo.');
+  assert.deepEqual(r.lines, []);
+});
+
+test('cabeçalhos duplicados: valor não vazio vence', () => {
+  const r = run({ Modelo: 'Redmi 15', 'IMEI 1': '', 'imei1': IMEI_A });
+  assert.equal(r.lines[0].item.identity.imei1, IMEI_A);
+});
