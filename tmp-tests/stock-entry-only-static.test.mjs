@@ -223,7 +223,8 @@ test('nova tentativa da variação nova não envia estoque (nem 0) e continua se
 
 test('update de produto sem stock_quantity mantém o estoque atual; campo some na variação nova', () => {
   const products = read('services/products.ts');
-  assert.match(products, /stock_quantity: input\.stock_quantity === undefined \? \(oldProduct\.stock_quantity \?\? 0\) : \(input\.stock_quantity \|\| 0\),/);
+  // Omitido: não vai no PUT e o servidor mantém o saldo (ver product-update-omitted-stock-static).
+  assert.match(products, /stock_quantity: input\.stock_quantity === undefined \? undefined : \(input\.stock_quantity \|\| 0\),/);
   assert.match(products, /shopeeService\.updateStock\(id, payload\.stock_quantity\)/);
   const form = read('components/products/ProductForm.tsx');
   assert.match(form, /if \(!mergedData\.track_inventory\) \{\s*mergedData\.stock_quantity = 0;/, 'edição sem controle de estoque continua gravando 0');
