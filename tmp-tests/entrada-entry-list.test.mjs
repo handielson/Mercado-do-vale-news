@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  emptyState, createLine, addLines, updateLine, removeLine, toItems, applyPreview,
+  emptyState, createLine, createShortcutLine, addLines, updateLine, removeLine, toItems, applyPreview,
   canConfirm, lineStatus, hasIdentity, hasPhotoIntake, createPhotoLine, saveDraft, loadDraft,
   errorText, commitErrorKind,
 } from '../components/entrada/entryList.js';
@@ -163,4 +163,18 @@ test('hasPhotoIntake acha o pré-cadastro na lista; updateLine mantém o rótulo
   assert.equal(hasPhotoIntake(s, ''), false);
   s = updateLine(s, line.key, { ...line.item, location_id: 'l1' });
   assert.equal(s.lines[1].label, 'Redmi 15');
+});
+
+test('createShortcutLine: item atalho com product_id; rótulo nome · SKU · identidade; updateLine mantém o rótulo', () => {
+  const v = { id: 'p1', name: 'Redmi 15', sku: 'RED15' };
+  const phone = createShortcutLine(v, { identity: { imei1: '863715061138763', imei2: null, serial: null }, quantity: 1 });
+  assert.equal(phone.source, 'atalho');
+  assert.equal(phone.item.source, 'atalho');
+  assert.equal(phone.item.product_id, 'p1');
+  assert.equal(phone.label, 'Redmi 15 · RED15 · IMEI …8763');
+  assert.equal(createShortcutLine(v, { quantity: 5 }).label, 'Redmi 15 · RED15 · 5 un.');
+  assert.equal(createShortcutLine({ id: 'p2', name: 'Capa' }, { quantity: 1 }).label, 'Capa');
+  let s = addLines(emptyState(), [phone]);
+  s = updateLine(s, phone.key, { ...phone.item, cost_cents: 10 });
+  assert.equal(s.lines[0].label, 'Redmi 15 · RED15 · IMEI …8763');
 });

@@ -1,19 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { modelService } from '../../services/models';
-import { productService } from '../../services/products';
 import { BarcodeScanButton } from '../ui/BarcodeScanButton';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { SearchableSelect } from '../ui/SearchableSelect';
-import { createLine, hasIdentity, isValidImei } from './entryList.js';
+import { createLine, createShortcutLine, hasIdentity, isValidImei } from './entryList.js';
 import { loadModelProfile, useEntryLocations, type ModelRef } from './EntryLockFields';
 import { CONDITIONS, RAM_OPTIONS, STORAGE_OPTIONS } from './ManualEntryTab';
+import { FixedVariationCard, type FixedVariation } from './FixedVariationCard';
 import type { EntryLine, EntryState } from './EntryListPanel';
 
 export interface ScanEntryTabProps {
     onAddLines: (lines: EntryLine[]) => void;
     /** Lista atual da tela, para detectar leituras repetidas. */
     existingState: EntryState;
-    prefill?: { variation_id?: string };
+    /** Variação fixa (atalho ?variacao=, carregada pela página): prende pelo product_id. */
+    fixed?: FixedVariation | null;
+    /** "Trocar" no card da variação fixa. */
+    onClearFixed?: () => void;
     /** Enquanto uma confirmação roda, não aceita leituras. */
     busy?: boolean;
 }
@@ -32,8 +35,8 @@ interface Locked {
 const fieldCls = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm';
 const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
 
-export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existingState, prefill, busy }) => {
-    const variationId = prefill?.variation_id || '';
+export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existingState, fixed, onClearFixed, busy }) => {
+    const variationId = fixed?.id || '';
 
     const [models, setModels] = useState<ModelRef[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -55,9 +58,6 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
     const [reseller, setReseller] = useState(0);
     const [wholesale, setWholesale] = useState(0);
 
-    const [variation, setVariation] = useState<Locked | null>(null);
-    const [variationPhone, setVariationPhone] = useState<boolean | null>(null);
-    const [variationCategoryError, setVariationCategoryError] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [reading, setReading] = useState('');
     const [feedback, setFeedback] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
@@ -71,37 +71,8 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
     // Ao sair de "ocupado" na etapa de leitura, o campo volta a receber o leitor.
     useEffect(() => { if (!busy && scanning) readerRef.current?.focus(); }, [busy, scanning]);
 
-    // Atalho ?variacao=: trava tudo a partir do produto.
-    useEffect(() => {
-        setVariation(null); setVariationPhone(null); setVariationCategoryError(false);
-        if (!variationId) return;
-        let alive = true;
-        setLoadError(null);
-        productService.getById(variationId)
-            .then(product => {
-                if (!alive) return;
-                if (!product) { setLoadError('Não foi possível carregar a variação.'); return; }
-                const p = product as { name?: string; model_id?: string; category_id?: string | null; specs?: Record<string, string> };
-                const specs = p.specs || {};
-                const locked = {
-                    model_id: p.model_id || '',
-                    category_id: p.category_id ?? null,
-                    name: p.name || '',
-                    ram: specs.ram || '',
-                    storage: specs.storage || '',
-                    version: specs.version || 'Global',
-                    condition: specs.condition || 'new',
-                    color: specs.color || '',
-                };
-                setVariation(locked);
-                if (!locked.model_id) { setVariationPhone(true); return; }
-                loadModelProfile({ id: locked.model_id, name: locked.name, category_id: locked.category_id })
-                    .then(profile => { if (alive) setVariationPhone(profile.isPhone); })
-                    .catch(() => { if (alive) { setVariationPhone(null); setVariationCategoryError(true); } });
-            })
-            .catch(() => { if (alive) setLoadError('Não foi possível carregar a variação.'); });
-        return () => { alive = false; };
-    }, [variationId]);
+    // Trocar de variação fixa volta para a configuração (as leituras eram da anterior).
+    useEffect(() => { setScanning(false); setFeedback(null); }, [variationId]);
 
     useEffect(() => {
         if (variationId) return;
@@ -124,25 +95,27 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
         return () => { alive = false; };
     }, [model, variationId]);
 
-    const variationIncomplete = Boolean(variation && !(variation.model_id && variation.ram && variation.storage && variation.color));
-    const variationNotPhone = Boolean(variation && variationPhone === false);
-    const locked: Locked | null = variationId
-        ? (variation && !variationIncomplete && variationPhone === true ? variation : null)
+    // Variação fixa: prende pelo product_id (não precisa de memória, cor nem modelo completos). Só celular.
+    const fixedLocked = Boolean(fixed && fixed.isPhone);
+    const locked: Locked | null = fixed ? null
         : (model && isPhone ? {
             model_id: model.id, category_id: model.category_id ?? null, name: model.name,
             ram, storage, version: version.trim(), condition, color,
         } : null);
 
     const pricesReady = !pricesOn || (retail > 0 && reseller > 0 && wholesale > 0);
-    const ready = Boolean(locked && locked.model_id && locked.ram && locked.storage && locked.color && cost > 0 && locationId && pricesReady);
+    const ready = fixed
+        ? Boolean(fixedLocked && cost > 0 && locationId)
+        : Boolean(locked && locked.model_id && locked.ram && locked.storage && locked.color && cost > 0 && locationId && pricesReady);
     const modelLabel = (id: string) => models.find(m => m.id === id)?.name || '';
     const labelOf = (l: Locked) => [l.name, l.color, [l.ram, l.storage].filter(Boolean).join('/')].filter(Boolean).join(' · ');
-    const lockLabel = locked ? labelOf(locked) : '';
+    const lockLabel = fixed ? [fixed.name, fixed.sku].filter(Boolean).join(' · ') : locked ? labelOf(locked) : '';
+    const canRead = fixedLocked || Boolean(locked);
 
     const refocus = () => setTimeout(() => readerRef.current?.focus(), 0);
 
     const addRead = (values: string[]) => {
-        if (!locked || busy) return;
+        if (!canRead || busy) return;
         const imeis = values.map(v => String(v ?? '').trim()).filter(Boolean);
         if (imeis.length === 0) return;
         if (imeis.some(v => !isValidImei(v)) || (imeis.length > 1 && imeis[0] === imeis[1])) {
@@ -154,6 +127,17 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
             return;
         }
         imeis.forEach(v => seen.current.add(v));
+        const identity = { imei1: imeis[0], imei2: imeis[1] || null, serial: null };
+        if (fixed) {
+            // O servidor usa o produto do product_id (configuração, cor, condição e preços dele).
+            onAddLines([createShortcutLine(fixed, {
+                identity, quantity: 1, cost_cents: cost, location_id: locationId, prices: null,
+            }) as EntryLine]);
+            setCount(n => n + 1);
+            setFeedback(null);
+            return;
+        }
+        if (!locked) return;
         const item = {
             source: 'bipar',
             model_id: locked.model_id,
@@ -162,7 +146,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
             configuration: { ram: locked.ram, storage: locked.storage, version: locked.version, network: '', condition: locked.condition },
             color: locked.color,
             condition_note: null,
-            identity: { imei1: imeis[0], imei2: imeis[1] || null, serial: null },
+            identity,
             quantity: 1,
             cost_cents: cost,
             location_id: locationId,
@@ -184,7 +168,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
 
     const counter = count === 1 ? '1 aparelho lido' : `${count} aparelhos lidos`;
 
-    if (scanning && locked && ready) {
+    if (scanning && canRead && ready) {
         return (
             <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -213,12 +197,10 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
         <div className="space-y-4">
             {loadError && <p role="alert" className="text-sm text-red-600">{loadError}</p>}
 
-            {variationId ? (
+            {fixed ? (
                 <>
-                    {locked && <p className="text-sm font-medium text-slate-800">{lockLabel}</p>}
-                    {variationIncomplete && <p role="alert" className="text-sm text-red-600">Esta variação não tem memória/cor definidas. Use a aba Manual.</p>}
-                    {!variationIncomplete && variationCategoryError && <p role="alert" className="text-sm text-red-600">Não foi possível identificar a categoria do modelo.</p>}
-                    {!variationIncomplete && variationNotPhone && <p role="alert" className="text-sm text-red-600">Esta variação não é celular. Use a aba Manual.</p>}
+                    <FixedVariationCard variation={fixed} onChange={onClearFixed} />
+                    {!fixed.isPhone && <p role="alert" className="text-sm text-red-600">Esta variação não é celular. Use a aba Manual.</p>}
                 </>
             ) : (
                 <div>
@@ -279,7 +261,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                 </div>
             )}
 
-            {locked && (
+            {canRead && (
                 <div className="grid gap-3 sm:grid-cols-2">
                     <CurrencyInput value={cost} onChange={setCost} label="Custo" />
                     <div>
@@ -290,19 +272,22 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                         </select>
                         {locationsError && <p role="alert" className="text-xs text-red-600 mt-1">Não foi possível carregar os locais.</p>}
                     </div>
-                    <div className="sm:col-span-2 space-y-2">
-                        <label className="flex items-center gap-2 text-sm text-slate-700">
-                            <input type="checkbox" checked={pricesOn} onChange={e => setPricesOn(e.target.checked)} />
-                            Informar preços desta configuração
-                        </label>
-                        {pricesOn && (
-                            <div className="grid gap-3 sm:grid-cols-3">
-                                <CurrencyInput value={retail} onChange={setRetail} label="Varejo" />
-                                <CurrencyInput value={reseller} onChange={setReseller} label="Revenda" />
-                                <CurrencyInput value={wholesale} onChange={setWholesale} label="Atacado" />
-                            </div>
-                        )}
-                    </div>
+                    {/* Variação fixa mantém os preços dela: o servidor ignora preço na linha com product_id. */}
+                    {!fixed && (
+                        <div className="sm:col-span-2 space-y-2">
+                            <label className="flex items-center gap-2 text-sm text-slate-700">
+                                <input type="checkbox" checked={pricesOn} onChange={e => setPricesOn(e.target.checked)} />
+                                Informar preços desta configuração
+                            </label>
+                            {pricesOn && (
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    <CurrencyInput value={retail} onChange={setRetail} label="Varejo" />
+                                    <CurrencyInput value={reseller} onChange={setReseller} label="Revenda" />
+                                    <CurrencyInput value={wholesale} onChange={setWholesale} label="Atacado" />
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 

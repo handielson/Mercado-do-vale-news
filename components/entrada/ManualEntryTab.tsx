@@ -3,8 +3,9 @@ import { modelService } from '../../services/models';
 import { IMEIInput } from '../ui/IMEIInput';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { SearchableSelect } from '../ui/SearchableSelect';
-import { createLine } from './entryList.js';
+import { createLine, createShortcutLine } from './entryList.js';
 import { loadModelProfile, useEntryLocations } from './EntryLockFields';
+import { FixedVariationCard, type FixedVariation } from './FixedVariationCard';
 import type { EntryLine } from './EntryListPanel';
 
 export const RAM_OPTIONS = ['2GB', '3GB', '4GB', '6GB', '8GB', '12GB', '16GB', '18GB', '24GB'];
@@ -23,12 +24,16 @@ export interface ManualEntryTabProps {
     prefill?: { model_id?: string };
     /** Enquanto uma confirmação roda, não aceita novas linhas. */
     busy?: boolean;
+    /** Variação fixa (atalho ?variacao=): esconde modelo, configuração e cor; a linha vai pelo product_id. */
+    fixed?: FixedVariation | null;
+    /** "Trocar" no card da variação fixa. */
+    onClearFixed?: () => void;
 }
 
 const fieldCls = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm';
 const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
 
-export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, prefill, busy }) => {
+export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, prefill, busy, fixed, onClearFixed }) => {
     const [models, setModels] = useState<ModelRow[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [categoryError, setCategoryError] = useState(false);
@@ -54,6 +59,16 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
     const [retail, setRetail] = useState(0);
     const [reseller, setReseller] = useState(0);
     const [wholesale, setWholesale] = useState(0);
+    const [battery, setBattery] = useState('');
+
+    // ?modelo= trocado com a aba montada (link para outro modelo): acompanha o parâmetro.
+    const prefillModel = prefill?.model_id || '';
+    useEffect(() => { if (prefillModel) setModelId(prefillModel); }, [prefillModel]);
+
+    // Trocar ou soltar a variação fixa zera o que era dela (custo e local ficam).
+    useEffect(() => {
+        setImei1(''); setImei2(''); setSerial(''); setQuantity('1'); setConditionNote(''); setBattery('');
+    }, [fixed?.id]);
 
     useEffect(() => {
         let alive = true;
@@ -89,6 +104,96 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
 
     const qty = Math.max(1, Math.floor(Number(quantity) || 1));
     const canAdd = Boolean(model) && isPhone !== null && Boolean(locationId) && !busy;
+
+    const fixedUnit = Boolean(fixed && (fixed.isPhone || fixed.unitTracked));
+    const fixedIdentityOk = !fixedUnit || Boolean(imei1.trim() || serial.trim());
+    const canAddFixed = Boolean(fixed) && fixedIdentityOk && Boolean(locationId) && !busy;
+
+    // Variação fixa: o servidor usa o produto do product_id (nome, configuração, cor e preços dele).
+    // Sem condição na linha, a unidade herda a condição do produto.
+    const handleAddFixed = () => {
+        if (!fixed || !canAddFixed) return;
+        const batteryValue = fixed.isPhone && battery.trim() !== '' ? Number(battery) : null;
+        const item = {
+            condition_note: conditionNote.trim() || null,
+            battery_health: Number.isFinite(batteryValue) ? batteryValue : null,
+            identity: fixedUnit
+                ? { imei1: fixed.isPhone ? imei1.trim() || null : null, imei2: fixed.isPhone ? imei2.trim() || null : null, serial: serial.trim() || null }
+                : { imei1: null, imei2: null, serial: null },
+            quantity: fixedUnit ? 1 : qty,
+            cost_cents: cost,
+            location_id: locationId,
+            prices: null,
+        };
+        onAddLines([createShortcutLine(fixed, item) as EntryLine]);
+        setImei1(''); setImei2(''); setSerial(''); setQuantity('1'); setBattery(''); setConditionNote('');
+        if (fixed.isPhone) setTimeout(() => document.getElementById('manual-imei1')?.focus(), 0);
+    };
+
+    const costField = (
+        <div>
+            <CurrencyInput value={cost} onChange={setCost} label="Custo" />
+            {cost === 0 && <p className="text-xs text-amber-700 mt-1">Custo zerado</p>}
+        </div>
+    );
+    const locationField = (
+        <div>
+            <label htmlFor="manual-location" className={labelCls}>Local</label>
+            <select id="manual-location" className={fieldCls} value={locationId} onChange={e => setLocationId(e.target.value)}>
+                <option value="">Selecione o local</option>
+                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+            {locationsError && <p role="alert" className="text-xs text-red-600 mt-1">Não foi possível carregar os locais.</p>}
+            {!locationId && !locationsError && <p className="text-xs text-amber-700 mt-1">Escolha o local de estoque.</p>}
+        </div>
+    );
+
+    if (fixed) {
+        return (
+            <div className="space-y-4">
+                <FixedVariationCard variation={fixed} onChange={onClearFixed} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                    {fixed.isPhone && (
+                        <>
+                            <IMEIInput id="manual-imei1" label="IMEI 1" value={imei1} onChange={setImei1} checkRegistered={false}
+                                onScanPair={values => { setImei1(values[0] || ''); setImei2(values[1] || ''); }} />
+                            <IMEIInput id="manual-imei2" label="IMEI 2" value={imei2} onChange={setImei2} checkRegistered={false} />
+                        </>
+                    )}
+                    {fixedUnit ? (
+                        <div>
+                            <label htmlFor="manual-serial" className={labelCls}>Serial</label>
+                            <input id="manual-serial" className={fieldCls} value={serial} onChange={e => setSerial(e.target.value)} />
+                        </div>
+                    ) : (
+                        <div>
+                            <label htmlFor="manual-qty" className={labelCls}>Quantidade</label>
+                            <input id="manual-qty" type="number" min={1} step={1} className={fieldCls} value={quantity} onChange={e => setQuantity(e.target.value)} />
+                        </div>
+                    )}
+                    {fixed.isPhone && (
+                        <div>
+                            <label htmlFor="manual-battery" className={labelCls}>Saúde da bateria (%)</label>
+                            <input id="manual-battery" type="number" min={0} max={100} step={1} className={fieldCls} value={battery} onChange={e => setBattery(e.target.value)} />
+                        </div>
+                    )}
+                    {costField}
+                    {locationField}
+                    <div className="sm:col-span-2">
+                        <label htmlFor="manual-fixed-note" className={labelCls}>Observação</label>
+                        <input id="manual-fixed-note" className={fieldCls} value={conditionNote} onChange={e => setConditionNote(e.target.value)} />
+                    </div>
+                </div>
+                {fixedUnit && !fixedIdentityOk && (
+                    <p className="text-xs text-amber-700">{fixed.isPhone ? 'Informe o IMEI 1 ou o serial.' : 'Informe o serial.'}</p>
+                )}
+                <button type="button" onClick={handleAddFixed} disabled={!canAddFixed}
+                    className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Adicionar à lista
+                </button>
+            </div>
+        );
+    }
 
     const handleAdd = () => {
         if (!model || isPhone === null || !locationId || busy) return;
@@ -204,19 +309,8 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
                         </div>
                     )}
 
-                    <div>
-                        <CurrencyInput value={cost} onChange={setCost} label="Custo" />
-                        {cost === 0 && <p className="text-xs text-amber-700 mt-1">Custo zerado</p>}
-                    </div>
-                    <div>
-                        <label htmlFor="manual-location" className={labelCls}>Local</label>
-                        <select id="manual-location" className={fieldCls} value={locationId} onChange={e => setLocationId(e.target.value)}>
-                            <option value="">Selecione o local</option>
-                            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                        </select>
-                        {locationsError && <p role="alert" className="text-xs text-red-600 mt-1">Não foi possível carregar os locais.</p>}
-                        {!locationId && !locationsError && <p className="text-xs text-amber-700 mt-1">Escolha o local de estoque.</p>}
-                    </div>
+                    {costField}
+                    {locationField}
 
                     <div className="sm:col-span-2 space-y-2">
                         <label className="flex items-center gap-2 text-sm text-slate-700">
