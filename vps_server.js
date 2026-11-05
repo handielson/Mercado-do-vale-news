@@ -28889,10 +28889,16 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
 
       // stock-entry-lock-v1: produto novo sem bling_id nasce com estoque 0 (a entrada é feita pela tela Entrada).
       // Produto existente e importação do Bling (com bling_id) continuam conciliando o saldo informado.
+      // Saldo inválido (mesma regra do externalStockReconciliation) não é ignorado: segue para o conciliador,
+      // que recusa com o erro de sempre e desfaz a gravação.
       let skipInitialStock = false;
       if (!matchedExisting && !p.bling_id && rawProduct.stock_quantity != null) {
-        const [stockLockRows] = p.id ? await pool.query('SELECT id FROM products WHERE id=? LIMIT 1', [p.id]) : [[]];
-        skipInitialStock = !stockLockRows.length;
+        const requestedStock = Number(rawProduct.stock_quantity);
+        const validStock = Number.isSafeInteger(requestedStock) && requestedStock >= 0 && requestedStock <= 2147483647;
+        if (validStock) {
+          const [stockLockRows] = p.id ? await pool.query('SELECT id FROM products WHERE id=? LIMIT 1', [p.id]) : [[]];
+          skipInitialStock = !stockLockRows.length;
+        }
       }
 
       // product-family-model-guard-v1: cadastro manual novo (sem Bling) de um modelo que ja tem familia
@@ -29054,7 +29060,10 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
       }, { transactional: true });
       });
       results.upserted++;
-      results.resolved.push({ requested_id: requestedId, id: p.id, bling_id: p.bling_id || null, matched_existing: matchedExisting });
+      results.resolved.push({
+        requested_id: requestedId, id: p.id, bling_id: p.bling_id || null, matched_existing: matchedExisting,
+        ...(skipInitialStock ? { stock_ignored: true } : {}),
+      });
     } catch (err) {
       results.errors.push({ id: p.id, name: p.name, error: err.message });
     }
@@ -29600,7 +29609,9 @@ fastify.get('/units/by-identifier/:q', { preHandler: requireSyncKeyOrAdmin }, as
 
 // stock-entry-lock-v1: helpers. Estoque entra pela tela Entrada (services/catalogEntryServer.cjs).
 // Exceção: manutenção (scripts/rebuild-smartphone-serialized-units.cjs) manda origin:'maintenance' em cada
-// item e autentica por x-sync-key. As guardas de pai e de IMEI continuam valendo para ela.
+// item, autentica por x-sync-key e envia o cabeçalho x-stock-maintenance: 1. O /api/vps-proxy remonta os
+// cabeçalhos a partir de uma lista fixa e não repassa x-stock-maintenance, então o SPA não chega aqui.
+// As guardas de pai e de IMEI continuam valendo para ela.
 const STOCK_ENTRY_LOCK_MESSAGE = 'Entrada de estoque é feita pela tela Entrada (Admin → Entrada).';
 const STOCK_ENTRY_LOCKED_TABLES = new Set(['units']);
 
@@ -29612,6 +29623,7 @@ function isStockMaintenanceRequest(request, items) {
   const key = request.headers?.['x-sync-key'];
   const secret = process.env.SYNC_SECRET;
   if (!key || !secret || key !== secret) return false;
+  if (String(request.headers?.['x-stock-maintenance'] || '').trim() !== '1') return false;
   return Array.isArray(items) && items.length > 0
     && items.every(item => item && typeof item === 'object' && item.origin === 'maintenance');
 }

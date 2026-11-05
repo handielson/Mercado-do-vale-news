@@ -24,9 +24,11 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.ok(src.includes("const STOCK_ENTRY_LOCK_MESSAGE = 'Entrada de estoque é feita pela tela Entrada (Admin → Entrada).';"), `${file}: sem mensagem da trava`);
   assert.match(src, /item\.origin === 'maintenance'/, `${file}: excecao de manutencao exige origin`);
   assert.match(src, /request\.headers\?\.\['x-sync-key'\]/, `${file}: excecao de manutencao exige x-sync-key`);
+  assert.match(src, /request\.headers\?\.\['x-stock-maintenance'\]/, `${file}: excecao de manutencao exige x-stock-maintenance`);
 }
 const rebuild = fs.readFileSync(new URL('../scripts/rebuild-smartphone-serialized-units.cjs', import.meta.url), 'utf8');
 assert.match(rebuild, /origin: 'maintenance'/, 'script de manutencao sem origin');
+assert.match(rebuild, /'x-stock-maintenance': '1'/, 'script de manutencao sem cabecalho');
 const deploy = fs.readFileSync(new URL('../deploy-vps-server-only.cjs', import.meta.url), 'utf8');
 assert.ok(deploy.includes('--catalog-entry-only'), 'deploy sem --catalog-entry-only');
 for (const f of ['services/catalogEntryCore.cjs', 'services/catalogEntryServer.cjs', 'services/smartphoneModelFamily.cjs', 'services/smartphonePhotoIntakeServer.cjs', 'services/smartphonePhotoIntakeCore.cjs']) {

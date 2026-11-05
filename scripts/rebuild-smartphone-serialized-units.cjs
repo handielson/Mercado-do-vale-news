@@ -301,6 +301,8 @@ async function main() {
     if (!SYNC_KEY) throw new Error('Missing VITE_VPS_SYNC_KEY/VPS_SYNC_KEY');
     const created = await api('/units/batch', {
       method: 'POST',
+      // stock-entry-lock-v1: cabecalho exigido pela excecao de manutencao (o /api/vps-proxy nao o repassa).
+      headers: { 'x-stock-maintenance': '1' },
       body: JSON.stringify(planned.map(({ group_key, source_product_id, source_sku, target_product_id, target_sku, ...unit }) => ({
         ...unit,
         product_id: target_product_id,
