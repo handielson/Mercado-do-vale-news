@@ -23,6 +23,8 @@ export const defaultFixtures = {
     ],
     products: {
         p1: { id: 'p1', name: 'Redmi 15', model_id: 'm1', category_id: 'c1', specs: { ram: '8GB', storage: '256GB', color: 'Verde' } },
+        p3: { id: 'p3', name: 'Redmi Pai', model_id: 'm1', category_id: 'c1', specs: {} },
+        p4: { id: 'p4', name: 'Capa Silicone', model_id: 'm2', category_id: 'c2', specs: { ram: '8GB', storage: '256GB', color: 'Preto' } },
         p2: { id: 'p2', name: 'Poco X8', model_id: 'm3', category_id: 'c1', specs: { ram: '12GB', storage: '512GB', color: 'Preto', version: 'India', condition: 'seminovo' } },
     },
     locations: [{ id: 'l1', name: 'Prateleira A', code: 'A', is_default: false, is_active: true }, { id: 'l2', name: 'Vitrine', code: 'V', is_default: true, is_active: true }],

@@ -12,6 +12,9 @@ const entry = `import React from 'react';import {createRoot} from 'react-dom/cli
 import {addLines, emptyState} from '${root}/components/entrada/entryList.js';
 function App() {
   const [state, setState] = React.useState(() => window.__state || emptyState());
+  window.removeAll = () => setState(emptyState());
+  window.setBusy = v => { window.__busy = v; setBump(n => n + 1); };
+  const [, setBump] = React.useState(0);
   return <ScanEntryTab existingState={state} prefill={window.__prefill} busy={!!window.__busy}
     onAddLines={lines => { window.added ||= []; window.added.push(...lines); setState(s => addLines(s, lines)); }} />;
 }
@@ -200,4 +203,36 @@ test('busy desabilita a leitura', { timeout: 120000 }, async t => {
     const { page } = await setup(t, { prefill: { variation_id: 'p1' }, busy: true });
     await page.getByLabel('Custo').fill('900');
     assert.equal(await start(page).isDisabled(), true);
+});
+
+test('remover a linha libera reler o mesmo IMEI', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await begin(page);
+    await bip(page, '863715061138763');
+    await page.getByText('1 aparelho lido', { exact: true }).waitFor();
+    await page.evaluate(() => window.removeAll());
+    await bip(page, '863715061138763');
+    await page.getByText('2 aparelhos lidos', { exact: true }).waitFor();
+    assert.equal((await page.evaluate(() => window.added)).length, 2);
+});
+
+test('depois de busy o campo de leitura volta ao foco', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await begin(page);
+    await page.evaluate(() => window.setBusy(true));
+    await page.waitForFunction(() => document.querySelector('[aria-label="Leitura de IMEI"]').disabled);
+    await page.evaluate(() => window.setBusy(false));
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Leitura de IMEI');
+});
+
+test('?variacao= sem memória/cor avisa e não trava', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { prefill: { variation_id: 'p3' } });
+    await page.getByText('Esta variação não tem memória/cor definidas. Use a aba Manual.').waitFor();
+    assert.equal(await start(page).count(), 0);
+});
+
+test('?variacao= de produto que não é celular avisa', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { prefill: { variation_id: 'p4' } });
+    await page.getByText('Esta variação não é celular. Use a aba Manual.').waitFor();
+    assert.equal(await start(page).count(), 0);
 });

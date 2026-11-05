@@ -51,6 +51,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
     const { locations, locationsError } = useEntryLocations(setLocationId);
 
     const [variation, setVariation] = useState<Locked | null>(null);
+    const [variationPhone, setVariationPhone] = useState<boolean | null>(null);
     const [scanning, setScanning] = useState(false);
     const [reading, setReading] = useState('');
     const [feedback, setFeedback] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
@@ -58,9 +59,16 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
     const seen = useRef<Set<string>>(new Set());
     const readerRef = useRef<HTMLInputElement>(null);
 
+    // A lista da tela é a verdade: o ref só guarda leituras ainda não refletidas nela (corrida do leitor).
+    useEffect(() => { seen.current = new Set(); }, [existingState.lines]);
+
+    // Ao sair de "ocupado" na etapa de leitura, o campo volta a receber o leitor.
+    useEffect(() => { if (!busy && scanning) readerRef.current?.focus(); }, [busy, scanning]);
+
     // Atalho ?variacao=: trava tudo a partir do produto.
     useEffect(() => {
-        if (!variationId) { setVariation(null); return; }
+        setVariation(null); setVariationPhone(null);
+        if (!variationId) return;
         let alive = true;
         setLoadError(null);
         productService.getById(variationId)
@@ -69,7 +77,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                 if (!product) { setLoadError('Não foi possível carregar a variação.'); return; }
                 const p = product as { name?: string; model_id?: string; category_id?: string | null; specs?: Record<string, string> };
                 const specs = p.specs || {};
-                setVariation({
+                const locked = {
                     model_id: p.model_id || '',
                     category_id: p.category_id ?? null,
                     name: p.name || '',
@@ -78,7 +86,12 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                     version: specs.version || 'Global',
                     condition: specs.condition || 'new',
                     color: specs.color || '',
-                });
+                };
+                setVariation(locked);
+                if (!locked.model_id) { setVariationPhone(true); return; }
+                loadModelProfile({ id: locked.model_id, name: locked.name, category_id: locked.category_id })
+                    .then(profile => { if (alive) setVariationPhone(profile.isPhone); })
+                    .catch(() => { if (alive) setVariationPhone(true); });
             })
             .catch(() => { if (alive) setLoadError('Não foi possível carregar a variação.'); });
         return () => { alive = false; };
@@ -105,8 +118,10 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
         return () => { alive = false; };
     }, [model, variationId]);
 
+    const variationIncomplete = Boolean(variation && !(variation.model_id && variation.ram && variation.storage && variation.color));
+    const variationNotPhone = Boolean(variation && variationPhone === false);
     const locked: Locked | null = variationId
-        ? variation
+        ? (variation && !variationIncomplete && !variationNotPhone ? variation : null)
         : (model && isPhone ? {
             model_id: model.id, category_id: model.category_id ?? null, name: model.name,
             ram, storage, version: version.trim(), condition, color,
@@ -114,7 +129,8 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
 
     const ready = Boolean(locked && locked.model_id && locked.ram && locked.storage && locked.color && cost > 0 && locationId);
     const modelLabel = (id: string) => models.find(m => m.id === id)?.name || '';
-    const lockLabel = locked ? `${locked.name} · ${locked.color || 'sem cor'} · ${locked.ram}/${locked.storage}` : '';
+    const labelOf = (l: Locked) => [l.name, l.color, [l.ram, l.storage].filter(Boolean).join('/')].filter(Boolean).join(' · ');
+    const lockLabel = locked ? labelOf(locked) : '';
 
     const refocus = () => setTimeout(() => readerRef.current?.focus(), 0);
 
@@ -190,7 +206,11 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
             {loadError && <p role="alert" className="text-sm text-red-600">{loadError}</p>}
 
             {variationId ? (
-                variation && <p className="text-sm font-medium text-slate-800">{lockLabel}</p>
+                <>
+                    {locked && <p className="text-sm font-medium text-slate-800">{lockLabel}</p>}
+                    {variationIncomplete && <p role="alert" className="text-sm text-red-600">Esta variação não tem memória/cor definidas. Use a aba Manual.</p>}
+                    {!variationIncomplete && variationNotPhone && <p role="alert" className="text-sm text-red-600">Esta variação não é celular. Use a aba Manual.</p>}
+                </>
             ) : (
                 <div>
                     <label htmlFor="scan-model" className={labelCls}>Modelo</label>
