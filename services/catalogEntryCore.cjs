@@ -68,17 +68,22 @@ function normalizeEntryItem(raw, index) {
   const costParsed = cents(r.cost_cents);
   if (costParsed === null) errors.push('Custo inválido.');
   const prices = normalizePrices(r.prices, errors);
+  // Com product_id (atalhos), o produto já está escolhido: modelo, categoria, nome, configuração e cor
+  // do cliente são ignorados (nem exigidos nem usados). A condição continua: é da unidade que entra.
+  const productId = orNull(r.product_id);
+  const keep = value => (productId ? null : orNull(value));
   return {
     line: index + 1,
     source,
-    model_id: orNull(r.model_id),
-    category_id: orNull(r.category_id),
-    name: orNull(r.name),
+    product_id: productId,
+    model_id: keep(r.model_id),
+    category_id: keep(r.category_id),
+    name: keep(r.name),
     configuration: {
-      ram: orNull(cfg.ram), storage: orNull(cfg.storage), version: orNull(cfg.version),
-      network: orNull(cfg.network), condition,
+      ram: keep(cfg.ram), storage: keep(cfg.storage), version: keep(cfg.version),
+      network: keep(cfg.network), condition,
     },
-    color: orNull(r.color),
+    color: keep(r.color),
     condition_note: orNull(r.condition_note),
     battery_health: Number.isFinite(battery) ? battery : null,
     identity: {
@@ -113,7 +118,7 @@ function validateEntryBatch(items, { isSmartphone } = {}) {
 
   for (const item of out) {
     const phoneItem = typeof isSmartphone === 'function' ? Boolean(isSmartphone(item)) : false;
-    if (!item.model_id && !(item.category_id && item.name)) add(item, 'Informe o modelo ou a categoria e o nome.');
+    if (!item.product_id && !item.model_id && !(item.category_id && item.name)) add(item, 'Informe o modelo ou a categoria e o nome.');
     if (!item.location_id) add(item, 'Escolha o local de estoque.');
 
     if (phoneItem) {
