@@ -23,10 +23,13 @@ function isValidImei(value) {
 /** undefined = vazio; inteiro >= 0 = valor; null = inválido. */
 function cents(value) {
   if (value === undefined || value === null) return undefined;
-  if (typeof value === 'number') return Number.isInteger(value) && value >= 0 ? value : null;
+  if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0 ? value : null;
   const text = String(value).trim();
   if (text === '') return undefined;
-  if (/^\d+(\.0+)?$/.test(text)) return Number(text.split('.')[0]);
+  if (/^\d+(\.0+)?$/.test(text)) {
+    const n = Number(text.split('.')[0]);
+    return Number.isSafeInteger(n) ? n : null;
+  }
   return null;
 }
 
@@ -58,6 +61,10 @@ function normalizeEntryItem(raw, index) {
   if (!SOURCES.includes(source)) errors.push('Origem inválida.');
   const quantity = r.quantity === undefined || r.quantity === null || r.quantity === '' ? 1 : Number(r.quantity);
   const battery = r.battery_health === undefined || r.battery_health === null || r.battery_health === '' ? null : Number(r.battery_health);
+  const CONDITIONS = ['new', 'seminovo', 'used', 'open_box'];
+  const conditionText = text(cfg.condition).toLowerCase();
+  const condition = conditionText === '' ? 'new' : conditionText;
+  if (!CONDITIONS.includes(condition)) errors.push('Condição inválida.');
   const costParsed = cents(r.cost_cents);
   if (costParsed === null) errors.push('Custo inválido.');
   const prices = normalizePrices(r.prices, errors);
@@ -69,7 +76,7 @@ function normalizeEntryItem(raw, index) {
     name: orNull(r.name),
     configuration: {
       ram: orNull(cfg.ram), storage: orNull(cfg.storage), version: orNull(cfg.version),
-      network: orNull(cfg.network), condition: orNull(cfg.condition),
+      network: orNull(cfg.network), condition,
     },
     color: orNull(r.color),
     condition_note: orNull(r.condition_note),
@@ -108,6 +115,8 @@ function validateEntryBatch(items, { isSmartphone } = {}) {
 
     if (item.identity.imei1 && !isValidImei(item.identity.imei1)) add(item, 'IMEI 1 inválido.');
     if (item.identity.imei2 && !isValidImei(item.identity.imei2)) add(item, 'IMEI 2 inválido.');
+
+    if (item.identity.imei2 && item.identity.imei2 === item.identity.imei1) add(item, 'IMEI 2 igual ao IMEI 1.');
 
     const p = item.prices;
     if (p) {

@@ -110,3 +110,27 @@ test('planHash', () => {
   assert.notEqual(planHash(plan), planHash(other));
   assert.match(planHash(plan), /^[0-9a-f]{64}$/);
 });
+
+test('condição: padrão new, normalizada, inválida', () => {
+  assert.equal(normalizeEntryItem(base(), 0).configuration.condition, 'new');
+  assert.equal(normalizeEntryItem(base({ configuration: { condition: '  ' } }), 0).configuration.condition, 'new');
+  const ok = normalizeEntryItem(base({ configuration: { condition: 'Seminovo' } }), 0);
+  assert.equal(ok.configuration.condition, 'seminovo');
+  assert.ok(!ok.errors.includes('Condição inválida.'));
+  assert.ok(normalizeEntryItem(base({ configuration: { condition: 'foo' } }), 0).errors.includes('Condição inválida.'));
+  for (const c of ['new', 'used', 'open_box']) assert.ok(!normalizeEntryItem(base({ configuration: { condition: c } }), 0).errors.includes('Condição inválida.'));
+});
+
+test('IMEI 2 igual ao IMEI 1 na mesma linha', () => {
+  const [item] = run([base({ identity: { imei1: IMEI_A, imei2: IMEI_A } })]);
+  assert.ok(item.errors.includes('IMEI 2 igual ao IMEI 1.'));
+  const [ok] = run([base({ identity: { imei1: IMEI_A, imei2: IMEI_B } })]);
+  assert.ok(!ok.errors.includes('IMEI 2 igual ao IMEI 1.'));
+});
+
+test('cents rejeita valores acima do inteiro seguro', () => {
+  assert.equal(cents('1e21'), null);
+  assert.equal(cents('99999999999999999999'), null);
+  assert.equal(cents(1e21), null);
+  assert.equal(cents(Number.MAX_SAFE_INTEGER), Number.MAX_SAFE_INTEGER);
+});
