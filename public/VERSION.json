@@ -1,7 +1,7 @@
 {
   "version": "v1.2.797-bling-token-text",
   "date": "2026-11-05",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.797-bling-token-text",
   "release_vps": "pendente",
@@ -38,7 +38,7 @@
     "status": "sem mudança"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "ALTER direto + --catalog-entry-only"
+    "status": "publicada",
+    "note": "ALTER company_settings bling_access_token/bling_refresh_token → TEXT aplicado em 05/11 11:20; API --catalog-entry-only (server.js b51d63bb); backup /var/www/mdv-api/backups/catalog-entry-1793888408695"
   }
 }

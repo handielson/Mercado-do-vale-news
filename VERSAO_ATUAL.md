@@ -1,6 +1,6 @@
 # v1.2.797-bling-token-text
 
-Data: 05/11/2026. Status: **pendente de publicação**. Branch: `main`. Só API: tokens do Bling em TEXT (reconectar o Bling voltava erro de tamanho).
+Data: 05/11/2026. Status: **publicada**. Branch: `main`. Só API: tokens do Bling em TEXT (reconectar o Bling voltava erro de tamanho).
 
 ---
 
