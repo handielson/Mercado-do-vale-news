@@ -6,7 +6,7 @@
   "tag": "v1.2.793-familia-salva-sem-rascunho",
   "release_vps": "/var/www/mdv-site/releases/20261105-095000-v1293-familia-sem-rascunho",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Editar uma família já cadastrada com cores ainda sem memória/preço (ex.: Branco e Azul do C17 Plus) não trava mais com 'Salve este cadastro como rascunho...': pai e filhos são salvos e as cores pendentes ficam só na tela. Também corrige o selo 'pendente' que aparecia na versão do menu.",
+  "summary": "Editar uma família já cadastrada não trava mais: ao abrir, o sistema não cria sozinho rascunhos das cores que só têm foto no modelo (Branco/Azul do C17 Plus, sem memória e preço). Isso agora só acontece no botão 'Atualizar variações pelas fotos do modelo'. E, se houver cor pendente, pai e filhos prontos são salvos mesmo assim. Também corrige o selo 'pendente' na versão do menu.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -30,7 +30,8 @@
     "docs/versoes/2026-11-05-v1.2.793-familia-salva-sem-rascunho.md"
   ],
   "validations": [
-    "family-registration.test 22/22"
+    "family-registration.test 23/23",
+    "family-model-photo-variations.test 3/3"
   ],
   "site_release": {
     "status": "publicada",

@@ -284,3 +284,11 @@ test('edição sem rascunho salva a família e deixa as cores sem preço só na 
   assert.match(form, /if \(pendingPriceRows\.length && !onSaveDraft\) \{[\s\S]*?toast\.success\([\s\S]*?return;\s*\}\s*if \(pendingPriceRows\.length\) \{/);
   assert.match(form, /if \(!rowsToSave\.length && !onSaveDraft\) throw new Error\(`Nada para salvar/);
 });
+
+// family-photo-rows-on-demand-v1: abrir família já cadastrada não cria rascunhos de cores só com foto.
+test('família já cadastrada só sugere cores das fotos quando pedido', () => {
+  const form = fs.readFileSync(new URL('../components/products/ProductForm.tsx', import.meta.url), 'utf8');
+  const effect = form.slice(form.indexOf('const hydrationKey = `${familyModelId}:${familyPhotoRetry}`;'), form.indexOf('buildModelPhotoVariationRows('));
+  assert.match(effect, /if \(initialData\?\.id && familyPhotoRetry === 0\) \{ familyPhotoHydratedKey\.current = hydrationKey; return; \}/);
+  assert.match(form, /onClick=\{\(\) => setFamilyPhotoRetry\(value => value \+ 1\)\}>Atualizar variações pelas fotos do modelo/);
+});

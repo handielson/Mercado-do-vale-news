@@ -404,6 +404,10 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
         if (!isParentProduct || isPrint3d || !familyModelId || !familyParentName?.trim() || familyLoading || familyLoadError || variationDraftMode) return;
         const hydrationKey = `${familyModelId}:${familyPhotoRetry}`;
         if (familyPhotoHydratedKey.current === hydrationKey) return;
+        // family-photo-rows-on-demand-v1: ao abrir uma família já cadastrada, não criar sozinho rascunhos
+        // das cores que só têm foto no modelo (ex.: Branco/Azul sem memória e preço); só no botão
+        // "Atualizar variações pelas fotos do modelo". Cadastro novo continua preenchendo automaticamente.
+        if (initialData?.id && familyPhotoRetry === 0) { familyPhotoHydratedKey.current = hydrationKey; return; }
         let active = true;
         setFamilyPhotoLoading(true); setFamilyPhotoError('');
         Promise.all([colorService.list(), modelColorImagesService.getByModel(familyModelId)]).then(([colors, imageRows]) => {
