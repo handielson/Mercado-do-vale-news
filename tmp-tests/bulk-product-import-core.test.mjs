@@ -166,9 +166,9 @@ assert.equal(payload.bling_id, 123, 'empty Bling cell must preserve existing Bli
 assert.equal(payload.specs.serial, 'SER-NEW');
 assert.equal(payload.specs.color, 'Preto');
 
+// services/bulk-products.ts saiu na etapa 6 (cadastro em massa virou a aba Planilha da Entrada).
 const coreSource = readFileSync(new URL('../services/bulkProductImportCore.js', import.meta.url), 'utf8');
-const serviceSource = readFileSync(new URL('../services/bulk-products.ts', import.meta.url), 'utf8');
-for (const [label, source] of [['core', coreSource], ['service', serviceSource]]) {
+for (const [label, source] of [['core', coreSource]]) {
   assert.doesNotMatch(
     source,
     /@supabase\/supabase-js|services\/supabase|SUPABASE_|VITE_SUPABASE|supabase\.from/i,

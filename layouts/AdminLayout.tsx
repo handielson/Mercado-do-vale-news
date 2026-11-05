@@ -342,18 +342,20 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     setMobileMenuOpen(false);
   }, [location.key]);
 
-  const mobileShortcuts = [
+  // path: caminho que acende o atalho (sem a query de `to`).
+  const mobileShortcuts: { to: string; path?: string; icon: React.ReactNode; label: string; title?: string }[] = [
     { to: '/admin/products', icon: <Package size={20} />, label: 'Produtos' },
-    { to: '/admin/products/photo-intake', icon: <Camera size={20} />, label: 'Foto', title: 'Cadastro por foto' },
+    { to: '/admin/entrada?aba=foto', path: '/admin/entrada', icon: <Camera size={20} />, label: 'Foto', title: 'Entrada' },
     { to: '/admin/inventory', icon: <ClipboardList size={20} />, label: 'Estoque' },
     { to: '/admin/products/labels', icon: <Barcode size={20} />, label: 'Etiquetas' },
   ];
-  // Atalho mais especifico vence: /admin/products/photo-intake acende "Foto", nao "Produtos".
-  const activeShortcutPath = mobileShortcuts
-    .filter(shortcut => location.pathname === shortcut.to || location.pathname.startsWith(`${shortcut.to}/`))
-    .sort((a, b) => b.to.length - a.to.length)[0]?.to || null;
-  const activeShortcut = mobileShortcuts.find(shortcut => shortcut.to === activeShortcutPath);
-  const mobileTitle = activeShortcut && activeShortcut.to.length > (activeItemPath || '').length ? (activeShortcut.title || activeShortcut.label) : (activeItemLabel || 'Painel');
+  const shortcutPath = (shortcut: { to: string; path?: string }) => shortcut.path || shortcut.to;
+  // Atalho mais especifico vence: /admin/products/labels acende "Etiquetas", nao "Produtos".
+  const activeShortcut = mobileShortcuts
+    .filter(shortcut => location.pathname === shortcutPath(shortcut) || location.pathname.startsWith(`${shortcutPath(shortcut)}/`))
+    .sort((a, b) => shortcutPath(b).length - shortcutPath(a).length)[0];
+  const activeShortcutPath = activeShortcut ? shortcutPath(activeShortcut) : null;
+  const mobileTitle = activeShortcut && shortcutPath(activeShortcut).length > (activeItemPath || '').length ? (activeShortcut.title || activeShortcut.label) : (activeItemLabel || 'Painel');
 
   return (
     <div className={cn("min-h-screen flex flex-col md:flex-row bg-slate-50", isPrint3dArea && "print3d-admin")} data-storefront={isPrint3dArea ? 'loja_3d' : 'mercado_do_vale'} data-admin-layout-build="2026-06-14-assets-refresh">
@@ -544,7 +546,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       {/* admin-mobile-shortcuts-keyboard-v1: com o teclado aberto o rodape fixo flutuava no meio da tela (iOS). */}
       {!mobileKeyboardOpen && <nav aria-label="Atalhos do celular" data-admin-mobile-shortcuts className="md:hidden fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_12px_rgba(15,23,42,0.08)]">
         {mobileShortcuts.map(shortcut => (
-          <Link key={shortcut.to} to={shortcut.to} aria-current={activeShortcutPath === shortcut.to ? 'page' : undefined} className={cn("flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold", activeShortcutPath === shortcut.to ? "text-blue-600" : "text-slate-500")}>
+          <Link key={shortcut.to} to={shortcut.to} aria-current={activeShortcutPath === shortcutPath(shortcut) ? 'page' : undefined} className={cn("flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold", activeShortcutPath === shortcutPath(shortcut) ? "text-blue-600" : "text-slate-500")}>
             {shortcut.icon}<span>{shortcut.label}</span>
           </Link>
         ))}

@@ -26,7 +26,7 @@ const productItems: QuickAccessItem[] = [
   {
     label: 'Smartphones por Foto',
     description: 'Ler etiqueta e pré-cadastrar',
-    path: '/admin/products/photo-intake',
+    path: '/admin/entrada?aba=foto',
     icon: '📷',
     cardClassName: 'bg-white border-slate-200 hover:border-cyan-400',
     iconClassName: 'bg-cyan-100 group-hover:bg-cyan-200',

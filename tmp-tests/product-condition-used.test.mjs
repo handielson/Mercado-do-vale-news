@@ -37,7 +37,8 @@ test('cadastro: as quatro opções e o campo de observação', () => {
     assert.match(src, /condition_note/, `${file}: grava em specs.condition_note`);
     assert.doesNotMatch(src, /<option value="used">Usado<\/option>/, `${file}: sem lista de opções fixa duplicada`);
   }
-  assert.match(read('components/units/UnitForm.tsx'), /ProductCondition\.SEMINOVO\}>Seminovo</);
+  // Aparelhos entram pela Entrada (o UnitForm saiu na etapa 6): a condição dela também separa seminovo de usado.
+  assert.match(read('components/entrada/ManualEntryTab.tsx'), /\{ value: 'seminovo', label: 'Seminovo' \},\s*\{ value: 'used', label: 'Usado' \}/);
 });
 
 test('site e admin mostram o selo; página do produto mostra a observação', () => {

@@ -20,7 +20,10 @@ assert.match(layout, /replace=\{mobileMenuOpen\}/, 'item do menu substitui a ent
 assert.match(layout, /openMobileGroup === group\.title \? "block" : "hidden", "md:block"/, 'grupos recolhíveis só no celular');
 assert.match(layout, /min-h-\[44px\] md:min-h-0[^"\n]*py-3 md:py-2\.5/, 'itens com altura de toque');
 assert.match(layout, /data-admin-mobile-shortcuts/, 'rodapé de atalhos');
-for (const route of ['/admin/products', '/admin/products/photo-intake', '/admin/inventory', '/admin/products/labels']) assert.ok(layout.includes(`to: '${route}'`), `atalho ${route}`);
+for (const route of ['/admin/products', '/admin/entrada?aba=foto', '/admin/inventory', '/admin/products/labels']) assert.ok(layout.includes(`to: '${route}'`), `atalho ${route}`);
+// Atalho "Foto" abre a aba Foto da Entrada e acende em qualquer aba dela (casa pelo caminho, sem a query).
+assert.match(layout, /\{ to: '\/admin\/entrada\?aba=foto', path: '\/admin\/entrada'/, 'Foto vai para a Entrada');
+assert.match(layout, /location\.pathname === shortcutPath\(shortcut\) \|\| location\.pathname\.startsWith\(`\$\{shortcutPath\(shortcut\)\}\/`\)/, 'atalho ativo compara o caminho, não a query');
 assert.match(layout, /flex-1 min-w-0 p-4 pb-24/, 'conteúdo não fica escondido atrás do rodapé');
 // Desktop preservado.
 assert.match(layout, /sidebarCollapsed \? "md:w-\[72px\] md:p-3" : "md:w-64"/);

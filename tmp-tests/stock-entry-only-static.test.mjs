@@ -22,9 +22,6 @@ function walk(dir, out = []) {
   return out;
 }
 
-// TODO(etapa 6, Task 3): QuickRegisterForm.tsx é apagado na Task 3; aí esta lista fica vazia.
-const DELETED_IN_TASK_3 = new Set([join('components', 'products', 'bulk', 'QuickRegisterForm.tsx')]);
-
 // As definições (não chamadas): vpsApiService.createUnit/createUnitsBatch e o unitService.create,
 // que embrulha vpsApiService.createUnit. Continuam para o script de manutenção e a leitura.
 const DEFINITIONS = [
@@ -36,7 +33,6 @@ const DEFINITIONS = [
 test('nenhum caminho do SPA cria unidade fora da Entrada', () => {
   const offenders = [];
   for (const file of [...walk('pages'), ...walk('components'), ...walk('services')]) {
-    if (DELETED_IN_TASK_3.has(file)) continue;
     read(file).split('\n').forEach((line, index) => {
       const creates = /\bunitService\.create\b|\bcreateUnitsBatch\b|\bcreateUnit\b/.test(line)
         || /\.post\b[^\n]*['"`]\/(table-data\/)?units(\/batch|\/bulk)?['"`]/.test(line);

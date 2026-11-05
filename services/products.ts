@@ -330,6 +330,21 @@ async function getBySku(sku: string): Promise<Product | null> {
     return transformFromDB(rows[0]);
 }
 
+/**
+ * Entrada: acha o produto pelo código bipado. EAN principal ou alternativo (GET /products/by-ean/:ean
+ * já procura nos dois); sem EAN, SKU exato. Qualquer status: produto inativo também recebe estoque.
+ * Falha de rede lança erro (não pode virar "não encontrado").
+ */
+async function findByCode(code: string): Promise<Product[]> {
+    const value = code.trim();
+    if (!value) return [];
+    const byEan = await vpsApiService.getProductByEan(value);
+    if (!byEan) throw new Error('Não foi possível consultar o produto na VPS.');
+    if (byEan.length > 0) return byEan.map(transformFromDB);
+    const bySku = await getBySku(value);
+    return bySku ? [bySku] : [];
+}
+
 async function search(query: string): Promise<Product[]> {
     const data = await vpsApiService.getProducts({ search: query, status: 'all', limit: 50, noCache: true });
     return (data || []).map(transformFromDB);
@@ -748,6 +763,7 @@ export const productService = {
     getById,
     getBySku,
     getByEan,
+    findByCode,
     create,
     update,
     delete: deleteProduct,
