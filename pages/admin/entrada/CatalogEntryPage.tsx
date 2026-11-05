@@ -8,7 +8,9 @@ import { PhotoEntryTab } from '../../../components/entrada/PhotoEntryTab';
 import { FixedVariation, loadFixedVariation } from '../../../components/entrada/FixedVariationCard';
 import { BarcodeProductLookup } from '../../../components/entrada/BarcodeProductLookup';
 import { EntryListPanel, EntryLine, EntryResult, EntryState } from '../../../components/entrada/EntryListPanel';
-import { addLines, applyPreview, commitErrorKind, emptyState, errorText, loadDraft, newBatchId, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
+import { EMPTY_COST_LOCATION, type CostLocation } from '../../../components/entrada/EntryLockFields';
+import type { SmartphonePhotoIntake } from '../../../types/smartphone-photo-intake';
+import { addLines, applyPreview, commitErrorKind, emptyState, errorText, loadDraft, newBatchId, refreshPhotoLines, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
 
 const AMBIGUOUS = 'A confirmação pode ter sido gravada. Confira novamente antes de reenviar.';
 const clearError = (r: EntryResult): EntryResult => (r?.type === 'error' ? null : r);
@@ -69,6 +71,36 @@ export const CatalogEntryPage: React.FC = () => {
     const [confirmCount, setConfirmCount] = useState(0);
     const stateRef = useRef(state);
     stateRef.current = state;
+
+    // Linhas que vieram do rascunho ao abrir a página (entrada anterior). As que entram depois não contam.
+    const restoredKeys = useRef<Set<string> | null>(null);
+    if (restoredKeys.current === null) restoredKeys.current = new Set(state.lines.map(l => l.key));
+    const restoredCount = state.lines.filter(l => restoredKeys.current!.has(l.key)).length;
+    // Atalho ?variacao= com linhas antigas na lista: avisa uma vez por variação.
+    const [oldDraftFor, setOldDraftFor] = useState<string | null>(null);
+    const noticedVariations = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        if (!variacaoParam || noticedVariations.current.has(variacaoParam)) return;
+        noticedVariations.current.add(variacaoParam);
+        const restored = restoredKeys.current!;
+        if (stateRef.current.lines.some(l => restored.has(l.key))) setOldDraftFor(variacaoParam);
+    }, [variacaoParam]);
+    const showOldDraft = Boolean(variacaoParam) && oldDraftFor === variacaoParam && restoredCount > 0;
+    // "Limpar a lista": como depois de uma confirmação, lista, rascunho e client_batch_id começam do zero.
+    const clearOldDraft = () => {
+        setResult(null);
+        setState(emptyState() as EntryState);
+        setOldDraftFor(null);
+    };
+
+    // Custo e local de Manual e Bipar ficam na página: trocar de variação desmonta a aba enquanto carrega.
+    const [manualCostLocation, setManualCostLocation] = useState<CostLocation>(EMPTY_COST_LOCATION);
+    const [scanCostLocation, setScanCostLocation] = useState<CostLocation>(EMPTY_COST_LOCATION);
+
+    // A fila de foto carregou ou mudou: rótulo e identidades das linhas de foto acompanham o pré-cadastro.
+    const onPhotoQueueLoaded = useCallback((items: SmartphonePhotoIntake[]) => {
+        setState(s => refreshPhotoLines(s, items) as EntryState);
+    }, []);
 
     useEffect(() => {
         const storage = safeStorage();
@@ -178,6 +210,20 @@ export const CatalogEntryPage: React.FC = () => {
         <div className="space-y-4 max-w-5xl mx-auto">
             <h1 className="text-2xl font-bold text-gray-800">Entrada</h1>
 
+            {showOldDraft && (
+                <div role="status" className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    <span className="flex-1 min-w-0">Há {restoredCount} linha(s) de uma entrada anterior na lista.</span>
+                    <button type="button" onClick={clearOldDraft} disabled={busy}
+                        className="px-3 py-1.5 rounded-md border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 disabled:opacity-50">
+                        Limpar a lista
+                    </button>
+                    <button type="button" onClick={() => setOldDraftFor(null)}
+                        className="px-3 py-1.5 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
+                        Manter
+                    </button>
+                </div>
+            )}
+
             <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
                 <div role="tablist" aria-label="Forma de entrada" className="flex gap-1 border-b border-gray-200">
                     {TABS.map(t => (
@@ -196,12 +242,13 @@ export const CatalogEntryPage: React.FC = () => {
                     ) : (
                         <>
                             {tab === 'manual' && <ManualEntryTab onAddLines={onAddLines} busy={busy} prefill={modeloParam ? { model_id: modeloParam } : undefined}
-                                fixed={fixed} onClearFixed={clearFixed} />}
-                            {tab === 'bipar' && <ScanEntryTab onAddLines={onAddLines} busy={busy} existingState={state} fixed={fixed} onClearFixed={clearFixed} />}
+                                fixed={fixed} onClearFixed={clearFixed} costLocation={{ value: manualCostLocation, onChange: setManualCostLocation }} />}
+                            {tab === 'bipar' && <ScanEntryTab onAddLines={onAddLines} busy={busy} existingState={state} fixed={fixed} onClearFixed={clearFixed}
+                                costLocation={{ value: scanCostLocation, onChange: setScanCostLocation }} />}
                         </>
                     )}
                     {tab === 'planilha' && <SpreadsheetEntryTab onAddLines={onAddLines} busy={busy} existingState={state} />}
-                    {tab === 'foto' && <PhotoEntryTab onAddLines={onAddLines} busy={busy} existingState={state} confirmCount={confirmCount} />}
+                    {tab === 'foto' && <PhotoEntryTab onAddLines={onAddLines} busy={busy} existingState={state} confirmCount={confirmCount} onQueueLoaded={onPhotoQueueLoaded} />}
                 </div>
             </div>
 
