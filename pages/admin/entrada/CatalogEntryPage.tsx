@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { catalogEntries, EntryItem } from '../../../services/catalogEntries';
 import { ScanEntryTab } from '../../../components/entrada/ScanEntryTab';
 import { SpreadsheetEntryTab } from '../../../components/entrada/SpreadsheetEntryTab';
 import { ManualEntryTab } from '../../../components/entrada/ManualEntryTab';
+import { PhotoEntryTab } from '../../../components/entrada/PhotoEntryTab';
 import { EntryListPanel, EntryLine, EntryResult, EntryState } from '../../../components/entrada/EntryListPanel';
 import { addLines, applyPreview, commitErrorKind, emptyState, errorText, loadDraft, newBatchId, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
 
@@ -24,13 +25,6 @@ const TABS: { id: EntryTab; label: string }[] = [
 
 const safeStorage = (): Storage | null => { try { return window.localStorage; } catch { return null; } };
 
-const ComingSoon: React.FC<{ to: string; label: string }> = ({ to, label }) => (
-    <div className="text-sm text-gray-600 space-y-2">
-        <p>Em breve nesta tela (use as telas atuais por enquanto)</p>
-        <Link to={to} className="text-blue-600 underline">{label}</Link>
-    </div>
-);
-
 export const CatalogEntryPage: React.FC = () => {
     const [params, setParams] = useSearchParams();
     const requested = params.get('aba') as EntryTab | null;
@@ -45,6 +39,8 @@ export const CatalogEntryPage: React.FC = () => {
     });
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState<EntryResult>(null);
+    // Conta as tentativas de confirmação: a aba Foto recarrega a fila (o pré-cadastro pode ter sido concluído).
+    const [confirmCount, setConfirmCount] = useState(0);
     const stateRef = useRef(state);
     stateRef.current = state;
 
@@ -133,6 +129,7 @@ export const CatalogEntryPage: React.FC = () => {
             }
         } finally {
             setBusy(false);
+            setConfirmCount(c => c + 1);
         }
     }, [runPreview]);
 
@@ -159,7 +156,7 @@ export const CatalogEntryPage: React.FC = () => {
                     {tab === 'manual' && <ManualEntryTab onAddLines={onAddLines} busy={busy} prefill={modeloParam ? { model_id: modeloParam } : undefined} />}
                     {tab === 'bipar' && <ScanEntryTab onAddLines={onAddLines} busy={busy} existingState={state} prefill={variacaoParam ? { variation_id: variacaoParam } : undefined} />}
                     {tab === 'planilha' && <SpreadsheetEntryTab onAddLines={onAddLines} busy={busy} existingState={state} />}
-                    {tab === 'foto' && <ComingSoon to="/admin/products/photo-intake" label="Cadastro por foto (tela atual)" />}
+                    {tab === 'foto' && <PhotoEntryTab onAddLines={onAddLines} busy={busy} existingState={state} confirmCount={confirmCount} />}
                 </div>
             </div>
 
