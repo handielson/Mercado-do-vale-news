@@ -34,3 +34,9 @@ test('fluxos automatico e manual passam pelo helper', () => {
   const src = fs.readFileSync(path.join(__dirname, '../scripts/shopee-auto-print.cjs'), 'utf8');
   assert.equal((src.match(/await writeShopeeThermalLabel\(/g) || []).length, 2);
 });
+
+test('Atualizar servico: npm.cmd roda com shell no Windows (evita spawn EINVAL)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../scripts/shopee-auto-print.cjs'), 'utf8');
+  const block = src.slice(src.indexOf('async function pullPrinterServiceUpdate'), src.indexOf('function normalizePrinterNames'));
+  assert.match(block, /shell: process\.platform === 'win32'/);
+});

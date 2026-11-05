@@ -562,7 +562,8 @@ async function pullPrinterServiceUpdate() {
     const { stdout: installStdout, stderr: installStderr } = await execFileAsync(
         npmCommand,
         ['install', '--omit=dev', '--no-audit', '--no-fund'],
-        { cwd: projectRoot, windowsHide: true, timeout: 180000 },
+        // Node >= 18.20.2/20.12.2 no Windows recusa executar .cmd sem shell (spawn EINVAL).
+        { cwd: projectRoot, windowsHide: true, timeout: 180000, shell: process.platform === 'win32' },
     );
     return [pullStdout, pullStderr, installStdout, installStderr]
         .filter(Boolean)
