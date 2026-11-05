@@ -38,8 +38,17 @@ export async function loadFixedVariation(id: string): Promise<FixedVariation> {
 
     // Como no servidor: a categoria do modelo decide; sem modelo, a do produto.
     const modelId = product.model_id ? String(product.model_id) : '';
-    const model = modelId ? await modelService.getById(modelId).catch(() => null) as { category_id?: string | null } | null : null;
-    const categoryId = (model?.category_id ?? product.category_id ?? null) as string | null;
+    let model: { category_id?: string | null } | null = null;
+    if (modelId) {
+        try {
+            model = await modelService.getById(modelId) as { category_id?: string | null } | null;
+        } catch {
+            throw new Error(LOAD_ERROR);
+        }
+        if (!model) throw new Error(LOAD_ERROR);
+    }
+    // Com modelo, vale só a categoria do modelo (mesmo vazia), como em isPhone do servidor.
+    const categoryId = (modelId ? (model?.category_id ?? null) : (product.category_id ?? null)) as string | null;
     let categoryName: string | undefined;
     if (categoryId) {
         const category = await categoryService.getById(categoryId).catch(() => undefined) as { name?: string } | null | undefined;
@@ -48,9 +57,10 @@ export async function loadFixedVariation(id: string): Promise<FixedVariation> {
     }
     const isPhone = isSmartphoneModel({ category_name: categoryName });
     // Produto que não é celular mas já tem unidades continua por unidade (o servidor recusa misturar).
+    // Falha de rede não pode virar "por quantidade" em silêncio: o servidor recusaria a linha.
     const unitTracked = isPhone ? false : await unitService.listByProduct(String(product.id ?? id))
         .then(list => Array.isArray(list) && list.length > 0)
-        .catch(() => false);
+        .catch(() => { throw new Error(LOAD_ERROR); });
     const images = Array.isArray(product.images) ? product.images as unknown[] : [];
     return {
         id: String(product.id ?? id),

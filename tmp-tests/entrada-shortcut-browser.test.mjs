@@ -21,7 +21,7 @@ function Probe() {
 createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={[window.__url]}><Probe /><CatalogEntryPage /></MemoryRouter>);`;
 
 let script;
-async function setup(t, url, { hold = false } = {}) {
+async function setup(t, url, { hold = false, failUnits = false } = {}) {
     if (!script) {
         const bundled = await build({
             configFile: false, logLevel: 'error',
@@ -50,9 +50,10 @@ async function setup(t, url, { hold = false } = {}) {
     const errors = [];
     page.setDefaultTimeout(5000);
     page.on('pageerror', e => errors.push(e.message));
-    await page.addInitScript(({ url, fixtures, hold }) => {
+    await page.addInitScript(({ url, fixtures, hold, failUnits }) => {
         window.__url = url;
         window.fixtures = fixtures;
+        if (failUnits) window.fixtures.units = new Proxy({}, { get: () => { throw new Error('rede'); } });
         if (hold) {
             // Segura o produto até o teste liberar: o stub devolve a promessa (async adota o valor).
             const products = fixtures.products;
@@ -61,7 +62,7 @@ async function setup(t, url, { hold = false } = {}) {
             window.release = () => release();
             window.fixtures.products = new Proxy({}, { get: (_, id) => gate.then(() => products[id] || null) });
         }
-    }, { url, fixtures: { ...defaultFixtures, ...photoFixtures }, hold });
+    }, { url, fixtures: { ...defaultFixtures, ...photoFixtures }, hold, failUnits });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     return { page, errors };
 }
@@ -240,4 +241,10 @@ test('?aba=manual&modelo= continua preenchendo o modelo e acompanha a troca do p
     assert.equal(await modelBox(page).inputValue(), 'Redmi 15');
     await page.evaluate(() => window.__navigate('/admin/entrada?aba=manual&modelo=m3'));
     await page.waitForFunction(() => document.querySelector('[role="combobox"]')?.value === 'Poco X8');
+});
+
+test('?variacao= de acessório com falha ao ler as unidades avisa e não prende (não chuta quantidade)', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, '/admin/entrada?variacao=p4', { failUnits: true });
+    await page.getByText('Não foi possível carregar a variação.').waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Trocar' }).count(), 0);
 });
