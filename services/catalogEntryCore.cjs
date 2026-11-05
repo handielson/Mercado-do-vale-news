@@ -62,15 +62,16 @@ function normalizeEntryItem(raw, index) {
   const quantity = r.quantity === undefined || r.quantity === null || r.quantity === '' ? 1 : Number(r.quantity);
   const battery = r.battery_health === undefined || r.battery_health === null || r.battery_health === '' ? null : Number(r.battery_health);
   const CONDITIONS = ['new', 'seminovo', 'used', 'open_box'];
+  const productId = orNull(r.product_id);
   const conditionText = text(cfg.condition).toLowerCase();
-  const condition = conditionText === '' ? 'new' : conditionText;
-  if (!CONDITIONS.includes(condition)) errors.push('Condição inválida.');
+  // Com product_id e sem condição, fica null: o servidor usa a condição do próprio produto.
+  const condition = conditionText === '' ? (productId ? null : 'new') : conditionText;
+  if (condition !== null && !CONDITIONS.includes(condition)) errors.push('Condição inválida.');
   const costParsed = cents(r.cost_cents);
   if (costParsed === null) errors.push('Custo inválido.');
   const prices = normalizePrices(r.prices, errors);
   // Com product_id (atalhos), o produto já está escolhido: modelo, categoria, nome, configuração e cor
   // do cliente são ignorados (nem exigidos nem usados). A condição continua: é da unidade que entra.
-  const productId = orNull(r.product_id);
   const keep = value => (productId ? null : orNull(value));
   return {
     line: index + 1,

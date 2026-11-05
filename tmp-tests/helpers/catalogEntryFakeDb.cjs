@@ -70,6 +70,12 @@ function fakeDb(seed = {}) {
     if (/^ROLLBACK TO SAVEPOINT (\w+)/.test(s)) { restore(savepoints.get(s.split(' ')[3])); return [{}]; }
     if (/^RELEASE SAVEPOINT/.test(s)) return [{}];
     if (s === 'SELECT id FROM models WHERE id=? FOR UPDATE') return [state.models.filter(m => m.id === args[0]).map(m => ({ id: m.id }))];
+    // Linhas com product_id: leitura sem trava, depois modelos e produtos travados em ordem.
+    if (s === 'SELECT id,model_id FROM products WHERE id IN (?)') return [state.products.filter(p => args[0].includes(p.id)).map(p => ({ id: p.id, model_id: p.model_id ?? null }))];
+    if (s === 'SELECT id FROM models WHERE id IN (?) ORDER BY id FOR UPDATE')
+      return [state.models.filter(m => args[0].includes(m.id)).map(m => ({ id: m.id })).sort((a, b) => a.id.localeCompare(b.id))];
+    if (s === 'SELECT * FROM products WHERE id IN (?) ORDER BY id FOR UPDATE')
+      return [structuredClone(state.products.filter(p => args[0].includes(p.id)).sort((a, b) => a.id.localeCompare(b.id)))];
     if (s.includes('FROM models m')) return [structuredClone(state.models.filter(m => m.id === args[0]))];
     if (s.startsWith('SELECT id,name FROM categories')) return [state.categories.filter(c => c.id === args[0])];
     if (s.includes('FROM stock_locations')) return [state.locations.filter(l => l.id === args[0])];

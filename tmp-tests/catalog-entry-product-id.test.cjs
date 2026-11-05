@@ -199,3 +199,79 @@ test('duas linhas com product_id no mesmo lote (celular e acessório) e uma por 
   assert.equal(db.state.psl.find(r => r.product_id === 'A1').quantity, 3);
   assert.deepEqual(productInserts(db), []);
 });
+
+test('combo com product_id é erro da linha e nada é gravado', async () => {
+  const db = fakeDb({ products: [capaRow({ is_combo: 1 })] });
+  const r = await runCatalogEntry(db.pool, [{ source: 'atalho', product_id: 'A1', quantity: 2, location_id: 'L1' }], { commit: true, expectedHash: 'x', deps: db.deps });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.plan[0].errors, ['Combo/oferta não recebe estoque: dê entrada nos produtos que o compõem.']);
+  assert.equal(db.state.psl.length, 0); assert.equal(db.state.movements.length, 0);
+});
+
+test('oferta (offer_type) com product_id é erro da linha', async () => {
+  const db = fakeDb({ products: [capaRow({ offer_type: 'kit' })] });
+  const r = await runCatalogEntry(db.pool, [{ source: 'atalho', product_id: 'A1', quantity: 2, location_id: 'L1' }], { commit: false, deps: db.deps });
+  assert.deepEqual(r.plan[0].errors, ['Combo/oferta não recebe estoque: dê entrada nos produtos que o compõem.']);
+});
+
+test('impressão 3D com product_id é aceita (estoque por quantidade)', async () => {
+  const db = fakeDb({ products: [capaRow({ is_print3d: 1 })] });
+  const { result } = await previewAndCommit(db, [{ source: 'atalho', product_id: 'A1', quantity: 2, location_id: 'L1' }]);
+  assert.equal(result.plan[0].product_id, 'A1');
+  assert.equal(db.state.psl[0].quantity, 2); assert.equal(db.state.movements[0].movement_type, 'in');
+});
+
+test('o lote trava modelos e depois produtos dos product_id, em ordem, antes de qualquer linha (pré-cadastros vêm antes)', async () => {
+  const db = fakeDb({ products: [parentRow, childRow(), childRow({ id: 'V2', sku: 'REDM0001-02', specs: JSON.stringify({ ram: '8GB', storage: '256GB', color: 'Azul' }) }), capaRow()] });
+  const items = [byId({ product_id: 'V2', identity: { imei1: IMEI_B } }), { source: 'atalho', product_id: 'A1', quantity: 1, location_id: 'L1' }, byId()];
+  const r = await runCatalogEntry(db.pool, items, { commit: false, deps: db.deps });
+  assert.equal(r.ok, true, JSON.stringify(r.plan));
+  const norm = db.log.map(sql => sql.replace(/\s+/g, ' ').trim());
+  const begin = norm.indexOf('BEGIN');
+  const read = norm.indexOf('SELECT id,model_id FROM products WHERE id IN (?)');
+  const models = norm.indexOf('SELECT id FROM models WHERE id IN (?) ORDER BY id FOR UPDATE');
+  const products = norm.indexOf('SELECT * FROM products WHERE id IN (?) ORDER BY id FOR UPDATE');
+  const firstLine = norm.findIndex(sql => sql.startsWith('SAVEPOINT'));
+  const firstRef = norm.findIndex(sql => /FROM models m|FROM categories|FROM stock_locations/.test(sql));
+  assert.ok(begin >= 0 && begin < read && read < models && models < products, 'BEGIN → leitura → modelos → produtos');
+  assert.ok(products < firstLine && products < firstRef, 'travas antes de qualquer linha e de qualquer referência');
+  assert.equal(norm.filter(sql => sql === 'SELECT * FROM products WHERE id IN (?) ORDER BY id FOR UPDATE').length, 1);
+  assert.ok(!norm.some(sql => sql === 'SELECT * FROM products WHERE id=? FOR UPDATE'), 'sem trava produto a produto');
+});
+
+test('o lote misto trava pré-cadastros de foto antes dos modelos e produtos dos product_id', async () => {
+  const db = fakeDb({ products: [parentRow, childRow()], intakes: [{ id: 'I1', status: 'ready_to_finalize' }] });
+  const deps = { ...db.deps, finalizePhotoIntake: async () => { throw Object.assign(new Error('pré-cadastro incompleto'), { statusCode: 422 }); } };
+  await runCatalogEntry(db.pool, [{ source: 'foto', photo_intake_id: 'I1', location_id: 'L1' }, byId()], { commit: false, deps });
+  const norm = db.log.map(sql => sql.replace(/\s+/g, ' ').trim());
+  const intakes = norm.indexOf('SELECT id FROM smartphone_photo_intakes WHERE id IN (?) ORDER BY id FOR UPDATE');
+  const models = norm.indexOf('SELECT id FROM models WHERE id IN (?) ORDER BY id FOR UPDATE');
+  const products = norm.indexOf('SELECT * FROM products WHERE id IN (?) ORDER BY id FOR UPDATE');
+  assert.ok(intakes >= 0 && intakes < models && models < products, 'pré-cadastros → modelos → produtos');
+});
+
+test('sem condição na linha, a unidade herda a condição do produto; condição explícita do cliente vale', async () => {
+  assert.equal(normalizeEntryItem({ source: 'atalho', product_id: 'V' }, 0).configuration.condition, null);
+  assert.equal(normalizeEntryItem({ source: 'manual' }, 0).configuration.condition, 'new');
+  const semi = childRow({ specs: JSON.stringify({ ram: '8GB', storage: '256GB', version: 'Global', color: 'Verde', condition: 'seminovo' }) });
+  let db = fakeDb({ products: [parentRow, semi] });
+  await previewAndCommit(db, [byId()]);
+  assert.equal(db.state.units[0].condition, 'seminovo');
+  db = fakeDb({ products: [parentRow, semi] });
+  await previewAndCommit(db, [byId({ configuration: { condition: 'new' } })]);
+  assert.equal(db.state.units[0].condition, 'new');
+  // Sem configuração (sem RAM/armazenamento): specs.condicao do produto; desconhecida → 'new'.
+  db = fakeDb({ products: [parentRow, childRow({ specs: JSON.stringify({ condicao: 'Usado' }) })] });
+  await previewAndCommit(db, [byId()]);
+  assert.equal(db.state.units[0].condition, 'used');
+  db = fakeDb({ products: [parentRow, childRow({ specs: JSON.stringify({ condicao: 'vitrine' }) })] });
+  await previewAndCommit(db, [byId()]);
+  assert.equal(db.state.units[0].condition, 'new');
+});
+
+test('pai ou produto inexistente mostra o próprio erro mesmo sem IMEI', async () => {
+  const db = fakeDb({ products: [parentRow, childRow()] });
+  const r = await runCatalogEntry(db.pool, [byId({ product_id: 'P', identity: {} }), byId({ product_id: 'nao-existe', identity: {} })], { commit: false, deps: db.deps });
+  assert.equal(r.plan[0].errors[0], 'Este é o produto pai da família. Escolha a variação (cor/memória).');
+  assert.equal(r.plan[1].errors[0], 'Produto não encontrado.');
+});

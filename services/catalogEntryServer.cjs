@@ -89,13 +89,27 @@ async function loadCategoryRef(ctx, categoryId) {
   }
 }
 
+// Linhas com product_id: trava tudo antes de qualquer linha, sempre na ordem pré-cadastros de foto (já
+// travados antes, em runCatalogEntry) → modelos → produtos, cada grupo ordenado por id. Modelo antes dos
+// produtos é a mesma ordem de resolveFamily e da rota antiga. A leitura sem trava só descobre os modelos;
+// o que vale é a linha travada em seguida.
+async function lockFixedProducts(ctx, items) {
+  const ids = [...new Set(items.map(item => item.product_id).filter(Boolean))].sort();
+  if (!ids.length) return;
+  const { conn } = ctx;
+  const [found] = await conn.query('SELECT id,model_id FROM products WHERE id IN (?)', [ids]);
+  const modelIds = [...new Set(found.map(row => row.model_id).filter(Boolean))].sort();
+  if (modelIds.length) await conn.query('SELECT id FROM models WHERE id IN (?) ORDER BY id FOR UPDATE', [modelIds]);
+  const [rows] = await conn.query('SELECT * FROM products WHERE id IN (?) ORDER BY id FOR UPDATE', [ids]);
+  for (const id of ids) ctx.products.set(id, rows.find(row => row.id === id) || null);
+}
+
 async function loadRefs(ctx, item) {
   const { conn } = ctx;
-  // Linha com product_id (atalho): trava o produto já na carga (dentro da transação do lote). O modelo
-  // (ou a categoria) do produto decide se é celular, para a validação e o modo de estoque.
-  if (item.product_id && !ctx.products.has(item.product_id)) {
-    const [[product]] = await conn.query('SELECT * FROM products WHERE id=? FOR UPDATE', [item.product_id]);
-    ctx.products.set(item.product_id, product || null);
+  // Linha com product_id (atalho): o produto já foi travado por lockFixedProducts. O modelo (ou a categoria)
+  // do produto decide se é celular, para a validação e o modo de estoque.
+  if (item.product_id) {
+    const product = ctx.products.get(item.product_id);
     if (product?.model_id) await loadModelRef(ctx, product.model_id);
     if (product?.category_id) await loadCategoryRef(ctx, product.category_id);
   }
@@ -341,14 +355,31 @@ async function resolveSimple(ctx, item, line) {
 // Linha com product_id (atalho): o produto já vem escolhido. Não cria família, variação nem SKU e não
 // mexe em preço: daqui em diante é o mesmo caminho da variação existente (modo de estoque, identidade,
 // local, custo e movimentação em resolveItem).
+// Erro do próprio produto escolhido (independe do resto da linha). Impressão 3D é aceita.
+function productRefError(product) {
+  if (!product) return 'Produto não encontrado.';
+  if (Number(product.is_parent) === 1) return 'Este é o produto pai da família. Escolha a variação (cor/memória).';
+  if (Number(product.is_combo) === 1 || product.offer_type) return 'Combo/oferta não recebe estoque: dê entrada nos produtos que o compõem.';
+  return null;
+}
+
+const UNIT_CONDITIONS = { new: 'new', novo: 'new', seminovo: 'seminovo', used: 'used', usado: 'used', open_box: 'open_box', 'caixa aberta': 'open_box' };
+// Condição da unidade quando a linha não traz: a do produto (configuração ou specs), senão 'new'.
+function productCondition(product, model) {
+  const specs = core.object(product.specs);
+  const raw = core.configuration(product, model || {})?.condition ?? norm(specs.condition ?? specs.condicao ?? product.condition);
+  return UNIT_CONDITIONS[raw] || 'new';
+}
+
 function resolveProductId(ctx, item, line, location) {
   const product = ctx.products.get(item.product_id);
-  if (!product) throw lineError('Produto não encontrado.');
-  if (Number(product.is_parent) === 1) throw lineError('Este é o produto pai da família. Escolha a variação (cor/memória).');
+  const refError = productRefError(product);
+  if (refError) throw lineError(refError);
   const company = scope(product.company_id, ctx.defaultCompanyId);
   if (company !== scope(location.company_id, ctx.defaultCompanyId)) throw lineError('Produto pertence a outra empresa.');
   Object.assign(line, { family: 'existing', variation: 'existing', price_source: 'existing', sku: product.sku ?? null });
-  return { id: product.id, company_id: company, familyCreated: false, variationCreated: false };
+  return { id: product.id, company_id: company, familyCreated: false, variationCreated: false,
+    condition: productCondition(product, product.model_id ? ctx.models.get(product.model_id) : null) };
 }
 
 async function addUnit(ctx, item, target, location) {
@@ -399,7 +430,10 @@ async function resolveItem(ctx, item, line) {
   if (kind !== line.stock.kind) throw lineError(`Este produto controla estoque por ${STOCK_LABEL[kind]}; ajuste a linha.`);
   // Produto criado neste lote não tem id estável entre prévia e confirmação: o plano mostra só o SKU previsto.
   line.product_id = ctx.created.has(target.id) ? null : target.id;
-  const unitId = line.stock.kind === 'unit' ? await addUnit(ctx, item, target, location) : null;
+  // Atalho sem condição na linha: a unidade herda a condição do produto; condição explícita do cliente vale.
+  const unitItem = fixed && item.configuration.condition == null
+    ? { ...item, configuration: { ...item.configuration, condition: fixed.condition } } : item;
+  const unitId = line.stock.kind === 'unit' ? await addUnit(ctx, unitItem, target, location) : null;
   if (!unitId) await addQuantity(ctx, item, target, location);
   return { line: item.line, product_id: target.id, unit_id: unitId, quantity: item.quantity,
     family_created: target.familyCreated ? 1 : 0, variation_created: target.variationCreated ? 1 : 0 };
@@ -508,6 +542,7 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
       models: new Map(), products: new Map(), categories: new Map(), locations: new Map(), requestHeaders };
     // Só id com conteúdo vai para a foto (só espaços segue a validação comum, com os erros de linha dela).
     const normalized = rawItems.map((raw, index) => (isPhotoRaw(raw) ? normalizePhotoEntryItem : normalizeEntryItem)(raw, index));
+    await lockFixedProducts(ctx, normalized);
     for (const item of normalized) await loadRefs(ctx, item);
     // Linhas de foto não passam pela validação do item manual (os dados vêm do pré-cadastro).
     const validated = new Map(validateEntryBatch(normalized.filter(item => !item.photo_intake_id), { isSmartphone: item => isPhone(ctx, item) })
@@ -520,6 +555,9 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
       const line = { line: item.line, product_id: null, sku: null, family: null, variation: null, price_source: null,
         stock: photo ? { kind: 'unit', quantity: 1 } : { kind: stockKind(ctx, item), quantity: item.quantity }, errors: [...item.errors],
         ...(photo ? { photo_intake_id: item.photo_intake_id } : {}) };
+      // O erro do produto escolhido aparece mesmo com outros erros na linha (ex.: pai sem IMEI).
+      const refError = item.product_id ? productRefError(ctx.products.get(item.product_id)) : null;
+      if (refError && !line.errors.includes(refError)) line.errors.unshift(refError);
       plan.push(line);
       if (line.errors.length) continue;
       const savepoint = `catalog_entry_line_${item.line}`;
