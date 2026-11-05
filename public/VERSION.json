@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.789-comprovante-qr-bot-seminovo",
+  "version": "v1.2.790-etiqueta-pf-shopee-g",
   "date": "2026-11-04",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.789-comprovante-qr-bot-seminovo",
+  "tag": "v1.2.790-etiqueta-pf-shopee-g",
   "release_vps": "/var/www/mdv-site/releases/20261104-225000-v1289-comprovante-qr",
   "api_release": {
     "status": "publicada",
     "note": "meta-catalog-feed + sales-marketplaces; server.js sha eff76620; backups /var/www/mdv-api/backups/meta-catalog-feed-1793843156587 e sales-marketplaces-1793843168623"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Inclui a v1.2.788 (condição Seminovo/Usado com observação). Comprovante de separação Shopee/ML/TikTok: quadro destacado com LOCAL (peças em cada local) e ESTOQUE TOTAL (aviso de ÚLTIMA PEÇA), e QR Code da página do produto em cada item. Robô do WhatsApp (n8n): seminovo/usado não se funde mais ao novo e sai em mensagem própria 'Seminovos | Usados' com a observação.",
+  "summary": "Agente de impressão: o ajuste da etiqueta da Shopee G (vendedor PF) que só existia no PC da loja entra no repositório (só a 1a página vai para o recorte 10x15; o PDF original fica salvo ao lado). PC da loja volta a atualizar pelo botão Atualizar serviço. Sem mudança no site/API (site segue a release da v1.2.789).",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -27,47 +27,23 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-04-v1.2.788-condicao-seminovo-usado.md",
-    "docs/versoes/2026-11-04-v1.2.789-comprovante-qr-bot-seminovo.md",
-    "public/VERSION.json",
-    "scripts/deploy-n8n-used-condition-list.cjs",
-    "scripts/mercado-livre-print-agent.cjs",
-    "scripts/mercado-livre-print-core.cjs",
-    "scripts/n8n-sales-regression-gate.cjs",
-    "scripts/n8n-used-condition-list.cjs",
-    "scripts/receipt-stock-location.cjs",
     "scripts/shopee-auto-print.cjs",
-    "scripts/shopee-separation-summary.cjs",
-    "scripts/tiktok-shop-print-agent.cjs",
-    "tmp-tests/n8n-used-condition-list.test.cjs",
-    "tmp-tests/receipt-stock-location.test.cjs",
-    "tmp-tests/shopee-dual-thermal-print-flow-static.test.mjs",
-    "tmp-tests/shopee-separation-summary.test.cjs",
-    "tmp-tests/tiktok-auto-print.test.cjs",
-    "vps_server.cjs",
-    "vps_server.js"
+    "tmp-tests/shopee-pf-label.test.cjs",
+    "public/VERSION.json",
+    "VERSAO_ATUAL.md",
+    "docs/versoes/2026-11-05-v1.2.790-etiqueta-pf-shopee-g.md"
   ],
   "validations": [
-    "receipt-stock-location (6) + shopee-separation-summary + mercado-livre-core (8) + mercado-livre-print-agent (12) + tiktok-auto-print + estáticos Shopee: ok",
-    "QRs decodificados a 203 dpi (zxing): 3/3 ML, 3/3 TikTok, 1 por folha Shopee",
-    "n8n: gate 129/129 no candidato (sha256 0be411f7…), dry-run contra produção ok (fluxo atual 36113bfc…)",
-    "página do produto com estoque 0 abre (HTTP 200; API devolve fotos)"
+    "tmp-tests/shopee-pf-label.test.cjs 3/3",
+    "shopee-label-core + receipt-stock-location 8/8",
+    "shopee-dual-thermal-print-flow-static ok"
   ],
   "site_release": {
     "status": "publicada",
     "release": "/var/www/mdv-site/releases/20261104-225000-v1289-comprovante-qr",
     "published_at": "2026-11-04T22:50:00-03:00"
   },
-  "n8n_release": {
-    "status": "publicada",
-    "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "36113bfc",
-    "after": "0be411f7",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-05T01-49-31-499Z-19e46ce2.aes256gcm.json"
-  },
   "printer_agent_release": {
-    "status": "publicada",
-    "note": "PC da loja: arquivos copiados (git pull bloqueado por hotfix local); backup em printer-service\\backup-v1289; pm2 shopee-auto-print reiniciado"
+    "status": "pendente"
   }
 }

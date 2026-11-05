@@ -1,3 +1,10 @@
+# v1.2.790-etiqueta-pf-shopee-g
+
+Data: 05/11/2026. Branch: `main`. Só agente de impressão (PC da loja); site/API seguem a v1.2.789-comprovante-qr-bot-seminovo.
+Etiqueta da Shopee G (PF): só a 1a página vai para o recorte 10x15; o original fica salvo. Ajuste que existia só no PC da loja agora está no repositório.
+
+---
+
 # v1.2.789-comprovante-qr-bot-seminovo
 
 Data: 04/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261104-225000-v1289-comprovante-qr`, API, n8n e PC da loja). Branch: `main`. Inclui a v1.2.788 (condição Seminovo/Usado).

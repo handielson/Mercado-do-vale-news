@@ -11,7 +11,7 @@ const {
 const { receiptStockInfo, receiptStockMap } = require('./receipt-stock-location.cjs');
 const { expandShopeeLabelForThermalPaper } = require('./shopee-label-core.cjs');
 const { createMercadoLivreSummaryPdf } = require('./mercado-livre-print-core.cjs');
-const { prepareMercadoLivreSummaryPrinter } = require('./mercado-livre-print-agent.cjs');
+const { prepareMercadoLivreSummaryPrinter, keepFirstPdfPages } = require('./mercado-livre-print-agent.cjs');
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -796,7 +796,7 @@ function startLocalServer() {
                             }, connection.id);
                             if (document.ok && document.buffer?.length && document.contentType.includes('pdf')) {
                                 const tempPdfPath = path.join(shippingLabelsDir, `MANUAL_${connection.id === 'primary' ? '' : 'G_'}${orderSn}_etiqueta-10x15.pdf`);
-                                fs.writeFileSync(tempPdfPath, await expandShopeeLabelForThermalPaper(document.buffer));
+                                await writeShopeeThermalLabel({ pdfBuffer: document.buffer, connection, labelPath: tempPdfPath });
                                 await ptp.print(tempPdfPath, {
                                     printer: settings.shopee_printer_thermal,
                                     paperSize: '4x6',
@@ -854,6 +854,20 @@ function startLocalServer() {
     server.listen(8081, '127.0.0.1', () => {
         console.log("Servidor local ativo! Escutando na porta 8081.");
     });
+}
+
+// shopee-pf-label-v1: um pedido de vendedor PF (Shopee G) vem com a etiqueta na
+// 1a pagina e a declaracao de conteudo (DACE) em pagina inteira anexa. So a 1a
+// pagina passa pelo recorte de quadrante; o original fica salvo ao lado.
+async function writeShopeeThermalLabel({ pdfBuffer, connection, labelPath }) {
+    let labelSource = pdfBuffer;
+    if (connection?.sellerType === 'individual') {
+        const originalPath = labelPath.replace(/_etiqueta-10x15\.pdf$/, '_documento-shopee-original.pdf');
+        if (originalPath === labelPath) throw new Error('Nome do arquivo de etiqueta inválido.');
+        fs.writeFileSync(originalPath, pdfBuffer);
+        labelSource = await keepFirstPdfPages(pdfBuffer, 1);
+    }
+    fs.writeFileSync(labelPath, await expandShopeeLabelForThermalPaper(labelSource));
 }
 
 function delay(ms) { return new Promise(res => setTimeout(res, ms)); }
@@ -1072,7 +1086,7 @@ async function processShopeePrintConnection(settings, connection, ptp) {
 
                 currentStage = 'label_print';
                 const labelPath = path.join(shippingLabelsDir, `${filePrefix}${orderSn}_etiqueta-10x15.pdf`);
-                fs.writeFileSync(labelPath, await expandShopeeLabelForThermalPaper(document.buffer));
+                await writeShopeeThermalLabel({ pdfBuffer: document.buffer, connection, labelPath });
                 await ptp.print(labelPath, {
                     printer: settings.shopee_printer_thermal,
                     paperSize: '4x6',
@@ -1197,6 +1211,7 @@ function startShopeeAutoPrintService() {
 if (require.main === module) startShopeeAutoPrintService();
 
 module.exports = {
+    writeShopeeThermalLabel,
     prepareShopeeOrderShipment,
     startShopeeAutoPrintService,
 };
