@@ -603,11 +603,13 @@ async function restartPrinterServiceAfterUpdate() {
         cwd: projectRoot,
         windowsHide: true,
         timeout: 60000,
+        shell: process.platform === 'win32', // pm2.cmd: mesmo caso do npm.cmd (spawn EINVAL)
     });
     await execFileAsync(pm2Command, ['save'], {
         cwd: projectRoot,
         windowsHide: true,
         timeout: 60000,
+        shell: process.platform === 'win32', // pm2.cmd: mesmo caso do npm.cmd (spawn EINVAL)
     });
 }
 

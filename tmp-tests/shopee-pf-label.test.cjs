@@ -39,4 +39,6 @@ test('Atualizar servico: npm.cmd roda com shell no Windows (evita spawn EINVAL)'
   const src = fs.readFileSync(path.join(__dirname, '../scripts/shopee-auto-print.cjs'), 'utf8');
   const block = src.slice(src.indexOf('async function pullPrinterServiceUpdate'), src.indexOf('function normalizePrinterNames'));
   assert.match(block, /shell: process\.platform === 'win32'/);
+  const restart = src.slice(src.indexOf('async function restartPrinterServiceAfterUpdate'), src.indexOf('async function getCompanySettings'));
+  assert.equal((restart.match(/shell: process\.platform === 'win32'/g) || []).length, 2);
 });
