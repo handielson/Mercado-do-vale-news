@@ -140,3 +140,54 @@ test('?modelo= seleciona o modelo; busy desabilita Adicionar', { timeout: 120000
     await page.getByRole('button', { name: 'Verde' }).click();
     assert.equal(await add(page).isDisabled(), true);
 });
+
+test('trocar de modelo zera preços, identidade e observação', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await pickModel(page, 'Redmi 15');
+    await page.getByLabel('Informar preços desta configuração').check();
+    await page.getByLabel('Varejo').fill('2000');
+    await page.locator('#manual-imei1').fill('863715061138763');
+    await page.getByLabel('Serial').fill('SER123');
+    await page.getByLabel('Condição').selectOption('seminovo');
+    await page.getByLabel('Observação do seminovo').fill('Risco');
+    await page.getByLabel('Custo').fill('900');
+    await pickModel(page, 'Poco X8');
+    await page.getByText('IMEI 1', { exact: true }).waitFor();
+    await page.getByLabel('Condição').selectOption('seminovo');
+    assert.equal(await page.getByLabel('Observação do seminovo').inputValue(), '');
+    assert.equal(await page.getByLabel('Informar preços desta configuração').isChecked(), false);
+    await add(page).click();
+    const item = (await page.evaluate(() => window.added))[0].item;
+    assert.equal(item.model_id, 'm3');
+    assert.equal(item.prices, null);
+    assert.deepEqual(item.identity, { imei1: null, imei2: null, serial: null });
+    assert.equal(item.condition_note, null);
+    assert.equal(item.cost_cents, 90000);
+});
+
+test('sem local o botão fica desabilitado com dica; custo zerado avisa', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await pickModel(page, 'Redmi 15');
+    assert.match(await text(page), /Custo zerado/);
+    await page.getByLabel('Local').selectOption('');
+    assert.match(await text(page), /Escolha o local de estoque\./);
+    assert.equal(await add(page).isDisabled(), true);
+    await page.getByLabel('Local').selectOption('l1');
+    assert.equal(await add(page).isEnabled(), true);
+});
+
+test('falha ao identificar a categoria bloqueia e avisa', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await pickModel(page, 'Sem Categoria Boa');
+    await page.getByText('Não foi possível identificar a categoria do modelo.').waitFor();
+    assert.doesNotMatch(await text(page), /IMEI 1|Quantidade/);
+    assert.equal(await add(page).isDisabled(), true);
+});
+
+test('após adicionar celular o foco volta ao IMEI 1', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await pickModel(page, 'Redmi 15');
+    await page.locator('#manual-imei1').fill('863715061138763');
+    await add(page).click();
+    await page.waitForFunction(() => document.activeElement?.id === 'manual-imei1');
+});

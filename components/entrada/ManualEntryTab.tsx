@@ -37,6 +37,8 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
     const [models, setModels] = useState<ModelRow[]>([]);
     const [locations, setLocations] = useState<LocationRow[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [locationsError, setLocationsError] = useState(false);
+    const [categoryError, setCategoryError] = useState(false);
 
     const [modelId, setModelId] = useState(prefill?.model_id || '');
     const [isPhone, setIsPhone] = useState<boolean | null>(null);
@@ -71,7 +73,7 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
                 setLocations(active);
                 setLocationId(current => current || active.find(l => l.is_default)?.id || '');
             })
-            .catch(() => { /* local é opcional */ });
+            .catch(() => { if (alive) setLocationsError(true); });
         return () => { alive = false; };
     }, []);
 
@@ -80,16 +82,21 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
     useEffect(() => {
         let alive = true;
         setIsPhone(null);
+        setCategoryError(false);
         setColorOptions([]);
         setColor('');
+        // Trocar de modelo zera o que era do modelo anterior (custo e local ficam).
+        setPricesOn(false); setRetail(0); setReseller(0); setWholesale(0);
+        setImei1(''); setImei2(''); setSerial(''); setQuantity('1'); setConditionNote('');
         if (!model) return;
         (async () => {
             const [category, rows, colors] = await Promise.all([
-                model.category_id ? categoryService.getById(model.category_id).catch(() => null) : Promise.resolve(null),
+                model.category_id ? categoryService.getById(model.category_id).catch(() => undefined) : Promise.resolve(null),
                 modelColorImagesService.getByModel(model.id).catch(() => []),
                 colorService.list().catch(() => []),
             ]);
             if (!alive) return;
+            if (model.category_id && !category) { setCategoryError(true); return; }
             setIsPhone(isSmartphoneModel({ category_name: category?.name }));
             const names = new Map((colors as { id: string; name: string }[]).map(c => [c.id, c.name]));
             const withPhoto = (rows as { color_id: string; images?: string[]; image_url?: string | null }[])
@@ -97,7 +104,7 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
                 .map(r => names.get(r.color_id))
                 .filter((n): n is string => Boolean(n));
             setColorOptions(Array.from(new Set(withPhoto)));
-        })();
+        })().catch(() => { if (alive) setCategoryError(true); });
         return () => { alive = false; };
     }, [model]);
 
@@ -105,10 +112,10 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
     const modelLabel = (id: string) => models.find(m => m.id === id)?.name || '';
 
     const qty = Math.max(1, Math.floor(Number(quantity) || 1));
-    const canAdd = Boolean(model) && isPhone !== null && !busy;
+    const canAdd = Boolean(model) && isPhone !== null && Boolean(locationId) && !busy;
 
     const handleAdd = () => {
-        if (!model || isPhone === null || busy) return;
+        if (!model || isPhone === null || !locationId || busy) return;
         const phone = isPhone;
         const item = {
             source: 'manual',
@@ -129,11 +136,12 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
                 : { imei1: null, imei2: null, serial: null },
             quantity: phone ? 1 : qty,
             cost_cents: cost,
-            location_id: locationId || null,
+            location_id: locationId,
             prices: pricesOn ? { price_retail: retail, price_reseller: reseller, price_wholesale: wholesale } : null,
         };
         onAddLines([createLine(item, { source: 'manual' }) as EntryLine]);
         setImei1(''); setImei2(''); setSerial(''); setQuantity('1');
+        if (phone) setTimeout(() => document.getElementById('manual-imei1')?.focus(), 0);
     };
 
     return (
@@ -145,6 +153,10 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
                 <SearchableSelect id="manual-model" value={modelId} options={modelOptions} onChange={setModelId}
                     getOptionLabel={modelLabel} placeholder="Digite para buscar o modelo" />
             </div>
+
+            {model && categoryError && (
+                <p role="alert" className="text-sm text-red-600">Não foi possível identificar a categoria do modelo.</p>
+            )}
 
             {model && isPhone !== null && (
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -216,13 +228,18 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
                         </div>
                     )}
 
-                    <CurrencyInput value={cost} onChange={setCost} label="Custo" />
+                    <div>
+                        <CurrencyInput value={cost} onChange={setCost} label="Custo" />
+                        {cost === 0 && <p className="text-xs text-amber-700 mt-1">Custo zerado</p>}
+                    </div>
                     <div>
                         <label htmlFor="manual-location" className={labelCls}>Local</label>
                         <select id="manual-location" className={fieldCls} value={locationId} onChange={e => setLocationId(e.target.value)}>
-                            <option value="">Sem local</option>
+                            <option value="">Selecione o local</option>
                             {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                         </select>
+                        {locationsError && <p role="alert" className="text-xs text-red-600 mt-1">Não foi possível carregar os locais.</p>}
+                        {!locationId && !locationsError && <p className="text-xs text-amber-700 mt-1">Escolha o local de estoque.</p>}
                     </div>
 
                     <div className="sm:col-span-2 space-y-2">

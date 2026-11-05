@@ -9,6 +9,8 @@ export const serviceStubs = {
 
 export const defaultFixtures = {
     models: [
+        { id: 'm3', name: 'Poco X8', category_id: 'c1', active: true },
+        { id: 'm4', name: 'Sem Categoria Boa', category_id: 'cX', active: true },
         { id: 'm1', name: 'Redmi 15', category_id: 'c1', active: true },
         { id: 'm2', name: 'Capa Silicone', category_id: 'c2', active: true },
     ],
