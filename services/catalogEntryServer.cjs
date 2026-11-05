@@ -383,6 +383,8 @@ function photoIntakeDigest(row) {
   data.version = getPhotoIntakeVersion(row);
   return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
 }
+const isPhotoRaw = raw => String(raw?.photo_intake_id ?? '').trim() !== '';
+
 async function resolvePhotoItem(ctx, item, line) {
   const { conn } = ctx;
   if (typeof ctx.deps.finalizePhotoIntake !== 'function') throw lineError('Entrada por foto indisponível neste servidor.');
@@ -445,7 +447,7 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
   await ensureCatalogEntrySchema(pool);
   await ensureSmartphonePriceGroupsSchema(pool);
   // Fora da transação do lote: o schema da fila de foto usa o pool (e corrige pendências) na primeira vez.
-  if (rawItems.some(raw => raw?.photo_intake_id) && typeof deps.ensurePhotoIntakeSchema === 'function') await deps.ensurePhotoIntakeSchema();
+  if (rawItems.some(isPhotoRaw) && typeof deps.ensurePhotoIntakeSchema === 'function') await deps.ensurePhotoIntakeSchema();
   const defaultCompanyId = await deps.getDefaultCompanyId();
   const client = commit && clientBatchId ? { id: clientBatchId, itemsHash: itemsDigest(rawItems) } : null;
   const conn = await pool.getConnection();
@@ -469,7 +471,8 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
     if (photoIds.length) await conn.query('SELECT id FROM smartphone_photo_intakes WHERE id IN (?) ORDER BY id FOR UPDATE', [photoIds]);
     const ctx = { conn, deps, defaultCompanyId, batchId: crypto.randomUUID(), created: new Set(),
       models: new Map(), categories: new Map(), locations: new Map(), requestHeaders };
-    const normalized = rawItems.map((raw, index) => (raw?.photo_intake_id ? normalizePhotoEntryItem : normalizeEntryItem)(raw, index));
+    // Só id com conteúdo vai para a foto (só espaços segue a validação comum, com os erros de linha dela).
+    const normalized = rawItems.map((raw, index) => (isPhotoRaw(raw) ? normalizePhotoEntryItem : normalizeEntryItem)(raw, index));
     for (const item of normalized) await loadRefs(ctx, item);
     // Linhas de foto não passam pela validação do item manual (os dados vêm do pré-cadastro).
     const validated = new Map(validateEntryBatch(normalized.filter(item => !item.photo_intake_id), { isSmartphone: item => isPhone(ctx, item) })

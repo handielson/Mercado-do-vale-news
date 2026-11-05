@@ -106,11 +106,48 @@ test('linha de foto ignora os demais campos do cliente', async t => {
   assert.equal(children(db)[0].model_id, 'm1');
 });
 
-test('sem local, a unidade fica sem local (como hoje)', async t => {
+test('sem local, a linha de foto dá erro (como as outras origens) e nada é gravado', async t => {
   const { db } = await setup(t);
-  await previewAndCommit(db, [photoLine({ location_id: undefined })]);
-  assert.equal(db.state.units[0].location_id, null);
-  assert.equal(db.state.units[0].deposit_id, null);
+  for (const location_id of [undefined, '', '   ']) {
+    const p = await preview(db, [photoLine({ location_id })]);
+    assert.equal(p.ok, false);
+    assert.deepEqual(p.plan[0].errors, ['Escolha o local de estoque.']);
+    const r = await runCatalogEntry(db.pool, [photoLine({ location_id })], { commit: true, expectedHash: p.hash, deps: db.deps });
+    assert.equal(r.ok, false);
+    assert.deepEqual(r.plan[0].errors, ['Escolha o local de estoque.']);
+  }
+  assert.equal(db.state.units.length, 0);
+  assert.equal(db.state.products.length, 0);
+  assert.equal(db.state.intakes[0].status, 'ready_to_finalize');
+});
+
+test('photo_intake_id só com espaços não derruba o servidor: vira linha comum com erros de linha', async t => {
+  const { db } = await setup(t);
+  const r = await preview(db, [photoLine({ photo_intake_id: '   ' })]);
+  assert.equal(r.ok, false);
+  assert.equal(r.plan[0].photo_intake_id, undefined);
+  assert.ok(r.plan[0].errors.includes('Informe o modelo ou a categoria e o nome.'), JSON.stringify(r.plan[0].errors));
+  assert.equal(db.state.intakes[0].status, 'ready_to_finalize');
+});
+
+test('sem SKU livre para a variação: 409 vira erro da linha', async t => {
+  const { db } = await setup(t);
+  const conn = await db.pool.getConnection();
+  const query = conn.query;
+  conn.query = async (sql, args) => (String(sql).startsWith('SELECT id FROM products WHERE sku=? LIMIT 1 FOR UPDATE') ? [[{ id: 'ocupado' }]] : query(sql, args));
+  const r = await preview(db, [photoLine()]);
+  assert.deepEqual(r.plan[0].errors, ['Não foi possível gerar um SKU único para esta variação']);
+  assert.equal(db.state.units.length, 0);
+});
+
+test('variação sumiu ao anexar o EAN: 409 vira erro da linha', async t => {
+  const { db } = await setup(t);
+  const conn = await db.pool.getConnection();
+  const query = conn.query;
+  conn.query = async (sql, args) => (String(sql).startsWith('SELECT ean,alternative_eans FROM products WHERE id=?') ? [[]] : query(sql, args));
+  const r = await preview(db, [manualLine(), photoLine()]);
+  assert.deepEqual(r.plan[0].errors, []);
+  assert.deepEqual(r.plan[1].errors, ['A variação selecionada não existe mais.']);
 });
 
 test('pré-cadastro já concluído vira erro da linha', async t => {

@@ -29,10 +29,13 @@ createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries=
 
 const catalogStub = `export const catalogEntries = {
     preview: async items => { window.previewCalls ||= []; window.previewCalls.push(items);
-        return { ok: true, hash: 'h1', plan: items.map((_, i) => ({ line: i + 1, product_id: 'p1', sku: 'S1', family: 'existing', variation: 'existing', price_source: 'photo', stock: { kind: 'serialized', quantity: 1 }, errors: [] })) }; },
+        const errs = it => (window.previewPhotoError && it.photo_intake_id ? [window.previewPhotoError] : []);
+        const plan = items.map((it, i) => ({ line: i + 1, product_id: errs(it).length ? null : 'p1', sku: 'S1', family: 'existing', variation: 'existing', price_source: 'photo', stock: { kind: 'unit', quantity: 1 }, errors: errs(it) }));
+        const ok = plan.every(l => !l.errors.length);
+        return { ok, hash: ok ? 'h1' : '', plan }; },
     commit: async (items, hash, clientBatchId) => { window.commitCalls ||= []; window.commitCalls.push({ items, hash, clientBatchId });
         for (const it of window.fixtures.photoIntakes) if (items.some(i => i.photo_intake_id === it.id)) it.status = 'completed';
-        return { batch_id: 'b1', plan: items.map((_, i) => ({ line: i + 1, product_id: 'p1', sku: 'S1', family: 'existing', variation: 'existing', price_source: 'photo', stock: { kind: 'serialized', quantity: 1 }, errors: [] })) }; },
+        return { batch_id: 'b1', plan: items.map((_, i) => ({ line: i + 1, product_id: 'p1', sku: 'S1', family: 'existing', variation: 'existing', price_source: 'photo', stock: { kind: 'unit', quantity: 1 }, errors: [] })) }; },
     get: async id => ({ batch: { id }, lines: [{ line: 1, product_id: 'p1' }] }),
 };`;
 
@@ -100,7 +103,7 @@ test('o pronto mostra "Enviar para a lista", sem SKU, e não chama finalize', { 
     const added = await page.evaluate(() => window.added);
     assert.equal(added.length, 1);
     assert.equal(added[0].source, 'foto');
-    assert.deepEqual(added[0].item, { source: 'foto', photo_intake_id: 'pi-ready' });
+    assert.deepEqual(added[0].item, { source: 'foto', photo_intake_id: 'pi-ready', location_id: 'l2' });
     assert.equal(added[0].label, 'Xiaomi · Redmi 15 · 8GB/256GB · Verde · IMEI …8763');
     await page.getByText('Adicionado à lista').waitFor();
     assert.equal(await finalizeCalls(page), 0);
@@ -118,13 +121,38 @@ test('enviar o mesmo pré-cadastro duas vezes não duplica a linha', { timeout: 
     assert.equal(await finalizeCalls(page), 0);
 });
 
-test('preços não confirmados: "Enviar para a lista" fica desabilitado', { timeout: 120000 }, async t => {
+const enabledSend = page => page.waitForFunction(() => [...document.querySelectorAll('button')].some(x => x.textContent.trim() === 'Enviar para a lista' && !x.disabled));
+
+test('preços não confirmados bloqueiam "Enviar para a lista"; o mesmo aparelho confirmado libera', { timeout: 120000 }, async t => {
     const { page } = await setup(t, { init: 'window.fixtures.photoIntakes[0].prices_confirmed = 0;' });
-    await sendButton(page).waitFor();
-    // Espera o preço do grupo carregar (antes disso o botão fica desabilitado de qualquer jeito).
-    await page.getByText('Preço de venda do grupo', { exact: false }).waitFor();
-    await page.waitForTimeout(200);
+    // Carregou o preço do grupo: "Confirmar preços" fica disponível; o envio continua bloqueado.
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(x => x.textContent.trim() === 'Confirmar preços' && !x.disabled));
     assert.equal(await sendButton(page).isDisabled(), true);
+    // Controle positivo: o mesmo pré-cadastro com preços confirmados (fila recarregada) libera o envio.
+    await page.evaluate(() => { window.fixtures.photoIntakes[0].prices_confirmed = 1; window.__confirm(); });
+    await enabledSend(page);
+});
+
+test('sem local o envio fica bloqueado; o local escolhido vai na linha', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await enabledSend(page);
+    assert.equal(await page.getByLabel('Local').inputValue(), 'l2', 'local padrão pré-preenchido');
+    await page.getByLabel('Local').selectOption('');
+    await page.getByText('Escolha o local de estoque.').waitFor();
+    assert.equal(await sendButton(page).isDisabled(), true);
+    await page.getByLabel('Local').selectOption('l1');
+    await enabledSend(page);
+    await sendButton(page).click();
+    assert.equal(await page.evaluate(() => window.added[0].item.location_id), 'l1');
+});
+
+test('a confirmação limpa o aviso "Adicionado à lista"', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await enabledSend(page);
+    await sendButton(page).click();
+    await page.getByText('Adicionado à lista').waitFor();
+    await page.evaluate(() => window.__confirm());
+    await page.getByText('Adicionado à lista').waitFor({ state: 'detached' });
 });
 
 test('depois de uma confirmação a fila é recarregada e mostra o aparelho concluído', { timeout: 120000 }, async t => {
@@ -161,7 +189,7 @@ test('tela Entrada: a aba Foto envia a linha, a confirmação usa a porta única
     await page.getByText('Xiaomi · Redmi 15 · 8GB/256GB · Verde · IMEI …8763').first().waitFor();
     await page.getByRole('button', { name: 'Conferir' }).click();
     await page.waitForFunction(() => window.previewCalls?.length === 1);
-    assert.deepEqual(await page.evaluate(() => window.previewCalls[0]), [{ source: 'foto', photo_intake_id: 'pi-ready' }]);
+    assert.deepEqual(await page.evaluate(() => window.previewCalls[0]), [{ source: 'foto', photo_intake_id: 'pi-ready', location_id: 'l2' }]);
     const before = await listCalls(page);
     await page.waitForFunction(() => [...document.querySelectorAll('button')].some(x => x.textContent.trim() === 'Confirmar entrada' && !x.disabled));
     await page.getByRole('button', { name: 'Confirmar entrada' }).click();
@@ -170,4 +198,25 @@ test('tela Entrada: a aba Foto envia a linha, a confirmação usa a porta única
     await page.getByRole('tab', { name: 'Disponíveis para venda (2)' }).waitFor();
     assert.equal(await finalizeCalls(page), 0);
     assert.deepEqual(errors, []);
+});
+
+const draftPhotoLine = { key: 'f1', source: 'foto', label: 'Xiaomi · Redmi 15 · 8GB/256GB · Verde · IMEI …8763', item: { source: 'foto', photo_intake_id: 'pi-ready', location_id: 'l1' } };
+const withDraft = extra => `localStorage.setItem('mdv-entrada-rascunho-v1', JSON.stringify({ lines: [${JSON.stringify(draftPhotoLine)}] }));${extra || ''}`;
+
+test('linha de foto restaurada do rascunho envia photo_intake_id e location_id na prévia', { timeout: 120000 }, async t => {
+    const { page, errors } = await setup(t, { mode: 'page', url: '/admin/entrada?aba=manual', init: withDraft() });
+    await page.getByText('Lista de entrada (1)').waitFor();
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await page.waitForFunction(() => window.previewCalls?.length === 1);
+    assert.deepEqual(await page.evaluate(() => window.previewCalls[0]), [{ source: 'foto', photo_intake_id: 'pi-ready', location_id: 'l1' }]);
+    assert.deepEqual(errors, []);
+});
+
+test('erro de linha do servidor aparece embaixo da linha de foto', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { mode: 'page', url: '/admin/entrada?aba=manual',
+        init: withDraft("window.previewPhotoError = 'Este aparelho da fila de foto já foi salvo.';") });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    const row = page.getByRole('listitem').filter({ hasText: draftPhotoLine.label });
+    await row.getByText('Este aparelho da fila de foto já foi salvo.').waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Confirmar entrada' }).isDisabled(), true);
 });

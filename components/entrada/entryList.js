@@ -146,13 +146,13 @@ function photoLabel(intake) {
 
 /**
  * Linha da aba Foto: o servidor usa os dados do pré-cadastro e ignora o resto, então o item leva só
- * a origem e o id. O rótulo (marca · modelo · RAM/armazenamento · cor · final do IMEI) fica na linha.
+ * a origem, o id e o local da unidade. O rótulo (marca · modelo · RAM/armazenamento · cor · final do IMEI) fica na linha.
  */
-export function createPhotoLine(intake) {
+export function createPhotoLine(intake, locationId) {
   return {
     key: newKey(),
     source: 'foto',
-    item: { source: 'foto', photo_intake_id: String(intake.id) },
+    item: { source: 'foto', photo_intake_id: String(intake.id), location_id: locationId ? String(locationId) : null },
     label: photoLabel(intake),
   };
 }

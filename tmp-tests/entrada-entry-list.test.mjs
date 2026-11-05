@@ -145,10 +145,11 @@ test('M4: errorText mostra só o campo error do JSON do servidor', () => {
   assert.equal(errorText('x'), 'erro desconhecido');
 });
 
-test('createPhotoLine: item só com origem e pré-cadastro; rótulo com marca, modelo, memória, cor e final do IMEI', () => {
-  const line = createPhotoLine({ id: 'pi1', detected_brand: 'Xiaomi', detected_model: 'Redmi 15', detected_ram: '8GB', detected_storage: '256GB', detected_color: 'Verde', detected_imei_1: '863715061138763', price_retail: 1 });
+test('createPhotoLine: item só com origem, pré-cadastro e local; rótulo com marca, modelo, memória, cor e final do IMEI', () => {
+  const line = createPhotoLine({ id: 'pi1', detected_brand: 'Xiaomi', detected_model: 'Redmi 15', detected_ram: '8GB', detected_storage: '256GB', detected_color: 'Verde', detected_imei_1: '863715061138763', price_retail: 1 }, 'l1');
   assert.equal(line.source, 'foto');
-  assert.deepEqual(line.item, { source: 'foto', photo_intake_id: 'pi1' });
+  assert.deepEqual(line.item, { source: 'foto', photo_intake_id: 'pi1', location_id: 'l1' });
+  assert.equal(createPhotoLine({ id: 'pi1' }).item.location_id, null);
   assert.equal(line.label, 'Xiaomi · Redmi 15 · 8GB/256GB · Verde · IMEI …8763');
   assert.equal(createPhotoLine({ id: 'pi2', detected_model: 'X', detected_serial: 'SN12345' }).label, 'X · Serial …2345');
   assert.equal(createPhotoLine({ id: 'pi3' }).label, 'Aparelho da fila de foto');

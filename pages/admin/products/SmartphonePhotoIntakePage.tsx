@@ -57,9 +57,11 @@ export interface SmartphonePhotoIntakePageProps {
   onSendToList?: (intake: SmartphonePhotoIntake) => void;
   /** Embutida: cada mudança recarrega a fila (ex.: depois de confirmar a Lista de entrada). */
   reloadSignal?: number;
+  /** Embutida: impede o envio (ex.: falta escolher o local). */
+  sendDisabled?: boolean;
 }
 
-export function SmartphonePhotoIntakePage({ embedded = false, onSendToList, reloadSignal = 0 }: SmartphonePhotoIntakePageProps = {}) {
+export function SmartphonePhotoIntakePage({ embedded = false, onSendToList, reloadSignal = 0, sendDisabled = false }: SmartphonePhotoIntakePageProps = {}) {
   const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>('queue');
   const [items, setItems] = useState<SmartphonePhotoIntake[]>([]);
@@ -492,7 +494,7 @@ export function SmartphonePhotoIntakePage({ embedded = false, onSendToList, relo
                   onRefreshColors={refreshColors}
                   onCreateModel={createModelFromIntake}
                   onFinalize={embedded ? sendSelectedToList : finalizeSelected}
-                  {...(embedded ? { finalizeLabel: 'Enviar para a lista', allowSku: false } : {})}
+                  {...(embedded ? { finalizeLabel: 'Enviar para a lista', allowSku: false, finalizeBlocked: sendDisabled } : {})}
                   onRemoveFromQueue={() => removeFromQueue(selected)}
                   fieldsRef={fieldsRef}
                 />

@@ -149,7 +149,8 @@ async function reserveAvailableSku(connection, requestedSku, intake, model) {
     const [rows] = await connection.query('SELECT id FROM products WHERE sku=? LIMIT 1 FOR UPDATE', [candidate]);
     if (!rows[0]) return candidate;
   }
-  throw new Error('Não foi possível gerar um SKU único para esta variação');
+  // 409 (recusa, não falha do servidor): na porta única vira erro da linha.
+  throw Object.assign(new Error('Não foi possível gerar um SKU único para esta variação'), { statusCode: 409, photoIntakeRefusal: true });
 }
 
 function toPublicIntake(row) {
@@ -1104,7 +1105,7 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
         'SELECT ean,alternative_eans FROM products WHERE id=? LIMIT 1 FOR UPDATE', [productId]
       );
       const barcodeRow = barcodeRows[0];
-      if (!barcodeRow) throw new Error('A variação selecionada não existe mais.');
+      if (!barcodeRow) throw refuse(409, 'A variação selecionada não existe mais.');
       const alternatives = safeJson(barcodeRow.alternative_eans, []);
       const knownEans = [...new Set([
         barcodeRow.ean,

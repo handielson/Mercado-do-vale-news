@@ -44,6 +44,8 @@ interface PhotoIntakeReviewCardProps {
   finalizeLabel?: string;
   /** Mostra o SKU opcional da nova variação (padrão: sim). */
   allowSku?: boolean;
+  /** Bloqueio extra do botão final, além das regras da conferência (ex.: falta o local na aba Foto). */
+  finalizeBlocked?: boolean;
   onRemoveFromQueue: () => Promise<void>;
   fieldsRef: React.Ref<HTMLDivElement>;
 }
@@ -112,6 +114,7 @@ export function PhotoIntakeReviewCard({
   onFinalize,
   finalizeLabel = 'Salvar e disponibilizar para venda',
   allowSku = true,
+  finalizeBlocked = false,
   onRemoveFromQueue,
   fieldsRef,
 }: PhotoIntakeReviewCardProps) {
@@ -809,7 +812,7 @@ export function PhotoIntakeReviewCard({
           <button
             type="button"
             onClick={() => void onFinalize(allowSku ? sku.trim() || undefined : undefined)}
-            disabled={busy || !canFinalize}
+            disabled={busy || !canFinalize || finalizeBlocked}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {busy ? <Loader2 size={17} className="animate-spin" /> : <Sparkles size={17} />}
