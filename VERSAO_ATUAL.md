@@ -1,6 +1,6 @@
 # v1.2.796-entrada-unica-servidor
 
-Data: 05/11/2026. Status: **pendente de publicação**. Branch: `main`. Só API (etapa 1 da Entrada única; inclui a API da v1.2.795).
+Data: 05/11/2026. Status: **publicada** (API + serviço de impressão). Branch: `main`. Só API (etapa 1 da Entrada única; inclui a API da v1.2.795).
 
 ---
 

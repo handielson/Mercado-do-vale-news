@@ -1,7 +1,7 @@
 {
   "version": "v1.2.796-entrada-unica-servidor",
   "date": "2026-11-05",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.796-entrada-unica-servidor",
   "release_vps": "pendente",
@@ -50,10 +50,11 @@
     "status": "sem mudança"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "--catalog-entry-only"
+    "status": "publicada",
+    "note": "--catalog-entry-only; backup /var/www/mdv-api/backups/catalog-entry-1793887841547; inclui API da v1.2.795"
   },
   "printer_agent_release": {
-    "status": "pendente (botão Atualizar serviço, aguarda OK)"
+    "status": "publicada",
+    "note": "PC da loja atualizado pelo Atualizar serviço (50b75346): comprovante de intervenção v1.2.795"
   }
 }
