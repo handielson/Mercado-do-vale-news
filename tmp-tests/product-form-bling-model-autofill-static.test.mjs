@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+// stock-entry-only-v1 (etapa 6): a lista de cadastro em massa saiu do formulário; as checagens do vínculo Bling
+// por item da lista saíram com ela. A trava fica em tmp-tests/stock-entry-only-static.test.mjs.
+
 const source = fs.readFileSync('components/products/ProductForm.tsx', 'utf8');
 const modelSelectSource = fs.readFileSync('components/products/selectors/ModelSelect.tsx', 'utf8');
 const basicInfoSource = fs.readFileSync('components/products/sections/ProductBasicInfo.tsx', 'utf8');
@@ -33,12 +36,6 @@ assert.match(
   source,
   /normalizedSuggestion\.includes\(normalizedName\)/,
   'Bling SKU autofill should match an active model when the Bling name includes variation details',
-);
-
-assert.match(
-  source,
-  /model_id:\s*watch\('model_id'\)\s*\|\|\s*undefined/,
-  'Serialized batch rows should retain the selected model id',
 );
 
 assert.match(
@@ -81,18 +78,6 @@ assert.match(
   source,
   /mergedData\.parent_id = automaticBlingLink\.parentProduct\.id/,
   'Automatic SKU linking should copy the local parent UUID into the submitted payload',
-);
-
-assert.match(
-  source,
-  /parent_id: link\.parentProduct\?\.id \|\| batchItem\.parent_id/,
-  'Manual batch linking should retain the local parent UUID on the batch item',
-);
-
-assert.match(
-  source,
-  /parent_id: link\.parentProduct\?\.id \|\| item\.parent_id/,
-  'Automatic batch linking should retain the local parent UUID before building products',
 );
 
 assert.match(

@@ -10,13 +10,12 @@ import { ColorSelect } from '../selectors/ColorSelect';
 import { MaterialSelect } from '../selectors/MaterialSelect';
 import { CapacitySelect } from '../selectors/CapacitySelect';
 import { VersionSelect } from '../selectors/VersionSelect';
-import { CheckCircle2, Package, RefreshCw, Loader2 } from 'lucide-react';
+import { Package, RefreshCw, Loader2 } from 'lucide-react';
 import { useEnrichedCustomFields } from '../../../hooks/useEnrichedCustomFields';
 import { FIELD_METADATA, isSpecialField, shouldRenderField } from './fieldMetadata';
 import { getCategoryDynamicSpecFields, getPrint3dDefaultSpecFields } from './categorySpecFieldCore.js';
 import { TableRelationField } from '../../fields/TableRelationField';
 import { vpsApiService } from '../../../services/vpsApiService';
-import { shouldAddSerializedFieldToBatchOnEnter } from '../serializedBatch.js';
 import { isVariationSpec, modelTechnicalSpecs } from '../../../services/smartphoneModelSpecs.mjs';
 import { PRINT3D_MEASUREMENT_FIELDS, formatPrint3dMeasurements, print3dMeasurementDisplayValue, print3dMeasurementStoredValue, formatPrint3dWeightInput, parsePrint3dWeightInput } from '../../../utils/print3dMeasurements.js';
 
@@ -26,11 +25,14 @@ interface ProductSpecificationsProps {
     setValue: UseFormSetValue<ProductInput>;
     errors: FieldErrors<ProductInput>;
     onRefresh?: () => void;
-    onAddToBatchList?: (overrides?: Record<string, string>) => void;
     templateValues?: Record<string, any>;
     currentProductId?: string; // ID do produto atual (modo edição)
     familyParent?: boolean; // family-parent-no-unit-identity-v1: pai da família não guarda IMEI/serial
+    hideUnitIdentity?: boolean; // stock-entry-only-v1: cadastro novo e linhas de família não pedem IMEI/serial
 }
+
+// stock-entry-only-v1: IMEI/serial identificam um aparelho (unidade), que entra pela tela Entrada.
+const UNIT_IDENTITY_KEYS = ['imei1', 'imei2', 'serial'];
 
 // Fields that must be unique per product
 const DB_UNIQUE_FIELDS = ['serial', 'imei1', 'imei2'];
@@ -110,10 +112,10 @@ export function ProductSpecifications({
     setValue,
     errors,
     onRefresh,
-    onAddToBatchList,
     templateValues,
     currentProductId,
-    familyParent = false
+    familyParent = false,
+    hideUnitIdentity = false
 }: ProductSpecificationsProps) {
     // ANTIGRAVITY PROTOCOL: Custom Fields Synchronization
     const { fields: customFields, loading: fieldsLoading } = useEnrichedCustomFields(
@@ -160,6 +162,11 @@ export function ProductSpecifications({
     const shouldShowBaseSpecField = (key: string): boolean => {
         // family-parent-no-unit-identity-v1: IMEI/serial identificam um aparelho físico (unidade da variação), não o pai.
         if (familyParent && ['imei1', 'imei2', 'serial'].includes(key)) return false;
+        if (hideUnitIdentity && UNIT_IDENTITY_KEYS.includes(key)) return false;
+        return isBaseSpecFieldEnabled(key);
+    };
+
+    const isBaseSpecFieldEnabled = (key: string): boolean => {
         if (isPrint3d && PHONE_ONLY_BASE_SPEC_FIELD_KEYS.has(key)) return false;
         const legacyRequirement = categoryConfig?.[key];
 
@@ -202,6 +209,8 @@ export function ProductSpecifications({
     const serialRegistered = useRegisteredIdentifier('serial', String(watch('specs.serial') || ''), { excludeProductId: currentProductId || null });
 
     if (!categoryConfig) return null;
+    // Aviso só quando a categoria pediria IMEI/serial e o cadastro os escondeu.
+    const unitIdentityHidden = hideUnitIdentity && UNIT_IDENTITY_KEYS.some(isBaseSpecFieldEnabled);
 
     const storageRequirement = getBaseSpecRequirement('storage');
     const ramRequirement = getBaseSpecRequirement('ram');
@@ -212,13 +221,6 @@ export function ProductSpecifications({
             {label} {required && <span className="text-red-500">*</span>}
         </label>
     );
-
-    const focusSerializedEntryStart = () => {
-        window.requestAnimationFrame(() => {
-            const imei1Field = document.getElementById('field-imei1');
-            if (imei1Field) (imei1Field as HTMLInputElement).focus();
-        });
-    };
 
     /**
      * Render a generic field based on metadata
@@ -268,18 +270,6 @@ export function ProductSpecifications({
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
-                                    const val = normalizeSerializedTextInput(key, (e.currentTarget as HTMLInputElement).value);
-                                    if (shouldAddSerializedFieldToBatchOnEnter({
-                                        key,
-                                        value: val,
-                                        hasBatchHandler: Boolean(onAddToBatchList),
-                                    })) {
-                                        setValue(fieldKey, val, { shouldValidate: true });
-                                        onAddToBatchList?.({ [key]: val });
-                                        setUniqueErrors(prev => ({ ...prev, [key]: '' }));
-                                        focusSerializedEntryStart();
-                                        return;
-                                    }
                                     const form = e.currentTarget.form;
                                     if (form) {
                                         const inputs = Array.from(form.querySelectorAll('input, select, textarea'));
@@ -358,16 +348,6 @@ export function ProductSpecifications({
                     Especificações Técnicas
                 </h3>
                 <div className="flex flex-wrap items-center gap-2">
-                    {onAddToBatchList && (
-                        <button
-                            type="button"
-                            onClick={() => onAddToBatchList()}
-                            className="flex min-h-[44px] md:min-h-0 items-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
-                        >
-                            <CheckCircle2 size={14} />
-                            Adicionar à Lista
-                        </button>
-                    )}
                     {onRefresh && (
                         <button
                             type="button"
@@ -382,9 +362,9 @@ export function ProductSpecifications({
                 </div>
             </div>
 
-            {familyParent && isSmartphoneCategory && (
-                <p className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800" data-family-parent-unit-hint>
-                    IMEI e serial ficam em cada aparelho: cadastre na variação (cor/memória), em Estoque → <strong>Adicionar Unidade</strong> (ou no <strong>+</strong> ao lado da cor na página do produto). O pai da família não guarda IMEI.
+            {((familyParent && isSmartphoneCategory) || unitIdentityHidden) && (
+                <p className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800" data-unit-entry-hint>
+                    Estoque e aparelhos entram pela tela Entrada. IMEI e serial ficam em cada aparelho, não no cadastro do produto.
                 </p>
             )}
             {/* Grid responsivo com alinhamento consistente - Max 3 colunas para evitar sobreposição */}

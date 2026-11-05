@@ -18,6 +18,7 @@ assert.match(imei, /<RegisteredIdentifierNotice check=\{registered\} \/>/);
 assert.match(notice, /Ver aparelho/);
 assert.match(specs, /useRegisteredIdentifier\('serial'/, 'serial confere na hora');
 assert.match(specs, /excludeProductId=\{currentProductId \|\| null\}/);
-assert.match(form, /const handleAddToBatchList = async[\s\S]*lookupRegisteredIdentifier\(value, initialData\?\.id \|\| null\)[\s\S]*toast\.error[\s\S]*Ver aparelho[\s\S]*return;[\s\S]*setSerialList\(prev => \[\.\.\.prev, item\]\)/, 'Adicionar à Lista recusa aparelho já cadastrado antes de entrar na lista');
+// stock-entry-only-v1 (etapa 6): o "Adicionar à Lista" saiu do formulário; aparelhos entram pela Entrada.
+assert.doesNotMatch(form, /handleAddToBatchList|setSerialList/, 'formulário não monta mais lista de aparelhos');
 
 console.log('registered identifier instant check static test passed');

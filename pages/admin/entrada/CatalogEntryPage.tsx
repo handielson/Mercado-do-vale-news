@@ -6,6 +6,7 @@ import { SpreadsheetEntryTab } from '../../../components/entrada/SpreadsheetEntr
 import { ManualEntryTab } from '../../../components/entrada/ManualEntryTab';
 import { PhotoEntryTab } from '../../../components/entrada/PhotoEntryTab';
 import { FixedVariation, loadFixedVariation } from '../../../components/entrada/FixedVariationCard';
+import { BarcodeProductLookup } from '../../../components/entrada/BarcodeProductLookup';
 import { EntryListPanel, EntryLine, EntryResult, EntryState } from '../../../components/entrada/EntryListPanel';
 import { addLines, applyPreview, commitErrorKind, emptyState, errorText, loadDraft, newBatchId, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
 
@@ -187,6 +188,8 @@ export const CatalogEntryPage: React.FC = () => {
                     ))}
                 </div>
                 <div role="tabpanel" className="space-y-4">
+                    {/* Sem variação fixa: achar o produto pelo código prende a variação (?variacao=). */}
+                    {usesFixed && (!variacaoParam || fixedError) && <BarcodeProductLookup disabled={busy} />}
                     {usesFixed && fixedError && <p role="alert" className="text-sm text-red-600">{fixedError}</p>}
                     {usesFixed && fixedLoading ? (
                         <p role="status" className="text-sm text-slate-600">Carregando variação…</p>

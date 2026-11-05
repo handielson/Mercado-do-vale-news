@@ -359,9 +359,9 @@ export function SmartphonePhotoIntakePage({ embedded = false, onSendToList, relo
         {!embedded && <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate('/admin/products/bulk')}
+            onClick={() => navigate('/admin/entrada?aba=foto')}
             className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-            aria-label="Voltar ao cadastro em massa"
+            aria-label="Voltar para a Entrada"
           >
             <ArrowLeft size={20} />
           </button>

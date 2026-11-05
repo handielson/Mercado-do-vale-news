@@ -169,7 +169,7 @@ test('depois de uma confirmação a fila é recarregada e mostra o aparelho conc
 test('página antiga sem props: cabeçalho, Voltar e "Salvar e disponibilizar para venda" chamando finalize', { timeout: 120000 }, async t => {
     const { page, errors } = await setup(t, { mode: 'standalone' });
     await page.getByText('Cadastro de smartphones por foto').waitFor();
-    await page.getByRole('button', { name: 'Voltar ao cadastro em massa' }).waitFor();
+    await page.getByRole('button', { name: 'Voltar para a Entrada' }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Enviar para a lista' }).count(), 0);
     await page.getByText('SKU da nova variação (opcional)').waitFor();
     const save = page.getByRole('button', { name: 'Salvar e disponibilizar para venda' });

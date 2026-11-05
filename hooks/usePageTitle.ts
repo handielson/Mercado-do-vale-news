@@ -39,7 +39,6 @@ const getPageTitleFromRoute = (pathname: string): string => {
         '/admin/entrada': 'Entrada',
         '/admin/products/labels': 'Etiquetas',
         '/admin/products/new': 'Novo Produto',
-        '/admin/products/bulk': 'Cadastro em Massa',
         '/admin/inventory': 'Estoque',
         '/admin/customers': 'Clientes',
         '/admin/customers/new': 'Novo Cliente',

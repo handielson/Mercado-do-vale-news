@@ -13,7 +13,7 @@ function render(overrides={}) {
   const context={exports:{}, require:()=>({jsx,jsxs:jsx,Fragment:'fragment'}),productActionClass:'neutral',
     Plus:'icon',Package:'icon',Share2:'icon',Images:'icon',RefreshCw:'icon',Video:'icon',CheckSquare:'icon',XSquare:'icon',Barcode:'icon',Store:'icon',Camera:'icon',FileText:'icon',Print3dProductEntry:'3d-entry',
     selectionMode:false,showMoreActions:false,setShowMoreActions:()=>calls.push('more-actions'),ChevronDown:'icon',LayoutGrid:'icon',isRefreshing:false,isGeneratingVideos:false,cacheAge:null,
-    navigate:path=>calls.push(path),setIsExportModalOpen:()=>calls.push('export'),handleNewProduct:()=>calls.push('new'),handleRefresh:()=>calls.push('refresh'),handleBulkRegistration:()=>calls.push('bulk'),handleAutoGenerateVideos:()=>calls.push('video'),handleExitSelection:()=>calls.push('exit-selection'),setSelectionMode:()=>calls.push('selection'),...overrides};
+    navigate:path=>calls.push(path),setIsExportModalOpen:()=>calls.push('export'),handleNewProduct:()=>calls.push('new'),handleRefresh:()=>calls.push('refresh'),handleAutoGenerateVideos:()=>calls.push('video'),handleExitSelection:()=>calls.push('exit-selection'),setSelectionMode:()=>calls.push('selection'),...overrides};
   const code=ts.transpileModule('exports.tree=(<>'+header+'</>);',{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
   vm.runInNewContext(code,context); return {tree:context.exports.tree,calls};
 }
@@ -22,7 +22,7 @@ test('product action groups keep every route and existing handler reachable',()=
   assert.equal(groups.length,3);
   assert.deepEqual(groups.map(g=>text(walk(g).find(n=>n.type==='h2'))),['Cadastro','Sites e vendas','Mídia e impressão']);
   assert(walk(groups[0]).some(n=>n.type==='3d-entry' && n.props.className==='neutral'));
-  for(const [label,target] of Object.entries({'Rascunhos de anúncios':'/admin/products/drafts','Cadastro em Massa':'bulk','Smartphones por Foto':'/admin/products/photo-intake','Sites e preços':'/admin/products/storefronts','Ofertas':'/admin/products/offers','Combos':'/admin/products/combos','Etiquetas':'/admin/products/labels','Exportar Catálogo':'export','Banco de Imagens':'/admin/products/image-bank','Gerar Links de Vídeo':'video','Novo Produto':'new','Atualizar':'refresh','Selecionar':'selection'})) {
+  for(const [label,target] of Object.entries({'Rascunhos de anúncios':'/admin/products/drafts','Cadastro em Massa':'/admin/entrada?aba=planilha','Smartphones por Foto':'/admin/entrada?aba=foto','Sites e preços':'/admin/products/storefronts','Ofertas':'/admin/products/offers','Combos':'/admin/products/combos','Etiquetas':'/admin/products/labels','Exportar Catálogo':'export','Banco de Imagens':'/admin/products/image-bank','Gerar Links de Vídeo':'video','Novo Produto':'new','Atualizar':'refresh','Selecionar':'selection'})) {
     const button=nodes.find(n=>n.type==='button' && text(n).trim()===label); assert(button,label); button.props.onClick(); assert.equal(f.calls.at(-1),target);
   }
 });

@@ -10,6 +10,7 @@ import { productService } from '../../../services/products';
 import { buildProductClonePrefill } from '../../../services/productClonePrefill.js';
 import { isLocalCatalogPreviewRuntime, localCatalogPreviewService, type LocalCatalogDraft } from '../../../services/localCatalogPreview';
 import { familyWorkspacePath, productFormDraftsService, type ProductFormDraft, type ProductFormSnapshot } from '../../../services/productFormDrafts';
+import { entryAfterRegistrationPath } from '../../../services/entryShortcuts.js';
 
 function LocalPreviewApproval({ productId, revision, onApproved }: { productId: string; revision: number; onApproved: () => void }) {
     const [draft, setDraft] = useState<LocalCatalogDraft | null>(null);
@@ -214,6 +215,20 @@ export const ProductFormPage: React.FC = () => {
         return pending;
     };
 
+    // stock-entry-only-v1: o formulário cadastra só o catálogo (estoque 0). Depois do cadastro,
+    // "Dar entrada no estoque" leva à Entrada: variação/produto simples, ou o modelo da família.
+    const offerStockEntry = (savedProduct?: Product, snapshot?: ProductFormSnapshot) => {
+        if (isEditMode || !savedProduct?.id) return;
+        const children = Object.values(snapshot?.familyCheckpoint?.children || {}) as Array<{ id?: string } | null>;
+        const entryPath = entryAfterRegistrationPath(savedProduct, children);
+        if (!entryPath) return;
+        toast.info('Produto cadastrado sem estoque.', {
+            description: 'Estoque e aparelhos entram pela tela Entrada.',
+            duration: 20000,
+            action: { label: 'Dar entrada no estoque', onClick: () => navigate(entryPath) },
+        });
+    };
+
     const handleBatchComplete = async (savedProduct?: Product, snapshot?: ProductFormSnapshot) => {
         // The parent's private template stays available for future variations,
         // using the same authenticated draft/file storage, outside the catalog.
@@ -230,6 +245,7 @@ export const ProductFormPage: React.FC = () => {
             if (savedProduct?.id && !isEditMode) navigate(`/admin/products/${savedProduct.id}`);
             return;
         }
+        offerStockEntry(savedProduct, snapshot);
         if (savedProduct?.is_parent && savedProduct.id) {
             navigate(`/admin/products/${savedProduct.id}`);
             return;

@@ -235,10 +235,6 @@ export const ProductListPage: React.FC = () => {
         navigate('/admin/products/new');
     };
 
-    const handleBulkRegistration = () => {
-        navigate('/admin/products/bulk');
-    };
-
     const handleEditProduct = (product: Product) => {
         if (selectionMode) return; // bloqueia navegação em modo seleção
         const slug = product.name 
@@ -433,8 +429,8 @@ export const ProductListPage: React.FC = () => {
                         <div className="flex flex-wrap gap-2">
                             <Print3dProductEntry className={productActionClass} />
                             <button onClick={() => navigate('/admin/products/drafts')} className={productActionClass}><FileText className="h-4 w-4" /> Rascunhos de anúncios</button>
-                            <button onClick={handleBulkRegistration} className={productActionClass}><Package className="h-4 w-4" /> Cadastro em Massa</button>
-                            <button onClick={() => navigate('/admin/products/photo-intake')} className={productActionClass} title="Cadastrar smartphones lendo a etiqueta da caixa por foto"><Camera className="h-4 w-4" /> Smartphones por Foto</button>
+                            <button onClick={() => navigate('/admin/entrada?aba=planilha')} className={productActionClass} title="Entrada por planilha"><Package className="h-4 w-4" /> Cadastro em Massa</button>
+                            <button onClick={() => navigate('/admin/entrada?aba=foto')} className={productActionClass} title="Cadastrar smartphones lendo a etiqueta da caixa por foto"><Camera className="h-4 w-4" /> Smartphones por Foto</button>
                         </div>
                     </section>
                     <section aria-labelledby="product-actions-sales" className="rounded-xl border border-slate-200 bg-white p-3">

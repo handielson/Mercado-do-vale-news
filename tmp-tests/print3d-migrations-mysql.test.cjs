@@ -383,6 +383,12 @@ test('MySQL local: migrations 3D, checkout concorrente, reserva central e rollba
   const newImportId=randomUUID();
   const importSuccess=await runBatch([{id:newImportId,name:'New',sku:'batch-unique',company_id:companyId,stock_quantity:3}]);
   assert.equal(importSuccess.upserted,1,JSON.stringify(importSuccess.errors));
+  // stock-entry-lock-v1: produto novo sem bling_id nasce com estoque 0; o saldo so concilia no produto existente.
+  const [[newImportInitial]]=await pool.query('SELECT stock_quantity FROM products WHERE id=?',[newImportId]);
+  assert.equal(Number(newImportInitial.stock_quantity),0);
+  const [newImportNoStock]=await pool.query('SELECT id FROM product_stock_locations WHERE product_id=?',[newImportId]);
+  assert.equal(newImportNoStock.length,0);
+  assert.equal((await runBatch([{id:newImportId,stock_quantity:3}])).upserted,1);
   const [[newImportStock]]=await pool.query('SELECT SUM(quantity) total FROM product_stock_locations WHERE product_id=?',[newImportId]);
   assert.equal(Number(newImportStock.total),3);
   const duplicateId=randomUUID();

@@ -236,32 +236,40 @@ test('partial save retries confirmed parent/children without creating duplicates
   await saveFamilyRegistration({name:'Pai'},rows,checkpoint,api);
   assert.deepEqual(created,['Pai','A','B']);assert.deepEqual(updated,['Pai','A']);
 });
-test('used serialized child creates a physical used unit, once across a confirmed retry', async () => {
-  const calls=[];const checkpoint={parent:null,children:{}};
-  const api={create:async data=>({...data,id:data.name}),update:async(id,data)=>({...data,id}),createUnit:async data=>{calls.push(data);return {...data,id:'unit'};}};
-  const rows=[{key:'x',data:{name:'Filho',specs:{condition:'USADO',serial:'TEST-ONLY'}},inheritImages:false}];
+// stock-entry-only-v1 (etapa 6): variação nova não cria unidade; o serial da linha é ignorado e o
+// estoque nasce 0. Aparelhos entram pela tela Entrada.
+test('used child with serial creates only the product, never a unit, across a confirmed retry', async () => {
+  const units=[],saved=[];const checkpoint={parent:null,children:{}};
+  const api={create:async data=>{saved.push(data);return {...data,id:data.name};},update:async(id,data)=>{saved.push(data);return {...data,id};},createUnit:async data=>{units.push(data);return {...data,id:'unit'};}};
+  const rows=[{key:'x',data:{name:'Filho',stock_quantity:2,specs:{condition:'USADO',serial:'TEST-ONLY'}},inheritImages:false}];
   await saveFamilyRegistration({name:'Pai'},rows,checkpoint,api); await saveFamilyRegistration({name:'Pai'},rows,checkpoint,api);
-  assert.equal(calls.length,1);assert.equal(calls[0].condition,'used');assert.equal(calls[0].serial_number,'TEST-ONLY');
-  assert.equal(checkpoint.children.x.specs.serial,undefined); assert.equal(rows[0].data.specs.serial,'TEST-ONLY');
+  assert.equal(units.length,0);
+  assert.equal(checkpoint.children.x.specs.serial,undefined); assert.equal(checkpoint.children.x.specs.condition,'USADO'); assert.equal(rows[0].data.specs.serial,'TEST-ONLY');
+  assert.equal(saved[1].stock_quantity,0,'filho novo nasce sem estoque');
+  const childUpdates=saved.slice(2).filter(data=>data.parent_id);assert.equal(childUpdates.length,1);
+  assert.equal(childUpdates[0].specs.serial,undefined,'nova tentativa (update) também não grava o serial');
 });
 test('main and batch use the selected condition; draft capture never saves products', () => {
   assert.equal(productUnitCondition({condition:'USADO'}),'used');assert.equal(productUnitCondition({condition:'open_box'}),'open_box');
   const form=fs.readFileSync('components/products/ProductForm.tsx','utf8');
-  assert.match(form,/condition: productUnitCondition\(unitItem.specs\)/);assert.match(form,/condition: productUnitCondition\(mergedData.specs\)/);
+  // stock-entry-only-v1: a condição continua no cadastro (select); a unidade, com a condição, nasce na Entrada.
+  assert.match(form,/value=\{productUnitCondition\(watch\('specs'\)\)\}/);assert.doesNotMatch(form,/unitService|createUnit/);
   assert.match(form,/if \(variationDraftMode\) \{[\s\S]*?await onSubmit\(mergedData\);\s*onProductionSetupChange\?\.\(setup\);\s*return;/);
   assert.match(form,/event.stopPropagation\(\)/);
   const specs = stripModelOwnedSpecs({ condition:'used', unit:'UN', production:'third_party', chipset:'model owned' });
   assert.equal(specs.condition,'used'); assert.equal(specs.unit,'UN'); assert.equal(specs.production,'third_party'); assert.equal(specs.chipset,undefined);
 });
 
-test('failed unit save remains pending after UI refreshes the confirmed child ID', async () => {
-  const checkpoint={parent:null,children:{}};let fails=true,creates=0,units=0;
-  const api={create:async data=>{creates++;return {...data,id:data.name};},update:async(id,data)=>({...data,id}),createUnit:async data=>{if(fails) throw Error('unit unavailable');units++;return {...data,id:'unit'};}};
+test('retry after the UI refreshes the confirmed child ID keeps the serial out of the product', async () => {
+  const checkpoint={parent:null,children:{}};let fails=true,creates=0;const updates=[];
+  const api={create:async data=>{creates++;return {...data,id:data.name};},update:async(id,data)=>{updates.push(data);return {...data,id};},
+    saveProduction:async()=>{if(fails) throw Error('production unavailable');}};
   const row={key:'x',data:{name:'Filho',specs:{serial:'FIXTURE',condition:'used'}},inheritImages:false};
-  await assert.rejects(saveFamilyRegistration({name:'Pai'},[row],checkpoint,api),/unit unavailable/);
+  await assert.rejects(saveFamilyRegistration({name:'Pai'},[row],checkpoint,api),/production unavailable/);
   row.data.id=checkpoint.children.x.id;fails=false;
   await saveFamilyRegistration({name:'Pai'},[row],checkpoint,api);
-  assert.equal(creates,2);assert.equal(units,1);assert.equal(checkpoint.units.x.condition,'used');
+  assert.equal(creates,2);assert.equal(updates.at(-1).specs.serial,undefined);assert.equal(updates.at(-1).specs.condition,'used');
+  assert.equal(checkpoint.units,undefined);
 });
 
 // family-price-normalize-v1: preço DECIMAL em texto vindo da API (pai "0.00") não trava o salvamento.
@@ -298,7 +306,8 @@ test('pai da família não mostra nem guarda IMEI/serial', () => {
   const form = fs.readFileSync(new URL('../components/products/ProductForm.tsx', import.meta.url), 'utf8');
   const specs = fs.readFileSync(new URL('../components/products/sections/ProductSpecifications.tsx', import.meta.url), 'utf8');
   assert.match(specs, /if \(familyParent && \['imei1', 'imei2', 'serial'\]\.includes\(key\)\) return false;/);
-  assert.match(specs, /data-family-parent-unit-hint/);
+  // stock-entry-only-v1: o aviso agora aponta para a tela Entrada.
+  assert.match(specs, /\(familyParent && isSmartphoneCategory\) \|\| unitIdentityHidden\) && \([\s\S]*?data-unit-entry-hint[\s\S]*?Estoque e aparelhos entram pela tela Entrada\./);
   assert.match(form, /familyParent=\{Boolean\(isParentProduct\) && !variationDraftMode\}/);
   assert.match(form, /if \(isParent && familyRows\.length > 0\) \{\s*\/\/ family-parent-no-unit-identity-v1[^\n]*\n\s*if \(mergedData\.specs\) \{ const \{ imei1: _i1, imei2: _i2, serial: _sn, \.\.\.parentSpecs \}/);
 });

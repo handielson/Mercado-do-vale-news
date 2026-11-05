@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+// stock-entry-only-v1 (etapa 6): a lista de cadastro em massa saiu do formulário; as checagens do vínculo Bling
+// por item da lista saíram com ela. A trava fica em tmp-tests/stock-entry-only-static.test.mjs.
+
 const source = readFileSync('components/products/ProductForm.tsx', 'utf8');
 
 assert.match(
@@ -12,7 +15,6 @@ assert.match(
 // v1.2.209 (05/08/2026): o vínculo automático ao digitar o SKU pula a busca local para não travar
 // (as imagens locais vêm por hydrateExistingLocalProductImagesBySku); o vínculo manual faz a busca completa.
 assert.match(source, /hydrateExistingLocalProductImagesBySku\(cleanSku\)[\s\S]{0,400}findBlingLinkBySku\(cleanSku, \{ skipLocalProductLookup: true \}\)/, 'automatic SKU link skips the slow local lookup and hydrates images separately');
-assert.match(source, /const link = await findBlingLinkBySku\(cleanSku\);/, 'manual Bling link keeps the full local product lookup');
 
 assert.match(
   source,
@@ -84,24 +86,6 @@ assert.match(
   source,
   /: await hydrateExistingBlingLinkFields\(\);/,
   'Saving an already-linked Bling product must still hydrate EAN/model into the payload',
-);
-
-assert.match(
-  source,
-  /eans: link\.eans\?\.length \? link\.eans : \(link\.ean \? \[link\.ean\] : batchItem\.eans\),/,
-  'batch auto-link must preserve all normalized EANs, not only link.ean',
-);
-
-assert.match(
-  source,
-  /model_id: link\.model_id \|\| item\.model_id,/,
-  'batch auto-link must preserve or fill model_id per item',
-);
-
-assert.match(
-  source,
-  /model: link\.model \|\| item\.model,/,
-  'batch auto-link must preserve or fill model name per item',
 );
 
 console.log('product form Bling model/EAN autofill static checks passed');

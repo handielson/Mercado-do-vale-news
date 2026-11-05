@@ -330,6 +330,21 @@ async function getBySku(sku: string): Promise<Product | null> {
     return transformFromDB(rows[0]);
 }
 
+/**
+ * Entrada: acha o produto pelo código bipado. EAN principal ou alternativo (GET /products/by-ean/:ean
+ * já procura nos dois); sem EAN, SKU exato. Qualquer status: produto inativo também recebe estoque.
+ * Falha de rede lança erro (não pode virar "não encontrado").
+ */
+async function findByCode(code: string): Promise<Product[]> {
+    const value = code.trim();
+    if (!value) return [];
+    const byEan = await vpsApiService.getProductByEan(value);
+    if (!byEan) throw new Error('Não foi possível consultar o produto na VPS.');
+    if (byEan.length > 0) return byEan.map(transformFromDB);
+    const bySku = await getBySku(value);
+    return bySku ? [bySku] : [];
+}
+
 async function search(query: string): Promise<Product[]> {
     const data = await vpsApiService.getProducts({ search: query, status: 'all', limit: 50, noCache: true });
     return (data || []).map(transformFromDB);
@@ -641,7 +656,9 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
         origin: input.origin || null,
         weight_kg,
         dimensions,
-        stock_quantity: input.stock_quantity || 0,
+        // stock-entry-only-v1: estoque omitido mantém o atual (a nova tentativa da família não zera uma Entrada).
+        // Estoque omitido: não vai no PUT, e o servidor mantém o saldo (sem regravar um valor lido antes).
+        stock_quantity: input.stock_quantity === undefined ? undefined : (input.stock_quantity || 0),
         status: input.status,
         track_inventory: input.track_inventory ? 1 : 0,
         is_gift: input.is_gift ? 1 : 0,
@@ -713,7 +730,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
 
     // Shopee Sync Automático
     const shopeePriceChanged = oldProduct.price_retail !== savedProduct.price_retail;
-    const shopeeStockChanged = Boolean(input.track_inventory && oldProduct.stock_quantity !== input.stock_quantity);
+    const shopeeStockChanged = Boolean(input.track_inventory && payload.stock_quantity !== undefined && oldProduct.stock_quantity !== payload.stock_quantity);
     const hasShopeeLinks = (shopeePriceChanged || shopeeStockChanged)
         ? (await shopeeProductService.getByProductIds([id])).some((link) => Number(link.shopee_item_id) > 0)
         : false;
@@ -723,7 +740,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
                 shopeeService.updatePrice(id, savedProduct.price_retail).catch(e => console.error("Shopee Price Sync Error:", e));
             }
             if (shopeeStockChanged) {
-                shopeeService.updateStock(id, input.stock_quantity || 0).catch(e => console.error("Shopee Stock Sync Error:", e));
+                shopeeService.updateStock(id, payload.stock_quantity).catch(e => console.error("Shopee Stock Sync Error:", e));
             }
         });
     }
@@ -748,6 +765,7 @@ export const productService = {
     getById,
     getBySku,
     getByEan,
+    findByCode,
     create,
     update,
     delete: deleteProduct,

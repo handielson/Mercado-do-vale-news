@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { AccountantProtectedRoute } from '../components/AccountantProtectedRoute';
 import { CartProvider } from '../contexts/CartContext';
@@ -46,8 +46,6 @@ const RedefinirSenhaPage = lazy(() => import('../pages/auth/RedefinirSenhaPage')
 const CustomerProfilePage = lazy(() => import('../pages/customer/CustomerProfilePage').then(module => ({ default: module.CustomerProfilePage })));
 const CustomerFavoritesPage = lazy(() => import('../pages/customer/CustomerFavoritesPage').then(module => ({ default: module.CustomerFavoritesPage })));
 const CatalogEntryPage = lazy(() => import('../pages/admin/entrada/CatalogEntryPage').then(module => ({ default: module.CatalogEntryPage })));
-const BulkRegistrationPage = lazy(() => import('../pages/admin/products/BulkRegistrationPage').then(module => ({ default: module.BulkRegistrationPage })));
-const SmartphonePhotoIntakePage = lazy(() => import('../pages/admin/products/SmartphonePhotoIntakePage').then(module => ({ default: module.SmartphonePhotoIntakePage })));
 const CategorySettingsPage = lazy(() => import('../pages/admin/settings/categories/index'));
 const NewCategoryPage = lazy(() => import('../pages/admin/settings/categories/new'));
 const FieldPresetsPage = lazy(() => import('../pages/admin/settings/categories/presets'));
@@ -528,21 +526,14 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     )
   },
+  // Cadastro em massa e cadastro por foto viraram abas da Entrada (etapa 6): links antigos redirecionam.
   {
     path: "/admin/products/bulk",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><BulkRegistrationPage /></AdminLayout>
-      </ProtectedRoute>
-    )
+    element: <Navigate to="/admin/entrada?aba=planilha" replace />
   },
   {
     path: "/admin/products/photo-intake",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><SmartphonePhotoIntakePage /></AdminLayout>
-      </ProtectedRoute>
-    )
+    element: <Navigate to="/admin/entrada?aba=foto" replace />
   },
   {
     path: "/admin/products/image-bank",

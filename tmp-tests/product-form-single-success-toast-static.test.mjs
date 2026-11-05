@@ -10,5 +10,5 @@ assert.match(
   'ProductForm must only show the single-product creation success toast when creating a new product, so edit flow keeps only the update toast from ProductFormPage.'
 );
 
-assert.match(source, /const isNewRegistration = !initialData \|\| Boolean\(initialDraft && !initialData\.id\);/, 'isNewRegistration nunca inclui produto existente');
+assert.match(source, /const isNewRegistration = !initialData\?\.id;/, 'isNewRegistration nunca inclui produto existente');
 console.log('ok - ProductForm single-product success toast is create-only');
