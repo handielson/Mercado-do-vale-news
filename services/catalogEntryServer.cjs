@@ -268,7 +268,7 @@ async function addQuantity(ctx, item, target, location) {
   else await conn.query(`INSERT INTO product_stock_locations (id,company_id,product_id,deposit_id,location_id,quantity,reserved_quantity)
     VALUES (?,?,?,?,?,?,0)`, [crypto.randomUUID(), company, target.id, location.deposit_id, location.id, next]);
   await ctx.deps.insertStockMovement({ company_id: company, product_id: target.id, to_deposit_id: location.deposit_id,
-    to_location_id: location.id, quantity: item.quantity, movement_type: 'entry', reason: 'Entrada', reference_type: 'catalog_entry',
+    to_location_id: location.id, quantity: item.quantity, movement_type: 'in', reason: 'Entrada', reference_type: 'catalog_entry',
     reference_id: ctx.batchId, previous_to_quantity: previous, new_to_quantity: next, notes: item.condition_note || null }, conn);
   await ctx.deps.syncProductStockFromLocations(target.id, conn);
 }
@@ -364,4 +364,58 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
   }
 }
 
-module.exports = { ensureCatalogEntrySchema, runCatalogEntry };
+const MAX_ITEMS = 500;
+
+function registerCatalogEntryRoutes(fastify, { pool, auth, deps }) {
+  const opts = { preHandler: auth };
+  // Memoizado: o boot não bloqueia nem cai; cada handler espera o schema antes de usar.
+  const ready = () => ensureCatalogEntrySchema(pool);
+  ready().catch(() => {});
+
+  function checkItems(body, reply) {
+    const items = body?.items;
+    if (!Array.isArray(items) || !items.length) { reply.code(400).send({ error: 'Envie a lista de itens.' }); return null; }
+    if (items.length > MAX_ITEMS) { reply.code(400).send({ error: 'Lote acima de 500 itens.' }); return null; }
+    return items;
+  }
+  function fail(reply, error) {
+    const status = Number(error?.statusCode);
+    if (status >= 400 && status < 500) return reply.code(status).send({ error: error.message });
+    fastify.log?.error?.(error);
+    return reply.code(500).send({ error: 'Erro ao processar a entrada.' });
+  }
+
+  fastify.post('/catalog-entries/preview', opts, async (request, reply) => {
+    const items = checkItems(request.body, reply);
+    if (!items) return reply;
+    try {
+      await ready();
+      const { ok, plan, hash } = await runCatalogEntry(pool, items, { commit: false, userId: request.user?.id || null, deps });
+      return reply.code(200).send({ ok, plan, hash });
+    } catch (error) { return fail(reply, error); }
+  });
+
+  fastify.post('/catalog-entries', opts, async (request, reply) => {
+    const items = checkItems(request.body, reply);
+    if (!items) return reply;
+    try {
+      await ready();
+      const result = await runCatalogEntry(pool, items, { commit: true, expectedHash: request.body.preview_hash,
+        userId: request.user?.id || null, deps });
+      if (!result.ok) return reply.code(422).send({ plan: result.plan });
+      return reply.code(201).send({ batch_id: result.batch_id, plan: result.plan });
+    } catch (error) { return fail(reply, error); }
+  });
+
+  fastify.get('/catalog-entries/:id', opts, async (request, reply) => {
+    try {
+      await ready();
+      const [[batch]] = await pool.query('SELECT * FROM catalog_entry_batches WHERE id=?', [request.params.id]);
+      if (!batch) return reply.code(404).send({ error: 'Lote não encontrado.' });
+      const [lines] = await pool.query('SELECT * FROM catalog_entry_lines WHERE batch_id=? ORDER BY line', [request.params.id]);
+      return reply.send({ batch, lines });
+    } catch (error) { return fail(reply, error); }
+  });
+}
+
+module.exports = { ensureCatalogEntrySchema, runCatalogEntry, registerCatalogEntryRoutes };

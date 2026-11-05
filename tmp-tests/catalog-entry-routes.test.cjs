@@ -1,0 +1,116 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const Fastify = require('fastify');
+const { registerCatalogEntryRoutes } = require('../services/catalogEntryServer.cjs');
+const { fakeDb } = require('./helpers/catalogEntryFakeDb.cjs');
+
+const IMEI = '863715061138763';
+const PRICES = { price_retail: 130000, price_reseller: 125000, price_wholesale: 115000 };
+const item = (patch = {}) => ({ source: 'manual', model_id: 'm1', configuration: { ram: '8GB', storage: '256GB' }, color: 'Verde',
+  identity: { imei1: IMEI }, quantity: 1, cost_cents: 95000, location_id: 'L1', prices: PRICES, ...patch });
+const H = { 'x-sync-key': 'test' };
+
+async function app(db = fakeDb()) {
+  const fastify = Fastify();
+  const auth = async (request, reply) => {
+    if (request.headers['x-sync-key'] !== 'test') return reply.code(401).send({ error: 'Não autorizado' });
+    request.user = { id: 'u1' };
+  };
+  registerCatalogEntryRoutes(fastify, { pool: db.pool, auth, deps: db.deps });
+  await fastify.ready();
+  return { fastify, db };
+}
+const post = (fastify, url, payload, headers = H) => fastify.inject({ method: 'POST', url, payload, headers });
+
+test('prévia devolve ok, plan e hash', async () => {
+  const { fastify } = await app();
+  const res = await post(fastify, '/catalog-entries/preview', { items: [item()] });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.ok, true); assert.ok(body.hash); assert.equal(body.plan.length, 1);
+});
+
+test('prévia com erro de linha continua 200 com ok:false', async () => {
+  const { fastify } = await app();
+  const res = await post(fastify, '/catalog-entries/preview', { items: [item({ identity: {} })] });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().ok, false);
+  assert.ok(res.json().plan[0].errors.length);
+});
+
+test('confirmação com preview_hash certo dá 201 e batch_id, e GET devolve batch e lines', async () => {
+  const { fastify, db } = await app();
+  const preview = (await post(fastify, '/catalog-entries/preview', { items: [item()] })).json();
+  const res = await post(fastify, '/catalog-entries', { items: [item()], preview_hash: preview.hash });
+  assert.equal(res.statusCode, 201, res.body);
+  const { batch_id, plan } = res.json();
+  assert.ok(batch_id); assert.equal(plan.length, 1);
+  assert.equal(db.state.batches[0].created_by, 'u1');
+  const got = await fastify.inject({ method: 'GET', url: `/catalog-entries/${batch_id}`, headers: H });
+  assert.equal(got.statusCode, 200);
+  assert.equal(got.json().batch.id, batch_id);
+  assert.equal(got.json().lines.length, 1);
+});
+
+test('GET de lote inexistente dá 404', async () => {
+  const { fastify } = await app();
+  const res = await fastify.inject({ method: 'GET', url: '/catalog-entries/nao-existe', headers: H });
+  assert.equal(res.statusCode, 404);
+});
+
+test('hash errado dá 409', async () => {
+  const { fastify } = await app();
+  const res = await post(fastify, '/catalog-entries', { items: [item()], preview_hash: 'x' });
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.json().error, 'O lote mudou desde a conferência. Confira novamente.');
+});
+
+test('item inválido na confirmação dá 422 com plan[0].errors', async () => {
+  const { fastify, db } = await app();
+  const res = await post(fastify, '/catalog-entries', { items: [item({ identity: {} })], preview_hash: 'x' });
+  assert.equal(res.statusCode, 422);
+  assert.ok(res.json().plan[0].errors.length);
+  assert.equal(db.state.batches.length, 0);
+});
+
+test('mais de 500 itens dá 400', async () => {
+  const { fastify } = await app();
+  const items = Array.from({ length: 501 }, () => item());
+  for (const url of ['/catalog-entries/preview', '/catalog-entries']) {
+    const res = await post(fastify, url, { items });
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error, 'Lote acima de 500 itens.');
+  }
+});
+
+test('items ausente, não-array ou vazio dá 400', async () => {
+  const { fastify } = await app();
+  for (const payload of [{}, { items: 'x' }, { items: [] }]) {
+    const res = await post(fastify, '/catalog-entries/preview', payload);
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error, 'Envie a lista de itens.');
+  }
+});
+
+test('sem auth dá 401 em todas as rotas', async () => {
+  const { fastify } = await app();
+  assert.equal((await post(fastify, '/catalog-entries/preview', { items: [item()] }, {})).statusCode, 401);
+  assert.equal((await post(fastify, '/catalog-entries', { items: [item()] }, {})).statusCode, 401);
+  assert.equal((await fastify.inject({ method: 'GET', url: '/catalog-entries/x' })).statusCode, 401);
+});
+
+test('vps_server.js e .cjs registram as rotas repassando o db às dependências', () => {
+  for (const file of ['vps_server.js', 'vps_server.cjs']) {
+    const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+    assert.ok(src.includes("require('./services/catalogEntryServer.cjs').registerCatalogEntryRoutes(fastify"), file);
+    assert.ok(src.includes('auth: requireSyncKeyOrAdmin'), file);
+    assert.ok(src.includes('(id, db) => syncProductStock(id, db)'), file);
+    assert.ok(src.includes('(id, db) => syncProductStockFromLocations(id, db)'), file);
+    assert.ok(src.includes('(row, db) => insertStockMovement(row, db)'), file);
+    assert.ok(src.includes('(ids, ex) => findUnitSerializedIdentifierConflict(ids, ex)'), file);
+    assert.ok(src.includes('getDefaultCompanyId: () => getDefaultStockCompanyId()'), file);
+  }
+});
