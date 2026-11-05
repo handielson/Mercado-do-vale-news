@@ -6,10 +6,15 @@ const detail = readFileSync('pages/admin/products/ProductDetailPage.tsx', 'utf8'
 
 assert.match(store, /admin-variant-add-units-v1/, 'cada variacao da loja tem atalho de admin para incluir pecas');
 assert.match(store, /const addUnitsUrl = isAdmin && sib\.id/, 'o atalho so aparece para administrador');
-assert.match(store, /\?tab=inventory&addUnit=1/, 'o atalho abre o estoque da variacao com o formulario aberto');
+// entrada-atalhos-v1: o atalho abre a Entrada com a variacao fixa (antes: ?tab=inventory&addUnit=1).
+assert.match(store, /const addUnitsUrl = isAdmin && sib\.id\s*\?\s*entryAddUnitsPath\(sib\.id\)/, 'o atalho abre a Entrada com a variacao fixa');
+assert.doesNotMatch(store, /addUnit=1/, 'a loja nao monta mais o link antigo');
 assert.match(store, /\{addUnitsUrl && \(\s*<button/, 'o botao fica fora do botao da variacao (esgotada continua clicavel no atalho)');
 assert.match(detail, /get\('tab'\) === 'inventory'/, 'a pagina do produto aceita abrir na aba de estoque');
-assert.match(detail, /useState\(requestedAddUnit\)/, 'a pagina do produto abre "Adicionar Unidade" pelo atalho');
+assert.match(detail, /get\('addUnit'\) === '1'/, 'a pagina do produto ainda reconhece o link antigo');
+assert.match(detail, /navigate\(entryAddUnitsPath\(id\)!, \{ replace: true \}\)/, 'link antigo addUnit=1 redireciona para a Entrada');
+assert.match(detail, /navigate\(entryAddUnitsPath\(product\.id\)!\)/, '"Adicionar Unidade" abre a Entrada');
+assert.doesNotMatch(detail, /<UnitForm\b/, 'formulario embutido saiu da pagina do produto');
 
 console.log('admin variant add units static checks passed');
 

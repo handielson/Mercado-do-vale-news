@@ -18,6 +18,8 @@ vm.runInNewContext(compiled, { exports: mod.exports, module: mod, require(name) 
   if (name === 'sonner') return { toast: {} };
   if (name === './CatalogTitleEditor') return { CatalogTitleEditor: () => null };
   if (name === './ProductCard') return { ProductCard: props => React.createElement('section', { 'data-product': props.product.id }, props.product.name, props.familyStockSummary, props.familyVariants) };
+  if (name === '../catalog/ProductConditionBadge') return { ProductConditionBadge: () => null };
+  if (name.includes('entryShortcuts')) return { entryAddUnitsPath: id => `/admin/entrada?variacao=${encodeURIComponent(id)}`, entryNewVariationPath: () => null };
   if (name.includes('modelProductAggregator')) return { getProductVariationSpecs: p => ({ color: p.specs.color, ram: p.specs.ram || '', storage: p.specs.storage || '' }) };
   throw new Error(`Unexpected dependency: ${name}`);
 } });
@@ -50,15 +52,19 @@ test('resumo lista cada cor com atalho "+ peças" (inclusive zerada) e fica ante
   const html = render({ groups: [{ ...group, familyProducts: [parent, child, empty] }] });
   const summary = html.slice(html.indexOf('aria-label="Estoque disponível para venda"'), html.indexOf('aria-label="SKUs da família"'));
   assert.match(summary, /Disponível para vender: 3 un/, 'o total soma so estoque positivo');
-  assert.match(summary, /Preto \(3 un\.\)/);
+  assert.match(summary, /Preto\s+\(3 un\.\)/);
   assert.match(summary, /8GB\/256GB/);
-  assert.match(summary, /class="text-slate-400">Azul \(0 un\.\)/, 'cor zerada aparece apagada para poder receber pecas');
+  assert.match(summary, /class="text-slate-400">Azul\s+\(0 un\.\)/, 'cor zerada aparece apagada para poder receber pecas');
   assert.match(summary, /aria-label="Incluir mais peças de Preto · 8GB RAM · 256GB armazenamento"/);
   assert.match(summary, /aria-label="Incluir mais peças de Azul · 8GB RAM · 256GB armazenamento"/);
   assert.doesNotMatch(summary, /Nova variação/, 'sem pai marcado como familia nao oferece nova variacao');
   const familyParent = { ...parent, is_parent: 1 };
   const withParent = render({ groups: [{ ...group, parent: familyParent, familyProducts: [familyParent, child] }], onAddVariation() {} });
   assert.match(withParent, /Nova variação \(cor\/memória\)/);
+  // entrada-atalhos-v1: "+ peças" abre a Entrada; "Nova variação" segue pelo onAddVariation da página.
+  assert.match(source, /navigate\(entryAddUnitsPath\(product\.id\)!\)/);
+  assert.doesNotMatch(source, /addUnit=1/);
+  assert.match(source, /onAddVariation\(group\.parent!\)/);
 });
 test('todos os cards preservam mídia, atalhos, nome e SKU antes da expansão', () => {
   const card = fs.readFileSync('components/products/ProductCard.tsx', 'utf8');

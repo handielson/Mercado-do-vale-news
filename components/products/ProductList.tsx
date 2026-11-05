@@ -10,6 +10,7 @@ import type { ProductFamilyGroup } from './ProductFamilyList';
 import { ProductCard } from './ProductCard';
 import { LazyLabelPrintModal } from './LazyLabelPrintModal';
 import { getProductVariationSpecs } from '../../services/modelProductAggregator.js';
+import { entryAddUnitsPath } from '../../services/entryShortcuts.js';
 
 interface ProductListProps {
     products: Product[];
@@ -78,7 +79,7 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
             priceVariants={variants}
             tiktokProductLink={tiktokProductLinks[familyProduct.id] || null}
             familyStockSummary={<div className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800" aria-label="Estoque disponível para venda">
-                {/* family-card-stock-actions-v1: cada cor tem "+ peças" (abre Adicionar Unidade) e a familia tem "Nova variação". */}
+                {/* family-card-stock-actions-v1: cada cor tem "+ peças" (abre a Entrada com a variação fixa) e a familia tem "Nova variação". */}
                 <p className="font-semibold">Disponível para vender: {variants.reduce((total, product) => total + Math.max(0, Number(product.stock_quantity) || 0), 0)} un.</p>
                 {sortedMemoryGroups.map(memoryGroup => {
                     if (!memoryGroup.products.length) return null;
@@ -92,7 +93,7 @@ function FamilyCard({ group, onEditProduct, onDeleteProduct, selectionMode, sele
                                     <span className={stock > 0 ? '' : 'text-slate-400'}>{label(product)} <ProductConditionBadge product={product} /> ({stock} un.)</span>
                                     <span className="flex shrink-0 items-center gap-1">
                                     <button type="button"
-                                        onClick={(event) => { event.stopPropagation(); navigate(`/admin/products/${encodeURIComponent(product.id)}?tab=inventory&addUnit=1`); }}
+                                        onClick={(event) => { event.stopPropagation(); navigate(entryAddUnitsPath(product.id)!); }}
                                         title={`Incluir mais peças de ${label(product)}${memoryGroup.title ? ` · ${memoryGroup.title}` : ''}`}
                                         aria-label={`Incluir mais peças de ${label(product)}${memoryGroup.title ? ` · ${memoryGroup.title}` : ''}`}
                                         className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-emerald-300 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100">

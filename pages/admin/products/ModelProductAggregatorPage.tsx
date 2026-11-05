@@ -12,6 +12,7 @@ import { isLocalCatalogPreviewRuntime } from '../../../services/localCatalogPrev
 import { stockLocationService } from '../../../services/stockLocationService';
 import { aggregateModelProducts, getModelIdentifierSections } from '../../../services/modelProductAggregator.js';
 import { getFamilyChildState } from '../../../services/productClonePrefill.js';
+import { entryAddUnitsPath, entryNewVariationPath } from '../../../services/entryShortcuts.js';
 import { familyWorkspacePath } from '../../../services/productFormDrafts';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 import { PAYJOY_SALE_NOTE } from '../../../utils/saleInformation.js';
@@ -111,7 +112,8 @@ export const ModelProductAggregatorPage: React.FC = () => {
     const [stockRowsByProductId, setStockRowsByProductId] = useState<Record<string, any[]>>({});
     const addUnitsPath = (product: any) => {
         const id = product?.id || product?.raw?.id || product?.products?.[0]?.id || product?.products?.[0]?.raw?.id;
-        return id ? `/admin/products/${encodeURIComponent(String(id))}?tab=inventory&addUnit=1` : '';
+        // entrada-atalhos-v1: "Incluir peças" abre a Entrada com a variação fixa.
+        return entryAddUnitsPath(id) || '';
     };
     const requestVisibility = (unit: any) => {
         setVisibilityUnit(unit);
@@ -266,7 +268,12 @@ export const ModelProductAggregatorPage: React.FC = () => {
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                     {familyParent && <button type="button"
-                        onClick={() => navigate('/admin/products/new', { state: getFamilyChildState(familyParent) })}
+                        onClick={() => {
+                            // Pai sem model_id (importado do Bling) segue no cadastro antigo até a etapa 6.
+                            const entryPath = entryNewVariationPath(familyParent);
+                            if (entryPath) navigate(entryPath);
+                            else navigate('/admin/products/new', { state: getFamilyChildState(familyParent) });
+                        }}
                         className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700">
                         <Plus className="h-4 w-4" />
                         Nova variação (cor/memória)

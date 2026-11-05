@@ -97,6 +97,7 @@ const aggregatorPage = readFileSync(new URL('../pages/admin/products/ModelProduc
 assert.doesNotMatch(aggregatorPage, />\s*Adicionar igual\s*</, 'Página do Produto não mostra mais Adicionar igual');
 assert.doesNotMatch(aggregatorPage, /getProductCloneState\(/, 'Página do Produto não abre cadastro copiado');
 assert.match(aggregatorPage, /Incluir peças/, 'mais unidades entram por Incluir peças');
+assert.match(aggregatorPage, /entryAddUnitsPath\(/, 'Incluir peças abre a Entrada com a variação fixa');
 
 const formPage = readFileSync(new URL('../pages/admin/products/ProductFormPage.tsx', import.meta.url), 'utf8');
 assert.match(formPage, /cloneProduct/, 'pagina de novo produto deve aceitar cloneProduct pelo estado de navegacao');

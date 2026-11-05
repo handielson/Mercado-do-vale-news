@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, ExternalLink, MapPin, Package, Plus, Printer, Tags } from 'lucide-react';
 import { LazyLabelPrintModal } from '../../../components/products/LazyLabelPrintModal';
 import { Product, ProductInput } from '../../../types/product';
-import { Unit, UnitInput } from '../../../types/unit';
+import { Unit } from '../../../types/unit';
 import { productService } from '../../../services/products';
 import { unitService } from '../../../services/units';
 import { autoResponderService } from '../../../services/autoResponderService';
@@ -13,9 +13,9 @@ import type { AutoResponderTag } from '../../../types/autoResponder';
 import { ProductForm } from '../../../components/products/ProductForm';
 import { ProductFamilyInheritance } from '../../../components/products/ProductFamilyInheritance';
 import { UnitList } from '../../../components/units/UnitList';
-import { UnitForm } from '../../../components/units/UnitForm';
 import { InmetroWidget } from '../../../components/admin/InmetroWidget';
 import { getFamilyChildState } from '../../../services/productClonePrefill.js';
+import { entryAddUnitsPath, entryNewVariationPath } from '../../../services/entryShortcuts.js';
 import { isLocalCatalogPreviewRuntime } from '../../../services/localCatalogPreview';
 
 type TabType = 'product' | 'family' | 'inventory' | 'extras';
@@ -108,9 +108,12 @@ export const ProductDetailPage: React.FC = () => {
     const location = useLocation();
     const print3dEntry = new URLSearchParams(location.search).get('print3d') === '1';
 
-    // admin-variant-add-units-v1: ?tab=inventory&addUnit=1 abre direto "Adicionar Unidade" (atalho da loja).
     const requestedTab = new URLSearchParams(location.search).get('tab') === 'inventory' ? 'inventory' : 'product';
+    // entrada-atalhos-v1: o link antigo ?tab=inventory&addUnit=1 (favoritos) agora abre a Entrada com a variação fixa.
     const requestedAddUnit = new URLSearchParams(location.search).get('addUnit') === '1';
+    useEffect(() => {
+        if (requestedAddUnit && id) navigate(entryAddUnitsPath(id)!, { replace: true });
+    }, [id, requestedAddUnit, navigate]);
     const [activeTab, setActiveTab] = useState<TabType>(requestedTab);
     useEffect(() => { setActiveTab(requestedTab); }, [id, requestedTab]);
     const selectTab = (nextTab: TabType) => {
@@ -128,8 +131,6 @@ export const ProductDetailPage: React.FC = () => {
     const [isLoadingProduct, setIsLoadingProduct] = useState(false);
     const [isLoadingUnits, setIsLoadingUnits] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [showUnitForm, setShowUnitForm] = useState(requestedAddUnit);
-    useEffect(() => { if (requestedAddUnit) setShowUnitForm(true); }, [id, requestedAddUnit]);
     const [autoResponderTags, setAutoResponderTags] = useState<AutoResponderTag[]>([]);
     const [productTagIds, setProductTagIds] = useState<number[]>([]);
     const [isLoadingTags, setIsLoadingTags] = useState(false);
@@ -137,12 +138,12 @@ export const ProductDetailPage: React.FC = () => {
 
     // Fetch product data
     useEffect(() => {
-        if (id) {
+        if (id && !requestedAddUnit) {
             fetchProduct();
             fetchUnits();
             loadProductTags();
         }
-    }, [id]);
+    }, [id, requestedAddUnit]);
 
     useEffect(() => {
         setProductTagIds(parseProductTagIds(product?.tag_ids));
@@ -247,21 +248,6 @@ export const ProductDetailPage: React.FC = () => {
         }
     };
 
-    const handleUnitSubmit = async (data: UnitInput) => {
-        try {
-            setIsSaving(true);
-            await unitService.create(data);
-            toast.success('Unidade adicionada ao estoque!');
-            setShowUnitForm(false);
-            await fetchUnits();
-        } catch (error) {
-            console.error('Error creating unit:', error);
-            toast.error('Erro ao adicionar unidade');
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
     const handleDeleteUnit = async (unit: Unit) => {
         if (!confirm(`Deseja realmente excluir a unidade ${unit.imei_1}?`)) {
             return;
@@ -288,6 +274,9 @@ export const ProductDetailPage: React.FC = () => {
     const modelPanelHref = product?.model_id ? `/admin/products/models/${encodeURIComponent(product.model_id)}` : '';
     const locationSearchTerm = encodeURIComponent(product?.sku || product?.name || '');
     const stockLocationsHref = `/admin/inventory/locations?search=${locationSearchTerm}`;
+
+    // Link antigo addUnit=1: nada a mostrar enquanto redireciona para a Entrada.
+    if (requestedAddUnit) return null;
 
     // Loading state
     if (isLoadingProduct) {
@@ -331,7 +320,12 @@ export const ProductDetailPage: React.FC = () => {
                         {Number(product.is_parent) === 1 && (
                             <button
                                 type="button"
-                                onClick={() => navigate('/admin/products/new', { state: getFamilyChildState(product) })}
+                                onClick={() => {
+                                    // Pai sem model_id (importado do Bling) segue no cadastro antigo até a etapa 6.
+                                    const entryPath = entryNewVariationPath(product);
+                                    if (entryPath) navigate(entryPath);
+                                    else navigate('/admin/products/new', { state: getFamilyChildState(product) });
+                                }}
                                 className="inline-flex items-center gap-2 rounded-lg bg-violet-700 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-800"
                             >
                                 <Plus className="h-4 w-4" />
@@ -505,28 +499,17 @@ export const ProductDetailPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Add Unit Button */}
-                            {!showUnitForm && (
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={() => setShowUnitForm(true)}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                        Adicionar Unidade
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Unit Form */}
-                            {showUnitForm && (
-                                <UnitForm
-                                    productId={product.id}
-                                    onSubmit={handleUnitSubmit}
-                                    onCancel={() => setShowUnitForm(false)}
-                                    isLoading={isSaving}
-                                />
-                            )}
+                            {/* Add Unit Button: a entrada de peças é feita na tela Entrada (entrada-atalhos-v1). */}
+                            <div className="flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => navigate(entryAddUnitsPath(product.id)!)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    Adicionar Unidade
+                                </button>
+                            </div>
 
                             {/* Units List */}
                             <UnitList

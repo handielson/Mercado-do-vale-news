@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { buildProductVideoUrl } from '../../../utils/video-url';
 import { buildProductFamilyGroups, paginateProductFamilyGroups } from '../../../utils/productFamilies.mjs';
 import { getFamilyChildState } from '../../../services/productClonePrefill.js';
+import { entryNewVariationPath } from '../../../services/entryShortcuts.js';
 import { mercadoLivreService } from '../../../services/mercadoLivreService';
 import {
     TIKTOK_PRODUCT_LINKS_UPDATED_EVENT,
@@ -271,7 +272,10 @@ export const ProductListPage: React.FC = () => {
     };
 
     const handleAddVariation = (parent: Product) => {
-        navigate('/admin/products/new', { state: getFamilyChildState(parent) });
+        // entrada-atalhos-v1: com model_id abre a Entrada (Manual) no modelo; pai sem modelo (Bling) segue no cadastro antigo até a etapa 6.
+        const entryPath = entryNewVariationPath(parent);
+        if (entryPath) navigate(entryPath);
+        else navigate('/admin/products/new', { state: getFamilyChildState(parent) });
     };
 
     const handleTogglePrint3dFamily = async (parent: Product, familyProducts: Product[], enabled: boolean) => {

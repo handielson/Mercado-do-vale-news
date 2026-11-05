@@ -12,6 +12,7 @@ import { aggregateModelProducts, getModelIdentifierSections } from '../services/
 import { productImageList, resolveProductFamilyImages } from '../services/productFamilyImages.js';
 import * as channelProfit from '../utils/channelProfit.js';
 import * as productConditionModule from '../utils/productCondition.js';
+import * as entryShortcuts from '../services/entryShortcuts.js';
 
 const require = createRequire(import.meta.url);
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -46,6 +47,7 @@ test('Página do Produto renderiza título, canais, estoque, taxas e lucro por S
     'react-router-dom': { useNavigate: () => () => {}, useParams: () => ({ modelId: 'm1' }) },
     '/modelProductAggregator.js': { aggregateModelProducts, getModelIdentifierSections },
     '/productFamilyImages.js': { productImageList, resolveProductFamilyImages },
+    '/entryShortcuts.js': entryShortcuts,
     '/localCatalogPreview': { isLocalCatalogPreviewRuntime: () => false },
     '/LazyLabelPrintModal': { LazyLabelPrintModal: () => null },
     '/ModelPublicationChannels': {
