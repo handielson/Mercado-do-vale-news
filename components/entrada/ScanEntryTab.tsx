@@ -52,6 +52,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
 
     const [variation, setVariation] = useState<Locked | null>(null);
     const [variationPhone, setVariationPhone] = useState<boolean | null>(null);
+    const [variationCategoryError, setVariationCategoryError] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [reading, setReading] = useState('');
     const [feedback, setFeedback] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
@@ -67,7 +68,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
 
     // Atalho ?variacao=: trava tudo a partir do produto.
     useEffect(() => {
-        setVariation(null); setVariationPhone(null);
+        setVariation(null); setVariationPhone(null); setVariationCategoryError(false);
         if (!variationId) return;
         let alive = true;
         setLoadError(null);
@@ -91,7 +92,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                 if (!locked.model_id) { setVariationPhone(true); return; }
                 loadModelProfile({ id: locked.model_id, name: locked.name, category_id: locked.category_id })
                     .then(profile => { if (alive) setVariationPhone(profile.isPhone); })
-                    .catch(() => { if (alive) setVariationPhone(true); });
+                    .catch(() => { if (alive) { setVariationPhone(null); setVariationCategoryError(true); } });
             })
             .catch(() => { if (alive) setLoadError('Não foi possível carregar a variação.'); });
         return () => { alive = false; };
@@ -121,7 +122,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
     const variationIncomplete = Boolean(variation && !(variation.model_id && variation.ram && variation.storage && variation.color));
     const variationNotPhone = Boolean(variation && variationPhone === false);
     const locked: Locked | null = variationId
-        ? (variation && !variationIncomplete && !variationNotPhone ? variation : null)
+        ? (variation && !variationIncomplete && variationPhone === true ? variation : null)
         : (model && isPhone ? {
             model_id: model.id, category_id: model.category_id ?? null, name: model.name,
             ram, storage, version: version.trim(), condition, color,
@@ -209,6 +210,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                 <>
                     {locked && <p className="text-sm font-medium text-slate-800">{lockLabel}</p>}
                     {variationIncomplete && <p role="alert" className="text-sm text-red-600">Esta variação não tem memória/cor definidas. Use a aba Manual.</p>}
+                    {!variationIncomplete && variationCategoryError && <p role="alert" className="text-sm text-red-600">Não foi possível identificar a categoria do modelo.</p>}
                     {!variationIncomplete && variationNotPhone && <p role="alert" className="text-sm text-red-600">Esta variação não é celular. Use a aba Manual.</p>}
                 </>
             ) : (

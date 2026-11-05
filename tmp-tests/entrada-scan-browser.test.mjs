@@ -236,3 +236,10 @@ test('?variacao= de produto que não é celular avisa', { timeout: 120000 }, asy
     await page.getByText('Esta variação não é celular. Use a aba Manual.').waitFor();
     assert.equal(await start(page).count(), 0);
 });
+
+test('?variacao= com categoria não identificada não libera a leitura', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { prefill: { variation_id: 'p5' } });
+    await page.getByText('Não foi possível identificar a categoria do modelo.').waitFor();
+    await page.getByLabel('Custo').count();
+    assert.equal(await start(page).count(), 0);
+});
