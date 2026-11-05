@@ -19,6 +19,7 @@ interface Parsed { fileName: string; lines: EntryLine[]; issues: { row: number; 
 interface Ctx { models: any[]; categories: any[]; locations: any[] }
 
 const READ_ERROR = 'Não foi possível ler a planilha. Use o modelo .xlsx da Entrada.';
+const CTX_ERROR = 'Não foi possível carregar modelos, categorias e locais. Recarregue a página.';
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export const SpreadsheetEntryTab: React.FC<SpreadsheetEntryTabProps> = ({ onAddLines, existingState, busy }) => {
@@ -43,6 +44,7 @@ export const SpreadsheetEntryTab: React.FC<SpreadsheetEntryTabProps> = ({ onAddL
                 };
                 ctxRef.current = loaded;
                 setCtx(loaded);
+                setLoadError(false);
                 return loaded;
             }).catch(err => { ctxPromise.current = null; setLoadError(true); throw err; });
         }
@@ -56,8 +58,12 @@ export const SpreadsheetEntryTab: React.FC<SpreadsheetEntryTabProps> = ({ onAddL
         const mine = ++seq.current;
         setReading(true); setReadError(null); setParsed(null);
         try {
-            const [records, c] = await Promise.all([readExcelObjects(f), loadCtx()]);
+            const [readResult, ctxResult] = await Promise.allSettled([readExcelObjects(f), loadCtx()]);
             if (mine !== seq.current) return;
+            if (readResult.status === 'rejected') { setReadError(READ_ERROR); return; }
+            if (ctxResult.status === 'rejected') { setReadError(CTX_ERROR); return; }
+            const records = readResult.value;
+            const c = ctxResult.value;
             if (!records || records.length === 0) {
                 setParsed({ fileName: f.name, lines: [], issues: [], empty: true });
             } else {
@@ -66,7 +72,7 @@ export const SpreadsheetEntryTab: React.FC<SpreadsheetEntryTabProps> = ({ onAddL
             }
         } catch (err) {
             if (mine !== seq.current) return;
-            setReadError(ctxRef.current ? READ_ERROR : 'Não foi possível carregar modelos, categorias e locais. Recarregue a página.');
+            setReadError(READ_ERROR);
         } finally {
             if (mine === seq.current) setReading(false);
         }

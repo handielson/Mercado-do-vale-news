@@ -1,4 +1,4 @@
-import readXlsxFile from 'read-excel-file/browser';
+import { readSheet } from 'read-excel-file/browser';
 import writeXlsxFile, { type SheetData } from 'write-excel-file/browser';
 
 type ExcelCellValue = string | number | boolean | Date | null | undefined;
@@ -14,22 +14,34 @@ function normalizeCell(value: unknown): ExcelCellValue {
     }
 }
 
-export async function readExcelObjects(file: File): Promise<Record<string, any>[]> {
-    const rows = await readXlsxFile(file);
-    const [headerRow, ...dataRows] = rows;
+/**
+ * Converte as linhas de uma aba (primeira linha = cabeçalho) em objetos.
+ * Linhas totalmente vazias são ignoradas; cada objeto leva `__row` (linha da planilha, 1-based,
+ * cabeçalho = 1) como propriedade não enumerável.
+ */
+export function rowsToObjects(rows: unknown[][]): Record<string, any>[] {
+    const [headerRow, ...dataRows] = rows || [];
     if (!headerRow) return [];
 
     const headers = headerRow.map(cell => String(cell ?? '').trim());
-    return dataRows
-        .filter(row => row.some(cell => cell != null && cell !== ''))
-        .map(row => {
-            const record: Record<string, any> = {};
-            headers.forEach((header, index) => {
-                if (!header) return;
-                record[header] = row[index] ?? null;
-            });
-            return record;
+    const records: Record<string, any>[] = [];
+    dataRows.forEach((row, index) => {
+        if (!row.some(cell => cell != null && cell !== '')) return;
+        const record: Record<string, any> = {};
+        headers.forEach((header, col) => {
+            if (!header) return;
+            record[header] = row[col] ?? null;
         });
+        Object.defineProperty(record, '__row', { value: index + 2, enumerable: false });
+        records.push(record);
+    });
+    return records;
+}
+
+export async function readExcelObjects(file: File): Promise<Record<string, any>[]> {
+    // read-excel-file >= 8: o export padrão devolve [{ sheet, data }]; readSheet devolve as linhas da primeira aba.
+    const rows = await readSheet(file);
+    return rowsToObjects(rows as unknown[][]);
 }
 
 export async function writeExcelRows(

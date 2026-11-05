@@ -24,7 +24,7 @@ export async function writeExcelRows(fileName, rows, headers) { window.writtenTe
 export async function writeExcelTemplate() {}`;
 
 let script;
-async function setup(t, { busy } = {}) {
+async function setup(t, { busy, failCtxOnce } = {}) {
     if (!script) {
         const bundled = await build({
             configFile: false, logLevel: 'error',
@@ -53,7 +53,13 @@ async function setup(t, { busy } = {}) {
     const errors = [];
     page.setDefaultTimeout(5000);
     page.on('pageerror', e => errors.push(e.message));
-    await page.addInitScript(({ fixtures, busy }) => { window.fixtures = fixtures; window.__busy = busy; }, { fixtures: defaultFixtures, busy });
+    await page.addInitScript(({ fixtures, busy, failCtxOnce }) => {
+        window.fixtures = fixtures; window.__busy = busy;
+        if (failCtxOnce) {
+            const models = fixtures.models;
+            Object.defineProperty(fixtures, 'models', { get() { if (!window.__ctxFailed) { window.__ctxFailed = true; throw new Error('rede'); } return models; } });
+        }
+    }, { fixtures: defaultFixtures, busy, failCtxOnce });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     return { page, errors };
 }
@@ -146,4 +152,18 @@ test('busy desabilita o botão de adicionar', { timeout: 120000 }, async t => {
     await upload(page, rows3());
     await page.getByText('3 linhas prontas', { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Adicionar 3 linhas à lista' }).isDisabled(), true);
+});
+
+test('falha ao carregar referências: aviso, e some quando uma nova leitura carrega', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { failCtxOnce: true });
+    await page.getByRole('alert').getByText('Não foi possível carregar modelos, categorias e locais. Recarregue a página.').waitFor();
+    await upload(page, rows3());
+    await page.getByText('3 linhas prontas', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('alert').count(), 0);
+});
+
+test('mensagem depende da etapa: leitura falha mesmo sem referências', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { failCtxOnce: true });
+    await upload(page, [], { throws: true });
+    await page.getByText('Não foi possível ler a planilha. Use o modelo .xlsx da Entrada.').waitFor();
 });

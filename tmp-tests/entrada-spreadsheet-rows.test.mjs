@@ -138,7 +138,7 @@ test('arquivo que não é o modelo e limite de linhas', () => {
 test('linha válida tem o mesmo formato da Manual', () => {
   const r = run({
     Modelo: 'Redmi 15', RAM: '8GB', Armazenamento: '256GB', 'Condição': 'Seminovo', 'Observação': ' arranhão ',
-    Cor: 'Preto', 'IMEI 1': IMEI_A, Quantidade: 5, Custo: '800,00',
+    Cor: 'Preto', 'IMEI 1': IMEI_A, Custo: '800,00',
   });
   assert.deepEqual(r.issues, []);
   const { source, item } = r.lines[0];
@@ -148,7 +148,7 @@ test('linha válida tem o mesmo formato da Manual', () => {
     model_id: 'm1',
     category_id: 'c1',
     name: 'Redmi 15',
-    configuration: { ram: '8GB', storage: '256GB', version: 'Global', network: '', condition: 'seminovo' },
+    configuration: { ram: '8GB', storage: '256GB', version: '', network: '', condition: 'seminovo' },
     color: 'Preto',
     condition_note: 'arranhão',
     identity: { imei1: IMEI_A, imei2: null, serial: null },
@@ -191,4 +191,35 @@ test('template antigo do Cadastro em massa', () => {
 test('cabeçalhos duplicados: valor não vazio vence', () => {
   const r = run({ Modelo: 'Redmi 15', 'IMEI 1': '', 'imei1': IMEI_A });
   assert.equal(r.lines[0].item.identity.imei1, IMEI_A);
+});
+
+test('número da linha vem de __row (linhas em branco não deslocam)', () => {
+  const mk = (row, extra) => { const o = { Modelo: 'Redmi 15', ...extra }; Object.defineProperty(o, '__row', { value: row, enumerable: false }); return o; };
+  const r = rowsToLines([mk(2, { 'IMEI 1': IMEI_A }), mk(5, { 'IMEI 1': IMEI_A }), mk(7, { Modelo: 'Zzz' })], ctx);
+  assert.deepEqual(r.issues, [
+    { row: 2, message: 'IMEI repetido no arquivo (linhas 2 e 5)' },
+    { row: 5, message: 'IMEI repetido no arquivo (linhas 2 e 5)' },
+    { row: 7, message: 'Modelo "Zzz" não encontrado.' },
+  ]);
+  // __row enumerável (objeto simples) também é aceito e não vira coluna.
+  const plain = rowsToLines([{ Modelo: 'Redmi 15', __row: 9, Custo: 'abc' }], ctx);
+  assert.deepEqual(plain.issues, [{ row: 9, message: 'Custo inválido.' }]);
+  // sem __row: índice + 2.
+  assert.equal(run({ Modelo: 'Zzz' }).issues[0].row, 2);
+});
+
+test('versão, RAM e armazenamento seguem o digitado (vazio fica vazio)', () => {
+  const cfg = rec => run(rec).lines[0].item.configuration;
+  assert.deepEqual(cfg({ Modelo: 'Redmi 15' }), { ram: '', storage: '', version: '', network: '', condition: 'new' });
+  assert.equal(cfg({ Categoria: 'Acessórios', Nome: 'Cabo' }).version, '');
+  assert.equal(cfg({ Modelo: 'Redmi 15', 'Versão': '  Índia ' }).version, 'Índia');
+});
+
+test('IMEI ou serial com quantidade > 1 vira problema', () => {
+  const r = run({ Modelo: 'Redmi 15', 'IMEI 1': IMEI_A, Quantidade: 3 });
+  assert.equal(r.lines.length, 0);
+  assert.deepEqual(r.issues, [{ row: 2, message: 'Com IMEI ou serial a quantidade é 1.' }]);
+  assert.deepEqual(msgs(run({ Modelo: 'Redmi 15', Serial: 'SN1', Quantidade: '2' })), ['Com IMEI ou serial a quantidade é 1.']);
+  assert.equal(run({ Modelo: 'Redmi 15', Serial: 'SN1', Quantidade: 1 }).lines.length, 1);
+  assert.equal(run({ Modelo: 'Redmi 15', Serial: 'SN1' }).lines[0].item.quantity, 1);
 });

@@ -111,7 +111,7 @@ export function rowsToLines(records, ctx) {
   const { models = [], categories = [], locations = [] } = ctx || {};
 
   const headerKeys = new Set();
-  for (const rec of list) for (const key of Object.keys(rec || {})) headerKeys.add(norm(key));
+  for (const rec of list) for (const key of Object.keys(rec || {})) if (key !== '__row') headerKeys.add(norm(key));
   if (OLD_TEMPLATE_HEADERS.some(h => headerKeys.has(h))
     || (list.length > 0 && !headerKeys.has('modelo') && !headerKeys.has('nome'))) {
     return { lines: [], issues: [], fatal: 'Esta planilha não é o modelo da Entrada. Baixe o modelo.' };
@@ -126,9 +126,10 @@ export function rowsToLines(records, ctx) {
   const imeiRows = new Map(); // imei -> [row]
 
   list.forEach((rec, index) => {
-    const row = index + 2;
+    const sheetRow = rec && Number.isInteger(rec.__row) && rec.__row >= 1 ? rec.__row : index + 2;
+    const row = sheetRow;
     const cell = {};
-    for (const [key, value] of Object.entries(rec || {})) { const k = norm(key); if (!(k in cell) || isBlank(cell[k])) cell[k] = value; }
+    for (const [key, value] of Object.entries(rec || {})) { if (key === '__row') continue; const k = norm(key); if (!(k in cell) || isBlank(cell[k])) cell[k] = value; }
     const get = name => cell[name];
     if (Object.values(cell).every(isBlank)) return;
 
@@ -194,12 +195,10 @@ export function rowsToLines(records, ctx) {
 
     // Quantidade.
     let quantity = 1;
-    if (identity.imei1 || identity.imei2 || identity.serial) quantity = 1;
-    else {
-      const q = readQuantity(get('quantidade'));
-      if (q === null) problem('Quantidade inválida.');
-      else quantity = q;
-    }
+    const q = readQuantity(get('quantidade'));
+    if (q === null) problem('Quantidade inválida.');
+    else if ((identity.imei1 || identity.imei2 || identity.serial) && q !== 1) problem('Com IMEI ou serial a quantidade é 1.');
+    else quantity = q;
 
     // Dinheiro.
     const cost = parseMoney(get('custo'));
@@ -227,7 +226,7 @@ export function rowsToLines(records, ctx) {
       configuration: {
         ram,
         storage,
-        version: text(get('versao')) || 'Global',
+        version: text(get('versao')),
         network: '',
         condition,
       },
