@@ -132,13 +132,16 @@ export const vpsClient = {
     /**
      * POST /resource  (body JSON)
      */
-    post: async <T>(path: string, body: unknown): Promise<T> => {
+    post: async <T>(path: string, body: unknown, options?: { timeoutMs?: number }): Promise<T> => {
         assertCheckpointNotBlocked(path, 'POST');
+        const signal = options?.timeoutMs && typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
+            ? AbortSignal.timeout(options.timeoutMs)
+            : getPublicStorefrontSignal(path);
         const res = await fetch(buildVpsUrl(path, { method: 'POST' }), {
             method: 'POST',
             headers: await buildHeaders(),
             body: JSON.stringify(body),
-            signal: getPublicStorefrontSignal(path),
+            signal,
         });
         return handleResponse<T>(path, 'POST', res);
     },
