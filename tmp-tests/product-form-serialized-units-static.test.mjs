@@ -1,55 +1,27 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+// stock-entry-only-v1 (etapa 6): o formulário não cria mais unidade (IMEI/serial) nem estoque.
+// Antes: produto base + unitService.create. Agora: o cadastro novo tira IMEI/serial dos specs,
+// grava estoque 0 e oferece "Dar entrada no estoque" (tela Entrada).
 const form = readFileSync('components/products/ProductForm.tsx', 'utf8');
 
-assert.match(
-  form,
-  /import \{ unitService \} from '..\/..\/services\/units';/,
-  'ProductForm must use the VPS unit service for serialized smartphone batch registration',
-);
+assert.doesNotMatch(form, /unitService/, 'ProductForm não importa nem chama o serviço de unidades');
+assert.doesNotMatch(form, /groupSerializedBatchItemsForUnits|UnitStatus\.AVAILABLE/, 'sem agrupamento em produto base + unidades');
+assert.match(form, /const isNewRegistration = !initialData \|\| Boolean\(initialDraft && !initialData.id\);/, 'Resumed drafts without a product ID remain new registrations');
 
 assert.match(
   form,
-  /function groupSerializedBatchItemsForUnits\(items: ProductInput\[\]\)/,
-  'ProductForm must group serialized batch rows into base products plus units',
+  /if \(isNewRegistration\) \{\s*mergedData\.specs = stripSerializedIdentityFromSpecs\(mergedData\.specs \|\| \{\}\);\s*mergedData\.stock_quantity = 0;\s*\}/,
+  'cadastro novo: IMEI/serial não ficam nos specs do produto e o estoque nasce 0',
 );
-
 assert.match(
   form,
-  /plannedItems\.push\(\{ \.\.\.batchPlan\.items\[index\], images: itemImages \}\);/,
-  'ProductForm must preserve resolved batch images before grouped save',
+  /function stripSerializedIdentityFromSpecs\(specs: Record<string, any> = \{\}\) \{\s*const \{\s*imei1: _imei1,\s*imei2: _imei2,\s*serial: _serial,\s*serial_number: _serialNumber,/,
+  'a limpeza tira IMEI 1, IMEI 2, serial e serial_number',
 );
 
-assert.match(
-  form,
-  /const groupedBatch = groupSerializedBatchItemsForUnits\(plannedItems\);/,
-  'ProductForm must create grouped base-product batches before saving',
-);
-
-assert.match(
-  form,
-  /await unitService\.create\(\{[\s\S]*product_id: savedProduct\.id[\s\S]*imei_1: specs\.imei1[\s\S]*status: UnitStatus\.AVAILABLE/s,
-  'ProductForm must create available serialized units for IMEI/serial rows',
-);
-
-assert.match(
-  form,
-  /const singleSerializedIdentity = hasSerializedIdentity\(mergedData\.specs \|\| \{\}\)[\s\S]*const singleSerializedSpecs = singleSerializedIdentity[\s\S]*delete mergedData\.specs\.serial[\s\S]*delete mergedData\.specs\.imei1[\s\S]*delete mergedData\.specs\.imei2/s,
-  'ProductForm single-product save must move serial/IMEI out of product specs before saving the base product',
-);
-
-assert.match(
-  form,
-  /if \(isNewRegistration && singleSerializedIdentity\) \{[\s\S]*await unitService\.create\(\{[\s\S]*product_id: savedProduct\.id[\s\S]*serial_number: singleSerializedSpecs\?\.serial[\s\S]*status: UnitStatus\.AVAILABLE/s,
-  'ProductForm single-product save must create an available unit for the extracted serial/IMEI',
-);
-assert.match(form, /const isNewRegistration = !initialData \|\| Boolean\(initialDraft && !initialData.id\);/, 'Resumed drafts without a product ID remain new registrations and must create their serialized unit');
-
-assert.doesNotMatch(
-  form,
-  /const itemData = \{ \.\.\.batchPlan\.items\[index\], images: itemImages \};[\s\S]*await onSubmit\(itemData\);/,
-  'ProductForm must not save each serialized row as a standalone product',
-);
+// Produto único continua salvando um produto só, pelo onSubmit (ou pelo checkpoint de nova tentativa).
+assert.match(form, /const savedProduct = !initialData\?\.id && singleSaveCheckpoint\.current\?\.id[\s\S]*: await onSubmit\(mergedData\) as Product \| undefined;/);
 
 console.log('product form serialized units static checks passed');

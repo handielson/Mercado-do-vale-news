@@ -23,11 +23,8 @@ assert.match(
   'ProductSpecifications serial input must visually render uppercase',
 );
 
-assert.match(
-  productForm,
-  /serial:\s*normalizeSerializedTextInput\('serial', overrides\.serial \|\| watch\('specs\.serial'\)/,
-  'ProductForm batch item creation must persist uppercase serial identifiers',
-);
+// stock-entry-only-v1 (etapa 6): a lista em massa (que gravava o serial em maiúsculas) saiu do formulário.
+assert.doesNotMatch(productForm, /handleAddToBatchList/, 'o formulário não monta mais lista de aparelhos');
 
 assert.match(
   pdvSearch,

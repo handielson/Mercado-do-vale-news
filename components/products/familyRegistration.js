@@ -264,15 +264,15 @@ export async function saveFamilyRegistration(parentData, rows, checkpoint, api) 
     if (queuedVideo && previousVideo?.file === row.videoFile && previousVideo.sku === payload.sku && previousVideo.url) payload.video_url = previousVideo.url;
     try {
       if (!id) validateFamilyIdentifiers(checkpoint.parent, [row]);
-      checkpoint.pendingUnits ||= {};
-      const identity = Boolean(checkpoint.pendingUnits[row.key]) || (!row.data.id && ['serial', 'imei1', 'imei2'].some(key => payload.specs?.[key]));
-      const serialSpecs = checkpoint.pendingUnits[row.key] || { ...payload.specs };
-      if (identity) {
-        if (!api.createUnit) throw new Error('Cadastro serializado exige gravação da unidade física.');
-        checkpoint.pendingUnits[row.key] = serialSpecs;
-        for (const key of ['serial', 'imei1', 'imei2']) delete payload.specs[key];
+      // stock-entry-only-v1: variação nova nasce só como produto de catálogo, sem estoque.
+      // IMEI/serial da linha são ignorados (também na nova tentativa, quando a tela já recebeu o ID);
+      // aparelhos e estoque entram pela tela Entrada.
+      checkpoint.newChildren ||= {};
+      if (!id) {
+        checkpoint.newChildren[row.key] = true;
         payload.stock_quantity = 0;
       }
+      if (checkpoint.newChildren[row.key]) for (const key of ['serial', 'serial_number', 'imei1', 'imei2']) delete payload.specs[key];
       const saved = id ? await api.update(id, payload) : await api.create(payload);
       if (!saved?.id) throw new Error('O salvamento não confirmou o ID.');
       checkpoint.children[row.key] = saved;
@@ -303,16 +303,6 @@ export async function saveFamilyRegistration(parentData, rows, checkpoint, api) 
         if (video?.exists && video.url) {
           checkpoint.children[row.key] = await api.update(saved.id, { ...payload, sku: saved.sku, name: saved.name, video_url: video.url });
         }
-      }
-      checkpoint.units ||= {};
-      if (identity && !checkpoint.units[row.key]) {
-        const unit = await api.createUnit({ product_id: saved.id,
-          serial_number: serialSpecs.serial || undefined, imei_1: serialSpecs.imei1 || undefined,
-          imei_2: serialSpecs.imei2 || undefined, condition: productUnitCondition(serialSpecs),
-          status: 'available', cost_price: payload.price_cost });
-        if (!unit?.id) throw new Error('A unidade física não confirmou o ID.');
-        checkpoint.units[row.key] = unit;
-        delete checkpoint.pendingUnits[row.key];
       }
     } catch (error) {
       throw new Error(`Família salva. Falha na variação "${row.data.name}": ${error.message}. Os dados foram mantidos; tente salvar novamente.`);

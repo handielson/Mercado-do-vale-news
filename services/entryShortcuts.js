@@ -22,3 +22,17 @@ export function entryNewVariationPath(parent) {
   if (modelId == null || modelId === '') return null;
   return `/admin/entrada?aba=manual&modelo=${encodeURIComponent(String(modelId))}`;
 }
+
+/**
+ * stock-entry-only-v1: "Dar entrada no estoque" depois do cadastro no formulário de produto.
+ * Produto simples ou variação: Entrada com a variação fixa. Família: Entrada Manual com o modelo
+ * do pai; sem modelo, a primeira variação salva.
+ * @param {{ id?: string | number | null, is_parent?: boolean | number | null, model_id?: string | number | null } | null | undefined} product
+ * @param {Array<{ id?: string | number | null } | null | undefined>} [children] variações confirmadas, na ordem do cadastro.
+ * @returns {string | null}
+ */
+export function entryAfterRegistrationPath(product, children = []) {
+  if (product?.id == null || product.id === '') return null;
+  if (!product.is_parent) return entryAddUnitsPath(product.id);
+  return entryNewVariationPath(product) || entryAddUnitsPath(children.find(child => child?.id)?.id);
+}
