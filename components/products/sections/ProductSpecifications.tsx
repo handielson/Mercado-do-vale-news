@@ -29,6 +29,7 @@ interface ProductSpecificationsProps {
     onAddToBatchList?: (overrides?: Record<string, string>) => void;
     templateValues?: Record<string, any>;
     currentProductId?: string; // ID do produto atual (modo edição)
+    familyParent?: boolean; // family-parent-no-unit-identity-v1: pai da família não guarda IMEI/serial
 }
 
 // Fields that must be unique per product
@@ -111,7 +112,8 @@ export function ProductSpecifications({
     onRefresh,
     onAddToBatchList,
     templateValues,
-    currentProductId
+    currentProductId,
+    familyParent = false
 }: ProductSpecificationsProps) {
     // ANTIGRAVITY PROTOCOL: Custom Fields Synchronization
     const { fields: customFields, loading: fieldsLoading } = useEnrichedCustomFields(
@@ -156,6 +158,8 @@ export function ProductSpecifications({
     };
 
     const shouldShowBaseSpecField = (key: string): boolean => {
+        // family-parent-no-unit-identity-v1: IMEI/serial identificam um aparelho físico (unidade da variação), não o pai.
+        if (familyParent && ['imei1', 'imei2', 'serial'].includes(key)) return false;
         if (isPrint3d && PHONE_ONLY_BASE_SPEC_FIELD_KEYS.has(key)) return false;
         const legacyRequirement = categoryConfig?.[key];
 
@@ -378,6 +382,11 @@ export function ProductSpecifications({
                 </div>
             </div>
 
+            {familyParent && isSmartphoneCategory && (
+                <p className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800" data-family-parent-unit-hint>
+                    IMEI e serial ficam em cada aparelho: cadastre na variação (cor/memória), em Estoque → <strong>Adicionar Unidade</strong> (ou no <strong>+</strong> ao lado da cor na página do produto). O pai da família não guarda IMEI.
+                </p>
+            )}
             {/* Grid responsivo com alinhamento consistente - Max 3 colunas para evitar sobreposição */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-5 gap-y-5">
 

@@ -1,3 +1,10 @@
+# v1.2.794-pai-sem-imei
+
+Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-101500-v1294-pai-sem-imei`). Branch: `main`. Só site.
+Pai de família de celular sem campos de IMEI/serial; aparelho entra pela variação.
+
+---
+
 # v1.2.793-familia-salva-sem-rascunho
 
 Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-095000-v1293-familia-sem-rascunho`). Branch: `main`. Só site (cadastro de família).

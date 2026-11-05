@@ -1656,6 +1656,8 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 }
             }
             if (isParent && familyRows.length > 0) {
+                // family-parent-no-unit-identity-v1: IMEI/serial digitados no pai não viram unidade; não guardar no pai.
+                if (mergedData.specs) { const { imei1: _i1, imei2: _i2, serial: _sn, ...parentSpecs } = mergedData.specs as any; mergedData.specs = parentSpecs; }
                 if (familyLoading || familyLoadError) throw new Error(familyLoadError || 'Aguarde o carregamento dos filhos.');
                 if (isLocalCatalogPreviewRuntime() && rowsToSave.some(row => !row.data.id && hasSerializedIdentity(row.data.specs || {}))) {
                     throw new Error('A prévia local de famílias ainda não grava unidades com IMEI/serial. Nenhum produto foi salvo. Cadastre a unidade física pelo fluxo de estoque após aprovação.');
@@ -2369,6 +2371,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 onAddToBatchList={isNewRegistration ? handleAddToBatchList : undefined}
                 templateValues={selectedModel?.template_values}
                 currentProductId={initialData?.id}
+                familyParent={Boolean(isParentProduct) && !variationDraftMode}
             />
             </div>
 

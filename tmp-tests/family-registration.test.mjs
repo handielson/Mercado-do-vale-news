@@ -292,3 +292,13 @@ test('família já cadastrada só sugere cores das fotos quando pedido', () => {
   assert.match(effect, /if \(initialData\?\.id && familyPhotoRetry === 0\) \{ familyPhotoHydratedKey\.current = hydrationKey; return; \}/);
   assert.match(form, /onClick=\{\(\) => setFamilyPhotoRetry\(value => value \+ 1\)\}>Atualizar variações pelas fotos do modelo/);
 });
+
+// family-parent-no-unit-identity-v1: IMEI/serial não aparecem nem são gravados no pai da família.
+test('pai da família não mostra nem guarda IMEI/serial', () => {
+  const form = fs.readFileSync(new URL('../components/products/ProductForm.tsx', import.meta.url), 'utf8');
+  const specs = fs.readFileSync(new URL('../components/products/sections/ProductSpecifications.tsx', import.meta.url), 'utf8');
+  assert.match(specs, /if \(familyParent && \['imei1', 'imei2', 'serial'\]\.includes\(key\)\) return false;/);
+  assert.match(specs, /data-family-parent-unit-hint/);
+  assert.match(form, /familyParent=\{Boolean\(isParentProduct\) && !variationDraftMode\}/);
+  assert.match(form, /if \(isParent && familyRows\.length > 0\) \{\s*\/\/ family-parent-no-unit-identity-v1[^\n]*\n\s*if \(mergedData\.specs\) \{ const \{ imei1: _i1, imei2: _i2, serial: _sn, \.\.\.parentSpecs \}/);
+});
