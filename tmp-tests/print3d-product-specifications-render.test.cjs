@@ -14,7 +14,6 @@ function render(isPrint3d,categoryConfig,customFields=[],measurementValues={}){
   if(name.endsWith('/print3dMeasurements.js'))return measurements;
   if(name.endsWith('/MaterialSelect'))return {MaterialSelect:props=>React.createElement('select',{'aria-label':props.label,value:props.value,onChange:()=>{}},React.createElement('option',{value:props.value},props.value))};
   if(name.includes('useEnrichedCustomFields'))return {useEnrichedCustomFields:()=>({fields:customFields,loading:false})};
-  if(name.includes('serializedBatch'))return {shouldAddSerializedFieldToBatchOnEnter:()=>false};
   if(name.includes('vpsApiService'))return {vpsApiService:{}};
   if(name==='lucide-react')return new Proxy({},{get:()=>()=>null});
   if(name.endsWith('/BarcodeScanButton'))return {BarcodeScanButton:()=>null};
