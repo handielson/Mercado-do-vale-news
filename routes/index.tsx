@@ -45,6 +45,7 @@ const RecuperarSenhaPage = lazy(() => import('../pages/auth/RecuperarSenhaPage')
 const RedefinirSenhaPage = lazy(() => import('../pages/auth/RedefinirSenhaPage').then(module => ({ default: module.RedefinirSenhaPage })));
 const CustomerProfilePage = lazy(() => import('../pages/customer/CustomerProfilePage').then(module => ({ default: module.CustomerProfilePage })));
 const CustomerFavoritesPage = lazy(() => import('../pages/customer/CustomerFavoritesPage').then(module => ({ default: module.CustomerFavoritesPage })));
+const CatalogEntryPage = lazy(() => import('../pages/admin/entrada/CatalogEntryPage').then(module => ({ default: module.CatalogEntryPage })));
 const BulkRegistrationPage = lazy(() => import('../pages/admin/products/BulkRegistrationPage').then(module => ({ default: module.BulkRegistrationPage })));
 const SmartphonePhotoIntakePage = lazy(() => import('../pages/admin/products/SmartphonePhotoIntakePage').then(module => ({ default: module.SmartphonePhotoIntakePage })));
 const CategorySettingsPage = lazy(() => import('../pages/admin/settings/categories/index'));
@@ -516,6 +517,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ProductCombosPage initialOfferMode /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/entrada",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><CatalogEntryPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

@@ -36,6 +36,7 @@ const getPageTitleFromRoute = (pathname: string): string => {
         '/admin': 'Dashboard',
         '/admin/settings/system-status': 'Status do sistema',
         '/admin/products': 'Produtos',
+        '/admin/entrada': 'Entrada',
         '/admin/products/labels': 'Etiquetas',
         '/admin/products/new': 'Novo Produto',
         '/admin/products/bulk': 'Cadastro em Massa',

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, X, Camera, ChevronDown, FilePenLine, Warehouse, ListChecks, BadgePercent, Wallet, ShieldCheck, Percent, Layers, ShoppingBasket, Music2, Handshake, Send, Landmark, UserCog, Calculator, Tv, Cloud, CloudCog } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, X, Camera, ChevronDown, FilePenLine, Warehouse, ListChecks, BadgePercent, Wallet, ShieldCheck, Percent, Layers, ShoppingBasket, Music2, Handshake, Send, Landmark, UserCog, Calculator, Tv, Cloud, CloudCog, PackagePlus } from 'lucide-react';
 
 import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -166,6 +166,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       title: 'Produtos & Estoque',
       items: [
         { to: '/admin/products', icon: <Package size={18} />, label: 'Produtos', keywords: 'catalogo itens mercadoria' },
+        { to: '/admin/entrada', icon: <PackagePlus size={18} />, label: 'Entrada', keywords: 'cadastro entrada estoque imei bipar planilha foto' },
         { to: '/admin/products/drafts', icon: <FilePenLine size={18} />, label: 'Rascunhos de anúncios', keywords: 'cadastros incompletos continuar rascunho' },
         { to: '/admin/products/storefronts', icon: <Globe size={18} />, label: 'Publicação nos sites', keywords: 'precos canais lojas publicar' },
         { to: '/admin/inventory', icon: <ClipboardList size={18} />, label: 'Estoque', keywords: 'quantidade inventario' },
