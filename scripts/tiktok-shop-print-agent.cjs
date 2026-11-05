@@ -52,8 +52,9 @@ function separationLocation(value) {
     || locations[0] || 'Nao cadastrada';
 }
 
+// receipt-stock-location-v1: o quadro de local/estoque aumentou cada item; a página cresce um degrau.
 function tiktokSummaryHeightMm(items) {
-  return 60 + Math.min(Math.max((items || []).length, 1), 3) * 10;
+  return 70 + Math.min(Math.max((items || []).length, 1), 3) * 10;
 }
 
 async function executeTikTokPrintJob({ job, settings, request, print, getStockLocations,
@@ -86,8 +87,11 @@ async function executeTikTokPrintJob({ job, settings, request, print, getStockLo
           const summary = { ...job.summary, marketplaceName: 'TIKTOK SHOP', items: (job.summary?.items || []).map(item => ({ ...item })) };
           if (getStockLocations) {
             const locations = await getStockLocations(summary.items.map(item => item.sku).filter(Boolean));
-            summary.items = summary.items.map(item => ({ ...item,
-              stockLocation: separationLocation(locations[String(item.sku).toUpperCase()]) }));
+            summary.items = summary.items.map(item => {
+              const found = locations[String(item.sku).toUpperCase()];
+              const info = found && typeof found === 'object' ? found : { stockLocation: found, stockTotal: null };
+              return { ...item, stockLocation: separationLocation(info.stockLocation), stockTotal: info.stockTotal ?? null, productUrl: info.productUrl || '' };
+            });
           }
           pdf = await createMercadoLivreSummaryPdf(summary, { pageHeightMm: tiktokSummaryHeightMm(summary.items) });
         }

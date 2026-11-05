@@ -1,16 +1,16 @@
 {
-  "version": "v1.2.788-condicao-seminovo-usado",
+  "version": "v1.2.789-comprovante-qr-bot-seminovo",
   "date": "2026-11-04",
   "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.788-condicao-seminovo-usado",
+  "tag": "v1.2.789-comprovante-qr-bot-seminovo",
   "release_vps": "pendente",
   "api_release": {
     "status": "pendente",
-    "note": "services/metaCatalogFeedServer.cjs (seminovo/usado → used no feed da Meta) via --meta-catalog-feed-only"
+    "note": "get_stock_locations com quantidade por local, estoque total e link do produto; feed da Meta (v1.2.788)"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Condição Novo / Seminovo / Usado / Caixa aberta com observação (specs.condition_note): cadastro, peças, site (card próprio separado do novo, selo e observação na página), admin (selo na lista, família e Página do Produto) e feed da Meta. Mensagem do WhatsApp (n8n) fica para a etapa 2.",
+  "summary": "Inclui a v1.2.788 (condição Seminovo/Usado com observação). Comprovante de separação Shopee/ML/TikTok: quadro destacado com LOCAL (peças em cada local) e ESTOQUE TOTAL (aviso de ÚLTIMA PEÇA), e QR Code da página do produto em cada item. Robô do WhatsApp (n8n): seminovo/usado não se funde mais ao novo e sai em mensagem própria 'Seminovos | Usados' com a observação.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -23,39 +23,37 @@
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic",
-    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
+    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center",
+    "printer_agent": "atualizar o serviço de impressão do PC da loja (botão Atualizar serviço no painel de impressoras) para o comprovante novo"
   },
-  "site_source_base": "63e5a496",
+  "site_source_base": "48412089",
   "changed_files": [
     "VERSAO_ATUAL.md",
-    "components/catalog/ModernProductCard.tsx",
-    "components/catalog/ProductConditionBadge.tsx",
-    "components/products/ProductCard.tsx",
-    "components/products/ProductFamilyEditor.tsx",
-    "components/products/ProductForm.tsx",
-    "components/products/ProductList.tsx",
-    "components/products/VariationListing.tsx",
-    "components/products/familyRegistration.js",
-    "components/settings/ModelPricesPanel.tsx",
-    "components/units/UnitForm.tsx",
     "docs/versoes/2026-11-04-v1.2.788-condicao-seminovo-usado.md",
-    "pages/admin/products/ModelProductAggregatorPage.tsx",
-    "pages/store/PublicProductPage.tsx",
+    "docs/versoes/2026-11-04-v1.2.789-comprovante-qr-bot-seminovo.md",
     "public/VERSION.json",
-    "services/metaCatalogFeedServer.cjs",
-    "services/productGrouping.ts",
-    "tmp-tests/catalog-sections-family-grouping.test.mjs",
-    "tmp-tests/model-panel-variation-image.test.mjs",
-    "tmp-tests/product-admin-page-channels.test.mjs",
-    "tmp-tests/product-condition-used.test.mjs",
-    "types/unit.ts",
-    "utils/field-standards.ts",
-    "utils/productCondition.js",
-    "utils/productCondition.test.mjs"
+    "scripts/deploy-n8n-used-condition-list.cjs",
+    "scripts/mercado-livre-print-agent.cjs",
+    "scripts/mercado-livre-print-core.cjs",
+    "scripts/n8n-sales-regression-gate.cjs",
+    "scripts/n8n-used-condition-list.cjs",
+    "scripts/receipt-stock-location.cjs",
+    "scripts/shopee-auto-print.cjs",
+    "scripts/shopee-separation-summary.cjs",
+    "scripts/tiktok-shop-print-agent.cjs",
+    "tmp-tests/n8n-used-condition-list.test.cjs",
+    "tmp-tests/receipt-stock-location.test.cjs",
+    "tmp-tests/shopee-dual-thermal-print-flow-static.test.mjs",
+    "tmp-tests/shopee-separation-summary.test.cjs",
+    "tmp-tests/tiktok-auto-print.test.cjs",
+    "vps_server.cjs",
+    "vps_server.js"
   ],
   "validations": [
-    "product-condition-used (5) + productCondition (3) + catalog-sections-family-grouping (com caso seminovo) + meta-catalog-feed + family-registration + página do produto: ok",
-    "catalog-parent-media-contract e model-prices-panel-vps-products-static já falhavam antes (sem relação)"
+    "receipt-stock-location (6) + shopee-separation-summary + mercado-livre-core (8) + mercado-livre-print-agent (12) + tiktok-auto-print + estáticos Shopee: ok",
+    "QRs decodificados a 203 dpi (zxing): 3/3 ML, 3/3 TikTok, 1 por folha Shopee",
+    "n8n: gate 129/129 no candidato (sha256 0be411f7…), dry-run contra produção ok (fluxo atual 36113bfc…)",
+    "página do produto com estoque 0 abre (HTTP 200; API devolve fotos)"
   ],
   "site_release": {
     "status": "pendente",

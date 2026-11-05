@@ -8,10 +8,11 @@ const { executeTikTokPrintJob, startTikTokPrintAgent, separationLocation, listWi
 const { summaryFromOrder, isPrintableOrder } = require('../services/tiktokShopPrintServer.cjs');
 
 async function main() {
-  assert.equal(tiktokSummaryHeightMm([{}]), 70);
-  assert.equal(tiktokSummaryHeightMm([{}, {}]), 80);
-  assert.equal(tiktokSummaryHeightMm([{}, {}, {}]), 90);
-  assert.equal(tiktokSummaryHeightMm([{}, {}, {}, {}]), 90);
+  // receipt-stock-location-v1: quadro de local/estoque maior — cada altura subiu um degrau.
+  assert.equal(tiktokSummaryHeightMm([{}]), 80);
+  assert.equal(tiktokSummaryHeightMm([{}, {}]), 90);
+  assert.equal(tiktokSummaryHeightMm([{}, {}, {}]), 100);
+  assert.equal(tiktokSummaryHeightMm([{}, {}, {}, {}]), 100);
   const branded = await require('../scripts/mercado-livre-print-core.cjs').createMercadoLivreSummaryPdf({
     marketplaceName: 'TIKTOK SHOP', orderSn: '586215533660637149', buyerName: 'Cliente TikTok',
     trackingNumber: 'BR123456789', items: [{ name: 'Produto TikTok', sku: 'TK-1', quantity: 1 }],
@@ -81,10 +82,10 @@ async function main() {
     assert.deepEqual(steps, ['label', 'summary', 'label', 'summary']);
     assert.equal(calls.length, 2, 'ack retry must not print duplicate sheets');
     assert.equal(calls[0].options.printer, 'Zebra');
-    assert.deepEqual(calls[1].options, { printer: 'Comprovante', width: 90, height: 70, orientation: 'landscape' });
+    assert.deepEqual(calls[1].options, { printer: 'Comprovante', width: 90, height: 80, orientation: 'landscape' });
     const summaryPdf = await PDFDocument.load(fs.readFileSync(calls[1].file));
     assert.equal(summaryPdf.getPageCount(), 1);
-    assert.ok(Math.abs(summaryPdf.getPage(0).getHeight() - 70 * 72 / 25.4) < 0.01);
+    assert.ok(Math.abs(summaryPdf.getPage(0).getHeight() - 80 * 72 / 25.4) < 0.01);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
   console.log('TikTok auto print: OK');
 }

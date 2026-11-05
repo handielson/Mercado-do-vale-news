@@ -1,3 +1,10 @@
+# v1.2.789-comprovante-qr-bot-seminovo
+
+Data: 04/11/2026. Status: **pendente de publicação**. Branch: `main`. Inclui a v1.2.788 (condição Seminovo/Usado).
+Comprovante de separação com LOCAL (peças por local), ESTOQUE TOTAL (aviso de última peça) e QR do produto; robô do WhatsApp separa "Seminovos | Usados".
+
+---
+
 # v1.2.788-condicao-seminovo-usado
 
 Data: 04/11/2026. Status: **pendente de publicação**. Branch: `main`.

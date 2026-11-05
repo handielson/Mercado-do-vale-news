@@ -104,8 +104,11 @@ async function executeMercadoLivreJob({ job, settings, request, print, directory
                     if (getStockLocations) {
                         try {
                             const locations = await getStockLocations(summary.items.map(item => item.sku).filter(Boolean));
-                            summary.items = summary.items.map(item => ({ ...item,
-                                stockLocation: locations[String(item.sku).toUpperCase()] || item.stockLocation }));
+                            summary.items = summary.items.map(item => {
+                                const found = locations[String(item.sku).toUpperCase()];
+                                const info = found && typeof found === 'object' ? found : { stockLocation: found, stockTotal: null };
+                                return { ...item, stockLocation: info.stockLocation || item.stockLocation, stockTotal: info.stockTotal ?? null, productUrl: info.productUrl || '' };
+                            });
                         } catch { logger.warn('Mercado Livre: localizacao de estoque indisponivel.'); }
                     }
                     buffer = await createMercadoLivreSummaryPdf(summary);

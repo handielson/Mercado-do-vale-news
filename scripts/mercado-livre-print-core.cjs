@@ -58,6 +58,14 @@ function fitText(value, font, size, maxWidth) {
     return `${clipped}...`;
 }
 
+// receipt-product-qr-v1: QR com o link curto do produto (só do próprio site); correção L = menos módulos, legível em térmica.
+async function productQrPng(url) {
+    if (!/^https:\/\/(www\.)?mercadodovale\.com\.br\/produto\//.test(String(url || ''))) return null;
+    try {
+        return await bwipjs.toBuffer({ bcid: 'qrcode', text: String(url), scale: 4, eclevel: 'L', padding: 0, backgroundcolor: 'FFFFFF' });
+    } catch { return null; }
+}
+
 async function createMercadoLivreSummaryPdf(job = {}, { pageHeightMm = ML_SUMMARY_HEIGHT_MM } = {}) {
     const data = job.marketplaceName ? job : buildMercadoLivreSummaryData(job);
     if (![70, 80, 90, ML_SUMMARY_HEIGHT_MM].includes(pageHeightMm)) throw new Error('Altura do resumo invalida.');
@@ -98,11 +106,23 @@ async function createMercadoLivreSummaryPdf(job = {}, { pageHeightMm = ML_SUMMAR
         let y = height - marginY - 112;
         for (const item of pageGroups[pageIndex]) {
             const quantity = Math.max(1, Number(item.quantity) || 1);
-            page.drawText(fitText(`${quantity}x ${item.name}`, bold, 7, contentWidth - 4), { x: marginX + 2, y, size: 7, font: bold, color: black });
-            y -= 10;
-            page.drawText(fitText(`SKU: ${item.sku || '-'} | Local: ${item.stockLocation || 'Nao cadastrado'}`, regular, 5.7, contentWidth - 7),
-                { x: marginX + 5, y, size: 5.7, font: regular, color: black });
-            y -= 13;
+            // receipt-product-qr-v1: QR da página do produto (foto, nome e variação) à direita do item.
+            const qrPng = await productQrPng(item.productUrl);
+            const qrSize = 32; // 4pt de respiro entre QRs de itens seguidos (o leitor não confunde)
+            const textWidth = contentWidth - 4 - (qrPng ? qrSize + 4 : 0);
+            page.drawText(fitText(`${quantity}x ${item.name}`, bold, 7, textWidth), { x: marginX + 2, y, size: 7, font: bold, color: black });
+            if (qrPng) {
+                const qr = await pdf.embedPng(qrPng);
+                page.drawImage(qr, { x: width - marginX - 2 - qrSize, y: y - 22, width: qrSize, height: qrSize });
+            }
+            y -= 9;
+            // receipt-stock-location-v1: quadro destacado com o local (e peças em cada local) e o estoque total.
+            page.drawRectangle({ x: marginX + 2, y: y - 18, width: textWidth, height: 23, borderColor: black, borderWidth: 1.2 });
+            page.drawText(fitText(`LOCAL: ${item.stockLocation || 'Nao cadastrado'}`, bold, 8, textWidth - 6), { x: marginX + 5, y: y - 4, size: 8, font: bold, color: black });
+            const stockTotalText = Number.isFinite(Number(item.stockTotal)) && item.stockTotal !== null && item.stockTotal !== undefined
+                ? `ESTOQUE TOTAL: ${Math.max(0, Math.round(Number(item.stockTotal)))} un.${Math.round(Number(item.stockTotal)) <= 0 ? ' - ULTIMA PECA' : ''}` : 'ESTOQUE TOTAL: -';
+            page.drawText(fitText(`SKU: ${item.sku || '-'}  |  ${stockTotalText}`, bold, 6.5, textWidth - 6), { x: marginX + 5, y: y - 14, size: 6.5, font: bold, color: black });
+            y -= 27;
         }
         page.drawLine({ start: { x: marginX + 2, y: 40 }, end: { x: width - marginX - 2, y: 40 }, thickness: 0.7, color: black });
         page.drawText('[ ] Produto  [ ] Quantidade  [ ] Modelo/Cor', { x: marginX + 2, y: 29, size: 6, font: regular, color: black });
@@ -111,5 +131,5 @@ async function createMercadoLivreSummaryPdf(job = {}, { pageHeightMm = ML_SUMMAR
     return Buffer.from(await pdf.save());
 }
 
-module.exports = { buildMercadoLivreSummaryData, createMercadoLivreSummaryPdf, parseJobPayload, variationName,
+module.exports = { buildMercadoLivreSummaryData, createMercadoLivreSummaryPdf, productQrPng, parseJobPayload, variationName,
     ML_SUMMARY_WIDTH_MM, ML_SUMMARY_HEIGHT_MM, ML_SUMMARY_HORIZONTAL_MARGIN_MM, ML_SUMMARY_VERTICAL_MARGIN_MM };

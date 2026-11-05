@@ -25,7 +25,8 @@ const {
     });
     assert.ok(Buffer.isBuffer(buffer) && buffer.length > 1_000, 'deve gerar um PDF com código de barras');
     const pdf = await PDFDocument.load(buffer);
-    assert.equal(pdf.getPageCount(), 2, 'pedidos com muitos itens devem continuar em outra folha de comprovante 80 mm');
+    // receipt-stock-location-v1: o quadro de local/estoque é maior; 5 itens longos ocupam 3 folhas (antes 2).
+    assert.equal(pdf.getPageCount(), 3, 'pedidos com muitos itens devem continuar em outra folha de comprovante 80 mm');
     const firstPageSize = pdf.getPage(0).getSize();
     assert.ok(Math.abs(firstPageSize.width - (80 * 72 / 25.4)) < 0.01, 'o comprovante deve ter largura real de 80 mm');
     assert.ok(Math.abs(firstPageSize.height - (152.4 * 72 / 25.4)) < 0.01, 'o comprovante deve manter altura de 152,4 mm');

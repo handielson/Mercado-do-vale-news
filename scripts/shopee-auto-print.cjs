@@ -8,6 +8,7 @@ const {
     createShopeeInterventionReceiptPdf,
     createShopeeSeparationSummaryPdf,
 } = require('./shopee-separation-summary.cjs');
+const { receiptStockInfo, receiptStockMap } = require('./receipt-stock-location.cjs');
 const { expandShopeeLabelForThermalPaper } = require('./shopee-label-core.cjs');
 const { createMercadoLivreSummaryPdf } = require('./mercado-livre-print-core.cjs');
 const { prepareMercadoLivreSummaryPrinter } = require('./mercado-livre-print-agent.cjs');
@@ -315,10 +316,7 @@ async function getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn) {
             const locationResult = await callVpsShopeeAction('get_stock_locations', { skus: itemSkus });
             if (isVpsActionSuccess(locationResult)) {
                 for (const entry of locationResult.data?.items || []) {
-                    stockLocationsBySku.set(
-                        String(entry?.sku || '').trim().toUpperCase(),
-                        Array.isArray(entry?.locations) ? entry.locations.filter(Boolean) : [],
-                    );
+                    stockLocationsBySku.set(String(entry?.sku || '').trim().toUpperCase(), receiptStockInfo(entry));
                 }
             } else {
                 console.warn(`[SUMMARY] Localização indisponível para ${orderSn}: ${locationResult.data?.message || locationResult.data?.error || `HTTP ${locationResult.status}`}`);
@@ -338,11 +336,8 @@ async function getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn) {
         paymentMethod: order?.payment_method || '',
         totalAmount: Number(order?.total_amount || 0),
         items: items.map((item) => {
-            const locations = stockLocationsBySku.get(String(item.sku || '').trim().toUpperCase()) || [];
-            return {
-                ...item,
-                stockLocation: locations.length ? locations.join(' | ') : 'Não cadastrada',
-            };
+            const info = stockLocationsBySku.get(String(item.sku || '').trim().toUpperCase()) || receiptStockInfo(null);
+            return { ...item, stockLocation: info.stockLocation || 'Não cadastrada', stockTotal: info.stockTotal, productUrl: info.productUrl || '' };
         }),
     };
 }
@@ -388,10 +383,7 @@ async function getShopeeOrderSummaryDataFromVps(connection, orderSn) {
         const locationResult = await callVpsShopeeAction('get_stock_locations', { skus: itemSkus }, connection.id);
         if (isVpsActionSuccess(locationResult)) {
             for (const entry of locationResult.data?.items || []) {
-                stockLocationsBySku.set(
-                    String(entry?.sku || '').trim().toUpperCase(),
-                    Array.isArray(entry?.locations) ? entry.locations.filter(Boolean) : [],
-                );
+                stockLocationsBySku.set(String(entry?.sku || '').trim().toUpperCase(), receiptStockInfo(entry));
             }
         }
     }
@@ -407,8 +399,8 @@ async function getShopeeOrderSummaryDataFromVps(connection, orderSn) {
         paymentMethod: order?.payment_method || '',
         totalAmount: Number(order?.total_amount || 0),
         items: items.map(item => {
-            const locations = stockLocationsBySku.get(String(item.sku || '').trim().toUpperCase()) || [];
-            return { ...item, stockLocation: locations.length ? locations.join(' | ') : 'Não cadastrada' };
+            const info = stockLocationsBySku.get(String(item.sku || '').trim().toUpperCase()) || receiptStockInfo(null);
+            return { ...item, stockLocation: info.stockLocation || 'Não cadastrada', stockTotal: info.stockTotal, productUrl: info.productUrl || '' };
         }),
     };
 }
@@ -1181,9 +1173,7 @@ function startShopeeAutoPrintService() {
             getStockLocations: async (skus) => {
                 if (!skus.length) return {};
                 const result = await callVpsShopeeAction('get_stock_locations', { skus });
-                return Object.fromEntries((result.data?.items || []).map(item => [
-                    String(item.sku || '').toUpperCase(), (item.locations || []).filter(Boolean).join(' | '),
-                ]));
+                return receiptStockMap(result.data?.items); // receipt-stock-location-v1
             },
         });
     } catch (error) {
@@ -1196,9 +1186,7 @@ function startShopeeAutoPrintService() {
             getStockLocations: async (skus) => {
                 if (!skus.length) return {};
                 const result = await callVpsShopeeAction('get_stock_locations', { skus });
-                return Object.fromEntries((result.data?.items || []).map(item => [
-                    String(item.sku || '').toUpperCase(), (item.locations || []).filter(Boolean).join(' | '),
-                ]));
+                return receiptStockMap(result.data?.items); // receipt-stock-location-v1
             },
         });
     } catch (error) {

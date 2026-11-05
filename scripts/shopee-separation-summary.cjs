@@ -188,41 +188,55 @@ async function createShopeeSeparationSummaryPdf(order) {
     const items = Array.isArray(order?.items) && order.items.length
         ? order.items
         : [{ name: 'Item não informado', sku: '', quantity: 1 }];
+    // receipt-product-qr-v1: QR da página do produto à direita de cada item (40pt ≈ 14 mm, legível na térmica).
+    const QR_SIZE = 40;
     const itemLayouts = items.map((item) => {
         const quantity = Math.max(1, Number(item?.quantity) || 1);
+        const productUrl = /^https:\/\/(www\.)?mercadodovale\.com\.br\/produto\//.test(String(item?.productUrl || '')) ? String(item.productUrl) : '';
+        const reserved = productUrl ? QR_SIZE + 4 : 0;
         const sku = printableText(item?.sku);
         const model = printableText(item?.modelName);
         const nameLines = wrapText(
             `${quantity}x  ${item?.name || 'Item'}`,
             bold,
             7.6,
-            RECEIPT_CONTENT_WIDTH - 8,
+            RECEIPT_CONTENT_WIDTH - 8 - reserved,
             Number.POSITIVE_INFINITY,
         );
         const detailLines = wrapText(
             `SKU: ${sku || '-'}${model ? `  |  Variacao: ${model}` : ''}`,
             regular,
             6.1,
-            RECEIPT_CONTENT_WIDTH - 14,
+            RECEIPT_CONTENT_WIDTH - 14 - reserved,
             Number.POSITIVE_INFINITY,
         );
+        // receipt-stock-location-v1: quadro destacado com o local (e peças em cada local) e o estoque total.
         const locationLines = wrapText(
-            `Localizacao: ${item?.stockLocation || 'Nao cadastrada'}`,
+            `LOCAL: ${item?.stockLocation || 'Nao cadastrada'}`,
             bold,
-            6.1,
-            RECEIPT_CONTENT_WIDTH - 14,
-            Number.POSITIVE_INFINITY,
+            8,
+            RECEIPT_CONTENT_WIDTH - 16 - reserved,
+            2,
         );
+        const total = Number(item?.stockTotal);
+        const stockLine = item?.stockTotal !== null && item?.stockTotal !== undefined && Number.isFinite(total)
+            ? `ESTOQUE TOTAL: ${Math.max(0, Math.round(total))} un.${Math.round(total) <= 0 ? ' - ULTIMA PECA' : ''}` : 'ESTOQUE TOTAL: -';
+        const boxHeight = (locationLines.length * 9.5) + 12;
+        const contentHeight = (nameLines.length * 9) + (detailLines.length * 7.5) + boxHeight;
         return {
             nameLines,
             detailLines,
             locationLines,
-            height: (nameLines.length * 9) + (detailLines.length * 7.5) + (locationLines.length * 7.5) + 8,
+            stockLine,
+            boxHeight,
+            productUrl,
+            reserved,
+            height: Math.max(contentHeight, productUrl ? QR_SIZE + 2 : 0) + 6,
         };
     });
     const pages = [[]];
     const pageHeights = [0];
-    const availableItemsHeight = 125;
+    const availableItemsHeight = 108; // receipt-stock-location-v1: espaço real entre "ITENS" (201) e a linha da conferência (90)
     for (const layout of itemLayouts) {
         const pageIndex = pages.length - 1;
         if (pages[pageIndex].length && pageHeights[pageIndex] + layout.height > availableItemsHeight) {
@@ -295,6 +309,14 @@ async function createShopeeSeparationSummaryPdf(order) {
 
         let y = 201;
         for (const layout of pages[pageIndex]) {
+            const itemTop = y;
+            if (layout.productUrl) {
+                try {
+                    const qrPng = await bwipjs.toBuffer({ bcid: 'qrcode', text: layout.productUrl, scale: 4, eclevel: 'L', padding: 0, backgroundcolor: 'FFFFFF' });
+                    const qr = await pdf.embedPng(qrPng);
+                    page.drawImage(qr, { x: RECEIPT_RIGHT - 4 - QR_SIZE, y: itemTop + 7 - QR_SIZE, width: QR_SIZE, height: QR_SIZE });
+                } catch { /* sem QR: o restante do comprovante sai normal */ }
+            }
             for (const line of layout.nameLines) {
                 page.drawText(line, { x: RECEIPT_MARGIN + 4, y, size: 7.6, font: bold, color: black });
                 y -= 9;
@@ -303,11 +325,15 @@ async function createShopeeSeparationSummaryPdf(order) {
                 page.drawText(line, { x: RECEIPT_MARGIN + 10, y, size: 6.1, font: regular, color: gray });
                 y -= 7.5;
             }
+            const boxTop = y + 2;
+            page.drawRectangle({ x: RECEIPT_MARGIN + 6, y: boxTop - layout.boxHeight, width: RECEIPT_CONTENT_WIDTH - 10 - layout.reserved, height: layout.boxHeight, borderColor: black, borderWidth: 1.2 });
+            y = boxTop - 9.5;
             for (const line of layout.locationLines) {
-                page.drawText(line, { x: RECEIPT_MARGIN + 10, y, size: 6.1, font: bold, color: black });
-                y -= 7.5;
+                page.drawText(line, { x: RECEIPT_MARGIN + 10, y, size: 8, font: bold, color: black });
+                y -= 9.5;
             }
-            y -= 8;
+            page.drawText(layout.stockLine, { x: RECEIPT_MARGIN + 10, y, size: 7.5, font: bold, color: black });
+            y = Math.min(boxTop - layout.boxHeight - 8, layout.productUrl ? itemTop + 7 - QR_SIZE - 8 : Infinity);
         }
 
         page.drawLine({ start: { x: RECEIPT_MARGIN + 4, y: 90 }, end: { x: RECEIPT_RIGHT - 4, y: 90 }, thickness: 0.7, color: border });

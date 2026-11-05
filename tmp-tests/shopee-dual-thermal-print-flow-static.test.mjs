@@ -94,8 +94,8 @@ assert.doesNotMatch(script, /NORMAL_PORT_RECEIPT_RETURN/,
   'o recibo portuário da Shopee não deve substituir o resumo de separação');
 assert.match(summary, /bcid:\s*'code128'/,
   'o rastreio precisa ser impresso como código de barras Code 128');
-assert.match(summary, /Localizacao:[\s\S]*?stockLocation/,
-  'cada item precisa imprimir sua localização de depósito');
+assert.match(summary, /LOCAL: \$\{item\?\.stockLocation[\s\S]*?ESTOQUE TOTAL/,
+  'cada item precisa imprimir sua localização de depósito e o estoque total, em destaque');
 assert.match(summary, /INTERVENCAO NECESSARIA[\s\S]*?NAO DESPACHAR ATE CORRIGIR/,
   'o comprovante de erro precisa ter alerta claro para bloquear o despacho');
 assert.match(packageJson, /"bwip-js":\s*"\^\d+/,

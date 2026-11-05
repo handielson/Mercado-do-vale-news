@@ -9260,6 +9260,8 @@ async function getShopeeStockLocationsVps(inputSkus) {
   const [rows] = await pool.query(
     `SELECT
        p.sku,
+       p.id AS product_id,
+       p.stock_quantity,
        sd.name AS deposit_name,
        sd.code AS deposit_code,
        sl.name AS location_name,
@@ -9282,18 +9284,33 @@ async function getShopeeStockLocationsVps(inputSkus) {
     skus.map((sku) => sku.toUpperCase()),
   );
 
+  // receipt-stock-location-v1: comprovante mostra quantas peças há em cada local e o estoque total do SKU.
+  // "locations" segue como lista de nomes (agentes antigos); detalhes e total vêm em campos novos.
   const bySku = new Map(skus.map((sku) => [sku.toUpperCase(), {
     sku,
     locations: [],
+    location_details: [],
+    stock_total: null,
+    product_url: null,
   }]));
   for (const row of rows || []) {
     const key = String(row?.sku || '').trim().toUpperCase();
     const item = bySku.get(key);
     if (!item) continue;
+    const productStock = Number(row?.stock_quantity);
+    if (Number.isFinite(productStock)) item.stock_total = Math.max(item.stock_total ?? 0, productStock, 0);
+    // receipt-product-qr-v1: link público do produto (QR no comprovante para achar o item pela foto).
+    // Link curto e de tamanho fixo (pelo ID): QR menor e legível na impressora térmica.
+    if (!item.product_url && row?.product_id) item.product_url = `https://mercadodovale.com.br/produto/${encodeURIComponent(String(row.product_id))}`;
     const deposit = String(row?.deposit_name || row?.deposit_code || '').trim();
     const location = String(row?.location_name || row?.location_code || '').trim();
     const label = [deposit, location].filter(Boolean).join(' / ');
-    if (label && !item.locations.includes(label)) item.locations.push(label);
+    if (!label) continue;
+    const quantity = Number(row?.quantity) || 0; // físico no local (a própria venda pode estar reservada)
+    if (!item.locations.includes(label)) item.locations.push(label);
+    const detail = item.location_details.find((entry) => entry.label === label);
+    if (detail) detail.quantity += Math.max(0, quantity);
+    else item.location_details.push({ label, quantity: Math.max(0, quantity) });
   }
   return Array.from(bySku.values());
 }
