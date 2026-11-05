@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.797-bling-token-text",
+  "version": "v1.2.798-entrada-unica-tela",
   "date": "2026-11-05",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.797-bling-token-text",
-  "release_vps": "pendente",
+  "tag": "v1.2.798-entrada-unica-tela",
+  "release_vps": "/var/www/mdv-site/releases/20261105-122500-v1298-entrada-tela",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Bling: reconectar falhava no callback com \"Data too long for column 'bling_access_token'\" (o Bling passou a emitir token maior que VARCHAR(500)). O boot da API alarga bling_access_token e bling_refresh_token de company_settings para TEXT (idempotente, mesma nulidade). Sem isso a NF-e de marketplace e a etiqueta da Shopee ficam travadas.",
+  "summary": "Entrada única, etapa 2: tela Admin → Entrada (/admin/entrada) com as abas Manual e Bipar e a Lista de entrada (conferir e confirmar pela porta única). Bipar trava modelo/configuração/cor/custo/local e lê IMEI em sequência (leitor ou câmera), com atalho ?aba=bipar&variacao=<id>. Confirmação idempotente (client_batch_id) para não duplicar estoque em reenvio. Links para os produtos criados. Planilha e Foto continuam nas telas atuais por enquanto.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -23,22 +23,41 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "vps_server.js",
-    "vps_server.cjs",
-    "tmp-tests/bling-token-columns-text-static.test.cjs",
+    "pages/admin/entrada/CatalogEntryPage.tsx",
+    "components/entrada/entryList.js",
+    "components/entrada/EntryListPanel.tsx",
+    "components/entrada/ManualEntryTab.tsx",
+    "components/entrada/ScanEntryTab.tsx",
+    "components/entrada/EntryLockFields.tsx",
+    "services/catalogEntries.ts",
+    "services/vpsClient.ts",
+    "services/catalogEntryServer.cjs",
+    "routes/index.tsx",
+    "layouts/AdminLayout.tsx",
+    "hooks/usePageTitle.ts",
+    "infra/nginx/mdv-site-production.conf",
+    "infra/nginx/mdv-site-staging.conf",
+    "tmp-tests/entrada-*.test.mjs",
+    "tmp-tests/entrada-fixtures.mjs",
+    "tmp-tests/catalog-entry-*.test.cjs",
+    "tmp-tests/helpers/catalogEntryFakeDb.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-05-v1.2.797-bling-token-text.md"
+    "docs/versoes/2026-11-05-v1.2.798-entrada-unica-tela.md"
   ],
   "validations": [
-    "bling-token-columns-text-static 3/3",
-    "node --check vps_server.js/.cjs"
+    "front entrada 58/58 (lista, página, Manual, Bipar — navegador)",
+    "servidor catalog-entry 69/69",
+    "npm run build ok",
+    "revisão por tarefa + revisão final (opus) + re-revisão: todos os achados resolvidos"
   ],
   "site_release": {
-    "status": "sem mudança"
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261105-122500-v1298-entrada-tela",
+    "published_at": "2026-11-05T12:25:00-03:00"
   },
   "api_release": {
-    "status": "publicada",
-    "note": "ALTER company_settings bling_access_token/bling_refresh_token → TEXT aplicado em 05/11 11:20; API --catalog-entry-only (server.js b51d63bb); backup /var/www/mdv-api/backups/catalog-entry-1793888408695"
+    "status": "pendente",
+    "note": "--catalog-entry-only (client_batch_id)"
   }
 }

@@ -1,3 +1,9 @@
+# v1.2.798-entrada-unica-tela
+
+Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-122500-v1298-entrada-tela` + API). Branch: `main`. Tela Admin → Entrada (Manual e Bipar).
+
+---
+
 # v1.2.797-bling-token-text
 
 Data: 05/11/2026. Status: **publicada**. Branch: `main`. Só API: tokens do Bling em TEXT (reconectar o Bling voltava erro de tamanho).
