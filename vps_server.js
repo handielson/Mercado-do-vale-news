@@ -9969,6 +9969,13 @@ async function refreshBlingStoredAccessTokenVps(settings) {
 
   if (!response.ok) {
     // Preserve credentials on provider failures; never reuse the old token.
+    // bling-refresh-diagnostics-v1: registra só status HTTP e código do erro (nunca tokens).
+    const providerError = data?.error;
+    console.error('[bling-token] refresh failed', {
+      status: response.status,
+      error: String((providerError && typeof providerError === 'object' ? (providerError.type || providerError.code) : providerError) || '').slice(0, 60),
+      at: new Date().toISOString(),
+    });
     const error = new Error('Renovação do Bling indisponível. Tente novamente mais tarde.');
     error.statusCode = 503;
     throw error;

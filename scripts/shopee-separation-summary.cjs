@@ -138,9 +138,10 @@ async function createShopeeInterventionReceiptPdf(input) {
         const page = pdf.addPage([RECEIPT_WIDTH, RECEIPT_HEIGHT]);
         page.drawRectangle({ x: 0, y: 0, width: RECEIPT_WIDTH, height: RECEIPT_HEIGHT, color: rgb(1, 1, 1) });
         page.drawRectangle({ x: RECEIPT_MARGIN, y: 379, width: RECEIPT_CONTENT_WIDTH, height: 38, color: red });
-        page.drawText('INTERVENCAO NECESSARIA', { x: RECEIPT_MARGIN + 8, y: 396, size: 9.5, font: bold, color: rgb(1, 1, 1) });
+        // intervention-header-no-overlap-v1: titulo e "SHOPEE | n/n" em linhas separadas (antes se sobrepunham).
+        page.drawText('INTERVENCAO NECESSARIA', { x: RECEIPT_MARGIN + 8, y: 400, size: 9.5, font: bold, color: rgb(1, 1, 1) });
         drawRightAlignedText(page, `SHOPEE | ${pageIndex + 1}/${pages.length}`, {
-            right: RECEIPT_RIGHT - 6, y: 396, size: 6, font: bold, color: rgb(1, 1, 1),
+            right: RECEIPT_RIGHT - 6, y: 385, size: 6, font: bold, color: rgb(1, 1, 1),
         });
 
         page.drawText(`PEDIDO: ${printableText(order.orderSn) || '-'}`, { x: RECEIPT_MARGIN + 4, y: 361, size: 10, font: bold, color: black });

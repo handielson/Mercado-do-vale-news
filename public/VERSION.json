@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.794-pai-sem-imei",
+  "version": "v1.2.795-bling-desconectado-comprovante",
   "date": "2026-11-04",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.794-pai-sem-imei",
-  "release_vps": "/var/www/mdv-site/releases/20261105-101500-v1294-pai-sem-imei",
+  "tag": "v1.2.795-bling-desconectado-comprovante",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Cadastro de família de celular: o pai não mostra mais IMEI 1, IMEI 2 e Serial (eles ficavam gravados no pai e não viravam aparelho em estoque). No lugar, um aviso indica cadastrar o aparelho na variação (Estoque → Adicionar Unidade). Ao salvar o pai, IMEI/serial antigos são retirados dele.",
+  "summary": "Comprovante de intervenção da Shopee: título e 'SHOPEE | 1/1' não se sobrepõem mais; quando a falha é a conexão/renovação do Bling, o comprovante manda reconectar o Bling (Admin > Configurações > Bling > Reconectar Bling) em vez de corrigir NCM. API registra status HTTP e código de erro da renovação do Bling (sem tokens).",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -23,19 +23,29 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "components/products/sections/ProductSpecifications.tsx",
-    "components/products/ProductForm.tsx",
-    "tmp-tests/family-registration.test.mjs",
+    "scripts/shopee-separation-summary.cjs",
+    "scripts/shopee-auto-print.cjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "tmp-tests/shopee-intervention-bling-static.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-05-v1.2.794-pai-sem-imei.md"
+    "docs/versoes/2026-11-05-v1.2.795-bling-desconectado-comprovante.md"
   ],
   "validations": [
-    "family-registration.test 24/24"
+    "shopee-intervention-bling-static 3/3",
+    "shopee-intervention-receipt ok",
+    "shopee-dual-thermal-print-flow-static ok",
+    "shopee-pf-label 4/4",
+    "node --check vps_server.js/.cjs"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261105-101500-v1294-pai-sem-imei",
-    "published_at": "2026-11-05T10:15:00-03:00"
+    "status": "sem mudança"
+  },
+  "api_release": {
+    "status": "pendente (aguarda OK)"
+  },
+  "printer_agent_release": {
+    "status": "pendente (botão Atualizar serviço, aguarda OK)"
   }
 }

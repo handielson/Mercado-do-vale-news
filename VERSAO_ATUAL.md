@@ -1,3 +1,10 @@
+# v1.2.795-bling-desconectado-comprovante
+
+Data: 05/11/2026. Status: **pendente de publicação** (API e agente de impressão aguardam OK). Branch: `main`.
+Comprovante de intervenção sem sobreposição; falha de conexão do Bling instrui reconectar; API registra status da renovação do Bling.
+
+---
+
 # v1.2.794-pai-sem-imei
 
 Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-101500-v1294-pai-sem-imei`). Branch: `main`. Só site.

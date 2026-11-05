@@ -215,7 +215,13 @@ function requiresHumanIntervention(stage, resultOrError) {
     return true;
 }
 
-function interventionInstructions(stage) {
+// bling-disconnected-instructions-v1: falha de conexão/renovação do Bling não é erro fiscal da nota.
+const BLING_CONNECTION_PROBLEM = /renova[cç][aã]o do bling|conex[aã]o do bling|reconecte/i;
+
+function interventionInstructions(stage, message = '') {
+    if (BLING_CONNECTION_PROBLEM.test(String(message || ''))) {
+        return 'Bling desconectado: entre em Admin > Configuracoes > Bling (mercadodovale.com.br/admin/settings/bling) e clique em "Reconectar Bling". Depois imprima o pedido de novo pelo painel.';
+    }
     return {
         invoice: 'Abra a NF-e no Bling, corrija NCM, CEST ou tributacao, autorize a nota e confirme o envio para a Shopee.',
         personal_document: 'Abra o pedido da conta G na Shopee e confira qual documento de pessoa física foi solicitado. Não emita NF-e pelo Bling para esta conta.',
@@ -458,7 +464,7 @@ async function printHumanInterventionReceipt({ settings, shopeeApiUrl, connectio
             }[stage] || stage,
             errorCode: issue.errorCode,
             message: issue.message,
-            instructions: interventionInstructions(stage),
+            instructions: interventionInstructions(stage, issue.message),
             occurredAt: Date.now(),
         });
         fs.writeFileSync(receiptPath, receipt);
@@ -1214,6 +1220,7 @@ function startShopeeAutoPrintService() {
 if (require.main === module) startShopeeAutoPrintService();
 
 module.exports = {
+    interventionInstructions,
     writeShopeeThermalLabel,
     prepareShopeeOrderShipment,
     startShopeeAutoPrintService,
