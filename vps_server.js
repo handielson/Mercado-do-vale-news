@@ -27254,22 +27254,22 @@ async function getDefaultStockCompanyId() {
   return '00000000-0000-0000-0000-000000000000';
 }
 
-async function ensureDefaultStockLocation(companyId) {
+async function ensureDefaultStockLocation(companyId, db = pool) {
   const targetCompanyId = companyId || await getDefaultStockCompanyId();
-  const [existingDeposits] = await pool.query(
+  const [existingDeposits] = await db.query(
     'SELECT id FROM stock_deposits WHERE company_id = ? AND code = ? LIMIT 1',
     [targetCompanyId, 'LOJA-PRINCIPAL']
   );
   let depositId = existingDeposits?.[0]?.id;
   if (!depositId) {
     depositId = crypto.randomUUID();
-    await pool.query(
+    await db.query(
       `INSERT INTO stock_deposits (id, company_id, name, code, type, is_default, is_active)
        VALUES (?, ?, 'Loja Principal', 'LOJA-PRINCIPAL', 'store', 1, 1)`,
       [depositId, targetCompanyId]
     );
   } else {
-    await pool.query(
+    await db.query(
       `UPDATE stock_deposits
        SET name='Loja Principal', type='store', is_default=1, is_active=1, updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
@@ -27277,20 +27277,20 @@ async function ensureDefaultStockLocation(companyId) {
     );
   }
 
-  const [existingLocations] = await pool.query(
+  const [existingLocations] = await db.query(
     'SELECT id FROM stock_locations WHERE deposit_id = ? AND code = ? LIMIT 1',
     [depositId, 'ESTOQUE-GERAL']
   );
   let locationId = existingLocations?.[0]?.id;
   if (!locationId) {
     locationId = crypto.randomUUID();
-    await pool.query(
+    await db.query(
       `INSERT INTO stock_locations (id, company_id, deposit_id, name, code, description, is_default, is_active)
        VALUES (?, ?, ?, 'Estoque Geral', 'ESTOQUE-GERAL', 'Local padrao criado automaticamente para migracao inicial de estoque.', 1, 1)`,
       [locationId, targetCompanyId, depositId]
     );
   } else {
-    await pool.query(
+    await db.query(
       `UPDATE stock_locations
        SET name='Estoque Geral', description='Local padrao criado automaticamente para migracao inicial de estoque.',
            is_default=1, is_active=1, updated_at=CURRENT_TIMESTAMP
@@ -27302,22 +27302,22 @@ async function ensureDefaultStockLocation(companyId) {
   return { depositId, locationId, companyId: targetCompanyId };
 }
 
-async function ensureIncomingStockLocation(companyId) {
+async function ensureIncomingStockLocation(companyId, db = pool) {
   const targetCompanyId = companyId || await getDefaultStockCompanyId();
-  const [existingDeposits] = await pool.query(
+  const [existingDeposits] = await db.query(
     'SELECT id FROM stock_deposits WHERE company_id = ? AND code = ? LIMIT 1',
     [targetCompanyId, 'DEPOSITO']
   );
   let depositId = existingDeposits?.[0]?.id;
   if (!depositId) {
     depositId = crypto.randomUUID();
-    await pool.query(
+    await db.query(
       `INSERT INTO stock_deposits (id, company_id, name, code, type, is_default, is_active)
        VALUES (?, ?, 'Deposito', 'DEPOSITO', 'warehouse', 0, 1)`,
       [depositId, targetCompanyId]
     );
   } else {
-    await pool.query(
+    await db.query(
       `UPDATE stock_deposits
        SET name='Deposito', type='warehouse', is_active=1, updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
@@ -27325,20 +27325,20 @@ async function ensureIncomingStockLocation(companyId) {
     );
   }
 
-  const [existingLocations] = await pool.query(
+  const [existingLocations] = await db.query(
     'SELECT id FROM stock_locations WHERE deposit_id = ? AND code = ? LIMIT 1',
     [depositId, 'ENTRADA-CONFERENCIA']
   );
   let locationId = existingLocations?.[0]?.id;
   if (!locationId) {
     locationId = crypto.randomUUID();
-    await pool.query(
+    await db.query(
       `INSERT INTO stock_locations (id, company_id, deposit_id, name, code, description, is_default, is_active)
        VALUES (?, ?, ?, 'Entrada / Conferencia', 'ENTRADA-CONFERENCIA', 'Local automatico para saldo recebido de integracoes antes da conferencia fisica.', 0, 1)`,
       [locationId, targetCompanyId, depositId]
     );
   } else {
-    await pool.query(
+    await db.query(
       `UPDATE stock_locations
        SET name='Entrada / Conferencia', description='Local automatico para saldo recebido de integracoes antes da conferencia fisica.',
            is_active=1, updated_at=CURRENT_TIMESTAMP
@@ -29632,6 +29632,13 @@ function isStockEntryLockedTableInsert(name) {
   return STOCK_ENTRY_LOCKED_TABLES.has(String(name || '').toLowerCase());
 }
 
+// /table-data/products (MySQL Explorer) não grava stock_quantity: o saldo vem das unidades e dos locais.
+// Vale só para as rotas HTTP; chamadores internos (vpsDbPatch etc.) seguem iguais.
+function hasStockEntryLockedProductColumns(name, rows) {
+  if (String(name || '').toLowerCase() !== 'products') return false;
+  return rows.some(row => row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'stock_quantity'));
+}
+
 // Cria 1 unidade
 fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
   const u = req.body || {};
@@ -30625,6 +30632,7 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return reply.code(400).send({ error: 'Body must be a JSON object' });
   }
+  if (hasStockEntryLockedProductColumns(name, [body])) return reply.code(409).send(stockEntryLockPayload());
   if (name === 'orders' && !require('./services/orderStorefront.cjs').isLegacyMdvOrderCreate(body)) {
     return reply.code(403).send({ error: 'Pedidos de outro site exigem checkout próprio.' });
   }
@@ -30698,6 +30706,7 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
   if (!Array.isArray(rows) || rows.length === 0) {
     return reply.code(400).send({ error: 'Body must be a non-empty array' });
   }
+  if (hasStockEntryLockedProductColumns(name, rows)) return reply.code(409).send(stockEntryLockPayload());
   if (name === 'orders' && !rows.every(row => require('./services/orderStorefront.cjs').isLegacyMdvOrderCreate(row))) {
     return reply.code(403).send({ error: 'Pedidos de outro site exigem checkout próprio.' });
   }
@@ -33157,6 +33166,8 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return reply.code(400).send({ error: 'Body must be a JSON object' });
   }
+  // stock-entry-lock-v1: saldo de produto não se edita por aqui.
+  if (hasStockEntryLockedProductColumns(name, [body])) return reply.code(409).send(stockEntryLockPayload());
   if (name === 'orders') {
     if (pkCol !== 'id' || !require('./services/orderStorefront.cjs').isLegacyMdvOrderPatch(body)) {
       return reply.code(403).send({ error: 'Origem do pedido é imutável nesta rota.' });
@@ -42825,13 +42836,15 @@ async function runMigrations() {
   await ensureDefaultAdminAccount();
 }
 
-async function syncSerializedProductStockFromUnits(productId, db = pool) {
+// options.stockLocationInTransaction: cria/atualiza o local padrão na própria db (porta da Entrada,
+// para o ROLLBACK da prévia desfazer). Sem a opção, o local segue pelo pool, como antes.
+async function syncSerializedProductStockFromUnits(productId, db = pool, options = {}) {
   if (!productId) return null;
   const [[product]] = await db.query('SELECT id, company_id FROM products WHERE id = ? LIMIT 1', [productId]);
   if (!product) return null;
 
   const companyId = product.company_id || await getDefaultStockCompanyId();
-  const fallback = await ensureDefaultStockLocation(companyId);
+  const fallback = await ensureDefaultStockLocation(companyId, options.stockLocationInTransaction ? db : pool);
   const [unitRows] = await db.query(
     `SELECT
        COALESCE(deposit_id, ?) AS deposit_id,
@@ -42866,8 +42879,8 @@ async function syncSerializedProductStockFromUnits(productId, db = pool) {
 }
 
 // Recalcula products.stock_quantity a partir das unidades serializadas disponiveis.
-async function syncProductStock(productId, db = pool) {
-  const stock = await syncSerializedProductStockFromUnits(productId, db);
+async function syncProductStock(productId, db = pool, options = {}) {
+  const stock = await syncSerializedProductStockFromUnits(productId, db, options);
   await require('./services/smartphoneMovingAverageServer.cjs').synchronizeProduct(pool, productId, db === pool ? null : db);
   return stock;
 }
@@ -43730,7 +43743,7 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 // Start
 const photoIntakeRoutes = registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname });
 registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey });
-require('./services/catalogEntryServer.cjs').registerCatalogEntryRoutes(fastify, { pool, auth: requireSyncKeyOrAdmin, getActorId: async (request) => (await getVpsBearerAuthContext(request))?.userId || null, deps: { syncProductStock: (id, db) => syncProductStock(id, db), syncProductStockFromLocations: (id, db) => syncProductStockFromLocations(id, db), insertStockMovement: (row, db) => insertStockMovement(row, db), getDefaultCompanyId: () => getDefaultStockCompanyId(), finalizePhotoIntake: photoIntakeRoutes.finalizePhotoIntake, ensurePhotoIntakeSchema: photoIntakeRoutes.ensureSchema } });
+require('./services/catalogEntryServer.cjs').registerCatalogEntryRoutes(fastify, { pool, auth: requireSyncKeyOrAdmin, getActorId: async (request) => (await getVpsBearerAuthContext(request))?.userId || null, deps: { syncProductStock: (id, db) => syncProductStock(id, db, { stockLocationInTransaction: true }), syncProductStockFromLocations: (id, db) => syncProductStockFromLocations(id, db), insertStockMovement: (row, db) => insertStockMovement(row, db), getDefaultCompanyId: () => getDefaultStockCompanyId(), finalizePhotoIntake: photoIntakeRoutes.finalizePhotoIntake, ensurePhotoIntakeSchema: photoIntakeRoutes.ensureSchema } });
 registerMercadoLivreRoutes(fastify, {
   pool, requireSyncKey, requireSyncKeyOrAdmin,
   onSale: (sale) => mobileSalesPushService.recordSaleEvent(sale),
