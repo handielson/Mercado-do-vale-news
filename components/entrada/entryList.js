@@ -129,3 +129,16 @@ export function loadDraft(storage) {
     return emptyState();
   }
 }
+
+/** 15 dígitos + Luhn (mesma regra de services/catalogEntryCore.cjs; o servidor valida de novo). */
+export function isValidImei(value) {
+  const text = String(value ?? '').trim();
+  if (!/^\d{15}$/.test(text)) return false;
+  let sum = 0;
+  for (let i = 0; i < 15; i++) {
+    let digit = Number(text[14 - i]);
+    if (i % 2 === 1) { digit *= 2; if (digit > 9) digit -= 9; }
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { catalogEntries, EntryItem } from '../../../services/catalogEntries';
+import { ScanEntryTab } from '../../../components/entrada/ScanEntryTab';
 import { ManualEntryTab } from '../../../components/entrada/ManualEntryTab';
 import { EntryListPanel, EntryLine, EntryResult, EntryState } from '../../../components/entrada/EntryListPanel';
 import { addLines, applyPreview, emptyState, loadDraft, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
@@ -26,15 +27,13 @@ const ComingSoon: React.FC<{ to: string; label: string }> = ({ to, label }) => (
     </div>
 );
 
-// Slot da aba Bipar: a Task 4 troca este placeholder pelo componente real.
-const BiparTab: React.FC<EntryTabProps> = () => <p className="text-sm text-gray-500">Entrada por leitura de IMEI (em construção).</p>;
-
 export const CatalogEntryPage: React.FC = () => {
     const [params, setParams] = useSearchParams();
     const requested = params.get('aba') as EntryTab | null;
     const tab: EntryTab = TABS.some(t => t.id === requested) ? (requested as EntryTab) : 'manual';
 
     const modeloParam = params.get('modelo');
+    const variacaoParam = params.get('variacao');
 
     const [state, setState] = useState<EntryState>(() => {
         const storage = safeStorage();
@@ -141,7 +140,7 @@ export const CatalogEntryPage: React.FC = () => {
                 </div>
                 <div role="tabpanel">
                     {tab === 'manual' && <ManualEntryTab onAddLines={onAddLines} busy={busy} prefill={modeloParam ? { model_id: modeloParam } : undefined} />}
-                    {tab === 'bipar' && <BiparTab onAddLines={onAddLines} busy={busy} />}
+                    {tab === 'bipar' && <ScanEntryTab onAddLines={onAddLines} busy={busy} existingState={state} prefill={variacaoParam ? { variation_id: variacaoParam } : undefined} />}
                     {tab === 'planilha' && <ComingSoon to="/admin/products/bulk" label="Cadastro em massa (tela atual)" />}
                     {tab === 'foto' && <ComingSoon to="/admin/products/photo-intake" label="Cadastro por foto (tela atual)" />}
                 </div>

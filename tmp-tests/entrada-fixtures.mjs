@@ -4,6 +4,7 @@ export const serviceStubs = {
     categories: `export const categoryService = { getById: async id => window.fixtures.categories[id] || null, list: async () => Object.values(window.fixtures.categories) };`,
     'model-color-images': `export const modelColorImagesService = { getByModel: async id => window.fixtures.modelColors.filter(r => r.model_id === id) };`,
     colors: `export const colorService = { list: async () => window.fixtures.colors, listActive: async () => window.fixtures.colors }; export const getColorHex = () => undefined; export const COLOR_MAP = {};`,
+    products: `export const productService = { getById: async id => window.fixtures.products?.[id] || null }; export default productService;`,
     stockLocationService: `const s = { listLocations: async () => window.fixtures.locations }; export const stockLocationService = s; export default s;`,
 };
 
@@ -20,6 +21,10 @@ export const defaultFixtures = {
         { id: 'r1', model_id: 'm1', color_id: 'k1', images: ['a.jpg'] },
         { id: 'r2', model_id: 'm1', color_id: 'k2', images: ['b.jpg'] },
     ],
+    products: {
+        p1: { id: 'p1', name: 'Redmi 15', model_id: 'm1', category_id: 'c1', specs: { ram: '8GB', storage: '256GB', color: 'Verde' } },
+        p2: { id: 'p2', name: 'Poco X8', model_id: 'm3', category_id: 'c1', specs: { ram: '12GB', storage: '512GB', color: 'Preto', version: 'India', condition: 'seminovo' } },
+    },
     locations: [{ id: 'l1', name: 'Prateleira A', code: 'A', is_default: false, is_active: true }, { id: 'l2', name: 'Vitrine', code: 'V', is_default: true, is_active: true }],
 };
 

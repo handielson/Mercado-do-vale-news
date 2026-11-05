@@ -1,14 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { modelService } from '../../services/models';
-import { categoryService } from '../../services/categories';
-import { colorService } from '../../services/colors';
-import { modelColorImagesService } from '../../services/model-color-images';
-import { stockLocationService } from '../../services/stockLocationService';
-import { isSmartphoneModel } from '../../services/smartphoneModelSpecs.mjs';
 import { IMEIInput } from '../ui/IMEIInput';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { createLine } from './entryList.js';
+import { loadModelProfile, useEntryLocations } from './EntryLockFields';
 import type { EntryLine } from './EntryListPanel';
 
 export const RAM_OPTIONS = ['2GB', '3GB', '4GB', '6GB', '8GB', '12GB', '16GB', '18GB', '24GB'];
@@ -21,7 +17,6 @@ export const CONDITIONS: { value: string; label: string }[] = [
 ];
 
 interface ModelRow { id: string; name: string; category_id?: string | null }
-interface LocationRow { id: string; name: string; is_default?: boolean; is_active?: boolean }
 
 export interface ManualEntryTabProps {
     onAddLines: (lines: EntryLine[]) => void;
@@ -35,9 +30,7 @@ const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
 
 export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, prefill, busy }) => {
     const [models, setModels] = useState<ModelRow[]>([]);
-    const [locations, setLocations] = useState<LocationRow[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
-    const [locationsError, setLocationsError] = useState(false);
     const [categoryError, setCategoryError] = useState(false);
 
     const [modelId, setModelId] = useState(prefill?.model_id || '');
@@ -56,6 +49,7 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
     const [quantity, setQuantity] = useState('1');
     const [cost, setCost] = useState(0);
     const [locationId, setLocationId] = useState('');
+    const { locations, locationsError } = useEntryLocations(setLocationId);
     const [pricesOn, setPricesOn] = useState(false);
     const [retail, setRetail] = useState(0);
     const [reseller, setReseller] = useState(0);
@@ -66,14 +60,6 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
         modelService.list()
             .then(list => { if (alive) setModels((list as ModelRow[]).filter(m => (m as { active?: boolean }).active !== false)); })
             .catch(() => { if (alive) setLoadError('Não foi possível carregar os modelos.'); });
-        stockLocationService.listLocations()
-            .then(list => {
-                if (!alive) return;
-                const active = (list as LocationRow[]).filter(l => l.is_active !== false);
-                setLocations(active);
-                setLocationId(current => current || active.find(l => l.is_default)?.id || '');
-            })
-            .catch(() => { if (alive) setLocationsError(true); });
         return () => { alive = false; };
     }, []);
 
@@ -90,20 +76,10 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
         setImei1(''); setImei2(''); setSerial(''); setQuantity('1'); setConditionNote('');
         if (!model) return;
         (async () => {
-            const [category, rows, colors] = await Promise.all([
-                model.category_id ? categoryService.getById(model.category_id).catch(() => undefined) : Promise.resolve(null),
-                modelColorImagesService.getByModel(model.id).catch(() => []),
-                colorService.list().catch(() => []),
-            ]);
+            const profile = await loadModelProfile(model);
             if (!alive) return;
-            if (model.category_id && !category) { setCategoryError(true); return; }
-            setIsPhone(isSmartphoneModel({ category_name: category?.name }));
-            const names = new Map((colors as { id: string; name: string }[]).map(c => [c.id, c.name]));
-            const withPhoto = (rows as { color_id: string; images?: string[]; image_url?: string | null }[])
-                .filter(r => (r.images && r.images.length > 0) || r.image_url)
-                .map(r => names.get(r.color_id))
-                .filter((n): n is string => Boolean(n));
-            setColorOptions(Array.from(new Set(withPhoto)));
+            setIsPhone(profile.isPhone);
+            setColorOptions(profile.colorOptions);
         })().catch(() => { if (alive) setCategoryError(true); });
         return () => { alive = false; };
     }, [model]);
