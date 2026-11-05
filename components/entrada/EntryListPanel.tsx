@@ -72,6 +72,7 @@ export const EntryListPanel: React.FC<Props> = ({ state, onRemove, onEdit, onPre
                                 <div className="min-w-0 space-y-1">
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <span aria-hidden="true">{st.state === 'ok' ? '✅' : st.state === 'error' ? '⚠️' : '•'}</span>
+                                        <span className="sr-only">{st.state === 'ok' ? 'OK' : st.state === 'error' ? 'Com problema' : 'Pendente'}</span>
                                         <span className="text-sm text-gray-800">{line.label}</span>
                                         <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{SOURCE_LABEL[line.source] || line.source}</span>
                                         {st.badges.map(b => (
@@ -84,9 +85,9 @@ export const EntryListPanel: React.FC<Props> = ({ state, onRemove, onEdit, onPre
                                 </div>
                                 <div className="flex gap-2 shrink-0">
                                     {onEdit && (
-                                        <button type="button" onClick={() => onEdit(line.key)} className="text-xs text-blue-600 hover:underline">Editar</button>
+                                        <button type="button" onClick={() => onEdit(line.key)} disabled={busy} className="text-xs text-blue-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed">Editar</button>
                                     )}
-                                    <button type="button" onClick={() => onRemove(line.key)} className="text-xs text-red-600 hover:underline">Remover</button>
+                                    <button type="button" onClick={() => onRemove(line.key)} disabled={busy} className="text-xs text-red-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed">Remover</button>
                                 </div>
                             </li>
                         );

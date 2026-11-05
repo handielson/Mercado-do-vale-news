@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { build } from 'vite';
 import react from '@vitejs/plugin-react';
 import { chromium } from 'playwright';
+import { defaultFixtures, stubPlugin } from './entrada-fixtures.mjs';
 
 const stub = `export const catalogEntries = {
     preview: async (items) => {
@@ -33,7 +34,7 @@ async function setup(t, { lines = draftLines, url = '/admin/entrada', init } = {
         const bundled = await build({
             configFile: false, logLevel: 'error',
             define: { 'process.env.NODE_ENV': '"production"' },
-            plugins: [react(), {
+            plugins: [react(), stubPlugin(), {
                 name: 'entrada-fixture', enforce: 'pre',
                 resolveId(id) {
                     if (id.endsWith('virtual:entry')) return '\0entrada-entry.tsx';
@@ -56,13 +57,14 @@ async function setup(t, { lines = draftLines, url = '/admin/entrada', init } = {
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
-    await page.addInitScript(({ lines, url, init }) => {
+    await page.addInitScript(({ lines, url, init, fixtures }) => {
         window.__initialEntries = [url];
+        window.fixtures = fixtures;
         if (lines) localStorage.setItem('mdv-entrada-rascunho-v1', JSON.stringify({ lines }));
         window.previewResult = items => ({ ok: true, hash: 'h1', plan: items.map((_, i) => ({ line: i + 1, product_id: 'p' + (i + 1), sku: 'S' + i, family: 'existing', variation: 'new', price_source: 'group', stock: { kind: 'serialized', quantity: 1 }, errors: [] })) });
         window.commitImpl = async items => ({ batch_id: 'b1', plan: items.map((_, i) => ({ line: i + 1, product_id: 'p' + (i + 1), sku: 'S' + i, family: 'existing', variation: 'new', price_source: 'group', stock: { kind: 'serialized', quantity: 1 }, errors: [] })) });
         if (init) new Function(init)();
-    }, { lines, url, init });
+    }, { lines, url, init, fixtures: defaultFixtures });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     return { page, errors };
 }
@@ -138,4 +140,23 @@ test('remover linha após prévia desabilita Confirmar', { timeout: 120000 }, as
     await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent.includes('Confirmar entrada') && !b.disabled));
     await page.getByRole('button', { name: 'Remover' }).first().click();
     assert.equal(await page.getByRole('button', { name: 'Confirmar entrada' }).isDisabled(), true);
+});
+
+test('durante a confirmação Remover e Adicionar ficam desabilitados e há texto para leitor de tela', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { init: `window.commitImpl = () => new Promise(r => { window.finishCommit = () => r({ batch_id: 'b1', plan: [{ product_id: 'p1' }, { product_id: 'p2' }] }); });` });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent.includes('Confirmar entrada') && !b.disabled));
+    assert.equal(await page.locator('span.sr-only', { hasText: 'OK' }).count(), 2);
+    await page.getByRole('button', { name: 'Confirmar entrada' }).click();
+    await page.waitForFunction(() => window.finishCommit);
+    for (const b of await page.getByRole('button', { name: 'Remover' }).all()) assert.equal(await b.isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Adicionar à lista' }).isDisabled(), true);
+    await page.evaluate(() => window.finishCommit());
+    await page.getByText('Entrada confirmada').waitFor();
+});
+
+test('?modelo= pré-seleciona o modelo na aba Manual', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { lines: null, url: '/admin/entrada?modelo=m1' });
+    await page.getByText('IMEI 1', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('combobox', { name: 'Modelo' }).inputValue(), 'Redmi 15');
 });

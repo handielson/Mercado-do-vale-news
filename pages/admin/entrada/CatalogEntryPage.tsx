@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { catalogEntries, EntryItem } from '../../../services/catalogEntries';
+import { ManualEntryTab } from '../../../components/entrada/ManualEntryTab';
 import { EntryListPanel, EntryLine, EntryResult, EntryState } from '../../../components/entrada/EntryListPanel';
 import { addLines, applyPreview, emptyState, loadDraft, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
 
 export type EntryTab = 'manual' | 'bipar' | 'planilha' | 'foto';
 
 /** Contrato de cada aba: entrega linhas prontas para a Lista de entrada. */
-export interface EntryTabProps { onAddLines: (lines: EntryLine[]) => void }
+export interface EntryTabProps { onAddLines: (lines: EntryLine[]) => void; busy?: boolean }
 
 const TABS: { id: EntryTab; label: string }[] = [
     { id: 'manual', label: 'Manual' },
@@ -25,14 +26,15 @@ const ComingSoon: React.FC<{ to: string; label: string }> = ({ to, label }) => (
     </div>
 );
 
-// Slots das abas Manual e Bipar: as Tasks 3 e 4 trocam estes placeholders pelos componentes reais.
-const ManualTab: React.FC<EntryTabProps> = () => <p className="text-sm text-gray-500">Cadastro manual (em construção).</p>;
+// Slot da aba Bipar: a Task 4 troca este placeholder pelo componente real.
 const BiparTab: React.FC<EntryTabProps> = () => <p className="text-sm text-gray-500">Entrada por leitura de IMEI (em construção).</p>;
 
 export const CatalogEntryPage: React.FC = () => {
     const [params, setParams] = useSearchParams();
     const requested = params.get('aba') as EntryTab | null;
     const tab: EntryTab = TABS.some(t => t.id === requested) ? (requested as EntryTab) : 'manual';
+
+    const modeloParam = params.get('modelo');
 
     const [state, setState] = useState<EntryState>(() => {
         const storage = safeStorage();
@@ -94,10 +96,12 @@ export const CatalogEntryPage: React.FC = () => {
                 label: line.label,
                 productId: res.plan?.[i]?.product_id ?? null,
             }));
-            const cleared = emptyState() as EntryState;
-            setState(cleared);
-            const storage = safeStorage();
-            if (storage) saveDraft(cleared, storage);
+            // Remove só as linhas confirmadas; o que entrou nesse meio tempo continua na lista.
+            const committed = new Set(lines.map(l => l.key));
+            setState(s => {
+                const remaining = s.lines.filter(l => !committed.has(l.key));
+                return (remaining.length === 0 ? emptyState() : { ...s, lines: remaining, plan: null, hash: null, previewedSignature: null }) as EntryState;
+            });
             setResult({ type: 'success', rows });
         } catch (err) {
             const m = /\[VPS\] (409|422)\b/.exec(err instanceof Error ? err.message : '');
@@ -136,8 +140,8 @@ export const CatalogEntryPage: React.FC = () => {
                     ))}
                 </div>
                 <div role="tabpanel">
-                    {tab === 'manual' && <ManualTab onAddLines={onAddLines} />}
-                    {tab === 'bipar' && <BiparTab onAddLines={onAddLines} />}
+                    {tab === 'manual' && <ManualEntryTab onAddLines={onAddLines} busy={busy} prefill={modeloParam ? { model_id: modeloParam } : undefined} />}
+                    {tab === 'bipar' && <BiparTab onAddLines={onAddLines} busy={busy} />}
                     {tab === 'planilha' && <ComingSoon to="/admin/products/bulk" label="Cadastro em massa (tela atual)" />}
                     {tab === 'foto' && <ComingSoon to="/admin/products/photo-intake" label="Cadastro por foto (tela atual)" />}
                 </div>
