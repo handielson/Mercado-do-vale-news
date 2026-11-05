@@ -131,7 +131,20 @@ function isPhone(ctx, item) {
   return core.isSmartphoneCategory(item.model_id ? owner?.category_name : owner?.name);
 }
 
-const stockKind = (ctx, item) => isPhone(ctx, item) || item.identity.imei1 || item.identity.serial ? 'unit' : 'quantity';
+// Produto por quantidade vinculado ao Bling (products.bling_id) recebe estoque pela nota fiscal de compra
+// no Bling: o webhook de estoque do Bling (PATCH /products/stock em vps_server.js) sobrescreve o saldo do MDV,
+// então uma entrada aqui seria contada em dobro ou apagada. Produto por aparelho (IMEI/serial) não é afetado
+// (lá o Bling só guarda referência). REMOVER (pôr false e depois apagar) quando o ERP próprio substituir o Bling.
+const BLING_QUANTITY_STOCK_OWNER = true;
+const BLING_QUANTITY_STOCK_MESSAGE = 'Este produto recebe estoque pela nota fiscal no Bling. Dê entrada por lá.';
+async function blingOwnsQuantityStock(ctx, productId, kind) {
+  if (!BLING_QUANTITY_STOCK_OWNER || kind !== 'quantity' || ctx.created.has(productId)) return false;
+  const cached = ctx.products.get(productId);
+  const [[row]] = cached ? [[cached]] : await ctx.conn.query('SELECT id,bling_id FROM products WHERE id=?', [productId]);
+  return String(row?.bling_id ?? '').trim() !== '';
+}
+
+const stockKind = (ctx, item) =>isPhone(ctx, item) || item.identity.imei1 || item.identity.serial ? 'unit' : 'quantity';
 const STOCK_LABEL = { unit: 'aparelho', quantity: 'quantidade' };
 
 // O modo de estoque é do PRODUTO: celular ou produto com unidades → aparelho; produto com saldo por local
@@ -427,6 +440,8 @@ async function resolveItem(ctx, item, line) {
   }
   const target = fixed || (item.model_id ? await resolveFamily(ctx, item, line, phone) : await resolveSimple(ctx, item, line));
   const kind = await productStockKind(ctx, target.id, phone, line.stock.kind);
+  // Antes do erro de modo: ajustar a linha para quantidade não resolveria (o Bling é o dono desse saldo).
+  if (await blingOwnsQuantityStock(ctx, target.id, kind)) throw lineError(BLING_QUANTITY_STOCK_MESSAGE);
   if (kind !== line.stock.kind) throw lineError(`Este produto controla estoque por ${STOCK_LABEL[kind]}; ajuste a linha.`);
   // Produto criado neste lote não tem id estável entre prévia e confirmação: o plano mostra só o SKU previsto.
   line.product_id = ctx.created.has(target.id) ? null : target.id;
@@ -663,4 +678,4 @@ function registerCatalogEntryRoutes(fastify, { pool, auth, deps, getActorId }) {
   });
 }
 
-module.exports = { ensureCatalogEntrySchema, runCatalogEntry, registerCatalogEntryRoutes };
+module.exports = { ensureCatalogEntrySchema, runCatalogEntry, registerCatalogEntryRoutes, BLING_QUANTITY_STOCK_OWNER };
