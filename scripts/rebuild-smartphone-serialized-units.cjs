@@ -331,6 +331,8 @@ async function main() {
 
         await api(`/table-data/products/${encodeURIComponent(candidate.source_product_id)}`, {
           method: 'PATCH',
+          // stock-entry-lock-v1: stock_quantity em /table-data/products so passa como manutencao (x-sync-key + cabecalho).
+          headers: { 'x-stock-maintenance': '1' },
           body: JSON.stringify({
             status: 'inactive',
             stock_quantity: 0,
