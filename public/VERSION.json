@@ -1,12 +1,13 @@
 {
   "version": "v1.2.792-preco-familia-meta-lista",
   "date": "2026-11-04",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.792-preco-familia-meta-lista",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261105-093300-v1292-preco-familia",
   "api_release": {
-    "status": "pendente"
+    "status": "publicada",
+    "note": "--marketing-scenes-only: só metaAttendanceReplies.cjs mudou (sha 93865ada); backup /var/www/mdv-api/backups/marketing-scenes-1793881984325"
   },
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Cadastro de família: preços que a API devolve em texto (\"0.00\", \"130000.00\") não travam mais o salvamento ('use valores válidos acima de zero'). Página do produto: o preço não aparece mais duplicado ao lado de 'Opções disponíveis'. Facebook/Instagram: a lista só é dividida entre produtos (antes cortava a cada 900 caracteres, no meio do texto).",
@@ -42,6 +43,8 @@
     "meta-attendance-replies.test 18/18"
   ],
   "site_release": {
-    "status": "pendente"
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261105-093300-v1292-preco-familia",
+    "published_at": "2026-11-05T09:33:00-03:00"
   }
 }

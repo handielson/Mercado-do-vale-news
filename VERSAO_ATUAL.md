@@ -1,6 +1,6 @@
 # v1.2.792-preco-familia-meta-lista
 
-Data: 05/11/2026. Status: **pendente de publicação**. Branch: `main`.
+Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-093300-v1292-preco-familia`, API). Branch: `main`.
 Família salva com preço em texto da API; preço sem duplicar na página do produto; lista no Facebook/Instagram dividida só entre produtos.
 
 ---
