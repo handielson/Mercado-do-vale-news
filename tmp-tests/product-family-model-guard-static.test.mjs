@@ -11,14 +11,19 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 }
 assert.match(form, /const familyGuardApplies = !initialData\?\.id && !variationDraftMode && !isParentProduct && !guardParentId && Boolean\(guardModelId\)/, 'form: so produto novo e solto');
 assert.match(form, /data-model-family-guard/, 'form: mostra a familia existente');
-assert.match(form, /\?tab=inventory&addUnit=1/, 'form: leva para "+ peças" na variacao existente');
-assert.match(form, /getFamilyChildState\(modelFamily\.parent\)/, 'form: cria a variacao dentro da familia');
+// entrada-atalhos-v1: "+ peças" e "Criar nova variação" abrem a Entrada (pai sem model_id segue no fluxo antigo).
+assert.match(form, /navigateFromForm\(entryAddUnitsPath\(variant\.id\)!\)/, 'form: leva para "+ peças" na variacao existente (Entrada)');
+assert.doesNotMatch(form, /addUnit=1/, 'form: nao monta mais o link antigo');
+assert.match(form, /const entryPath = entryNewVariationPath\(modelFamily\.parent\)/, 'form: cria a variacao dentro da familia pela Entrada');
+assert.match(form, /getFamilyChildState\(modelFamily\.parent\)/, 'form: pai sem modelo cria a variacao no fluxo antigo');
 assert.match(form, /blocksSubmitForDuplicateEAN \|\| Boolean\(modelFamily\)/, 'form: salvar bloqueado enquanto houver familia');
 assert.match(form, /if \(modelFamily\) \{ toast\.error/, 'form: submit tambem bloqueado no handler');
 const familyPage = readFileSync('pages/admin/products/ModelProductAggregatorPage.tsx', 'utf8');
 assert.match(familyPage, />Página do Produto</, 'painel do modelo virou a Página do Produto (antiga pagina da familia)');
 assert.doesNotMatch(familyPage, /Página da família/, 'nome antigo Página da família não volta');
 assert.match(familyPage, /Nova variação \(cor\/memória\)/, 'pagina da familia cria variacao dentro dela');
+assert.match(familyPage, /const entryPath = entryNewVariationPath\(familyParent\)/, 'nova variacao da familia abre a Entrada');
+assert.match(familyPage, /return entryAddUnitsPath\(id\) \|\| ''/, 'Incluir peças abre a Entrada');
 assert.match(familyPage, /Editar dados da família/, 'pagina da familia edita o pai');
 assert.match(familyPage, /Incluir peças em \$\{memoryGroup\.label\} \$\{colorGroup\.color\}/, 'cada cor tem Incluir peças');
 assert.doesNotMatch(familyPage, />\s*Adicionar igual\s*</, '"Adicionar igual" saiu da Página do Produto (criava cadastro duplicado)');

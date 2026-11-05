@@ -10,12 +10,18 @@ import { defaultFixtures, stubPlugin } from './entrada-fixtures.mjs';
 const root = process.cwd().replaceAll('\\', '/');
 const entry = `import React from 'react';import {createRoot} from 'react-dom/client';import {ScanEntryTab} from '${root}/components/entrada/ScanEntryTab.tsx';
 import {addLines, emptyState} from '${root}/components/entrada/entryList.js';
+import {loadFixedVariation} from '${root}/components/entrada/FixedVariationCard.tsx';
 function App() {
   const [state, setState] = React.useState(() => window.__state || emptyState());
+  // Variação fixa como a página entrega: carregada pelo mesmo loader (window.__variation = id do produto).
+  const [fixed, setFixed] = React.useState(null);
+  const [fixedError, setFixedError] = React.useState(null);
+  React.useEffect(() => { if (window.__variation) loadFixedVariation(window.__variation).then(setFixed, e => setFixedError(e.message)); }, []);
   window.removeAll = () => setState(emptyState());
   window.setBusy = v => { window.__busy = v; setBump(n => n + 1); };
   const [, setBump] = React.useState(0);
-  return <ScanEntryTab existingState={state} prefill={window.__prefill} busy={!!window.__busy}
+  if (window.__variation && !fixed) return <p>{fixedError || 'carregando'}</p>;
+  return <ScanEntryTab existingState={state} fixed={fixed} onClearFixed={() => { window.cleared = true; }} busy={!!window.__busy}
     onAddLines={lines => { window.added ||= []; window.added.push(...lines); setState(s => addLines(s, lines)); }} />;
 }
 createRoot(document.getElementById('root')).render(<App />);`;
@@ -26,7 +32,7 @@ export const BarcodeScanButton = ({ onScan, allowPair }) => <>
 </>;`;
 
 let script;
-async function setup(t, { prefill, busy, state } = {}) {
+async function setup(t, { variation, busy, state } = {}) {
     if (!script) {
         const bundled = await build({
             configFile: false, logLevel: 'error',
@@ -55,7 +61,7 @@ async function setup(t, { prefill, busy, state } = {}) {
     const errors = [];
     page.setDefaultTimeout(5000);
     page.on('pageerror', e => errors.push(e.message));
-    await page.addInitScript(({ fixtures, prefill, busy, state }) => { window.fixtures = fixtures; window.__prefill = prefill; window.__busy = busy; window.__state = state; }, { fixtures: defaultFixtures, prefill, busy, state });
+    await page.addInitScript(({ fixtures, variation, busy, state }) => { window.fixtures = fixtures; window.__variation = variation; window.__busy = busy; window.__state = state; }, { fixtures: defaultFixtures, variation, busy, state });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     return { page, errors };
 }
@@ -164,30 +170,44 @@ test('IMEI inválido não adiciona', { timeout: 120000 }, async t => {
 });
 
 test('?variacao= chega travado no produto, sem pedir modelo', { timeout: 120000 }, async t => {
-    const { page } = await setup(t, { prefill: { variation_id: 'p1' } });
-    await page.getByText('Redmi 15 · Verde · 8GB/256GB').waitFor();
+    const { page } = await setup(t, { variation: 'p1' });
+    await page.getByRole('button', { name: 'Trocar' }).waitFor();
+    assert.match(await text(page), /Redmi 15/);
+    assert.match(await text(page), /SKU RED15-8-256-VD/);
     assert.equal(await page.getByRole('combobox', { name: 'Modelo' }).count(), 0);
     assert.equal(await start(page).count(), 0);
     await page.getByLabel('Custo').fill('900');
     assert.equal(await page.getByLabel('Local').inputValue(), 'l2');
     await start(page).click();
+    await page.getByText('Redmi 15 · RED15-8-256-VD', { exact: true }).waitFor();
     await bip(page, '863715061138763');
-    const item = (await page.evaluate(() => window.added))[0].item;
-    assert.equal(item.model_id, 'm1');
-    assert.deepEqual(item.configuration, { ram: '8GB', storage: '256GB', version: 'Global', network: '', condition: 'new' });
-    assert.equal(item.color, 'Verde');
-    assert.equal(item.cost_cents, 90000);
-    assert.equal(item.location_id, 'l2');
+    const [line] = await page.evaluate(() => window.added);
+    assert.equal(line.source, 'atalho');
+    assert.equal(line.label, 'Redmi 15 · RED15-8-256-VD · IMEI …8763');
+    assert.deepEqual(line.item, {
+        source: 'atalho', product_id: 'p1',
+        identity: { imei1: '863715061138763', imei2: null, serial: null },
+        quantity: 1, cost_cents: 90000, location_id: 'l2', prices: null,
+    });
 });
 
-test('?variacao= usa versão e condição do produto', { timeout: 120000 }, async t => {
-    const { page } = await setup(t, { prefill: { variation_id: 'p2' } });
-    await page.getByText('Poco X8 · Preto · 12GB/512GB').waitFor();
+test('?variacao= não manda configuração: o servidor usa versão e condição do produto', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { variation: 'p2' });
+    await page.getByRole('button', { name: 'Trocar' }).waitFor();
     await page.getByLabel('Custo').fill('900');
     await start(page).click();
-    await bip(page, '863715061138763');
+    await page.getByRole('button', { name: 'simular par' }).click();
     const item = (await page.evaluate(() => window.added))[0].item;
-    assert.deepEqual(item.configuration, { ram: '12GB', storage: '512GB', version: 'India', network: '', condition: 'seminovo' });
+    assert.equal(item.product_id, 'p2');
+    assert.equal('configuration' in item, false);
+    assert.equal('model_id' in item, false);
+    assert.deepEqual(item.identity, { imei1: '863715061138763', imei2: '863715061138771', serial: null });
+});
+
+test('?variacao= Trocar chama onClearFixed', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { variation: 'p1' });
+    await page.getByRole('button', { name: 'Trocar' }).click();
+    assert.equal(await page.evaluate(() => window.cleared), true);
 });
 
 test('contador mostra 3 aparelhos lidos', { timeout: 120000 }, async t => {
@@ -200,7 +220,7 @@ test('contador mostra 3 aparelhos lidos', { timeout: 120000 }, async t => {
 });
 
 test('busy desabilita a leitura', { timeout: 120000 }, async t => {
-    const { page } = await setup(t, { prefill: { variation_id: 'p1' }, busy: true });
+    const { page } = await setup(t, { variation: 'p1', busy: true });
     await page.getByLabel('Custo').fill('900');
     assert.equal(await start(page).isDisabled(), true);
 });
@@ -225,22 +245,29 @@ test('depois de busy o campo de leitura volta ao foco', { timeout: 120000 }, asy
     await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Leitura de IMEI');
 });
 
-test('?variacao= sem memória/cor avisa e não trava', { timeout: 120000 }, async t => {
-    const { page } = await setup(t, { prefill: { variation_id: 'p3' } });
-    await page.getByText('Esta variação não tem memória/cor definidas. Use a aba Manual.').waitFor();
-    assert.equal(await start(page).count(), 0);
+test('?variacao= de celular sem memória/cor prende pelo product_id (sem aviso)', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { variation: 'p3' });
+    await page.getByRole('button', { name: 'Trocar' }).waitFor();
+    assert.doesNotMatch(await text(page), /não tem memória\/cor|Use a aba Manual/);
+    await page.getByLabel('Custo').fill('900');
+    await start(page).click();
+    await bip(page, '863715061138763');
+    const [line] = await page.evaluate(() => window.added);
+    assert.equal(line.item.product_id, 'p3');
+    assert.equal(line.label, 'Redmi Antigo · RED-OLD · IMEI …8763');
 });
 
 test('?variacao= de produto que não é celular avisa', { timeout: 120000 }, async t => {
-    const { page } = await setup(t, { prefill: { variation_id: 'p4' } });
+    const { page } = await setup(t, { variation: 'p4' });
     await page.getByText('Esta variação não é celular. Use a aba Manual.').waitFor();
+    assert.equal(await page.getByLabel('Custo').count(), 0);
     assert.equal(await start(page).count(), 0);
 });
 
-test('?variacao= com categoria não identificada não libera a leitura', { timeout: 120000 }, async t => {
-    const { page } = await setup(t, { prefill: { variation_id: 'p5' } });
+test('?variacao= com categoria não identificada não chega a prender', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { variation: 'p5' });
     await page.getByText('Não foi possível identificar a categoria do modelo.').waitFor();
-    await page.getByLabel('Custo').count();
+    assert.equal(await page.getByRole('button', { name: 'Trocar' }).count(), 0);
     assert.equal(await start(page).count(), 0);
 });
 
@@ -276,17 +303,15 @@ test('I3: desligar os preços volta a mandar prices null', { timeout: 120000 }, 
     assert.equal((await page.evaluate(() => window.added))[0].item.prices, null);
 });
 
-test('I3: ?variacao= também oferece os preços', { timeout: 120000 }, async t => {
-    const { page } = await setup(t, { prefill: { variation_id: 'p1' } });
-    await page.getByText('Redmi 15 · Verde · 8GB/256GB').waitFor();
-    await page.getByLabel('Informar preços desta configuração').check();
-    await page.getByLabel('Varejo').fill('100');
-    await page.getByLabel('Revenda').fill('90');
-    await page.getByLabel('Atacado').fill('80');
+test('I3: ?variacao= não oferece preços (a variação fixa mantém os dela)', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { variation: 'p1' });
+    await page.getByRole('button', { name: 'Trocar' }).waitFor();
+    await page.getByLabel('Custo').waitFor();
+    assert.equal(await page.getByLabel('Informar preços desta configuração').count(), 0);
     await page.getByLabel('Custo').fill('50');
     await start(page).click();
     await bip(page, '863715061138763');
-    assert.deepEqual((await page.evaluate(() => window.added))[0].item.prices, { price_retail: 10000, price_reseller: 9000, price_wholesale: 8000 });
+    assert.equal((await page.evaluate(() => window.added))[0].item.prices, null);
 });
 
 test('M1: ocupado mostra "Aguarde…" ao lado do leitor', { timeout: 120000 }, async t => {

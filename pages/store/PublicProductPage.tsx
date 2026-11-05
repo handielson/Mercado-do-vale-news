@@ -45,6 +45,7 @@ import { customFieldsService } from '@/services/custom-fields';
 import ProductDeadlineRequest, { productDeadlineLabel } from '@/components/catalog/ProductDeadlineRequest';
 import { generateProductShareMessage } from '@/utils/catalogMessageGenerator';
 import type { Product } from '@/types/product';
+import { entryAddUnitsPath } from '@/services/entryShortcuts.js';
 /**
  * PublicProductPage
  * A dedicated SEO-friendly landing page for a single product.
@@ -1546,8 +1547,9 @@ export const PublicProductPage: React.FC = () => {
                                                             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:bg-white';
 
                                                     // admin-variant-add-units-v1: atalho do admin para incluir mais pecas desta variacao.
+                                                    // entrada-atalhos-v1: abre a Entrada com a variação fixa.
                                                     const addUnitsUrl = isAdmin && sib.id
-                                                        ? `/admin/products/${encodeURIComponent(sib.id)}/${encodeURIComponent(getPublicProductRouteTarget(sib))}?tab=inventory&addUnit=1`
+                                                        ? entryAddUnitsPath(sib.id) || ''
                                                         : '';
 
                                                     return (

@@ -5,6 +5,7 @@ import { ScanEntryTab } from '../../../components/entrada/ScanEntryTab';
 import { SpreadsheetEntryTab } from '../../../components/entrada/SpreadsheetEntryTab';
 import { ManualEntryTab } from '../../../components/entrada/ManualEntryTab';
 import { PhotoEntryTab } from '../../../components/entrada/PhotoEntryTab';
+import { FixedVariation, loadFixedVariation } from '../../../components/entrada/FixedVariationCard';
 import { EntryListPanel, EntryLine, EntryResult, EntryState } from '../../../components/entrada/EntryListPanel';
 import { addLines, applyPreview, commitErrorKind, emptyState, errorText, loadDraft, newBatchId, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
 
@@ -23,15 +24,39 @@ const TABS: { id: EntryTab; label: string }[] = [
     { id: 'foto', label: 'Foto' },
 ];
 
+type FixedLoad = { id: string; status: 'loading' } | { id: string; status: 'ok'; variation: FixedVariation } | { id: string; status: 'error'; message: string };
+
 const safeStorage = (): Storage | null => { try { return window.localStorage; } catch { return null; } };
 
 export const CatalogEntryPage: React.FC = () => {
     const [params, setParams] = useSearchParams();
     const requested = params.get('aba') as EntryTab | null;
-    const tab: EntryTab = TABS.some(t => t.id === requested) ? (requested as EntryTab) : 'manual';
+    const explicitTab = TABS.some(t => t.id === requested) ? (requested as EntryTab) : null;
 
     const modeloParam = params.get('modelo');
-    const variacaoParam = params.get('variacao');
+    const variacaoParam = params.get('variacao') || '';
+
+    // Atalho ?variacao=: a página carrega o produto uma vez e entrega a variação fixa às abas.
+    const [fixedLoad, setFixedLoad] = useState<FixedLoad | null>(null);
+    useEffect(() => {
+        if (!variacaoParam) { setFixedLoad(null); return; }
+        let alive = true;
+        setFixedLoad({ id: variacaoParam, status: 'loading' });
+        loadFixedVariation(variacaoParam)
+            .then(variation => { if (alive) setFixedLoad({ id: variacaoParam, status: 'ok', variation }); })
+            .catch(err => { if (alive) setFixedLoad({ id: variacaoParam, status: 'error', message: err instanceof Error ? err.message : 'Não foi possível carregar a variação.' }); });
+        return () => { alive = false; };
+    }, [variacaoParam]);
+    // Antes do efeito rodar para um id novo, o estado ainda é do anterior: conta como carregando.
+    const fixedCurrent: FixedLoad | null = variacaoParam
+        ? (fixedLoad && fixedLoad.id === variacaoParam ? fixedLoad : { id: variacaoParam, status: 'loading' })
+        : null;
+    const fixed = fixedCurrent?.status === 'ok' ? fixedCurrent.variation : null;
+    const fixedLoading = fixedCurrent?.status === 'loading';
+    const fixedError = fixedCurrent?.status === 'error' ? fixedCurrent.message : null;
+
+    // ?aba= explícita vence; com variação fixa, celular vai para Bipar e o resto para Manual.
+    const tab: EntryTab = explicitTab ?? (fixed?.isPhone ? 'bipar' : 'manual');
 
     const [state, setState] = useState<EntryState>(() => {
         const storage = safeStorage();
@@ -139,6 +164,15 @@ export const CatalogEntryPage: React.FC = () => {
         setParams(next, { replace: true });
     };
 
+    // "Trocar": solta a variação fixa e fica na aba em que estava.
+    const clearFixed = () => {
+        const next = new URLSearchParams(params);
+        next.delete('variacao');
+        next.set('aba', tab);
+        setParams(next, { replace: true });
+    };
+    const usesFixed = tab === 'manual' || tab === 'bipar';
+
     return (
         <div className="space-y-4 max-w-5xl mx-auto">
             <h1 className="text-2xl font-bold text-gray-800">Entrada</h1>
@@ -152,9 +186,17 @@ export const CatalogEntryPage: React.FC = () => {
                         </button>
                     ))}
                 </div>
-                <div role="tabpanel">
-                    {tab === 'manual' && <ManualEntryTab onAddLines={onAddLines} busy={busy} prefill={modeloParam ? { model_id: modeloParam } : undefined} />}
-                    {tab === 'bipar' && <ScanEntryTab onAddLines={onAddLines} busy={busy} existingState={state} prefill={variacaoParam ? { variation_id: variacaoParam } : undefined} />}
+                <div role="tabpanel" className="space-y-4">
+                    {usesFixed && fixedError && <p role="alert" className="text-sm text-red-600">{fixedError}</p>}
+                    {usesFixed && fixedLoading ? (
+                        <p role="status" className="text-sm text-slate-600">Carregando variação…</p>
+                    ) : (
+                        <>
+                            {tab === 'manual' && <ManualEntryTab onAddLines={onAddLines} busy={busy} prefill={modeloParam ? { model_id: modeloParam } : undefined}
+                                fixed={fixed} onClearFixed={clearFixed} />}
+                            {tab === 'bipar' && <ScanEntryTab onAddLines={onAddLines} busy={busy} existingState={state} fixed={fixed} onClearFixed={clearFixed} />}
+                        </>
+                    )}
                     {tab === 'planilha' && <SpreadsheetEntryTab onAddLines={onAddLines} busy={busy} existingState={state} />}
                     {tab === 'foto' && <PhotoEntryTab onAddLines={onAddLines} busy={busy} existingState={state} confirmCount={confirmCount} />}
                 </div>

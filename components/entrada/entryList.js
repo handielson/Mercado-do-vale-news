@@ -35,21 +35,37 @@ function last4(value) {
   return s.length > 4 ? s.slice(-4) : s;
 }
 
+function identitySuffix(item) {
+  const id = item.identity || {};
+  if (id.imei1) return `IMEI …${last4(id.imei1)}`;
+  if (id.serial) return `Serial …${last4(id.serial)}`;
+  if (Number(item.quantity) > 1) return `${item.quantity} un.`;
+  return '';
+}
+
 function buildLabel(item) {
   const cfg = item.configuration || {};
-  const id = item.identity || {};
   const parts = [item.name || 'Item'];
   if (cfg.ram || cfg.storage) parts.push([cfg.ram, cfg.storage].filter(Boolean).join('/'));
   if (item.color) parts.push(item.color);
-  if (id.imei1) parts.push(`IMEI …${last4(id.imei1)}`);
-  else if (id.serial) parts.push(`Serial …${last4(id.serial)}`);
-  else if (Number(item.quantity) > 1) parts.push(`${item.quantity} un.`);
-  return parts.join(' · ');
+  parts.push(identitySuffix(item));
+  return parts.filter(Boolean).join(' · ');
 }
 
 export function createLine(fields, { source } = {}) {
   const item = { ...(fields || {}), source: source || fields?.source || 'manual' };
   return { key: newKey(), source: item.source, item, label: buildLabel(item) };
+}
+
+/**
+ * Linha da variação fixa (atalho ?variacao=): o servidor usa o produto do product_id e ignora nome,
+ * configuração e cor, então o item não os leva. O rótulo (nome · SKU · final do IMEI/serial ou quantidade)
+ * fica na linha, como na aba Foto.
+ */
+export function createShortcutLine(variation, fields) {
+  const item = { ...(fields || {}), source: 'atalho', product_id: String(variation.id) };
+  const label = [variation.name || 'Item', variation.sku, identitySuffix(item)].filter(Boolean).join(' · ');
+  return { key: newKey(), source: 'atalho', item, label };
 }
 
 export function addLines(state, lines) {
@@ -62,8 +78,8 @@ export function updateLine(state, key, item) {
     lines: state.lines.map(line => {
       if (line.key !== key) return line;
       const next = { ...item, source: item.source || line.source };
-      // Linha de foto não tem os campos do rótulo no item: mantém o rótulo dela.
-      return { ...line, item: next, label: next.photo_intake_id ? line.label : buildLabel(next) };
+      // Linhas de foto e de variação fixa não têm os campos do rótulo no item: mantêm o rótulo delas.
+      return { ...line, item: next, label: next.photo_intake_id || next.product_id ? line.label : buildLabel(next) };
     }),
   };
 }

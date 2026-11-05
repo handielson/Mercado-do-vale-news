@@ -14,6 +14,12 @@ export interface EntryItem {
     cost_cents?: number;
     location_id?: string | null;
     prices?: { price_retail: number; price_reseller: number; price_wholesale: number } | null;
+    /** Atalho: produto (variação) já escolhido. O servidor ignora modelo, categoria, nome, configuração (menos a condição) e cor. */
+    product_id?: string | null;
+    /** Linha da aba Foto: pré-cadastro da fila de foto (do cliente vale só o local). */
+    photo_intake_id?: string | null;
+    /** Só para a tela; o servidor ignora (não entra no hash). */
+    label?: string;
 }
 
 export interface PlanLine {

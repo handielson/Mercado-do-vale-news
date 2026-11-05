@@ -1,3 +1,9 @@
+# v1.2.802-entrada-atalhos
+
+Data: 05/11/2026. Status: **pendente de publicação**. Branch: `main`. Atalhos (+ peças, Adicionar Unidade, Nova variação) abrem a Entrada.
+
+---
+
 # v1.2.801-entrada-foto
 
 Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-170000-v1301-entrada-foto` + API). Branch: `main`. Aba Foto da Entrada (o aparelho da fila de foto vai para a Lista de entrada e é salvo pela porta única).

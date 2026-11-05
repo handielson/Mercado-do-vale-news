@@ -10,6 +10,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { chromium } from 'playwright';
 import { aggregateModelProducts, getModelIdentifierSections } from '../services/modelProductAggregator.js';
 import { productImageList, resolveProductFamilyImages } from '../services/productFamilyImages.js';
+import * as entryShortcuts from '../services/entryShortcuts.js';
 
 const require = createRequire(import.meta.url);
 const image = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="240"><rect width="160" height="240" rx="18" fill="#cbd5e1"/><rect x="10" y="10" width="140" height="220" rx="12" fill="#0f172a"/><circle cx="80" cy="20" r="4" fill="white"/></svg>');
@@ -35,6 +36,7 @@ vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.Mo
         if (id === 'react-router-dom') return { useNavigate: () => () => {}, useParams: () => ({ modelId: 'model-test' }) };
         if (id.endsWith('/modelProductAggregator.js')) return { aggregateModelProducts, getModelIdentifierSections };
         if (id.endsWith('/productFamilyImages.js')) return { productImageList, resolveProductFamilyImages };
+        if (id.endsWith('/entryShortcuts.js')) return entryShortcuts;
         if (id.endsWith('/localCatalogPreview')) return { isLocalCatalogPreviewRuntime: () => false };
         if (id.endsWith('/LazyLabelPrintModal')) return { LazyLabelPrintModal: () => null };
         if (id.endsWith('/ModelPublicationChannels')) return { useModelPublicationChannels: () => ({ loading: false, failed: false, byProductId: {}, reload() {} }), mergeChannels: () => ({ shopee: [], ml: [], tiktok: null, tiktokInherited: false }), ModelChannelsSummary: () => null, SkuChannelBadges: () => null };

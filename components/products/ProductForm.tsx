@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getFamilyChildState } from '../../services/productClonePrefill.js';
+import { entryAddUnitsPath, entryNewVariationPath } from '../../services/entryShortcuts.js';
 import { getProductVariationSpecs } from '../../services/modelProductAggregator.js';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -2268,7 +2269,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                             const specs = getProductVariationSpecs(variant);
                             const variantLabel = [specs.color, [specs.ram, specs.storage].filter(Boolean).join('/')].filter(Boolean).join(' · ') || variant.sku || variant.name;
                             return <button key={variant.id} type="button"
-                                onClick={() => navigateFromForm(`/admin/products/${encodeURIComponent(variant.id)}?tab=inventory&addUnit=1`)}
+                                onClick={() => navigateFromForm(entryAddUnitsPath(variant.id)!)}
                                 aria-label={`Incluir peças em ${variantLabel}`}
                                 className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50">
                                 + peças · {variantLabel} ({Math.max(0, Number(variant.stock_quantity) || 0)} un.)
@@ -2280,7 +2281,12 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 <div>
                     <p className="text-sm font-semibold text-slate-800">2. É uma cor ou memória nova?</p>
                     <button type="button"
-                        onClick={() => navigateFromForm('/admin/products/new', { state: getFamilyChildState(modelFamily.parent) })}
+                        onClick={() => {
+                            // Pai sem model_id (importado do Bling) segue no cadastro antigo até a etapa 6.
+                            const entryPath = entryNewVariationPath(modelFamily.parent);
+                            if (entryPath) navigateFromForm(entryPath);
+                            else navigateFromForm('/admin/products/new', { state: getFamilyChildState(modelFamily.parent) });
+                        }}
                         className="mt-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">
                         Criar nova variação nesta família
                     </button>
