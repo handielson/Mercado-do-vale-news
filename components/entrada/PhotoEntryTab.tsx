@@ -12,6 +12,8 @@ export interface PhotoEntryTabProps {
     /** Muda a cada confirmação da Lista de entrada: a fila de foto é recarregada. */
     confirmCount?: number;
     busy?: boolean;
+    /** A fila de foto carregou ou mudou: a página atualiza rótulo e identidades das linhas de foto. */
+    onQueueLoaded?: (items: SmartphonePhotoIntake[]) => void;
 }
 
 type Notice = { kind: 'added' | 'duplicate' | 'busy'; label: string } | null;
@@ -23,7 +25,7 @@ const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
  * Aba Foto: captura, análise e conferência da fila de foto (a mesma tela de hoje, embutida).
  * O aparelho conferido vira uma linha `{ source:'foto', photo_intake_id, location_id }`; quem grava é a confirmação da Lista.
  */
-export const PhotoEntryTab: React.FC<PhotoEntryTabProps> = ({ onAddLines, existingState, confirmCount = 0, busy }) => {
+export const PhotoEntryTab: React.FC<PhotoEntryTabProps> = ({ onAddLines, existingState, confirmCount = 0, busy, onQueueLoaded }) => {
     const [notice, setNotice] = useState<Notice>(null);
     const [locationId, setLocationId] = useState('');
     const { locations, locationsError } = useEntryLocations(setLocationId);
@@ -74,7 +76,8 @@ export const PhotoEntryTab: React.FC<PhotoEntryTabProps> = ({ onAddLines, existi
                     {' · '}{notice.label}
                 </p>
             )}
-            <SmartphonePhotoIntakePage embedded onSendToList={onSendToList} reloadSignal={confirmCount} sendDisabled={!locationId} />
+            <SmartphonePhotoIntakePage embedded onSendToList={onSendToList} reloadSignal={confirmCount} sendDisabled={!locationId}
+                onQueueLoaded={onQueueLoaded} />
         </div>
     );
 };

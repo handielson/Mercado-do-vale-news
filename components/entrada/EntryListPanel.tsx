@@ -2,7 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { canConfirm, lineStatus } from './entryList.js';
 
-export interface EntryLine { key: string; source: string; item: Record<string, unknown>; label: string }
+/** `identities`: só na linha de foto (IMEI/serial do pré-cadastro, para "já está na lista"); não vai ao servidor. */
+export interface EntryLine { key: string; source: string; item: Record<string, unknown>; label: string; identities?: { imei1: string | null; imei2: string | null; serial: string | null } }
 export interface EntryState { lines: EntryLine[]; plan: unknown[] | null; hash: string | null; previewedSignature: string | null; previewOk?: boolean; clientBatchId: string }
 
 export type EntryResult =

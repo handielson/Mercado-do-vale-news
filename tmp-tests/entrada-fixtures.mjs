@@ -82,6 +82,9 @@ export const defaultFixtures = {
         p6: { id: 'p6', name: 'Redmi 15 (família)', sku: 'RED15', ean: '7895555555555', model_id: 'm1', category_id: 'c1', is_parent: true, specs: {} },
         // Não é celular, mas já controla estoque por unidade (tem unidades).
         p7: { id: 'p7', name: 'Fone Bluetooth', sku: 'FONE-BT', alternative_eans: ['7899999999999'], category_id: 'c2', specs: {} },
+        // Combo e oferta (kit): não recebem estoque.
+        p8: { id: 'p8', name: 'Combo Capa + Película', sku: 'COMBO-1', category_id: 'c2', is_combo: 1, offer_type: null, specs: {} },
+        p9: { id: 'p9', name: 'Kit 2 Capas', sku: 'KIT-2', category_id: 'c2', is_combo: 0, offer_type: 'quantity_kit', specs: {} },
         p2: { id: 'p2', name: 'Poco X8', alternative_eans: ['7899999999999'], model_id: 'm3', category_id: 'c1', specs: { ram: '12GB', storage: '512GB', color: 'Preto', version: 'India', condition: 'seminovo' } },
     },
     units: { p7: [{ id: 'u1', product_id: 'p7', serial: 'ABC123' }] },

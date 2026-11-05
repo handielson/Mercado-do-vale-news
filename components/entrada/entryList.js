@@ -136,11 +136,9 @@ export function lineStatus(state, key) {
 export function hasIdentity(state, imeiOrSerial) {
   const wanted = String(imeiOrSerial ?? '').trim().toLowerCase();
   if (!wanted) return false;
-  return state.lines.some(line => {
-    const id = line.item?.identity || {};
-    return [id.imei1, id.imei2, id.serial]
-      .some(v => v && String(v).trim().toLowerCase() === wanted);
-  });
+  // Linha de foto: as identidades do pré-cadastro ficam na linha (o item não as leva).
+  return state.lines.some(line => [line.item?.identity, line.identities]
+    .some(id => id && [id.imei1, id.imei2, id.serial].some(v => v && String(v).trim().toLowerCase() === wanted)));
 }
 
 /** O pré-cadastro da fila de foto já está numa linha da lista? */
@@ -160,9 +158,15 @@ function photoLabel(intake) {
   return label || 'Aparelho da fila de foto';
 }
 
+function photoIdentities(intake) {
+  const value = v => (String(v ?? '').trim() || null);
+  return { imei1: value(intake?.detected_imei_1), imei2: value(intake?.detected_imei_2), serial: value(intake?.detected_serial) };
+}
+
 /**
  * Linha da aba Foto: o servidor usa os dados do pré-cadastro e ignora o resto, então o item leva só
- * a origem, o id e o local da unidade. O rótulo (marca · modelo · RAM/armazenamento · cor · final do IMEI) fica na linha.
+ * a origem, o id e o local da unidade. O rótulo (marca · modelo · RAM/armazenamento · cor · final do IMEI)
+ * e as identidades do pré-cadastro (`identities`, para "já está na lista") ficam na linha, fora do item.
  */
 export function createPhotoLine(intake, locationId) {
   return {
@@ -170,7 +174,30 @@ export function createPhotoLine(intake, locationId) {
     source: 'foto',
     item: { source: 'foto', photo_intake_id: String(intake.id), location_id: locationId ? String(locationId) : null },
     label: photoLabel(intake),
+    identities: photoIdentities(intake),
   };
+}
+
+const sameIdentities = (a, b) => ['imei1', 'imei2', 'serial'].every(k => (a?.[k] ?? null) === (b?.[k] ?? null));
+
+/**
+ * A fila de foto carregou: as linhas de foto cujo pré-cadastro mudou ganham rótulo e identidades novos.
+ * O item não muda (a prévia continua valendo). Sem mudança, devolve o mesmo estado.
+ */
+export function refreshPhotoLines(state, intakes) {
+  const byId = new Map((Array.isArray(intakes) ? intakes : []).filter(i => i && i.id != null).map(i => [String(i.id), i]));
+  if (byId.size === 0) return state;
+  let changed = false;
+  const lines = state.lines.map(line => {
+    const intake = line.source === 'foto' ? byId.get(String(line.item?.photo_intake_id ?? '')) : null;
+    if (!intake) return line;
+    const label = photoLabel(intake);
+    const identities = photoIdentities(intake);
+    if (line.label === label && line.identities && sameIdentities(line.identities, identities)) return line;
+    changed = true;
+    return { ...line, label, identities };
+  });
+  return changed ? { ...state, lines } : state;
 }
 
 export function saveDraft(state, storage) {

@@ -4,7 +4,7 @@ import { BarcodeScanButton } from '../ui/BarcodeScanButton';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { createLine, createShortcutLine, hasIdentity, isValidImei } from './entryList.js';
-import { loadModelProfile, useEntryLocations, type ModelRef } from './EntryLockFields';
+import { loadModelProfile, useCostLocation, useEntryLocations, type ModelRef, type SharedCostLocation } from './EntryLockFields';
 import { CONDITIONS, RAM_OPTIONS, STORAGE_OPTIONS } from './ManualEntryTab';
 import { FixedVariationCard, type FixedVariation } from './FixedVariationCard';
 import type { EntryLine, EntryState } from './EntryListPanel';
@@ -19,6 +19,8 @@ export interface ScanEntryTabProps {
     onClearFixed?: () => void;
     /** Enquanto uma confirmação roda, não aceita leituras. */
     busy?: boolean;
+    /** Custo e local guardados pela página (não se perdem quando a aba é desmontada). */
+    costLocation?: SharedCostLocation;
 }
 
 interface Locked {
@@ -35,7 +37,7 @@ interface Locked {
 const fieldCls = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm';
 const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
 
-export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existingState, fixed, onClearFixed, busy }) => {
+export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existingState, fixed, onClearFixed, busy, costLocation }) => {
     const variationId = fixed?.id || '';
 
     const [models, setModels] = useState<ModelRef[]>([]);
@@ -49,8 +51,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
     const [version, setVersion] = useState('Global');
     const [condition, setCondition] = useState('new');
     const [color, setColor] = useState('');
-    const [cost, setCost] = useState(0);
-    const [locationId, setLocationId] = useState('');
+    const { cost, setCost, locationId, setLocationId } = useCostLocation(costLocation);
     const { locations, locationsError } = useEntryLocations(setLocationId);
     // Configuração sem preço: o operador informa aqui (vai em todas as leituras) em vez de cair no erro da prévia.
     const [pricesOn, setPricesOn] = useState(false);

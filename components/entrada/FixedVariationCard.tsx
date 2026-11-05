@@ -19,12 +19,14 @@ export interface FixedVariation {
 
 export const PARENT_MESSAGE = 'Este é o produto pai da família. Escolha a variação (cor/memória).';
 export const NOT_FOUND_MESSAGE = 'Produto não encontrado.';
+/** Mesma mensagem do servidor (productRefError em services/catalogEntryServer.cjs). */
+export const COMBO_MESSAGE = 'Combo/oferta não recebe estoque: dê entrada nos produtos que o compõem.';
 const LOAD_ERROR = 'Não foi possível carregar a variação.';
 const CATEGORY_ERROR = 'Não foi possível identificar a categoria do modelo.';
 
 /**
  * Carrega a variação fixa. Lança Error com a mensagem para o operador quando o produto não serve
- * (não existe, é o pai da família ou a categoria não pôde ser identificada).
+ * (não existe, é o pai da família, é combo/oferta ou a categoria não pôde ser identificada).
  */
 export async function loadFixedVariation(id: string): Promise<FixedVariation> {
     let product: Record<string, unknown> | null;
@@ -35,6 +37,7 @@ export async function loadFixedVariation(id: string): Promise<FixedVariation> {
     }
     if (!product) throw new Error(NOT_FOUND_MESSAGE);
     if (product.is_parent === true || Number(product.is_parent) === 1) throw new Error(PARENT_MESSAGE);
+    if (product.is_combo === true || Number(product.is_combo) === 1 || product.offer_type) throw new Error(COMBO_MESSAGE);
 
     // Como no servidor: a categoria do modelo decide; sem modelo, a do produto.
     const modelId = product.model_id ? String(product.model_id) : '';
