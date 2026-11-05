@@ -56,8 +56,8 @@ Preço de celular já tem fonte única: `smartphone_price_groups`, aplicado por 
   - a inserção de unidade e de estoque por local que já existe (`units`, `product_stock_locations`, `stock_location_movements`).
 
 ### 3.2 Rotas (`requireSyncKeyOrAdmin`)
-- `POST /catalog-entries/preview` → `{ batch: Item[] }` e devolve um plano por linha: `{ line, family: 'new'|'existing', variation: 'new'|'existing', sku, price_source, stock: {...}, errors: string[] }`. Não grava nada.
-- `POST /catalog-entries` → mesmo corpo + `preview_hash` (hash do plano mostrado). Grava tudo numa transação. Se o plano mudou desde a prévia (outra pessoa deu entrada), devolve 409 e pede para conferir de novo.
+- `POST /catalog-entries/preview` → `{ items: Item[] }` (até 500) e devolve um plano por linha: `{ line, family: 'new'|'existing', variation: 'new'|'existing', sku, price_source, stock: {...}, errors: string[] }`. Não grava nada.
+- `POST /catalog-entries` → `{ items: Item[], preview_hash }` — `preview_hash` é o `hash` devolvido pela prévia; cobre o plano e os itens normalizados (identidade, local, quantidade, preços, custo), então a confirmação precisa mandar exatamente os itens conferidos. Grava tudo numa transação. Se o plano mudou desde a prévia (outra pessoa deu entrada), devolve 409 e pede para conferir de novo.
 - `GET /catalog-entries/:id` → lote registrado: quem, quando, origem, linhas e IDs criados.
 
 ### 3.3 Item

@@ -11,6 +11,7 @@ function fakeDb(seed = {}) {
     ...structuredClone(seed),
   };
   const log = [];
+  const control = { failRollback: false };
   const calls = { syncStock: [], syncLocations: [] };
   const TABLES = ['products', 'units', 'psl', 'groups', 'batches', 'lines', 'movements'];
   const snap = () => structuredClone(Object.fromEntries(TABLES.map(t => [t, state[t]])));
@@ -49,8 +50,20 @@ function fakeDb(seed = {}) {
     if (s.includes('FROM products WHERE sku=')) return [state.products.filter(p => p.sku === args[0]).map(p => ({ id: p.id }))];
     if (s.includes('FROM products WHERE parent_id=')) return [structuredClone(state.products.filter(p => p.parent_id === args[0]))];
     if (s.includes('FROM products WHERE sku LIKE')) return [state.products.filter(p => p.sku.toUpperCase().startsWith(args[0].slice(0, -1).toUpperCase())).map(p => ({ sku: p.sku }))];
-    if (s.includes('FROM products WHERE category_id=?')) return [structuredClone(state.products.filter(p => p.category_id === args[0]
-      && String(p.name).toLowerCase() === String(args[1]).toLowerCase() && !Number(p.is_parent)))];
+    if (s.includes('FROM products WHERE category_id=?')) {
+      if (!/model_id IS NULL/.test(s) || !/parent_id IS NULL/.test(s) || !/LIMIT 2/.test(s)) throw new Error('resolveSimple sem filtro de família: ' + s);
+      const low = v => String(v ?? '').trim().toLowerCase();
+      return [structuredClone(state.products.filter(p => p.category_id === args[0] && !p.model_id && !p.parent_id && !Number(p.is_parent)
+        && (low(p.name) === low(args[1]) || low(p.name) === low(`${args[2]} - ${p.sku}`))).slice(0, 2))];
+    }
+    if (s.startsWith('SELECT id,imei_1,imei_2,serial FROM units WHERE imei_1 IN (?) OR imei_2 IN (?) OR serial IN (?)')) {
+      const vals = args[0].map(v => String(v).toUpperCase());
+      const has = v => v != null && vals.includes(String(v).toUpperCase());
+      return [structuredClone(state.units.filter(u => has(u.imei_1) || has(u.imei_2) || has(u.serial)).slice(0, 1))];
+    }
+    if (s.startsWith('SELECT (SELECT COUNT(*) FROM units WHERE product_id=?) AS units')) {
+      return [[{ units: state.units.filter(u => u.product_id === args[0]).length, locations: state.psl.filter(r => r.product_id === args[1]).length }]];
+    }
     if (s.startsWith('INSERT INTO products') || s.startsWith('INSERT INTO units') || s.startsWith('INSERT INTO catalog_entry')) return genericInsert(s, args);
     if (s.startsWith('UPDATE products SET parent_id=')) { state.products.find(p => p.id === args[1]).parent_id = args[0]; return [{}]; }
     if (s.startsWith('UPDATE products SET model_id=')) { state.products.find(p => p.id === args[1]).model_id = args[0]; return [{}]; }
@@ -73,19 +86,21 @@ function fakeDb(seed = {}) {
     query,
     beginTransaction: async () => { log.push('BEGIN'); tx = snap(); },
     commit: async () => { log.push('COMMIT'); tx = null; },
-    rollback: async () => { log.push('ROLLBACK'); if (tx) restore(tx); tx = null; },
+    rollback: async () => {
+      if (control.failRollback) { log.push('ROLLBACK_FAILED'); throw Object.assign(new Error('rollback falhou'), { code: 'PROTOCOL_CONNECTION_LOST' }); }
+      log.push('ROLLBACK'); if (tx) restore(tx); tx = null;
+    },
     release: () => { log.push('RELEASE'); },
+    destroy: () => { log.push('DESTROY'); },
   };
   const pool = { query, getConnection: async () => connection };
   const deps = {
-    conflict: null,
-    findUnitConflict: async (ids) => deps.conflict || null,
     syncProductStock: async (id) => { calls.syncStock.push(id); const p = state.products.find(r => r.id === id); p.stock_quantity = state.units.filter(u => u.product_id === id && u.status === 'available').length; },
     syncProductStockFromLocations: async (id) => { calls.syncLocations.push(id); const p = state.products.find(r => r.id === id); p.stock_quantity = state.psl.filter(r => r.product_id === id).reduce((a, r) => a + Number(r.quantity), 0); },
     insertStockMovement: async (row) => { state.movements.push(row); },
     getDefaultCompanyId: async () => 'c',
   };
-  return { state, log, calls, pool, deps };
+  return { state, log, calls, pool, deps, control };
 }
 
 module.exports = { fakeDb };

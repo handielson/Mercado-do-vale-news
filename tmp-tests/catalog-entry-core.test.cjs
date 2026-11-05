@@ -134,3 +134,24 @@ test('cents rejeita valores acima do inteiro seguro', () => {
   assert.equal(cents(1e21), null);
   assert.equal(cents(Number.MAX_SAFE_INTEGER), Number.MAX_SAFE_INTEGER);
 });
+
+test('serial repetido no lote (I2)', () => {
+  const items = run([
+    base({ identity: { serial: 'abc123' } }),
+    base({ identity: { serial: 'ABC123 ' } }),
+  ]);
+  const msg = 'Serial ABC123 repetido no lote (linhas 1 e 2).';
+  assert.ok(items[0].errors.includes(msg), JSON.stringify(items[0].errors));
+  assert.ok(items[1].errors.includes(msg));
+});
+
+test('planHash cobre os itens normalizados (M3)', () => {
+  const plan = [{ line: 1, sku: 'A', errors: [] }];
+  const a = [normalizeEntryItem(base({ identity: { imei1: IMEI_A } }), 0)];
+  const b = [normalizeEntryItem(base({ identity: { imei1: IMEI_B } }), 0)];
+  const a2 = [normalizeEntryItem(base({ identity: { imei1: IMEI_A } }), 0)];
+  assert.equal(planHash(plan, a), planHash(plan, a2));
+  assert.notEqual(planHash(plan, a), planHash(plan, b));
+  const c = [normalizeEntryItem(base({ identity: { imei1: IMEI_A }, quantity: 2 }), 0)];
+  assert.notEqual(planHash(plan, a), planHash(plan, c));
+});

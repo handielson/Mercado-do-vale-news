@@ -11,15 +11,16 @@ const IMEI = '863715061138763';
 const PRICES = { price_retail: 130000, price_reseller: 125000, price_wholesale: 115000 };
 const item = (patch = {}) => ({ source: 'manual', model_id: 'm1', configuration: { ram: '8GB', storage: '256GB' }, color: 'Verde',
   identity: { imei1: IMEI }, quantity: 1, cost_cents: 95000, location_id: 'L1', prices: PRICES, ...patch });
-const H = { 'x-sync-key': 'test' };
+const H = { 'x-sync-key': 'test', 'x-actor': 'u1' };
 
 async function app(db = fakeDb()) {
   const fastify = Fastify();
   const auth = async (request, reply) => {
+    // Igual a requireSyncKeyOrAdmin: não preenche request.user; o autor vem de getActorId.
     if (request.headers['x-sync-key'] !== 'test') return reply.code(401).send({ error: 'Não autorizado' });
-    request.user = { id: 'u1' };
   };
-  registerCatalogEntryRoutes(fastify, { pool: db.pool, auth, deps: db.deps });
+  const getActorId = async request => request.headers['x-actor'] || null;
+  registerCatalogEntryRoutes(fastify, { pool: db.pool, auth, deps: db.deps, getActorId });
   await fastify.ready();
   return { fastify, db };
 }
@@ -110,7 +111,19 @@ test('vps_server.js e .cjs registram as rotas repassando o db às dependências'
     assert.ok(src.includes('(id, db) => syncProductStock(id, db)'), file);
     assert.ok(src.includes('(id, db) => syncProductStockFromLocations(id, db)'), file);
     assert.ok(src.includes('(row, db) => insertStockMovement(row, db)'), file);
-    assert.ok(src.includes('(ids, ex) => findUnitSerializedIdentifierConflict(ids, ex)'), file);
+    assert.ok(!src.includes('findUnitConflict:'), file); // conflito de IMEI/serial agora roda na conexão da transação
+    assert.ok(src.includes('getActorId: async (request) => (await getVpsBearerAuthContext(request))?.userId || null'), file);
     assert.ok(src.includes('getDefaultCompanyId: () => getDefaultStockCompanyId()'), file);
   }
+});
+
+test('sem getActorId o lote fica com created_by nulo (I6)', async () => {
+  const db = fakeDb();
+  const fastify = Fastify();
+  registerCatalogEntryRoutes(fastify, { pool: db.pool, auth: async () => {}, deps: db.deps });
+  await fastify.ready();
+  const preview = (await post(fastify, '/catalog-entries/preview', { items: [item()] })).json();
+  const res = await post(fastify, '/catalog-entries', { items: [item()], preview_hash: preview.hash });
+  assert.equal(res.statusCode, 201, res.body);
+  assert.equal(db.state.batches[0].created_by, null);
 });

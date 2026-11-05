@@ -4,11 +4,13 @@
 const crypto = require('node:crypto');
 const { normalizeEntryItem, validateEntryBatch, planHash } = require('./catalogEntryCore.cjs');
 const { ensureSmartphoneModelFamily } = require('./smartphoneModelFamily.cjs');
-const { productSkuPrefix, nextProductSku, nextVariationSku } = require('./productSku.cjs');
+const { productSkuPrefix, nextProductSku, assignAutomaticProductSku } = require('./productSku.cjs');
 const { ensureSmartphonePriceGroupsSchema, inheritSmartphonePrices, loadModel } = require('./smartphonePriceGroupsServer.cjs');
 const core = require('./smartphonePriceGroupsCore.cjs');
 
 const SKU_LOCK = 'mdv:product-auto-sku';
+// Mesmo valor de DEFAULT_PRODUCT_VERSION (smartphoneModelSpecs.mjs, ESM — não dá para require aqui).
+const DEFAULT_PRODUCT_VERSION = 'Global';
 const SALE = ['price_retail', 'price_reseller', 'price_wholesale'];
 const MODEL_SQL = `SELECT m.id,m.name,m.category_id,m.company_id,m.template_values,b.name AS brand_name,c.name AS category_name
   FROM models m LEFT JOIN brands b ON b.id=m.brand_id LEFT JOIN categories c ON c.id=m.category_id WHERE m.id=?`;
@@ -73,13 +75,45 @@ function isPhone(ctx, item) {
 }
 
 const stockKind = (ctx, item) => isPhone(ctx, item) || item.identity.imei1 || item.identity.serial ? 'unit' : 'quantity';
+const STOCK_LABEL = { unit: 'aparelho', quantity: 'quantidade' };
 
+// O modo de estoque é do PRODUTO: celular ou produto com unidades → aparelho; produto com saldo por local
+// e sem unidades → quantidade; produto sem nenhum dos dois segue a linha. Misturar apagaria o saldo
+// (syncProductStock reconstrói product_stock_locations a partir das unidades).
+async function productStockKind(ctx, productId, phone, lineKind) {
+  if (phone) return 'unit';
+  const [[row]] = await ctx.conn.query(`SELECT (SELECT COUNT(*) FROM units WHERE product_id=?) AS units,
+    (SELECT COUNT(*) FROM product_stock_locations WHERE product_id=?) AS locations`, [productId, productId]);
+  if (Number(row?.units) > 0) return 'unit';
+  if (Number(row?.locations) > 0) return 'quantity';
+  return lineKind;
+}
+
+// Compara cada identificador informado com imei_1, imei_2 e serial, na conexão da transação
+// (enxerga unidades gravadas por linhas anteriores do mesmo lote). Valores já normalizados pelo núcleo:
+// IMEI só dígitos, serial em maiúsculas sem espaços nas pontas.
+async function findIdentifierConflict(conn, identity) {
+  const imeis = [identity.imei1, identity.imei2].map(v => String(v ?? '').replace(/\D/g, '')).filter(Boolean);
+  const serial = String(identity.serial ?? '').trim().toUpperCase();
+  const values = [...new Set([...imeis, serial].filter(Boolean))];
+  if (!values.length) return null;
+  const [[hit]] = await conn.query('SELECT id,imei_1,imei_2,serial FROM units WHERE imei_1 IN (?) OR imei_2 IN (?) OR serial IN (?) LIMIT 1',
+    [values, values, values]);
+  if (!hit) return null;
+  const same = (a, b) => a != null && String(a).trim().toUpperCase() === b;
+  const value = values.find(v => same(hit.imei_1, v) || same(hit.imei_2, v)) || values.find(v => same(hit.serial, v)) || values[0];
+  const asImei = same(hit.imei_1, value) || same(hit.imei_2, value) || imeis.includes(value);
+  return { value, label: asImei ? 'IMEI' : 'Serial' };
+}
+
+// SKU e nome seguem assignAutomaticProductSku: produto/variação recebe "<nome> - <SKU>".
 async function nextSku(conn, { name, parentSku }) {
   try {
     const prefix = parentSku ? `${parentSku}-` : productSkuPrefix(name);
     const [rows] = await conn.query('SELECT sku FROM products WHERE sku LIKE ?', [`${prefix}%`]);
-    const skus = rows.map(row => row.sku);
-    return parentSku ? nextVariationSku(parentSku, skus) : nextProductSku(name, skus);
+    const product = { name };
+    assignAutomaticProductSku(product, rows.map(row => row.sku), parentSku);
+    return product;
   } catch (error) {
     if (error.code || error.sqlMessage) throw error;
     throw lineError(error.message);
@@ -108,11 +142,15 @@ function variantSpecs(item, template, phone) {
 
 // Mesma variação = mesma configuração (inclui condição) + mesma cor, sem diferenciar maiúsculas,
 // espaços ou acentos. Os pares já estão filtrados pela empresa, então a empresa fica fora da chave.
-function variantKey(product, model) {
+// Celular: versão vazia (cadastro antigo) conta como 'Global', igual ao cadastro por foto.
+// Sem configuração (sem RAM+armazenamento), a chave usa as características normalizadas da variação.
+function variantKey(product, model, phone) {
   const specs = core.object(product.specs);
   const cfg = core.configuration({ ...product, is_parent: 0 }, model);
-  const config = cfg ? [cfg.ram, cfg.storage, cfg.version, cfg.network, cfg.condition]
-    : [norm(specs.condition || specs.condicao || 'new')];
+  const version = value => norm(value) || (phone ? norm(DEFAULT_PRODUCT_VERSION) : '');
+  const config = cfg ? [cfg.ram, cfg.storage, version(cfg.version), cfg.network, cfg.condition]
+    : [norm(specs.ram ?? specs.memoria_ram), norm(specs.storage ?? specs.armazenamento), version(specs.version ?? specs.versao),
+      norm(specs.network ?? specs.rede), norm(specs.condition || specs.condicao || 'new')];
   return JSON.stringify([...config, norm(specs.color ?? specs.cor)]);
 }
 
@@ -134,7 +172,7 @@ async function findParent(conn, peers, children) {
 
 async function createParent(ctx, model, company) {
   const name = String(model.name || '').trim();
-  const sku = await nextSku(ctx.conn, { name });
+  const { sku } = await nextSku(ctx.conn, { name }); // o pai mantém o nome do modelo, sem o SKU
   const id = crypto.randomUUID();
   // O pai nunca recebe IMEI, serial, estoque nem preço de venda.
   await ctx.conn.query(`INSERT INTO products
@@ -146,12 +184,12 @@ async function createParent(ctx, model, company) {
   return { id, sku };
 }
 
-async function insertProduct(ctx, { name, sku, model, categoryId, company, parentId, prices, cost, specs, images }) {
+async function insertProduct(ctx, { name, baseName, sku, model, categoryId, company, parentId, prices, cost, specs, images }) {
   const id = crypto.randomUUID();
   await ctx.conn.query(`INSERT INTO products (id,name,slug,sku,price_retail,price_wholesale,price_cost,price_reseller,
     stock_quantity,status,category_id,brand,model_id,parent_id,images,specs,track_inventory,company_id)
     VALUES (?,?,?,?,?,?,?,?,0,'active',?,?,?,?,?,?,1,?)`,
-  [id, name, slugify([name, specs.ram, specs.storage, specs.color, sku].filter(Boolean).join(' ')), sku,
+  [id, name, slugify([baseName || name, specs.ram, specs.storage, specs.color, sku].filter(Boolean).join(' ')), sku,
     prices.price_retail, prices.price_wholesale, cost ?? null, prices.price_reseller, categoryId || null,
     model?.brand_name || null, model?.id || null, parentId || null, JSON.stringify(images || []), JSON.stringify(specs), company]);
   ctx.created.add(id);
@@ -179,13 +217,19 @@ function itemPrices(item) {
 }
 
 // Celular: o grupo da configuração manda. Sem grupo nem pares unânimes, o preço do item cria o grupo.
-async function phonePrices(conn, item, priceModel, probe) {
+async function phonePrices(conn, item, priceModel, probe, rows) {
   const pick = product => Object.fromEntries(SALE.map(key => [key, Number(product[key])]));
   try {
     const result = await inheritSmartphonePrices(conn, probe, priceModel);
     return { source: 'group', prices: pick(result.product) };
   } catch (error) {
     if (error?.statusCode !== 409 || !/^Preços divergentes ou incompletos/.test(error.message)) throw error;
+    // Mesmo critério de loadPeers: pares existentes com preços diferentes não se resolvem pelo preço do item.
+    const config = core.configuration(probe, priceModel);
+    const peers = config ? rows.filter(row => core.configuration(row, priceModel)?.id === config.id) : [];
+    if (peers.length && !core.unanimousPrices(peers)) {
+      throw lineError('Preços divergentes nesta configuração: revise em Modelos → Preços por configuração.');
+    }
     if (!completePrices(item.prices)) throw lineError('Configuração sem preço: informe varejo, revenda e atacado.');
     const result = await inheritSmartphonePrices(conn, { ...probe, ...item.prices }, priceModel);
     return { source: 'group-new', prices: pick(result.product) };
@@ -207,18 +251,19 @@ async function resolveFamily(ctx, item, line, phone) {
   line.family = familyCreated ? 'new' : 'existing';
   const specs = variantSpecs(item, core.object(model.template_values), phone);
   const probe = { model_id: model.id, company_id: company, is_parent: 0, specs };
-  const key = variantKey(probe, model);
-  let variation = children.find(row => variantKey(row, model) === key);
+  const key = variantKey(probe, model, phone);
+  let variation = children.find(row => variantKey(row, model, phone) === key);
   const variationCreated = !variation;
   if (variation) {
     Object.assign(line, { variation: 'existing', price_source: 'existing', sku: variation.sku });
   } else {
-    const price = phone ? await phonePrices(conn, item, priceModel, probe) : itemPrices(item);
-    const sku = await nextSku(conn, { parentSku: parent.sku });
+    const price = phone ? await phonePrices(conn, item, priceModel, probe, rows) : itemPrices(item);
+    const baseName = String(model.name).trim();
+    const { sku, name } = await nextSku(conn, { name: baseName, parentSku: parent.sku });
     Object.assign(line, { variation: 'new', price_source: price.source, sku });
     const photos = await colorImages(conn, model.id, company, item.color);
     if (photos.color_id) specs.color_id = photos.color_id;
-    variation = await insertProduct(ctx, { name: String(model.name).trim(), sku, model, categoryId: model.category_id, company,
+    variation = await insertProduct(ctx, { name, baseName, sku, model, categoryId: model.category_id, company,
       parentId: parent.id, prices: price.prices, cost: item.cost_cents, specs, images: photos.images });
   }
   await ensureSmartphoneModelFamily(conn, { modelId: model.id, companyId: company, defaultCompanyId: ctx.defaultCompanyId,
@@ -230,17 +275,22 @@ async function resolveFamily(ctx, item, line, phone) {
 async function resolveSimple(ctx, item, line) {
   const { conn } = ctx;
   const category = ctx.categories.get(item.category_id);
-  const [[found]] = await conn.query(`SELECT id,sku,company_id FROM products WHERE category_id=? AND LOWER(TRIM(name))=LOWER(?)
-    AND COALESCE(is_parent,0)=0 ORDER BY id LIMIT 1 FOR UPDATE`, [category.id, item.name]);
+  // Só produto simples: fora de família (sem modelo, sem pai, não é pai). Aceita o nome puro ou "<nome> - <SKU>".
+  const [matches] = await conn.query(`SELECT id,sku,company_id FROM products WHERE category_id=?
+    AND model_id IS NULL AND parent_id IS NULL AND COALESCE(is_parent,0)=0
+    AND (LOWER(TRIM(name))=LOWER(?) OR LOWER(TRIM(name))=LOWER(CONCAT(?,' - ',sku)))
+    ORDER BY id LIMIT 2 FOR UPDATE`, [category.id, item.name, item.name]);
+  if (matches.length > 1) throw lineError('Mais de um produto com este nome nesta categoria; informe o modelo.');
+  const found = matches[0];
   if (found) {
     Object.assign(line, { family: 'existing', variation: 'existing', price_source: 'existing', sku: found.sku });
     return { id: found.id, company_id: scope(found.company_id, ctx.defaultCompanyId), familyCreated: false, variationCreated: false };
   }
   const price = itemPrices(item);
-  const sku = await nextSku(conn, { name: item.name });
+  const { sku, name } = await nextSku(conn, { name: item.name });
   Object.assign(line, { family: 'new', variation: 'new', price_source: price.source, sku });
   const specs = variantSpecs(item, {}, false);
-  const product = await insertProduct(ctx, { name: item.name, sku, model: null, categoryId: category.id, company: ctx.defaultCompanyId,
+  const product = await insertProduct(ctx, { name, baseName: item.name, sku, model: null, categoryId: category.id, company: ctx.defaultCompanyId,
     parentId: null, prices: price.prices, cost: item.cost_cents, specs, images: [] });
   return { id: product.id, company_id: product.company_id, familyCreated: true, variationCreated: true };
 }
@@ -284,10 +334,12 @@ async function resolveItem(ctx, item, line) {
   }
   if (line.stock.kind === 'unit') {
     if (item.quantity !== 1) throw lineError('Item com IMEI ou serial entra um por linha.');
-    const hit = await ctx.deps.findUnitConflict({ imei_1: item.identity.imei1, imei_2: item.identity.imei2, serial: item.identity.serial }, null);
-    if (hit) throw lineError(`IMEI ${hit.value || item.identity.imei1 || item.identity.serial} já cadastrado.`);
+    const hit = await findIdentifierConflict(ctx.conn, item.identity);
+    if (hit) throw lineError(`${hit.label} ${hit.value} já cadastrado.`);
   }
   const target = item.model_id ? await resolveFamily(ctx, item, line, phone) : await resolveSimple(ctx, item, line);
+  const kind = await productStockKind(ctx, target.id, phone, line.stock.kind);
+  if (kind !== line.stock.kind) throw lineError(`Este produto controla estoque por ${STOCK_LABEL[kind]}; ajuste a linha.`);
   // Produto criado neste lote não tem id estável entre prévia e confirmação: o plano mostra só o SKU previsto.
   line.product_id = ctx.created.has(target.id) ? null : target.id;
   const unitId = line.stock.kind === 'unit' ? await addUnit(ctx, item, target, location) : null;
@@ -314,6 +366,7 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
   const conn = await pool.getConnection();
   let locked = false;
   let open = false;
+  let broken = false;
   try {
     const [locks] = await conn.query('SELECT GET_LOCK(?, 15) AS acquired', [SKU_LOCK]);
     locked = Number(locks[0]?.acquired) === 1;
@@ -344,11 +397,11 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
         line.errors.push(error.message);
       }
     }
-    const hash = planHash(plan);
+    const hash = planHash(plan, normalized);
     const ok = plan.every(line => !line.errors.length);
     if (!commit || !ok) {
-      open = false;
       await conn.rollback();
+      open = false; // só depois do ROLLBACK confirmado
       return { ok, plan, hash };
     }
     if (hash !== expectedHash) throw httpError(409, 'O lote mudou desde a conferência. Confira novamente.');
@@ -357,17 +410,21 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
     open = false;
     return { ok: true, plan, hash, batch_id: ctx.batchId };
   } catch (error) {
-    if (open) await conn.rollback().catch(() => {});
+    if (open) await conn.rollback().catch(() => { broken = true; });
     throw error;
   } finally {
-    try { if (locked) await conn.query('SELECT RELEASE_LOCK(?)', [SKU_LOCK]); } finally { conn.release(); }
+    // Conexão com ROLLBACK falho pode estar no meio da transação: descarta (o MySQL solta o lock ao fechar).
+    if (broken) conn.destroy();
+    else { try { if (locked) await conn.query('SELECT RELEASE_LOCK(?)', [SKU_LOCK]); } finally { conn.release(); } }
   }
 }
 
 const MAX_ITEMS = 500;
 
-function registerCatalogEntryRoutes(fastify, { pool, auth, deps }) {
+// getActorId(request) → id do usuário (ou null). O preHandler de auth não preenche request.user.
+function registerCatalogEntryRoutes(fastify, { pool, auth, deps, getActorId }) {
   const opts = { preHandler: auth };
+  const actor = async request => (typeof getActorId === 'function' ? (await getActorId(request)) || null : null);
   // Memoizado: o boot não bloqueia nem cai; cada handler espera o schema antes de usar.
   const ready = () => ensureCatalogEntrySchema(pool);
   ready().catch(() => {});
@@ -390,7 +447,7 @@ function registerCatalogEntryRoutes(fastify, { pool, auth, deps }) {
     if (!items) return reply;
     try {
       await ready();
-      const { ok, plan, hash } = await runCatalogEntry(pool, items, { commit: false, userId: request.user?.id || null, deps });
+      const { ok, plan, hash } = await runCatalogEntry(pool, items, { commit: false, deps });
       return reply.code(200).send({ ok, plan, hash });
     } catch (error) { return fail(reply, error); }
   });
@@ -401,7 +458,7 @@ function registerCatalogEntryRoutes(fastify, { pool, auth, deps }) {
     try {
       await ready();
       const result = await runCatalogEntry(pool, items, { commit: true, expectedHash: request.body.preview_hash,
-        userId: request.user?.id || null, deps });
+        userId: await actor(request), deps });
       if (!result.ok) return reply.code(422).send({ plan: result.plan });
       return reply.code(201).send({ batch_id: result.batch_id, plan: result.plan });
     } catch (error) { return fail(reply, error); }

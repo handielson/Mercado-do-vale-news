@@ -43663,7 +43663,7 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 // Start
 registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname });
 registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey });
-require('./services/catalogEntryServer.cjs').registerCatalogEntryRoutes(fastify, { pool, auth: requireSyncKeyOrAdmin, deps: { findUnitConflict: (ids, ex) => findUnitSerializedIdentifierConflict(ids, ex), syncProductStock: (id, db) => syncProductStock(id, db), syncProductStockFromLocations: (id, db) => syncProductStockFromLocations(id, db), insertStockMovement: (row, db) => insertStockMovement(row, db), getDefaultCompanyId: () => getDefaultStockCompanyId() } });
+require('./services/catalogEntryServer.cjs').registerCatalogEntryRoutes(fastify, { pool, auth: requireSyncKeyOrAdmin, getActorId: async (request) => (await getVpsBearerAuthContext(request))?.userId || null, deps: { syncProductStock: (id, db) => syncProductStock(id, db), syncProductStockFromLocations: (id, db) => syncProductStockFromLocations(id, db), insertStockMovement: (row, db) => insertStockMovement(row, db), getDefaultCompanyId: () => getDefaultStockCompanyId() } });
 registerMercadoLivreRoutes(fastify, {
   pool, requireSyncKey, requireSyncKeyOrAdmin,
   onSale: (sale) => mobileSalesPushService.recordSaleEvent(sale),

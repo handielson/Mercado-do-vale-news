@@ -100,6 +100,7 @@ function validateEntryBatch(items, { isSmartphone } = {}) {
   const out = items.map((item) => ({ ...item, errors: [...item.errors] }));
   const add = (item, message) => { if (!item.errors.includes(message)) item.errors.push(message); };
   const seen = new Map(); // imei -> linhas
+  const seenSerials = new Map(); // serial -> linhas
 
   for (const item of out) {
     const phoneItem = typeof isSmartphone === 'function' ? Boolean(isSmartphone(item)) : false;
@@ -132,21 +133,33 @@ function validateEntryBatch(items, { isSmartphone } = {}) {
       if (!lines.includes(item.line)) lines.push(item.line);
       seen.set(imei, lines);
     }
+    if (item.identity.serial) {
+      const lines = seenSerials.get(item.identity.serial) || [];
+      if (!lines.includes(item.line)) lines.push(item.line);
+      seenSerials.set(item.identity.serial, lines);
+    }
   }
 
-  for (const [imei, lines] of seen) {
-    if (lines.length < 2) continue;
-    const sorted = [...lines].sort((x, y) => x - y);
-    const label = sorted.length === 2 ? `${sorted[0]} e ${sorted[1]}` : `${sorted.slice(0, -1).join(', ')} e ${sorted[sorted.length - 1]}`;
-    const message = `IMEI ${imei} repetido no lote (linhas ${label}).`;
-    for (const item of out) if (sorted.includes(item.line)) add(item, message);
-  }
+  const flagRepeated = (map, label) => {
+    for (const [value, lines] of map) {
+      if (lines.length < 2) continue;
+      const sorted = [...lines].sort((x, y) => x - y);
+      const list = sorted.length === 2 ? `${sorted[0]} e ${sorted[1]}` : `${sorted.slice(0, -1).join(', ')} e ${sorted[sorted.length - 1]}`;
+      const message = `${label} ${value} repetido no lote (linhas ${list}).`;
+      for (const item of out) if (sorted.includes(item.line)) add(item, message);
+    }
+  };
+  flagRepeated(seen, 'IMEI');
+  flagRepeated(seenSerials, 'Serial');
   return out;
 }
 
-function planHash(plan) {
+// O hash cobre o plano e os itens normalizados (identidade, local, quantidade, preços, custo...):
+// a confirmação precisa ser exatamente o lote que foi conferido na prévia.
+function planHash(plan, items = []) {
   const lines = plan.map(({ errors, ...rest }) => rest);
-  return crypto.createHash('sha256').update(JSON.stringify(lines)).digest('hex');
+  const inputs = items.map(({ errors, ...rest }) => rest);
+  return crypto.createHash('sha256').update(JSON.stringify({ lines, inputs })).digest('hex');
 }
 
 module.exports = { SOURCES, isValidImei, cents, normalizeEntryItem, validateEntryBatch, planHash };
