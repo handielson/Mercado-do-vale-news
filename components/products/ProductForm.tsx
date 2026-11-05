@@ -1629,7 +1629,9 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                     const partition = partitionSmartphoneFamilyRowsForSave(rowsToSave);
                     rowsToSave = partition.ready;
                     pendingPriceRows = partition.pending;
-                    if (pendingPriceRows.length && !onSaveDraft) throw new Error('Salve este cadastro como rascunho para manter as configurações sem preço antes de continuar.');
+                    // family-pending-without-draft-v1: na edição de uma família já cadastrada não há rascunho;
+                    // as cores sem memória/preço ficam só na tela e o restante (pai e filhos) é salvo normalmente.
+                    if (!rowsToSave.length && !onSaveDraft) throw new Error(`Nada para salvar: preencha memória e os três preços de ${pendingPriceRows.map(row => row.data.specs?.color || row.data.name).join(', ')} ou remova o rascunho.`);
                     if (!rowsToSave.length) {
                         await onSaveDraft!(captureDraftSnapshot(), { linkToDraft: true });
                         setDraftSaveStatus('saved');
@@ -1683,6 +1685,11 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 setFamilyRows(confirmedRows);
                 setProductionSetups({});
                 setProductionSavedVersion(current => current + 1);
+                if (pendingPriceRows.length && !onSaveDraft) {
+                    const names = pendingPriceRows.map(row => row.data.specs?.color || row.data.name).join(', ');
+                    toast.success(`Família salva. ${names}: sem memória/preço, não foram cadastradas; preencha em Variações quando quiser.`);
+                    return;
+                }
                 if (pendingPriceRows.length) {
                     const snapshot = { ...captureDraftSnapshot(), familyRows: confirmedRows, completion: undefined };
                     await onSaveDraft!(snapshot, { linkToDraft: true });

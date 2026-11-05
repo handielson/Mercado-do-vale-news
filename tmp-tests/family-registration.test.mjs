@@ -275,3 +275,12 @@ test('preço em texto da API ("0.00", "130000.00") não bloqueia a família', ()
   assert.equal(result.ready[0].data.price_retail, 130000, 'preço convertido para número');
   assert.throws(() => partitionSmartphoneFamilyRowsForSave([draft('x', 'Azul', { price_retail: 'abc' })]), /use valores válidos/);
 });
+
+// family-pending-without-draft-v1: editar família já cadastrada (sem rascunho) com cores pendentes não trava.
+test('edição sem rascunho salva a família e deixa as cores sem preço só na tela', () => {
+  const form = fs.readFileSync(new URL('../components/products/ProductForm.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(form, /Salve este cadastro como rascunho para manter as configurações sem preço/);
+  assert.match(form, /family-pending-without-draft-v1/);
+  assert.match(form, /if \(pendingPriceRows\.length && !onSaveDraft\) \{[\s\S]*?toast\.success\([\s\S]*?return;\s*\}\s*if \(pendingPriceRows\.length\) \{/);
+  assert.match(form, /if \(!rowsToSave\.length && !onSaveDraft\) throw new Error\(`Nada para salvar/);
+});

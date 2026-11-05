@@ -1,16 +1,12 @@
 {
-  "version": "v1.2.792-preco-familia-meta-lista",
+  "version": "v1.2.793-familia-salva-sem-rascunho",
   "date": "2026-11-04",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.792-preco-familia-meta-lista",
-  "release_vps": "/var/www/mdv-site/releases/20261105-093300-v1292-preco-familia",
-  "api_release": {
-    "status": "publicada",
-    "note": "--marketing-scenes-only: só metaAttendanceReplies.cjs mudou (sha 93865ada); backup /var/www/mdv-api/backups/marketing-scenes-1793881984325"
-  },
+  "tag": "v1.2.793-familia-salva-sem-rascunho",
+  "release_vps": "/var/www/mdv-site/releases/20261105-095000-v1293-familia-sem-rascunho",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Cadastro de família: preços que a API devolve em texto (\"0.00\", \"130000.00\") não travam mais o salvamento ('use valores válidos acima de zero'). Página do produto: o preço não aparece mais duplicado ao lado de 'Opções disponíveis'. Facebook/Instagram: a lista só é dividida entre produtos (antes cortava a cada 900 caracteres, no meio do texto).",
+  "summary": "Editar uma família já cadastrada com cores ainda sem memória/preço (ex.: Branco e Azul do C17 Plus) não trava mais com 'Salve este cadastro como rascunho...': pai e filhos são salvos e as cores pendentes ficam só na tela. Também corrige o selo 'pendente' que aparecia na versão do menu.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -27,24 +23,18 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "components/products/familyRegistration.js",
-    "pages/store/PublicProductPage.tsx",
-    "services/metaAttendanceReplies.cjs",
+    "components/products/ProductForm.tsx",
     "tmp-tests/family-registration.test.mjs",
-    "tmp-tests/admin-variant-add-units-static.test.mjs",
-    "tmp-tests/meta-attendance-replies.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-05-v1.2.792-preco-familia-meta-lista.md"
+    "docs/versoes/2026-11-05-v1.2.793-familia-salva-sem-rascunho.md"
   ],
   "validations": [
-    "family-registration.test 21/21",
-    "admin-variant-add-units-static ok",
-    "meta-attendance-replies.test 18/18"
+    "family-registration.test 22/22"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261105-093300-v1292-preco-familia",
-    "published_at": "2026-11-05T09:33:00-03:00"
+    "release": "/var/www/mdv-site/releases/20261105-095000-v1293-familia-sem-rascunho",
+    "published_at": "2026-11-05T09:50:00-03:00"
   }
 }

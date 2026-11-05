@@ -1,3 +1,9 @@
+# v1.2.793-familia-salva-sem-rascunho
+
+Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-095000-v1293-familia-sem-rascunho`). Branch: `main`. Só site (cadastro de família).
+
+---
+
 # v1.2.792-preco-familia-meta-lista
 
 Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-093300-v1292-preco-familia`, API). Branch: `main`.
