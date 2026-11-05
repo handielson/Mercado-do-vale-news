@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.799-gestao-mdv-movimentar",
+  "version": "v1.2.800-entrada-planilha",
   "date": "2026-11-05",
-  "status": "pendente de publicação (API)",
+  "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.799-gestao-mdv-movimentar",
-  "release_vps": "/var/www/mdv-site/releases/20261105-122500-v1298-entrada-tela",
+  "tag": "v1.2.800-entrada-planilha",
+  "release_vps": "/var/www/mdv-site/releases/20261105-160000-v1300-entrada-planilha",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Gestão MDV 0.14.0 (código 67): em Movimentar estoque, ler o código de barras abre o produto direto com foto, quantidade e destino (com mais de uma origem, lista os locais com saldo para escolher). Novo botão \"+ Criar novo local de estoque\" na tela inicial e na escolha do destino (o local criado já vira o destino). API: POST /stock-locations/locations passa a aceitar token admin (requireSyncKeyOrAdmin) — pendente de publicação.",
+  "summary": "Entrada única, etapa 3: aba Planilha na tela Entrada (modelo .xlsx próprio da Entrada, leitura do arquivo, linhas válidas vão para a Lista de entrada e as com problema aparecem com linha e motivo). Corrige a leitura de .xlsx (read-excel-file v9), que também quebrava o upload do Cadastro em massa e do MySQL Explorer.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,42 +23,31 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
+    "components/entrada/spreadsheetRows.js",
+    "components/entrada/SpreadsheetEntryTab.tsx",
     "pages/admin/entrada/CatalogEntryPage.tsx",
-    "components/entrada/entryList.js",
-    "components/entrada/EntryListPanel.tsx",
-    "components/entrada/ManualEntryTab.tsx",
-    "components/entrada/ScanEntryTab.tsx",
-    "components/entrada/EntryLockFields.tsx",
-    "services/catalogEntries.ts",
-    "services/vpsClient.ts",
-    "services/catalogEntryServer.cjs",
-    "routes/index.tsx",
-    "layouts/AdminLayout.tsx",
-    "hooks/usePageTitle.ts",
-    "infra/nginx/mdv-site-production.conf",
-    "infra/nginx/mdv-site-staging.conf",
-    "tmp-tests/entrada-*.test.mjs",
-    "tmp-tests/entrada-fixtures.mjs",
-    "tmp-tests/catalog-entry-*.test.cjs",
-    "tmp-tests/helpers/catalogEntryFakeDb.cjs",
+    "utils/excel.ts",
+    "tmp-tests/entrada-spreadsheet-rows.test.mjs",
+    "tmp-tests/entrada-spreadsheet-browser.test.mjs",
+    "tmp-tests/excel-roundtrip.test.mjs",
+    "tmp-tests/entrada-page-browser.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-05-v1.2.798-entrada-unica-tela.md"
+    "docs/versoes/2026-11-05-v1.2.800-entrada-planilha.md"
   ],
   "validations": [
-    "front entrada 58/58 (lista, página, Manual, Bipar — navegador)",
-    "servidor catalog-entry 69/69",
+    "entrada-* + excel-roundtrip: 90/90",
     "npm run build ok",
-    "revisão por tarefa + revisão final (opus) + re-revisão: todos os achados resolvidos"
+    "revisão por tarefa + revisão final + re-revisão"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261105-122500-v1298-entrada-tela",
-    "published_at": "2026-11-05T12:25:00-03:00"
+    "release": "/var/www/mdv-site/releases/20261105-160000-v1300-entrada-planilha",
+    "published_at": "2026-11-05T16:00:00-03:00"
   },
   "api_release": {
-    "status": "publicada",
-    "note": "--catalog-entry-only; backup /var/www/mdv-api/backups/catalog-entry-1793897392648; catalog_entry_batches com client_batch_id e client_items_hash"
+    "status": "pendente",
+    "note": "v1.2.799 (Gestão MDV: criar local com login de admin) aguarda OK para publicar a API"
   },
   "nginx_release": {
     "status": "publicada",

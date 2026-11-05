@@ -1,3 +1,9 @@
+# v1.2.800-entrada-planilha
+
+Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-160000-v1300-entrada-planilha`). Branch: `main`. Aba Planilha da Entrada + leitura de .xlsx corrigida.
+
+---
+
 # v1.2.799-gestao-mdv-movimentar
 
 Data: 05/11/2026. Status: **pendente de publicação** (APK 0.14.0 gerado; API aguarda OK). Branch: `main`. Gestão MDV: ler código de barras abre o produto com quantidade e destino; criar local de estoque pelo app.
