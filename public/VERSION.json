@@ -1,7 +1,7 @@
 {
   "version": "v1.2.801-entrada-foto",
   "date": "2026-11-05",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.801-entrada-foto",
   "release_vps": "/var/www/mdv-site/releases/20261105-170000-v1301-entrada-foto",
@@ -52,12 +52,13 @@
     "revisão por tarefa + revisão final + re-revisão"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "/var/www/mdv-site/releases/20261105-170000-v1301-entrada-foto"
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261105-170000-v1301-entrada-foto",
+    "published_at": "2026-11-05T17:06:00-03:00"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "--catalog-entry-only com os módulos da foto"
+    "status": "publicada",
+    "note": "v1.2.801 (porta única com linhas de foto; módulos da foto) publicada em 05/11 ~17:00; backup /var/www/mdv-api/backups/catalog-entry-1793908977000"
   },
   "nginx_release": {
     "status": "publicada",

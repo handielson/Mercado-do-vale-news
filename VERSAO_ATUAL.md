@@ -1,6 +1,6 @@
 # v1.2.801-entrada-foto
 
-Data: 05/11/2026. Status: **pendente de publicação**. Branch: `main`. Aba Foto da Entrada (o aparelho da fila de foto vai para a Lista de entrada e é salvo pela porta única).
+Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-170000-v1301-entrada-foto` + API). Branch: `main`. Aba Foto da Entrada (o aparelho da fila de foto vai para a Lista de entrada e é salvo pela porta única).
 
 ---
 
