@@ -1057,6 +1057,11 @@ async function main() {
       'services/physicalRamCore.cjs',
       'services/smartphoneMovingAverageServer.cjs',
       'services/smartphoneMovingAverageCore.cjs',
+      // v1.2.801: a porta unica finaliza o pre-cadastro de foto (catalogEntryServer exige smartphonePhotoIntakeCore).
+      'services/smartphonePhotoIntakeServer.cjs',
+      'services/smartphonePhotoIntakeCore.cjs',
+      'services/smartphoneBarcodeCrossCheck.cjs',
+      'services/smartphoneBarcodeReader.cjs',
     ];
     {
       const guardFiles = ['vps_server.js', 'vps_server.cjs', ...catalogEntryServices];

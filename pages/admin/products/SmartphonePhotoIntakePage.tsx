@@ -50,7 +50,18 @@ function getQueueGroupKey(item: SmartphonePhotoIntake): string {
   return photoQueueGroupKey(item);
 }
 
-export function SmartphonePhotoIntakePage() {
+export interface SmartphonePhotoIntakePageProps {
+  /** Dentro da tela Entrada (aba Foto): sem cabeçalho e sem Voltar; o aparelho vai para a Lista de entrada. */
+  embedded?: boolean;
+  /** Embutida: recebe o aparelho escolhido no lugar de salvar (a gravação é pela confirmação da Lista). */
+  onSendToList?: (intake: SmartphonePhotoIntake) => void;
+  /** Embutida: cada mudança recarrega a fila (ex.: depois de confirmar a Lista de entrada). */
+  reloadSignal?: number;
+  /** Embutida: impede o envio (ex.: falta escolher o local). */
+  sendDisabled?: boolean;
+}
+
+export function SmartphonePhotoIntakePage({ embedded = false, onSendToList, reloadSignal = 0, sendDisabled = false }: SmartphonePhotoIntakePageProps = {}) {
   const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>('queue');
   const [items, setItems] = useState<SmartphonePhotoIntake[]>([]);
@@ -139,6 +150,13 @@ export function SmartphonePhotoIntakePage() {
   }, [loadQueue, loadReferences]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
+
+  const lastReloadSignal = useRef(reloadSignal);
+  useEffect(() => {
+    if (reloadSignal === lastReloadSignal.current) return;
+    lastReloadSignal.current = reloadSignal;
+    loadQueue().catch((error: any) => toast.error(error?.message || 'Não foi possível carregar a fila por foto.'));
+  }, [reloadSignal, loadQueue]);
 
   const selected = useMemo(
     () => items.find(item => item.id === selectedId) || null,
@@ -330,10 +348,15 @@ export function SmartphonePhotoIntakePage() {
     }
   };
 
+  // Embutida: nunca finaliza aqui; só entrega o aparelho para a Lista de entrada.
+  const sendSelectedToList = async () => {
+    if (selected) onSendToList?.(selected);
+  };
+
   return (
-    <div className="w-full min-w-0 p-4 sm:p-6">
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
+    <div className={embedded ? 'w-full min-w-0' : 'w-full min-w-0 p-4 sm:p-6'}>
+      <header className={embedded ? 'mb-4 flex flex-wrap justify-end gap-2' : 'mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'}>
+        {!embedded && <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => navigate('/admin/products/bulk')}
@@ -346,7 +369,7 @@ export function SmartphonePhotoIntakePage() {
             <h1 className="text-2xl font-black tracking-tight text-slate-900">Cadastro de smartphones por foto</h1>
             <p className="text-sm text-slate-500">Leia a etiqueta, confira os dados e só então disponibilize o aparelho para venda.</p>
           </div>
-        </div>
+        </div>}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -470,7 +493,8 @@ export function SmartphonePhotoIntakePage() {
                   )}
                   onRefreshColors={refreshColors}
                   onCreateModel={createModelFromIntake}
-                  onFinalize={finalizeSelected}
+                  onFinalize={embedded ? sendSelectedToList : finalizeSelected}
+                  {...(embedded ? { finalizeLabel: 'Enviar para a lista', allowSku: false, finalizeBlocked: sendDisabled } : {})}
                   onRemoveFromQueue={() => removeFromQueue(selected)}
                   fieldsRef={fieldsRef}
                 />

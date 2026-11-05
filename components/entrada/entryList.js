@@ -62,7 +62,8 @@ export function updateLine(state, key, item) {
     lines: state.lines.map(line => {
       if (line.key !== key) return line;
       const next = { ...item, source: item.source || line.source };
-      return { ...line, item: next, label: buildLabel(next) };
+      // Linha de foto não tem os campos do rótulo no item: mantém o rótulo dela.
+      return { ...line, item: next, label: next.photo_intake_id ? line.label : buildLabel(next) };
     }),
   };
 }
@@ -124,6 +125,36 @@ export function hasIdentity(state, imeiOrSerial) {
     return [id.imei1, id.imei2, id.serial]
       .some(v => v && String(v).trim().toLowerCase() === wanted);
   });
+}
+
+/** O pré-cadastro da fila de foto já está numa linha da lista? */
+export function hasPhotoIntake(state, photoIntakeId) {
+  const wanted = String(photoIntakeId ?? '').trim();
+  if (!wanted) return false;
+  return state.lines.some(line => String(line.item?.photo_intake_id ?? '').trim() === wanted);
+}
+
+function photoLabel(intake) {
+  const ram = intake?.detected_ram || '';
+  const storage = intake?.detected_storage || '';
+  const parts = [intake?.detected_brand, intake?.detected_model, [ram, storage].filter(Boolean).join('/'), intake?.detected_color];
+  if (intake?.detected_imei_1) parts.push(`IMEI …${last4(intake.detected_imei_1)}`);
+  else if (intake?.detected_serial) parts.push(`Serial …${last4(intake.detected_serial)}`);
+  const label = parts.map(p => String(p ?? '').trim()).filter(Boolean).join(' · ');
+  return label || 'Aparelho da fila de foto';
+}
+
+/**
+ * Linha da aba Foto: o servidor usa os dados do pré-cadastro e ignora o resto, então o item leva só
+ * a origem, o id e o local da unidade. O rótulo (marca · modelo · RAM/armazenamento · cor · final do IMEI) fica na linha.
+ */
+export function createPhotoLine(intake, locationId) {
+  return {
+    key: newKey(),
+    source: 'foto',
+    item: { source: 'foto', photo_intake_id: String(intake.id), location_id: locationId ? String(locationId) : null },
+    label: photoLabel(intake),
+  };
 }
 
 export function saveDraft(state, storage) {

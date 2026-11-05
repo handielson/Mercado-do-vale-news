@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   emptyState, createLine, addLines, updateLine, removeLine, toItems, applyPreview,
-  canConfirm, lineStatus, hasIdentity, saveDraft, loadDraft,
+  canConfirm, lineStatus, hasIdentity, hasPhotoIntake, createPhotoLine, saveDraft, loadDraft,
   errorText, commitErrorKind,
 } from '../components/entrada/entryList.js';
 
@@ -143,4 +143,24 @@ test('M4: errorText mostra só o campo error do JSON do servidor', () => {
   assert.equal(errorText(e('[VPS] 502 https://api.x — <html>Bad gateway</html>')), '[VPS] 502 https://api.x — <html>Bad gateway</html>');
   assert.equal(errorText(e('Failed to fetch')), 'Failed to fetch');
   assert.equal(errorText('x'), 'erro desconhecido');
+});
+
+test('createPhotoLine: item só com origem, pré-cadastro e local; rótulo com marca, modelo, memória, cor e final do IMEI', () => {
+  const line = createPhotoLine({ id: 'pi1', detected_brand: 'Xiaomi', detected_model: 'Redmi 15', detected_ram: '8GB', detected_storage: '256GB', detected_color: 'Verde', detected_imei_1: '863715061138763', price_retail: 1 }, 'l1');
+  assert.equal(line.source, 'foto');
+  assert.deepEqual(line.item, { source: 'foto', photo_intake_id: 'pi1', location_id: 'l1' });
+  assert.equal(createPhotoLine({ id: 'pi1' }).item.location_id, null);
+  assert.equal(line.label, 'Xiaomi · Redmi 15 · 8GB/256GB · Verde · IMEI …8763');
+  assert.equal(createPhotoLine({ id: 'pi2', detected_model: 'X', detected_serial: 'SN12345' }).label, 'X · Serial …2345');
+  assert.equal(createPhotoLine({ id: 'pi3' }).label, 'Aparelho da fila de foto');
+});
+
+test('hasPhotoIntake acha o pré-cadastro na lista; updateLine mantém o rótulo da linha de foto', () => {
+  const line = createPhotoLine({ id: 'pi1', detected_model: 'Redmi 15' });
+  let s = addLines(emptyState(), [mk('111111111111111'), line]);
+  assert.equal(hasPhotoIntake(s, 'pi1'), true);
+  assert.equal(hasPhotoIntake(s, 'pi2'), false);
+  assert.equal(hasPhotoIntake(s, ''), false);
+  s = updateLine(s, line.key, { ...line.item, location_id: 'l1' });
+  assert.equal(s.lines[1].label, 'Redmi 15');
 });

@@ -2,11 +2,12 @@
 // Entrada única: resolve família, variação, preço e estoque de um lote numa única transação.
 // Prévia (commit:false) roda o mesmo código e termina em ROLLBACK; a confirmação exige o mesmo hash.
 const crypto = require('node:crypto');
-const { normalizeEntryItem, validateEntryBatch, planHash } = require('./catalogEntryCore.cjs');
+const { normalizeEntryItem, normalizePhotoEntryItem, validateEntryBatch, planHash } = require('./catalogEntryCore.cjs');
 const { ensureSmartphoneModelFamily } = require('./smartphoneModelFamily.cjs');
 const { productSkuPrefix, nextProductSku, assignAutomaticProductSku } = require('./productSku.cjs');
 const { ensureSmartphonePriceGroupsSchema, inheritSmartphonePrices, loadModel } = require('./smartphonePriceGroupsServer.cjs');
 const core = require('./smartphonePriceGroupsCore.cjs');
+const { getPhotoIntakeVersion } = require('./smartphonePhotoIntakeCore.cjs');
 
 const SKU_LOCK = 'mdv:product-auto-sku';
 // Mesmo valor de DEFAULT_PRODUCT_VERSION (smartphoneModelSpecs.mjs, ESM — não dá para require aqui).
@@ -369,6 +370,47 @@ async function resolveItem(ctx, item, line) {
     family_created: target.familyCreated ? 1 : 0, variation_created: target.variationCreated ? 1 : 0 };
 }
 
+// Linha da aba Foto: o pré-cadastro é a fonte (modelo, cor, memória, IMEI, preços, custo, EAN); do cliente vale só o local.
+// A finalização roda na transação do lote (prévia: ROLLBACK). Recusas 4xx dela viram erro da linha.
+const PHOTO_ALREADY_SAVED = 'Este aparelho da fila de foto já foi salvo.';
+const PHOTO_DIGEST_FIELDS = ['status', 'company_id', 'matched_model_id', 'matched_color_id', 'matched_product_id', 'detected_brand', 'detected_color',
+  'detected_ram', 'detected_storage', 'detected_imei_1', 'detected_imei_2', 'detected_serial', 'detected_ean', 'price_cost', 'price_retail',
+  'price_reseller', 'price_wholesale', 'prices_confirmed', 'review_confirmed', 'validation_errors', 'validation_warnings', 'updated_at'];
+// Resumo do que a finalização usa: entra na PlanLine (e no hash), então editar o pré-cadastro
+// na tela antiga entre a prévia e a confirmação dá 409.
+function photoIntakeDigest(row) {
+  const data = Object.fromEntries(PHOTO_DIGEST_FIELDS.map(key => [key, row[key] instanceof Date ? row[key].toISOString() : row[key] ?? null]));
+  data.version = getPhotoIntakeVersion(row);
+  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+}
+const isPhotoRaw = raw => String(raw?.photo_intake_id ?? '').trim() !== '';
+
+async function resolvePhotoItem(ctx, item, line) {
+  const { conn } = ctx;
+  if (typeof ctx.deps.finalizePhotoIntake !== 'function') throw lineError('Entrada por foto indisponível neste servidor.');
+  // Já concluído (antes ou por outra linha deste lote): nunca finaliza de novo nem devolve a resposta idempotente.
+  const [[current]] = await conn.query('SELECT * FROM smartphone_photo_intakes WHERE id=? FOR UPDATE', [item.photo_intake_id]);
+  if (current) line.photo_intake_digest = photoIntakeDigest(current);
+  if (current?.status === 'completed') throw lineError(PHOTO_ALREADY_SAVED);
+  let result;
+  try {
+    result = await ctx.deps.finalizePhotoIntake(conn, item.photo_intake_id, { headers: ctx.requestHeaders, locationId: item.location_id });
+  } catch (error) {
+    const status = Number(error?.statusCode);
+    if (status >= 400 && status < 500) throw lineError(error.message);
+    throw error;
+  }
+  if (result.idempotent) throw lineError(PHOTO_ALREADY_SAVED);
+  // A unidade já foi gravada com o local; o estoque por local é reconstruído a partir das unidades.
+  if (item.location_id) await ctx.deps.syncProductStock(result.product_id, conn);
+  const [[product]] = await conn.query('SELECT id,sku FROM products WHERE id=?', [result.product_id]);
+  if (result.created.variation) ctx.created.add(result.product_id);
+  Object.assign(line, { family: result.created.family ? 'new' : 'existing', variation: result.created.variation ? 'new' : 'existing',
+    price_source: 'photo', sku: product?.sku ?? null, product_id: ctx.created.has(result.product_id) ? null : result.product_id });
+  return { line: item.line, product_id: result.product_id, unit_id: result.unit_id, quantity: 1,
+    family_created: result.created.family ? 1 : 0, variation_created: result.created.variation ? 1 : 0 };
+}
+
 async function recordBatch(conn, batchId, items, plan, hash, userId, writes, client) {
   const sources = [...new Set(items.map(item => item.source))];
   await conn.query(`INSERT INTO catalog_entry_batches (id,source,created_by,plan_hash,line_count,client_batch_id,client_items_hash)
@@ -399,10 +441,13 @@ async function findReplay(db, client) {
   return { ok: true, replay: true, batch_id: batch.id, plan, hash: null };
 }
 
-async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, userId, deps, clientBatchId = null } = {}) {
+// requestHeaders: cabeçalhos da requisição (a finalização por foto valida o filho no Bling com eles).
+async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, userId, deps, clientBatchId = null, requestHeaders = {} } = {}) {
   if (!Array.isArray(rawItems) || !rawItems.length) throw httpError(400, 'Envie ao menos um item.');
   await ensureCatalogEntrySchema(pool);
   await ensureSmartphonePriceGroupsSchema(pool);
+  // Fora da transação do lote: o schema da fila de foto usa o pool (e corrige pendências) na primeira vez.
+  if (rawItems.some(isPhotoRaw) && typeof deps.ensurePhotoIntakeSchema === 'function') await deps.ensurePhotoIntakeSchema();
   const defaultCompanyId = await deps.getDefaultCompanyId();
   const client = commit && clientBatchId ? { id: clientBatchId, itemsHash: itemsDigest(rawItems) } : null;
   const conn = await pool.getConnection();
@@ -420,22 +465,32 @@ async function runCatalogEntry(pool, rawItems, { commit = false, expectedHash, u
     }
     await conn.beginTransaction();
     open = true;
+    // Mesma ordem da rota antiga (pré-cadastro antes de modelo/produtos): trava todos os pré-cadastros do lote
+    // antes de qualquer linha, em ordem fixa, para não haver deadlock com uma finalização pela tela antiga.
+    const photoIds = [...new Set(rawItems.map(raw => String(raw?.photo_intake_id ?? '').trim()).filter(Boolean))].sort();
+    if (photoIds.length) await conn.query('SELECT id FROM smartphone_photo_intakes WHERE id IN (?) ORDER BY id FOR UPDATE', [photoIds]);
     const ctx = { conn, deps, defaultCompanyId, batchId: crypto.randomUUID(), created: new Set(),
-      models: new Map(), categories: new Map(), locations: new Map() };
-    const normalized = rawItems.map((raw, index) => normalizeEntryItem(raw, index));
+      models: new Map(), categories: new Map(), locations: new Map(), requestHeaders };
+    // Só id com conteúdo vai para a foto (só espaços segue a validação comum, com os erros de linha dela).
+    const normalized = rawItems.map((raw, index) => (isPhotoRaw(raw) ? normalizePhotoEntryItem : normalizeEntryItem)(raw, index));
     for (const item of normalized) await loadRefs(ctx, item);
-    const items = validateEntryBatch(normalized, { isSmartphone: item => isPhone(ctx, item) });
+    // Linhas de foto não passam pela validação do item manual (os dados vêm do pré-cadastro).
+    const validated = new Map(validateEntryBatch(normalized.filter(item => !item.photo_intake_id), { isSmartphone: item => isPhone(ctx, item) })
+      .map(item => [item.line, item]));
+    const items = normalized.map(item => (item.photo_intake_id ? item : validated.get(item.line)));
     const plan = [];
     const writes = [];
     for (const item of items) {
+      const photo = Boolean(item.photo_intake_id);
       const line = { line: item.line, product_id: null, sku: null, family: null, variation: null, price_source: null,
-        stock: { kind: stockKind(ctx, item), quantity: item.quantity }, errors: [...item.errors] };
+        stock: photo ? { kind: 'unit', quantity: 1 } : { kind: stockKind(ctx, item), quantity: item.quantity }, errors: [...item.errors],
+        ...(photo ? { photo_intake_id: item.photo_intake_id } : {}) };
       plan.push(line);
       if (line.errors.length) continue;
       const savepoint = `catalog_entry_line_${item.line}`;
       await conn.query(`SAVEPOINT ${savepoint}`);
       try {
-        writes.push(await resolveItem(ctx, item, line));
+        writes.push(await (photo ? resolvePhotoItem : resolveItem)(ctx, item, line));
         await conn.query(`RELEASE SAVEPOINT ${savepoint}`);
       } catch (error) {
         if (!isRuleError(error)) throw error;
@@ -502,7 +557,7 @@ function registerCatalogEntryRoutes(fastify, { pool, auth, deps, getActorId }) {
     if (!items) return reply;
     try {
       await ready();
-      const { ok, plan, hash } = await runCatalogEntry(pool, items, { commit: false, deps });
+      const { ok, plan, hash } = await runCatalogEntry(pool, items, { commit: false, deps, requestHeaders: request.headers });
       return reply.code(200).send({ ok, plan, hash });
     } catch (error) { return fail(reply, error); }
   });
@@ -517,7 +572,7 @@ function registerCatalogEntryRoutes(fastify, { pool, auth, deps, getActorId }) {
     try {
       await ready();
       const result = await runCatalogEntry(pool, items, { commit: true, expectedHash: request.body.preview_hash,
-        userId: await actor(request), deps, clientBatchId });
+        userId: await actor(request), deps, clientBatchId, requestHeaders: request.headers });
       if (result.replay) return reply.code(200).send({ batch_id: result.batch_id, plan: result.plan, replay: true });
       if (!result.ok) return reply.code(422).send({ plan: result.plan });
       return reply.code(201).send({ batch_id: result.batch_id, plan: result.plan });

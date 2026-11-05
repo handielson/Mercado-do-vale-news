@@ -40,6 +40,12 @@ interface PhotoIntakeReviewCardProps {
   /** Cadastra um modelo novo direto da conferência; devolve o modelo criado. */
   onCreateModel?: (input: ModelInput) => Promise<Model | null>;
   onFinalize: (sku?: string) => Promise<void>;
+  /** Texto do botão final (padrão: "Salvar e disponibilizar para venda"). */
+  finalizeLabel?: string;
+  /** Mostra o SKU opcional da nova variação (padrão: sim). */
+  allowSku?: boolean;
+  /** Bloqueio extra do botão final, além das regras da conferência (ex.: falta o local na aba Foto). */
+  finalizeBlocked?: boolean;
   onRemoveFromQueue: () => Promise<void>;
   fieldsRef: React.Ref<HTMLDivElement>;
 }
@@ -106,6 +112,9 @@ export function PhotoIntakeReviewCard({
   onRefreshColors,
   onCreateModel,
   onFinalize,
+  finalizeLabel = 'Salvar e disponibilizar para venda',
+  allowSku = true,
+  finalizeBlocked = false,
   onRemoveFromQueue,
   fieldsRef,
 }: PhotoIntakeReviewCardProps) {
@@ -787,7 +796,7 @@ export function PhotoIntakeReviewCard({
           </div>
 
           <PhotoIntakeBlingMapping key={intake.id} intake={intake} busy={busy} />
-          {!intake.matched_product_id && !models.find(model => model.id === intake.matched_model_id)?.template_values?.bling_family && (
+          {allowSku && !intake.matched_product_id && !models.find(model => model.id === intake.matched_model_id)?.template_values?.bling_family && (
             <label className="block rounded-xl border border-slate-200 bg-slate-50 p-4">
               <span className="mb-1 block text-xs font-bold text-slate-700">SKU da nova variação (opcional)</span>
               <input
@@ -802,12 +811,12 @@ export function PhotoIntakeReviewCard({
           )}
           <button
             type="button"
-            onClick={() => void onFinalize(sku.trim() || undefined)}
-            disabled={busy || !canFinalize}
+            onClick={() => void onFinalize(allowSku ? sku.trim() || undefined : undefined)}
+            disabled={busy || !canFinalize || finalizeBlocked}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {busy ? <Loader2 size={17} className="animate-spin" /> : <Sparkles size={17} />}
-            Salvar e disponibilizar para venda
+            {finalizeLabel}
           </button>
         </div>
       </div>

@@ -149,7 +149,8 @@ async function reserveAvailableSku(connection, requestedSku, intake, model) {
     const [rows] = await connection.query('SELECT id FROM products WHERE sku=? LIMIT 1 FOR UPDATE', [candidate]);
     if (!rows[0]) return candidate;
   }
-  throw new Error('Não foi possível gerar um SKU único para esta variação');
+  // 409 (recusa, não falha do servidor): na porta única vira erro da linha.
+  throw Object.assign(new Error('Não foi possível gerar um SKU único para esta variação'), { statusCode: 409, photoIntakeRefusal: true });
 }
 
 function toPublicIntake(row) {
@@ -960,210 +961,224 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     } finally { connection.release(); }
   });
 
+  // Finaliza o pré-cadastro na transação de quem chama (rota antiga ou porta única): sem BEGIN/COMMIT/ROLLBACK próprios.
+  // Recusas saem como Error com statusCode 4xx (photoIntakeRefusal) e as mensagens de sempre; o chamador desfaz a transação.
+  // Opções: sku e productId (corpo da rota antiga), headers (validação do filho no Bling), locationId (local da unidade).
+  async function finalizePhotoIntake(connection, intakeId, { sku, productId: requestedProductId, headers, locationId } = {}) {
+    // Mesmo formato que o corpo da rota sempre usou (request.body / request.headers).
+    const request = { body: { sku, product_id: requestedProductId }, headers: headers || {} };
+    const refuse = (statusCode, message) => Object.assign(new Error(message), { statusCode, photoIntakeRefusal: true });
+    const [intakeRows] = await connection.query('SELECT * FROM smartphone_photo_intakes WHERE id=? FOR UPDATE', [intakeId]);
+    const intake = parseIntakeRow(intakeRows[0]);
+    if (!intake) { throw refuse(404, 'Pré-cadastro não encontrado'); }
+    if (intake.status === PHOTO_INTAKE_STATUS.CANCELLED) {
+      throw refuse(409, 'Este registro foi excluído da fila');
+    }
+    if (intake.status === PHOTO_INTAKE_STATUS.COMPLETED && intake.unit_id) {
+      return { intake: toPublicIntake(intake), product_id: intake.matched_product_id, unit_id: intake.unit_id, idempotent: true,
+        created: { family: false, variation: false } };
+    }
+    if (!intake.matched_model_id) { throw refuse(409, 'Cadastre ou vincule o modelo primeiro'); }
+    const defaultCompanyId = await resolvePhotoIntakeCompanyId('default', connection);
+    if (!intake.matched_color_id) { throw refuse(409, 'Selecione ou cadastre a cor antes de salvar'); }
+    if (!getPhotoIntakeVersion(intake)) { throw refuse(409, 'Confira e salve a versão comercial antes de confirmar os preços e finalizar.'); }
+    if (!intake.prices_confirmed) { throw refuse(409, 'Confirme os preços antes de salvar'); }
+    const requiredPrices = ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale'];
+    if (requiredPrices.some((field) => intake[field] == null || !Number.isFinite(Number(intake[field])) || Number(intake[field]) < 0)) {
+      throw refuse(409, 'Preencha e confirme todos os valores antes de salvar');
+    }
+    if (getBlockingPhotoIntakeErrors(intake.validation_errors || [], Boolean(intake.review_confirmed)).length > 0
+      || (!intake.review_confirmed && ((intake.validation_errors || []).length > 0 || (intake.validation_warnings || []).length > 0))) {
+      throw refuse(409, 'Confira e confirme os dados marcados para revisão antes de salvar');
+    }
+    const identifiers = [intake.detected_imei_1, intake.detected_imei_2, intake.detected_serial].filter(Boolean);
+    if (identifiers.length) {
+      const placeholders = identifiers.map(() => '?').join(',');
+      const [duplicates] = await connection.query(
+        `SELECT id FROM units WHERE (imei_1 IN (${placeholders}) OR imei_2 IN (${placeholders}) OR serial IN (${placeholders}))
+         AND (intake_id IS NULL OR intake_id <> ?) FOR UPDATE`,
+        [...identifiers, ...identifiers, ...identifiers, intake.id]
+      );
+      if (duplicates.length) { throw refuse(409, 'IMEI ou serial já cadastrado'); }
+    }
+    const [modelRows] = await connection.query(
+      `SELECT m.id,m.name,m.category_id,m.template_values,b.name AS brand_name,b.id AS brand_id
+       FROM models m LEFT JOIN brands b ON b.id=m.brand_id WHERE m.id=? LIMIT 1 FOR UPDATE`, [intake.matched_model_id]
+    );
+    const model = modelRows[0];
+    if (!model) { throw refuse(409, 'Modelo vinculado não existe mais'); }
+    const template = safeJson(model.template_values, {});
+    const { getIntakeBlingChild } = await import('./modelBlingMapping.mjs');
+    const family = template.bling_family;
+    const blingChild = getIntakeBlingChild(family, intake);
+    if (family && !blingChild) {
+      throw refuse(409, 'Confirme o SKU filho no vínculo com Bling para esta memória e cor.');
+    }
+    if (blingChild) {
+      try { await verifyBlingChild(request, family, blingChild); }
+      catch (error) { throw refuse(409, error.message); }
+    }
+    const priceModel = await loadPriceModel(connection, intake.matched_model_id, true);
+    const inherited = await inheritSmartphonePrices(connection, {
+      model_id: intake.matched_model_id, company_id: intake.company_id,
+      specs: photoIntakePriceSpecs(intake),
+      price_retail: intake.price_retail, price_reseller: intake.price_reseller, price_wholesale: intake.price_wholesale,
+    }, priceModel);
+    Object.assign(intake, {
+      price_retail: inherited.product.price_retail,
+      price_reseller: inherited.product.price_reseller,
+      price_wholesale: inherited.product.price_wholesale,
+    });
+    let productId = String(request.body?.product_id || intake.matched_product_id || '').trim();
+    if (productId) {
+      const [products] = await connection.query('SELECT id,model_id,specs,is_parent,company_id FROM products WHERE id=? LIMIT 1 FOR UPDATE', [productId]);
+      if (!products[0]) productId = '';
+      else if (products[0].model_id !== intake.matched_model_id || products[0].is_parent
+        || !productCompanyMatchesIntakeScope(products[0].company_id, intake.company_id, defaultCompanyId)
+        || !productMatchesIntakeConfiguration(products[0], intake)) {
+        throw refuse(409, 'O produto selecionado não corresponde ao modelo, memória, cor ou empresa conferidos.');
+      }
+    }
+    if (!productId) {
+      const exactProduct = await findExactIntakeProduct(connection, intake, defaultCompanyId);
+      if (exactProduct) productId = exactProduct.id;
+    }
+    if (blingChild) {
+      const [linked] = await connection.query('SELECT id,model_id,specs,company_id,is_parent FROM products WHERE bling_id=? OR sku=? FOR UPDATE', [blingChild.id, blingChild.sku]);
+      if (linked.some(row => (productId && row.id !== productId) || row.model_id !== intake.matched_model_id || row.is_parent
+        || !productCompanyMatchesIntakeScope(row.company_id, intake.company_id, defaultCompanyId)
+        || !productMatchesIntakeConfiguration(row, intake))) {
+        throw refuse(409, 'Esse SKU filho já pertence a outro produto. Confira o modelo, memória e cor antes de vincular.');
+      }
+      if (!productId && linked.length === 1) productId = linked[0].id;
+    }
+    const existingProductId = productId;
+    if (!productId) {
+      const sku = blingChild?.sku || await reserveAvailableSku(connection, request.body?.sku, intake, model);
+      if (!sku) { throw refuse(409, 'Informe o SKU para criar esta variação'); }
+      const [skuRows] = await connection.query('SELECT id FROM products WHERE sku=? LIMIT 1 FOR UPDATE', [sku]);
+      if (skuRows[0]) {
+        throw refuse(409, 'Este SKU já está em uso. Informe outro SKU ou vincule o produto existente.');
+      } else {
+        productId = crypto.randomUUID();
+        const { stripModelOwnedSpecs } = await import('./smartphoneModelSpecs.mjs');
+        const specs = {
+          _price_group_network: stripModelOwnedSpecs({}, template)._price_group_network,
+          color: intake.detected_color || undefined,
+          color_id: intake.matched_color_id || undefined,
+          ram: intake.detected_ram || undefined,
+          storage: intake.detected_storage || undefined,
+          version: getPhotoIntakeVersion(intake) || undefined,
+        };
+        delete specs.bling_family;
+        let images = [];
+        if (intake.detected_color) {
+          const [imageRows] = await connection.query(
+            `SELECT mci.images,mci.image_url FROM model_color_images mci
+             WHERE mci.model_id=? AND mci.color_id=?
+             AND (mci.company_id=? OR mci.company_id IS NULL)
+             ORDER BY (mci.company_id=?) DESC, mci.updated_at DESC LIMIT 1`,
+            [model.id, intake.matched_color_id, intake.company_id || null, intake.company_id || null]
+          );
+          const savedImages = safeJson(imageRows?.[0]?.images, []);
+          images = Array.isArray(savedImages) ? savedImages : [];
+          if (imageRows?.[0]?.image_url && !images.includes(imageRows[0].image_url)) images.push(imageRows[0].image_url);
+        }
+        const name = String(model.name || '').trim();
+        await connection.query(
+          `INSERT INTO products (id,name,slug,sku,ean,alternative_eans,price_retail,price_wholesale,price_cost,
+           price_reseller,stock_quantity,status,category_id,brand,model_id,images,specs,track_inventory,warranty_type,company_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,0,'active',?,?,?,?,?,1,'brand',?)`,
+          [productId, name, slugify([model.name, intake.detected_ram, intake.detected_storage, intake.detected_color, sku].filter(Boolean).join(' ')), sku, intake.detected_ean || null,
+            JSON.stringify(intake.detected_ean ? [intake.detected_ean] : []), intake.price_retail,
+            intake.price_wholesale, intake.price_cost, intake.price_reseller, model.category_id || null,
+            model.brand_name || intake.detected_brand || null, model.id, JSON.stringify(images), JSON.stringify(specs),
+            intake.company_id || null]
+        );
+      }
+    }
+    // The same model/color/memory can arrive with different factory GTINs.
+    // Keep its original barcode and append the reviewed photo barcode to this
+    // exact variation; never create a second product just for a new EAN.
+    if (existingProductId && intake.detected_ean) {
+      const [barcodeRows] = await connection.query(
+        'SELECT ean,alternative_eans FROM products WHERE id=? LIMIT 1 FOR UPDATE', [productId]
+      );
+      const barcodeRow = barcodeRows[0];
+      if (!barcodeRow) throw refuse(409, 'A variação selecionada não existe mais.');
+      const alternatives = safeJson(barcodeRow.alternative_eans, []);
+      const knownEans = [...new Set([
+        barcodeRow.ean,
+        ...(Array.isArray(alternatives) ? alternatives : []),
+      ].map(value => String(value || '').trim()).filter(Boolean))];
+      const detectedEan = String(intake.detected_ean).trim();
+      if (detectedEan && !knownEans.includes(detectedEan)) {
+        knownEans.push(detectedEan);
+        await connection.query('UPDATE products SET ean=?,alternative_eans=? WHERE id=?',
+          [barcodeRow.ean || knownEans[0], JSON.stringify(knownEans), productId]);
+      }
+    }
+    if (blingChild) {
+      const [existing] = await connection.query('SELECT bling_id,bling_parent_id FROM products WHERE id=? FOR UPDATE', [productId]);
+      if ((existing[0]?.bling_id && String(existing[0].bling_id) !== String(blingChild.id))
+        || (existing[0]?.bling_parent_id && String(existing[0].bling_parent_id) !== String(family.parent_id))) {
+        throw refuse(409, 'O produto já possui outro vínculo Bling. Corrija o vínculo na edição do produto.');
+      }
+      await connection.query('UPDATE products SET bling_id=?,bling_parent_id=? WHERE id=?',
+        [blingChild.id, family.parent_id, productId]);
+    }
+    const localFamily = await ensureSmartphoneModelFamily(connection, {
+      modelId: model.id, companyId: intake.company_id, defaultCompanyId, productId,
+    });
+    // Local da unidade: só a porta única informa; sem local, fica como sempre foi (NULL).
+    let location = null;
+    if (locationId) {
+      const [locationRows] = await connection.query('SELECT id,company_id,deposit_id FROM stock_locations WHERE id=?', [locationId]);
+      location = locationRows[0];
+      if (!location) throw refuse(409, 'Local de estoque não encontrado.');
+    }
+    const unitId = crypto.randomUUID();
+    await connection.query(
+      `INSERT INTO units (id,product_id,imei_1,imei_2,serial,status,\`condition\`,internal_notes,cost_price,intake_photo_path,intake_id,deposit_id,location_id)
+       VALUES (?,?,?,?,?,'available','new',?,?,?,?,?,?)`,
+      [unitId, productId, intake.detected_imei_1 || null, intake.detected_imei_2 || null,
+        intake.detected_serial || null, `Cadastro por foto ${intake.id}`, intake.price_cost || null,
+        intake.photo_private_path, intake.id, location?.deposit_id ?? null, location?.id ?? null]
+    );
+    await connection.query(
+      `UPDATE products SET price_cost=?,price_retail=?,price_reseller=?,price_wholesale=?,status='active',
+       stock_quantity=(SELECT COUNT(*) FROM units WHERE product_id=? AND status='available'),updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [intake.price_cost, intake.price_retail, intake.price_reseller, intake.price_wholesale, productId, productId]
+    );
+    await connection.query(
+      `UPDATE smartphone_photo_intakes SET status=?,matched_product_id=?,unit_id=?,price_retail=?,price_reseller=?,price_wholesale=?,completed_at=NOW() WHERE id=?`,
+      [PHOTO_INTAKE_STATUS.COMPLETED, productId, unitId, intake.price_retail, intake.price_reseller, intake.price_wholesale, intake.id]
+    );
+    await (dependencies.inventoryCostSync || require('./smartphoneMovingAverageServer.cjs').synchronizeProduct)(pool, productId, connection);
+    // Lido na própria transação: quem chama ainda não fez COMMIT.
+    return { intake: toPublicIntake(await loadIntake(intake.id, connection)), product_id: productId, parent_id: localFamily.parent_id, unit_id: unitId, idempotent: false,
+      created: { family: Boolean(localFamily.created), variation: !existingProductId } };
+  }
+
   fastify.post('/smartphone-photo-intakes/:id/finalize', { preHandler: requireSyncKey }, async (request, reply) => {
     await ensureSchema();
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
-      const [intakeRows] = await connection.query('SELECT * FROM smartphone_photo_intakes WHERE id=? FOR UPDATE', [request.params.id]);
-      const intake = parseIntakeRow(intakeRows[0]);
-      if (!intake) { await connection.rollback(); return reply.code(404).send({ error: 'Pré-cadastro não encontrado' }); }
-      if (intake.status === PHOTO_INTAKE_STATUS.CANCELLED) {
-        await connection.rollback();
-        return reply.code(409).send({ error: 'Este registro foi excluído da fila' });
-      }
-      if (intake.status === PHOTO_INTAKE_STATUS.COMPLETED && intake.unit_id) {
-        await connection.commit();
-        return { intake: toPublicIntake(intake), product_id: intake.matched_product_id, unit_id: intake.unit_id, idempotent: true };
-      }
-      if (!intake.matched_model_id) { await connection.rollback(); return reply.code(409).send({ error: 'Cadastre ou vincule o modelo primeiro' }); }
-      const defaultCompanyId = await resolvePhotoIntakeCompanyId('default', connection);
-      if (!intake.matched_color_id) { await connection.rollback(); return reply.code(409).send({ error: 'Selecione ou cadastre a cor antes de salvar' }); }
-      if (!getPhotoIntakeVersion(intake)) { await connection.rollback(); return reply.code(409).send({ error: 'Confira e salve a versão comercial antes de confirmar os preços e finalizar.' }); }
-      if (!intake.prices_confirmed) { await connection.rollback(); return reply.code(409).send({ error: 'Confirme os preços antes de salvar' }); }
-      const requiredPrices = ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale'];
-      if (requiredPrices.some((field) => intake[field] == null || !Number.isFinite(Number(intake[field])) || Number(intake[field]) < 0)) {
-        await connection.rollback();
-        return reply.code(409).send({ error: 'Preencha e confirme todos os valores antes de salvar' });
-      }
-      if (getBlockingPhotoIntakeErrors(intake.validation_errors || [], Boolean(intake.review_confirmed)).length > 0
-        || (!intake.review_confirmed && ((intake.validation_errors || []).length > 0 || (intake.validation_warnings || []).length > 0))) {
-        await connection.rollback();
-        return reply.code(409).send({ error: 'Confira e confirme os dados marcados para revisão antes de salvar' });
-      }
-      const identifiers = [intake.detected_imei_1, intake.detected_imei_2, intake.detected_serial].filter(Boolean);
-      if (identifiers.length) {
-        const placeholders = identifiers.map(() => '?').join(',');
-        const [duplicates] = await connection.query(
-          `SELECT id FROM units WHERE (imei_1 IN (${placeholders}) OR imei_2 IN (${placeholders}) OR serial IN (${placeholders}))
-           AND (intake_id IS NULL OR intake_id <> ?) FOR UPDATE`,
-          [...identifiers, ...identifiers, ...identifiers, intake.id]
-        );
-        if (duplicates.length) { await connection.rollback(); return reply.code(409).send({ error: 'IMEI ou serial já cadastrado' }); }
-      }
-      const [modelRows] = await connection.query(
-        `SELECT m.id,m.name,m.category_id,m.template_values,b.name AS brand_name,b.id AS brand_id
-         FROM models m LEFT JOIN brands b ON b.id=m.brand_id WHERE m.id=? LIMIT 1 FOR UPDATE`, [intake.matched_model_id]
-      );
-      const model = modelRows[0];
-      if (!model) { await connection.rollback(); return reply.code(409).send({ error: 'Modelo vinculado não existe mais' }); }
-      const template = safeJson(model.template_values, {});
-      const { getIntakeBlingChild } = await import('./modelBlingMapping.mjs');
-      const family = template.bling_family;
-      const blingChild = getIntakeBlingChild(family, intake);
-      if (family && !blingChild) {
-        await connection.rollback();
-        return reply.code(409).send({ error: 'Confirme o SKU filho no vínculo com Bling para esta memória e cor.' });
-      }
-      if (blingChild) {
-        try { await verifyBlingChild(request, family, blingChild); }
-        catch (error) { await connection.rollback(); return reply.code(409).send({ error: error.message }); }
-      }
-      const priceModel = await loadPriceModel(connection, intake.matched_model_id, true);
-      const inherited = await inheritSmartphonePrices(connection, {
-        model_id: intake.matched_model_id, company_id: intake.company_id,
-        specs: photoIntakePriceSpecs(intake),
-        price_retail: intake.price_retail, price_reseller: intake.price_reseller, price_wholesale: intake.price_wholesale,
-      }, priceModel);
-      Object.assign(intake, {
-        price_retail: inherited.product.price_retail,
-        price_reseller: inherited.product.price_reseller,
-        price_wholesale: inherited.product.price_wholesale,
-      });
-      let productId = String(request.body?.product_id || intake.matched_product_id || '').trim();
-      if (productId) {
-        const [products] = await connection.query('SELECT id,model_id,specs,is_parent,company_id FROM products WHERE id=? LIMIT 1 FOR UPDATE', [productId]);
-        if (!products[0]) productId = '';
-        else if (products[0].model_id !== intake.matched_model_id || products[0].is_parent
-          || !productCompanyMatchesIntakeScope(products[0].company_id, intake.company_id, defaultCompanyId)
-          || !productMatchesIntakeConfiguration(products[0], intake)) {
-          await connection.rollback();
-          return reply.code(409).send({ error: 'O produto selecionado não corresponde ao modelo, memória, cor ou empresa conferidos.' });
-        }
-      }
-      if (!productId) {
-        const exactProduct = await findExactIntakeProduct(connection, intake, defaultCompanyId);
-        if (exactProduct) productId = exactProduct.id;
-      }
-      if (blingChild) {
-        const [linked] = await connection.query('SELECT id,model_id,specs,company_id,is_parent FROM products WHERE bling_id=? OR sku=? FOR UPDATE', [blingChild.id, blingChild.sku]);
-        if (linked.some(row => (productId && row.id !== productId) || row.model_id !== intake.matched_model_id || row.is_parent
-          || !productCompanyMatchesIntakeScope(row.company_id, intake.company_id, defaultCompanyId)
-          || !productMatchesIntakeConfiguration(row, intake))) {
-          await connection.rollback();
-          return reply.code(409).send({ error: 'Esse SKU filho já pertence a outro produto. Confira o modelo, memória e cor antes de vincular.' });
-        }
-        if (!productId && linked.length === 1) productId = linked[0].id;
-      }
-      const existingProductId = productId;
-      if (!productId) {
-        const sku = blingChild?.sku || await reserveAvailableSku(connection, request.body?.sku, intake, model);
-        if (!sku) { await connection.rollback(); return reply.code(409).send({ error: 'Informe o SKU para criar esta variação' }); }
-        const [skuRows] = await connection.query('SELECT id FROM products WHERE sku=? LIMIT 1 FOR UPDATE', [sku]);
-        if (skuRows[0]) {
-          await connection.rollback();
-          return reply.code(409).send({ error: 'Este SKU já está em uso. Informe outro SKU ou vincule o produto existente.' });
-        } else {
-          productId = crypto.randomUUID();
-          const { stripModelOwnedSpecs } = await import('./smartphoneModelSpecs.mjs');
-          const specs = {
-            _price_group_network: stripModelOwnedSpecs({}, template)._price_group_network,
-            color: intake.detected_color || undefined,
-            color_id: intake.matched_color_id || undefined,
-            ram: intake.detected_ram || undefined,
-            storage: intake.detected_storage || undefined,
-            version: getPhotoIntakeVersion(intake) || undefined,
-          };
-          delete specs.bling_family;
-          let images = [];
-          if (intake.detected_color) {
-            const [imageRows] = await connection.query(
-              `SELECT mci.images,mci.image_url FROM model_color_images mci
-               WHERE mci.model_id=? AND mci.color_id=?
-               AND (mci.company_id=? OR mci.company_id IS NULL)
-               ORDER BY (mci.company_id=?) DESC, mci.updated_at DESC LIMIT 1`,
-              [model.id, intake.matched_color_id, intake.company_id || null, intake.company_id || null]
-            );
-            const savedImages = safeJson(imageRows?.[0]?.images, []);
-            images = Array.isArray(savedImages) ? savedImages : [];
-            if (imageRows?.[0]?.image_url && !images.includes(imageRows[0].image_url)) images.push(imageRows[0].image_url);
-          }
-          const name = String(model.name || '').trim();
-          await connection.query(
-            `INSERT INTO products (id,name,slug,sku,ean,alternative_eans,price_retail,price_wholesale,price_cost,
-             price_reseller,stock_quantity,status,category_id,brand,model_id,images,specs,track_inventory,warranty_type,company_id)
-             VALUES (?,?,?,?,?,?,?,?,?,?,0,'active',?,?,?,?,?,1,'brand',?)`,
-            [productId, name, slugify([model.name, intake.detected_ram, intake.detected_storage, intake.detected_color, sku].filter(Boolean).join(' ')), sku, intake.detected_ean || null,
-              JSON.stringify(intake.detected_ean ? [intake.detected_ean] : []), intake.price_retail,
-              intake.price_wholesale, intake.price_cost, intake.price_reseller, model.category_id || null,
-              model.brand_name || intake.detected_brand || null, model.id, JSON.stringify(images), JSON.stringify(specs),
-              intake.company_id || null]
-          );
-        }
-      }
-      // The same model/color/memory can arrive with different factory GTINs.
-      // Keep its original barcode and append the reviewed photo barcode to this
-      // exact variation; never create a second product just for a new EAN.
-      if (existingProductId && intake.detected_ean) {
-        const [barcodeRows] = await connection.query(
-          'SELECT ean,alternative_eans FROM products WHERE id=? LIMIT 1 FOR UPDATE', [productId]
-        );
-        const barcodeRow = barcodeRows[0];
-        if (!barcodeRow) throw new Error('A variação selecionada não existe mais.');
-        const alternatives = safeJson(barcodeRow.alternative_eans, []);
-        const knownEans = [...new Set([
-          barcodeRow.ean,
-          ...(Array.isArray(alternatives) ? alternatives : []),
-        ].map(value => String(value || '').trim()).filter(Boolean))];
-        const detectedEan = String(intake.detected_ean).trim();
-        if (detectedEan && !knownEans.includes(detectedEan)) {
-          knownEans.push(detectedEan);
-          await connection.query('UPDATE products SET ean=?,alternative_eans=? WHERE id=?',
-            [barcodeRow.ean || knownEans[0], JSON.stringify(knownEans), productId]);
-        }
-      }
-      if (blingChild) {
-        const [existing] = await connection.query('SELECT bling_id,bling_parent_id FROM products WHERE id=? FOR UPDATE', [productId]);
-        if ((existing[0]?.bling_id && String(existing[0].bling_id) !== String(blingChild.id))
-          || (existing[0]?.bling_parent_id && String(existing[0].bling_parent_id) !== String(family.parent_id))) {
-          await connection.rollback();
-          return reply.code(409).send({ error: 'O produto já possui outro vínculo Bling. Corrija o vínculo na edição do produto.' });
-        }
-        await connection.query('UPDATE products SET bling_id=?,bling_parent_id=? WHERE id=?',
-          [blingChild.id, family.parent_id, productId]);
-      }
-      const localFamily = await ensureSmartphoneModelFamily(connection, {
-        modelId: model.id, companyId: intake.company_id, defaultCompanyId, productId,
-      });
-      const unitId = crypto.randomUUID();
-      await connection.query(
-        `INSERT INTO units (id,product_id,imei_1,imei_2,serial,status,\`condition\`,internal_notes,cost_price,intake_photo_path,intake_id)
-         VALUES (?,?,?,?,?,'available','new',?,?,?,?)`,
-        [unitId, productId, intake.detected_imei_1 || null, intake.detected_imei_2 || null,
-          intake.detected_serial || null, `Cadastro por foto ${intake.id}`, intake.price_cost || null,
-          intake.photo_private_path, intake.id]
-      );
-      await connection.query(
-        `UPDATE products SET price_cost=?,price_retail=?,price_reseller=?,price_wholesale=?,status='active',
-         stock_quantity=(SELECT COUNT(*) FROM units WHERE product_id=? AND status='available'),updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-        [intake.price_cost, intake.price_retail, intake.price_reseller, intake.price_wholesale, productId, productId]
-      );
-      await connection.query(
-        `UPDATE smartphone_photo_intakes SET status=?,matched_product_id=?,unit_id=?,price_retail=?,price_reseller=?,price_wholesale=?,completed_at=NOW() WHERE id=?`,
-        [PHOTO_INTAKE_STATUS.COMPLETED, productId, unitId, intake.price_retail, intake.price_reseller, intake.price_wholesale, intake.id]
-      );
-      await (dependencies.inventoryCostSync || require('./smartphoneMovingAverageServer.cjs').synchronizeProduct)(pool, productId, connection);
+      const { created, ...result } = await finalizePhotoIntake(connection, request.params.id,
+        { sku: request.body?.sku, productId: request.body?.product_id, headers: request.headers });
       await connection.commit();
-      return { intake: toPublicIntake(await loadIntake(intake.id)), product_id: productId, parent_id: localFamily.parent_id, unit_id: unitId, idempotent: false };
+      return result;
     } catch (error) {
       await connection.rollback().catch(() => {});
+      if (error?.photoIntakeRefusal) return reply.code(error.statusCode).send({ error: error.message });
       throw error;
     } finally {
       connection.release();
     }
   });
 
-  return { ensureSchema };
+  return { ensureSchema, finalizePhotoIntake };
 }
 
 module.exports = { registerSmartphonePhotoIntakeRoutes, scoreCatalogModel, productCompanyMatchesIntakeScope };

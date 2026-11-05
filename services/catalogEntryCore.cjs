@@ -96,6 +96,15 @@ function normalizeEntryItem(raw, index) {
   };
 }
 
+// Linha da aba Foto: só o pré-cadastro e o local valem; os demais campos do cliente são ignorados
+// (o servidor usa os dados do pré-cadastro). Entra assim também no hash do lote.
+function normalizePhotoEntryItem(raw, index) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const location_id = orNull(r.location_id);
+  // Mesma regra das outras origens: a unidade sempre entra num local (só a rota antiga deixa sem local).
+  return { line: index + 1, source: 'foto', photo_intake_id: orNull(r.photo_intake_id), location_id, errors: location_id ? [] : ['Escolha o local de estoque.'] };
+}
+
 function validateEntryBatch(items, { isSmartphone } = {}) {
   const out = items.map((item) => ({ ...item, errors: [...item.errors] }));
   const add = (item, message) => { if (!item.errors.includes(message)) item.errors.push(message); };
@@ -162,4 +171,4 @@ function planHash(plan, items = []) {
   return crypto.createHash('sha256').update(JSON.stringify({ lines, inputs })).digest('hex');
 }
 
-module.exports = { SOURCES, isValidImei, cents, normalizeEntryItem, validateEntryBatch, planHash };
+module.exports = { SOURCES, isValidImei, cents, normalizeEntryItem, normalizePhotoEntryItem, validateEntryBatch, planHash };

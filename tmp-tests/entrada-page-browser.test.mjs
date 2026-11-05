@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { build } from 'vite';
 import react from '@vitejs/plugin-react';
 import { chromium } from 'playwright';
-import { defaultFixtures, stubPlugin } from './entrada-fixtures.mjs';
+import { defaultFixtures, photoFixtures, photoServiceStubs, stubPlugin } from './entrada-fixtures.mjs';
 
 const stub = `export const catalogEntries = {
     preview: async (items) => {
@@ -37,7 +37,7 @@ async function setup(t, { lines = draftLines, url = '/admin/entrada', init } = {
         const bundled = await build({
             configFile: false, logLevel: 'error',
             define: { 'process.env.NODE_ENV': '"production"' },
-            plugins: [react(), stubPlugin(), {
+            plugins: [react(), stubPlugin(photoServiceStubs), {
                 name: 'entrada-fixture', enforce: 'pre',
                 resolveId(id) {
                     if (id.endsWith('virtual:entry')) return '\0entrada-entry.tsx';
@@ -64,12 +64,12 @@ async function setup(t, { lines = draftLines, url = '/admin/entrada', init } = {
         window.__initialEntries = [url];
         window.fixtures = fixtures;
         if (lines) localStorage.setItem('mdv-entrada-rascunho-v1', JSON.stringify({ lines }));
-        window.previewResult = items => ({ ok: true, hash: 'h1', plan: items.map((_, i) => ({ line: i + 1, product_id: 'p' + (i + 1), sku: 'S' + i, family: 'existing', variation: 'new', price_source: 'group', stock: { kind: 'serialized', quantity: 1 }, errors: [] })) });
+        window.previewResult = items => ({ ok: true, hash: 'h1', plan: items.map((_, i) => ({ line: i + 1, product_id: 'p' + (i + 1), sku: 'S' + i, family: 'existing', variation: 'new', price_source: 'group', stock: { kind: 'unit', quantity: 1 }, errors: [] })) });
         // Variação criada no lote: o plano da confirmação não tem id (só o lote gravado tem).
-        window.commitImpl = async items => ({ batch_id: 'b1', plan: items.map((_, i) => ({ line: i + 1, product_id: null, sku: 'S' + i, family: 'existing', variation: 'new', price_source: 'group', stock: { kind: 'serialized', quantity: 1 }, errors: [] })) });
+        window.commitImpl = async items => ({ batch_id: 'b1', plan: items.map((_, i) => ({ line: i + 1, product_id: null, sku: 'S' + i, family: 'existing', variation: 'new', price_source: 'group', stock: { kind: 'unit', quantity: 1 }, errors: [] })) });
         window.getImpl = async id => ({ batch: { id }, lines: window.commitCalls.at(-1).items.map((_, i) => ({ line: i + 1, product_id: 'p' + (i + 1) })) });
         if (init) new Function(init)();
-    }, { lines, url, init, fixtures: defaultFixtures });
+    }, { lines, url, init, fixtures: { ...defaultFixtures, ...photoFixtures } });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     return { page, errors };
 }
@@ -83,7 +83,8 @@ test('abas e lista vazia', { timeout: 120000 }, async t => {
     await page.getByRole('tab', { name: 'Planilha' }).click();
     await page.getByRole('button', { name: 'Baixar modelo da planilha' }).waitFor();
     await page.getByRole('tab', { name: 'Foto' }).click();
-    assert.equal(await page.locator('a[href="/admin/products/photo-intake"]').count(), 1);
+    await page.getByRole('heading', { name: 'Fila de conferência' }).waitFor();
+    assert.equal(await page.getByText('Em breve nesta tela').count(), 0);
     assert.deepEqual(errors, []);
 });
 
@@ -105,7 +106,7 @@ test('Conferir chama preview com 2 itens e mostra ok e selo', { timeout: 120000 
 test('erro de IMEI repetido bloqueia Confirmar', { timeout: 120000 }, async t => {
     const msg = 'IMEI 863715061138763 repetido no lote (linhas 1 e 2).';
     const { page } = await setup(t, {
-        init: `window.previewResult = items => ({ ok:false, hash:'', plan: items.map((_, i) => ({ line:i+1, product_id:null, sku:null, family:null, variation:null, price_source:null, stock:{kind:'serialized',quantity:1}, errors:['${msg}'] })) });`,
+        init: `window.previewResult = items => ({ ok:false, hash:'', plan: items.map((_, i) => ({ line:i+1, product_id:null, sku:null, family:null, variation:null, price_source:null, stock:{kind:'unit',quantity:1}, errors:['${msg}'] })) });`,
     });
     await page.getByRole('button', { name: 'Conferir' }).click();
     await page.waitForFunction(m => document.body.innerText.split(m).length === 3, msg);
