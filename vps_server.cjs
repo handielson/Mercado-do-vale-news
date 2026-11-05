@@ -29538,6 +29538,11 @@ fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
   const u = req.body || {};
   if (!u.product_id) return reply.code(400).send({ error: 'product_id required' });
   const id = u.id || require('crypto').randomUUID();
+  // catalog-entry-parent-guard-v1: aparelho serializado nunca fica no produto pai.
+  const [parentRows] = await pool.query('SELECT is_parent FROM products WHERE id=?', [u.product_id]);
+  if (Number(parentRows[0]?.is_parent) === 1) {
+    return reply.code(409).send({ error: 'Aparelho não pode ficar no produto pai. Use a variação (cor/memória).' });
+  }
   const conflict = await findUnitSerializedIdentifierConflict(collectUnitSerializedIdentifiers(u), id);
   if (conflict) return reply.code(409).send(serializedIdentifierConflictPayload(conflict));
 
@@ -29576,6 +29581,15 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
       ...batchDuplicate,
       table: 'request_batch',
     }));
+  }
+
+  // catalog-entry-parent-guard-v1: nada e inserido se algum item aponta para produto pai.
+  const guardIds = [...new Set(items.map(u => u && u.product_id).filter(Boolean))];
+  if (guardIds.length) {
+    const [parentRows] = await pool.query('SELECT is_parent FROM products WHERE id IN (?)', [guardIds]);
+    if (parentRows.some(r => Number(r.is_parent) === 1)) {
+      return reply.code(409).send({ error: 'Aparelho não pode ficar no produto pai. Use a variação (cor/memória).' });
+    }
   }
 
   const results = { inserted: 0, errors: [] };

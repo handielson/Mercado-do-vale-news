@@ -1043,6 +1043,50 @@ async function main() {
     conn.end();
     return;
   }
+  if (process.argv.includes('--catalog-entry-only')) {
+    if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+    // deploy-committed-files-guard-v1: so publica arquivos iguais ao commit.
+    // Inclui os modulos exigidos (transitivamente) por catalogEntryServer.cjs: faltar um derruba a API no boot.
+    const catalogEntryServices = [
+      'services/catalogEntryCore.cjs',
+      'services/catalogEntryServer.cjs',
+      'services/smartphoneModelFamily.cjs',
+      'services/productSku.cjs',
+      'services/smartphonePriceGroupsServer.cjs',
+      'services/smartphonePriceGroupsCore.cjs',
+      'services/physicalRamCore.cjs',
+      'services/smartphoneMovingAverageServer.cjs',
+      'services/smartphoneMovingAverageCore.cjs',
+    ];
+    {
+      const guardFiles = ['vps_server.js', 'vps_server.cjs', ...catalogEntryServices];
+      const { spawnSync } = require('child_process');
+      const dirty = spawnSync('git', ['status', '--porcelain', '--', ...guardFiles], { cwd: __dirname, encoding: 'utf8' });
+      if (dirty.status !== 0) throw new Error('Nao foi possivel conferir o git antes de publicar.');
+      if (dirty.stdout.trim()) throw new Error(`Publicacao cancelada: arquivos com alteracoes nao commitadas:\n${dirty.stdout.trim()}`);
+    }
+    const runtimePath = String(apiProc.pm2_env?.pm_exec_path || '');
+    const runtimeFile = runtimePath.endsWith('/server.js')
+      ? 'server.js'
+      : runtimePath.endsWith('/vps_server.cjs') ? 'vps_server.cjs' : '';
+    if (!runtimeFile) throw new Error(`Unexpected API runtime for selective catalog-entry deploy: ${runtimePath}`);
+    const backupDir = `${appDir}/backups/catalog-entry-${Date.now()}`;
+    const serverTarget = `${appDir}/${runtimeFile}`;
+    const localRuntime = runtimeFile === 'server.js' ? localServer : localServerCjs;
+    const targets = [
+      { local: localRuntime, target: serverTarget, backup: runtimeFile },
+      ...catalogEntryServices.map(file => ({ local: path.join(__dirname, file), target: `${appDir}/${file}`, backup: path.basename(file) })),
+    ];
+    await exec(`mkdir -p ${backupDir} ${appDir}/services`);
+    for (const t of targets) await exec(`if [ -f ${t.target} ]; then cp -p ${t.target} ${backupDir}/${t.backup}; fi`);
+    for (const t of targets) await upload(t.local, `${t.target}.next.cjs`);
+    for (const t of targets) await exec(`node --check ${t.target}.next.cjs`);
+    for (const t of targets) await exec(`mv ${t.target}.next.cjs ${t.target}`);
+    console.log((await exec('pm2 restart mdv-api')).trim());
+    console.log(`Catalog entry backup: ${backupDir}`);
+    conn.end();
+    return;
+  }
   if (process.argv.includes('--marketing-scenes-migration-only')) {
     await applyMarketingScenesMigration({ appDir, apiProc, exec, upload, root: __dirname });
     conn.end();
