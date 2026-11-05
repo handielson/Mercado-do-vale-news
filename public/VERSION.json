@@ -1,7 +1,7 @@
 {
   "version": "v1.2.803-entrada-estoque",
   "date": "2026-11-05",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.803-entrada-estoque",
   "release_vps": "/var/www/mdv-site/releases/20261105-210000-v1303-entrada-estoque",
@@ -55,12 +55,13 @@
     "revisão por tarefa + revisão final + re-revisão"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "/var/www/mdv-site/releases/20261105-210000-v1303-entrada-estoque"
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261105-210000-v1303-entrada-estoque",
+    "published_at": "2026-11-05T21:00:00-03:00"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "server.js (vps_server.js) + módulos da porta única"
+    "status": "publicada",
+    "note": "v1.2.803 (trava do estoque) publicada em 05/11 ~21:00, depois do site; backup /var/www/mdv-api/backups/stock-entry-lock-1793921973000"
   },
   "nginx_release": {
     "status": "publicada",
