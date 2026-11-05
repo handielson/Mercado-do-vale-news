@@ -1,3 +1,9 @@
+# v1.2.801-entrada-foto
+
+Data: 05/11/2026. Status: **pendente de publicação**. Branch: `main`. Aba Foto da Entrada (o aparelho da fila de foto vai para a Lista de entrada e é salvo pela porta única).
+
+---
+
 # v1.2.800-entrada-planilha
 
 Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261105-160000-v1300-entrada-planilha`). Branch: `main`. Aba Planilha da Entrada + leitura de .xlsx corrigida.

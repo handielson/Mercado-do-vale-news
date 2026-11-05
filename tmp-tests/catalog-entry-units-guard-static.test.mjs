@@ -19,7 +19,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 }
 const deploy = fs.readFileSync(new URL('../deploy-vps-server-only.cjs', import.meta.url), 'utf8');
 assert.ok(deploy.includes('--catalog-entry-only'), 'deploy sem --catalog-entry-only');
-for (const f of ['services/catalogEntryCore.cjs', 'services/catalogEntryServer.cjs', 'services/smartphoneModelFamily.cjs']) {
+for (const f of ['services/catalogEntryCore.cjs', 'services/catalogEntryServer.cjs', 'services/smartphoneModelFamily.cjs', 'services/smartphonePhotoIntakeServer.cjs', 'services/smartphonePhotoIntakeCore.cjs']) {
   assert.ok(deploy.includes(f), `deploy sem ${f}`);
 }
 console.log('ok');
