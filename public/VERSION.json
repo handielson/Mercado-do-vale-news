@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.796-entrada-unica-servidor",
+  "version": "v1.2.797-bling-token-text",
   "date": "2026-11-05",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.796-entrada-unica-servidor",
+  "tag": "v1.2.797-bling-token-text",
   "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Entrada única, etapa 1: porta única no servidor (POST /catalog-entries/preview, POST /catalog-entries, GET /catalog-entries/:id) que resolve família, variação, preço e estoque de uma lista de itens numa transação, com prévia, hash do lote e registro (catalog_entry_batches/lines). POST /units e /units/batch recusam aparelho em produto pai. Publica junto a parte de API da v1.2.795 (código de erro da renovação do Bling). Sem tela ainda (etapa 2).",
+  "summary": "Bling: reconectar falhava no callback com \"Data too long for column 'bling_access_token'\" (o Bling passou a emitir token maior que VARCHAR(500)). O boot da API alarga bling_access_token e bling_refresh_token de company_settings para TEXT (idempotente, mesma nulidade). Sem isso a NF-e de marketplace e a etiqueta da Shopee ficam travadas.",
   "gestao_mdv_android": {
     "version_name": "0.13.9",
     "version_code": 66
@@ -23,38 +23,22 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "services/catalogEntryCore.cjs",
-    "services/catalogEntryServer.cjs",
-    "services/smartphoneModelFamily.cjs",
     "vps_server.js",
     "vps_server.cjs",
-    "deploy-vps-server-only.cjs",
-    "tmp-tests/catalog-entry-core.test.cjs",
-    "tmp-tests/catalog-entry-server.test.cjs",
-    "tmp-tests/catalog-entry-routes.test.cjs",
-    "tmp-tests/catalog-entry-units-guard-static.test.mjs",
-    "tmp-tests/helpers/catalogEntryFakeDb.cjs",
-    "tmp-tests/smartphone-model-family.test.cjs",
-    "docs/superpowers/specs/2026-11-05-entrada-unica-design.md",
+    "tmp-tests/bling-token-columns-text-static.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-05-v1.2.796-entrada-unica-servidor.md"
+    "docs/versoes/2026-11-05-v1.2.797-bling-token-text.md"
   ],
   "validations": [
-    "catalog-entry core/server/routes + smartphone-model-family + model-family-repair: 79/79",
-    "catalog-entry-units-guard-static ok",
-    "node --check vps_server.js/.cjs/deploy ok",
-    "revisão por tarefa + revisão final do branch (opus) + re-revisão: todos os achados resolvidos"
+    "bling-token-columns-text-static 3/3",
+    "node --check vps_server.js/.cjs"
   ],
   "site_release": {
     "status": "sem mudança"
   },
   "api_release": {
-    "status": "publicada",
-    "note": "--catalog-entry-only; backup /var/www/mdv-api/backups/catalog-entry-1793887841547; inclui API da v1.2.795"
-  },
-  "printer_agent_release": {
-    "status": "publicada",
-    "note": "PC da loja atualizado pelo Atualizar serviço (50b75346): comprovante de intervenção v1.2.795"
+    "status": "pendente",
+    "note": "ALTER direto + --catalog-entry-only"
   }
 }

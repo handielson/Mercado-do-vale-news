@@ -40101,6 +40101,23 @@ async function addColumnIfMissing(table, column, definition) {
   }
 }
 
+// bling-token-columns-text-v1: o Bling passou a emitir tokens maiores que VARCHAR(500)
+// ("Data too long for column 'bling_access_token'" no callback). TEXT, mesma nulidade.
+const BLING_TOKEN_TEXT_COLUMNS = ['bling_access_token', 'bling_refresh_token'];
+async function ensureBlingTokenColumnsAreText() {
+  for (const columnName of BLING_TOKEN_TEXT_COLUMNS) {
+    const [[column]] = await pool.query(
+      `SELECT DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'company_settings' AND COLUMN_NAME = ? LIMIT 1`,
+      [columnName]
+    );
+    if (!column || ['text', 'mediumtext', 'longtext'].includes(String(column.DATA_TYPE || '').toLowerCase())) continue;
+    const nullableSql = String(column.IS_NULLABLE || '').toUpperCase() === 'NO' ? 'NOT NULL' : 'NULL';
+    await pool.query(`ALTER TABLE \`company_settings\` MODIFY COLUMN \`${columnName}\` TEXT ${nullableSql}`);
+    console.log(`[migration] company_settings.${columnName} widened to TEXT`);
+  }
+}
+
 async function ensureOrderPaymentStatusSupportsRefunded() {
   const [[column]] = await pool.query(
     `SELECT DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT
@@ -40566,6 +40583,8 @@ async function runMigrations() {
   `);
   await upgradeSignedWarrantyDocumentIndexes();
 
+  try { await ensureBlingTokenColumnsAreText(); }
+  catch (error) { console.error('[migration] bling token columns:', error.message); }
   await addColumnIfMissing('company_settings', 'synology_video_base_url', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('company_settings', 'synology_video_extension', "VARCHAR(20) DEFAULT '.mp4'");
   await addColumnIfMissing('company_settings', 'tiktok_app_key', 'VARCHAR(255) DEFAULT NULL');
