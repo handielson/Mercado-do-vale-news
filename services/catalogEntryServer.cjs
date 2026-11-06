@@ -133,30 +133,34 @@ function isPhone(ctx, item) {
 
 // Produto por quantidade vinculado ao Bling (products.bling_id) recebe estoque pela nota fiscal de compra
 // no Bling: o webhook de estoque do Bling (PATCH /products/stock em vps_server.js) sobrescreve o saldo do MDV,
-// então uma entrada aqui seria contada em dobro ou apagada. Produto por aparelho (IMEI/serial) não é afetado
-// (lá o Bling só guarda referência). REMOVER (pôr false e depois apagar) quando o ERP próprio substituir o Bling.
+// então uma entrada aqui seria contada em dobro ou apagada. Vale para todo produto do Bling que não é celular e
+// ainda não tem unidades, qualquer que seja a linha: a primeira unidade o tornaria serializado para sempre e o
+// webhook passaria a só guardar referência, deixando de aplicar o saldo da NF. Celular e produto que já tem
+// unidades não são afetados. REMOVER (pôr false e depois apagar) quando o ERP próprio substituir o Bling.
 const BLING_QUANTITY_STOCK_OWNER = true;
 const BLING_QUANTITY_STOCK_MESSAGE = 'Este produto recebe estoque pela nota fiscal no Bling. Dê entrada por lá.';
-async function blingOwnsQuantityStock(ctx, productId, kind) {
-  if (!BLING_QUANTITY_STOCK_OWNER || kind !== 'quantity' || ctx.created.has(productId)) return false;
+async function blingOwnsQuantityStock(ctx, productId, { phone, units }) {
+  if (!BLING_QUANTITY_STOCK_OWNER || phone || units > 0 || ctx.created.has(productId)) return false;
   const cached = ctx.products.get(productId);
   const [[row]] = cached ? [[cached]] : await ctx.conn.query('SELECT id,bling_id FROM products WHERE id=?', [productId]);
   return String(row?.bling_id ?? '').trim() !== '';
 }
 
-const stockKind = (ctx, item) =>isPhone(ctx, item) || item.identity.imei1 || item.identity.serial ? 'unit' : 'quantity';
+const stockKind = (ctx, item) => isPhone(ctx, item) || item.identity.imei1 || item.identity.serial ? 'unit' : 'quantity';
 const STOCK_LABEL = { unit: 'aparelho', quantity: 'quantidade' };
 
 // O modo de estoque é do PRODUTO: celular ou produto com unidades → aparelho; produto com saldo por local
 // e sem unidades → quantidade; produto sem nenhum dos dois segue a linha. Misturar apagaria o saldo
 // (syncProductStock reconstrói product_stock_locations a partir das unidades).
+// Devolve também a contagem de unidades (null para celular, que não consulta), usada pela regra do Bling.
 async function productStockKind(ctx, productId, phone, lineKind) {
-  if (phone) return 'unit';
+  if (phone) return { kind: 'unit', units: null };
   const [[row]] = await ctx.conn.query(`SELECT (SELECT COUNT(*) FROM units WHERE product_id=?) AS units,
     (SELECT COUNT(*) FROM product_stock_locations WHERE product_id=?) AS locations`, [productId, productId]);
-  if (Number(row?.units) > 0) return 'unit';
-  if (Number(row?.locations) > 0) return 'quantity';
-  return lineKind;
+  const units = Number(row?.units) || 0;
+  if (units > 0) return { kind: 'unit', units };
+  if (Number(row?.locations) > 0) return { kind: 'quantity', units };
+  return { kind: lineKind, units };
 }
 
 // Compara cada identificador informado com imei_1, imei_2 e serial, na conexão da transação
@@ -439,9 +443,9 @@ async function resolveItem(ctx, item, line) {
     if (hit) throw lineError(`${hit.label} ${hit.value} já cadastrado.`);
   }
   const target = fixed || (item.model_id ? await resolveFamily(ctx, item, line, phone) : await resolveSimple(ctx, item, line));
-  const kind = await productStockKind(ctx, target.id, phone, line.stock.kind);
-  // Antes do erro de modo: ajustar a linha para quantidade não resolveria (o Bling é o dono desse saldo).
-  if (await blingOwnsQuantityStock(ctx, target.id, kind)) throw lineError(BLING_QUANTITY_STOCK_MESSAGE);
+  const { kind, units } = await productStockKind(ctx, target.id, phone, line.stock.kind);
+  // Antes do erro de modo: ajustar a linha não resolveria (o Bling é o dono desse saldo).
+  if (await blingOwnsQuantityStock(ctx, target.id, { phone, units })) throw lineError(BLING_QUANTITY_STOCK_MESSAGE);
   if (kind !== line.stock.kind) throw lineError(`Este produto controla estoque por ${STOCK_LABEL[kind]}; ajuste a linha.`);
   // Produto criado neste lote não tem id estável entre prévia e confirmação: o plano mostra só o SKU previsto.
   line.product_id = ctx.created.has(target.id) ? null : target.id;
