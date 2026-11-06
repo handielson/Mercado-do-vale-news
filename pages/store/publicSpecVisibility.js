@@ -21,6 +21,8 @@ const INTERNAL_PREFIXES = ['shopee_', 'mercado_livre_', 'mercadolivre_', 'ml_', 
 const PUBLIC_EXCEPTIONS = /^shopee_attribute_\d+$/;
 
 export function isInternalSpecKey(key) {
+  // Chave começando com "_" é marca do sistema para campo interno (ex.: _price_group_network, _bling_name_sync).
+  if (/^\s*_/.test(String(key ?? ''))) return true;
   const k = normalize(key);
   if (!k) return true;
   if (PUBLIC_EXCEPTIONS.test(k)) return false;

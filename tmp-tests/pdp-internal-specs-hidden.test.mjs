@@ -11,7 +11,8 @@ import { isInternalSpecKey, isPublicSpecValue } from '../pages/store/publicSpecV
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 test('chaves do print do Pad 6 são internas', () => {
-  for (const key of ['unit', 'production', 'mercado_livre', 'shopee_auto_publish_enabled', 'price_group_network']) {
+  // Chaves exatas do specs do Pad 6 em produção (06/11): o grupo de preço é salvo como _price_group_network.
+  for (const key of ['unit', 'production', 'mercado_livre', 'shopee_auto_publish_enabled', '_price_group_network', 'price_group_network', '_bling_name_sync']) {
     assert.equal(isInternalSpecKey(key), true, key);
   }
 });
@@ -20,6 +21,16 @@ test('integrações e grupo de preço são internos por prefixo, em qualquer gra
   for (const key of ['shopee_category_id', 'Mercado Livre Item', 'ml_listing_id', 'bling_id', 'tiktok_product_id', 'price_group_storage', 'PRICE_GROUP_NETWORK']) {
     assert.equal(isInternalSpecKey(key), true, key);
   }
+});
+
+test('specs real do Pad 6: sobra só a ficha técnica', () => {
+  const specKeys = ['ram', 'slug', 'unit', 'color', 'versao', 'storage', 'version', 'keywords', 'meta_title', 'production', 'mercado_livre',
+    'battery_health', '_bling_name_sync', 'meta_description', 'shopee_auto_publish_enabled', '_price_group_network', 'gpu', 'nfc', 'antutu',
+    'peso_g', 'chipset', 'display', 'battery_mah', 'processador', 'resistencia', 'carregamento', 'tipo_de_tela', 'cam_selfie_mpx',
+    'rede_operadora', 'tipo_de_display', 'cam_principal_mpx', 'celular_biometria', 'celular_fps_display', 'entrada_fone_de_ouvido',
+    'celular_slot_para_cartao', 'celular_tipo_de_protecao_de_tela'];
+  const internal = specKeys.filter(isInternalSpecKey);
+  assert.deepEqual(internal, ['unit', 'production', 'mercado_livre', '_bling_name_sync', 'shopee_auto_publish_enabled', '_price_group_network']);
 });
 
 test('ficha técnica de verdade continua pública', () => {
