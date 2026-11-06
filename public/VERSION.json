@@ -1,10 +1,10 @@
 {
   "version": "v1.2.815-entrada-aviso-sucesso",
   "date": "2026-11-06",
-  "status": "pendente de publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.815-entrada-aviso-sucesso",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261106-185136-entrada-aviso-sucesso",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Entrada: o Bipar mostra o botão \"Começar a bipar\" sempre (desabilitado) e diz o que falta para liberar Serial/IMEI 1/IMEI 2; a confirmação mostra \"Cadastrado com sucesso!\" em destaque, com o total e rolagem até a mensagem; o contador \"aparelhos lidos\" zera após confirmar.",
   "gestao_mdv_android": {
@@ -39,9 +39,9 @@
     "entrada-shortcut-browser 23/23"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261106-185136-entrada-aviso-sucesso",
+    "published_at": "2026-11-06"
   },
   "api_release": {
     "status": "sem mudança",

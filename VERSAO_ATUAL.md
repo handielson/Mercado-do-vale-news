@@ -1,6 +1,6 @@
 # v1.2.815-entrada-aviso-sucesso
 
-Data: 06/11/2026. Status: **pendente de publicação** (só site). Branch: `main`. Bipar diz o que falta para liberar Serial/IMEI; confirmação mostra "Cadastrado com sucesso!". Detalhes: `docs/versoes/2026-11-06-v1.2.815-entrada-aviso-sucesso.md`.
+Data: 06/11/2026. Status: **publicada** (só site). Branch: `main`. Commit de implementação: `a4d1cb7`. Tag: `v1.2.815-entrada-aviso-sucesso`. Release: `/var/www/mdv-site/releases/20261106-185136-entrada-aviso-sucesso`. Bipar diz o que falta para liberar Serial/IMEI; confirmação mostra "Cadastrado com sucesso!". API sem alteração ou reinício. Detalhes: `docs/versoes/2026-11-06-v1.2.815-entrada-aviso-sucesso.md`.
 
 ---
 
