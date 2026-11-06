@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.812-nomes-sem-cliente",
+  "version": "v1.2.813-nomes-sem-entrega",
   "date": "2026-11-06",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.812-nomes-sem-cliente",
-  "release_vps": "/var/www/mdv-site/releases/20261106-125349-v1312-nomes-sem-cliente",
+  "tag": "v1.2.813-nomes-sem-entrega",
+  "release_vps": "/var/www/mdv-site/releases/20261106-130116-v1313-nomes-sem-entrega",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Rota pública /public/spec-labels (v1.2.811) fica só com os campos de ficha (spec e logistics, os mesmos da página do modelo). Os campos basic são do cadastro de cliente (Limite de Crédito, Dia de Vencimento, Preferência de Contato...) e saem da rota; sem categoria também fica fora. Cor, armazenamento, RAM, bateria e tela continuam com nome fixo na página.",
+  "summary": "Rota pública /public/spec-labels também deixa de fora Observações de Entrega (observacoes_entrega): é campo de logística da entrega/cliente, não da ficha do produto. Mantém só spec/logistics de produto.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,17 +28,17 @@
     "tmp-tests/pdp-public-spec-labels.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-06-v1.2.812-nomes-sem-cliente.md"
+    "docs/versoes/2026-11-06-v1.2.813-nomes-sem-entrega.md"
   ],
   "validations": [
-    "tmp-tests/pdp-public-spec-labels.test.mjs + pdp-internal-specs-hidden: 13/13 (campos de cliente e sem categoria fora da rota)",
+    "tmp-tests/pdp-public-spec-labels.test.mjs + pdp-internal-specs-hidden: 13/13 (observacoes_entrega em logistics fica fora)",
     "node --check vps_server.js e vps_server.cjs ok",
     "deploy-unit-visibility conferido depois do commit",
     "vite build ok"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261106-125349-v1312-nomes-sem-cliente",
+    "release": "/var/www/mdv-site/releases/20261106-130116-v1313-nomes-sem-entrega",
     "published_at": null
   },
   "api_release": {

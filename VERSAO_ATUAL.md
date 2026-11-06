@@ -1,3 +1,9 @@
+# v1.2.813-nomes-sem-entrega
+
+Data: 06/11/2026. Status: **publicada** (API + site `/var/www/mdv-site/releases/20261106-130116-v1313-nomes-sem-entrega`). Branch: `main`. Rota pública /public/spec-labels sem "Observações de Entrega". Detalhes: `docs/versoes/2026-11-06-v1.2.813-nomes-sem-entrega.md`.
+
+---
+
 # v1.2.812-nomes-sem-cliente
 
 Data: 06/11/2026. Status: **publicada** (API + site `/var/www/mdv-site/releases/20261106-125349-v1312-nomes-sem-cliente`). Branch: `main`. Rota pública /public/spec-labels só com campos de ficha (spec/logistics); campos do cadastro de cliente saem. Detalhes: `docs/versoes/2026-11-06-v1.2.812-nomes-sem-cliente.md`.

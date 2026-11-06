@@ -39,6 +39,8 @@ const rows = [
   { key: 'dia_vencimento', label: 'Dia de Vencimento', category: 'basic' },
   { key: 'preferencia_contato', label: 'Preferência de Contato', category: 'basic' },
   { key: 'sem_categoria', label: 'Sem categoria', category: null },
+  // Logística da entrega/cliente, não do produto (v1.2.813).
+  { key: 'observacoes_entrega', label: 'Observações de Entrega', category: 'logistics' },
   { key: 'ncm', label: 'NCM', category: 'fiscal' },
   { key: 'custo_medio', label: 'Custo médio', category: 'price' },
   { key: '_price_group_network', label: 'Rede do grupo', category: 'spec' },
