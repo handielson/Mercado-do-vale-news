@@ -73,7 +73,18 @@ const tab = (page, name) => page.getByRole('tab', { name });
 const selected = async (page, name) => (await tab(page, name).getAttribute('aria-selected')) === 'true';
 const modelBox = page => page.getByRole('combobox', { name: 'Modelo' });
 const draftLines = page => page.evaluate(() => JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1') || '{"lines":[]}').lines);
-const reader = page => page.getByLabel('Leitura de IMEI');
+// scan-sequence-v1: Bipar lê Serial → IMEI 1 → IMEI 2; Enter no campo vazio pula, no IMEI 2 fecha o aparelho.
+const focusOn = (page, id) => page.waitForFunction(want => document.activeElement?.id === want, id);
+async function bipImei(page, imei, { close = true } = {}) {
+    await focusOn(page, 'scan-read-serial');
+    await page.keyboard.press('Enter');
+    await focusOn(page, 'scan-read-imei1');
+    await page.keyboard.type(imei);
+    await page.keyboard.press('Enter');
+    if (!close) return;
+    await focusOn(page, 'scan-read-imei2');
+    await page.keyboard.press('Enter');
+}
 
 test('?variacao= de celular abre Bipar com o card; bipar sai como atalho com product_id', { timeout: 120000 }, async t => {
     const { page, errors } = await setup(t, '/admin/entrada?variacao=p1');
@@ -86,8 +97,7 @@ test('?variacao= de celular abre Bipar com o card; bipar sai como atalho com pro
     await page.getByLabel('Custo').fill('900');
     assert.equal(await page.getByLabel('Local').inputValue(), 'l2');
     await page.getByRole('button', { name: 'Começar a bipar' }).click();
-    await reader(page).fill('863715061138763');
-    await reader(page).press('Enter');
+    await bipImei(page, '863715061138763');
     await page.getByText('1 aparelho lido', { exact: true }).waitFor();
     const lines = await draftLines(page);
     assert.equal(lines.length, 1);
@@ -118,8 +128,7 @@ test('?variacao= de celular antigo sem memória/cor prende pelo product_id', { t
     assert.doesNotMatch(await text(page), /não tem memória\/cor/);
     await page.getByLabel('Custo').fill('500');
     await page.getByRole('button', { name: 'Começar a bipar' }).click();
-    await reader(page).fill('863715061138763');
-    await reader(page).press('Enter');
+    await bipImei(page, '863715061138763');
     await page.getByText('1 aparelho lido', { exact: true }).waitFor();
     const [line] = await draftLines(page);
     assert.equal(line.item.product_id, 'p3');
@@ -335,8 +344,7 @@ test('B3: trocar de ?variacao= mantém custo e local no Bipar', { timeout: 12000
     assert.equal(await page.getByLabel('Custo').inputValue(), costText);
     assert.equal(await page.getByLabel('Local').inputValue(), 'l1');
     await page.getByRole('button', { name: 'Começar a bipar' }).click();
-    await reader(page).fill('863715061138763');
-    await reader(page).press('Enter');
+    await bipImei(page, '863715061138763');
     await page.getByText('1 aparelho lido', { exact: true }).waitFor();
     const [line] = await draftLines(page);
     assert.equal(line.item.product_id, 'p3');
@@ -377,8 +385,7 @@ for (const imei of ['863715061138763', '863715061138771']) {
         await page.evaluate(() => window.__navigate('/admin/entrada?aba=bipar&variacao=p1'));
         await page.getByLabel('Custo').fill('900');
         await page.getByRole('button', { name: 'Começar a bipar' }).click();
-        await reader(page).fill(imei);
-        await reader(page).press('Enter');
+        await bipImei(page, imei, { close: false });
         await page.getByText('IMEI já está na lista').waitFor();
         assert.equal((await draftLines(page)).length, 1);
         assert.deepEqual(errors, []);

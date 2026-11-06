@@ -1,3 +1,9 @@
+# v1.2.808-bipar-sequencia
+
+Data: 06/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-120252-v1308-bipar-sequencia`; API sem mudança). Branch: `main`. Bipar em sequência Serial → IMEI 1 → IMEI 2 por aparelho, com + para tablet sem IMEI 2. Detalhes: `docs/versoes/2026-11-06-v1.2.808-bipar-sequencia.md`.
+
+---
+
 # v1.2.807-entrada-conferencia-ram
 
 Data: 06/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-114553-v1307-entrada-conferencia-ram`; API sem mudança). Branch: `main`. Card da variação na Entrada mostra RAM, armazenamento e cor para conferência. Detalhes: `docs/versoes/2026-11-06-v1.2.807-entrada-conferencia-ram.md`.

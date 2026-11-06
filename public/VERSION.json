@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.807-entrada-conferencia-ram",
+  "version": "v1.2.808-bipar-sequencia",
   "date": "2026-11-06",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.807-entrada-conferencia-ram",
-  "release_vps": "/var/www/mdv-site/releases/20261106-114553-v1307-entrada-conferencia-ram",
+  "tag": "v1.2.808-bipar-sequencia",
+  "release_vps": "/var/www/mdv-site/releases/20261106-120252-v1308-bipar-sequencia",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Entrada: o card da variação escolhida (atalho ?variacao=) mostra RAM (física), armazenamento e cor do produto para conferência; em celular/tablet, campo faltando aparece como \"não informado\" em destaque. Vale para Manual e Bipar.",
+  "summary": "Entrada > Bipar: leitura por aparelho em sequência Serial → IMEI 1 → IMEI 2, com o cursor avançando sozinho; o IMEI 2 fecha o aparelho e o próximo começa no Serial. Tablet sem IMEI 2: botão + (ou Enter no campo vazio). Câmera por campo (par no IMEI 1 fecha o aparelho). Serial/IMEI repetido, IMEI inválido e IMEI 2 igual ao IMEI 1 são recusados no campo.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,23 +23,23 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "components/entrada/fixedVariationSpecs.js (novo)",
-    "components/entrada/FixedVariationCard.tsx",
-    "tmp-tests/entrada-fixed-variation-specs.test.mjs (novo)",
+    "components/entrada/ScanEntryTab.tsx",
+    "tmp-tests/entrada-scan-browser.test.mjs",
+    "tmp-tests/entrada-shortcut-browser.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-06-v1.2.807-entrada-conferencia-ram.md"
+    "docs/versoes/2026-11-06-v1.2.808-bipar-sequencia.md"
   ],
   "validations": [
-    "tmp-tests/entrada-fixed-variation-specs.test.mjs: 5/5",
-    "tmp-tests/entrada-location-groups.test.mjs: 6/6",
-    "suíte da Entrada (manual, bipar, foto, atalho, página, código de barras, planilha, lista): 143/143",
+    "tmp-tests/entrada-scan-browser.test.mjs: 25/25 (sequência, +, câmera, repetição, inválido, IMEI 2 = IMEI 1, serial repetido, ocupado)",
+    "tmp-tests/entrada-shortcut-browser.test.mjs: 23/23",
+    "suíte da Entrada + tablet-as-phone + location-groups + fixed-variation-specs: 167/167",
     "tsc sem erros em components/entrada",
     "vite build ok"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261106-114553-v1307-entrada-conferencia-ram",
+    "release": "/var/www/mdv-site/releases/20261106-120252-v1308-bipar-sequencia",
     "published_at": null
   },
   "api_release": {

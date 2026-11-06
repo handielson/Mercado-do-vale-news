@@ -26,9 +26,9 @@ function App() {
 }
 createRoot(document.getElementById('root')).render(<App />);`;
 const scanStub = `import React from 'react';
-export const BarcodeScanButton = ({ onScan, allowPair }) => <>
-  <button type="button" onClick={() => onScan(['863715061138763', '863715061138771'])}>simular par</button>
-  <button type="button" onClick={() => onScan(['863715061138771'])}>simular um</button>
+export const BarcodeScanButton = ({ onScan, title }) => <>
+  <button type="button" onClick={() => onScan(['863715061138763', '863715061138771'])}>{title + ': par'}</button>
+  <button type="button" onClick={() => onScan(['863715061138771'])}>{title + ': um'}</button>
 </>;`;
 
 let script;
@@ -68,7 +68,11 @@ async function setup(t, { variation, busy, state } = {}) {
 
 const text = page => page.locator('body').innerText();
 const start = page => page.getByRole('button', { name: 'Começar a bipar' });
-const reader = page => page.getByLabel('Leitura de IMEI');
+// scan-sequence-v1: um aparelho por vez, Serial → IMEI 1 → IMEI 2.
+const field = (page, name) => page.getByLabel(name, { exact: true });
+const plus = page => page.getByRole('button', { name: 'Adicionar aparelho à lista' });
+const IDS = { Serial: 'scan-read-serial', 'IMEI 1': 'scan-read-imei1', 'IMEI 2': 'scan-read-imei2' };
+const focusOn = (page, name) => page.waitForFunction(id => document.activeElement?.id === id, IDS[name]);
 
 async function lock(page) {
     const box = page.getByRole('combobox', { name: 'Modelo' });
@@ -81,8 +85,19 @@ async function lock(page) {
     await page.getByLabel('Custo').fill('1500,50');
     await page.getByLabel('Local').selectOption('l1');
 }
-async function begin(page) { await lock(page); await start(page).click(); await reader(page).waitFor(); }
-async function bip(page, value) { await reader(page).fill(value); await reader(page).press('Enter'); }
+async function begin(page) { await lock(page); await start(page).click(); await focusOn(page, 'Serial'); }
+/** Lê `value` no campo da vez (espera o cursor chegar nele) e aperta Enter, como o leitor faz. */
+async function read(page, name, value) {
+    await focusOn(page, name);
+    if (value) await page.keyboard.type(value);
+    await page.keyboard.press('Enter');
+}
+/** Aparelho completo pela sequência; campo vazio = Enter sem leitura. */
+async function bip(page, imei1, { serial = '', imei2 = '' } = {}) {
+    await read(page, 'Serial', serial);
+    await read(page, 'IMEI 1', imei1);
+    await read(page, 'IMEI 2', imei2);
+}
 
 test('Começar a bipar só aparece com tudo preenchido', { timeout: 120000 }, async t => {
     const { page, errors } = await setup(t);
@@ -102,7 +117,38 @@ test('Começar a bipar só aparece com tudo preenchido', { timeout: 120000 }, as
     assert.deepEqual(errors, []);
 });
 
-test('digitar IMEI + Enter adiciona 1 linha bipar, limpa e mantém o foco', { timeout: 120000 }, async t => {
+test('Serial → IMEI 1 → IMEI 2: o cursor avança sozinho e o IMEI 2 fecha o aparelho', { timeout: 120000 }, async t => {
+    const { page, errors } = await setup(t);
+    await begin(page);
+    await read(page, 'Serial', 'SN123ABC');
+    await focusOn(page, 'IMEI 1');
+    assert.equal((await page.evaluate(() => window.added || [])).length, 0, 'serial sozinho não fecha o aparelho');
+    await read(page, 'IMEI 1', '863715061138763');
+    await focusOn(page, 'IMEI 2');
+    assert.equal((await page.evaluate(() => window.added || [])).length, 0, 'IMEI 1 não fecha o aparelho');
+    await read(page, 'IMEI 2', '863715061138771');
+    await page.getByText('1 aparelho lido', { exact: true }).waitFor();
+    const lines = await page.evaluate(() => window.added);
+    assert.equal(lines.length, 1);
+    assert.deepEqual(lines[0].item.identity, { imei1: '863715061138763', imei2: '863715061138771', serial: 'SN123ABC' });
+    await focusOn(page, 'Serial');
+    for (const name of ['Serial', 'IMEI 1', 'IMEI 2']) assert.equal(await field(page, name).inputValue(), '', `${name} limpo para o próximo aparelho`);
+    assert.deepEqual(errors, []);
+});
+
+test('aparelhos em sequência: cada IMEI 2 fecha um e o próximo começa no Serial', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await begin(page);
+    await bip(page, '863715061138763', { serial: 'SN-A', imei2: '863715061138771' });
+    await bip(page, '490154203237518', { serial: 'SN-B', imei2: '356938035643809' });
+    await page.getByText('2 aparelhos lidos', { exact: true }).waitFor();
+    assert.deepEqual((await page.evaluate(() => window.added)).map(l => l.item.identity), [
+        { imei1: '863715061138763', imei2: '863715061138771', serial: 'SN-A' },
+        { imei1: '490154203237518', imei2: '356938035643809', serial: 'SN-B' },
+    ]);
+});
+
+test('só IMEI 1: Enter no Serial vazio e no IMEI 2 vazio adiciona a linha bipar', { timeout: 120000 }, async t => {
     const { page, errors } = await setup(t);
     await begin(page);
     await bip(page, '863715061138763');
@@ -117,56 +163,101 @@ test('digitar IMEI + Enter adiciona 1 linha bipar, limpa e mantém o foco', { ti
         identity: { imei1: '863715061138763', imei2: null, serial: null },
         quantity: 1, cost_cents: 150050, location_id: 'l1', prices: null,
     });
-    assert.equal(await reader(page).inputValue(), '');
-    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Leitura de IMEI');
+    await focusOn(page, 'Serial');
     assert.deepEqual(errors, []);
 });
 
-test('par pela câmera adiciona 1 linha com imei1 e imei2', { timeout: 120000 }, async t => {
+test('tablet sem IMEI 2: o + adiciona com Serial e IMEI 1', { timeout: 120000 }, async t => {
     const { page } = await setup(t);
     await begin(page);
-    await page.getByRole('button', { name: 'simular par' }).click();
+    await read(page, 'Serial', 'TAB-001');
+    await read(page, 'IMEI 1', '863715061138763');
+    await focusOn(page, 'IMEI 2');
+    await plus(page).click();
+    await page.getByText('1 aparelho lido', { exact: true }).waitFor();
+    assert.deepEqual((await page.evaluate(() => window.added))[0].item.identity, { imei1: '863715061138763', imei2: null, serial: 'TAB-001' });
+    await focusOn(page, 'Serial');
+});
+
+test('o + só com serial também adiciona; vazio avisa', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await begin(page);
+    await plus(page).click();
+    await page.getByText('Informe o IMEI 1 ou o serial.').waitFor();
+    assert.equal((await page.evaluate(() => window.added || [])).length, 0);
+    await field(page, 'Serial').fill('SO-SERIAL');
+    await plus(page).click();
+    await page.getByText('1 aparelho lido', { exact: true }).waitFor();
+    assert.deepEqual((await page.evaluate(() => window.added))[0].item.identity, { imei1: null, imei2: null, serial: 'SO-SERIAL' });
+});
+
+test('par pela câmera no IMEI 1 fecha o aparelho com imei1 e imei2', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await begin(page);
+    await read(page, 'Serial', 'SN-CAM');
+    await page.getByRole('button', { name: 'Ler IMEI 1 pela câmera: par' }).click();
     await page.getByText('1 aparelho lido', { exact: true }).waitFor();
     const lines = await page.evaluate(() => window.added);
     assert.equal(lines.length, 1);
-    assert.deepEqual(lines[0].item.identity, { imei1: '863715061138763', imei2: '863715061138771', serial: null });
+    assert.deepEqual(lines[0].item.identity, { imei1: '863715061138763', imei2: '863715061138771', serial: 'SN-CAM' });
 });
 
 test('repetir leitura não duplica e avisa (mesmo leitor repetindo)', { timeout: 120000 }, async t => {
     const { page } = await setup(t);
     await begin(page);
+    await read(page, 'Serial', '');
+    await read(page, 'IMEI 1', '863715061138763');
+    await focusOn(page, 'IMEI 2');
     // duas leituras idênticas antes de o React re-renderizar
     await page.evaluate(() => {
-        const el = document.querySelector('[aria-label="Leitura de IMEI"]');
+        const el = document.getElementById('scan-read-imei2');
         const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
         for (let i = 0; i < 2; i++) {
-            set.call(el, '863715061138763'); el.dispatchEvent(new Event('input', { bubbles: true }));
+            set.call(el, '863715061138771'); el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
         }
     });
     await page.getByText('IMEI já está na lista').waitFor();
     assert.equal((await page.evaluate(() => window.added)).length, 1);
     await page.getByText('1 aparelho lido', { exact: true }).waitFor();
+    await focusOn(page, 'Serial');
+    assert.equal(await field(page, 'IMEI 2').inputValue(), '', 'a repetição não fica no próximo aparelho');
 });
 
-test('IMEI que já está na lista da página não é adicionado', { timeout: 120000 }, async t => {
-    const state = { lines: [{ key: 'x', source: 'manual', label: 'x', item: { source: 'manual', identity: { imei1: '863715061138771', imei2: null, serial: null } } }], plan: null, hash: null, previewedSignature: null };
+test('IMEI que já está na lista da página não avança nem adiciona', { timeout: 120000 }, async t => {
+    const state = { lines: [{ key: 'x', source: 'manual', label: 'x', item: { source: 'manual', identity: { imei1: '863715061138771', imei2: null, serial: 'SN-OLD' } } }], plan: null, hash: null, previewedSignature: null };
     const { page } = await setup(t, { state });
     await begin(page);
-    await bip(page, '863715061138771');
+    await read(page, 'Serial', 'SN-OLD');
+    await page.getByText('Serial já está na lista').waitFor();
+    await focusOn(page, 'Serial');
+    await field(page, 'Serial').fill('');
+    await read(page, 'Serial', '');
+    await read(page, 'IMEI 1', '863715061138771');
     await page.getByText('IMEI já está na lista').waitFor();
-    assert.equal(await page.evaluate(() => window.added || []).then(a => a.length), 0);
-    await page.getByRole('button', { name: 'simular um' }).click();
+    await focusOn(page, 'IMEI 1');
+    await page.getByRole('button', { name: 'Ler IMEI 2 pela câmera: um' }).click();
     assert.equal((await page.evaluate(() => window.added || [])).length, 0);
 });
 
-test('IMEI inválido não adiciona', { timeout: 120000 }, async t => {
+test('IMEI inválido não avança nem adiciona', { timeout: 120000 }, async t => {
     const { page } = await setup(t);
     await begin(page);
-    await bip(page, '863715061138764');
+    await read(page, 'Serial', '');
+    await read(page, 'IMEI 1', '863715061138764');
     await page.getByText('IMEI inválido').waitFor();
+    await focusOn(page, 'IMEI 1');
     assert.equal((await page.evaluate(() => window.added || [])).length, 0);
     assert.match(await text(page), /0 aparelhos lidos/);
+});
+
+test('IMEI 2 igual ao IMEI 1 não fecha o aparelho', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await begin(page);
+    await bip(page, '863715061138763', { imei2: '863715061138763' });
+    await page.getByText('IMEI 2 igual ao IMEI 1').waitFor();
+    await focusOn(page, 'IMEI 2');
+    assert.equal((await page.evaluate(() => window.added || [])).length, 0);
 });
 
 test('?variacao= chega travado no produto, sem pedir modelo', { timeout: 120000 }, async t => {
@@ -181,6 +272,7 @@ test('?variacao= chega travado no produto, sem pedir modelo', { timeout: 120000 
     await start(page).click();
     await page.getByText('Redmi 15 · RED15-8-256-VD', { exact: true }).waitFor();
     await bip(page, '863715061138763');
+    await page.getByText('1 aparelho lido', { exact: true }).waitFor();
     const [line] = await page.evaluate(() => window.added);
     assert.equal(line.source, 'atalho');
     assert.equal(line.label, 'Redmi 15 · RED15-8-256-VD · IMEI …8763');
@@ -196,7 +288,9 @@ test('?variacao= não manda configuração: o servidor usa versão e condição 
     await page.getByRole('button', { name: 'Trocar' }).waitFor();
     await page.getByLabel('Custo').fill('900');
     await start(page).click();
-    await page.getByRole('button', { name: 'simular par' }).click();
+    await focusOn(page, 'Serial');
+    await page.getByRole('button', { name: 'Ler IMEI 1 pela câmera: par' }).click();
+    await page.getByText('1 aparelho lido', { exact: true }).waitFor();
     const item = (await page.evaluate(() => window.added))[0].item;
     assert.equal(item.product_id, 'p2');
     assert.equal('configuration' in item, false);
@@ -214,7 +308,7 @@ test('contador mostra 3 aparelhos lidos', { timeout: 120000 }, async t => {
     const { page } = await setup(t);
     await begin(page);
     await bip(page, '863715061138763');
-    await page.getByRole('button', { name: 'simular um' }).click();
+    await bip(page, '863715061138771');
     await bip(page, '490154203237518');
     await page.getByText('3 aparelhos lidos', { exact: true }).waitFor();
 });
@@ -236,13 +330,16 @@ test('remover a linha libera reler o mesmo IMEI', { timeout: 120000 }, async t =
     assert.equal((await page.evaluate(() => window.added)).length, 2);
 });
 
-test('depois de busy o campo de leitura volta ao foco', { timeout: 120000 }, async t => {
+test('depois de busy o campo da vez volta ao foco', { timeout: 120000 }, async t => {
     const { page } = await setup(t);
     await begin(page);
+    await read(page, 'Serial', 'SN-BUSY');
+    await focusOn(page, 'IMEI 1');
     await page.evaluate(() => window.setBusy(true));
-    await page.waitForFunction(() => document.querySelector('[aria-label="Leitura de IMEI"]').disabled);
+    await page.waitForFunction(() => document.getElementById('scan-read-imei1').disabled);
     await page.evaluate(() => window.setBusy(false));
-    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Leitura de IMEI');
+    await focusOn(page, 'IMEI 1');
+    assert.equal(await field(page, 'Serial').inputValue(), 'SN-BUSY', 'o aparelho em andamento continua');
 });
 
 test('?variacao= de celular sem memória/cor prende pelo product_id (sem aviso)', { timeout: 120000 }, async t => {
@@ -252,6 +349,7 @@ test('?variacao= de celular sem memória/cor prende pelo product_id (sem aviso)'
     await page.getByLabel('Custo').fill('900');
     await start(page).click();
     await bip(page, '863715061138763');
+    await page.getByText('1 aparelho lido', { exact: true }).waitFor();
     const [line] = await page.evaluate(() => window.added);
     assert.equal(line.item.product_id, 'p3');
     assert.equal(line.label, 'Redmi Antigo · RED-OLD · IMEI …8763');
@@ -285,7 +383,7 @@ test('I3: preços opcionais da configuração vão em todas as leituras', { time
     await page.getByLabel('Atacado').fill('1799,50');
     await start(page).click();
     await bip(page, '863715061138763');
-    await page.getByRole('button', { name: 'simular um' }).click();
+    await bip(page, '863715061138771');
     await page.getByText('2 aparelhos lidos', { exact: true }).waitFor();
     const prices = { price_retail: 199990, price_reseller: 189900, price_wholesale: 179950 };
     assert.deepEqual((await page.evaluate(() => window.added)).map(l => l.item.prices), [prices, prices]);
@@ -300,6 +398,7 @@ test('I3: desligar os preços volta a mandar prices null', { timeout: 120000 }, 
     await page.getByLabel('Informar preços desta configuração').uncheck();
     await start(page).click();
     await bip(page, '863715061138763');
+    await page.getByText('1 aparelho lido', { exact: true }).waitFor();
     assert.equal((await page.evaluate(() => window.added))[0].item.prices, null);
 });
 
@@ -311,16 +410,18 @@ test('I3: ?variacao= não oferece preços (a variação fixa mantém os dela)', 
     await page.getByLabel('Custo').fill('50');
     await start(page).click();
     await bip(page, '863715061138763');
+    await page.getByText('1 aparelho lido', { exact: true }).waitFor();
     assert.equal((await page.evaluate(() => window.added))[0].item.prices, null);
 });
 
-test('M1: ocupado mostra "Aguarde…" ao lado do leitor', { timeout: 120000 }, async t => {
+test('M1: ocupado mostra "Aguarde…" e trava os campos de leitura', { timeout: 120000 }, async t => {
     const { page } = await setup(t);
     await begin(page);
     assert.equal(await page.getByText('Aguarde…').count(), 0);
     await page.evaluate(() => window.setBusy(true));
     await page.getByText('Aguarde…').waitFor();
-    assert.equal(await reader(page).isDisabled(), true);
+    for (const name of ['Serial', 'IMEI 1', 'IMEI 2']) assert.equal(await field(page, name).isDisabled(), true);
+    assert.equal(await plus(page).isDisabled(), true);
     await page.evaluate(() => window.setBusy(false));
     await page.waitForFunction(() => !document.body.innerText.includes('Aguarde…'));
 });
