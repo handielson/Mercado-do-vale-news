@@ -1,6 +1,6 @@
 # v1.2.804-entrada-ajustes
 
-Data: 05/11/2026. Status: **pendente de publicação**. Branch: `main`. Ajustes das pendências da Entrada única + estoque do Bling por nota fiscal.
+Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-000000-v1304-entrada-ajustes` + API). Branch: `main`. Ajustes das pendências da Entrada única + estoque do Bling por nota fiscal.
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "version": "v1.2.804-entrada-ajustes",
   "date": "2026-11-05",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.804-entrada-ajustes",
   "release_vps": "/var/www/mdv-site/releases/20261106-000000-v1304-entrada-ajustes",
@@ -47,12 +47,13 @@
     "revisão por parte + revisão final"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "/var/www/mdv-site/releases/20261106-000000-v1304-entrada-ajustes"
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261106-000000-v1304-entrada-ajustes",
+    "published_at": "2026-11-05T22:05:00-03:00"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "server.js + catalogEntryServer.cjs"
+    "status": "publicada",
+    "note": "v1.2.804 (server.js + catalogEntryServer.cjs) publicada em 05/11 ~22:05, depois do site; backup /var/www/mdv-api/backups/entrada-ajustes-1793925936000"
   },
   "nginx_release": {
     "status": "publicada",
