@@ -1,10 +1,10 @@
 {
   "version": "v1.2.805-tablet-como-celular",
   "date": "2026-11-06",
-  "status": "pendente de publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.805-tablet-como-celular",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261106-112523-v1305-tablet-como-celular",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Tablet segue o padrão do celular em todo o sistema: aparelho por unidade com Serial, IMEI 1 e IMEI 2 (IMEI 2 nunca obrigatório para tablet), Entrada (Manual/Bipar/Planilha), preço por configuração (modelo + RAM + armazenamento), ficha técnica no modelo, busca por 4G/5G, card \"Vendido\" e campos do modelo.",
   "gestao_mdv_android": {
@@ -46,13 +46,13 @@
     "vite build ok"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261106-112523-v1305-tablet-como-celular",
+    "published_at": "2026-11-06T11:25:23-03:00"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "enviar services/smartphonePriceGroupsCore.cjs, smartphonePriceGroupsServer.cjs, smartphoneModelSpecs.mjs, catalogEntryCore.cjs, catalogEntryServer.cjs e reiniciar mdv-api"
+    "status": "publicada",
+    "note": "v1.2.805 publicada em 06/11 ~11:28, depois do site: smartphoneModelSpecs.mjs (backup /var/www/mdv-api/backups/tablet-como-celular-1793975171875) + deploy-vps-server-only.cjs --catalog-entry-only (server.js, catalogEntry*, smartphonePriceGroups* e dependências; backup /var/www/mdv-api/backups/catalog-entry-1793975228261); pm2 restart mdv-api online"
   },
   "nginx_release": {
     "status": "sem mudança",
