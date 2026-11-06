@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.803-entrada-estoque",
+  "version": "v1.2.804-entrada-ajustes",
   "date": "2026-11-05",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.803-entrada-estoque",
-  "release_vps": "/var/www/mdv-site/releases/20261105-210000-v1303-entrada-estoque",
+  "tag": "v1.2.804-entrada-ajustes",
+  "release_vps": "/var/www/mdv-site/releases/20261106-000000-v1304-entrada-ajustes",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Entrada única, etapa 6: estoque e aparelhos só entram pela Entrada. O servidor recusa POST /units, /units/batch e insert em /table-data/units (exceto o script de manutenção). O formulário Novo produto cadastra o catálogo sem estoque e oferece 'Dar entrada no estoque'. Cadastro em massa e Smartphones por foto abrem a Entrada; o Bipar busca produto por código de barras ou SKU.",
+  "summary": "Ajustes da Entrada única: aviso de lista anterior no atalho, combo barrado no atalho, custo/local mantidos, IMEI da foto conta como já na lista, rótulo da foto atualizado; produto por quantidade ligado ao Bling recebe estoque pela nota fiscal no Bling; table-data products sem estoque; prévia sem escrita pelo pool; nova tentativa do formulário sem zerar estoque; aviso de rascunho antigo; limpeza de código morto.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -25,43 +25,34 @@
   "changed_files": [
     "vps_server.js",
     "vps_server.cjs",
-    "scripts/rebuild-smartphone-serialized-units.cjs",
-    "components/products/ProductForm.tsx",
-    "components/products/familyRegistration.js",
-    "components/products/VariationListing.tsx",
-    "components/products/sections/ProductSpecifications.tsx",
-    "pages/admin/products/ProductFormPage.tsx",
+    "services/catalogEntryServer.cjs",
     "services/products.ts",
-    "services/entryShortcuts.js",
-    "components/entrada/BarcodeProductLookup.tsx",
+    "scripts/rebuild-smartphone-serialized-units.cjs",
     "pages/admin/entrada/CatalogEntryPage.tsx",
-    "routes/index.tsx",
-    "pages/admin/products/ProductListPage.tsx",
-    "layouts/AdminLayout.tsx",
-    "components/admin/dashboard/AdminQuickAccessGrid.tsx",
-    "hooks/usePageTitle.ts",
+    "components/entrada/* (entryList, EntryListPanel, EntryLockFields, FixedVariationCard, ManualEntryTab, ScanEntryTab, PhotoEntryTab)",
     "pages/admin/products/SmartphonePhotoIntakePage.tsx",
-    "apagados: EntradaPage, ProductEntryPage, BulkRegistrationPage, components/products/bulk/*, UnitForm, serializedBatch.js, bulk-products.ts, types/bulk-product.ts",
-    "tmp-tests (stock-entry-lock, stock-entry-only-static, entrada-barcode-browser, entrada-redirects-static, product-update-omitted-stock-static e atualizados)",
+    "components/products/ProductForm.tsx",
+    "components/products/productFormRecovery.js",
+    "pages/admin/products/ProductFormPage.tsx",
+    "apagados: components/products/ProductEntryForm.tsx, components/products/entry/**",
+    "tmp-tests (novos e atualizados)",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-05-v1.2.803-entrada-estoque.md"
+    "docs/versoes/2026-11-05-v1.2.804-entrada-ajustes.md"
   ],
   "validations": [
-    "entrada-* + formulário + navegação: 204/204",
-    "stock-entry-lock + catalog-entry-*: 136/136",
+    "servidor (stock-entry-lock*, catalog-entry-*): 169/169",
+    "front (entrada-*, formulário, estáticos): 227/227",
     "npm run build ok",
-    "conjunto amplo: 21 falhas, todas já existentes no main",
-    "revisão por tarefa + revisão final + re-revisão"
+    "revisão por parte + revisão final"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261105-210000-v1303-entrada-estoque",
-    "published_at": "2026-11-05T21:00:00-03:00"
+    "status": "pendente",
+    "release": "/var/www/mdv-site/releases/20261106-000000-v1304-entrada-ajustes"
   },
   "api_release": {
-    "status": "publicada",
-    "note": "v1.2.803 (trava do estoque) publicada em 05/11 ~21:00, depois do site; backup /var/www/mdv-api/backups/stock-entry-lock-1793921973000"
+    "status": "pendente",
+    "note": "server.js + catalogEntryServer.cjs"
   },
   "nginx_release": {
     "status": "publicada",
