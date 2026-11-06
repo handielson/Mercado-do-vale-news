@@ -1,3 +1,9 @@
+# v1.2.814-complemento-titulo-rota
+
+Data: 06/11/2026. Status: **pendente de publicação** (só API). Branch: `main`. "Complemento do título no site" voltou a salvar: a rota não existia no `server.js` publicado. Detalhes: `docs/versoes/2026-11-06-v1.2.814-complemento-titulo-rota.md`.
+
+---
+
 # v1.2.813-nomes-sem-entrega
 
 Data: 06/11/2026. Status: **publicada** (API + site `/var/www/mdv-site/releases/20261106-130116-v1313-nomes-sem-entrega`). Branch: `main`. Rota pública /public/spec-labels sem "Observações de Entrega". Detalhes: `docs/versoes/2026-11-06-v1.2.813-nomes-sem-entrega.md`.

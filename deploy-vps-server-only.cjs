@@ -1062,6 +1062,8 @@ async function main() {
       'services/smartphonePhotoIntakeCore.cjs',
       'services/smartphoneBarcodeCrossCheck.cjs',
       'services/smartphoneBarcodeReader.cjs',
+      // v1.2.814: o server.js (de vps_server.js) passou a exigir o modulo do complemento do titulo.
+      'services/catalogTitleServer.cjs',
     ];
     {
       const guardFiles = ['vps_server.js', 'vps_server.cjs', ...catalogEntryServices];

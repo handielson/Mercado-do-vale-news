@@ -29424,6 +29424,8 @@ fastify.patch('/products/name', { preHandler: requireSyncKey }, async (req, repl
 });
 
 
+require('./services/catalogTitleServer.cjs').registerCatalogTitleRoutes(fastify, { pool, requireSyncKeyOrAdmin });
+
 fastify.patch('/products/:id/seo', { preHandler: requireSyncKey }, async (req, reply) => {
   const { exclude_from_seo } = req.body;
   await pool.query(
@@ -40697,6 +40699,7 @@ async function runMigrations() {
   await addColumnIfMissing('company_settings', 'tiktok_granted_scopes', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('products', 'exclude_from_seo', "TINYINT(1) DEFAULT 0");
   await addColumnIfMissing('products', 'hide_from_catalog', "TINYINT(1) DEFAULT 0");
+  await addColumnIfMissing('products', 'catalog_title_complement', "VARCHAR(120) NULL");
   await addColumnIfMissing('products', 'meta_title', "VARCHAR(255) NULL");
   await addColumnIfMissing('products', 'meta_description', "TEXT NULL");
   await addColumnIfMissing('products', 'keywords', "TEXT NULL");

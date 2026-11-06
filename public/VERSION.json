@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.813-nomes-sem-entrega",
+  "version": "v1.2.814-complemento-titulo-rota",
   "date": "2026-11-06",
-  "status": "publicada",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.813-nomes-sem-entrega",
-  "release_vps": "/var/www/mdv-site/releases/20261106-130116-v1313-nomes-sem-entrega",
+  "tag": "v1.2.814-complemento-titulo-rota",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Rota pública /public/spec-labels também deixa de fora Observações de Entrega (observacoes_entrega): é campo de logística da entrega/cliente, não da ficha do produto. Mantém só spec/logistics de produto.",
+  "summary": "Complemento do título no site voltou a salvar: a rota PATCH /products/:id/catalog-title estava registrada só no vps_server.cjs e não existia no server.js publicado (404). Registrada no vps_server.js, módulo incluído no deploy --catalog-entry-only e teste que trava rota só num dos servidores.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -24,26 +24,26 @@
   "site_source_base": "48412089",
   "changed_files": [
     "vps_server.js",
-    "vps_server.cjs",
-    "tmp-tests/pdp-public-spec-labels.test.mjs",
+    "deploy-vps-server-only.cjs",
+    "tmp-tests/server-entrypoints-route-parity.test.cjs (novo)",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-06-v1.2.813-nomes-sem-entrega.md"
+    "docs/versoes/2026-11-06-v1.2.814-complemento-titulo-rota.md"
   ],
   "validations": [
-    "tmp-tests/pdp-public-spec-labels.test.mjs + pdp-internal-specs-hidden: 13/13 (observacoes_entrega em logistics fica fora)",
-    "node --check vps_server.js e vps_server.cjs ok",
-    "deploy-unit-visibility conferido depois do commit",
-    "vite build ok"
+    "server-entrypoints-route-parity: 2/2 (falha 2/2 sem a correção)",
+    "catalog-title.test.mjs: 5/5",
+    "node --check vps_server.js e deploy-vps-server-only.cjs",
+    "produção antes: PATCH /products/:id/catalog-title → 404 \"Route not found\""
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261106-130116-v1313-nomes-sem-entrega",
+    "status": "sem mudança",
+    "release": "",
     "published_at": null
   },
   "api_release": {
-    "status": "publicada",
-    "note": "deploy-vps-server-only.cjs --catalog-entry-only (envia o runtime server.js com a rota nova) + pm2 restart mdv-api"
+    "status": "pendente",
+    "note": "node deploy-vps-server-only.cjs --catalog-entry-only (envia server.js + services/catalogTitleServer.cjs) + pm2 restart mdv-api; conferir PATCH com id inexistente → 409 (não 404)"
   },
   "nginx_release": {
     "status": "sem mudança",
