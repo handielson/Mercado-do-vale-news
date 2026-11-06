@@ -1,10 +1,10 @@
 {
   "version": "v1.2.816-entrada-imei-completo",
   "date": "2026-11-06",
-  "status": "pendente de publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.816-entrada-imei-completo",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261106-191059-entrada-imei-completo",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Entrada: a lista mostra Serial, IMEI 1 e IMEI 2 completos de cada aparelho (antes só o final do IMEI) também na mensagem de sucesso, e o SKU não aparece mais duplicado quando o nome do produto já termina com ele.",
   "gestao_mdv_android": {
@@ -42,9 +42,9 @@
     "entrada-photo-browser 14/14"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261106-191059-entrada-imei-completo",
+    "published_at": "2026-11-06"
   },
   "api_release": {
     "status": "sem mudança",

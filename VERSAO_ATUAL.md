@@ -1,6 +1,6 @@
 # v1.2.816-entrada-imei-completo
 
-Data: 06/11/2026. Status: **pendente de publicação** (só site). Branch: `main`. Lista de entrada mostra Serial/IMEI 1/IMEI 2 completos e o SKU não duplica. Detalhes: `docs/versoes/2026-11-06-v1.2.816-entrada-imei-completo.md`.
+Data: 06/11/2026. Status: **publicada** (só site). Branch: `main`. Commit de implementação: `5c6c1a2`. Tag: `v1.2.816-entrada-imei-completo`. Release: `/var/www/mdv-site/releases/20261106-191059-entrada-imei-completo`. Lista de entrada mostra Serial/IMEI 1/IMEI 2 completos e o SKU não duplica. API sem alteração ou reinício. Detalhes: `docs/versoes/2026-11-06-v1.2.816-entrada-imei-completo.md`.
 
 ---
 
