@@ -4,7 +4,7 @@ import { BarcodeScanButton } from '../ui/BarcodeScanButton';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { createLine, createShortcutLine, hasIdentity, isValidImei } from './entryList.js';
-import { loadModelProfile, useCostLocation, useEntryLocations, type ModelRef, type SharedCostLocation } from './EntryLockFields';
+import { loadModelProfile, useCostLocation, EntryLocationOptions, useEntryLocations, type ModelRef, type SharedCostLocation } from './EntryLockFields';
 import { CONDITIONS, RAM_OPTIONS, STORAGE_OPTIONS } from './ManualEntryTab';
 import { FixedVariationCard, type FixedVariation } from './FixedVariationCard';
 import type { EntryLine, EntryState } from './EntryListPanel';
@@ -52,7 +52,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
     const [condition, setCondition] = useState('new');
     const [color, setColor] = useState('');
     const { cost, setCost, locationId, setLocationId } = useCostLocation(costLocation);
-    const { locations, locationsError } = useEntryLocations(setLocationId);
+    const { locationGroups, locationsError } = useEntryLocations(setLocationId);
     // Configuração sem preço: o operador informa aqui (vai em todas as leituras) em vez de cair no erro da prévia.
     const [pricesOn, setPricesOn] = useState(false);
     const [retail, setRetail] = useState(0);
@@ -268,8 +268,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                     <div>
                         <label htmlFor="scan-location" className={labelCls}>Local</label>
                         <select id="scan-location" className={fieldCls} value={locationId} onChange={e => setLocationId(e.target.value)}>
-                            <option value="">Selecione o local</option>
-                            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                            <EntryLocationOptions groups={locationGroups} />
                         </select>
                         {locationsError && <p role="alert" className="text-xs text-red-600 mt-1">Não foi possível carregar os locais.</p>}
                     </div>

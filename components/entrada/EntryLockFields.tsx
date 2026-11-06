@@ -4,6 +4,7 @@ import { colorService } from '../../services/colors';
 import { modelColorImagesService } from '../../services/model-color-images';
 import { stockLocationService } from '../../services/stockLocationService';
 import { isSmartphoneModel } from '../../services/smartphoneModelSpecs.mjs';
+import { defaultEntryLocationId, groupEntryLocations } from './entryLocationGroups.js';
 
 export interface LocationRow { id: string; name: string; is_default?: boolean; is_active?: boolean }
 export interface ModelRef { id: string; name: string; category_id?: string | null }
@@ -27,23 +28,47 @@ export function useCostLocation(shared?: SharedCostLocation) {
     return { cost: value.cost, locationId: value.locationId, setCost, setLocationId };
 }
 
-/** Locais de estoque ativos; preenche o local padrão quando ainda não há escolha. */
+export interface LocationGroup { depositId: string | null; label: string | null; locations: LocationRow[] }
+
+/**
+ * Locais de estoque ativos agrupados por depósito (entry-location-groups-v1);
+ * preenche o local padrão quando ainda não há escolha. Se os depósitos não carregarem,
+ * os locais aparecem sem grupo em vez de sumir.
+ */
 export function useEntryLocations(setLocationId: (update: (current: string) => string) => void) {
-    const [locations, setLocations] = useState<LocationRow[]>([]);
+    const [groups, setGroups] = useState<LocationGroup[]>([]);
     const [locationsError, setLocationsError] = useState(false);
     useEffect(() => {
         let alive = true;
-        stockLocationService.listLocations()
-            .then(list => {
+        const deposits = typeof stockLocationService.listDeposits === 'function'
+            ? stockLocationService.listDeposits().catch(() => null)
+            : Promise.resolve(null);
+        Promise.all([stockLocationService.listLocations(), deposits])
+            .then(([list, depositList]) => {
                 if (!alive) return;
-                const active = (list as LocationRow[]).filter(l => l.is_active !== false);
-                setLocations(active);
-                setLocationId(current => current || active.find(l => l.is_default)?.id || '');
+                const grouped = groupEntryLocations(list as LocationRow[], depositList) as LocationGroup[];
+                setGroups(grouped);
+                setLocationId(current => current || defaultEntryLocationId(grouped));
             })
             .catch(() => { if (alive) setLocationsError(true); });
         return () => { alive = false; };
     }, []);
-    return { locations, locationsError };
+    return { locationGroups: groups, locationsError };
+}
+
+/** Opções do select de Local: um grupo por depósito, com o nome do depósito como título. */
+export function EntryLocationOptions({ groups }: { groups: LocationGroup[] }) {
+    return (
+        <>
+            <option value="">Selecione o local</option>
+            {groups.map(group => {
+                const options = group.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>);
+                return group.label
+                    ? <optgroup key={group.depositId || 'sem-deposito'} label={group.label}>{options}</optgroup>
+                    : options;
+            })}
+        </>
+    );
 }
 
 /**

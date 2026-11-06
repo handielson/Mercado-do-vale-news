@@ -15,7 +15,7 @@ export const serviceStubs = {
         return byEan.length ? byEan : all.filter(p => p.sku === code);
     },
 }; export default productService;`,
-    stockLocationService: `const s = { listLocations: async () => window.fixtures.locations }; export const stockLocationService = s; export default s;`,
+    stockLocationService: `const s = { listLocations: async () => window.fixtures.locations, listDeposits: async () => window.fixtures.deposits || [] }; export const stockLocationService = s; export default s;`,
     units: `export const unitService = { listByProduct: async id => window.fixtures.units?.[id] || [] };`,
 };
 
@@ -88,7 +88,8 @@ export const defaultFixtures = {
         p2: { id: 'p2', name: 'Poco X8', alternative_eans: ['7899999999999'], model_id: 'm3', category_id: 'c1', specs: { ram: '12GB', storage: '512GB', color: 'Preto', version: 'India', condition: 'seminovo' } },
     },
     units: { p7: [{ id: 'u1', product_id: 'p7', serial: 'ABC123' }] },
-    locations: [{ id: 'l1', name: 'Prateleira A', code: 'A', is_default: false, is_active: true }, { id: 'l2', name: 'Vitrine', code: 'V', is_default: true, is_active: true }],
+    deposits: [{ id: 'd1', name: 'Loja', is_default: true, is_active: true }],
+    locations: [{ id: 'l1', deposit_id: 'd1', name: 'Prateleira A', code: 'A', is_default: false, is_active: true }, { id: 'l2', deposit_id: 'd1', name: 'Vitrine', code: 'V', is_default: true, is_active: true }],
 };
 
 /** Plugin Vite que troca os serviços por stubs. */

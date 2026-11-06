@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { SmartphonePhotoIntakePage } from '../../pages/admin/products/SmartphonePhotoIntakePage';
 import type { SmartphonePhotoIntake } from '../../types/smartphone-photo-intake';
 import { createPhotoLine, hasPhotoIntake } from './entryList.js';
-import { useEntryLocations } from './EntryLockFields';
+import { EntryLocationOptions, useEntryLocations } from './EntryLockFields';
 import type { EntryLine, EntryState } from './EntryListPanel';
 
 export interface PhotoEntryTabProps {
@@ -28,7 +28,7 @@ const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
 export const PhotoEntryTab: React.FC<PhotoEntryTabProps> = ({ onAddLines, existingState, confirmCount = 0, busy, onQueueLoaded }) => {
     const [notice, setNotice] = useState<Notice>(null);
     const [locationId, setLocationId] = useState('');
-    const { locations, locationsError } = useEntryLocations(setLocationId);
+    const { locationGroups, locationsError } = useEntryLocations(setLocationId);
     // O envio lê a lista mais recente (dois cliques seguidos não podem duplicar a linha).
     const stateRef = useRef(existingState);
     stateRef.current = existingState;
@@ -61,8 +61,7 @@ export const PhotoEntryTab: React.FC<PhotoEntryTabProps> = ({ onAddLines, existi
             <div className="max-w-xs">
                 <label htmlFor="photo-location" className={labelCls}>Local</label>
                 <select id="photo-location" className={fieldCls} value={locationId} onChange={e => setLocationId(e.target.value)}>
-                    <option value="">Selecione o local</option>
-                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    <EntryLocationOptions groups={locationGroups} />
                 </select>
                 {locationsError && <p role="alert" className="text-xs text-red-600 mt-1">Não foi possível carregar os locais.</p>}
                 {!locationId && !locationsError && <p className="text-xs text-amber-700 mt-1">Escolha o local de estoque.</p>}

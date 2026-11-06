@@ -1,3 +1,9 @@
+# v1.2.806-local-por-deposito
+
+Data: 06/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-113353-v1306-local-por-deposito`; API sem mudança). Branch: `main`. Local da Entrada agrupado por depósito (Manual, Bipar e Foto), local padrão no topo e ordem natural. Detalhes: `docs/versoes/2026-11-06-v1.2.806-local-por-deposito.md`.
+
+---
+
 # v1.2.805-tablet-como-celular
 
 Data: 06/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-112523-v1305-tablet-como-celular` + API). Branch: `main`. Tablet segue o padrão do celular em todo o sistema (Serial, IMEI 1, IMEI 2 opcional, Entrada, preço por configuração, ficha no modelo). Detalhes: `docs/versoes/2026-11-06-v1.2.805-tablet-como-celular.md`.

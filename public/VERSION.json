@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.805-tablet-como-celular",
+  "version": "v1.2.806-local-por-deposito",
   "date": "2026-11-06",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.805-tablet-como-celular",
-  "release_vps": "/var/www/mdv-site/releases/20261106-112523-v1305-tablet-como-celular",
+  "tag": "v1.2.806-local-por-deposito",
+  "release_vps": "/var/www/mdv-site/releases/20261106-113353-v1306-local-por-deposito",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Tablet segue o padrão do celular em todo o sistema: aparelho por unidade com Serial, IMEI 1 e IMEI 2 (IMEI 2 nunca obrigatório para tablet), Entrada (Manual/Bipar/Planilha), preço por configuração (modelo + RAM + armazenamento), ficha técnica no modelo, busca por 4G/5G, card \"Vendido\" e campos do modelo.",
+  "summary": "Entrada: o Local mostra os locais agrupados por depósito (nome do depósito como título), depósito padrão primeiro, local padrão no topo e o resto em ordem natural (Caixa 2 antes de Caixa 10); vale para Manual, Bipar e Foto. Locais de depósito desativado ficam fora.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,36 +23,31 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "services/smartphonePriceGroupsCore.cjs",
-    "services/smartphonePriceGroupsServer.cjs",
-    "services/smartphoneModelSpecs.mjs",
-    "services/catalogEntryCore.cjs",
-    "services/catalogEntryServer.cjs",
-    "components/products/sections/ProductSpecifications.tsx",
-    "components/products/productCardStatus.js",
-    "components/settings/ModelModal.tsx",
+    "components/entrada/entryLocationGroups.js (novo)",
+    "components/entrada/EntryLockFields.tsx",
+    "components/entrada/ManualEntryTab.tsx",
     "components/entrada/ScanEntryTab.tsx",
-    "tmp-tests/tablet-as-phone.test.mjs (novo)",
-    "tmp-tests/catalog-entry-core.test.cjs",
-    "tmp-tests/entrada-scan-browser.test.mjs",
-    "tmp-tests/entrada-shortcut-browser.test.mjs",
+    "components/entrada/PhotoEntryTab.tsx",
+    "tmp-tests/entrada-location-groups.test.mjs (novo)",
+    "tmp-tests/entrada-fixtures.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-06-v1.2.805-tablet-como-celular.md"
+    "docs/versoes/2026-11-06-v1.2.806-local-por-deposito.md"
   ],
   "validations": [
-    "tmp-tests/tablet-as-phone.test.mjs: 8/8",
-    "testes relacionados (entrada, preços, ficha, card, família): mesmas falhas pré-existentes antes e depois (deploy/seo/família 15/price-groups-ui), nenhuma nova",
+    "tmp-tests/entrada-location-groups.test.mjs: 6/6",
+    "suite da Entrada (manual, bipar, foto, atalho, pagina, codigo de barras, planilha, lista): 143/143",
+    "tsc sem erros em components/entrada",
     "vite build ok"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261106-112523-v1305-tablet-como-celular",
-    "published_at": "2026-11-06T11:25:23-03:00"
+    "release": "/var/www/mdv-site/releases/20261106-113353-v1306-local-por-deposito",
+    "published_at": null
   },
   "api_release": {
-    "status": "publicada",
-    "note": "v1.2.805 publicada em 06/11 ~11:28, depois do site: smartphoneModelSpecs.mjs (backup /var/www/mdv-api/backups/tablet-como-celular-1793975171875) + deploy-vps-server-only.cjs --catalog-entry-only (server.js, catalogEntry*, smartphonePriceGroups* e dependências; backup /var/www/mdv-api/backups/catalog-entry-1793975228261); pm2 restart mdv-api online"
+    "status": "sem mudança",
+    "note": "só frontend"
   },
   "nginx_release": {
     "status": "sem mudança",

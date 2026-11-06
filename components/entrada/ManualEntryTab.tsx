@@ -4,7 +4,7 @@ import { IMEIInput } from '../ui/IMEIInput';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { createLine, createShortcutLine } from './entryList.js';
-import { loadModelProfile, useCostLocation, useEntryLocations, type SharedCostLocation } from './EntryLockFields';
+import { loadModelProfile, useCostLocation, EntryLocationOptions, useEntryLocations, type SharedCostLocation } from './EntryLockFields';
 import { FixedVariationCard, type FixedVariation } from './FixedVariationCard';
 import type { EntryLine } from './EntryListPanel';
 
@@ -55,7 +55,7 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
     const [serial, setSerial] = useState('');
     const [quantity, setQuantity] = useState('1');
     const { cost, setCost, locationId, setLocationId } = useCostLocation(costLocation);
-    const { locations, locationsError } = useEntryLocations(setLocationId);
+    const { locationGroups, locationsError } = useEntryLocations(setLocationId);
     const [pricesOn, setPricesOn] = useState(false);
     const [retail, setRetail] = useState(0);
     const [reseller, setReseller] = useState(0);
@@ -141,8 +141,7 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
         <div>
             <label htmlFor="manual-location" className={labelCls}>Local</label>
             <select id="manual-location" className={fieldCls} value={locationId} onChange={e => setLocationId(e.target.value)}>
-                <option value="">Selecione o local</option>
-                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                <EntryLocationOptions groups={locationGroups} />
             </select>
             {locationsError && <p role="alert" className="text-xs text-red-600 mt-1">Não foi possível carregar os locais.</p>}
             {!locationId && !locationsError && <p className="text-xs text-amber-700 mt-1">Escolha o local de estoque.</p>}
