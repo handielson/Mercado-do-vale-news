@@ -201,7 +201,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
             {fixed ? (
                 <>
                     <FixedVariationCard variation={fixed} onChange={onClearFixed} />
-                    {!fixed.isPhone && <p role="alert" className="text-sm text-red-600">Esta variação não é celular. Use a aba Manual.</p>}
+                    {!fixed.isPhone && <p role="alert" className="text-sm text-red-600">Esta variação não é celular nem tablet. Use a aba Manual.</p>}
                 </>
             ) : (
                 <div>
@@ -215,7 +215,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                 <p role="alert" className="text-sm text-red-600">Não foi possível identificar a categoria do modelo.</p>
             )}
             {!variationId && model && isPhone === false && (
-                <p role="alert" className="text-sm text-red-600">Bipar vale só para celulares (com IMEI). Use a aba Manual.</p>
+                <p role="alert" className="text-sm text-red-600">Bipar vale só para celulares e tablets (com IMEI). Use a aba Manual.</p>
             )}
 
             {!variationId && model && isPhone && (

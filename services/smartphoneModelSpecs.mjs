@@ -19,9 +19,15 @@ export function stripModelTechnicalCustomFields(customFields, template, specs = 
     ...Object.keys(specObject(specs)).map(normalizeKey).filter(key => !isVariationSpec(key) && !isOperationalSpec(key))]);
   return Object.fromEntries(Object.entries(specObject(customFields)).filter(([key]) => !technical.has(normalizeKey(key))));
 }
+const categoryText = model => String(model.category_name || model.__category_name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+// tablet-as-phone-v1: tablet segue o padrão do celular em todo o sistema (mesma regra de
+// smartphonePriceGroupsCore.cjs isSmartphoneCategory e do REGEXP em smartphoneCatalogSearchSql).
 export function isSmartphoneModel(model = {}) {
-  const category = String(model.category_name || model.__category_name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-  return /^(celulares?|smartphones?)(?:\b|$)/.test(category);
+  return /^(celular(?:es)?|smartphones?|tablets?)(?:\b|$)/.test(categoryText(model));
+}
+/** Tablet pode ter só um IMEI: IMEI 2 nunca é obrigatório. */
+export function isTabletModel(model = {}) {
+  return /^tablets?(?:\b|$)/.test(categoryText(model));
 }
 export function modelTechnicalSpecs(template) {
   const result = {};
@@ -92,7 +98,7 @@ export function smartphoneCatalogSearchSql(productAlias = 'products') {
   const phone = `COALESCE(${p}.is_print3d,0)=0 AND COALESCE(${p}.is_combo,0)=0 AND EXISTS (
     SELECT 1 FROM categories pc LEFT JOIN models pm ON pm.id=${p}.model_id
     WHERE pc.id=COALESCE(pm.category_id,${p}.category_id)
-      AND LOWER(TRIM(pc.name)) REGEXP '^(celulares?|smartphones?)([^a-z]|$)')`;
+      AND LOWER(TRIM(pc.name)) REGEXP '^(celular(es)?|smartphones?|tablets?)([^a-z]|$)')`;
   const technical = `(SELECT JSON_REMOVE(COALESCE(pm.template_values,JSON_OBJECT()), ${removed}) FROM models pm WHERE pm.id=${p}.model_id LIMIT 1)`;
   const networkValue = `(SELECT COALESCE(${['rede_operadora', 'specs.rede_operadora', 'network', 'rede'].map(key => `NULLIF(JSON_UNQUOTE(JSON_EXTRACT(pm.template_values,${jsonPath(key)})),'null')`).join(',')},'') FROM models pm WHERE pm.id=${p}.model_id LIMIT 1)`;
   return {

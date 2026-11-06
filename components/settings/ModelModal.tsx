@@ -707,7 +707,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     const isSmartphoneCategory = (category?: Category) => {
         const categoryName = normalizeFieldAlias(category?.name || '');
         const categorySlug = normalizeFieldAlias(category?.slug || '');
-        return ['smartphone', 'smartphones', 'celular', 'celulares', 'iphone', 'iphones']
+        return ['smartphone', 'smartphones', 'celular', 'celulares', 'iphone', 'iphones', 'tablet', 'tablets']
             .some(term => categoryName.includes(term) || categorySlug.includes(term));
     };
     const isFieldBlockedForCategory = (field: CustomField) => {

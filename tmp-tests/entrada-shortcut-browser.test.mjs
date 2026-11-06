@@ -195,7 +195,7 @@ test('?aba=manual&variacao=<celular> respeita a Manual e pede IMEI e bateria', {
 
 test('?aba=bipar&variacao=<acessório> avisa para usar a Manual', { timeout: 120000 }, async t => {
     const { page } = await setup(t, '/admin/entrada?aba=bipar&variacao=p4');
-    await page.getByText('Esta variação não é celular. Use a aba Manual.').waitFor();
+    await page.getByText('Esta variação não é celular nem tablet. Use a aba Manual.').waitFor();
     assert.equal(await page.getByRole('button', { name: 'Começar a bipar' }).count(), 0);
 });
 

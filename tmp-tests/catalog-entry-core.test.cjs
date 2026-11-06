@@ -58,7 +58,7 @@ test('celular sem IMEI 1 e sem serial', () => {
 
 test('celular com quantity 2', () => {
   const [item] = run([base({ quantity: 2, identity: { imei1: IMEI_A } })]);
-  assert.ok(item.errors.includes('Celular entra um aparelho por linha.'));
+  assert.ok(item.errors.includes('Celular ou tablet entra um aparelho por linha.'));
 });
 
 test('não celular com quantity 0', () => {

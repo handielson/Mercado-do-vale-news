@@ -65,11 +65,14 @@ const NON_SERIALIZED_CATEGORY_SLUG_PATTERNS = [
     'headset',
 ];
 
+// tablet-as-phone-v1: tablet segue o mesmo padrão do celular.
 const SMARTPHONE_CATEGORY_PATTERNS = [
     'smartphone',
     'celular',
     'iphone',
+    'tablet',
 ];
+const TABLET_CATEGORY_PATTERN = 'tablet';
 
 const normalizeSpecFieldKey = (key?: string | null) => {
     if (!key || typeof key !== 'string') return '';
@@ -155,8 +158,11 @@ export function ProductSpecifications({
         return requirements;
     }, [categoryConfig?.custom_fields, customFields]);
 
+    const isTabletCategory = [categoryId, categorySlug, categoryName].some(value => value.includes(TABLET_CATEGORY_PATTERN));
     const getBaseSpecRequirement = (key: string, fallback: FieldRequirement = 'optional'): FieldRequirement => {
-        return configuredBaseSpecRequirements.get(key) || (isEnabledRequirement(categoryConfig?.[key]) ? categoryConfig?.[key] : fallback);
+        const requirement = configuredBaseSpecRequirements.get(key) || (isEnabledRequirement(categoryConfig?.[key]) ? categoryConfig?.[key] : fallback);
+        // tablet-imei2-optional-v1: alguns tablets têm um IMEI só; IMEI 2 nunca é obrigatório.
+        return isTabletCategory && key === 'imei2' && requirement === 'required' ? 'optional' : requirement;
     };
 
     const shouldShowBaseSpecField = (key: string): boolean => {

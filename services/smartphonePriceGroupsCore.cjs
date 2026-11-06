@@ -30,7 +30,11 @@ function configuration(product, model = {}) {
   };
   return { ...value, id: crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex') };
 }
-function isSmartphoneCategory(name) { return /^(celular(?:es)?|smartphones?)(?:\b|$)/.test(text(name)); }
+// tablet-as-phone-v1: tablet segue o mesmo padrão do celular (IMEI/serial, preço por configuração,
+// ficha técnica no modelo). Mesma regra de smartphoneModelSpecs.mjs (isSmartphoneModel).
+function isSmartphoneCategory(name) { return /^(celular(?:es)?|smartphones?|tablets?)(?:\b|$)/.test(text(name)); }
+// Tablet pode ter só um IMEI: IMEI 2 nunca é obrigatório.
+function isTabletCategory(name) { return /^tablets?(?:\b|$)/.test(text(name)); }
 function prices(value) {
   const result = {};
   for (const field of SALE_FIELDS) {
@@ -51,4 +55,4 @@ function revision(group, products) {
     products: [...products].sort((a, b) => String(a.id).localeCompare(String(b.id))).map(p => [p.id, p.price_cost, ...SALE_FIELDS.map(f => p[f])]),
   })).digest('hex');
 }
-module.exports = { SALE_FIELDS, object, configuration, isSmartphoneCategory, prices, samePrices, unanimousPrices, revision };
+module.exports = { SALE_FIELDS, object, configuration, isSmartphoneCategory, isTabletCategory, prices, samePrices, unanimousPrices, revision };

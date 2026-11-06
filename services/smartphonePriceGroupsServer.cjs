@@ -76,7 +76,7 @@ async function inheritSmartphonePrices(db, product, model, existing = null) {
   const config = core.configuration(product, model);
   if (!config) {
     if (Number(product.is_parent) === 1 || Number(product.is_combo) === 1 || product.offer_type) return { product, controlled: false };
-    throw conflict('Preencha modelo, RAM física e armazenamento do celular antes de salvar.');
+    throw conflict('Preencha modelo, RAM física e armazenamento do celular ou tablet antes de salvar.');
   }
   const group = await loadGroup(db, config.id);
   let salePrices = core.prices(group);
@@ -314,7 +314,7 @@ function registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey, inv
     try {
       await connection.beginTransaction();
       const model = await loadModel(connection, req.params.id, true);
-      if (!core.isSmartphoneCategory(model?.category_name)) throw conflict('Modelo não é um celular.');
+      if (!core.isSmartphoneCategory(model?.category_name)) throw conflict('Modelo não é celular nem tablet.');
       const [rows] = await connection.query('SELECT * FROM products WHERE id=? FOR UPDATE', [req.body.product_id]);
       const config = core.configuration(rows[0], model);
       if (!config || config.model_id !== req.params.id || config.id !== req.params.groupId) throw conflict('A configuração mudou. Recarregue os grupos.');

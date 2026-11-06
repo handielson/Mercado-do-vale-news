@@ -124,7 +124,7 @@ function validateEntryBatch(items, { isSmartphone } = {}) {
 
     if (phoneItem) {
       if (!item.identity.imei1 && !item.identity.serial) add(item, 'Informe IMEI 1 ou serial.');
-      if (item.quantity !== 1) add(item, 'Celular entra um aparelho por linha.');
+      if (item.quantity !== 1) add(item, 'Celular ou tablet entra um aparelho por linha.');
     } else if (!Number.isInteger(item.quantity) || item.quantity < 1) {
       add(item, 'Quantidade deve ser 1 ou mais.');
     }

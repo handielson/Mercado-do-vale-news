@@ -435,7 +435,7 @@ async function resolveItem(ctx, item, line) {
   if (!fixed && item.model_id && !ctx.models.get(item.model_id)) throw lineError('Modelo não encontrado.');
   if (!fixed && !item.model_id) {
     if (!ctx.categories.get(item.category_id)) throw lineError('Categoria não encontrada.');
-    if (phone) throw lineError('Celular precisa de modelo.');
+    if (phone) throw lineError('Celular ou tablet precisa de modelo.');
   }
   if (line.stock.kind === 'unit') {
     if (item.quantity !== 1) throw lineError('Item com IMEI ou serial entra um por linha.');

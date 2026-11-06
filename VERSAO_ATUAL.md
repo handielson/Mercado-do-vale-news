@@ -1,3 +1,9 @@
+# v1.2.805-tablet-como-celular
+
+Data: 06/11/2026. Status: **pendente de publicação** (site + API). Branch: `main`. Tablet segue o padrão do celular em todo o sistema (Serial, IMEI 1, IMEI 2 opcional, Entrada, preço por configuração, ficha no modelo). Detalhes: `docs/versoes/2026-11-06-v1.2.805-tablet-como-celular.md`.
+
+---
+
 # v1.2.804-entrada-ajustes
 
 Data: 05/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-000000-v1304-entrada-ajustes` + API). Branch: `main`. Ajustes das pendências da Entrada única + estoque do Bling por nota fiscal.

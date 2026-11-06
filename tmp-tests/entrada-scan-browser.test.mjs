@@ -259,7 +259,7 @@ test('?variacao= de celular sem memória/cor prende pelo product_id (sem aviso)'
 
 test('?variacao= de produto que não é celular avisa', { timeout: 120000 }, async t => {
     const { page } = await setup(t, { variation: 'p4' });
-    await page.getByText('Esta variação não é celular. Use a aba Manual.').waitFor();
+    await page.getByText('Esta variação não é celular nem tablet. Use a aba Manual.').waitFor();
     assert.equal(await page.getByLabel('Custo').count(), 0);
     assert.equal(await start(page).count(), 0);
 });

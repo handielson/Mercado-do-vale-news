@@ -6,7 +6,12 @@ const PRODUCT_STATUS = {
   SOLD: 'sold',
 };
 
-const SMARTPHONE_CATEGORY_ID = '8b7c4852-c195-4527-8fd7-c3cc2debda42';
+// Aparelhos vendidos por unidade (IMEI/serial): Smartphones e, pelo tablet-as-phone-v1, Tablet e Tablets.
+const SERIALIZED_DEVICE_CATEGORY_IDS = new Set([
+  '8b7c4852-c195-4527-8fd7-c3cc2debda42', // Smartphones
+  'fd2b4b01-e8d7-4085-848e-18176aa58a66', // Tablet
+  '4397aa39-99c3-48a5-aecf-0b04d9d12016', // Tablets
+]);
 
 const STATUS_VIEW = {
   [PRODUCT_STATUS.ACTIVE]: {
@@ -45,7 +50,7 @@ function hasSerializedIdentifier(product) {
 }
 
 function isSerializedProduct(product) {
-  return hasSerializedIdentifier(product) || String(product?.category_id || '') === SMARTPHONE_CATEGORY_ID;
+  return hasSerializedIdentifier(product) || SERIALIZED_DEVICE_CATEGORY_IDS.has(String(product?.category_id || ''));
 }
 
 export function getAdminProductCardStatus(product) {
