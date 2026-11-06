@@ -1,3 +1,9 @@
+# v1.2.807-entrada-conferencia-ram
+
+Data: 06/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-114553-v1307-entrada-conferencia-ram`; API sem mudança). Branch: `main`. Card da variação na Entrada mostra RAM, armazenamento e cor para conferência. Detalhes: `docs/versoes/2026-11-06-v1.2.807-entrada-conferencia-ram.md`.
+
+---
+
 # v1.2.806-local-por-deposito
 
 Data: 06/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-113353-v1306-local-por-deposito`; API sem mudança). Branch: `main`. Local da Entrada agrupado por depósito (Manual, Bipar e Foto), local padrão no topo e ordem natural. Detalhes: `docs/versoes/2026-11-06-v1.2.806-local-por-deposito.md`.

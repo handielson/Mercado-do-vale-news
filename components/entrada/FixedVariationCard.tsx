@@ -4,6 +4,7 @@ import { modelService } from '../../services/models';
 import { productService } from '../../services/products';
 import { unitService } from '../../services/units';
 import { isSmartphoneModel } from '../../services/smartphoneModelSpecs.mjs';
+import { readVariationSpecs, variationSpecItems } from './fixedVariationSpecs.js';
 
 /** Variação fixa do atalho ?variacao=: a entrada vai direto para este produto (linha com product_id). */
 export interface FixedVariation {
@@ -15,6 +16,8 @@ export interface FixedVariation {
     isPhone: boolean;
     /** Não é celular, mas o produto já tem unidades: entra por serial, uma por linha. */
     unitTracked: boolean;
+    /** RAM (física), armazenamento e cor do produto, para conferência (fixed-variation-specs-v1). */
+    specs?: { ram: string; storage: string; color: string };
 }
 
 export const PARENT_MESSAGE = 'Este é o produto pai da família. Escolha a variação (cor/memória).';
@@ -72,6 +75,7 @@ export async function loadFixedVariation(id: string): Promise<FixedVariation> {
         image: typeof images[0] === 'string' && images[0] ? images[0] as string : null,
         isPhone,
         unitTracked,
+        specs: readVariationSpecs(product),
     };
 }
 
@@ -81,6 +85,22 @@ export interface FixedVariationCardProps {
     onChange?: () => void;
 }
 
+/** RAM, armazenamento e cor em destaque; campo faltando aparece em âmbar. */
+const VariationSpecs: React.FC<{ variation: FixedVariation }> = ({ variation }) => {
+    const items = variationSpecItems(variation.specs, { isPhone: variation.isPhone }) as { label: string; value: string; missing: boolean }[];
+    if (items.length === 0) return null;
+    return (
+        <dl aria-label="Configuração da variação" className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {items.map(item => (
+                <div key={item.label} className="flex gap-1">
+                    <dt className="text-slate-600">{item.label}:</dt>
+                    <dd className={item.missing ? 'font-medium text-amber-700' : 'font-semibold text-slate-900'}>{item.value}</dd>
+                </div>
+            ))}
+        </dl>
+    );
+};
+
 export const FixedVariationCard: React.FC<FixedVariationCardProps> = ({ variation, onChange }) => (
     <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
         {variation.image && (
@@ -89,6 +109,7 @@ export const FixedVariationCard: React.FC<FixedVariationCardProps> = ({ variatio
         <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-slate-800 truncate">{variation.name}</p>
             {variation.sku && <p className="text-xs text-slate-600">SKU {variation.sku}</p>}
+            <VariationSpecs variation={variation} />
         </div>
         {onChange && (
             <button type="button" onClick={onChange}

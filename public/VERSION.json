@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.806-local-por-deposito",
+  "version": "v1.2.807-entrada-conferencia-ram",
   "date": "2026-11-06",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.806-local-por-deposito",
-  "release_vps": "/var/www/mdv-site/releases/20261106-113353-v1306-local-por-deposito",
+  "tag": "v1.2.807-entrada-conferencia-ram",
+  "release_vps": "/var/www/mdv-site/releases/20261106-114553-v1307-entrada-conferencia-ram",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Entrada: o Local mostra os locais agrupados por depósito (nome do depósito como título), depósito padrão primeiro, local padrão no topo e o resto em ordem natural (Caixa 2 antes de Caixa 10); vale para Manual, Bipar e Foto. Locais de depósito desativado ficam fora.",
+  "summary": "Entrada: o card da variação escolhida (atalho ?variacao=) mostra RAM (física), armazenamento e cor do produto para conferência; em celular/tablet, campo faltando aparece como \"não informado\" em destaque. Vale para Manual e Bipar.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,26 +23,23 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "components/entrada/entryLocationGroups.js (novo)",
-    "components/entrada/EntryLockFields.tsx",
-    "components/entrada/ManualEntryTab.tsx",
-    "components/entrada/ScanEntryTab.tsx",
-    "components/entrada/PhotoEntryTab.tsx",
-    "tmp-tests/entrada-location-groups.test.mjs (novo)",
-    "tmp-tests/entrada-fixtures.mjs",
+    "components/entrada/fixedVariationSpecs.js (novo)",
+    "components/entrada/FixedVariationCard.tsx",
+    "tmp-tests/entrada-fixed-variation-specs.test.mjs (novo)",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-06-v1.2.806-local-por-deposito.md"
+    "docs/versoes/2026-11-06-v1.2.807-entrada-conferencia-ram.md"
   ],
   "validations": [
+    "tmp-tests/entrada-fixed-variation-specs.test.mjs: 5/5",
     "tmp-tests/entrada-location-groups.test.mjs: 6/6",
-    "suite da Entrada (manual, bipar, foto, atalho, pagina, codigo de barras, planilha, lista): 143/143",
+    "suíte da Entrada (manual, bipar, foto, atalho, página, código de barras, planilha, lista): 143/143",
     "tsc sem erros em components/entrada",
     "vite build ok"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261106-113353-v1306-local-por-deposito",
+    "release": "/var/www/mdv-site/releases/20261106-114553-v1307-entrada-conferencia-ram",
     "published_at": null
   },
   "api_release": {
