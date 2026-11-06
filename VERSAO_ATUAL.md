@@ -1,6 +1,6 @@
 # v1.2.814-complemento-titulo-rota
 
-Data: 06/11/2026. Status: **pendente de publicação** (só API). Branch: `main`. "Complemento do título no site" voltou a salvar: a rota não existia no `server.js` publicado. Detalhes: `docs/versoes/2026-11-06-v1.2.814-complemento-titulo-rota.md`.
+Data: 06/11/2026. Status: **publicada** (só API). Branch: `main`. Commit de implementação: `5102556`. Tag: `v1.2.814-complemento-titulo-rota`. Publicação via `--catalog-entry-only`, com reinício de `mdv-api`; PATCH autenticado como ADMIN para ID inexistente retornou **409** e `/status` retornou **200**, MySQL saudável. Hashes dos arquivos publicados conferidos. Site preservado em `/var/www/mdv-site/releases/20261106-130116-v1313-nomes-sem-entrega`. Detalhes: `docs/versoes/2026-11-06-v1.2.814-complemento-titulo-rota.md`.
 
 ---
 
