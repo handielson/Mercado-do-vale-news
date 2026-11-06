@@ -10,7 +10,7 @@ import { BarcodeProductLookup } from '../../../components/entrada/BarcodeProduct
 import { EntryListPanel, EntryLine, EntryResult, EntryState } from '../../../components/entrada/EntryListPanel';
 import { EMPTY_COST_LOCATION, type CostLocation } from '../../../components/entrada/EntryLockFields';
 import type { SmartphonePhotoIntake } from '../../../types/smartphone-photo-intake';
-import { addLines, applyPreview, commitErrorKind, emptyState, errorText, loadDraft, newBatchId, refreshPhotoLines, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
+import { addLines, applyPreview, commitErrorKind, emptyState, errorText, identityDetails, loadDraft, newBatchId, refreshPhotoLines, removeLine, saveDraft, toItems } from '../../../components/entrada/entryList.js';
 
 const AMBIGUOUS = 'A confirmação pode ter sido gravada. Confira novamente antes de reenviar.';
 const clearError = (r: EntryResult): EntryResult => (r?.type === 'error' ? null : r);
@@ -160,6 +160,7 @@ export const CatalogEntryPage: React.FC = () => {
             const rows = lines.map((line, i) => ({
                 key: line.key,
                 label: line.label,
+                identity: identityDetails(line),
                 productId: saved.get(res.plan?.[i]?.line ?? i + 1) ?? res.plan?.[i]?.product_id ?? null,
             }));
             // Remove só as linhas confirmadas; o que entrou nesse meio tempo continua na lista (com chave nova).

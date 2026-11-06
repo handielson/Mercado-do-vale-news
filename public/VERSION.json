@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.815-entrada-aviso-sucesso",
+  "version": "v1.2.816-entrada-imei-completo",
   "date": "2026-11-06",
-  "status": "publicada",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.815-entrada-aviso-sucesso",
-  "release_vps": "/var/www/mdv-site/releases/20261106-185136-entrada-aviso-sucesso",
+  "tag": "v1.2.816-entrada-imei-completo",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Entrada: o Bipar mostra o botão \"Começar a bipar\" sempre (desabilitado) e diz o que falta para liberar Serial/IMEI 1/IMEI 2; a confirmação mostra \"Cadastrado com sucesso!\" em destaque, com o total e rolagem até a mensagem; o contador \"aparelhos lidos\" zera após confirmar.",
+  "summary": "Entrada: a lista mostra Serial, IMEI 1 e IMEI 2 completos de cada aparelho (antes só o final do IMEI) também na mensagem de sucesso, e o SKU não aparece mais duplicado quando o nome do produto já termina com ele.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,25 +23,28 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "components/entrada/ScanEntryTab.tsx",
+    "components/entrada/entryList.js",
     "components/entrada/EntryListPanel.tsx",
+    "components/entrada/ScanEntryTab.tsx",
+    "components/entrada/BarcodeProductLookup.tsx",
     "pages/admin/entrada/CatalogEntryPage.tsx",
-    "tmp-tests/entrada-scan-browser.test.mjs",
-    "tmp-tests/entrada-page-browser.test.mjs",
-    "tmp-tests/print3d-checkout-browser.cjs",
+    "tmp-tests/entrada-entry-list.test.mjs",
+    "tmp-tests/entrada-shortcut-browser.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-06-v1.2.815-entrada-aviso-sucesso.md"
+    "docs/versoes/2026-11-06-v1.2.816-entrada-imei-completo.md"
   ],
   "validations": [
+    "entrada-entry-list 21/21",
+    "entrada-shortcut-browser 23/23",
     "entrada-scan-browser 25/25",
     "entrada-page-browser 18/18",
-    "entrada-shortcut-browser 23/23"
+    "entrada-photo-browser 14/14"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261106-185136-entrada-aviso-sucesso",
-    "published_at": "2026-11-06"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   },
   "api_release": {
     "status": "sem mudança",

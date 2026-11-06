@@ -234,3 +234,21 @@ test('refreshPhotoLines sem mudança devolve o mesmo estado', () => {
   assert.equal(refreshPhotoLines(s, []), s);
   assert.equal(refreshPhotoLines(s, null), s);
 });
+
+test('entry-sku-once-v1: SKU não repete quando o nome já termina com ele', async () => {
+  const { nameWithSku, createShortcutLine } = await import('../components/entrada/entryList.js');
+  assert.equal(nameWithSku('Poco X8 5G - Preto / 8GB / 256GB - POCO0001-01', 'POCO0001-01'), 'Poco X8 5G - Preto / 8GB / 256GB - POCO0001-01');
+  assert.equal(nameWithSku('Redmi 15', 'RED15'), 'Redmi 15 · RED15');
+  assert.equal(nameWithSku('Redmi 15', null), 'Redmi 15');
+  const line = createShortcutLine({ id: 'p1', name: 'Poco X8 5G - Preto - POCO0001-01', sku: 'POCO0001-01' }, { identity: { imei1: '863715061138763' } });
+  assert.equal(line.label, 'Poco X8 5G - Preto - POCO0001-01 · IMEI …8763');
+});
+
+test('entry-full-identity-v1: Serial, IMEI 1 e IMEI 2 completos para conferir', async () => {
+  const { identityDetails } = await import('../components/entrada/entryList.js');
+  assert.deepEqual(identityDetails({ item: { identity: { serial: 'SN1', imei1: '863715061138763', imei2: '' } } }),
+    [{ label: 'Serial', value: 'SN1' }, { label: 'IMEI 1', value: '863715061138763' }]);
+  assert.deepEqual(identityDetails({ item: {}, identities: { serial: null, imei1: '1', imei2: '2' } }),
+    [{ label: 'IMEI 1', value: '1' }, { label: 'IMEI 2', value: '2' }]);
+  assert.deepEqual(identityDetails({ item: { quantity: 3 } }), []);
+});

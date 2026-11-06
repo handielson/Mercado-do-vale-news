@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { productService } from '../../services/products';
 import { BarcodeScanButton } from '../ui/BarcodeScanButton';
 import { PARENT_MESSAGE } from './FixedVariationCard';
+import { nameWithSku } from './entryList.js';
 
 export const LOOKUP_NOT_FOUND = 'Produto não encontrado. Cadastre em Produtos → Novo produto.';
 const LOOKUP_ERROR = 'Não foi possível buscar o produto. Tente de novo.';
@@ -84,7 +85,7 @@ export const BarcodeProductLookup: React.FC<{ disabled?: boolean }> = ({ disable
                         {result.options.map(p => (
                             <button key={p.id} type="button" onClick={() => pick(String(p.id))}
                                 className="px-3 py-1.5 rounded-md border border-slate-300 bg-white text-sm text-slate-700 hover:bg-slate-50">
-                                {[p.name, p.sku].filter(Boolean).join(' · ')}
+                                {nameWithSku(p.name, p.sku)}
                             </button>
                         ))}
                     </div>

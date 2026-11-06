@@ -1,13 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { canConfirm, lineStatus } from './entryList.js';
+import { canConfirm, identityDetails, lineStatus } from './entryList.js';
 
 /** `identities`: só na linha de foto (IMEI/serial do pré-cadastro, para "já está na lista"); não vai ao servidor. */
 export interface EntryLine { key: string; source: string; item: Record<string, unknown>; label: string; identities?: { imei1: string | null; imei2: string | null; serial: string | null } }
 export interface EntryState { lines: EntryLine[]; plan: unknown[] | null; hash: string | null; previewedSignature: string | null; previewOk?: boolean; clientBatchId: string }
 
 export type EntryResult =
-    | { type: 'success'; rows: { key: string; label: string; productId: string | null }[] }
+    | { type: 'success'; rows: { key: string; label: string; productId: string | null; identity?: { label: string; value: string }[] }[] }
     | { type: 'error'; message: string }
     | null;
 
@@ -20,6 +20,17 @@ interface Props {
     busy?: boolean;
     result?: EntryResult;
 }
+
+/** Serial, IMEI 1 e IMEI 2 completos (entry-full-identity-v1). */
+const IdentityRow: React.FC<{ fields?: { label: string; value: string }[] }> = ({ fields }) => (
+    fields && fields.length > 0 ? (
+        <p className="text-xs text-gray-700 flex flex-wrap gap-x-3 gap-y-0.5">
+            {fields.map(f => (
+                <span key={f.label}><span className="text-gray-500">{f.label}:</span> <span className="font-mono select-all">{f.value}</span></span>
+            ))}
+        </p>
+    ) : null
+);
 
 const SOURCE_LABEL: Record<string, string> = { manual: 'Manual', bipar: 'Bipar', planilha: 'Planilha', foto: 'Foto' };
 
@@ -73,6 +84,7 @@ export const EntryListPanel: React.FC<Props> = ({ state, onRemove, onEdit, onPre
                                 {row.productId
                                     ? <Link to={`/admin/products/${row.productId}`} className="underline">{row.label}</Link>
                                     : row.label}
+                                <IdentityRow fields={row.identity} />
                             </li>
                         ))}
                     </ul>
@@ -97,6 +109,7 @@ export const EntryListPanel: React.FC<Props> = ({ state, onRemove, onEdit, onPre
                                             <span key={b} className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{b}</span>
                                         ))}
                                     </div>
+                                    <IdentityRow fields={identityDetails(line)} />
                                     {st.errors.map(err => (
                                         <p key={err} className="text-xs text-red-600">{err}</p>
                                     ))}

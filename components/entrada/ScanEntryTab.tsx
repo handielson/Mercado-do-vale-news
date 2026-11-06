@@ -3,7 +3,7 @@ import { modelService } from '../../services/models';
 import { BarcodeScanButton } from '../ui/BarcodeScanButton';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { SearchableSelect } from '../ui/SearchableSelect';
-import { createLine, createShortcutLine, hasIdentity, isValidImei } from './entryList.js';
+import { createLine, createShortcutLine, hasIdentity, isValidImei, nameWithSku } from './entryList.js';
 import { loadModelProfile, useCostLocation, EntryLocationOptions, useEntryLocations, type ModelRef, type SharedCostLocation } from './EntryLockFields';
 import { CONDITIONS, RAM_OPTIONS, STORAGE_OPTIONS } from './ManualEntryTab';
 import { FixedVariationCard, type FixedVariation } from './FixedVariationCard';
@@ -148,7 +148,7 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
         ].filter(Boolean);
     const modelLabel = (id: string) => models.find(m => m.id === id)?.name || '';
     const labelOf = (l: Locked) => [l.name, l.color, [l.ram, l.storage].filter(Boolean).join('/')].filter(Boolean).join(' · ');
-    const lockLabel = fixed ? [fixed.name, fixed.sku].filter(Boolean).join(' · ') : locked ? labelOf(locked) : '';
+    const lockLabel = fixed ? nameWithSku(fixed.name, fixed.sku) : locked ? labelOf(locked) : '';
     const canRead = fixedLocked || Boolean(locked);
 
     const focusStep = (next: ReadStep) => {

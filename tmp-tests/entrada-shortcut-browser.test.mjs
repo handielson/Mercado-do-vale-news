@@ -194,6 +194,8 @@ test('?aba=manual&variacao=<celular> respeita a Manual e pede IMEI e bateria', {
     await page.getByLabel('Custo').fill('900');
     await page.getByRole('button', { name: 'Adicionar à lista' }).click();
     await page.getByText('Redmi 15 · RED15-8-256-VD · IMEI …8763').waitFor();
+    // entry-full-identity-v1: o IMEI completo aparece na lista para conferir.
+    await page.getByRole('region', { name: 'Lista de entrada' }).getByText('863715061138763', { exact: true }).waitFor();
     const [line] = await draftLines(page);
     assert.deepEqual(line.item, {
         source: 'atalho', product_id: 'p1', condition_note: null, battery_health: 91,

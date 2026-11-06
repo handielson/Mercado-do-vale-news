@@ -62,9 +62,34 @@ export function createLine(fields, { source } = {}) {
  * configuração e cor, então o item não os leva. O rótulo (nome · SKU · final do IMEI/serial ou quantidade)
  * fica na linha, como na aba Foto.
  */
+/**
+ * entry-sku-once-v1: o nome do produto às vezes já termina com o SKU ("… - POCO0001-01");
+ * nesse caso o SKU não é repetido.
+ */
+export function nameWithSku(name, sku) {
+  const n = String(name || '').trim();
+  const s = String(sku || '').trim();
+  if (!s || n.toLowerCase().includes(s.toLowerCase())) return n;
+  return [n, s].filter(Boolean).join(' · ');
+}
+
+/**
+ * entry-full-identity-v1: Serial, IMEI 1 e IMEI 2 completos da linha, para conferir antes de confirmar
+ * (o rótulo só mostra o final). Vem do item (Manual/Bipar/atalho) ou do pré-cadastro (Foto).
+ */
+export function identityDetails(line) {
+  const id = line?.item?.identity || line?.identities || {};
+  const value = v => String(v ?? '').trim();
+  return [
+    { label: 'Serial', value: value(id.serial) },
+    { label: 'IMEI 1', value: value(id.imei1) },
+    { label: 'IMEI 2', value: value(id.imei2) },
+  ].filter(f => f.value);
+}
+
 export function createShortcutLine(variation, fields) {
   const item = { ...(fields || {}), source: 'atalho', product_id: String(variation.id) };
-  const label = [variation.name || 'Item', variation.sku, identitySuffix(item)].filter(Boolean).join(' · ');
+  const label = [nameWithSku(variation.name || 'Item', variation.sku), identitySuffix(item)].filter(Boolean).join(' · ');
   return { key: newKey(), source: 'atalho', item, label };
 }
 
