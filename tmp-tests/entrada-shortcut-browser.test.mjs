@@ -21,7 +21,7 @@ function Probe() {
 createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={[window.__url]}><Probe /><CatalogEntryPage /></MemoryRouter>);`;
 
 let script;
-async function setup(t, url, { hold = false, failUnits = false } = {}) {
+async function setup(t, url, { hold = false, failUnits = false, init } = {}) {
     if (!script) {
         const bundled = await build({
             configFile: false, logLevel: 'error',
@@ -50,9 +50,10 @@ async function setup(t, url, { hold = false, failUnits = false } = {}) {
     const errors = [];
     page.setDefaultTimeout(5000);
     page.on('pageerror', e => errors.push(e.message));
-    await page.addInitScript(({ url, fixtures, hold, failUnits }) => {
+    await page.addInitScript(({ url, fixtures, hold, failUnits, init }) => {
         window.__url = url;
         window.fixtures = fixtures;
+        if (init) new Function(init)();
         if (failUnits) window.fixtures.units = new Proxy({}, { get: () => { throw new Error('rede'); } });
         if (hold) {
             // Segura o produto até o teste liberar: o stub devolve a promessa (async adota o valor).
@@ -62,7 +63,7 @@ async function setup(t, url, { hold = false, failUnits = false } = {}) {
             window.release = () => release();
             window.fixtures.products = new Proxy({}, { get: (_, id) => gate.then(() => products[id] || null) });
         }
-    }, { url, fixtures: { ...defaultFixtures, ...photoFixtures }, hold, failUnits });
+    }, { url, fixtures: { ...defaultFixtures, ...photoFixtures }, hold, failUnits, init });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     return { page, errors };
 }
@@ -248,3 +249,138 @@ test('?variacao= de acessório com falha ao ler as unidades avisa e não prende 
     await page.getByText('Não foi possível carregar a variação.').waitFor();
     assert.equal(await page.getByRole('button', { name: 'Trocar' }).count(), 0);
 });
+
+// Ajustes v1.2.804 (Task B).
+const DRAFT_ID = '11111111-2222-4333-8444-555555555555';
+const oldLine = { key: 'old1', source: 'manual', label: 'Capa Silicone · 2 un.', item: { source: 'manual', model_id: 'm2', name: 'Capa Silicone', quantity: 2, identity: { imei1: null, imei2: null, serial: null }, cost_cents: 100, location_id: 'l1', prices: null } };
+// addInitScript roda em toda navegação: só semeia o rascunho na primeira carga.
+const seedDraft = lines => `if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1');
+  localStorage.setItem('mdv-entrada-rascunho-v1', JSON.stringify({ lines: ${JSON.stringify(lines)}, clientBatchId: '${DRAFT_ID}' })); }`;
+const draft = page => page.evaluate(() => JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1') || 'null'));
+const OLD_NOTICE = /Há \d+ linha\(s\) de uma entrada anterior na lista\./;
+
+test('B1: ?variacao= com linhas do rascunho avisa; "Limpar a lista" zera linhas, rascunho e client_batch_id', { timeout: 120000 }, async t => {
+    const { page, errors } = await setup(t, '/admin/entrada?variacao=p1', { init: seedDraft([oldLine, { ...oldLine, key: 'old2' }]) });
+    await page.getByText('Há 2 linha(s) de uma entrada anterior na lista.').waitFor();
+    await page.getByRole('button', { name: 'Manter' }).waitFor();
+    await page.getByRole('button', { name: 'Limpar a lista' }).click();
+    await page.getByText(OLD_NOTICE).waitFor({ state: 'detached' });
+    const saved = await draft(page);
+    assert.deepEqual(saved.lines, []);
+    assert.notEqual(saved.clientBatchId, DRAFT_ID, 'client_batch_id novo');
+    await page.getByRole('button', { name: 'Trocar' }).waitFor();
+    assert.deepEqual(errors, []);
+});
+
+test('B1: "Manter" fecha o aviso e mantém a lista; o aviso aparece uma vez por variação', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, '/admin/entrada?variacao=p1', { init: seedDraft([oldLine]) });
+    await page.getByText('Há 1 linha(s) de uma entrada anterior na lista.').waitFor();
+    await page.getByRole('button', { name: 'Manter' }).click();
+    await page.getByText(OLD_NOTICE).waitFor({ state: 'detached' });
+    const saved = await draft(page);
+    assert.equal(saved.lines.length, 1);
+    assert.equal(saved.clientBatchId, DRAFT_ID);
+    // Outra variação: avisa de novo; voltar para a primeira não avisa.
+    await page.evaluate(() => window.__navigate('/admin/entrada?variacao=p4'));
+    await page.getByText('Há 1 linha(s) de uma entrada anterior na lista.').waitFor();
+    await page.getByRole('button', { name: 'Manter' }).click();
+    await page.evaluate(() => window.__navigate('/admin/entrada?variacao=p1'));
+    await page.getByRole('button', { name: 'Trocar' }).waitFor();
+    await page.waitForTimeout(200);
+    assert.equal(await page.getByText(OLD_NOTICE).count(), 0);
+});
+
+test('B1: sem ?variacao= ou sem linhas no rascunho não avisa', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, '/admin/entrada?aba=manual', { init: seedDraft([oldLine]) });
+    await modelBox(page).waitFor();
+    await page.waitForTimeout(200);
+    assert.equal(await page.getByText(OLD_NOTICE).count(), 0);
+    const empty = await setup(t, '/admin/entrada?variacao=p1');
+    await empty.page.getByRole('button', { name: 'Trocar' }).waitFor();
+    await empty.page.waitForTimeout(200);
+    assert.equal(await empty.page.getByText(OLD_NOTICE).count(), 0);
+});
+
+test('B1: linhas adicionadas nesta sessão não contam como entrada anterior', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, '/admin/entrada?variacao=p4');
+    await page.getByRole('button', { name: 'Trocar' }).waitFor();
+    await page.getByLabel('Custo').fill('10');
+    await page.getByRole('button', { name: 'Adicionar à lista' }).click();
+    await page.getByText('Lista de entrada (1)').waitFor();
+    await page.evaluate(() => window.__navigate('/admin/entrada?variacao=p7'));
+    await page.getByLabel('Serial').waitFor();
+    await page.waitForTimeout(200);
+    assert.equal(await page.getByText(OLD_NOTICE).count(), 0);
+});
+
+for (const [id, kind] of [['p8', 'combo'], ['p9', 'oferta']]) {
+    test(`B2: ?variacao=<${kind}> recusa com a mensagem do servidor e não prende nada`, { timeout: 120000 }, async t => {
+        const { page } = await setup(t, `/admin/entrada?variacao=${id}`);
+        await page.getByText('Combo/oferta não recebe estoque: dê entrada nos produtos que o compõem.').waitFor();
+        assert.equal(await page.getByRole('button', { name: 'Trocar' }).count(), 0);
+        await modelBox(page).waitFor();
+    });
+}
+
+test('B3: trocar de ?variacao= mantém custo e local no Bipar', { timeout: 120000 }, async t => {
+    const { page, errors } = await setup(t, '/admin/entrada?variacao=p1');
+    await page.getByRole('button', { name: 'Trocar' }).waitFor();
+    await page.getByLabel('Custo').fill('900');
+    await page.getByLabel('Custo').blur();
+    await page.getByLabel('Local').selectOption('l1');
+    const costText = await page.getByLabel('Custo').inputValue();
+    await page.evaluate(() => window.__navigate('/admin/entrada?variacao=p3'));
+    await page.getByText('Redmi Antigo').waitFor();
+    assert.equal(await selected(page, 'Bipar'), true);
+    assert.equal(await page.getByLabel('Custo').inputValue(), costText);
+    assert.equal(await page.getByLabel('Local').inputValue(), 'l1');
+    await page.getByRole('button', { name: 'Começar a bipar' }).click();
+    await reader(page).fill('863715061138763');
+    await reader(page).press('Enter');
+    await page.getByText('1 aparelho lido', { exact: true }).waitFor();
+    const [line] = await draftLines(page);
+    assert.equal(line.item.product_id, 'p3');
+    assert.equal(line.item.cost_cents, 90000);
+    assert.equal(line.item.location_id, 'l1');
+    assert.deepEqual(errors, []);
+});
+
+test('B3: trocar de ?variacao= mantém custo e local na Manual', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, '/admin/entrada?variacao=p4');
+    await page.getByRole('button', { name: 'Trocar' }).waitFor();
+    await page.getByLabel('Custo').fill('10');
+    await page.getByLabel('Custo').blur();
+    await page.getByLabel('Local').selectOption('l1');
+    const costText = await page.getByLabel('Custo').inputValue();
+    await page.evaluate(() => window.__navigate('/admin/entrada?variacao=p7'));
+    await page.getByText('Fone Bluetooth').waitFor();
+    assert.equal(await page.getByLabel('Custo').inputValue(), costText);
+    assert.equal(await page.getByLabel('Local').inputValue(), 'l1');
+    await page.getByLabel('Serial').fill('XYZ789');
+    await page.getByRole('button', { name: 'Adicionar à lista' }).click();
+    const [line] = await draftLines(page);
+    assert.equal(line.item.product_id, 'p7');
+    assert.equal(line.item.cost_cents, 1000);
+    assert.equal(line.item.location_id, 'l1');
+});
+
+const sendButton = page => page.getByRole('button', { name: 'Enviar para a lista' });
+
+for (const imei of ['863715061138763', '863715061138771']) {
+    test(`B4: bipar IMEI de aparelho já na lista pela foto mostra "Já está na lista" (${imei.slice(-4)})`, { timeout: 120000 }, async t => {
+        const { page, errors } = await setup(t, '/admin/entrada?aba=foto');
+        await page.waitForFunction(() => [...document.querySelectorAll('button')].some(x => x.textContent.trim() === 'Enviar para a lista' && !x.disabled));
+        await sendButton(page).click();
+        await page.getByText('Lista de entrada (1)').waitFor();
+        const [photo] = await draftLines(page);
+        assert.deepEqual(photo.item, { source: 'foto', photo_intake_id: 'pi-ready', location_id: 'l2' });
+        await page.evaluate(() => window.__navigate('/admin/entrada?aba=bipar&variacao=p1'));
+        await page.getByLabel('Custo').fill('900');
+        await page.getByRole('button', { name: 'Começar a bipar' }).click();
+        await reader(page).fill(imei);
+        await reader(page).press('Enter');
+        await page.getByText('IMEI já está na lista').waitFor();
+        assert.equal((await draftLines(page)).length, 1);
+        assert.deepEqual(errors, []);
+    });
+}

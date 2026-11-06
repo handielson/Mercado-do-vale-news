@@ -59,9 +59,11 @@ export interface SmartphonePhotoIntakePageProps {
   reloadSignal?: number;
   /** Embutida: impede o envio (ex.: falta escolher o local). */
   sendDisabled?: boolean;
+  /** Embutida: a fila mudou (carga, recarga ou conferência salva); a Lista de entrada atualiza as linhas de foto. */
+  onQueueLoaded?: (items: SmartphonePhotoIntake[]) => void;
 }
 
-export function SmartphonePhotoIntakePage({ embedded = false, onSendToList, reloadSignal = 0, sendDisabled = false }: SmartphonePhotoIntakePageProps = {}) {
+export function SmartphonePhotoIntakePage({ embedded = false, onSendToList, reloadSignal = 0, sendDisabled = false, onQueueLoaded }: SmartphonePhotoIntakePageProps = {}) {
   const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>('queue');
   const [items, setItems] = useState<SmartphonePhotoIntake[]>([]);
@@ -150,6 +152,13 @@ export function SmartphonePhotoIntakePage({ embedded = false, onSendToList, relo
   }, [loadQueue, loadReferences]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
+
+  // Toda mudança da fila (loadQueue, upsert depois de salvar a conferência) chega à Lista de entrada.
+  const onQueueLoadedRef = useRef(onQueueLoaded);
+  onQueueLoadedRef.current = onQueueLoaded;
+  useEffect(() => {
+    if (embedded) onQueueLoadedRef.current?.(items);
+  }, [embedded, items]);
 
   const lastReloadSignal = useRef(reloadSignal);
   useEffect(() => {

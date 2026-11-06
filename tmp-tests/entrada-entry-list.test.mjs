@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   emptyState, createLine, createShortcutLine, addLines, updateLine, removeLine, toItems, applyPreview,
   canConfirm, lineStatus, hasIdentity, hasPhotoIntake, createPhotoLine, saveDraft, loadDraft,
-  errorText, commitErrorKind,
+  errorText, commitErrorKind, refreshPhotoLines,
 } from '../components/entrada/entryList.js';
 
 // O estado vazio traz um clientBatchId novo a cada chamada: compara o resto.
@@ -177,4 +177,60 @@ test('createShortcutLine: item atalho com product_id; rótulo nome · SKU · ide
   let s = addLines(emptyState(), [phone]);
   s = updateLine(s, phone.key, { ...phone.item, cost_cents: 10 });
   assert.equal(s.lines[0].label, 'Redmi 15 · RED15 · IMEI …8763');
+});
+
+// Ajustes v1.2.804: identidades da linha de foto ficam na linha (não no item) e acompanham a fila.
+const intake = (over = {}) => ({ id: 'pi1', detected_brand: 'Xiaomi', detected_model: 'Redmi 15', detected_ram: '8GB', detected_storage: '256GB',
+  detected_color: 'Verde', detected_imei_1: '863715061138763', detected_imei_2: '863715061138771', detected_serial: 'SN-1', ...over });
+
+test('createPhotoLine guarda IMEI 1, IMEI 2 e serial em line.identities, fora do item', () => {
+  const line = createPhotoLine(intake(), 'l1');
+  assert.deepEqual(line.identities, { imei1: '863715061138763', imei2: '863715061138771', serial: 'SN-1' });
+  assert.deepEqual(line.item, { source: 'foto', photo_intake_id: 'pi1', location_id: 'l1' });
+  assert.deepEqual(createPhotoLine({ id: 'pi2' }).identities, { imei1: null, imei2: null, serial: null });
+  const s = addLines(emptyState(), [line]);
+  assert.deepEqual(toItems(s), [{ source: 'foto', photo_intake_id: 'pi1', location_id: 'l1' }], 'toItems não leva identities');
+});
+
+test('hasIdentity considera as identidades da linha de foto', () => {
+  const s = addLines(emptyState(), [createPhotoLine(intake(), 'l1')]);
+  assert.equal(hasIdentity(s, '863715061138763'), true);
+  assert.equal(hasIdentity(s, '863715061138771'), true);
+  assert.equal(hasIdentity(s, 'sn-1'), true);
+  assert.equal(hasIdentity(s, '356938035643809'), false);
+});
+
+test('identities da linha de foto sobrevivem ao rascunho', () => {
+  const store = new Map();
+  const storage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  saveDraft(addLines(emptyState(), [createPhotoLine(intake(), 'l1')]), storage);
+  const loaded = loadDraft(storage);
+  assert.deepEqual(loaded.lines[0].identities, { imei1: '863715061138763', imei2: '863715061138771', serial: 'SN-1' });
+  assert.equal(hasIdentity(loaded, '863715061138771'), true);
+  assert.deepEqual(toItems(loaded), [{ source: 'foto', photo_intake_id: 'pi1', location_id: 'l1' }]);
+});
+
+test('refreshPhotoLines atualiza rótulo e identidades das linhas de foto cujo pré-cadastro mudou', () => {
+  const photo = createPhotoLine(intake({ detected_imei_1: '356938035643809', detected_imei_2: null, detected_color: 'Preto' }), 'l1');
+  const other = mk('111111111111111');
+  const untouched = createPhotoLine(intake({ id: 'pi9' }), 'l1');
+  let s = addLines(emptyState(), [photo, other, untouched]);
+  s = applyPreview(s, okResult(3));
+  const next = refreshPhotoLines(s, [intake()]);
+  assert.equal(next.lines[0].label, 'Xiaomi · Redmi 15 · 8GB/256GB · Verde · IMEI …8763');
+  assert.deepEqual(next.lines[0].identities, { imei1: '863715061138763', imei2: '863715061138771', serial: 'SN-1' });
+  assert.equal(next.lines[0].key, photo.key);
+  assert.deepEqual(next.lines[0].item, photo.item, 'o item enviado não muda');
+  assert.equal(next.lines[1], other, 'linha que não é de foto fica igual');
+  assert.equal(next.lines[2], untouched, 'pré-cadastro fora da fila fica igual');
+  assert.equal(canConfirm(next), true, 'a prévia continua valendo (itens iguais)');
+  assert.equal(hasIdentity(next, '863715061138771'), true);
+  assert.equal(hasIdentity(next, '356938035643809'), false);
+});
+
+test('refreshPhotoLines sem mudança devolve o mesmo estado', () => {
+  const s = addLines(emptyState(), [createPhotoLine(intake(), 'l1'), mk('111111111111111')]);
+  assert.equal(refreshPhotoLines(s, [intake()]), s);
+  assert.equal(refreshPhotoLines(s, []), s);
+  assert.equal(refreshPhotoLines(s, null), s);
 });

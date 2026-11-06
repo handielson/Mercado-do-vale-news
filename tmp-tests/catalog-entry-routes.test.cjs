@@ -108,7 +108,8 @@ test('vps_server.js e .cjs registram as rotas repassando o db às dependências'
     const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
     assert.ok(src.includes("require('./services/catalogEntryServer.cjs').registerCatalogEntryRoutes(fastify"), file);
     assert.ok(src.includes('auth: requireSyncKeyOrAdmin'), file);
-    assert.ok(src.includes('(id, db) => syncProductStock(id, db)'), file);
+    // A prévia cria o local padrão na transação (stockLocationInTransaction), não pelo pool.
+    assert.ok(src.includes('(id, db) => syncProductStock(id, db, { stockLocationInTransaction: true })'), file);
     assert.ok(src.includes('(id, db) => syncProductStockFromLocations(id, db)'), file);
     assert.ok(src.includes('(row, db) => insertStockMovement(row, db)'), file);
     assert.ok(!src.includes('findUnitConflict:'), file); // conflito de IMEI/serial agora roda na conexão da transação

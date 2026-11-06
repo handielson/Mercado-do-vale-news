@@ -4,7 +4,7 @@ import { IMEIInput } from '../ui/IMEIInput';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { createLine, createShortcutLine } from './entryList.js';
-import { loadModelProfile, useEntryLocations } from './EntryLockFields';
+import { loadModelProfile, useCostLocation, useEntryLocations, type SharedCostLocation } from './EntryLockFields';
 import { FixedVariationCard, type FixedVariation } from './FixedVariationCard';
 import type { EntryLine } from './EntryListPanel';
 
@@ -28,12 +28,14 @@ export interface ManualEntryTabProps {
     fixed?: FixedVariation | null;
     /** "Trocar" no card da variação fixa. */
     onClearFixed?: () => void;
+    /** Custo e local guardados pela página (não se perdem quando a aba é desmontada). */
+    costLocation?: SharedCostLocation;
 }
 
 const fieldCls = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm';
 const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
 
-export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, prefill, busy, fixed, onClearFixed }) => {
+export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, prefill, busy, fixed, onClearFixed, costLocation }) => {
     const [models, setModels] = useState<ModelRow[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [categoryError, setCategoryError] = useState(false);
@@ -52,8 +54,7 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = ({ onAddLines, pref
     const [imei2, setImei2] = useState('');
     const [serial, setSerial] = useState('');
     const [quantity, setQuantity] = useState('1');
-    const [cost, setCost] = useState(0);
-    const [locationId, setLocationId] = useState('');
+    const { cost, setCost, locationId, setLocationId } = useCostLocation(costLocation);
     const { locations, locationsError } = useEntryLocations(setLocationId);
     const [pricesOn, setPricesOn] = useState(false);
     const [retail, setRetail] = useState(0);

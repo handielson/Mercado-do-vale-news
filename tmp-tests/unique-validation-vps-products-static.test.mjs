@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 
 const files = [
   'components/products/ProductForm.tsx',
-  'components/products/entry/components/BatchEntryGrid.tsx',
   'components/products/sections/ProductSpecifications.tsx',
 ];
 

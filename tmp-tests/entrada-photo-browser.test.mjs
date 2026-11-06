@@ -19,6 +19,7 @@ function TabHarness() {
   const [confirmCount, setConfirmCount] = React.useState(0);
   window.__confirm = () => setConfirmCount(c => c + 1);
   return <PhotoEntryTab existingState={state} confirmCount={confirmCount} busy={!!window.__busy}
+    onQueueLoaded={items => { (window.queueLoads ||= []).push(items.map(i => i.id + ':' + (i.detected_color || ''))); }}
     onAddLines={lines => { window.added ||= []; window.added.push(...lines); setState(s => addLines(s, lines)); }} />;
 }
 const mode = window.__mode || 'tab';
@@ -34,6 +35,7 @@ const catalogStub = `export const catalogEntries = {
         const ok = plan.every(l => !l.errors.length);
         return { ok, hash: ok ? 'h1' : '', plan }; },
     commit: async (items, hash, clientBatchId) => { window.commitCalls ||= []; window.commitCalls.push({ items, hash, clientBatchId });
+        if (window.__failCommit) throw new Error('rede');
         for (const it of window.fixtures.photoIntakes) if (items.some(i => i.photo_intake_id === it.id)) it.status = 'completed';
         return { batch_id: 'b1', plan: items.map((_, i) => ({ line: i + 1, product_id: 'p1', sku: 'S1', family: 'existing', variation: 'existing', price_source: 'photo', stock: { kind: 'unit', quantity: 1 }, errors: [] })) }; },
     get: async id => ({ batch: { id }, lines: [{ line: 1, product_id: 'p1' }] }),
@@ -219,4 +221,42 @@ test('erro de linha do servidor aparece embaixo da linha de foto', { timeout: 12
     const row = page.getByRole('listitem').filter({ hasText: draftPhotoLine.label });
     await row.getByText('Este aparelho da fila de foto já foi salvo.').waitFor();
     assert.equal(await page.getByRole('button', { name: 'Confirmar entrada' }).isDisabled(), true);
+});
+
+// Ajustes v1.2.804 (Task B5): a fila recarregada atualiza rótulo e identidades das linhas de foto.
+test('B5: linha de foto do rascunho com rótulo antigo ganha rótulo e identidades da fila carregada', { timeout: 120000 }, async t => {
+    const stale = { ...draftPhotoLine, label: 'Xiaomi · Redmi 15 · 8GB/256GB · Preto · IMEI …0000' };
+    const { page, errors } = await setup(t, { mode: 'page', url: '/admin/entrada?aba=foto',
+        init: `localStorage.setItem('mdv-entrada-rascunho-v1', JSON.stringify({ lines: [${JSON.stringify(stale)}] }));` });
+    await page.getByRole('listitem').filter({ hasText: draftPhotoLine.label }).waitFor();
+    assert.equal(await page.getByText(stale.label).count(), 0);
+    const [line] = await page.evaluate(() => JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1')).lines);
+    assert.equal(line.label, draftPhotoLine.label);
+    assert.deepEqual(line.identities, { imei1: '863715061138763', imei2: '863715061138771', serial: null });
+    assert.deepEqual(line.item, draftPhotoLine.item, 'o item enviado não muda');
+    assert.deepEqual(errors, []);
+});
+
+test('B5: a aba Foto avisa cada carga da fila (inclusive a recarga por reloadSignal)', { timeout: 120000 }, async t => {
+    const { page } = await setup(t);
+    await page.waitForFunction(() => (window.queueLoads || []).some(l => l.includes('pi-ready:Verde')));
+    await page.evaluate(() => { window.fixtures.photoIntakes[0].detected_color = 'Rosa'; window.__confirm(); });
+    await page.waitForFunction(() => (window.queueLoads || []).some(l => l.includes('pi-ready:Rosa')));
+});
+
+test('B5: na tela Entrada, a recarga da fila depois de uma confirmação que falhou atualiza o rótulo da linha', { timeout: 120000 }, async t => {
+    const { page } = await setup(t, { mode: 'page', url: '/admin/entrada?aba=foto' });
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(x => x.textContent.trim() === 'Enviar para a lista' && !x.disabled));
+    await sendButton(page).click();
+    await page.getByText('Lista de entrada (1)').waitFor();
+    const labels = () => page.evaluate(() => JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1')).lines.map(l => l.label));
+    const first = (await labels())[0];
+    // Muda o pré-cadastro na "fila" e recarrega pela confirmação da lista.
+    await page.evaluate(() => { const it = window.fixtures.photoIntakes.find(i => i.id === 'pi-ready'); it.detected_color = 'Rosa'; });
+    await page.getByRole('button', { name: 'Conferir' }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(x => x.textContent.trim() === 'Confirmar entrada' && !x.disabled));
+    // Confirmação falha (ambígua): a linha fica e a fila recarrega.
+    await page.evaluate(() => { window.__failCommit = true; });
+    await page.getByRole('button', { name: 'Confirmar entrada' }).click();
+    await page.waitForFunction(f => JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1')).lines.some(l => l.label !== f && /Rosa/.test(l.label)), first);
 });

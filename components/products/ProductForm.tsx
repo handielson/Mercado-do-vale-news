@@ -72,6 +72,7 @@ import { isLocalCatalogPreviewRuntime } from '../../services/localCatalogPreview
 import { Print3dRegistrationEditor } from './Print3dRegistrationEditor';
 import { assertPrint3dRegistrationAvailable, preparePrint3dRegistration, savePrint3dRegistration, copyPrint3dSetup, print3dSetupParameters, withPrint3dCost, type Print3dSetup } from '../../services/print3dRegistration';
 import { FiscalNcmCestHint } from '../fiscal/FiscalNcmCestHint';
+import { singleRetryUpdatePayload } from './productFormRecovery.js';
 
 interface ProductFormProps {
     initialProductionSetup?: Print3dSetup;
@@ -1524,7 +1525,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 await assertPrint3dRegistrationAvailable();
             }
             const savedProduct = !initialData?.id && singleSaveCheckpoint.current?.id
-                ? await productService.update(singleSaveCheckpoint.current.id, { ...mergedData, sku:singleSaveCheckpoint.current.sku })
+                ? await productService.update(singleSaveCheckpoint.current.id, singleRetryUpdatePayload(mergedData, singleSaveCheckpoint.current, isNewRegistration))
                 : await onSubmit(mergedData) as Product | undefined;
             if (!savedProduct?.id) throw new Error('O salvamento não confirmou o produto. Os dados foram mantidos; tente novamente.');
             singleSaveCheckpoint.current = savedProduct;

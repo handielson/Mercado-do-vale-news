@@ -11,6 +11,7 @@ import { buildProductClonePrefill } from '../../../services/productClonePrefill.
 import { isLocalCatalogPreviewRuntime, localCatalogPreviewService, type LocalCatalogDraft } from '../../../services/localCatalogPreview';
 import { familyWorkspacePath, productFormDraftsService, type ProductFormDraft, type ProductFormSnapshot } from '../../../services/productFormDrafts';
 import { entryAfterRegistrationPath } from '../../../services/entryShortcuts.js';
+import { LEGACY_DRAFT_SERIAL_ENTRY_PATH, legacyDraftSerialNotice, takeLegacyDraftSerialNotice } from '../../../components/products/productFormRecovery.js';
 
 function LocalPreviewApproval({ productId, revision, onApproved }: { productId: string; revision: number; onApproved: () => void }) {
     const [draft, setDraft] = useState<LocalCatalogDraft | null>(null);
@@ -76,6 +77,8 @@ export const ProductFormPage: React.FC = () => {
     const [savedDraft, setSavedDraft] = useState<ProductFormDraft | null>(null);
     const [loadedDraft, setLoadedDraft] = useState<ProductFormDraft | null>(null);
     const [draftError, setDraftError] = useState('');
+    // Rascunho de antes da v1.2.803 com lista de seriais: o formulário ignora a lista; o aviso aparece uma vez ao abrir.
+    const [legacySerialCount, setLegacySerialCount] = useState(0);
     const draftMeta = useRef<{ id: string; revision: number } | null>(null);
     const draftSaveQueue = useRef<Promise<void>>(Promise.resolve());
     const resumeDraftId = new URLSearchParams(location.search).get('draft');
@@ -90,7 +93,7 @@ export const ProductFormPage: React.FC = () => {
 
     // Fetch product data if editing
     useEffect(() => {
-        setLoadedDraft(null); setSavedDraft(null); draftMeta.current = null;
+        setLoadedDraft(null); setSavedDraft(null); setLegacySerialCount(0); draftMeta.current = null;
         if (familyModelId) {
             let active = true;
             setIsFetching(true); setDraftError('');
@@ -106,6 +109,9 @@ export const ProductFormPage: React.FC = () => {
                 if (draft.status !== 'pending') throw new Error('Este rascunho já foi concluído ou arquivado.');
                 draftMeta.current = { id: draft.id, revision: draft.revision };
                 setLoadedDraft(draft); setSavedDraft(draft); setProduct(draft.snapshot.data as Product);
+                let storage: Storage | null = null;
+                try { storage = window.localStorage; } catch { storage = null; }
+                setLegacySerialCount(takeLegacyDraftSerialNotice(draft, storage));
                 if (draft.id !== resumeDraftId) {
                     const search = new URLSearchParams(window.location.search); search.set('draft', draft.id);
                     window.history.replaceState(window.history.state, '', `${window.location.pathname}?${search}${window.location.hash}`);
@@ -300,6 +306,16 @@ export const ProductFormPage: React.FC = () => {
 
             {print3dEntry && <p className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">A opção de impressão 3D já está marcada. Confira o cadastro e salve para continuar. Produtos vendáveis seguem para a ficha e os arquivos; produtos pai organizam as variações.</p>}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p>{savedDraft ? `Rascunho salvo em ${new Date(savedDraft.updated_at).toLocaleString('pt-BR')}. As próximas alterações são salvas automaticamente.` : 'O cadastro será salvo automaticamente como rascunho ao começar a preencher, sem disponibilizar o anúncio para venda.'}</p><Link to="/admin/products/drafts" className="font-semibold text-blue-700 underline">Rascunhos de anúncios</Link></div>
+
+            {legacySerialCount > 0 && (
+                <div data-legacy-serial-notice role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+                    <p>{legacyDraftSerialNotice(legacySerialCount)}</p>
+                    <div className="flex items-center gap-3">
+                        <Link to={LEGACY_DRAFT_SERIAL_ENTRY_PATH} className="font-semibold text-blue-700 underline">Abrir a Entrada</Link>
+                        <button type="button" onClick={() => setLegacySerialCount(0)} className="rounded-lg border border-blue-300 bg-white px-3 py-1.5 font-semibold hover:bg-blue-100">Fechar</button>
+                    </div>
+                </div>
+            )}
 
             {isEditMode && product?.id && product.sku && (
                 <ProductWorkspaceNav productId={product.id} sku={product.sku} active="product" />
