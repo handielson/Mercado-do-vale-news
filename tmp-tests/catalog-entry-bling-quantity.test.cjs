@@ -96,10 +96,28 @@ test('celular do Bling com IMEI passa (estoque por aparelho)', async () => {
   assert.equal(viaModel.state.units.length, 1);
 });
 
-test('acessório do Bling com serial (estoque por aparelho) passa', async () => {
+test('acessório do Bling sem unidades nem saldo, linha com serial: erro (não vira produto por aparelho)', async () => {
+  // A primeira unidade tornaria o produto serializado para sempre e o webhook do Bling pararia de atualizar o saldo da NF.
   const db = fakeDb({ products: [capaRow({ bling_id: '16000000005' })] });
-  await previewAndCommit(db, [{ source: 'atalho', product_id: 'A1', identity: { serial: 'SN1' }, quantity: 1, location_id: 'L1' }]);
-  assert.equal(db.state.units.length, 1);
+  const r = await runCatalogEntry(db.pool, [{ source: 'atalho', product_id: 'A1', identity: { serial: 'SN1' }, quantity: 1, location_id: 'L1' }],
+    { commit: true, expectedHash: 'x', deps: db.deps });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.plan[0].errors, [BLING_ERROR]);
+  assertNothingWritten(db);
+  assert.equal(db.calls.syncStock.length, 0);
+  // Mesmo caminho pelo modelo (variação existente sem unidades).
+  const viaModel = fakeDb({ products: [capaParent, capaChild({ bling_id: '16000000006' })] });
+  const r2 = await runCatalogEntry(viaModel.pool, [{ source: 'manual', model_id: 'm2', color: 'Preta', identity: { serial: 'SN2' }, quantity: 1, location_id: 'L1' }],
+    { commit: false, deps: viaModel.deps });
+  assert.deepEqual(r2.plan[0].errors, [BLING_ERROR]);
+});
+
+test('acessório do Bling que já tem unidades (já serializado): linha com serial passa', async () => {
+  const units = [{ id: 'U9', product_id: 'A1', imei_1: null, imei_2: null, serial: 'SN9', status: 'available' }];
+  const db = fakeDb({ products: [capaRow({ bling_id: '16000000005' })], units });
+  const { result } = await previewAndCommit(db, [{ source: 'atalho', product_id: 'A1', identity: { serial: 'SN10' }, quantity: 1, location_id: 'L1' }]);
+  assert.equal(result.plan[0].stock.kind, 'unit');
+  assert.equal(db.state.units.length, 2);
 });
 
 test('produto por quantidade sem bling_id passa', async () => {

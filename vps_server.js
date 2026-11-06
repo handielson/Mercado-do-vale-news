@@ -27269,10 +27269,11 @@ async function ensureDefaultStockLocation(companyId) {
       [depositId, targetCompanyId]
     );
   } else {
+    // So grava quando algo difere: dentro da transacao da Entrada, um UPDATE sem mudanca ainda prende a linha ate o commit.
     await pool.query(
       `UPDATE stock_deposits
        SET name='Loja Principal', type='store', is_default=1, is_active=1, updated_at=CURRENT_TIMESTAMP
-       WHERE id=?`,
+       WHERE id=? AND NOT (name <=> 'Loja Principal' AND type <=> 'store' AND is_default <=> 1 AND is_active <=> 1)`,
       [depositId]
     );
   }
@@ -27294,7 +27295,9 @@ async function ensureDefaultStockLocation(companyId) {
       `UPDATE stock_locations
        SET name='Estoque Geral', description='Local padrao criado automaticamente para migracao inicial de estoque.',
            is_default=1, is_active=1, updated_at=CURRENT_TIMESTAMP
-       WHERE id=?`,
+       WHERE id=? AND NOT (name <=> 'Estoque Geral'
+         AND description <=> 'Local padrao criado automaticamente para migracao inicial de estoque.'
+         AND is_default <=> 1 AND is_active <=> 1)`,
       [locationId]
     );
   }
