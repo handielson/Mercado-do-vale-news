@@ -1,3 +1,9 @@
+# v1.2.811-ficha-nomes-publicos
+
+Data: 06/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-124830-v1311-ficha-nomes-publicos` + API). Branch: `main`. Ficha técnica com uma fonte só de nomes: rota pública /public/spec-labels; o cliente vê "Resistência" como o admin. Detalhes: `docs/versoes/2026-11-06-v1.2.811-ficha-nomes-publicos.md`.
+
+---
+
 # v1.2.810-ficha-chave-underscore
 
 Data: 06/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-124020-v1310-ficha-chave-underscore`; API sem mudança). Branch: `main`. Correção da v1.2.809: chave do specs com _ na frente (ex.: _price_group_network) também fica fora da ficha do cliente. Detalhes: `docs/versoes/2026-11-06-v1.2.810-ficha-chave-underscore.md`.

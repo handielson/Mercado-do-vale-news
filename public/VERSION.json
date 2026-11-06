@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.810-ficha-chave-underscore",
+  "version": "v1.2.811-ficha-nomes-publicos",
   "date": "2026-11-06",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.810-ficha-chave-underscore",
-  "release_vps": "/var/www/mdv-site/releases/20261106-124020-v1310-ficha-chave-underscore",
+  "tag": "v1.2.811-ficha-nomes-publicos",
+  "release_vps": "/var/www/mdv-site/releases/20261106-124830-v1311-ficha-nomes-publicos",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Correção da v1.2.809: chave do specs começando com _ (ex.: _price_group_network, _bling_name_sync) é interna e não aparece na ficha do cliente. Mantém a v1.2.809: a ficha técnica não mostra controles internos do specs (unit, production, mercado_livre, shopee_auto_publish_enabled, price_group_network e prefixos de Shopee/Mercado Livre/Bling/TikTok/grupo de preço); objeto nunca aparece como [object Object] e true/false soltos fora do template ficam ocultos. Atributos públicos da Shopee (shopee_attribute_<id>) continuam.",
+  "summary": "Ficha técnica da página do produto com uma fonte só de nomes: nova rota pública GET /public/spec-labels (só chave -> nome dos campos basic/spec/logistics) e a página usa para todo mundo. Antes os nomes (/table-data/custom_fields) só carregavam para admin, e o cliente via a chave crua (\"resistencia\" em vez de \"Resistência\").",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,25 +23,30 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "pages/store/publicSpecVisibility.js",
-    "tmp-tests/pdp-internal-specs-hidden.test.mjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "services/vpsTransport.js",
+    "pages/store/PublicProductPage.tsx",
+    "tmp-tests/pdp-public-spec-labels.test.mjs (novo)",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-06-v1.2.810-ficha-chave-underscore.md"
+    "docs/versoes/2026-11-06-v1.2.811-ficha-nomes-publicos.md"
   ],
   "validations": [
-    "tmp-tests/pdp-internal-specs-hidden.test.mjs: 7/7 (inclui as 36 chaves reais do specs do Pad 6)",
-    "testes pdp-* e catalog-*: 225/230; as 5 falhas são pré-existentes (iguais sem a mudança): catalog-mobile-navigation, catalog-share-optional-memory, pdp-typography-weight, catalog-parent-media-contract, catalog-title-deploy",
+    "tmp-tests/pdp-public-spec-labels.test.mjs: 6/6 (handler das duas cópias da API, rota pública, cópias iguais, página sem depender de admin)",
+    "tmp-tests/pdp-internal-specs-hidden.test.mjs: 7/7",
+    "testes do servidor/transporte relacionados: 145/147 antes do commit; as 2 de deploy-unit-visibility comparam com HEAD e são conferidas depois do commit",
+    "node --check vps_server.js e vps_server.cjs ok; unit-visibility-runtime-contract ok",
     "vite build ok"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261106-124020-v1310-ficha-chave-underscore",
+    "release": "/var/www/mdv-site/releases/20261106-124830-v1311-ficha-nomes-publicos",
     "published_at": null
   },
   "api_release": {
-    "status": "sem mudança",
-    "note": "só frontend"
+    "status": "publicada",
+    "note": "deploy-vps-server-only.cjs --catalog-entry-only (envia o runtime server.js com a rota nova) + pm2 restart mdv-api"
   },
   "nginx_release": {
     "status": "sem mudança",

@@ -41,7 +41,7 @@ import { getCatalogTitle } from '../../services/catalogTitle.js';
 import { ProductConditionBadge, ProductConditionNote } from '../../components/catalog/ProductConditionBadge';
 import { getPublicProductDisambiguatedRouteTarget, getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
 import { buildCategoryBreadcrumb } from './categoryBreadcrumb.js';
-import { customFieldsService } from '@/services/custom-fields';
+import { vpsClient } from '@/services/vpsClient';
 import ProductDeadlineRequest, { productDeadlineLabel } from '@/components/catalog/ProductDeadlineRequest';
 import { generateProductShareMessage } from '@/utils/catalogMessageGenerator';
 import type { Product } from '@/types/product';
@@ -341,19 +341,16 @@ export const PublicProductPage: React.FC = () => {
                 text_secondary: settings.text_secondary || '#64748b',
             }))
             .catch(console.error);
-        if (customer?.customer_type === 'ADMIN') {
-            customFieldsService.list()
-                .then((fieldsData) => {
-                    if (fieldsData.length > 0) {
-                        const dict: Record<string, string> = {};
-                        fieldsData.forEach(f => { if (f.key) dict[f.key] = f.label; });
-                        setCustomFieldNames(dict);
-                    }
-                })
-                .catch((fieldError) => {
-                    console.warn('[PublicProductPage] Dicionario de campos customizados indisponivel.', fieldError);
-                });
-        }
+        // public-spec-labels-v1: uma fonte só para os nomes da ficha (cliente e admin veem "Resistência", não "resistencia").
+        vpsClient.get<Record<string, string>>('/public/spec-labels')
+            .then((labels) => {
+                if (labels && typeof labels === 'object' && !Array.isArray(labels) && Object.keys(labels).length > 0) {
+                    setCustomFieldNames(labels);
+                }
+            })
+            .catch((fieldError) => {
+                console.warn('[PublicProductPage] Nomes dos campos da ficha indisponiveis.', fieldError);
+            });
         if (!slug) {
             navigate('/');
             return;

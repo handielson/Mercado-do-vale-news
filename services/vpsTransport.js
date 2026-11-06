@@ -18,6 +18,7 @@ const PUBLIC_READ_EXACT_PATHS = new Set([
   '/field-presets',
   '/payment-fees',
   '/public/company-settings',
+  '/public/spec-labels',
   '/public/check-video',
   '/rams',
   '/shipping/settings',
