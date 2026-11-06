@@ -1,3 +1,9 @@
+# v1.2.812-nomes-sem-cliente
+
+Data: 06/11/2026. Status: **publicada** (API + site `/var/www/mdv-site/releases/20261106-125349-v1312-nomes-sem-cliente`). Branch: `main`. Rota pública /public/spec-labels só com campos de ficha (spec/logistics); campos do cadastro de cliente saem. Detalhes: `docs/versoes/2026-11-06-v1.2.812-nomes-sem-cliente.md`.
+
+---
+
 # v1.2.811-ficha-nomes-publicos
 
 Data: 06/11/2026. Status: **publicada** (site `/var/www/mdv-site/releases/20261106-124830-v1311-ficha-nomes-publicos` + API). Branch: `main`. Ficha técnica com uma fonte só de nomes: rota pública /public/spec-labels; o cliente vê "Resistência" como o admin. Detalhes: `docs/versoes/2026-11-06-v1.2.811-ficha-nomes-publicos.md`.

@@ -34,7 +34,11 @@ const rows = [
   { key: 'resistencia', label: 'Resistência', category: 'spec' },
   { key: 'celular_biometria', label: 'Biometria', category: 'spec' },
   { key: 'peso_g', label: 'Peso (g)', category: 'logistics' },
-  { key: 'cor', label: 'Cor', category: 'basic' },
+  // basic = campos do cadastro de cliente (CustomerFormPage filtra category === 'basic'): nunca públicos.
+  { key: 'limite_credito', label: 'Limite de Crédito', category: 'basic' },
+  { key: 'dia_vencimento', label: 'Dia de Vencimento', category: 'basic' },
+  { key: 'preferencia_contato', label: 'Preferência de Contato', category: 'basic' },
+  { key: 'sem_categoria', label: 'Sem categoria', category: null },
   { key: 'ncm', label: 'NCM', category: 'fiscal' },
   { key: 'custo_medio', label: 'Custo médio', category: 'price' },
   { key: '_price_group_network', label: 'Rede do grupo', category: 'spec' },
@@ -42,9 +46,9 @@ const rows = [
 ];
 
 for (const file of ['vps_server.js', 'vps_server.cjs']) {
-  test(`${file}: devolve só chave -> nome dos campos de ficha, com acento`, async () => {
+  test(`${file}: devolve só chave -> nome dos campos de ficha (spec/logistics), com acento`, async () => {
     const { body, headers } = await runRoute(file, rows);
-    assert.deepEqual(JSON.parse(JSON.stringify(body)), { resistencia: 'Resistência', celular_biometria: 'Biometria', peso_g: 'Peso (g)', cor: 'Cor' });
+    assert.deepEqual(JSON.parse(JSON.stringify(body)), { resistencia: 'Resistência', celular_biometria: 'Biometria', peso_g: 'Peso (g)' });
     assert.match(headers['Cache-Control'], /public/);
   });
 

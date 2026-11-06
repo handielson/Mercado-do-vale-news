@@ -30094,9 +30094,10 @@ fastify.get('/public/company-settings', { config: { rateLimit: { max: 240, timeW
 });
 
 // public-spec-labels-v1: nomes dos campos da ficha técnica (chave -> nome) para a página do cliente.
-// Só chave e nome dos campos de ficha; fiscal e preço ficam fora. Antes só o admin recebia esses nomes
+// Só chave e nome dos campos de ficha (spec/logistics, os mesmos da página do modelo). "basic" fica fora: são
+// os campos do cadastro de cliente (limite de crédito, vencimento...). Fiscal e preço também. Antes só o admin recebia esses nomes
 // (/table-data/custom_fields), e o cliente via a chave crua (ex.: "resistencia" em vez de "Resistência").
-const PUBLIC_SPEC_LABEL_CATEGORIES = new Set(['basic', 'spec', 'logistics']);
+const PUBLIC_SPEC_LABEL_CATEGORIES = new Set(['spec', 'logistics']);
 fastify.get('/public/spec-labels', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [rows] = await pool.query('SELECT * FROM custom_fields');
   const labels = {};
@@ -30105,7 +30106,7 @@ fastify.get('/public/spec-labels', { config: { rateLimit: { max: 240, timeWindow
     const label = String(row?.label || '').trim();
     const category = String(row?.category || '').trim().toLowerCase();
     if (!key || !label || key.startsWith('_')) continue;
-    if (category && !PUBLIC_SPEC_LABEL_CATEGORIES.has(category)) continue;
+    if (!PUBLIC_SPEC_LABEL_CATEGORIES.has(category)) continue;
     labels[key] = label;
   }
   reply.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
