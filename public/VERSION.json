@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.808-bipar-sequencia",
+  "version": "v1.2.809-ficha-sem-internos",
   "date": "2026-11-06",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.808-bipar-sequencia",
-  "release_vps": "/var/www/mdv-site/releases/20261106-120252-v1308-bipar-sequencia",
+  "tag": "v1.2.809-ficha-sem-internos",
+  "release_vps": "/var/www/mdv-site/releases/20261106-123754-v1309-ficha-sem-internos",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Entrada > Bipar: leitura por aparelho em sequência Serial → IMEI 1 → IMEI 2, com o cursor avançando sozinho; o IMEI 2 fecha o aparelho e o próximo começa no Serial. Tablet sem IMEI 2: botão + (ou Enter no campo vazio). Câmera por campo (par no IMEI 1 fecha o aparelho). Serial/IMEI repetido, IMEI inválido e IMEI 2 igual ao IMEI 1 são recusados no campo.",
+  "summary": "Página do produto (cliente): a ficha técnica não mostra mais controles internos do specs (unit, production, mercado_livre, shopee_auto_publish_enabled, price_group_network e prefixos de Shopee/Mercado Livre/Bling/TikTok/grupo de preço); objeto nunca aparece como [object Object] e true/false soltos fora do template ficam ocultos. Atributos públicos da Shopee (shopee_attribute_<id>) continuam.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,23 +23,21 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "components/entrada/ScanEntryTab.tsx",
-    "tmp-tests/entrada-scan-browser.test.mjs",
-    "tmp-tests/entrada-shortcut-browser.test.mjs",
+    "pages/store/publicSpecVisibility.js (novo)",
+    "pages/store/PublicProductPage.tsx",
+    "tmp-tests/pdp-internal-specs-hidden.test.mjs (novo)",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-06-v1.2.808-bipar-sequencia.md"
+    "docs/versoes/2026-11-06-v1.2.809-ficha-sem-internos.md"
   ],
   "validations": [
-    "tmp-tests/entrada-scan-browser.test.mjs: 25/25 (sequência, +, câmera, repetição, inválido, IMEI 2 = IMEI 1, serial repetido, ocupado)",
-    "tmp-tests/entrada-shortcut-browser.test.mjs: 23/23",
-    "suíte da Entrada + tablet-as-phone + location-groups + fixed-variation-specs: 167/167",
-    "tsc sem erros em components/entrada",
+    "tmp-tests/pdp-internal-specs-hidden.test.mjs: 6/6",
+    "testes pdp-* e catalog-*: 225/230; as 5 falhas são pré-existentes (iguais sem a mudança): catalog-mobile-navigation, catalog-share-optional-memory, pdp-typography-weight, catalog-parent-media-contract, catalog-title-deploy",
     "vite build ok"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261106-120252-v1308-bipar-sequencia",
+    "release": "/var/www/mdv-site/releases/20261106-123754-v1309-ficha-sem-internos",
     "published_at": null
   },
   "api_release": {

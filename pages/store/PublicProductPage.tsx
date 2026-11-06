@@ -46,6 +46,7 @@ import ProductDeadlineRequest, { productDeadlineLabel } from '@/components/catal
 import { generateProductShareMessage } from '@/utils/catalogMessageGenerator';
 import type { Product } from '@/types/product';
 import { entryAddUnitsPath } from '@/services/entryShortcuts.js';
+import { isInternalSpecKey, isPublicSpecValue } from './publicSpecVisibility.js';
 /**
  * PublicProductPage
  * A dedicated SEO-friendly landing page for a single product.
@@ -2230,8 +2231,10 @@ export const PublicProductPage: React.FC = () => {
                                         const allItems: { key: string, label: string, strVal: string }[] = [];
 
                                         // Auxiliar: processa o valor e adiciona na lista se for válido
-                                        const tryAddItem = (key: string, label: string, value: unknown) => {
+                                        const tryAddItem = (key: string, label: string, value: unknown, fromTemplate = false) => {
                                             if (HIDDEN_KEYS.has(normalizePdpSpecText(key)) || HIDDEN_KEYS.has(normalizePdpSpecText(label))) return;
+                                            // pdp-internal-specs-hidden-v1: controles internos (marketplaces, grupo de preço, produção, unidade) e objetos nunca aparecem.
+                                            if (isInternalSpecKey(key) || !isPublicSpecValue(value, { fromTemplate })) return;
                                             const strVal = String(value ?? '').trim();
                                             if (!strVal || strVal === '0') return;
                                             if (uuidRegex.test(strVal)) return;
@@ -2248,7 +2251,7 @@ export const PublicProductPage: React.FC = () => {
                                                 if (!key) continue;
                                                 if (field.requirement === 'off' || field.requirement === 'hidden') continue;
                                                 const label: string = publicSpecLabels[key] || field.label || field.name || key.replace(/_/g, ' ');
-                                                tryAddItem(key, label, publicSpecs[key]);
+                                                tryAddItem(key, label, publicSpecs[key], true);
                                             }
                                         }
 
