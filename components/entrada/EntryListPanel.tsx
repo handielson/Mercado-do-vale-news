@@ -23,8 +23,17 @@ interface Props {
 
 const SOURCE_LABEL: Record<string, string> = { manual: 'Manual', bipar: 'Bipar', planilha: 'Planilha', foto: 'Foto' };
 
+const successSummary = (n: number) => n === 1 ? '1 item entrou no estoque.' : `${n} itens entraram no estoque.`;
+
 export const EntryListPanel: React.FC<Props> = ({ state, onRemove, onEdit, onPreview, onConfirm, busy, result }) => {
     const empty = state.lines.length === 0;
+    const successRef = React.useRef<HTMLDivElement>(null);
+    // Leva a mensagem para a vista (no celular a lista fica abaixo da dobra).
+    React.useEffect(() => {
+        if (result?.type !== 'success') return;
+        successRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        successRef.current?.focus?.({ preventScroll: true });
+    }, [result]);
     const confirmEnabled = !busy && canConfirm(state);
 
     return (
@@ -48,9 +57,17 @@ export const EntryListPanel: React.FC<Props> = ({ state, onRemove, onEdit, onPre
             )}
 
             {result?.type === 'success' && (
-                <div role="status" className="rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm px-3 py-2 space-y-1">
-                    <p className="font-semibold">Entrada confirmada</p>
-                    <ul className="space-y-0.5">
+                // entry-success-message-v1: mensagem clara de que o cadastro deu certo.
+                <div ref={successRef} tabIndex={-1} role="status" aria-live="polite"
+                    className="rounded-lg bg-green-50 border-2 border-green-500 text-green-800 text-sm px-4 py-3 space-y-2 outline-none">
+                    <div className="flex items-start gap-2">
+                        <span aria-hidden="true" className="text-xl leading-none">✅</span>
+                        <div>
+                            <p className="text-base font-bold">Cadastrado com sucesso!</p>
+                            <p>{successSummary(result.rows.length)} Toque num item para abrir o produto.</p>
+                        </div>
+                    </div>
+                    <ul className="space-y-0.5 pl-7">
                         {result.rows.map(row => (
                             <li key={row.key}>
                                 {row.productId

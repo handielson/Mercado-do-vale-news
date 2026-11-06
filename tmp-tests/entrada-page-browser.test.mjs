@@ -119,7 +119,7 @@ test('Confirmar limpa lista e rascunho e mostra links', { timeout: 120000 }, asy
     const btn = page.getByRole('button', { name: 'Confirmar entrada' });
     await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent.includes('Confirmar entrada') && !b.disabled));
     await btn.click();
-    await page.getByText('Entrada confirmada').waitFor();
+    await page.getByText('Cadastrado com sucesso!').waitFor();
     assert.equal(await page.locator('a[href="/admin/products/p1"]').count(), 1);
     assert.equal(await page.locator('a[href="/admin/products/p2"]').count(), 1);
     assert.deepEqual(await page.evaluate(() => window.getCalls), ['b1']);
@@ -158,7 +158,7 @@ test('durante a confirmação Remover e Adicionar ficam desabilitados e há text
     for (const b of await page.getByRole('button', { name: 'Remover' }).all()) assert.equal(await b.isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: 'Adicionar à lista' }).isDisabled(), true);
     await page.evaluate(() => window.finishCommit());
-    await page.getByText('Entrada confirmada').waitFor();
+    await page.getByText('Cadastrado com sucesso!').waitFor();
 });
 
 test('?modelo= pré-seleciona o modelo na aba Manual', { timeout: 120000 }, async t => {
@@ -176,7 +176,7 @@ test('I1: confirmação envia o clientBatchId do rascunho e troca a chave depois
     await page.getByRole('button', { name: 'Conferir' }).click();
     await confirmReady(page);
     await page.getByRole('button', { name: 'Confirmar entrada' }).click();
-    await page.getByText('Entrada confirmada').waitFor();
+    await page.getByText('Cadastrado com sucesso!').waitFor();
     assert.equal(await page.evaluate(() => window.commitCalls[0].clientBatchId), DRAFT_ID);
     await page.waitForFunction(id => { const d = JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1') || '{}'); return d.clientBatchId && d.clientBatchId !== id; }, DRAFT_ID);
 });
@@ -191,7 +191,7 @@ test('I1: erro ambíguo avisa, confere de novo e o reenvio usa a mesma chave', {
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('mdv-entrada-rascunho-v1')).lines.length), 2, 'lista continua');
     await confirmReady(page);
     await page.getByRole('button', { name: 'Confirmar entrada' }).click();
-    await page.getByText('Entrada confirmada').waitFor();
+    await page.getByText('Cadastrado com sucesso!').waitFor();
     assert.deepEqual(await page.evaluate(() => window.commitCalls.map(c => c.clientBatchId)), [DRAFT_ID, DRAFT_ID]);
 });
 
@@ -213,7 +213,7 @@ test('I1: mesma chave com outra lista mostra o aviso do servidor e gera chave no
     await page.waitForFunction(() => window.previewCalls.length === 2);
     await confirmReady(page);
     await page.getByRole('button', { name: 'Confirmar entrada' }).click();
-    await page.getByText('Entrada confirmada').waitFor();
+    await page.getByText('Cadastrado com sucesso!').waitFor();
     const ids = await page.evaluate(() => window.commitCalls.map(c => c.clientBatchId));
     assert.equal(ids[0], DRAFT_ID); assert.notEqual(ids[1], DRAFT_ID); assert.ok(ids[1]);
 });
@@ -223,7 +223,7 @@ test('I2: replay e falha do get usam o plano como reserva para os links', { time
     await page.getByRole('button', { name: 'Conferir' }).click();
     await confirmReady(page);
     await page.getByRole('button', { name: 'Confirmar entrada' }).click();
-    await page.getByText('Entrada confirmada').waitFor();
+    await page.getByText('Cadastrado com sucesso!').waitFor();
     assert.equal(await page.locator('a[href="/admin/products/q1"]').count(), 1);
     assert.equal(await page.locator('a[href="/admin/products/q2"]').count(), 1);
 });

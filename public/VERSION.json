@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.814-complemento-titulo-rota",
+  "version": "v1.2.815-entrada-aviso-sucesso",
   "date": "2026-11-06",
-  "status": "publicada",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.814-complemento-titulo-rota",
-  "release_vps": "/var/www/mdv-site/releases/20261106-130116-v1313-nomes-sem-entrega",
+  "tag": "v1.2.815-entrada-aviso-sucesso",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Complemento do título no site voltou a salvar: a rota PATCH /products/:id/catalog-title estava registrada só no vps_server.cjs e não existia no server.js publicado (404). Registrada no vps_server.js, módulo incluído no deploy --catalog-entry-only e teste que trava rota só num dos servidores.",
+  "summary": "Entrada: o Bipar mostra o botão \"Começar a bipar\" sempre (desabilitado) e diz o que falta para liberar Serial/IMEI 1/IMEI 2; a confirmação mostra \"Cadastrado com sucesso!\" em destaque, com o total e rolagem até a mensagem; o contador \"aparelhos lidos\" zera após confirmar.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,28 +23,29 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "vps_server.js",
-    "deploy-vps-server-only.cjs",
-    "tmp-tests/server-entrypoints-route-parity.test.cjs (novo)",
+    "components/entrada/ScanEntryTab.tsx",
+    "components/entrada/EntryListPanel.tsx",
+    "pages/admin/entrada/CatalogEntryPage.tsx",
+    "tmp-tests/entrada-scan-browser.test.mjs",
+    "tmp-tests/entrada-page-browser.test.mjs",
+    "tmp-tests/print3d-checkout-browser.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-06-v1.2.814-complemento-titulo-rota.md"
+    "docs/versoes/2026-11-06-v1.2.815-entrada-aviso-sucesso.md"
   ],
   "validations": [
-    "server-entrypoints-route-parity: 2/2 (falha 2/2 sem a correção)",
-    "catalog-title.test.mjs: 5/5",
-    "node --check vps_server.js e deploy-vps-server-only.cjs",
-    "produção antes: PATCH /products/:id/catalog-title → 404 \"Route not found\"",
-    "produção após deploy: PATCH para ID inexistente com token ADMIN → 409; /status → 200, mysql.ok=true; hashes dos dois arquivos iguais aos locais"
+    "entrada-scan-browser 25/25",
+    "entrada-page-browser 18/18",
+    "entrada-shortcut-browser 23/23"
   ],
   "site_release": {
-    "status": "sem mudança",
-    "release": "/var/www/mdv-site/releases/20261106-130116-v1313-nomes-sem-entrega",
+    "status": "pendente",
+    "release": "pendente",
     "published_at": null
   },
   "api_release": {
-    "status": "publicada",
-    "note": "06/11/2026: commit 5102556ae4d8b90a7bb3d52b0c0bf577d77426c0 publicado com --catalog-entry-only; mdv-api reiniciado pelo deploy e online. PATCH com token ADMIN para ID inexistente retornou 409; /status 200, mysql.ok=true. Backup: /var/www/mdv-api/backups/catalog-entry-1793989139455. Site preservado."
+    "status": "sem mudança",
+    "note": ""
   },
   "nginx_release": {
     "status": "sem mudança",

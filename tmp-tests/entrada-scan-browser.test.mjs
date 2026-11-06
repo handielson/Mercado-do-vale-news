@@ -68,6 +68,9 @@ async function setup(t, { variation, busy, state } = {}) {
 
 const text = page => page.locator('body').innerText();
 const start = page => page.getByRole('button', { name: 'Começar a bipar' });
+// scan-missing-hint-v1: o botão fica visível e desabilitado enquanto falta algo (ou some quando já está lendo).
+const blocked = async page => (await start(page).count()) === 0 || await start(page).isDisabled();
+const enabledStart = async page => { await start(page).waitFor(); assert.equal(await start(page).isDisabled(), false); };
 // scan-sequence-v1: um aparelho por vez, Serial → IMEI 1 → IMEI 2.
 const field = (page, name) => page.getByLabel(name, { exact: true });
 const plus = page => page.getByRole('button', { name: 'Adicionar aparelho à lista' });
@@ -105,15 +108,18 @@ test('Começar a bipar só aparece com tudo preenchido', { timeout: 120000 }, as
     await box.click(); await box.fill('Redm');
     await page.getByRole('listbox').getByRole('button', { name: 'Redmi 15' }).click();
     await page.getByLabel('RAM').waitFor();
-    assert.equal(await start(page).count(), 0);
+    assert.equal(await blocked(page), true);
+    await page.getByText('Para ler Serial, IMEI 1 e IMEI 2, falta: RAM, armazenamento, cor, custo').waitFor();
     await page.getByLabel('RAM').selectOption('8GB');
     await page.getByLabel('Armazenamento').selectOption('256GB');
     await page.getByRole('button', { name: 'Verde' }).click();
     await page.getByLabel('Custo').fill('1500,50');
     await page.getByLabel('Local').selectOption('');
-    assert.equal(await start(page).count(), 0);
+    assert.equal(await blocked(page), true);
+    await page.getByText('Para ler Serial, IMEI 1 e IMEI 2, falta: local.').waitFor();
     await page.getByLabel('Local').selectOption('l1');
-    await start(page).waitFor();
+    await enabledStart(page);
+    await page.getByText('Depois de começar, aparecem os campos Serial, IMEI 1 e IMEI 2.').waitFor();
     assert.deepEqual(errors, []);
 });
 
@@ -266,7 +272,7 @@ test('?variacao= chega travado no produto, sem pedir modelo', { timeout: 120000 
     assert.match(await text(page), /Redmi 15/);
     assert.match(await text(page), /SKU RED15-8-256-VD/);
     assert.equal(await page.getByRole('combobox', { name: 'Modelo' }).count(), 0);
-    assert.equal(await start(page).count(), 0);
+    assert.equal(await blocked(page), true);
     await page.getByLabel('Custo').fill('900');
     assert.equal(await page.getByLabel('Local').inputValue(), 'l2');
     await start(page).click();
@@ -359,14 +365,14 @@ test('?variacao= de produto que não é celular avisa', { timeout: 120000 }, asy
     const { page } = await setup(t, { variation: 'p4' });
     await page.getByText('Esta variação não é celular nem tablet. Use a aba Manual.').waitFor();
     assert.equal(await page.getByLabel('Custo').count(), 0);
-    assert.equal(await start(page).count(), 0);
+    assert.equal(await blocked(page), true);
 });
 
 test('?variacao= com categoria não identificada não chega a prender', { timeout: 120000 }, async t => {
     const { page } = await setup(t, { variation: 'p5' });
     await page.getByText('Não foi possível identificar a categoria do modelo.').waitFor();
     assert.equal(await page.getByRole('button', { name: 'Trocar' }).count(), 0);
-    assert.equal(await start(page).count(), 0);
+    assert.equal(await blocked(page), true);
 });
 
 test('I3: preços opcionais da configuração vão em todas as leituras', { timeout: 120000 }, async t => {
@@ -376,10 +382,10 @@ test('I3: preços opcionais da configuração vão em todas as leituras', { time
     assert.equal(await toggle.isChecked(), false);
     assert.equal(await page.getByLabel('Varejo').count(), 0);
     await toggle.check();
-    assert.equal(await start(page).count(), 0, 'preço ligado e vazio não libera a leitura');
+    assert.equal(await blocked(page), true, 'preço ligado e vazio não libera a leitura');
     await page.getByLabel('Varejo').fill('1999,90');
     await page.getByLabel('Revenda').fill('1899');
-    assert.equal(await start(page).count(), 0);
+    assert.equal(await blocked(page), true);
     await page.getByLabel('Atacado').fill('1799,50');
     await start(page).click();
     await bip(page, '863715061138763');

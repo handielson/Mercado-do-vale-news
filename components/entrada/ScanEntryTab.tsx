@@ -21,6 +21,8 @@ export interface ScanEntryTabProps {
     busy?: boolean;
     /** Custo e local guardados pela página (não se perdem quando a aba é desmontada). */
     costLocation?: SharedCostLocation;
+    /** Muda a cada "Confirmar entrada": zera o contador de aparelhos lidos. */
+    confirmCount?: number;
 }
 
 interface Locked {
@@ -47,7 +49,7 @@ const READ_FIELDS: { step: ReadStep; label: string; scanKind: 'serial' | 'imei' 
 const fieldCls = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm';
 const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
 
-export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existingState, fixed, onClearFixed, busy, costLocation }) => {
+export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existingState, fixed, onClearFixed, busy, costLocation, confirmCount = 0 }) => {
     const variationId = fixed?.id || '';
 
     const [models, setModels] = useState<ModelRef[]>([]);
@@ -78,6 +80,13 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
     const seen = useRef<Set<string>>(new Set());
     // O leitor digita mais rápido que o React re-renderiza: o ref guarda o aparelho em andamento.
     const deviceRef = useRef<Device>(EMPTY_DEVICE);
+    // Depois de "Confirmar entrada" o contador recomeça (os aparelhos já foram cadastrados).
+    const lastConfirm = useRef(confirmCount);
+    useEffect(() => {
+        if (confirmCount === lastConfirm.current) return;
+        lastConfirm.current = confirmCount;
+        setCount(0);
+    }, [confirmCount]);
     const serialRef = useRef<HTMLInputElement>(null);
     const imei1Ref = useRef<HTMLInputElement>(null);
     const imei2Ref = useRef<HTMLInputElement>(null);
@@ -125,6 +134,18 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
     const ready = fixed
         ? Boolean(fixedLocked && cost > 0 && locationId)
         : Boolean(locked && locked.model_id && locked.ram && locked.storage && locked.color && cost > 0 && locationId && pricesReady);
+    // scan-missing-hint-v1: diz o que falta para liberar a leitura (antes o botão só sumia).
+    const missing: string[] = fixed
+        ? [cost > 0 ? '' : 'custo', locationId ? '' : 'local'].filter(Boolean)
+        : [
+            model && isPhone ? '' : 'modelo (celular ou tablet)',
+            ram ? '' : 'RAM',
+            storage ? '' : 'armazenamento',
+            color ? '' : 'cor',
+            cost > 0 ? '' : 'custo',
+            locationId ? '' : 'local',
+            pricesReady ? '' : 'preços (varejo, revenda e atacado)',
+        ].filter(Boolean);
     const modelLabel = (id: string) => models.find(m => m.id === id)?.name || '';
     const labelOf = (l: Locked) => [l.name, l.color, [l.ram, l.storage].filter(Boolean).join('/')].filter(Boolean).join(' · ');
     const lockLabel = fixed ? [fixed.name, fixed.sku].filter(Boolean).join(' · ') : locked ? labelOf(locked) : '';
@@ -379,11 +400,18 @@ export const ScanEntryTab: React.FC<ScanEntryTabProps> = ({ onAddLines, existing
                 </div>
             )}
 
-            {ready && (
-                <button type="button" disabled={busy} onClick={() => { setDevice(EMPTY_DEVICE); setStep('serial'); setScanning(true); setFeedback(null); }}
-                    className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    Começar a bipar
-                </button>
+            {(ready || !fixed || fixedLocked) && (
+                <div className="space-y-1">
+                    <button type="button" disabled={busy || !ready} onClick={() => { setDevice(EMPTY_DEVICE); setStep('serial'); setScanning(true); setFeedback(null); }}
+                        className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Começar a bipar
+                    </button>
+                    <p className="text-xs text-slate-600">
+                        {ready
+                            ? 'Depois de começar, aparecem os campos Serial, IMEI 1 e IMEI 2.'
+                            : `Para ler Serial, IMEI 1 e IMEI 2, falta: ${missing.join(', ')}.`}
+                    </p>
+                </div>
             )}
             {count > 0 && <p className="text-sm text-slate-600">{counter}</p>}
         </div>

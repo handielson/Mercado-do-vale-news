@@ -63,7 +63,7 @@ const baseUrl = process.env.PRINT3D_TEST_BASE_URL || 'http://127.0.0.1:3000';
     await page.getByRole('button', { name: 'Gerar PIX' }).click();
     await page.getByLabel('PIX copia e cola').waitFor();
     await page.getByRole('button', { name: 'Já paguei: verificar confirmação' }).click();
-    await page.getByText('Entrada confirmada', { exact: true }).first().waitFor();
+    await page.getByText('Cadastrado com sucesso!', { exact: true }).first().waitFor();
     assert.equal(paymentRequests, 1);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.screenshot({ path: 'C:/Users/Nitro/.codex/visualizations/2026/09/25/01a0d7e9-06df-7743-aa77-6b4637f66647/pedidos-3d-mobile.png', fullPage: true });

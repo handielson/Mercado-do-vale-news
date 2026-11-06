@@ -69,6 +69,8 @@ export const CatalogEntryPage: React.FC = () => {
     const [result, setResult] = useState<EntryResult>(null);
     // Conta as tentativas de confirmação: a aba Foto recarrega a fila (o pré-cadastro pode ter sido concluído).
     const [confirmCount, setConfirmCount] = useState(0);
+    // Só confirmações gravadas: zera o contador do Bipar.
+    const [successCount, setSuccessCount] = useState(0);
     const stateRef = useRef(state);
     stateRef.current = state;
 
@@ -168,6 +170,7 @@ export const CatalogEntryPage: React.FC = () => {
                     : { ...s, lines: remaining, plan: null, hash: null, previewedSignature: null, clientBatchId: newBatchId() }) as EntryState;
             });
             setResult({ type: 'success', rows });
+            setSuccessCount(c => c + 1);
         } catch (err) {
             const kind = commitErrorKind(err);
             if (kind === 'rejected') {
@@ -244,7 +247,7 @@ export const CatalogEntryPage: React.FC = () => {
                             {tab === 'manual' && <ManualEntryTab onAddLines={onAddLines} busy={busy} prefill={modeloParam ? { model_id: modeloParam } : undefined}
                                 fixed={fixed} onClearFixed={clearFixed} costLocation={{ value: manualCostLocation, onChange: setManualCostLocation }} />}
                             {tab === 'bipar' && <ScanEntryTab onAddLines={onAddLines} busy={busy} existingState={state} fixed={fixed} onClearFixed={clearFixed}
-                                costLocation={{ value: scanCostLocation, onChange: setScanCostLocation }} />}
+                                costLocation={{ value: scanCostLocation, onChange: setScanCostLocation }} confirmCount={successCount} />}
                         </>
                     )}
                     {tab === 'planilha' && <SpreadsheetEntryTab onAddLines={onAddLines} busy={busy} existingState={state} />}
