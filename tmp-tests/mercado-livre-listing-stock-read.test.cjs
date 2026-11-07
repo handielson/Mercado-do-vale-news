@@ -40,18 +40,43 @@ function harness({ linked = [{ id: 'product-1', sku: 'LJH074', variation_id: '' 
 test('reads traditional listing quantity through GET only', async () => {
   const h = harness({
     item: { id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
-      available_quantity: 0, variations: [] },
+      condition: 'new', listing_type_id: 'gold_special', available_quantity: 0, variations: [] },
     user: { id: sellerId, tags: [] },
   });
   const result = await h.read({ params: { itemId }, query: { parentId } });
 
   assert.equal(result.mode, 'item_available_quantity');
   assert.equal(result.quantityByVariation, true);
+  assert.equal(result.condition, 'new');
+  assert.equal(result.listingTypeId, 'gold_special');
   assert.deepEqual(result.quantities, [{ variationId: '', sku: 'LJH074', quantity: 0 }]);
   assert.equal(h.dbQueries.length, 1);
   assert.match(h.dbQueries[0].sql, /^\s*SELECT/i);
   assert.ok(h.calls.length >= 2);
   assert.ok(h.calls.every(call => call.method === 'GET'));
+});
+
+test('returns only valid listing condition and type values for ERP zero-stock preflight', async () => {
+  const h = harness({
+    item: { id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
+      condition: 'not_specified', listing_type_id: 'free', available_quantity: 2, variations: [] },
+    user: { id: sellerId, tags: [] },
+  });
+  const result = await h.read({ params: { itemId }, query: { parentId } });
+  assert.equal(result.condition, 'not_specified');
+  assert.equal(result.listingTypeId, 'free');
+  assert.ok(h.calls.every(call => call.method === 'GET'));
+});
+
+test('does not expose malformed listing type as evidence that zero stock is allowed', async () => {
+  const h = harness({
+    item: { id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
+      condition: 'new', listing_type_id: '123', available_quantity: 2, variations: [] },
+    user: { id: sellerId, tags: [] },
+  });
+  const result = await h.read({ params: { itemId }, query: { parentId } });
+  assert.equal(result.condition, 'new');
+  assert.equal(result.listingTypeId, '');
 });
 
 test('shares only an in-flight seller-profile GET across concurrent stock reads', async () => {

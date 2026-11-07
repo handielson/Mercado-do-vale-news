@@ -7,6 +7,15 @@ function quantity(value) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function listingCondition(item) {
+  return ['new', 'used', 'not_specified'].includes(item?.condition) ? item.condition : '';
+}
+
+function listingType(item) {
+  const value = String(item?.listing_type_id || '');
+  return /^[a-z][a-z0-9_]{0,49}$/.test(value) ? value : '';
+}
+
 function responseHeader(response, name) {
   if (typeof response.headers?.get === 'function') return response.headers.get(name);
   const entry = Object.entries(response.headers || {}).find(([key]) => key.toLowerCase() === name.toLowerCase());
@@ -198,6 +207,7 @@ function createListingStockHandlers({ pool, settings, request }) {
       if (!linked.length && !matchedVariationIds.size) matchMethod = 'warehouse_location_only';
       const version = responseHeader(stockResponse, 'x-version');
       return { itemId, parentId, sellerId: seller, status: String(item.status || ''),
+        condition: listingCondition(item), listingTypeId: listingType(item),
         subStatus: Array.isArray(item.sub_status) ? item.sub_status.map(String) : [],
         mode: 'warehouse_management', userProductId,
         stockVersion: version && /^\d{1,30}$/.test(version) ? version : null,
@@ -216,6 +226,7 @@ function createListingStockHandlers({ pool, settings, request }) {
     if (quantities.some(row => row.quantity === null))
       throw fail('O Mercado Livre não informou quantidade válida para todos os itens/variações.');
     return { itemId, parentId, sellerId: seller, status: String(item.status || ''),
+      condition: listingCondition(item), listingTypeId: listingType(item),
       subStatus: Array.isArray(item.sub_status) ? item.sub_status.map(String) : [],
       mode: 'item_available_quantity', userProductId: '',
       stockVersion: null, quantityByVariation: true, reason: '', locations: [], quantities, matchMethod };
@@ -281,7 +292,9 @@ function createListingStockHandlers({ pool, settings, request }) {
       body = { available_quantity: desired };
     }
     if (oldQuantity !== expected) throw fail('O saldo remoto mudou desde a conferência. Consulte novamente.');
-    if (desired === 0 && (item.condition === 'used' || item.listing_type_id === 'free'))
+    const currentCondition = listingCondition(item);
+    const currentListingType = listingType(item);
+    if (desired === 0 && (currentCondition !== 'new' || !currentListingType || currentListingType === 'free'))
       throw fail('A API não permite zerar estoque para esta condição/tipo de anúncio.');
     if (desired === oldQuantity)
       return { ok: true, itemId, quantity: desired, alreadyCurrent: true,

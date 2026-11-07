@@ -27,7 +27,7 @@ O endpoint dedicado `/items/{item_id}/prices/standard` ainda não está disponí
 
 ## Estoque
 
-Estoque permanece separado do preço. Anúncios de origem única usam a rota de estoque tradicional; `warehouse_management` usa User Product, `x-version` e todas as localizações `seller_warehouse`, preservando `meli_facility`. Nenhuma dessas rotas grava o estoque operacional do Mercado do Vale; elas enviam solicitações ao Mercado Livre somente quando o respectivo gate está habilitado.
+Estoque permanece separado do preço. Anúncios de origem única usam a rota de estoque tradicional; `warehouse_management` usa User Product, `x-version` e todas as localizações `seller_warehouse`, preservando `meli_facility`. O GET tradicional também retorna condição e tipo de anúncio, para o ERP só permitir saldo zero quando confirmar `condition=new` e tipo diferente de `free`; ausência de qualquer evidência bloqueia a proposta. A API repete essa validação antes do PUT. Nenhuma dessas rotas grava o estoque operacional do Mercado do Vale; elas enviam solicitações ao Mercado Livre somente quando o respectivo gate está habilitado.
 
 ## Habilitação
 

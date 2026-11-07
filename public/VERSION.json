@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.816-entrada-imei-completo",
-  "date": "2026-11-06",
-  "status": "publicada",
+  "version": "v1.2.817-ml-stock-zero-guard",
+  "date": "2026-11-07",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.816-entrada-imei-completo",
-  "release_vps": "/var/www/mdv-site/releases/20261106-191059-entrada-imei-completo",
+  "tag": "v1.2.817-ml-stock-zero-guard",
+  "release_vps": "/var/www/mdv-site/releases/20261107-013328-ml-stock-zero-guard",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Entrada: a lista mostra Serial, IMEI 1 e IMEI 2 completos de cada aparelho (antes só o final do IMEI) também na mensagem de sucesso, e o SKU não aparece mais duplicado quando o nome do produto já termina com ele.",
+  "summary": "Mercado Livre: leitura protegida passa a informar condição e tipo do anúncio; zeragem é bloqueada sem condição new e tipo conhecido não free. Os gates de escrita continuam desligados.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,32 +23,29 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "components/entrada/entryList.js",
-    "components/entrada/EntryListPanel.tsx",
-    "components/entrada/ScanEntryTab.tsx",
-    "components/entrada/BarcodeProductLookup.tsx",
-    "pages/admin/entrada/CatalogEntryPage.tsx",
-    "tmp-tests/entrada-entry-list.test.mjs",
-    "tmp-tests/entrada-shortcut-browser.test.mjs",
+    "docs/operacional/mercado-livre-erp-sync.md",
+    "services/mercadoLivreListingStock.cjs",
+    "tmp-tests/mercado-livre-listing-stock-read.test.cjs",
+    "tmp-tests/mercado-livre-listing-stock-write.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-06-v1.2.816-entrada-imei-completo.md"
+    "docs/versoes/2026-11-07-v1.2.817-ml-stock-zero-guard.md"
   ],
   "validations": [
-    "entrada-entry-list 21/21",
-    "entrada-shortcut-browser 23/23",
-    "entrada-scan-browser 25/25",
-    "entrada-page-browser 18/18",
-    "entrada-photo-browser 14/14"
+    "node --check server.js",
+    "node --check vps_server.cjs",
+    "node --check vps_server.js",
+    "node --test tmp-tests/mercado-livre-listing-stock-read.test.cjs tmp-tests/mercado-livre-listing-stock-write.test.cjs (33/33)",
+    "npm.cmd run build (concluído; warning existente de Vite configLoader/native)"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261106-191059-entrada-imei-completo",
-    "published_at": "2026-11-06"
+    "status": "pendente",
+    "release": "/var/www/mdv-site/releases/20261107-013328-ml-stock-zero-guard",
+    "published_at": "pendente"
   },
   "api_release": {
-    "status": "sem mudança",
-    "note": ""
+    "status": "pendente",
+    "note": "Deploy seletivo por --mercado-livre-stock-read-only; nenhum dado comercial alterado."
   },
   "nginx_release": {
     "status": "sem mudança",

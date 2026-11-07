@@ -1,3 +1,9 @@
+# v1.2.817-ml-stock-zero-guard
+
+Data: 07/11/2026. Status: **pendente de publicação**. Branch: main. Commit/tag: pendentes. A alteração prepara o GET de estoque do Mercado Livre para devolver condição e tipo do anúncio; o ERP/API bloqueiam saldo zero sem condition=new e tipo conhecido diferente de free. Os gates de escrita continuam desligados. Não houve chamadas de escrita nem mudança de saldos. Validações: 33 testes focados passaram e os três arquivos de servidor passaram em node --check.
+
+---
+
 # v1.2.816-entrada-imei-completo
 
 Data: 06/11/2026. Status: **publicada** (só site). Branch: `main`. Commit de implementação: `5c6c1a2`. Tag: `v1.2.816-entrada-imei-completo`. Release: `/var/www/mdv-site/releases/20261106-191059-entrada-imei-completo`. Lista de entrada mostra Serial/IMEI 1/IMEI 2 completos e o SKU não duplica. API sem alteração ou reinício. Detalhes: `docs/versoes/2026-11-06-v1.2.816-entrada-imei-completo.md`.

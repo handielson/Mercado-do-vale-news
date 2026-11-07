@@ -44,6 +44,59 @@ test('stock writes require both an explicit enable flag and a valid dedicated ke
   }
 });
 
+test('zero stock requires a verified new condition and known non-free listing type', async t => {
+  const cases = [
+    { condition: 'used', listing_type_id: 'gold_special' },
+    { condition: 'not_specified', listing_type_id: 'gold_special' },
+    { condition: 'new', listing_type_id: 'free' },
+    { condition: 'new', listing_type_id: '' },
+    { condition: '', listing_type_id: 'gold_special' },
+  ];
+  for (const metadata of cases) await t.test(JSON.stringify(metadata), async () => {
+    const item = { id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
+      ...metadata, available_quantity: 4, variations: [] };
+    const calls = [];
+    const request = async (url, options = {}) => {
+      calls.push({ url, method: options.method || 'GET' });
+      if (url.startsWith(`/items/${itemId}?`)) return response(item);
+      if (url === `/users/${sellerId}`) return response({ id: sellerId, tags: [] });
+      throw new Error(`Unexpected Mercado Livre API path: ${url}`);
+    };
+    const handlers = createListingStockHandlers({
+      pool: { query: async () => [[{ id: 'product-1', sku: 'LJH074', variation_id: '' }]] },
+      settings: async () => ({ user_id: sellerId }), request,
+    });
+    await assert.rejects(handlers.update({ params: { itemId }, query: { parentId },
+      body: { quantity: 0, expectedQuantity: 4, confirm: true } }), /não permite zerar estoque/);
+    assert.equal(calls.some(call => call.method === 'PUT'), false);
+  });
+
+  await t.test('allows a verified new non-free listing', async () => {
+    const item = { id: itemId, seller_id: sellerId, status: 'active', sub_status: [], tags: [],
+      condition: 'new', listing_type_id: 'gold_special', available_quantity: 4, variations: [] };
+    const calls = [];
+    const request = async (url, options = {}) => {
+      calls.push({ url, method: options.method || 'GET' });
+      if (url.startsWith(`/items/${itemId}?`)) return response(item);
+      if (url === `/users/${sellerId}`) return response({ id: sellerId, tags: [] });
+      if (url === `/items/${itemId}` && options.method === 'PUT') {
+        item.available_quantity = JSON.parse(options.body).available_quantity;
+        return response({ id: itemId });
+      }
+      throw new Error(`Unexpected Mercado Livre API path: ${url}`);
+    };
+    const handlers = createListingStockHandlers({
+      pool: { query: async () => [[{ id: 'product-1', sku: 'LJH074', variation_id: '' }]] },
+      settings: async () => ({ user_id: sellerId }), request,
+    });
+    const result = await handlers.update({ params: { itemId }, query: { parentId },
+      body: { quantity: 0, expectedQuantity: 4, confirm: true } });
+    assert.deepEqual(result, { ok: true, itemId, quantity: 0, alreadyCurrent: false,
+      reactivated: false, affectedSkus: ['LJH074'] });
+    assert.equal(calls.filter(call => call.method === 'PUT').length, 1);
+  });
+});
+
 test('price writes require an explicit flag and a valid dedicated write key', () => {
   const previousKey = process.env.MDV_ERP_WRITE_KEY;
   const previousStockFlag = process.env.MDV_ERP_STOCK_WRITE_ENABLED;
