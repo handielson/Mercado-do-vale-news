@@ -1,7 +1,7 @@
 {
   "version": "v1.2.817-ml-stock-zero-guard",
   "date": "2026-11-07",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.817-ml-stock-zero-guard",
   "release_vps": "/var/www/mdv-site/releases/20261107-013328-ml-stock-zero-guard",
@@ -36,16 +36,20 @@
     "node --check vps_server.cjs",
     "node --check vps_server.js",
     "node --test tmp-tests/mercado-livre-listing-stock-read.test.cjs tmp-tests/mercado-livre-listing-stock-write.test.cjs (33/33)",
-    "npm.cmd run build (concluído; warning existente de Vite configLoader/native)"
+    "npm.cmd run build (concluído; warning existente de Vite configLoader/native)",
+    "GET https://api.xiaomipetrolina.com.br/status: HTTP 200; mysql.ok=true"
   ],
   "site_release": {
-    "status": "pendente",
+    "status": "publicada",
     "release": "/var/www/mdv-site/releases/20261107-013328-ml-stock-zero-guard",
-    "published_at": "pendente"
+    "published_at": "2026-11-07"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "Deploy seletivo por --mercado-livre-stock-read-only; nenhum dado comercial alterado."
+    "status": "publicada",
+    "deployed_at": "2026-11-07T01:35:46Z",
+    "service": "mdv-api",
+    "backup": "/var/www/mdv-api/backups/mercado-livre-stock-read-1794015346915",
+    "note": "Deploy seletivo do módulo de estoque; .env e serviços de preço/publicação preservados."
   },
   "nginx_release": {
     "status": "sem mudança",

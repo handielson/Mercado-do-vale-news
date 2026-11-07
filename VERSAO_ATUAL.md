@@ -1,6 +1,6 @@
 # v1.2.817-ml-stock-zero-guard
 
-Data: 07/11/2026. Status: **pendente de publicação**. Branch: main. Commit/tag: pendentes. A alteração prepara o GET de estoque do Mercado Livre para devolver condição e tipo do anúncio; o ERP/API bloqueiam saldo zero sem condition=new e tipo conhecido diferente de free. Os gates de escrita continuam desligados. Não houve chamadas de escrita nem mudança de saldos. Validações: 33 testes focados passaram e os três arquivos de servidor passaram em node --check.
+Data: 07/11/2026. Status: **publicada**. Branch: main. Commit: 7e397117; tag: v1.2.817-ml-stock-zero-guard. A alteração prepara o GET de estoque do Mercado Livre para devolver condição e tipo do anúncio; o ERP/API bloqueiam saldo zero sem condition=new e tipo conhecido diferente de free. Os gates de escrita continuam desligados. Não houve chamadas de escrita nem mudança de saldos. Validações: 33 testes focados passaram, build passou sem referência operacional ao Supabase, API status HTTP 200 com MySQL saudável, e os três arquivos de servidor passaram em node --check.
 
 ---
 
