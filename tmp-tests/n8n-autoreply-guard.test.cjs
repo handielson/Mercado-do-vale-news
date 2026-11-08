@@ -17,8 +17,13 @@ const runDados = (code, text, { fromMe = false, event = 'messages.upsert' } = {}
 };
 
 test('Dados: respostas automáticas não viram fala do cliente', { skip: !snapshot && 'sem snapshot do n8n' }, () => {
-  const original = load().nodes.find(n => n.name === NODE_DADOS).parameters.jsCode;
-  const code = patchDados(original);
+  const live = load().nodes.find(n => n.name === NODE_DADOS).parameters.jsCode;
+  // Depois de publicado, o snapshot já tem a guarda: o patch é idempotente e o "antes" vira a versão sem a guarda.
+  const published = live.includes(MARK);
+  const code = patchDados(live);
+  if (published) assert.equal(code, live, 'patch idempotente');
+  const original = published ? live.replace(/\n\/\/ autoreply-guard-v1:[\s\S]*?if \(isAutoReplyV1\) return \[\];\n/, '\n') : live;
+  assert.ok(!original.includes(MARK), 'versão sem a guarda reconstruída');
   const autoReplies = [
     'No momento não estou disponível, assim que possível respondo. Se for urgente fala no whatsapp do CREAS +55 74 0000-0000',
     'Olá! Esta é uma mensagem automática. Retornaremos em breve.',
@@ -53,8 +58,12 @@ test('Dados: respostas automáticas não viram fala do cliente', { skip: !snapsh
 
 test('Contexto: título com memória só quando a lista está filtrada', { skip: !snapshot && 'sem snapshot do n8n' }, () => {
   const workflow = load();
-  const original = workflow.nodes.find(n => n.name === NODE_CONTEXTO).parameters.jsCode;
+  const live = workflow.nodes.find(n => n.name === NODE_CONTEXTO).parameters.jsCode;
   const patched = patchWorkflow(workflow).nodes.find(n => n.name === NODE_CONTEXTO).parameters.jsCode;
+  const original = live.includes(MARK)
+    ? live.replace("(sameModelConfigurationAlternativeV1 || unavailableRequestedDevice || structuredFilterFallbackV1)?'':String(base.memoryFilterLabel || '').trim()].filter(Boolean).join(' e '); // " + MARK + ": título só com memória quando a lista está filtrada por ela", "sameModelConfigurationAlternativeV1?'':String(base.memoryFilterLabel || '').trim()].filter(Boolean).join(' e ');")
+    : live;
+  assert.ok(!original.includes(MARK), 'versão sem a correção do título reconstruída');
   const product = (id, name, brand, ram, storage, color, price) => ({ id, model_id: id + '-m', model_name: name, name: name + ' ' + color, brand, status: 'active', stock_quantity: 1, price_retail: price, specs: { ram, storage, color }, slug: id, images: [] });
   const rows = [
     product('r15', 'Redmi 15', 'Xiaomi', '8GB', '256GB', 'Preto', 135000),

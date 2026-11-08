@@ -26,6 +26,19 @@ test('lista sem resumo de características; resto idêntico', { skip: !snapshot 
     const json = new Function('$json', '$input', '$getWorkflowStaticData', '$', code)({}, { all: () => [{ json: { channel: 'presencial', installments: 12, applied_fee_pct: 11.9 } }] }, () => state, lookup)[0].json;
     return { json, state };
   };
+  if (original.includes(MARK)) {
+    // Snapshot já publicado: patch idempotente e a lista no ar sem resumo e sem "total".
+    assert.equal(patched, original, 'patch idempotente');
+    const live = run(patched);
+    const stored = live.state.salesPostList[jid].options.map(o => o.featureSummary).filter(Boolean);
+    assert.ok(stored.length > 0, 'resumo continua guardado');
+    for (const summary of stored) assert.ok(!live.json.deterministicCatalogOutput.includes(summary), 'lista sem o resumo');
+    assert.doesNotMatch(live.json.deterministicCatalogOutput, /\(total /);
+    assert.match(live.json.deterministicCatalogOutput, /💳 Cartão: 12x de R\$\s[\d.,]+ \(R\$\s[\d.,]+\)/);
+    const posLive = patchedWorkflow.nodes.find(n => n.name === NODE_POS_LISTA).parameters.jsCode;
+    assert.ok(posLive.includes(MARK) && !posLive.includes("' (total ' + "));
+    return;
+  }
   const before = run(original), after = run(patched);
   const summaries = before.state.salesPostList[jid].options.map(o => o.featureSummary).filter(Boolean);
   assert.ok(summaries.length > 0, 'fixture gera resumo');

@@ -1,6 +1,6 @@
 # v1.2.820-n8n-lista-limpa
 
-Data: 08/11/2026. Branch: `main`. Status: **pendente** (n8n). Só o robô do WhatsApp (n8n); site/API seguem a v1.2.818.
+Data: 08/11/2026. Branch: `main`. Tag: `v1.2.820-n8n-lista-limpa`. Status: **publicada** (n8n 0c06d07a…, backup `/root/n8n-backups/meta-attendance-2026-11-08T19-16-20-933Z-78da7d22.aes256gcm.json`). Só o robô do WhatsApp (n8n); site/API seguem a v1.2.818.
 Lista de celulares sem a linha de resumo ✨ (tela, bateria, câmera); linha do cartão sem a palavra "total": `12x de R$ 111,81 (R$ 1.341,68)`. A tabela de parcelamento 1x–12x mantém "total". Registro: `docs/versoes/2026-11-08-v1.2.820-n8n-lista-limpa.md`.
 
 ---

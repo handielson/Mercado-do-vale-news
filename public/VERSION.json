@@ -1,7 +1,7 @@
 {
   "version": "v1.2.820-n8n-lista-limpa",
   "date": "2026-11-08",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.820-n8n-lista-limpa",
   "release_vps": "/var/www/mdv-site/releases/20261108-171300-ml-billing-failure-log",
@@ -28,13 +28,15 @@
     "tmp-tests/n8n-list-no-feature-summary.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-08-v1.2.820-n8n-lista-limpa.md"
+    "docs/versoes/2026-11-08-v1.2.820-n8n-lista-limpa.md",
+    "tmp-tests/n8n-autoreply-guard.test.cjs"
   ],
   "validations": [
     "node --test tmp-tests/n8n-list-no-feature-summary.test.cjs (1/1) no candidato",
     "node --test tmp-tests/n8n-autoreply-guard.test.cjs (2/2) — v1.2.819",
     "gate comercial n8n-sales-regression-gate (18 arquivos) no candidato sha256 0c06d07a…",
-    "dry run contra o workflow ativo: só Vendas - Contexto Produtos e Vendas - Verificar Pos Lista mudam"
+    "dry run contra o workflow ativo: só Vendas - Contexto Produtos e Vendas - Verificar Pos Lista mudam",
+    "após publicar: hash ativo 0c06d07a… = candidato; testes focados e gate repetidos no snapshot publicado (idempotentes)"
   ],
   "site_release": {
     "status": "publicada",
@@ -53,11 +55,13 @@
     "note": ""
   },
   "n8n_release": {
-    "status": "pendente",
+    "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
+    "published_at": "2026-11-08T19:16:20Z",
+    "sha256": "0c06d07a245ee575f6a1634d6d1551c225771864e6a3e63b1e90be7410f3f52b",
     "before": "e56b04af33e0aac15aafafb2c31740975fd78de8df2d37c6ee659ba4e343893c",
-    "candidate": "0c06d07a245ee575f6a1634d6d1551c225771864e6a3e63b1e90be7410f3f52b",
-    "previous_release": "v1.2.819-n8n-autoreply-guard publicada (backup /root/n8n-backups/meta-attendance-2026-11-08T17-48-19-236Z-aa0222ec.aes256gcm.json)"
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-08T19-16-20-933Z-78da7d22.aes256gcm.json",
+    "note": "Só os nós Vendas - Contexto Produtos e Vendas - Verificar Pos Lista; n8n/runner 1/1, healthz 200, Evolution open. Inclui a v1.2.819 (backup /root/n8n-backups/meta-attendance-2026-11-08T17-48-19-236Z-aa0222ec.aes256gcm.json)."
   },
   "evolution_release": {
     "status": "publicada",
