@@ -1,10 +1,10 @@
 {
   "version": "v1.2.821-ml-billing-429",
   "date": "2026-11-08",
-  "status": "pendente de publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.821-ml-billing-429",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261108-211138-ml-billing-429-record",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Mercado Livre: respostas HTTP 429 na consulta de faturamento são preservadas e orientam aguardar; diagnóstico sanitizado, sem novas escritas comerciais.",
   "gestao_mdv_android": {
@@ -33,19 +33,19 @@
     "node --test tmp-tests/mercado-livre-erp-billing-details.test.cjs (9/9)",
     "node --check services/mercadoLivreServer.cjs, server.js, vps_server.cjs e vps_server.js (OK)",
     "npm.cmd run build (OK; aviso conhecido de configLoader nativo do Vite)",
-    "API seletiva --mercado-livre-only (pendente; gates de estoque, preço e publicação desligados)",
-    "GET API status e VERSION do site (pendente)"
+    "API seletiva --mercado-livre-only; mdv-api online, gates de estoque, preço e publicação desligados",
+    "GET API status HTTP 200, mysql.ok=true; site release final v1.2.821 e homepage HTTP 200"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": ""
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261108-211138-ml-billing-429-record",
+    "published_at": "2026-11-08"
   },
   "api_release": {
-    "status": "pendente",
-    "deployed_at": "",
+    "status": "publicada",
+    "deployed_at": "2026-11-08T21:08:20.272Z",
     "service": "mdv-api",
-    "backup": "pendente",
+    "backup": "/var/www/mdv-api/backups/mercado-livre-1794172100272",
     "note": "Rota GET read-only de faturamento; gates de publicação, preço e estoque desligados."
   },
   "nginx_release": {

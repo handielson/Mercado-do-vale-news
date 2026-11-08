@@ -1,6 +1,6 @@
 # v1.2.821-ml-billing-429
 
-Data: 08/11/2026. Status: **pendente de publicação**. Branch: `main`. Tag: `v1.2.821-ml-billing-429` (será criada após as validações). A rota read-only de faturamento preserva o HTTP 429 do Mercado Livre e orienta aguardar a próxima janela, com diagnóstico sanitizado. A causa upstream da tentativa anterior continua sem confirmação. Gates de escrita de estoque, preço e anúncio permanecem desligados. Validações locais: regressão focada 9/9, sintaxe dos servidores OK e build OK (aviso conhecido de configLoader nativo do Vite). API seletiva e publicação do manifesto do site pendentes.
+Data: 08/11/2026. Status: **publicada**. Branch: `main`. Commit de código: `2bef3cf3`; tag: `v1.2.821-ml-billing-429`. API `mdv-api` reiniciada via deploy seletivo em `2026-11-08T21:08:20.272Z`, backup `/var/www/mdv-api/backups/mercado-livre-1794172100272`. Release do site com o manifesto final: `/var/www/mdv-site/releases/20261108-211138-ml-billing-429-record` (a release inicial foi `/var/www/mdv-site/releases/20261108-210520-ml-billing-429`). A rota read-only de faturamento preserva o HTTP 429 do Mercado Livre e orienta aguardar a próxima janela, com diagnóstico sanitizado. A causa upstream da tentativa anterior continua sem confirmação. Gates de escrita de estoque, preço e anúncio permanecem desligados. Validações: regressão focada 9/9, sintaxe dos servidores OK, build OK (aviso conhecido de configLoader nativo do Vite), API status HTTP 200/MySQL saudável e homepage HTTP 200.
 
 ---
 
