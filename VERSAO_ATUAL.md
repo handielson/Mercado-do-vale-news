@@ -1,3 +1,17 @@
+# v1.2.820-n8n-lista-limpa
+
+Data: 08/11/2026. Branch: `main`. Status: **pendente** (n8n). Só o robô do WhatsApp (n8n); site/API seguem a v1.2.818.
+Lista de celulares sem a linha de resumo ✨ (tela, bateria, câmera); linha do cartão sem a palavra "total": `12x de R$ 111,81 (R$ 1.341,68)`. A tabela de parcelamento 1x–12x mantém "total". Registro: `docs/versoes/2026-11-08-v1.2.820-n8n-lista-limpa.md`.
+
+---
+
+# v1.2.819-n8n-autoreply-guard
+
+Data: 08/11/2026. Branch: `main`. Tag: `v1.2.819-n8n-autoreply-guard`. Publicada (n8n e56b04af…, backup `/root/n8n-backups/meta-attendance-2026-11-08T17-48-19-236Z-aa0222ec.aes256gcm.json`). Só o robô do WhatsApp (n8n).
+Robô não responde mensagens automáticas de outras empresas (ausência, "mensagem automática", fora do horário); título "Celulares com 64GB" só quando a lista está filtrada por memória. Incidente 07–08/11: Evolution "surda" pelo bug da Baileys rc.9 com `<status>`; patch `mdv-status-ack-v1` na VPS e imagem `mdv/evolution-api:2.3.7-statusack`.
+
+---
+
 # v1.2.818-ml-billing-failure-log
 
 Data: 08/11/2026. Status: **publicada**. Branch: `main`. Tag: `v1.2.818-ml-billing-failure-log`. API `mdv-api` reiniciada pelo deploy seletivo, backup `/var/www/mdv-api/backups/mercado-livre-1794157953905`; site em `/var/www/mdv-site/releases/20261108-171300-ml-billing-failure-log`. A rota read-only de faturamento agora registra erros técnicos seguros em JSON mesmo quando Fastify está configurado com `logger: false`, como na API de produção. O log não contém IDs de pedidos, tokens nem corpo da resposta. Gates de escrita de estoque, preço e anúncio seguem desligados. Validações locais: 8 testes focados, 128 testes Mercado Livre, sintaxe dos servidores e build passaram; API pública respondeu HTTP 200 com MySQL saudável. O build mostrou somente o aviso já conhecido de `configLoader` nativo do Vite.
