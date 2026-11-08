@@ -1,10 +1,10 @@
 {
   "version": "v1.2.818-ml-billing-failure-log",
   "date": "2026-11-08",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.818-ml-billing-failure-log",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261108-171300-ml-billing-failure-log",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Mercado Livre: falhas na consulta de faturamento registram diagnóstico técnico seguro mesmo com o logger Fastify desativado. Escritas de estoque, preço e anúncio permanecem desligadas.",
   "gestao_mdv_android": {
@@ -34,19 +34,20 @@
     "npm.cmd run test:mercado-livre (128/128; integração estática OK)",
     "node --check services/mercadoLivreServer.cjs, server.js, vps_server.cjs e vps_server.js (OK)",
     "npm.cmd run build (OK; aviso conhecido de configLoader nativo do Vite)",
-    "GET https://api.xiaomipetrolina.com.br/status (pendente após publicação)"
+    "API seletiva --mercado-livre-only publicada; gates de estoque, preço e publicação desligados",
+    "GET https://api.xiaomipetrolina.com.br/status: HTTP 200; mysql.ok=true"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": "pendente"
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261108-171300-ml-billing-failure-log",
+    "published_at": "2026-11-08"
   },
   "api_release": {
-    "status": "pendente",
-    "deployed_at": "pendente",
+    "status": "publicada",
+    "deployed_at": "2026-11-08T17:12:33.905Z",
     "service": "mdv-api",
-    "backup": "pendente",
-    "note": "Deploy seletivo do módulo do Mercado Livre pendente; gates de escrita permanecem desligados."
+    "backup": "/var/www/mdv-api/backups/mercado-livre-1794157953905",
+    "note": "Deploy seletivo do módulo do Mercado Livre; gates de publicação, preço e estoque desligados."
   },
   "nginx_release": {
     "status": "sem mudança",

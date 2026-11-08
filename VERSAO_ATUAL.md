@@ -1,6 +1,6 @@
 # v1.2.818-ml-billing-failure-log
 
-Data: 08/11/2026. Status: **pendente de publicação**. Branch: `main`. Tag planejada: `v1.2.818-ml-billing-failure-log`. A rota read-only de faturamento agora registra erros técnicos seguros em JSON mesmo quando Fastify está configurado com `logger: false`, como na API de produção. O log não contém IDs de pedidos, tokens nem corpo da resposta. Gates de escrita de estoque, preço e anúncio seguem desligados. Validações: 8 testes focados, 128 testes Mercado Livre, sintaxe dos servidores e build passaram; o build mostrou somente o aviso já conhecido de `configLoader` nativo do Vite. Publicação e status público ainda pendentes.
+Data: 08/11/2026. Status: **publicada**. Branch: `main`. Tag: `v1.2.818-ml-billing-failure-log`. API `mdv-api` reiniciada pelo deploy seletivo, backup `/var/www/mdv-api/backups/mercado-livre-1794157953905`; site em `/var/www/mdv-site/releases/20261108-171300-ml-billing-failure-log`. A rota read-only de faturamento agora registra erros técnicos seguros em JSON mesmo quando Fastify está configurado com `logger: false`, como na API de produção. O log não contém IDs de pedidos, tokens nem corpo da resposta. Gates de escrita de estoque, preço e anúncio seguem desligados. Validações locais: 8 testes focados, 128 testes Mercado Livre, sintaxe dos servidores e build passaram; API pública respondeu HTTP 200 com MySQL saudável. O build mostrou somente o aviso já conhecido de `configLoader` nativo do Vite.
 
 ---
 
