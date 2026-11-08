@@ -1,3 +1,9 @@
+# v1.2.821-ml-billing-429
+
+Data: 08/11/2026. Status: **pendente de publicação**. Branch: `main`. Tag: `v1.2.821-ml-billing-429` (será criada após as validações). A rota read-only de faturamento preserva o HTTP 429 do Mercado Livre e orienta aguardar a próxima janela, com diagnóstico sanitizado. A causa upstream da tentativa anterior continua sem confirmação. Gates de escrita de estoque, preço e anúncio permanecem desligados. Validações locais: regressão focada 9/9, sintaxe dos servidores OK e build OK (aviso conhecido de configLoader nativo do Vite). API seletiva e publicação do manifesto do site pendentes.
+
+---
+
 # v1.2.820-n8n-lista-limpa
 
 Data: 08/11/2026. Branch: `main`. Tag: `v1.2.820-n8n-lista-limpa`. Status: **publicada** (n8n 0c06d07a…, backup `/root/n8n-backups/meta-attendance-2026-11-08T19-16-20-933Z-78da7d22.aes256gcm.json`). Só o robô do WhatsApp (n8n); site/API seguem a v1.2.818.

@@ -1521,9 +1521,11 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
       return await loadMercadoLivreOrderBillingDetailsForErp(pool, request.params?.orderId);
     } catch (error) {
       const authorizationBlocked = [401, 403].includes(error.remoteStatus);
-      const status = error.statusCode || (error.remoteStatus === 404 ? 404 : authorizationBlocked ? 409 : 502);
+      const status = error.statusCode || (error.remoteStatus === 404 ? 404
+        : authorizationBlocked ? 409 : error.remoteStatus === 429 ? 429 : 502);
       const message = authorizationBlocked ? 'A conexão OAuth atual não permite consultar o faturamento.'
         : status === 404 ? 'Pedido não encontrado para o vendedor conectado.'
+        : status === 429 ? 'A consulta de faturamento foi limitada temporariamente. Aguarde a próxima janela antes de consultar novamente.'
         : status === 400 || status === 409 ? error.message
           : 'Consulta do faturamento do pedido Mercado Livre indisponível.';
       const diagnostic = mercadoLivreBillingDiagnostic(error, status);
@@ -1541,8 +1543,9 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
       return await loadMercadoLivreOrderBillingBatchForErp(pool, orderIds);
     } catch (error) {
       const authorizationBlocked = [401, 403].includes(error.remoteStatus);
-      const status = error.statusCode || (authorizationBlocked ? 409 : 502);
+      const status = error.statusCode || (authorizationBlocked ? 409 : error.remoteStatus === 429 ? 429 : 502);
       const message = authorizationBlocked ? 'A conexão OAuth atual não permite consultar o faturamento.'
+        : status === 429 ? 'A consulta de faturamento foi limitada temporariamente. Aguarde a próxima janela antes de consultar novamente.'
         : status === 400 || status === 409 || status === 503 ? error.message
           : 'Consulta do faturamento dos pedidos Mercado Livre indisponível.';
       const diagnostic = mercadoLivreBillingDiagnostic(error, status);

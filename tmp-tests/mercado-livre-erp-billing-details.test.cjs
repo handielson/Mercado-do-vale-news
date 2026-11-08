@@ -137,6 +137,38 @@ test('não trata resposta parcial do Mercado Livre como lote completo', async ()
   }
 });
 
+test('preserva limite temporário 429 no faturamento sem expor corpo upstream', async () => {
+  const oldKey = process.env.MERCADO_LIVRE_ERP_READ_KEY;
+  const oldFetch = global.fetch;
+  process.env.MERCADO_LIVRE_ERP_READ_KEY = readKey;
+  global.fetch = async url => {
+    const path = new URL(url).pathname;
+    if (path === '/orders/130') return response({ id: 130, seller: { id: 7 }, payments: [] });
+    if (path === '/billing/integration/group/ML/order/details') {
+      return response({ error: 'too_many_requests', private: 'never expose this body' }, 429);
+    }
+    throw new Error(`unexpected external request ${path}`);
+  };
+  const app = appFor({ query: async () => [[settings]] });
+  try {
+    for (const url of [
+      '/api/mercado-livre/erp/orders/130/billing-details',
+      '/api/mercado-livre/erp/orders/billing-details?order_ids=130',
+    ]) {
+      const result = await app.inject({ method: 'GET', url, headers: { 'x-erp-read-key': readKey } });
+      assert.equal(result.statusCode, 429);
+      assert.match(result.json().error, /limitada temporariamente/);
+      assert.match(result.json().error, /próxima janela/);
+      assert.deepEqual(result.json().diagnostic, { upstreamStatus: 429, upstreamCode: 'too_many_requests' });
+      assert.equal(result.body.includes('never expose this body'), false);
+    }
+  } finally {
+    await app.close(); global.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.MERCADO_LIVRE_ERP_READ_KEY;
+    else process.env.MERCADO_LIVRE_ERP_READ_KEY = oldKey;
+  }
+});
+
 test('não consulta faturamento se o pedido não é do vendedor e representa faturamento ausente sem inventar tarifa zero', async () => {
   const oldKey = process.env.MERCADO_LIVRE_ERP_READ_KEY;
   const oldFetch = global.fetch;

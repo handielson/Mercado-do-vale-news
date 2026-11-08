@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.820-n8n-lista-limpa",
+  "version": "v1.2.821-ml-billing-429",
   "date": "2026-11-08",
-  "status": "publicada",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.820-n8n-lista-limpa",
-  "release_vps": "/var/www/mdv-site/releases/20261108-171300-ml-billing-failure-log",
+  "tag": "v1.2.821-ml-billing-429",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô do WhatsApp: lista de celulares sem a linha de resumo ✨ (tela, bateria, câmera) e linha do cartão sem a palavra \"total\" — \"12x de R$ 111,81 (R$ 1.341,68)\". Inclui a v1.2.819: o robô não responde mensagens automáticas de outras empresas e o título \"Celulares com 64GB\" só aparece quando a lista está filtrada. Sem mudança no site/API (site segue a release da v1.2.818).",
+  "summary": "Mercado Livre: respostas HTTP 429 na consulta de faturamento são preservadas e orientam aguardar; diagnóstico sanitizado, sem novas escritas comerciais.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,32 +23,30 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "scripts/n8n-list-no-feature-summary.cjs",
-    "scripts/deploy-n8n-list-no-feature-summary.cjs",
-    "tmp-tests/n8n-list-no-feature-summary.test.cjs",
+    "services/mercadoLivreServer.cjs",
+    "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-08-v1.2.820-n8n-lista-limpa.md",
-    "tmp-tests/n8n-autoreply-guard.test.cjs"
+    "docs/versoes/2026-11-08-v1.2.821-ml-billing-429.md"
   ],
   "validations": [
-    "node --test tmp-tests/n8n-list-no-feature-summary.test.cjs (1/1) no candidato",
-    "node --test tmp-tests/n8n-autoreply-guard.test.cjs (2/2) — v1.2.819",
-    "gate comercial n8n-sales-regression-gate (18 arquivos) no candidato sha256 0c06d07a…",
-    "dry run contra o workflow ativo: só Vendas - Contexto Produtos e Vendas - Verificar Pos Lista mudam",
-    "após publicar: hash ativo 0c06d07a… = candidato; testes focados e gate repetidos no snapshot publicado (idempotentes)"
+    "node --test tmp-tests/mercado-livre-erp-billing-details.test.cjs (9/9)",
+    "node --check services/mercadoLivreServer.cjs, server.js, vps_server.cjs e vps_server.js (OK)",
+    "npm.cmd run build (OK; aviso conhecido de configLoader nativo do Vite)",
+    "API seletiva --mercado-livre-only (pendente; gates de estoque, preço e publicação desligados)",
+    "GET API status e VERSION do site (pendente)"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261108-171300-ml-billing-failure-log",
-    "published_at": "2026-11-08"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": ""
   },
   "api_release": {
-    "status": "publicada",
-    "deployed_at": "2026-11-08T17:12:33.905Z",
+    "status": "pendente",
+    "deployed_at": "",
     "service": "mdv-api",
-    "backup": "/var/www/mdv-api/backups/mercado-livre-1794157953905",
-    "note": "Deploy seletivo do módulo do Mercado Livre; gates de publicação, preço e estoque desligados."
+    "backup": "pendente",
+    "note": "Rota GET read-only de faturamento; gates de publicação, preço e estoque desligados."
   },
   "nginx_release": {
     "status": "sem mudança",
