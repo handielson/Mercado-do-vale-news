@@ -682,13 +682,16 @@ function mercadoLivreBillingDiagnostic(error, status) {
   return diagnostic;
 }
 
-function logMercadoLivreBillingFailure(request, scope, status, diagnostic) {
-  request.log?.warn({
+function logMercadoLivreBillingFailure(scope, status, diagnostic) {
+  if (status < 500 && !Number.isInteger(diagnostic.upstreamStatus)) return;
+  console.warn(JSON.stringify({
+    level: 'warn', timestamp: new Date().toISOString(),
     event: 'mercado_livre_billing_read_failed', scope, httpStatus: status,
     ...(Number.isInteger(diagnostic.upstreamStatus) ? { upstreamStatus: diagnostic.upstreamStatus } : {}),
     ...(typeof diagnostic.upstreamCode === 'string' ? { upstreamCode: diagnostic.upstreamCode } : {}),
     ...(typeof diagnostic.failureClass === 'string' ? { failureClass: diagnostic.failureClass } : {}),
-  }, 'Mercado Livre billing read failed');
+    message: 'Mercado Livre billing read failed',
+  }));
 }
 
 async function loadMercadoLivreOrderBillingBatchForErp(pool, orderIdsValue) {
@@ -1524,7 +1527,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         : status === 400 || status === 409 ? error.message
           : 'Consulta do faturamento do pedido Mercado Livre indisponível.';
       const diagnostic = mercadoLivreBillingDiagnostic(error, status);
-      logMercadoLivreBillingFailure(request, 'single', status, diagnostic);
+      logMercadoLivreBillingFailure('single', status, diagnostic);
       return reply.code(status).send({ error: message, ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     }
   };
@@ -1543,7 +1546,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
         : status === 400 || status === 409 || status === 503 ? error.message
           : 'Consulta do faturamento dos pedidos Mercado Livre indisponível.';
       const diagnostic = mercadoLivreBillingDiagnostic(error, status);
-      logMercadoLivreBillingFailure(request, 'batch', status, diagnostic);
+      logMercadoLivreBillingFailure('batch', status, diagnostic);
       return reply.code(status).send({ error: message, ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     }
   };

@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.817-ml-stock-zero-guard",
-  "date": "2026-11-07",
-  "status": "publicada",
+  "version": "v1.2.818-ml-billing-failure-log",
+  "date": "2026-11-08",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.817-ml-stock-zero-guard",
-  "release_vps": "/var/www/mdv-site/releases/20261107-013328-ml-stock-zero-guard",
+  "tag": "v1.2.818-ml-billing-failure-log",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Mercado Livre: leitura protegida passa a informar condição e tipo do anúncio; zeragem é bloqueada sem condição new e tipo conhecido não free. Os gates de escrita continuam desligados.",
+  "summary": "Mercado Livre: falhas na consulta de faturamento registram diagnóstico técnico seguro mesmo com o logger Fastify desativado. Escritas de estoque, preço e anúncio permanecem desligadas.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -23,33 +23,30 @@
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "docs/operacional/mercado-livre-erp-sync.md",
-    "services/mercadoLivreListingStock.cjs",
-    "tmp-tests/mercado-livre-listing-stock-read.test.cjs",
-    "tmp-tests/mercado-livre-listing-stock-write.test.cjs",
+    "services/mercadoLivreServer.cjs",
+    "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-07-v1.2.817-ml-stock-zero-guard.md"
+    "docs/versoes/2026-11-08-v1.2.818-ml-billing-failure-log.md"
   ],
   "validations": [
-    "node --check server.js",
-    "node --check vps_server.cjs",
-    "node --check vps_server.js",
-    "node --test tmp-tests/mercado-livre-listing-stock-read.test.cjs tmp-tests/mercado-livre-listing-stock-write.test.cjs (33/33)",
-    "npm.cmd run build (concluído; warning existente de Vite configLoader/native)",
-    "GET https://api.xiaomipetrolina.com.br/status: HTTP 200; mysql.ok=true"
+    "node --test tmp-tests/mercado-livre-erp-billing-details.test.cjs (8/8)",
+    "npm.cmd run test:mercado-livre (128/128; integração estática OK)",
+    "node --check services/mercadoLivreServer.cjs, server.js, vps_server.cjs e vps_server.js (OK)",
+    "npm.cmd run build (OK; aviso conhecido de configLoader nativo do Vite)",
+    "GET https://api.xiaomipetrolina.com.br/status (pendente após publicação)"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261107-013328-ml-stock-zero-guard",
-    "published_at": "2026-11-07"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": "pendente"
   },
   "api_release": {
-    "status": "publicada",
-    "deployed_at": "2026-11-07T01:35:46Z",
+    "status": "pendente",
+    "deployed_at": "pendente",
     "service": "mdv-api",
-    "backup": "/var/www/mdv-api/backups/mercado-livre-stock-read-1794015346915",
-    "note": "Deploy seletivo do módulo de estoque; .env e serviços de preço/publicação preservados."
+    "backup": "pendente",
+    "note": "Deploy seletivo do módulo do Mercado Livre pendente; gates de escrita permanecem desligados."
   },
   "nginx_release": {
     "status": "sem mudança",

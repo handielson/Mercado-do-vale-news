@@ -1,3 +1,9 @@
+# v1.2.818-ml-billing-failure-log
+
+Data: 08/11/2026. Status: **pendente de publicação**. Branch: `main`. Tag planejada: `v1.2.818-ml-billing-failure-log`. A rota read-only de faturamento agora registra erros técnicos seguros em JSON mesmo quando Fastify está configurado com `logger: false`, como na API de produção. O log não contém IDs de pedidos, tokens nem corpo da resposta. Gates de escrita de estoque, preço e anúncio seguem desligados. Validações: 8 testes focados, 128 testes Mercado Livre, sintaxe dos servidores e build passaram; o build mostrou somente o aviso já conhecido de `configLoader` nativo do Vite. Publicação e status público ainda pendentes.
+
+---
+
 # v1.2.817-ml-stock-zero-guard
 
 Data: 07/11/2026. Status: **publicada**. Branch: main. Commit: 7e397117; tag: v1.2.817-ml-stock-zero-guard. A alteração prepara o GET de estoque do Mercado Livre para devolver condição e tipo do anúncio; o ERP/API bloqueiam saldo zero sem condition=new e tipo conhecido diferente de free. Os gates de escrita continuam desligados. Não houve chamadas de escrita nem mudança de saldos. Validações: 33 testes focados passaram, build passou sem referência operacional ao Supabase, API status HTTP 200 com MySQL saudável, e os três arquivos de servidor passaram em node --check.
