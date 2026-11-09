@@ -1,3 +1,11 @@
+# v1.2.822-order-coin-redemption
+
+Data: 08/11/2026 (Brasília). Branch: `main`. Tag: `v1.2.822-order-coin-redemption`. Commits: `2c125e0f` e `12e63fe6`. API publicada via `deploy-vps-server-only.cjs`; site sem novo deploy, release ativa: `/var/www/mdv-site/releases/20261108-211138-ml-billing-429-record`.
+
+Pedidos com moedas debitam o saldo na criação e estornam no cancelamento ou exclusão. Dois componentes de catálogo sem uso foram removidos do repositório. 27 testes focados aprovados; Deploy oficial concluído, PM2 mdv-api online, módulo remoto com SHA-256 igual ao local e sem ocorrência nos logs inspecionados; API pública /health HTTP 200; /status com mysql.ok=true; www.mercadodovale.com.br/api/health HTTP 404 antes e depois do deploy. Registro: `docs/versoes/2026-11-08-v1.2.822-order-coin-redemption.md`.
+
+---
+
 # v1.2.821-ml-billing-429
 
 Data: 08/11/2026. Status: **publicada**. Branch: `main`. Commit de código: `2bef3cf3`; tag: `v1.2.821-ml-billing-429`. API `mdv-api` reiniciada via deploy seletivo em `2026-11-08T21:08:20.272Z`, backup `/var/www/mdv-api/backups/mercado-livre-1794172100272`. Release do site com o manifesto final: `/var/www/mdv-site/releases/20261108-211138-ml-billing-429-record` (a release inicial foi `/var/www/mdv-site/releases/20261108-210520-ml-billing-429`). A rota read-only de faturamento preserva o HTTP 429 do Mercado Livre e orienta aguardar a próxima janela, com diagnóstico sanitizado. A causa upstream da tentativa anterior continua sem confirmação. Gates de escrita de estoque, preço e anúncio permanecem desligados. Validações: regressão focada 9/9, sintaxe dos servidores OK, build OK (aviso conhecido de configLoader nativo do Vite), API status HTTP 200/MySQL saudável e homepage HTTP 200.

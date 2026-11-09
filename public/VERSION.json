@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.821-ml-billing-429",
+  "version": "v1.2.822-order-coin-redemption",
   "date": "2026-11-08",
-  "status": "publicada",
+  "status": "API publicada",
   "branch": "main",
-  "tag": "v1.2.821-ml-billing-429",
+  "tag": "v1.2.822-order-coin-redemption",
   "release_vps": "/var/www/mdv-site/releases/20261108-211138-ml-billing-429-record",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Mercado Livre: respostas HTTP 429 na consulta de faturamento são preservadas e orientam aguardar; diagnóstico sanitizado, sem novas escritas comerciais.",
+  "summary": "Pedidos com moedas debitam o saldo na criação e estornam no cancelamento ou exclusão. Dois componentes de catálogo sem uso foram removidos do repositório.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -19,22 +19,28 @@
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "site": "v1.2.780-ml-billing-safe-diagnostic: /var/www/mdv-site/releases/20261104-004205-ml-billing-safe-diagnostic",
-    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
+    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center",
+    "site_manifest": "v1.2.822 registrado no Git; site não republicado nesta entrega"
   },
   "site_source_base": "48412089",
   "changed_files": [
-    "services/mercadoLivreServer.cjs",
-    "tmp-tests/mercado-livre-erp-billing-details.test.cjs",
+    "components/catalog/InstallmentSimulator.tsx",
+    "components/catalog/ShippingCalculator.tsx",
+    "deploy-vps-server-only.cjs",
+    "services/orderCoinRedemption.cjs",
+    "tmp-tests/order-coin-redemption-routes.test.cjs",
+    "tmp-tests/order-coin-redemption.test.cjs",
+    "vps_server.cjs",
+    "vps_server.js",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-08-v1.2.821-ml-billing-429.md"
+    "docs/versoes/2026-11-08-v1.2.822-order-coin-redemption.md"
   ],
   "validations": [
-    "node --test tmp-tests/mercado-livre-erp-billing-details.test.cjs (9/9)",
-    "node --check services/mercadoLivreServer.cjs, server.js, vps_server.cjs e vps_server.js (OK)",
-    "npm.cmd run build (OK; aviso conhecido de configLoader nativo do Vite)",
-    "API seletiva --mercado-livre-only; mdv-api online, gates de estoque, preço e publicação desligados",
-    "GET API status HTTP 200, mysql.ok=true; site release final v1.2.821 e homepage HTTP 200"
+    "27 testes focados aprovados",
+    "Deploy oficial concluído, PM2 mdv-api online, módulo remoto com SHA-256 igual ao local e sem ocorrência nos logs inspecionados",
+    "API pública /health HTTP 200; /status com mysql.ok=true",
+    "www.mercadodovale.com.br/api/health HTTP 404 antes e depois do deploy"
   ],
   "site_release": {
     "status": "publicada",
@@ -43,14 +49,13 @@
   },
   "api_release": {
     "status": "publicada",
-    "deployed_at": "2026-11-08T21:08:20.272Z",
     "service": "mdv-api",
-    "backup": "/var/www/mdv-api/backups/mercado-livre-1794172100272",
-    "note": "Rota GET read-only de faturamento; gates de publicação, preço e estoque desligados."
+    "commit": "12e63fe6",
+    "note": "Deploy via deploy-vps-server-only.cjs; PID 3000199 confirmado online."
   },
   "nginx_release": {
     "status": "sem mudança",
-    "note": ""
+    "note": "Site permanece na release anterior."
   },
   "n8n_release": {
     "status": "publicada",
