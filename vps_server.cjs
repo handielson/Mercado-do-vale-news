@@ -30645,10 +30645,33 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
   const placeholders = cols.map(() => '?').join(', ');
   const colList = cols.map(c => `\`${c}\``).join(', ');
 
-  await pool.query(
-    `INSERT INTO \`${name}\` (${colList}) VALUES (${placeholders})`,
-    vals
-  );
+  // order-coin-redemption-v1: moedas usadas no pedido sao debitadas na mesma transacao do INSERT.
+  if (name === 'orders' && require('./services/orderCoinRedemption.cjs').hasCoinRedemption(insertBody)) {
+    const orderCoinRedemption = require('./services/orderCoinRedemption.cjs');
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await orderCoinRedemption.debitCoinsForOrder(connection, insertBody);
+      await connection.query(
+        `INSERT INTO \`${name}\` (${colList}) VALUES (${placeholders})`,
+        vals
+      );
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      if (error instanceof orderCoinRedemption.CoinRedemptionError) {
+        return reply.code(409).send({ error: error.message, code: error.code });
+      }
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } else {
+    await pool.query(
+      `INSERT INTO \`${name}\` (${colList}) VALUES (${placeholders})`,
+      vals
+    );
+  }
 
   const [rows] = await pool.query(
     `SELECT * FROM \`${name}\` WHERE \`${pk}\` = ? LIMIT 1`,
@@ -33148,7 +33171,23 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
   const setClauses = entries.map(([k]) => `\`${k}\` = ?`).join(', ');
   const vals = [...entries.map(([, v]) => normalizeTableDataValue(v)), pkValue];
 
-  await pool.query(`UPDATE \`${name}\` SET ${setClauses} WHERE \`${pkCol}\` = ?`, vals);
+  // order-coin-redemption-v1: cancelar o pedido devolve as moedas resgatadas, uma unica vez.
+  if (name === 'orders' && String(body.status || '') === 'cancelled') {
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(`UPDATE \`${name}\` SET ${setClauses} WHERE \`${pkCol}\` = ?`, vals);
+      await require('./services/orderCoinRedemption.cjs').refundCoinsForOrder(connection, pkValue);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } else {
+    await pool.query(`UPDATE \`${name}\` SET ${setClauses} WHERE \`${pkCol}\` = ?`, vals);
+  }
 
   const [rows] = await pool.query(`SELECT * FROM \`${name}\` WHERE \`${pkCol}\` = ? LIMIT 1`, [pkValue]);
   const updatedRow = rows[0];
@@ -33179,7 +33218,25 @@ fastify.delete('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asy
     const [existingOrders] = await pool.query('SELECT storefront FROM orders WHERE id=? LIMIT 1', [pkValue]);
     if (existingOrders[0]?.storefront === 'loja_3d') return reply.code(403).send({ error: 'Pedido 3D exige fluxo próprio.' });
   }
-  const [result] = await pool.query(`DELETE FROM \`${name}\` WHERE \`${pkCol}\` = ?`, [pkValue]);
+  let result;
+  if (name === 'orders') {
+    // order-coin-redemption-v1: excluir o pedido (inclusive rollback do checkout) devolve as moedas.
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await require('./services/orderCoinRedemption.cjs').refundCoinsForOrder(connection, pkValue);
+      [result] = await connection.query(`DELETE FROM \`${name}\` WHERE \`${pkCol}\` = ?`, [pkValue]);
+      if (result.affectedRows === 0) await connection.rollback();
+      else await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } else {
+    [result] = await pool.query(`DELETE FROM \`${name}\` WHERE \`${pkCol}\` = ?`, [pkValue]);
+  }
 
   if (result.affectedRows === 0) return reply.code(404).send({ error: 'Row not found' });
   return { ok: true, deleted: 1 };
