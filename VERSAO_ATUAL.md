@@ -1,3 +1,13 @@
+# v1.2.823-trava-total-cupom
+
+Data: 08/11/2026 (Brasília). Branch: `main`. Commit de código: `57fe7a67`. Release planejada: `/var/www/mdv-site/releases/20261109-005350-trava-total-cupom`.
+
+Valida o total dos pedidos online no servidor e controla o uso de cupom uma vez por pedido, com liberação no cancelamento ou exclusão.
+
+Registro: `docs/versoes/2026-11-08-v1.2.823-trava-total-cupom.md`.
+
+---
+
 # v1.2.822-order-coin-redemption
 
 Data: 08/11/2026 (Brasília). Branch: `main`. Tag: `v1.2.822-order-coin-redemption`. Commits: `2c125e0f` e `12e63fe6`. API publicada via `deploy-vps-server-only.cjs`; site sem novo deploy, release ativa: `/var/www/mdv-site/releases/20261108-211138-ml-billing-429-record`.
