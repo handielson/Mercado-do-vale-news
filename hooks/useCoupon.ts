@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { validateCoupon, applyCoupon, type Coupon } from '../services/couponService';
+import { validateCoupon, type Coupon } from '../services/couponService';
 
 interface UseCouponReturn {
     code: string;
@@ -48,11 +48,9 @@ export function useCoupon(totalPrice: number, customerType?: string): UseCouponR
         setIsLoading(false);
     };
 
-    const confirm = async () => {
-        if (appliedCoupon) {
-            await applyCoupon(appliedCoupon.id);
-        }
-    };
+    // order-coupon-redemption-v1: o uso do cupom é contado no servidor, uma vez por pedido,
+    // quando o pedido é gravado (e liberado se o pedido for cancelado). Nada a fazer aqui.
+    const confirm = async () => {};
 
     const clear = () => {
         setCode('');

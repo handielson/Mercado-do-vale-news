@@ -15066,6 +15066,11 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
     if (!await assertVpsProxyCustomerOrderWriteAllowed(request, auth, vpsProxyTargetPath, method)) {
       return reply.code(403).send({ error: 'Forbidden for this order' });
     }
+    // order-total-guard-v1: pedido de cliente so aceita itens cujos valores conferem com o catalogo.
+    if (!auth.isAdmin && method === 'POST' && (vpsProxyTargetPath.split('?')[0] || '/') === '/table-data/order_items/bulk') {
+      const guard = await require('./services/orderTotalGuard.cjs').guardCustomerOrderItems(pool, request.body);
+      if (!guard.ok) return reply.code(guard.status).send(guard.body);
+    }
   } else if (isCustomerSelfServicePath) {
     if (!auth.userId || !auth.customerId) return reply.code(401).send({ error: 'Auth required' });
   } else if (isVpsProxyAccountantDocumentPath(vpsProxyTargetPath, method)) {
@@ -30645,12 +30650,17 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
   const placeholders = cols.map(() => '?').join(', ');
   const colList = cols.map(c => `\`${c}\``).join(', ');
 
-  // order-coin-redemption-v1: moedas usadas no pedido sao debitadas na mesma transacao do INSERT.
-  if (name === 'orders' && require('./services/orderCoinRedemption.cjs').hasCoinRedemption(insertBody)) {
+  // order-coin-redemption-v1 + order-coupon-redemption-v1: moedas e uso de cupom sao gravados
+  // na mesma transacao do INSERT do pedido.
+  if (name === 'orders' && (require('./services/orderCoinRedemption.cjs').hasCoinRedemption(insertBody)
+    || require('./services/orderCouponRedemption.cjs').hasCouponRedemption(insertBody))) {
     const orderCoinRedemption = require('./services/orderCoinRedemption.cjs');
+    const orderCouponRedemption = require('./services/orderCouponRedemption.cjs');
+    if (orderCouponRedemption.hasCouponRedemption(insertBody)) await orderCouponRedemption.ensureCouponRedemptionTable(pool);
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
+      await orderCouponRedemption.reserveCouponForOrder(connection, insertBody);
       await orderCoinRedemption.debitCoinsForOrder(connection, insertBody);
       await connection.query(
         `INSERT INTO \`${name}\` (${colList}) VALUES (${placeholders})`,
@@ -30659,7 +30669,7 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
       await connection.commit();
     } catch (error) {
       await connection.rollback();
-      if (error instanceof orderCoinRedemption.CoinRedemptionError) {
+      if (error instanceof orderCoinRedemption.CoinRedemptionError || error instanceof orderCouponRedemption.CouponRedemptionError) {
         return reply.code(409).send({ error: error.message, code: error.code });
       }
       throw error;
@@ -33173,11 +33183,13 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
 
   // order-coin-redemption-v1: cancelar o pedido devolve as moedas resgatadas, uma unica vez.
   if (name === 'orders' && String(body.status || '') === 'cancelled') {
+    await require('./services/orderCouponRedemption.cjs').ensureCouponRedemptionTable(pool);
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
       await connection.query(`UPDATE \`${name}\` SET ${setClauses} WHERE \`${pkCol}\` = ?`, vals);
       await require('./services/orderCoinRedemption.cjs').refundCoinsForOrder(connection, pkValue);
+      await require('./services/orderCouponRedemption.cjs').releaseCouponForOrder(connection, pkValue);
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -33220,11 +33232,13 @@ fastify.delete('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asy
   }
   let result;
   if (name === 'orders') {
-    // order-coin-redemption-v1: excluir o pedido (inclusive rollback do checkout) devolve as moedas.
+    // order-coin-redemption-v1: excluir o pedido (inclusive rollback do checkout) devolve as moedas e o cupom.
+    await require('./services/orderCouponRedemption.cjs').ensureCouponRedemptionTable(pool);
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
       await require('./services/orderCoinRedemption.cjs').refundCoinsForOrder(connection, pkValue);
+      await require('./services/orderCouponRedemption.cjs').releaseCouponForOrder(connection, pkValue);
       [result] = await connection.query(`DELETE FROM \`${name}\` WHERE \`${pkCol}\` = ?`, [pkValue]);
       if (result.affectedRows === 0) await connection.rollback();
       else await connection.commit();

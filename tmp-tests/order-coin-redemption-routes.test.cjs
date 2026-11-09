@@ -38,6 +38,8 @@ function createDb({ balance = 1000 } = {}) {
   async function query(sql, params = []) {
     const s = sql.replace(/\s+/g, ' ').trim();
     if (s.startsWith('SELECT * FROM cashback_settings')) return [[SETTINGS]];
+    if (s.startsWith('CREATE TABLE IF NOT EXISTS coupon_redemptions')) return [{}];
+    if (s.startsWith('SELECT * FROM coupon_redemptions')) return [[]];
     if (s.startsWith('SELECT * FROM coin_balances')) {
       const row = state.balances.get(params[0]);
       return [row ? [{ ...row }] : []];

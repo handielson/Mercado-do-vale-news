@@ -96,6 +96,8 @@ const print3dRecipeRuntimePaths = [
   'services/print3dExpiryWorker.cjs',
   'services/orderStorefront.cjs',
   'services/orderCoinRedemption.cjs',
+  'services/orderCouponRedemption.cjs',
+  'services/orderTotalGuard.cjs',
   'services/print3dCustomerSession.cjs',
   'services/print3dCustomerAccountsServer.cjs',
   'services/print3dAuthSecurity.cjs',
