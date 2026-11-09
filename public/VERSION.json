@@ -1,7 +1,7 @@
 {
   "version": "v1.2.823-trava-total-cupom",
   "date": "2026-11-08",
-  "status": "release",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.823-trava-total-cupom",
   "release_vps": "/var/www/mdv-site/releases/20261109-005350-trava-total-cupom",
@@ -37,7 +37,8 @@
     "docs/versoes/2026-11-08-v1.2.823-trava-total-cupom.md"
   ],
   "validations": [
-    "64 testes focados aprovados; validação em produção somente por leitura"
+    "64 testes focados aprovados; validação em produção somente por leitura",
+    "API /health e GET público /products HTTP 200; MySQL ok; /api/health no domínio do site mantém o HTTP 404 conhecido."
   ],
   "site_release": {
     "status": "publicada",
@@ -47,7 +48,8 @@
   "api_release": {
     "service": "mdv-api",
     "commit": "57fe7a67",
-    "status": "prevista para esta release"
+    "status": "publicada",
+    "note": "PM2 online; os hashes dos dois módulos correspondem aos arquivos locais."
   },
   "nginx_release": {
     "status": "sem mudança",
