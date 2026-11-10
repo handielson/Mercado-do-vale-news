@@ -578,7 +578,19 @@ const TIKTOK_FIELD_LABELS = {
   voucher_xtra_service_fee_amount: 'Taxa de serviço de cupom',
 };
 
+const TIKTOK_SHIPPING_FIELD = /shipping|logistic|delivery/;
+
+/** Frete líquido do vendedor: shipping_cost_amount quando vier; senão a soma (com sinal) da abertura. */
+function tikTokNetShipping(totals) {
+  if (Object.prototype.hasOwnProperty.call(totals, 'shipping_cost_amount')) {
+    return { key: 'shipping_cost_amount', amount: Number(totals.shipping_cost_amount) || 0 };
+  }
+  const amount = Object.values(totals).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  return { key: 'shipping_net', amount };
+}
+
 function tikTokFieldLabel(key) {
+  if (key === 'shipping_net') return 'Frete pago pelo vendedor';
   if (TIKTOK_FIELD_LABELS[key]) return TIKTOK_FIELD_LABELS[key];
   if (/shipping|logistic|delivery/.test(key)) return `Frete (${key})`;
   if (/commission/.test(key)) return `Comissão (${key})`;
@@ -639,6 +651,7 @@ function buildTikTokSaleFinancials({ statement, order = null, orderStatus = '', 
   let settlement = null;
   const fees = new Map();
   const raw = new Map();
+  const shipping = new Map();
   for (const transaction of transactions) {
     for (const [key, value] of Object.entries(transaction || {})) {
       if (!/_amount$/.test(key) || (value && typeof value === 'object')) continue;
@@ -647,10 +660,16 @@ function buildTikTokSaleFinancials({ statement, order = null, orderStatus = '', 
       raw.set(key, (raw.get(key) || 0) + amount);
       if (key === 'revenue_amount') { revenue += amount; continue; }
       if (key === 'settlement_amount') { settlement = (settlement || 0) + amount; continue; }
-      if (TIKTOK_TOTAL_FIELD.test(key) || !(amount < 0)) continue;
+      if (TIKTOK_TOTAL_FIELD.test(key)) continue;
+      if (TIKTOK_SHIPPING_FIELD.test(key)) { shipping.set(key, (shipping.get(key) || 0) + amount); continue; }
+      if (!(amount < 0)) continue;
       fees.set(key, (fees.get(key) || 0) + amount);
     }
   }
+  // tiktok-net-shipping-v1: o extrato traz o frete líquido (shipping_cost_amount) e a abertura dele
+  // (frete cheio, subsídio da plataforma, frete pago pelo cliente...). Usa só o líquido.
+  const shippingNet = tikTokNetShipping(Object.fromEntries(shipping));
+  if (shippingNet.amount !== 0) fees.set(shippingNet.key, shippingNet.amount);
   const revenueCents = Math.round(revenue * 100);
   const feeLines = [...fees.entries()]
     .map(([key, amount]) => ({ key, label: tikTokFieldLabel(key), amount_cents: -Math.abs(Math.round(amount * 100)) }))
@@ -788,6 +807,7 @@ function registerMarketplaceSaleProfitRoutes(fastify, { pool, guard }) {
 }
 
 module.exports = {
+  tikTokNetShipping,
   ensureMarketplaceSaleProfitSchema,
   normalizeSaleProfitInput,
   registerMarketplaceSaleProfitRoutes,

@@ -85,16 +85,25 @@ export function suggestTikTokFeesFromSummary(summary) {
   const revenue = Number(summary?.revenue_cents || 0);
   const orders = Number(summary?.orders_with_statement || 0);
   const parts = { commission: [], other: [], shipping: [] };
+  const shippingTotals = {};
   for (const field of summary?.fields || []) {
     const match = /^statement_transactions\[\]\.([a-z0-9_]+)$/.exec(String(field.path || ''));
     if (!match) continue;
     const key = match[1];
-    if (TOTAL_FIELD.test(key) || !(Number(field.total_cents) < 0)) continue;
-    const cost = Math.abs(Number(field.total_cents));
-    if (/shipping|logistic|delivery/.test(key)) parts.shipping.push({ key, cost });
-    else if (/commission/.test(key) && !/affiliate|creator|partner/.test(key)) parts.commission.push({ key, cost });
+    if (TOTAL_FIELD.test(key)) continue;
+    const total = Number(field.total_cents) || 0;
+    // tiktok-net-shipping-v1: frete entra pelo líquido (shipping_cost_amount), com subsídios; a abertura
+    // (frete cheio, desconto da plataforma, frete pago pelo cliente) não pode ser somada só pelo lado negativo.
+    if (/shipping|logistic|delivery/.test(key)) { shippingTotals[key] = total; continue; }
+    if (!(total < 0)) continue;
+    const cost = Math.abs(total);
+    if (/commission/.test(key) && !/affiliate|creator|partner/.test(key)) parts.commission.push({ key, cost });
     else parts.other.push({ key, cost });
   }
+  const netShipping = Object.prototype.hasOwnProperty.call(shippingTotals, 'shipping_cost_amount')
+    ? { key: 'shipping_cost_amount', total: shippingTotals.shipping_cost_amount }
+    : { key: 'shipping_net', total: Object.values(shippingTotals).reduce((sum, value) => sum + value, 0) };
+  if (netShipping.total < 0) parts.shipping.push({ key: netShipping.key, cost: Math.abs(netShipping.total) });
   const sum = (list) => list.reduce((total, item) => total + item.cost, 0);
   const pctOf = (value) => (revenue > 0 ? Math.round((value / revenue) * 10000) / 100 : 0);
   return {
