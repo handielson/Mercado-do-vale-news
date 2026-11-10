@@ -1,3 +1,13 @@
+# v1.2.831-venda-prejuizo-vermelho
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `c64ee4c`. Release VPS: pendente. Escopo: API + frontend/admin + tabela nova.
+
+Vendas com lucro negativo em vermelho na lista (PDV e marketplaces), filtro "Só prejuízo" e verificação do lucro dos pedidos de marketplace. Testes focados verdes, build aprovado. Publicação pendente (API antes do site).
+
+Registro: `docs/versoes/2026-11-10-v1.2.831-venda-prejuizo-vermelho.md`.
+
+---
+
 # v1.2.830-financeiro-venda-ml-tiktok
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `13bc07b`. Release VPS: `/var/www/mdv-site/releases/20261110-151257-midia-promo-financeiro-marketplaces`. Escopo: API + frontend/admin.
