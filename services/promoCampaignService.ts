@@ -23,6 +23,9 @@ export interface PromoCampaignProduct {
   promoStart: string | null;
   promoEnd: string | null;
   stock: number | null;
+  /** promo-media-v1: imagem e vídeo próprios da promoção (Página do Produto → versão). */
+  promoImageUrl?: string | null;
+  promoVideoUrl?: string | null;
 }
 
 export interface PromoCampaignOverview {

@@ -35,6 +35,7 @@ const phonePriceListServicePaths = [
   'services/promoPricingCore.cjs',
   'services/promoCampaignArtwork.cjs',
   'services/promoCampaignServer.cjs',
+  'services/productPromoMediaServer.cjs',
 ];
 const n8nBotConversationContextPath = 'services/n8nBotConversationContext.cjs';
 const n8nAdminHandoffRelayPath = 'services/n8nAdminHandoffRelay.cjs';

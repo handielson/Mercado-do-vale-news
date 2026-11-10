@@ -5,6 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { isPromoActive, normalizePromoCampaign, buildPromoWhatsAppText, shortPromoDate } = require('./promoPricingCore.cjs');
 const { paginatePromoItems, renderPromoCampaignPage } = require('./promoCampaignArtwork.cjs');
+const { loadPromoMediaByProductIds, registerProductPromoMediaRoutes } = require('./productPromoMediaServer.cjs');
 
 const PREFERENCE_KEY = 'promo_campaign';
 const MAX_PRODUCTS = 120;
@@ -70,7 +71,11 @@ function createPromoCampaignService(dependencies) {
         AND (p.offer_visibility IS NULL OR p.offer_visibility <> 'hidden')
         AND p.price_promo > 0 AND p.price_promo < p.price_retail
       ORDER BY p.name, p.id`);
-    return selectPromoCampaignProducts(rows);
+    const selected = selectPromoCampaignProducts(rows);
+    // promo-media-v1: imagem/vídeo próprios da promoção (definidos na Página do Produto, por versão).
+    let media = new Map();
+    try { media = await loadPromoMediaByProductIds(pool, selected.map((item) => item.id)); } catch {}
+    return selected.map((item) => ({ ...item, promoImageUrl: media.get(String(item.id))?.image_url || null, promoVideoUrl: media.get(String(item.id))?.video_url || null }));
   }
 
   function publicProduct(item) {
@@ -159,6 +164,7 @@ function registerPromoCampaignRoutes(fastify, dependencies) {
   const service = createPromoCampaignService(dependencies);
   dependencies.generatePromoCampaignStories = service.generateStories;
   const guard = { preHandler: dependencies.requireSyncKeyOrAdmin };
+  registerProductPromoMediaRoutes(fastify, { pool: dependencies.pool, guard });
   const send = async (reply, work) => {
     reply.header('Cache-Control', 'no-store');
     try { return await work(); } catch (error) {

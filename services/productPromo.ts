@@ -3,6 +3,8 @@
 // Usa o PATCH parcial do produto: só esses três campos mudam; preços do grupo e custo ficam intactos.
 import { vpsClient } from './vpsClient';
 import { vpsApiService } from './vpsApiService';
+import { bannerService } from './bannerService';
+import { promoCampaignService } from './promoCampaignService';
 
 export type PromoInput = { priceCents: number; start: string | null; end: string | null } | null;
 
@@ -22,4 +24,72 @@ export async function saveProductsPromo(productIds: string[], promo: PromoInput)
   }
   vpsApiService.invalidateProductCache();
   return { saved, failed };
+}
+
+// ── promo-media-v1: imagem, vídeo e banner da promoção, por versão ──
+
+export type PromoMedia = { image_url: string | null; video_url: string | null; banner_id: string | null };
+export const EMPTY_PROMO_MEDIA: PromoMedia = { image_url: null, video_url: null, banner_id: null };
+
+/** Mídia da promoção de vários cadastros (a mesma em todas as cores da versão). */
+export async function loadPromoMedia(productIds: string[]): Promise<Record<string, PromoMedia>> {
+  const ids = [...new Set(productIds.filter(Boolean))];
+  if (!ids.length) return {};
+  const result: Record<string, PromoMedia> = {};
+  for (let index = 0; index < ids.length; index += 200) {
+    const chunk = ids.slice(index, index + 200);
+    const data = await vpsClient.get<{ items: Record<string, PromoMedia> }>(`/admin/products/promo-media?ids=${chunk.map(encodeURIComponent).join(',')}`);
+    Object.assign(result, data.items || {});
+  }
+  return result;
+}
+
+export function savePromoMedia(productIds: string[], media: PromoMedia) {
+  return vpsClient.put<{ ok: boolean; items: Record<string, PromoMedia> }>('/admin/products/promo-media', { product_ids: productIds, ...media });
+}
+
+export const uploadPromoFile = (file: File, onProgress?: (pct: number) => void) => promoCampaignService.uploadMedia(file, onProgress);
+
+/**
+ * Banner da home da promoção: é um banner normal (aparece no carrossel e na tela de Banners),
+ * vinculado à página do produto e com as mesmas datas da promoção.
+ */
+export async function upsertPromoBanner(input: { bannerId: string | null; title: string; imageUrl: string; productUrl: string; start: string | null; end: string | null }): Promise<string> {
+  const fields = {
+    title: input.title,
+    image_url: input.imageUrl,
+    link_type: 'product' as const,
+    link_target: input.productUrl,
+    is_active: true,
+    start_date: (input.start || undefined) as any,
+    end_date: (input.end || undefined) as any,
+  };
+  if (input.bannerId) {
+    try {
+      const updated = await bannerService.updateBanner(input.bannerId, fields);
+      if (updated?.id) return updated.id;
+    } catch (error) {
+      // Banner apagado na tela de Banners: cria outro.
+      if (!/not found|404/i.test(error instanceof Error ? error.message : '')) throw error;
+    }
+  }
+  const created = await bannerService.createBanner({ ...fields, storefront: 'mercado_do_vale', display_order: 0, target_audience: [] } as any);
+  return created.id;
+}
+
+/** Acompanha a promoção: novas datas, ou desliga o banner quando a promoção sai. */
+export async function syncPromoBanner(bannerId: string | null, promo: PromoInput) {
+  if (!bannerId) return;
+  try {
+    if (promo) await bannerService.updateBanner(bannerId, { is_active: true, start_date: (promo.start || null) as any, end_date: (promo.end || null) as any });
+    else await bannerService.updateBanner(bannerId, { is_active: false });
+  } catch (error) {
+    if (!/not found|404/i.test(error instanceof Error ? error.message : '')) throw error;
+  }
+}
+
+export async function removePromoBanner(bannerId: string | null) {
+  if (!bannerId) return;
+  try { await bannerService.deleteBanner(bannerId); }
+  catch (error) { if (!/not found|404/i.test(error instanceof Error ? error.message : '')) throw error; }
 }
