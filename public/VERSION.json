@@ -1,10 +1,10 @@
 {
   "version": "v1.2.830-financeiro-venda-ml-tiktok",
   "date": "2026-11-10",
-  "status": "pendente de publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.830-financeiro-venda-ml-tiktok",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261110-151257-midia-promo-financeiro-marketplaces",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Financeiro da venda (taxas, frete, valor recebido, custo e lucro) para pedidos do Mercado Livre e do TikTok Shop, com estimativa pelas taxas configuradas quando o marketplace não devolve o extrato.",
   "gestao_mdv_android": {
@@ -18,7 +18,8 @@
   "pending_deployments": {
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
-    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
+    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center",
+    "tiktok_finance_estimate_validation": "Configurar as taxas do TikTok Shop para validar a estimativa em produção."
   },
   "site_source_base": "13bc07b",
   "changed_files": [
@@ -39,18 +40,31 @@
   "validations": [
     "node --test tmp-tests/marketplace-sale-financials-ml-tiktok.test.cjs tmp-tests/marketplace-sale-estimate.test.mjs (15/15).",
     "Suíte shopee/marketplace/mercado-livre/tiktok/channelProfit/custo manual: 234 testes; mesmas 6 falhas preexistentes do baseline (mercado-livre-publication-ui, mobile-sales-push-static, sales-page-marketplaces-static, tiktok-shop-product-list-bulk-refresh-static, tiktok-shop-product-shortcut-static, tiktok-shop-video-ratio).",
-    "node --check dos .cjs/.js alterados; vite build aprovado."
+    "node --check dos .cjs/.js alterados; vite build aprovado.",
+    "49 testes focados aprovados. Build concluído, home HTTP 200 e manifesto público confirmado.",
+    "Poco C81 Pro (4 GB/128 GB) exibiu “Mídia da promoção” com os tamanhos recomendados de imagem, vídeo e banner.",
+    "Mercado Livre exibiu os valores reais com selo “Provisório”. Em dois pedidos do TikTok, o quadro retornou “Indisponível”: o marketplace ainda não disponibilizou o extrato e a API de configuração não retornou taxas cadastradas para TikTok. A validação do selo de estimativa em produção fica pendente dessa configuração.",
+    "Console sem erros na conferência e nenhuma gravação de teste no admin."
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261110-151257-midia-promo-financeiro-marketplaces",
+    "published_at": "2026-11-10T15:16:50Z",
+    "versions": [
+      "v1.2.829-midia-promocao-versao",
+      "v1.2.830-financeiro-venda-ml-tiktok"
+    ]
   },
   "api_release": {
-    "status": "pendente",
+    "status": "publicada",
     "service": "mdv-api",
     "commit": "13bc07b",
-    "note": "node deploy-vps-server-only.cjs --sales-marketplaces-only (agora envia services/marketplaceSaleFinancials.cjs com backup e node --check) e reiniciar mdv-api. Se a v1.2.829 ainda não tiver ido para a API, usar o deploy completo."
+    "note": "Deploy completo da API em 2026-11-10T15:16:03.058Z. mdv-api online no PM2, /status HTTP 200 com MySQL saudável, GET promo-media autenticado HTTP 200 e tabela product_promo_media confirmada por SHOW TABLES.",
+    "published_at": "2026-11-10T15:16:03.058Z",
+    "versions": [
+      "v1.2.829-midia-promocao-versao",
+      "v1.2.830-financeiro-venda-ml-tiktok"
+    ]
   },
   "nginx_release": {
     "status": "sem mudança",

@@ -1,8 +1,8 @@
 # v1.2.830-financeiro-venda-ml-tiktok
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `13bc07b`. Release VPS: pendente. Escopo: API + frontend/admin.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `13bc07b`. Release VPS: `/var/www/mdv-site/releases/20261110-151257-midia-promo-financeiro-marketplaces`. Escopo: API + frontend/admin.
 
-Financeiro da venda para Mercado Livre (real pelo pedido e frete) e TikTok Shop (extrato; estimado pelas taxas configuradas enquanto o escopo de Finanças não responde). Testes 15/15, sem falhas novas na suíte relacionada, build aprovado. Publicação pendente (API antes do site).
+Financeiro da venda para Mercado Livre (real pelo pedido e frete) e TikTok Shop (extrato; estimado pelas taxas configuradas enquanto o escopo de Finanças não responde). Testes 15/15, sem falhas novas na suíte relacionada, build aprovado. Deploy completo da API em 2026-11-10T15:16:03.058Z. mdv-api online no PM2, /status HTTP 200 com MySQL saudável, GET promo-media autenticado HTTP 200 e tabela product_promo_media confirmada por SHOW TABLES. Mercado Livre exibiu os valores reais com selo “Provisório”. Em dois pedidos do TikTok, o quadro retornou “Indisponível”: o marketplace ainda não disponibilizou o extrato e a API de configuração não retornou taxas cadastradas para TikTok. A validação do selo de estimativa em produção fica pendente dessa configuração. Console sem erros na conferência e nenhuma gravação de teste no admin.
 
 Registro: `docs/versoes/2026-11-10-v1.2.830-financeiro-venda-ml-tiktok.md`.
 
@@ -10,9 +10,9 @@ Registro: `docs/versoes/2026-11-10-v1.2.830-financeiro-venda-ml-tiktok.md`.
 
 # v1.2.829-midia-promocao-versao
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `215df51`. Release VPS: pendente. Escopo: API + frontend/admin + tabela nova.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `215df51`. Release VPS: `/var/www/mdv-site/releases/20261110-151257-midia-promo-financeiro-marketplaces`. Escopo: API + frontend/admin + tabela nova.
 
-Mídia da promoção por versão na Página do Produto: imagem, vídeo e banner da home (banner normal com as datas da promoção). Tabela `product_promo_media` criada pela API no primeiro uso. Testes 17/17 e 16/16, build aprovado. Publicação pendente (API antes do site).
+Mídia da promoção por versão na Página do Produto: imagem, vídeo e banner da home (banner normal com as datas da promoção). Tabela `product_promo_media` criada pela API no primeiro uso. Testes 17/17 e 16/16, build aprovado. Deploy completo da API em 2026-11-10T15:16:03.058Z. mdv-api online no PM2, /status HTTP 200 com MySQL saudável, GET promo-media autenticado HTTP 200 e tabela product_promo_media confirmada por SHOW TABLES. Poco C81 Pro (4 GB/128 GB) exibiu “Mídia da promoção” com os tamanhos recomendados de imagem, vídeo e banner. Console sem erros na conferência e nenhuma gravação de teste no admin.
 
 Registro: `docs/versoes/2026-11-10-v1.2.829-midia-promocao-versao.md`.
 
