@@ -1,3 +1,13 @@
+# v1.2.833-atalho-taxas-tiktok
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `4b7ff40`. Release VPS: pendente. Escopo: frontend/admin.
+
+Atalhos para as taxas do TikTok Shop (página do TikTok Shop, Página do Produto e financeiro da venda). Publicação pendente.
+
+Registro: `docs/versoes/2026-11-10-v1.2.833-atalho-taxas-tiktok.md`.
+
+---
+
 # v1.2.832-custo-venda-calculadora-familia
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `e90f76e`. Release VPS: `/var/www/mdv-site/releases/20261110-183022-custo-venda-calculadora-familia`. Escopo: frontend/admin + script operacional.

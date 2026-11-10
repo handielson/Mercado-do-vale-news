@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.832-custo-venda-calculadora-familia",
+  "version": "v1.2.833-atalho-taxas-tiktok",
   "date": "2026-11-10",
-  "status": "publicada",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.832-custo-venda-calculadora-familia",
-  "release_vps": "/var/www/mdv-site/releases/20261110-183022-custo-venda-calculadora-familia",
+  "tag": "v1.2.833-atalho-taxas-tiktok",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Alterar custo do item na venda do PDV; ajustar preço nos marketplaces pelo financeiro da venda; \"Copiar calculadora\" no carrinho (à vista, entrada e 1x a 12x); script para organizar a família (pai) de um modelo.",
+  "summary": "Atalhos para as taxas do TikTok Shop: card na página do TikTok Shop, link por canal na Página do Produto e no financeiro da venda do TikTok.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -21,32 +21,26 @@
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center. Em 10/11, a consulta retornou 5 extratos e 5 erros 36009002, sem 105005 na amostra.",
     "tiktok_finance_estimate_validation": "Configurar as taxas do TikTok Shop para validar a estimativa em produção."
   },
-  "site_source_base": "e90f76e",
+  "site_source_base": "4b7ff40",
   "changed_files": [
-    "components/admin/sales/ProductCostItemRow.tsx",
     "components/products/ChannelPricingPanel.tsx",
-    "components/admin/sales/SaleItemCostEditor.tsx",
-    "components/admin/sales/SaleDetailsModal.tsx",
-    "utils/cartShareUtils.ts",
-    "pages/store/CartPage.tsx",
-    "scripts/organize-model-family.cjs",
+    "pages/admin/settings/TikTokShopPage.tsx",
+    "components/admin/sales/MarketplaceSaleFinancialSummary.tsx",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.832-custo-venda-calculadora-familia.md"
+    "docs/versoes/2026-11-10-v1.2.833-atalho-taxas-tiktok.md"
   ],
   "validations": [
-    "tsc do projeto: mesmas 139 mensagens do baseline (nenhuma nova).",
-    "sale-details-product-link-cost-static verde; vite build aprovado; node --check do script.",
-    "product-admin-page-channels (7/7) e product-manual-cost (5/5) verdes; model-panel-variation-image: falha preexistente."
+    "tsc do projeto: nenhuma mensagem nova em relação ao baseline.",
+    "product-admin-page-channels (7/7) e product-manual-cost (5/5) verdes; vite build aprovado."
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261110-183022-custo-venda-calculadora-familia",
-    "published_at": "2026-11-10T18:30:48.000Z"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   },
   "api_release": {
-    "status": "sem alteração de API",
-    "note": "O custo usa a rota já publicada PATCH /admin/products/:id/cost."
+    "status": "sem alteração de API"
   },
   "nginx_release": {
     "status": "sem mudança",
