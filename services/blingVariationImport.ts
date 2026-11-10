@@ -33,9 +33,15 @@ export async function expandBlingSearchFamilies<T extends BlingVariationListItem
   return Array.from(byId.values());
 }
 
+// Bling API v3: formato 'S' = simples, 'V' = com variações (pai), 'E' = com composição (kit).
+// Kit ('E') é produto vendável com preço próprio — não é pai de variações.
 export function isBlingStructureProduct(product: BlingVariationListItem): boolean {
   const format = String(product?.formato || '').trim().toUpperCase();
-  return format === 'E' || format === 'V';
+  return format === 'V';
+}
+
+export function isBlingKitProduct(product: BlingVariationListItem): boolean {
+  return String(product?.formato || '').trim().toUpperCase() === 'E';
 }
 
 export function buildBlingImportSelection<T extends BlingVariationListItem>(
