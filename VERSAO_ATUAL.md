@@ -1,3 +1,13 @@
+# v1.2.838-bot-parcelas-limpas
+
+Workflow `SkrkB4vyKVDnQ68t` publicado em 10/11/2026 às 20:47:41 de Brasília. Commit de código `248e9dfb` na `main`.
+
+Tabela de parcelamento com cabeçalho curto, sem chamada duplicada nem a palavra “total”, mantendo taxas, entrada, rascunho e a recotação.
+
+Passaram 5 testes focados e 130 do gate comercial. Execuções do WhatsApp: `74517` (lista), `74552` (opção) e `74588` (parcelamento). Os hashes e o backup criptografado estão em `docs/versoes/2026-11-10-v1.2.838-bot-parcelas-limpas.md`.
+
+---
+
 # v1.2.837-bot-fotos-por-cor
 
 Workflow `SkrkB4vyKVDnQ68t` publicado em 10/11/2026 às 20:09:47 de Brasília. Commit de código `08551d7e` na `main`.

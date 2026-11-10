@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.837-bot-fotos-por-cor",
+  "version": "v1.2.838-bot-parcelas-limpas",
   "date": "2026-11-10",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.837-bot-fotos-por-cor",
+  "tag": "v1.2.838-bot-parcelas-limpas",
   "release_vps": "/var/www/mdv-site/releases/20261110-181910-taxas-faixa-programa-frete",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Ao escolher um modelo no WhatsApp, o bot mostra as fotos das cores disponíveis antes de perguntar qual o cliente prefere.",
+  "summary": "Tabela de parcelamento com cabeçalho curto, sem chamada duplicada nem a palavra “total”, mantendo taxas, entrada, rascunho e a recotação.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,17 +28,17 @@
   },
   "site_source_base": "a5cdefa",
   "changed_files": [
-    "scripts/n8n-sales-option-color-photos.cjs",
-    "scripts/deploy-n8n-sales-option-color-photos.cjs",
-    "tmp-tests/n8n-sales-option-color-photos.test.cjs",
+    "scripts/n8n-installment-table-clean.cjs",
+    "scripts/deploy-n8n-installment-table-clean.cjs",
+    "tmp-tests/n8n-installment-table-clean.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.837-bot-fotos-por-cor.md"
+    "docs/versoes/2026-11-10-v1.2.838-bot-parcelas-limpas.md"
   ],
   "validations": [
-    "7/7 testes focados no snapshot ativo e 130/130 no gate comercial do candidato.",
-    "Dry run, backup criptografado, CAS e hash ativo conferidos. n8n healthz HTTP 200 e Evolution open.",
-    "WhatsApp: lista 74448, opção 74480 com três fotos antes da pergunta separada e cor 74496 com rascunho em R$ 1.349,00."
+    "5/5 testes focados no snapshot ativo e 130/130 no gate comercial do candidato.",
+    "Dry run, backup AES-256-GCM, CAS e hash ativo conferidos. n8n healthz HTTP 200 e Evolution open.",
+    "WhatsApp: lista 74517, opção 74552, tabela 74588 com as mesmas 12 parcelas da execução 74438."
   ],
   "site_release": {
     "status": "publicada",
@@ -60,23 +60,26 @@
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
     "versionId": "3edc8f23-90f6-4012-aaf5-385eb3aa8934",
-    "published_at": "2026-11-10T23:09:47.889Z",
-    "before": "0a7eee82b2e4a304a96e20bc2bd2a7c742a80a547bf107b2493f0e2c145fa943",
-    "sha256": "d91644409424e7e8595535ea5d0413d0e2e1c247db93b00fc3b16f0892784985",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-10T23-09-34-022Z-66c65845.aes256gcm.json",
+    "published_at": "2026-11-10T23:47:41.407Z",
+    "before": "d91644409424e7e8595535ea5d0413d0e2e1c247db93b00fc3b16f0892784985",
+    "sha256": "cc673b01cb5fa5a5ad35d255f52ee30145a604e850250f02a8e0bc9f9185cb9c",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-10T23-47-27-358Z-e6fc3e81.aes256gcm.json",
     "nodes": [
+      "Vendas - Resolver Parcelamento",
       "Vendas - Verificar Pos Lista"
     ],
+    "base_backup": "/root/n8n-backups/meta-attendance-2026-11-10T23-42-25-799Z-75b001b0.aes256gcm.json",
+    "intermediate": "8e32dbf7796b4f8a89f563ce9f64bd38cccf1d93b5fe9f15f8ce34647c4ca838",
     "tests": {
-      "focused_passed": 7,
+      "focused_passed": 5,
       "commercial_gate_passed": 130
     },
     "executions": {
-      "lista": 74448,
-      "opcao": 74480,
-      "cor": 74496
+      "lista": 74517,
+      "opcao": 74552,
+      "parcelamento": 74588
     },
-    "note": "Apenas o nó de pós-lista foi publicado. Grafo, preço da configuração e rascunho preservados. O agregador Meta foi validado em teste."
+    "note": "Marcador installment-table-clean-v1. O mesmo formatador serve WhatsApp e Meta; grafo, taxas e rascunho preservados."
   },
   "evolution_release": {
     "status": "publicada",
