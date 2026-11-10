@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.833-atalho-taxas-tiktok",
+  "version": "v1.2.834-tiktok-frete-liquido",
   "date": "2026-11-10",
-  "status": "publicada",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.833-atalho-taxas-tiktok",
-  "release_vps": "/var/www/mdv-site/releases/20261110-172052-atalho-taxas-tiktok",
+  "tag": "v1.2.834-tiktok-frete-liquido",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Atalhos para as taxas do TikTok Shop: card na página do TikTok Shop, link por canal na Página do Produto e no financeiro da venda do TikTok.",
+  "summary": "TikTok: frete pelo valor líquido do extrato na sugestão de taxas e no financeiro do pedido (antes inflava o frete).",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -21,28 +21,29 @@
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center. Em 10/11, a consulta retornou 5 extratos e 5 erros 36009002, sem 105005 na amostra.",
     "tiktok_finance_estimate_validation": "Configurar as taxas do TikTok Shop para validar a estimativa em produção."
   },
-  "site_source_base": "652eb83",
+  "site_source_base": "2f37eb6",
   "changed_files": [
-    "components/products/ChannelPricingPanel.tsx",
-    "pages/admin/settings/TikTokShopPage.tsx",
-    "components/admin/sales/MarketplaceSaleFinancialSummary.tsx",
+    "services/marketplaceSaleFinancials.cjs",
+    "utils/channelProfit.js",
+    "tmp-tests/tiktok-net-shipping.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.833-atalho-taxas-tiktok.md"
+    "docs/versoes/2026-11-10-v1.2.834-tiktok-frete-liquido.md"
   ],
   "validations": [
-    "tsc do projeto: nenhuma mensagem nova em relação ao baseline.",
-    "product-admin-page-channels (7/7) e product-manual-cost (5/5) verdes; vite build aprovado.",
-    "Testes focados 18/18. Home e /VERSION.json HTTP 200.",
-    "Em produção, o card no topo do TikTok Shop abriu Taxas por canal com a aba TikTok ativa. Na Página do Produto, foram confirmados os atalhos de Shopee M, Shopee G, Mercado Livre e TikTok Shop. Em Vendas, o pedido TikTok com financeiro Indisponível mostrou Configurar taxas do TikTok. Sem erros de console nas três telas e sem salvar taxas."
+    "tiktok-net-shipping (3/3), marketplace-sale-financials-ml-tiktok e marketplace-sale-estimate verdes (18 no total).",
+    "node --check; vite build aprovado."
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261110-172052-atalho-taxas-tiktok",
-    "published_at": "2026-11-10T20:21:10.000Z"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   },
   "api_release": {
-    "status": "sem alteração de API"
+    "status": "pendente",
+    "service": "mdv-api",
+    "commit": "2f37eb6",
+    "note": "node deploy-vps-server-only.cjs --sales-marketplaces-only (envia services/marketplaceSaleFinancials.cjs) e reiniciar mdv-api."
   },
   "nginx_release": {
     "status": "sem mudança",

@@ -1,3 +1,13 @@
+# v1.2.834-tiktok-frete-liquido
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `2f37eb6`. Release VPS: pendente. Escopo: API + frontend/admin.
+
+TikTok: frete pelo valor líquido do extrato na sugestão de taxas e no financeiro do pedido. Publicação pendente (API antes do site).
+
+Registro: `docs/versoes/2026-11-10-v1.2.834-tiktok-frete-liquido.md`.
+
+---
+
 # v1.2.833-atalho-taxas-tiktok
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `652eb83`. Release VPS: `/var/www/mdv-site/releases/20261110-172052-atalho-taxas-tiktok`. Escopo: frontend/admin.
