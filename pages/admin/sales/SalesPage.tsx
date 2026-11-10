@@ -5,7 +5,7 @@ import { SaleWithItems, SaleFilters } from '../../../types/sale';
 import { getSales, cancelSale, refundSale } from '../../../services/saleService';
 import SaleDetailsModal from '../../../components/admin/sales/SaleDetailsModal';
 import MarketplaceSaleDetailsModal from '../../../components/admin/sales/MarketplaceSaleDetailsModal';
-import { getCachedMarketplaceSales, getMarketplaceSales, MarketplaceSale, MarketplaceSaleStatus } from '../../../services/adminMarketplaceSalesService';
+import { getCachedMarketplaceSales, getMarketplaceSaleDetail, getMarketplaceSales, lookupMarketplaceSaleProfits, MarketplaceSale, MarketplaceSaleStatus, SALE_PROFIT_EVENT, saleProfitKey, type StoredSaleProfit } from '../../../services/adminMarketplaceSalesService';
 import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../../../utils/salePresentation';
 import toast from 'react-hot-toast';
 import { PAYJOY_SALE_NOTE, isPayJoySale } from '../../../utils/saleInformation.js';
@@ -38,6 +38,10 @@ export default function SalesPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Filtros de data
+    // sale-profit-flag-v1: venda com lucro negativo fica com fundo vermelho para análise.
+    const [storedProfits, setStoredProfits] = useState<Record<string, StoredSaleProfit>>({});
+    const [onlyLoss, setOnlyLoss] = useState(false);
+    const [profitCheck, setProfitCheck] = useState<{ done: number; total: number } | null>(null);
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [activePeriod, setActivePeriod] = useState<'day' | 'week' | 'month' | 'year' | 'custom' | null>(null);
@@ -258,6 +262,8 @@ export default function SalesPage() {
             occurredAt: sale.created_at,
             totalCents: sale.total,
             normalizedStatus: sale.status as MarketplaceSaleStatus,
+            profitCents: ['cancelled', 'refunded'].includes(String(sale.status)) ? null : getSaleRealProfit(sale),
+            profitEstimated: false,
             localSale: sale,
             marketplaceSale: null,
         }));
@@ -272,6 +278,8 @@ export default function SalesPage() {
             occurredAt: sale.occurred_at,
             totalCents: sale.total_cents,
             normalizedStatus: sale.normalized_status,
+            profitCents: ['cancelled', 'refunded'].includes(String(sale.normalized_status)) ? null : storedProfits[saleProfitKey(sale)]?.profit_cents ?? null,
+            profitEstimated: storedProfits[saleProfitKey(sale)]?.origin === 'configured_fees',
             localSale: null,
             marketplaceSale: sale,
         }));
@@ -282,6 +290,7 @@ export default function SalesPage() {
                 if (!`${row.customerName} ${row.id} ${row.channelLabel} ${saleInformation}`.toLowerCase().includes(s)) return false;
             }
             if (statusFilter !== 'all' && row.normalizedStatus !== statusFilter) return false;
+            if (onlyLoss && !(row.profitCents !== null && row.profitCents < 0)) return false;
             if (dateFrom) {
                 if (new Date(row.occurredAt) < new Date(dateFrom + 'T00:00:00')) return false;
             }
@@ -291,7 +300,45 @@ export default function SalesPage() {
             return true;
         // sales-sort-by-instant-v1: cada canal grava a data num formato/fuso diferente; ordenar pelo instante real.
         }).sort((a, b) => saleInstant(b.occurredAt) - saleInstant(a.occurredAt));
-    }, [sales, marketplaceSales, searchTerm, statusFilter, dateFrom, dateTo]);
+    }, [sales, marketplaceSales, storedProfits, onlyLoss, searchTerm, statusFilter, dateFrom, dateTo]);
+
+    // Lucro já calculado dos pedidos de marketplace (o "Financeiro da venda" grava ao abrir o pedido).
+    const marketplaceProfitKeys = marketplaceSales.map(saleProfitKey).join(',');
+    useEffect(() => {
+        if (!marketplaceSales.length) return;
+        let active = true;
+        lookupMarketplaceSaleProfits(marketplaceSales)
+            .then(result => { if (active) setStoredProfits(current => ({ ...current, ...result })); })
+            .catch(error => console.warn('[sales] lucro dos marketplaces indisponível', error));
+        return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [marketplaceProfitKeys]);
+    useEffect(() => {
+        const listener = (event: Event) => {
+            const detail = (event as CustomEvent).detail;
+            if (detail?.external_id) setStoredProfits(current => ({ ...current, [saleProfitKey(detail)]: detail }));
+        };
+        window.addEventListener(SALE_PROFIT_EVENT, listener);
+        return () => window.removeEventListener(SALE_PROFIT_EVENT, listener);
+    }, []);
+    const lossCount = filteredRows.filter(row => row.profitCents !== null && row.profitCents < 0).length;
+    const uncheckedMarketplaceRows = filteredRows.filter(row => row.marketplaceSale && row.profitCents === null
+        && !['cancelled', 'refunded'].includes(String(row.normalizedStatus)));
+    // Abre o financeiro de cada pedido de marketplace da lista ainda sem lucro (no máximo 60 por vez, um de cada vez).
+    const checkMarketplaceProfits = async () => {
+        const queue = uncheckedMarketplaceRows.slice(0, 60);
+        if (!queue.length || profitCheck) return;
+        setProfitCheck({ done: 0, total: queue.length });
+        let failed = 0;
+        for (const [index, row] of queue.entries()) {
+            try { await getMarketplaceSaleDetail(row.marketplaceSale as MarketplaceSale); }
+            catch { failed += 1; }
+            setProfitCheck({ done: index + 1, total: queue.length });
+        }
+        setProfitCheck(null);
+        if (failed) toast.error(`${failed} pedido(s) não puderam ser consultados agora.`);
+        else toast.success('Lucro dos pedidos verificado.');
+    };
 
     const getMarketplaceStatusLabel = (status: MarketplaceSaleStatus) => ({
         completed: 'Confirmada',
@@ -536,6 +583,26 @@ export default function SalesPage() {
                                 Limpar filtro
                             </button>
                         )}
+                        <button
+                            type="button"
+                            onClick={() => setOnlyLoss(value => !value)}
+                            className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${onlyLoss ? 'bg-red-600 text-white border-red-600' : 'text-red-700 bg-red-50 border-red-200 hover:bg-red-100'}`}
+                            title="Mostrar só as vendas com lucro negativo"
+                        >
+                            Só prejuízo{lossCount > 0 ? ` (${lossCount})` : ''}
+                        </button>
+                        {uncheckedMarketplaceRows.length > 0 && (
+                            <button
+                                type="button"
+                                disabled={!!profitCheck}
+                                onClick={() => void checkMarketplaceProfits()}
+                                className="flex items-center gap-1 px-3 py-1.5 text-sm text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-60"
+                                title="Consulta o financeiro dos pedidos de marketplace da lista que ainda não têm lucro calculado"
+                            >
+                                <RefreshCw size={14} className={profitCheck ? 'animate-spin' : ''} />
+                                {profitCheck ? `Verificando lucro ${profitCheck.done}/${profitCheck.total}…` : `Verificar lucro dos marketplaces (${Math.min(uncheckedMarketplaceRows.length, 60)})`}
+                            </button>
+                        )}
                         {filteredRows.length !== sales.length + marketplaceSales.length && (
                             <span className="text-xs text-slate-500 ml-auto">
                                 Exibindo <strong>{filteredRows.length}</strong> de <strong>{sales.length + marketplaceSales.length}</strong> vendas
@@ -595,7 +662,9 @@ export default function SalesPage() {
                                 </tr>
                             ) : (
                                 filteredRows.map((row) => (
-                                    <tr key={row.key} className="hover:bg-slate-50 transition-colors group">
+                                    <tr key={row.key} className={row.profitCents !== null && row.profitCents < 0
+                                        ? 'bg-red-50 hover:bg-red-100 transition-colors group shadow-[inset_4px_0_0_#dc2626]'
+                                        : 'hover:bg-slate-50 transition-colors group'}>
                                         <td className="px-2 py-4 lg:px-3">
                                             <div className="text-sm font-medium text-slate-800">
                                                 {formatDate(row.occurredAt).split(' ')[0]}
@@ -651,6 +720,11 @@ export default function SalesPage() {
                                             <div className="whitespace-nowrap text-sm font-bold text-slate-800">
                                                 {formatCurrency(row.totalCents)}
                                             </div>
+                                            {row.profitCents !== null && row.profitCents < 0 && (
+                                                <div className="whitespace-nowrap text-xs font-semibold text-red-700" title={row.profitEstimated ? 'Lucro estimado pelas taxas configuradas' : 'Lucro da venda'}>
+                                                    Prejuízo {formatCurrency(row.profitCents)}{row.profitEstimated ? ' (est.)' : ''}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-1 py-4 text-center lg:px-2">
                                             <button

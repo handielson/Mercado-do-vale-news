@@ -720,7 +720,77 @@ function createTikTokSaleFinancialsLoader({ pool, fetchStatement, fetchOrder = a
   };
 }
 
+// sale-profit-flag-v1: último lucro calculado de cada pedido de marketplace (real ou estimado), para a lista
+// de Vendas destacar prejuízo sem consultar o marketplace pedido a pedido. Só um espelho do que o
+// "Financeiro da venda" já mostrou: a fonte dos valores continua sendo o cálculo do detalhe.
+const PROFIT_CHANNELS = new Set(['shopee_mv', 'shopee_g', 'mercado_livre', 'tiktok']);
+let profitSchemaPromise = null;
+function ensureMarketplaceSaleProfitSchema(pool) {
+  profitSchemaPromise ||= pool.query(`CREATE TABLE IF NOT EXISTS marketplace_sale_profit (
+      channel VARCHAR(32) NOT NULL,
+      connection_id VARCHAR(64) NOT NULL DEFAULT '',
+      external_id VARCHAR(64) NOT NULL,
+      profit_cents BIGINT NOT NULL,
+      origin VARCHAR(32) NULL,
+      computed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (channel, connection_id, external_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`).catch((error) => { profitSchemaPromise = null; throw error; });
+  return profitSchemaPromise;
+}
+
+function profitKey(input) {
+  const channel = String(input?.channel || '').trim();
+  const connectionId = String(input?.connection_id || '').trim();
+  const externalId = String(input?.external_id || '').trim();
+  if (!PROFIT_CHANNELS.has(channel)) throw Object.assign(new Error('Canal inválido.'), { statusCode: 400 });
+  if (!/^[A-Za-z0-9_-]{0,64}$/.test(connectionId) || !/^[A-Za-z0-9_-]{1,64}$/.test(externalId)) {
+    throw Object.assign(new Error('Pedido inválido.'), { statusCode: 400 });
+  }
+  return { channel, connection_id: connectionId, external_id: externalId };
+}
+
+function normalizeSaleProfitInput(body = {}) {
+  const key = profitKey(body);
+  const profit = Number(body.profit_cents);
+  if (!Number.isSafeInteger(profit)) throw Object.assign(new Error('Lucro inválido.'), { statusCode: 400 });
+  const origin = ['marketplace', 'configured_fees'].includes(body.origin) ? body.origin : 'marketplace';
+  return { ...key, profit_cents: profit, origin };
+}
+
+function registerMarketplaceSaleProfitRoutes(fastify, { pool, guard }) {
+  fastify.put('/admin/marketplace-sale-profits', guard, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      const row = normalizeSaleProfitInput(req.body || {});
+      await ensureMarketplaceSaleProfitSchema(pool);
+      await pool.query(`INSERT INTO marketplace_sale_profit (channel,connection_id,external_id,profit_cents,origin) VALUES (?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE profit_cents=VALUES(profit_cents), origin=VALUES(origin)`,
+      [row.channel, row.connection_id, row.external_id, row.profit_cents, row.origin]);
+      return { ok: true };
+    } catch (error) {
+      return reply.code(error.statusCode || 500).send({ error: error.statusCode ? error.message : 'Não foi possível registrar o lucro.' });
+    }
+  });
+  fastify.post('/admin/marketplace-sale-profits/lookup', guard, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      const keys = (Array.isArray(req.body?.keys) ? req.body.keys : []).slice(0, 1000).map(profitKey);
+      if (!keys.length) return { items: [] };
+      await ensureMarketplaceSaleProfitSchema(pool);
+      const [rows] = await pool.query(`SELECT channel,connection_id,external_id,profit_cents,origin,computed_at FROM marketplace_sale_profit
+        WHERE (channel,connection_id,external_id) IN (${keys.map(() => '(?,?,?)').join(',')})`,
+      keys.flatMap((key) => [key.channel, key.connection_id, key.external_id]));
+      return { items: rows.map((row) => ({ ...row, profit_cents: Number(row.profit_cents) })) };
+    } catch (error) {
+      return reply.code(error.statusCode || 500).send({ error: error.statusCode ? error.message : 'Não foi possível consultar os lucros.' });
+    }
+  });
+}
+
 module.exports = {
+  ensureMarketplaceSaleProfitSchema,
+  normalizeSaleProfitInput,
+  registerMarketplaceSaleProfitRoutes,
   buildShopeeSaleFinancials,
   buildMercadoLivreSaleFinancials,
   buildTikTokSaleFinancials,

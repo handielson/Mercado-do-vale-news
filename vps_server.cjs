@@ -14060,6 +14060,8 @@ fastify.patch('/admin/products/:id/cost', { preHandler: requireAdminBearerToken 
   }
 });
 const { createShopeeSaleFinancialsLoader, createMercadoLivreSaleFinancialsLoader, createTikTokSaleFinancialsLoader } = require('./services/marketplaceSaleFinancials.cjs');
+// sale-profit-flag-v1: lucro calculado de cada pedido de marketplace, para destacar prejuízo na lista de Vendas.
+require('./services/marketplaceSaleFinancials.cjs').registerMarketplaceSaleProfitRoutes(fastify, { pool, guard: { preHandler: requireAdminBearerToken } });
 const loadShopeeSaleFinancialsVps = createShopeeSaleFinancialsLoader({
   pool,
   fetchEscrow: async (orderSn, connectionId) => {

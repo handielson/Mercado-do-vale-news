@@ -300,7 +300,42 @@ export async function getMarketplaceSaleDetail(sale: MarketplaceSale): Promise<M
     );
     const refreshed = mapSales({ sales: response?.sale ? [response.sale] : [] }, sale.channel, sale.channel_label, sale.connection_id)[0];
     if (!refreshed) return sale;
-    return withEstimatedFinancial(refreshed);
+    const detailed = await withEstimatedFinancial(refreshed);
+    void recordMarketplaceSaleProfit(detailed);
+    return detailed;
+}
+
+// sale-profit-flag-v1: guarda o lucro que o "Financeiro da venda" calculou (real ou estimado) para a lista
+// de Vendas destacar prejuízo. Não recalcula nada: só espelha o detalhe.
+export type SaleProfitKey = { channel: string; connection_id: string; external_id: string };
+export type StoredSaleProfit = SaleProfitKey & { profit_cents: number; origin: 'marketplace' | 'configured_fees' | null; computed_at?: string };
+export const saleProfitKey = (sale: { channel: string; connection_id?: string | null; external_id: string }) => `${sale.channel}|${sale.connection_id || ''}|${sale.external_id}`;
+export const SALE_PROFIT_EVENT = 'mdv:sale-profit';
+
+export async function recordMarketplaceSaleProfit(sale: MarketplaceSale): Promise<void> {
+    const financial = sale.details?.financial;
+    const profit = financial?.profit_cents;
+    if (!financial || profit === null || profit === undefined || !Number.isFinite(Number(profit))) return;
+    if (['cancelled', 'refunded'].includes(String(sale.normalized_status))) return;
+    const body = { channel: sale.channel, connection_id: sale.connection_id || '', external_id: sale.external_id,
+        profit_cents: Math.round(Number(profit)), origin: (financial as any).origin === 'configured_fees' ? 'configured_fees' : 'marketplace' };
+    try {
+        await vpsClient.put('/admin/marketplace-sale-profits', body);
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(SALE_PROFIT_EVENT, { detail: body }));
+    } catch (error) {
+        console.warn('[marketplace-sales] não foi possível registrar o lucro do pedido', error);
+    }
+}
+
+export async function lookupMarketplaceSaleProfits(sales: Array<Pick<MarketplaceSale, 'channel' | 'connection_id' | 'external_id'>>): Promise<Record<string, StoredSaleProfit>> {
+    const keys = sales.filter(sale => ['shopee_mv', 'shopee_g', 'mercado_livre', 'tiktok'].includes(sale.channel))
+        .map(sale => ({ channel: sale.channel, connection_id: sale.connection_id || '', external_id: String(sale.external_id) }));
+    const result: Record<string, StoredSaleProfit> = {};
+    for (let index = 0; index < keys.length; index += 500) {
+        const response = await vpsClient.post<{ items: StoredSaleProfit[] }>('/admin/marketplace-sale-profits/lookup', { keys: keys.slice(index, index + 500) });
+        for (const item of response?.items || []) result[saleProfitKey(item)] = item;
+    }
+    return result;
 }
 
 // marketplace-sale-financials-ml-tiktok-v1: quando o Mercado Livre/TikTok não informam os valores reais,
