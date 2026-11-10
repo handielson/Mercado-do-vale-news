@@ -1,3 +1,13 @@
+# v1.2.824-bling-kit-nao-pai
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commits: `c35783b0` e `e8048a80`. Release VPS: pendente. Escopo: frontend/admin.
+
+Importação Bling classifica o formato E como kit vendável e o formato V como pai de variações. A seleção de um kit importa só o próprio item.
+
+Registro: `docs/versoes/2026-11-10-v1.2.824-bling-kit-nao-pai.md`.
+
+---
+
 # v1.2.823-trava-total-cupom
 
 Data: 08/11/2026 (Brasília). Branch: `main`. Commit de código: `57fe7a67`. Release ativa confirmada: `/var/www/mdv-site/releases/20261109-005350-trava-total-cupom`.
