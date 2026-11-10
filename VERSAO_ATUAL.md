@@ -1,3 +1,13 @@
+# v1.2.830-financeiro-venda-ml-tiktok
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `13bc07b`. Release VPS: pendente. Escopo: API + frontend/admin.
+
+Financeiro da venda para Mercado Livre (real pelo pedido e frete) e TikTok Shop (extrato; estimado pelas taxas configuradas enquanto o escopo de Finanças não responde). Testes 15/15, sem falhas novas na suíte relacionada, build aprovado. Publicação pendente (API antes do site).
+
+Registro: `docs/versoes/2026-11-10-v1.2.830-financeiro-venda-ml-tiktok.md`.
+
+---
+
 # v1.2.829-midia-promocao-versao
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `215df51`. Release VPS: pendente. Escopo: API + frontend/admin + tabela nova.

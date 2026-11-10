@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.829-midia-promocao-versao",
+  "version": "v1.2.830-financeiro-venda-ml-tiktok",
   "date": "2026-11-10",
   "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.829-midia-promocao-versao",
+  "tag": "v1.2.830-financeiro-venda-ml-tiktok",
   "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Mídia da promoção por versão na Página do Produto: imagem, vídeo e banner da home (banner normal com as datas da promoção).",
+  "summary": "Financeiro da venda (taxas, frete, valor recebido, custo e lucro) para pedidos do Mercado Livre e do TikTok Shop, com estimativa pelas taxas configuradas quando o marketplace não devolve o extrato.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -20,24 +20,26 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
   },
-  "site_source_base": "215df51",
+  "site_source_base": "13bc07b",
   "changed_files": [
-    "components/products/ModelVersionFinancials.tsx",
+    "components/admin/sales/MarketplaceSaleFinancialSummary.tsx",
     "deploy-vps-server-only.cjs",
-    "migrations/vps-product-promo-media.sql",
-    "services/productPromo.ts",
-    "services/productPromoMediaServer.cjs",
-    "services/promoCampaignServer.cjs",
-    "services/promoCampaignService.ts",
-    "tmp-tests/product-promo-media.test.cjs",
+    "services/adminMarketplaceSalesService.ts",
+    "services/marketplaceSaleFinancials.cjs",
+    "services/mercadoLivreServer.cjs",
+    "utils/marketplaceSaleEstimate.js",
+    "vps_server.cjs",
+    "vps_server.js",
+    "tmp-tests/marketplace-sale-estimate.test.mjs",
+    "tmp-tests/marketplace-sale-financials-ml-tiktok.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.829-midia-promocao-versao.md"
+    "docs/versoes/2026-11-10-v1.2.830-financeiro-venda-ml-tiktok.md"
   ],
   "validations": [
-    "node --test tmp-tests/product-promo-media.test.cjs tmp-tests/promo-campaign.test.cjs (17/17).",
-    "node --test tmp-tests/model-version-financials.test.mjs tmp-tests/product-admin-page-channels.test.mjs (16/16).",
-    "node --check dos .cjs alterados; vite build aprovado; tsc sem erros nos arquivos alterados."
+    "node --test tmp-tests/marketplace-sale-financials-ml-tiktok.test.cjs tmp-tests/marketplace-sale-estimate.test.mjs (15/15).",
+    "Suíte shopee/marketplace/mercado-livre/tiktok/channelProfit/custo manual: 234 testes; mesmas 6 falhas preexistentes do baseline (mercado-livre-publication-ui, mobile-sales-push-static, sales-page-marketplaces-static, tiktok-shop-product-list-bulk-refresh-static, tiktok-shop-product-shortcut-static, tiktok-shop-video-ratio).",
+    "node --check dos .cjs/.js alterados; vite build aprovado."
   ],
   "site_release": {
     "status": "pendente",
@@ -47,8 +49,8 @@
   "api_release": {
     "status": "pendente",
     "service": "mdv-api",
-    "commit": "215df51",
-    "note": "Módulo novo services/productPromoMediaServer.cjs (rotas GET/PUT /admin/products/promo-media) registrado por promoCampaignServer.cjs; tabela product_promo_media criada no primeiro uso. Deploy: node deploy-vps-server-only.cjs (full) e pm2 restart mdv-api."
+    "commit": "13bc07b",
+    "note": "node deploy-vps-server-only.cjs --sales-marketplaces-only (agora envia services/marketplaceSaleFinancials.cjs com backup e node --check) e reiniciar mdv-api. Se a v1.2.829 ainda não tiver ido para a API, usar o deploy completo."
   },
   "nginx_release": {
     "status": "sem mudança",
