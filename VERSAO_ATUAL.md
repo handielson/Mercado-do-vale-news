@@ -1,8 +1,10 @@
 # v1.2.826-campanha-promocao
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `d02fbb12`. Release VPS: pendente.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `d02fbb12`. Release VPS: `/var/www/mdv-site/releases/20261110-132700-campanha-promocao`.
 
 Campanhas de promoção no Marketing e preço efetivo por período no catálogo, nas listas e no bot.
+
+API e frontend publicados. PM2 online, GET de produto com price_effective e promo_active, rota da campanha HTTP 200 com chave de sync e MySQL saudável. Homepage HTTP 200 e manifesto público confirmado. Publicação dos dois nós pendente. A trava aguardou execução ativa até expirar (execução 72923 em running). O workflow permanece na versão 3edc8f23-90f6-4012-aaf5-385eb3aa8934.
 
 Registro: `docs/versoes/2026-11-10-v1.2.826-campanha-promocao.md`.
 

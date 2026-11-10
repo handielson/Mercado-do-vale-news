@@ -1,10 +1,10 @@
 {
   "version": "v1.2.826-campanha-promocao",
   "date": "2026-11-10",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.826-campanha-promocao",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261110-132700-campanha-promocao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Campanhas de promoção no Marketing e preço efetivo por período no catálogo, nas listas e no bot.",
   "gestao_mdv_android": {
@@ -19,7 +19,7 @@
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center",
-    "n8n_promo_pricing": "Publicar os dois nós de preço depois de verificar API e site"
+    "n8n_promo_pricing": "Publicação dos dois nós pendente. A trava aguardou execução ativa até expirar (execução 72923 em running). O workflow permanece na versão 3edc8f23-90f6-4012-aaf5-385eb3aa8934."
   },
   "site_source_base": "d02fbb12",
   "changed_files": [
@@ -50,7 +50,9 @@
   "validations": [
     "31 testes funcionais e 2 estáticos aprovados; sintaxe dos dois servidores OK. O teste estático de estoque foi ajustado para LF e CRLF.",
     "MySQL global/session SYSTEM, NOW() igual a UTC_TIMESTAMP(); 0 de 2841 produtos com preço promocional positivo ou datas preenchidas. Um SELECT sintético confirmou a comparação do ISO UTC.",
-    "Falhas preexistentes informadas: n8n-cheapest-promo-accessory-fix, n8n-meta-catalog-intent-parity, n8n-meta-multibrand-promos e product-pricing-profit-target-static."
+    "Falhas preexistentes informadas: n8n-cheapest-promo-accessory-fix, n8n-meta-catalog-intent-parity, n8n-meta-multibrand-promos e product-pricing-profit-target-static.",
+    "Site HTTP 200, catálogo renderizado sem erros de console na verificação, manifesto público confirmado e bundle sem marcadores de runtime Supabase.",
+    "n8n: candidato testado sem publicação. healthz 200 e Evolution open."
   ],
   "site_release": {
     "status": "publicada",
@@ -58,9 +60,10 @@
     "published_at": "2026-11-08"
   },
   "api_release": {
-    "status": "pendente",
+    "status": "publicada",
     "service": "mdv-api",
-    "commit": "d02fbb12"
+    "commit": "d02fbb12",
+    "note": "PM2 online. Campos price_effective e promo_active confirmados. Rota de campanha HTTP 200 com chave de sync e MySQL saudável."
   },
   "nginx_release": {
     "status": "sem mudança",
