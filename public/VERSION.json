@@ -21,7 +21,7 @@
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center. Em 10/11, a consulta retornou 5 extratos e 5 erros 36009002, sem 105005 na amostra.",
     "tiktok_finance_estimate_validation": "Configurar as taxas do TikTok Shop para validar a estimativa em produção."
   },
-  "site_source_base": "4b7ff40",
+  "site_source_base": "652eb83",
   "changed_files": [
     "components/products/ChannelPricingPanel.tsx",
     "pages/admin/settings/TikTokShopPage.tsx",

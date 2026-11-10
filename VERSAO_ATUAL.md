@@ -1,6 +1,6 @@
 # v1.2.833-atalho-taxas-tiktok
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `4b7ff40`. Release VPS: pendente. Escopo: frontend/admin.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `652eb83`. Release VPS: pendente. Escopo: frontend/admin.
 
 Atalhos para as taxas do TikTok Shop (página do TikTok Shop, Página do Produto e financeiro da venda). Publicação pendente.
 
