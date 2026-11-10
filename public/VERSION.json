@@ -1,10 +1,10 @@
 {
   "version": "v1.2.832-custo-venda-calculadora-familia",
   "date": "2026-11-10",
-  "status": "pendente de publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.832-custo-venda-calculadora-familia",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261110-183022-custo-venda-calculadora-familia",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Alterar custo do item na venda do PDV; ajustar preço nos marketplaces pelo financeiro da venda; \"Copiar calculadora\" no carrinho (à vista, entrada e 1x a 12x); script para organizar a família (pai) de um modelo.",
   "gestao_mdv_android": {
@@ -18,7 +18,7 @@
   "pending_deployments": {
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
-    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center",
+    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center. Em 10/11, a consulta retornou 5 extratos e 5 erros 36009002, sem 105005 na amostra.",
     "tiktok_finance_estimate_validation": "Configurar as taxas do TikTok Shop para validar a estimativa em produção."
   },
   "site_source_base": "e90f76e",
@@ -40,9 +40,9 @@
     "product-admin-page-channels (7/7) e product-manual-cost (5/5) verdes; model-panel-variation-image: falha preexistente."
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261110-183022-custo-venda-calculadora-familia",
+    "published_at": "2026-11-10T18:30:48.000Z"
   },
   "api_release": {
     "status": "sem alteração de API",
@@ -69,5 +69,26 @@
   "evolution_release": {
     "status": "publicada",
     "note": "mdv-status-ack-v1: ack de <status> no Baileys rc.9 (evolution-api #2778); container evolution_api corrigido e imagem mdv/evolution-api:2.3.7-statusack no /opt/evolution-api/docker-compose.yml"
+  },
+  "tiktok_finance_check": {
+    "http_status": 200,
+    "orders_considered": 10,
+    "orders_with_statement": 5,
+    "error_count": 5,
+    "error_code": 36009002,
+    "error_message": "Too many requests. This app has exceeded a shared app-group rate limit. Reduce the request rate and retry later.",
+    "error_105005_observed": false,
+    "delivered_order_finance": "Indisponível",
+    "item_cost_present": true,
+    "item_cost_source": "vínculo do anúncio"
+  },
+  "realme_note_70_family": {
+    "model_id": "a479a373-62d9-4528-8949-e626cb32eb97",
+    "parent_id": "7d5a4bb2-4be8-408d-a0cd-0aa1c99c7b03",
+    "variations_linked": 8,
+    "variations_pending": 0,
+    "backup": "/var/www/mdv-api/backups/model-family-a479a373-62d9-4528-8949-e626cb32eb97-1794335535026",
+    "prices_stock_specs_preserved": true,
+    "storefront_verification": "Busca pública mostrou apenas a capa. O card do celular não foi localizado."
   }
 }

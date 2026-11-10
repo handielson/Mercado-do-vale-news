@@ -1,8 +1,8 @@
 # v1.2.832-custo-venda-calculadora-familia
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `e90f76e`. Release VPS: pendente. Escopo: frontend/admin + script operacional.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `e90f76e`. Release VPS: `/var/www/mdv-site/releases/20261110-183022-custo-venda-calculadora-familia`. Escopo: frontend/admin + script operacional.
 
-Alterar custo do item na venda do PDV, ajustar preço nos marketplaces pelo financeiro da venda, "Copiar calculadora" no carrinho e script para organizar a família de um modelo (Realme Note 70). Publicação pendente.
+Alterar custo do item na venda do PDV, ajustar preço nos marketplaces pelo financeiro da venda, "Copiar calculadora" no carrinho e script para organizar a família de um modelo (Realme Note 70). Frontend publicado e manifesto público confirmado. Testes focados 13/13. PDV, carrinho e vínculo de anúncio conferidos. O painel por canal abriu sem erros de console, com preços do site e do Mercado Livre e limite de requisições na Shopee. TikTok retornou 5 extratos e 5 erros 36009002, sem 105005 na amostra. No pedido entregue, o financeiro ficou indisponível e o custo por item apareceu. Realme Note 70 organizado com 1 pai e 8 variações. A busca pública mostrou apenas a capa.
 
 Registro: `docs/versoes/2026-11-10-v1.2.832-custo-venda-calculadora-familia.md`.
 
