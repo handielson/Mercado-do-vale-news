@@ -2,6 +2,7 @@ import React from 'react';
 import { AlertTriangle, DollarSign } from 'lucide-react';
 import type { MarketplaceFinancialLine, MarketplaceSale } from '../../../services/adminMarketplaceSalesService';
 import { ProductCostItemRow } from './ProductCostItemRow';
+import { ChannelFeesButton } from '../../products/ChannelPricingPanel';
 
 interface Props {
     sale: MarketplaceSale;
@@ -95,6 +96,9 @@ export function MarketplaceSaleFinancialSummary({ sale, isRefreshing, onCostSave
                 </div>
             </div>
             {financial.note && <p className="mb-3 text-xs text-slate-500">{financial.note}</p>}
+            {sale.channel === 'tiktok' && (financial.state === 'unavailable' || isConfiguredEstimate) && (
+                <div className="mb-3"><ChannelFeesButton channel="tiktok" compact label="Configurar taxas do TikTok" /></div>
+            )}
 
             {hasPayout && (
                 <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">

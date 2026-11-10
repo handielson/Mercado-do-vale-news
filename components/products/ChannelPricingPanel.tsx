@@ -32,9 +32,9 @@ function publishFees(fees: ChannelFeeMap) {
 const pctInput = (value: number) => String(value).replace('.', ',');
 const parsePct = (value: string) => Number(String(value).replace(',', '.')) || 0;
 
-export function ChannelFeeSettingsModal({ onClose }: { onClose: () => void }) {
+export function ChannelFeeSettingsModal({ onClose, initialChannel = 'shopee_m' }: { onClose: () => void; initialChannel?: ChannelId }) {
   const fees = useChannelFees();
-  const [channel, setChannel] = useState<ChannelId>('shopee_m');
+  const [channel, setChannel] = useState<ChannelId>(initialChannel);
   const [draft, setDraft] = useState<ChannelFee | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => { if (fees) setDraft(structuredClone(fees[channel])); }, [fees, channel]);
@@ -172,6 +172,7 @@ function ListingRow({ listing, costCents, fee, onSaved, product }: { listing: Ch
           <div><dt>Lucro</dt><dd className={`text-sm font-black ${result.profitCents >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{money(result.profitCents)} <span className="text-[11px] font-semibold">({result.marginPct.toLocaleString('pt-BR')}%)</span></dd></div>
           <div className="col-span-full text-[11px] text-slate-400">Comissão {money(result.commissionCents)} · fixa {money(result.fixedCents)} · impostos {money(result.taxCents)} · outras {money(result.otherCents)}{result.packagingCents ? ` · embalagem ${money(result.packagingCents)}` : ''}{result.shippingCents ? ` · frete ${money(result.shippingCents)}` : ''}</div>
           {listing.channel !== 'site' && fee && !isChannelFeeConfigured(fee) && <p className="col-span-full text-[11px] font-semibold text-amber-700">Taxas deste canal não configuradas — lucro sem taxas.</p>}
+          {listing.channel !== 'site' && <div className="col-span-full"><ChannelFeesButton channel={listing.channel} compact label={fee && !isChannelFeeConfigured(fee) ? `Configurar taxas ${listing.label}` : `Taxas ${listing.label}`} /></div>}
         </dl> : <p className="text-xs text-slate-400">Informe o preço para ver o lucro.</p>}
       </div>
       {listing.editable && changed && (confirming
@@ -264,12 +265,36 @@ export function SkuChannelPricing({ productId, product, label, costCents, costSo
   );
 }
 
-export function ChannelFeesButton() {
+export function ChannelFeesButton({ channel, label = 'Taxas por canal', compact = false }: { channel?: ChannelId; label?: string; compact?: boolean } = {}) {
   const [open, setOpen] = useState(false);
   return <>
-    <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-      <Settings2 className="h-4 w-4" /> Taxas por canal
+    <button type="button" onClick={() => setOpen(true)} className={compact
+      ? 'inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline'
+      : 'inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50'}>
+      <Settings2 className={compact ? 'h-3 w-3' : 'h-4 w-4'} /> {label}
     </button>
-    {open && <ChannelFeeSettingsModal onClose={() => setOpen(false)} />}
+    {open && <ChannelFeeSettingsModal initialChannel={channel} onClose={() => setOpen(false)} />}
   </>;
+}
+
+// tiktok-fees-shortcut-v1: atalho das taxas do TikTok (página do TikTok Shop): mostra o que está salvo e abre o
+// mesmo modal de "Taxas por canal" já na aba TikTok, com a busca das taxas reais pelos extratos.
+export function TikTokFeesCard() {
+  const fees = useChannelFees();
+  const fee = fees?.tiktok;
+  const configured = Boolean(fee && fee.saved && isChannelFeeConfigured(fee));
+  return (
+    <section className={`rounded-lg border p-5 shadow-sm ${configured ? 'border-slate-200 bg-white' : 'border-amber-200 bg-amber-50'}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Taxas do TikTok Shop</h2>
+          <p className="mt-1 text-sm text-slate-600">Usadas no lucro dos produtos e no financeiro estimado das vendas do TikTok. Busque as taxas reais nos extratos dos pedidos concluídos, confira e salve.</p>
+          {!fees ? <p className="mt-2 flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Carregando…</p>
+            : configured && fee ? <p className="mt-2 text-sm text-slate-700">Salvo: comissão <strong>{fee.commissionPct.toLocaleString('pt-BR')}%</strong> · outras <strong>{fee.otherPct.toLocaleString('pt-BR')}%</strong> · impostos <strong>{fee.taxPct.toLocaleString('pt-BR')}%</strong> · taxa fixa <strong>{money(fee.fixedFeeCents)}</strong> · frete <strong>{money(fee.shippingCents)}</strong></p>
+            : <p className="mt-2 text-sm font-semibold text-amber-800">Ainda não configuradas: o financeiro das vendas do TikTok fica "Indisponível" quando o extrato não carrega.</p>}
+        </div>
+        <ChannelFeesButton channel="tiktok" label={configured ? 'Revisar taxas do TikTok' : 'Configurar taxas do TikTok'} />
+      </div>
+    </section>
+  );
 }

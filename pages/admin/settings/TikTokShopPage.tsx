@@ -9,6 +9,7 @@ import {
 import TikTokShopSaleCalculator from './components/TikTokShopSaleCalculator';
 import TikTokShopProductPreparation from './components/TikTokShopProductPreparation';
 import TikTokShopBulkPreparation from './components/TikTokShopBulkPreparation';
+import { TikTokFeesCard } from '../../../components/products/ChannelPricingPanel';
 
 type TikTokShopDraft = {
   app_key: string;
@@ -230,6 +231,8 @@ export default function TikTokShopPage() {
           </p>
         </div>
       </div>
+
+      <TikTokFeesCard />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
