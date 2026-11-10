@@ -1,8 +1,8 @@
 # v1.2.835-taxas-faixa-programa-frete
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `a5cdefa`. Release VPS: pendente. Escopo: frontend/admin.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `a5cdefa`. Release VPS: `/var/www/mdv-site/releases/20261110-181910-taxas-faixa-programa-frete`. Escopo: frontend/admin.
 
-Taxas por canal com comissão por faixa de preço, programa de frete com teto e tabela oficial do TikTok Shop. Publicação pendente.
+Taxas por canal com comissão por faixa de preço, programa de frete com teto e tabela oficial do TikTok Shop. Publicada. Tabela oficial conferida no admin sem salvar: comissão geral 6%, até R$ 49,99 com R$ 4,00 e 10%, a partir de R$ 50 com R$ 6,00 e 6%, e programa de frete 6% com teto de R$ 50,00. Shopee M e G com comissão por faixa vazia. A Página do Produto redirecionou para o login durante a conferência de produção. O painel Preço e lucro por canal passou no teste focado, mas a verificação no navegador ficou pendente.
 
 Registro: `docs/versoes/2026-11-10-v1.2.835-taxas-faixa-programa-frete.md`.
 
@@ -10,9 +10,9 @@ Registro: `docs/versoes/2026-11-10-v1.2.835-taxas-faixa-programa-frete.md`.
 
 # v1.2.834-tiktok-frete-liquido
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `2f37eb6`. Release VPS: pendente. Escopo: API + frontend/admin.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `2f37eb6`. Release VPS: `/var/www/mdv-site/releases/20261110-181910-taxas-faixa-programa-frete`. Escopo: API + frontend/admin.
 
-TikTok: frete pelo valor líquido do extrato na sugestão de taxas e no financeiro do pedido. Publicação pendente (API antes do site).
+TikTok: frete pelo valor líquido do extrato na sugestão de taxas e no financeiro do pedido. Publicada. mdv-api reiniciado e online no PM2. /status HTTP 200 e MySQL saudável. O hash de marketplaceSaleFinancials.cjs coincidiu com o arquivo local. O log repetiu avisos de migração que já existiam. Sugestão de frete líquido de R$ 0,00 por pedido. O TikTok retornou 8 extratos de 10 pedidos e 2 erros 36009002 (limite de requisições).
 
 Registro: `docs/versoes/2026-11-10-v1.2.834-tiktok-frete-liquido.md`.
 
