@@ -1,8 +1,8 @@
 # v1.2.827-financeiro-por-versao
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `35253f1`. Release VPS: pendente. Escopo: frontend/admin.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `35253f1`. Release VPS: `/var/www/mdv-site/releases/20261110-143310-financeiro-por-versao`. Escopo: frontend/admin.
 
-Página do Produto: custo médio, preço praticado e lucro por versão (RAM + armazenamento), sem misturar versões no custo médio. Preços editáveis por versão pelo grupo de preço do celular (fonte única, com conferência de revisão). Lucro por canal usa o mesmo custo da versão. Testes focados 13/13 e build aprovado. Publicação no site pendente.
+Página do Produto: custo médio, preço praticado e lucro por versão (RAM + armazenamento), sem misturar versões no custo médio. Preços editáveis por versão pelo grupo de preço do celular (fonte única, com conferência de revisão). Lucro por canal usa o mesmo custo da versão. Testes focados 13/13 e build aprovado. Manifesto público HTTP 200. No admin, o Poco C81 Pro exibiu “Ver por versão ↓” e dois cartões (4 GB/128 GB e 4 GB/256 GB), com custo médio em estoque e móvel, valor em estoque, vendidos, preço praticado e preços/lucro por faixa. Console sem erros na conferência. Verificação em modo de leitura.
 
 Registro: `docs/versoes/2026-11-10-v1.2.827-financeiro-por-versao.md`.
 

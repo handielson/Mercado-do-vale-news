@@ -1,10 +1,10 @@
 {
   "version": "v1.2.827-financeiro-por-versao",
   "date": "2026-11-10",
-  "status": "pendente de publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.827-financeiro-por-versao",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261110-143310-financeiro-por-versao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Página do Produto: custo, preço praticado e lucro por versão (RAM + armazenamento), sem misturar versões; edição dos preços pelo grupo de preço do celular (fonte única).",
   "gestao_mdv_android": {
@@ -38,9 +38,9 @@
     "vite build aprovado; tsc sem erros nos arquivos alterados."
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261110-143310-financeiro-por-versao",
+    "published_at": "2026-11-10T14:33:39Z"
   },
   "api_release": {
     "status": "sem mudança",
