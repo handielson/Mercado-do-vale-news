@@ -22,6 +22,7 @@ import TikTokShopSyncModal from '../settings/components/TikTokShopSyncModal';
 import { ProductConditionBadge } from '../../../components/catalog/ProductConditionBadge';
 import { productCondition, productConditionLabel } from '../../../utils/productCondition.js';
 import { ChannelFeesButton, SkuChannelPricing } from '../../../components/products/ChannelPricingPanel';
+import { ModelVersionFinancials, useModelVersionGroups } from '../../../components/products/ModelVersionFinancials';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -110,6 +111,8 @@ export const ModelProductAggregatorPage: React.FC = () => {
     const [labelProduct, setLabelProduct] = useState<any | null>(null);
     // model-stock-locations-v1: locais brutos por cadastro (mesma fonte do modal "Onde está no estoque" do card).
     const [stockRowsByProductId, setStockRowsByProductId] = useState<Record<string, any[]>>({});
+    // model-version-financials-v1: custo e preço por versão vêm do grupo de preço (fonte única).
+    const versionGroups = useModelVersionGroups(modelId);
     const addUnitsPath = (product: any) => {
         const id = product?.id || product?.raw?.id || product?.products?.[0]?.id || product?.products?.[0]?.raw?.id;
         // entrada-atalhos-v1: "Incluir peças" abre a Entrada com a variação fixa.
@@ -210,7 +213,13 @@ export const ModelProductAggregatorPage: React.FC = () => {
             const registeredCost = Number(raw?.price_cost || 0);
             const costLock = units.length > 0 ? 'Aparelho com IMEI: o custo vem da compra de cada unidade (média móvel). Ajuste na peça.'
                 : custom?.inherit_parent_cost === true ? 'Esta variação herda o custo do produto pai: altere no cadastro da família.' : null;
-            const costCents = units.length > 0 && unitCosts.length ? Math.round(unitCosts.reduce((a: number, b: number) => a + b, 0) / unitCosts.length) : registeredCost;
+            // model-version-financials-v1: celular usa o custo da versão (média móvel, a mesma que a venda registra),
+            // para o lucro por canal bater com o lucro por versão. Sem grupo, segue a regra anterior.
+            const versionGroup = versionGroups.state.status === 'ready' && versionGroups.state.enabled
+                ? versionGroups.state.groups.find((group: any) => (group.products || []).some((item: any) => ids.includes(String(item.id)))) : null;
+            const versionCost = versionGroup ? (versionGroup.moving_average_cost ?? versionGroup.cost_average_in_stock ?? null) : null;
+            const costCents = versionCost !== null ? Number(versionCost)
+                : units.length > 0 && unitCosts.length ? Math.round(unitCosts.reduce((a: number, b: number) => a + b, 0) / unitCosts.length) : registeredCost;
             return {
                 key: `${memoryGroup.key}-${colorGroup.key}-${product.key || product.id}`,
                 productId: ids[0],
@@ -218,11 +227,11 @@ export const ModelProductAggregatorPage: React.FC = () => {
                 label: [memoryGroup.label, colorGroup.color, productCondition(raw) !== 'new' ? productConditionLabel(productCondition(raw)) : ''].filter(Boolean).join(' · '),
                 costCents,
                 registeredCostCents: Number.isFinite(Number(raw?.price_cost)) && raw?.price_cost !== null && raw?.price_cost !== undefined ? Number(raw.price_cost) : null,
-                costSource: units.length > 0 ? 'média do custo das peças disponíveis' : 'custo do cadastro',
+                costSource: versionCost !== null ? (versionGroup?.moving_average_cost != null ? 'custo médio móvel da versão' : 'custo médio da versão em estoque') : units.length > 0 ? 'média do custo das peças disponíveis' : 'custo do cadastro',
                 costLock,
                 inventoryUrl: ids[0] ? `/admin/products/${encodeURIComponent(ids[0])}?tab=inventory` : '',
             };
-        }).filter((sku: any) => sku.productId))), [data]);
+        }).filter((sku: any) => sku.productId))), [data, versionGroups.state]);
 
     const modelName = useMemo(() => String(data?.model?.name || 'Modelo'), [data]);
     const memoryGroups = useMemo(() => [...(data?.memoryGroups || [])].sort((a, b) =>
@@ -367,10 +376,13 @@ export const ModelProductAggregatorPage: React.FC = () => {
                         <p className="mt-2 text-xs text-slate-500">Valores calculados a partir dos custos e das vendas registrados no sistema.</p>
                         <section className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <SummaryCard label="Valor em estoque" value={money(data.totals.stockCostValue)} />
-                        <SummaryCard label="Custo médio em estoque" value={money(data.totals.averageStockCost)} />
+                        {/* model-version-financials-v1: média geral só faz sentido com uma versão; com várias, cada versão tem a sua abaixo. */}
+                        <SummaryCard label="Custo médio em estoque" value={(versionGroups.state.status === 'ready' && versionGroups.state.enabled ? versionGroups.state.groups.length : data.memoryGroups.length) > 1 ? 'Ver por versão ↓' : money(data.totals.averageStockCost)} />
                         <SummaryCard label="Valor investido" value={money(data.totals.investedValue)} />
                         <SummaryCard label="Valor já retornado" value={money(data.totals.returnedValue)} />
                         </section>
+                        <ModelVersionFinancials modelId={String(modelId || '')} modelName={modelName} memoryGroups={data.memoryGroups}
+                            groupsState={versionGroups.state} onReloadGroups={versionGroups.reload} onSaved={() => void load()} />
                         {/* product-financial-v1: custo (fonte única: custo do cadastro / custo das peças) e preço/lucro por canal, por SKU. */}
                         <section className="mt-5 space-y-3">
                             <div className="flex flex-wrap items-center justify-between gap-2">

@@ -63,9 +63,16 @@ test('Página do Produto renderiza título, canais, estoque, taxas e lucro por S
     '/TikTokShopSyncModal': { default: () => null },
     '/productCondition.js': productConditionModule,
     '/ProductConditionBadge': { ProductConditionBadge: () => null, ProductConditionNote: () => null },
+    '/ModelVersionFinancials': {
+      // Produto que não é celular: o grupo de preço vem desligado e a página mantém a regra anterior.
+      useModelVersionGroups: () => ({ state: { status: 'ready', enabled: false, groups: [] }, reload() {} }),
+      ModelVersionFinancials: (props) => { calls.versions = props; return React.createElement('section', null, 'Por versão'); },
+    },
   });
   const html = renderToStaticMarkup(React.createElement(page.ModelProductAggregatorPage));
-  assert.match(html, />Página do Produto</);
+  assert.ok(calls.versions, 'bloco por versão fica no Resumo financeiro');
+  assert.equal(calls.versions.modelId, 'm1');
+  assert.equal(calls.versions.memoryGroups.length, 1);
   assert.doesNotMatch(html, /Página da família/);
   assert.match(html, /Canais de venda conectados/);
   assert.match(html, /Taxas por canal/);
