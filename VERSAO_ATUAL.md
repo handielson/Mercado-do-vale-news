@@ -1,8 +1,8 @@
 # v1.2.831-venda-prejuizo-vermelho
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `c64ee4c`. Release VPS: pendente. Escopo: API + frontend/admin + tabela nova.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `c64ee4c`. Release VPS: `/var/www/mdv-site/releases/20261110-153038-venda-prejuizo-vermelho`. Escopo: API + frontend/admin + tabela nova.
 
-Vendas com lucro negativo em vermelho na lista (PDV e marketplaces), filtro "Só prejuízo" e verificação do lucro dos pedidos de marketplace. Testes focados verdes, build aprovado. Publicação pendente (API antes do site).
+Vendas com lucro negativo em vermelho na lista (PDV e marketplaces), filtro "Só prejuízo" e verificação do lucro dos pedidos de marketplace. Testes focados verdes, build aprovado. Deploy seletivo da API via --sales-marketplaces-only. mdv-api reiniciado e online no PM2. Lookup sem token HTTP 401 e com token admin e keys vazio HTTP 200, sem itens. O log pós-deploy repetiu mensagens já existentes. Build concluído, home e manifesto público HTTP 200. Em /admin/sales, os controles “Só prejuízo” e “Verificar lucro dos marketplaces” apareceram sem erros de console.
 
 Registro: `docs/versoes/2026-11-10-v1.2.831-venda-prejuizo-vermelho.md`.
 

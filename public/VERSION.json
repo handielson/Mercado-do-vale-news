@@ -1,10 +1,10 @@
 {
   "version": "v1.2.831-venda-prejuizo-vermelho",
   "date": "2026-11-10",
-  "status": "pendente de publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.831-venda-prejuizo-vermelho",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261110-153038-venda-prejuizo-vermelho",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Lista de Vendas destaca em vermelho a venda com lucro negativo (PDV e marketplaces), com filtro \"Só prejuízo\" e verificação do lucro dos pedidos de marketplace.",
   "gestao_mdv_android": {
@@ -36,18 +36,23 @@
   "validations": [
     "node --test tmp-tests/sale-profit-flag.test.cjs (4/4), marketplace-sale-financials-ml-tiktok e marketplace-sale-estimate verdes.",
     "sales-page-marketplaces-static: mesma falha preexistente do baseline; tsc: erro preexistente em SalesPage.tsx (getMarketplaceSales result.error).",
-    "node --check dos servidores; vite build aprovado."
+    "node --check dos servidores; vite build aprovado.",
+    "19 testes focados aprovados e sintaxe dos dois servidores validada.",
+    "Deploy seletivo da API via --sales-marketplaces-only. mdv-api reiniciado e online no PM2. Lookup sem token HTTP 401 e com token admin e keys vazio HTTP 200, sem itens. O log pós-deploy repetiu mensagens já existentes.",
+    "Build concluído, home e manifesto público HTTP 200. Em /admin/sales, os controles “Só prejuízo” e “Verificar lucro dos marketplaces” apareceram sem erros de console."
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261110-153038-venda-prejuizo-vermelho",
+    "published_at": "2026-11-10T15:32:22Z"
   },
   "api_release": {
-    "status": "pendente",
+    "status": "publicada",
     "service": "mdv-api",
     "commit": "c64ee4c",
-    "note": "node deploy-vps-server-only.cjs --sales-marketplaces-only (envia vps_server.js e marketplaceSaleFinancials.cjs) e reiniciar mdv-api. Tabela marketplace_sale_profit criada no primeiro uso."
+    "note": "Deploy seletivo da API via --sales-marketplaces-only. mdv-api reiniciado e online no PM2. Lookup sem token HTTP 401 e com token admin e keys vazio HTTP 200, sem itens. O log pós-deploy repetiu mensagens já existentes.",
+    "published_at": "2026-11-10T15:31:15.547Z",
+    "backup": "/var/www/mdv-api/backups/sales-marketplaces-1794324663767"
   },
   "nginx_release": {
     "status": "sem mudança",
