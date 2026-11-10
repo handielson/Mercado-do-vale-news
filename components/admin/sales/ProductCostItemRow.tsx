@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Check, Lock, Pencil, RefreshCw, X } from 'lucide-react';
 import { CurrencyInput } from '../../ui/CurrencyInput';
 import { updateProductManualCost, type MarketplaceFinancialCostItem } from '../../../services/adminMarketplaceSalesService';
+import { ChannelListingsPanel } from '../../products/ChannelPricingPanel';
 
 interface Props {
     item: MarketplaceFinancialCostItem;
@@ -54,7 +55,10 @@ export function ProductCostItemRow({ item, context, onSaved }: Props) {
         }
     };
 
-    const matchLabel = item.matched_by === 'shopee_link' ? 'vínculo do anúncio' : item.matched_by === 'sku' ? 'pelo SKU' : 'produto não encontrado';
+    const matchLabel = item.matched_by === 'shopee_link' || item.matched_by === 'marketplace_link'
+        ? 'vínculo do anúncio'
+        : item.matched_by === 'sku' ? 'pelo SKU' : 'produto não encontrado';
+    const [pricesOpen, setPricesOpen] = useState(false);
 
     return (
         <div className="p-3">
@@ -85,6 +89,15 @@ export function ProductCostItemRow({ item, context, onSaved }: Props) {
 
             {item.product_id && !item.cost_editable && item.cost_lock_reason && (
                 <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><Lock size={12} className="mt-0.5 shrink-0" />{item.cost_lock_reason}</p>
+            )}
+
+            {item.product_id && (
+                <details className="mt-2" onToggle={(event) => setPricesOpen((event.target as HTMLDetailsElement).open)}>
+                    <summary className="cursor-pointer text-xs font-semibold text-blue-700">Ajustar preço nos marketplaces</summary>
+                    <div className="mt-2">
+                        {pricesOpen && <ChannelListingsPanel productId={item.product_id} costCents={item.current_cost_cents ?? item.unit_cost_cents ?? 0} />}
+                    </div>
+                </details>
             )}
 
             {isEditing && (

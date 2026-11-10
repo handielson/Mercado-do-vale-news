@@ -7,6 +7,7 @@ import { CHANNELS, calculateChannelProfit, defaultChannelFee, isChannelFeeConfig
 import { loadChannelFees, loadSkuListings, loadTikTokFeeSummary, saveChannelFee, updateListingPrice, type ChannelFee, type ChannelFeeMap, type ChannelId, type ChannelListing, type TikTokFeeSummary } from '../../services/channelPricing';
 import { MercadoLivreListingPrice } from './sections/MercadoLivreListingPrice';
 import { updateProductManualCost } from '../../services/adminMarketplaceSalesService';
+import { vpsApiService } from '../../services/vpsApiService';
 
 const money = (cents: number | null | undefined) => cents === null || cents === undefined ? '—'
   : (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -214,21 +215,40 @@ function CostEditor({ productId, registeredCostCents, costLock, inventoryUrl, on
   );
 }
 
+/** Preço e lucro do SKU em cada canal (site, Shopee, ML, TikTok), com edição. Usado na Página do Produto e no financeiro da venda. */
+export function ChannelListingsPanel({ productId, product, costCents }: { productId: string; product?: any; costCents: number }) {
+  const fees = useChannelFees();
+  const [listings, setListings] = useState<ChannelListing[] | null>(null);
+  const [loadedProduct, setLoadedProduct] = useState<any>(product || null);
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setListings(null);
+    void (async () => {
+      const current = product || await vpsApiService.getProductById(productId, true).catch(() => null) || { id: productId };
+      const result = await loadSkuListings(productId, current);
+      if (active) { setLoadedProduct(current); setListings(result); }
+    })();
+    return () => { active = false; };
+  }, [productId, refresh]);
+  return (
+    <div className="space-y-2">
+      {costCents <= 0 && <p className="rounded bg-amber-50 p-2 text-[11px] text-amber-800">Sem custo informado: o lucro abaixo considera custo zero.</p>}
+      {!listings ? <p className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />Consultando preços nos canais…</p>
+        : listings.map(listing => <ListingRow key={listing.key} listing={listing} costCents={costCents} product={loadedProduct}
+            fee={fees ? fees[listing.channel] : null}
+            onSaved={() => setRefresh(value => value + 1)} />)}
+      {listings && <button type="button" onClick={() => setRefresh(value => value + 1)} className="text-xs font-semibold text-blue-700 hover:underline">Consultar preços novamente</button>}
+    </div>
+  );
+}
+
 export function SkuChannelPricing({ productId, product, label, costCents, costSource, registeredCostCents = null, costLock = null, inventoryUrl = '', onCostSaved }: {
   productId: string; product: any; label?: string; costCents: number; costSource: string;
   registeredCostCents?: number | null; costLock?: string | null; inventoryUrl?: string; onCostSaved?: () => void;
 }) {
-  const fees = useChannelFees();
   const [open, setOpen] = useState(false);
-  const [listings, setListings] = useState<ChannelListing[] | null>(null);
   const [refresh, setRefresh] = useState(0);
-  useEffect(() => {
-    if (!open) return;
-    let active = true;
-    setListings(null);
-    void loadSkuListings(productId, product).then(result => { if (active) setListings(result); });
-    return () => { active = false; };
-  }, [open, productId, refresh]);
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -238,14 +258,7 @@ export function SkuChannelPricing({ productId, product, label, costCents, costSo
       <div className="mt-2"><CostEditor productId={productId} registeredCostCents={registeredCostCents} costLock={costLock} inventoryUrl={inventoryUrl} onSaved={() => { onCostSaved?.(); setRefresh(value => value + 1); }} /></div>
       <details className="mt-2" onToggle={event => setOpen((event.target as HTMLDetailsElement).open)}>
         <summary className="cursor-pointer text-xs font-semibold text-blue-800">Preço e lucro por canal</summary>
-        <div className="mt-2 space-y-2">
-          {costCents <= 0 && <p className="rounded bg-amber-50 p-2 text-[11px] text-amber-800">Sem custo informado: o lucro abaixo considera custo zero.</p>}
-          {!listings ? <p className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />Consultando preços nos canais…</p>
-            : listings.map(listing => <ListingRow key={listing.key} listing={listing} costCents={costCents} product={product}
-                fee={fees ? fees[listing.channel] : null}
-                onSaved={() => setRefresh(value => value + 1)} />)}
-          {listings && <button type="button" onClick={() => setRefresh(value => value + 1)} className="text-xs font-semibold text-blue-700 hover:underline">Consultar preços novamente</button>}
-        </div>
+        <div className="mt-2">{open && <ChannelListingsPanel key={refresh} productId={productId} product={product} costCents={costCents} />}</div>
       </details>
     </div>
   );
