@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.824-bling-kit-nao-pai",
+  "version": "v1.2.825-bling-kit-componentes",
   "date": "2026-11-10",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.824-bling-kit-nao-pai",
-  "release_vps": "/var/www/mdv-site/releases/20261110-123400-bling-kit-nao-pai",
+  "tag": "v1.2.825-bling-kit-componentes",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Importação Bling classifica o formato E como kit vendável e o formato V como pai de variações. A seleção de um kit importa só o próprio item.",
+  "summary": "A importação de kits do Bling cria ofertas vinculadas aos componentes locais e deriva o estoque do kit desses componentes.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -20,18 +20,17 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
   },
-  "site_source_base": "e8048a80",
+  "site_source_base": "9f663998",
   "changed_files": [
     "services/blingVariationImport.ts",
     "services/blingService.ts",
-    "pages/admin/settings/BlingPage.tsx",
     "tmp-tests/bling-kit-formato-e-not-parent.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.824-bling-kit-nao-pai.md"
+    "docs/versoes/2026-11-10-v1.2.825-bling-kit-componentes.md"
   ],
   "validations": [
-    "Três casos novos aprovados. A seleção de testes Bling teve nove aprovações e cinco falhas reproduzidas na base aaeeedc8, anterior à correção (marca, duplicidade, proteção do pai, imagens e módulo legado de preços)."
+    "Teste focado: 7 aprovações. Seleção de testes Bling: 13 aprovações e as mesmas 5 falhas preexistentes da v1.2.824."
   ],
   "site_release": {
     "status": "publicada",

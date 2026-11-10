@@ -1,3 +1,13 @@
+# v1.2.825-bling-kit-componentes
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit: `9f663998`. Release VPS: pendente. Escopo: frontend/admin.
+
+A importação de kits do Bling cria ofertas vinculadas aos componentes locais e deriva o estoque do kit desses componentes.
+
+Registro: `docs/versoes/2026-11-10-v1.2.825-bling-kit-componentes.md`.
+
+---
+
 # v1.2.824-bling-kit-nao-pai
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commits: `c35783b0` e `e8048a80`. Release VPS: `/var/www/mdv-site/releases/20261110-123400-bling-kit-nao-pai`. Escopo: frontend/admin.
