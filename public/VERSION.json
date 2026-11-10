@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.828-versao-link-promocao",
+  "version": "v1.2.829-midia-promocao-versao",
   "date": "2026-11-10",
-  "status": "publicada",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.828-versao-link-promocao",
-  "release_vps": "/var/www/mdv-site/releases/20261110-144740-versao-link-promocao",
+  "tag": "v1.2.829-midia-promocao-versao",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Página do Produto: nome da versão abre a página no site; promoção por tempo limitado visível e editável por versão (mesmo campo do cadastro e da campanha).",
+  "summary": "Mídia da promoção por versão na Página do Produto: imagem, vídeo e banner da home (banner normal com as datas da promoção).",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -20,30 +20,35 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
   },
-  "site_source_base": "b0a56ed",
+  "site_source_base": "215df51",
   "changed_files": [
     "components/products/ModelVersionFinancials.tsx",
-    "utils/modelVersionFinancials.js",
+    "deploy-vps-server-only.cjs",
+    "migrations/vps-product-promo-media.sql",
     "services/productPromo.ts",
-    "tmp-tests/model-version-financials.test.mjs",
+    "services/productPromoMediaServer.cjs",
+    "services/promoCampaignServer.cjs",
+    "services/promoCampaignService.ts",
+    "tmp-tests/product-promo-media.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.828-versao-link-promocao.md"
+    "docs/versoes/2026-11-10-v1.2.829-midia-promocao-versao.md"
   ],
   "validations": [
+    "node --test tmp-tests/product-promo-media.test.cjs tmp-tests/promo-campaign.test.cjs (17/17).",
     "node --test tmp-tests/model-version-financials.test.mjs tmp-tests/product-admin-page-channels.test.mjs (16/16).",
-    "vite build aprovado; tsc sem erros nos arquivos alterados."
+    "node --check dos .cjs alterados; vite build aprovado; tsc sem erros nos arquivos alterados."
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261110-144740-versao-link-promocao",
-    "published_at": "2026-11-10T14:48:04Z"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   },
   "api_release": {
-    "status": "sem mudança",
+    "status": "pendente",
     "service": "mdv-api",
-    "commit": "d02fbb12",
-    "note": "Só frontend: PATCH /table-data/products/:id existente (price_promo/promo_start/promo_end)."
+    "commit": "215df51",
+    "note": "Módulo novo services/productPromoMediaServer.cjs (rotas GET/PUT /admin/products/promo-media) registrado por promoCampaignServer.cjs; tabela product_promo_media criada no primeiro uso. Deploy: node deploy-vps-server-only.cjs (full) e pm2 restart mdv-api."
   },
   "nginx_release": {
     "status": "sem mudança",

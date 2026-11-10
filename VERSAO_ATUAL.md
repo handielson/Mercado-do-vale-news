@@ -1,3 +1,13 @@
+# v1.2.829-midia-promocao-versao
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `215df51`. Release VPS: pendente. Escopo: API + frontend/admin + tabela nova.
+
+Mídia da promoção por versão na Página do Produto: imagem, vídeo e banner da home (banner normal com as datas da promoção). Tabela `product_promo_media` criada pela API no primeiro uso. Testes 17/17 e 16/16, build aprovado. Publicação pendente (API antes do site).
+
+Registro: `docs/versoes/2026-11-10-v1.2.829-midia-promocao-versao.md`.
+
+---
+
 # v1.2.828-versao-link-promocao
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `b0a56ed`. Release VPS: `/var/www/mdv-site/releases/20261110-144740-versao-link-promocao`. Escopo: frontend/admin.
