@@ -34,3 +34,43 @@ test('selecionar uma variação traz primeiro o pai V e inclui os irmãos', () =
   assert.equal(result.products.length, 3);
   assert.deepEqual(result.missingParentIds, []);
 });
+
+test('kit de quantidade do Bling vira quantity_kit ligado ao produto base', async () => {
+  const { parseBlingKitComponents, buildBlingKitOfferLink } = await import('../services/blingVariationImport.ts');
+  const detail = { formato: 'E', estrutura: { componentes: [{ produto: { id: 16711751146 }, quantidade: 5 }] } };
+  const components = parseBlingKitComponents(detail);
+  assert.deepEqual(components, [{ blingId: 16711751146, quantity: 5 }]);
+
+  const link = buildBlingKitOfferLink(components, (id) => (id === 16711751146 ? 'slnbkug-local' : null));
+  assert.deepEqual(link, {
+    offer_type: 'quantity_kit',
+    offer_parent_product_id: 'slnbkug-local',
+    combo_children: [{ id: 'slnbkug-local', quantity: 5 }],
+  });
+});
+
+test('kit com vários componentes vira product_combo e soma componentes repetidos', async () => {
+  const { parseBlingKitComponents, buildBlingKitOfferLink } = await import('../services/blingVariationImport.ts');
+  const components = parseBlingKitComponents({ estrutura: { componentes: [
+    { produto: { id: 1 }, quantidade: 1 },
+    { produto: { id: 2 }, quantidade: 2 },
+    { produto: { id: 1 }, quantidade: 1 },
+  ] } });
+  const link = buildBlingKitOfferLink(components, (id) => `local-${id}`);
+  assert.equal(link.offer_type, 'product_combo');
+  assert.equal(link.offer_parent_product_id, null);
+  assert.deepEqual(link.combo_children, [{ id: 'local-1', quantity: 2 }, { id: 'local-2', quantity: 2 }]);
+});
+
+test('kit sem componente importado falha com mensagem clara em vez de virar produto solto', async () => {
+  const { buildBlingKitOfferLink } = await import('../services/blingVariationImport.ts');
+  assert.throws(() => buildBlingKitOfferLink([{ blingId: 99, quantity: 5 }], () => null), /kit_componente_nao_importado.*99/);
+  assert.throws(() => buildBlingKitOfferLink([], () => 'x'), /kit_sem_componentes/);
+});
+
+test('import do Bling liga o kit aos componentes depois de gravar o produto', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../services/blingService.ts', import.meta.url), 'utf8');
+  assert.match(source, /estrutura: data\.estrutura/);
+  assert.match(source, /if \(isBlingKitProduct\(enriched\)\)[\s\S]*buildBlingKitOfferLink[\s\S]*vpsApiService\.updateCombo\(persistedProductId/);
+});

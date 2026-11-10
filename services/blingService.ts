@@ -4,7 +4,7 @@ import { modelService } from './models';
 import { brandService } from './brands';
 import { crossSellTagsService } from './cross-sell-tags';
 import { vpsApiService } from './vpsApiService';
-import { buildBlingImportSelection, expandBlingSearchFamilies, getBlingParentId, isBlingStructureProduct } from './blingVariationImport';
+import { buildBlingImportSelection, buildBlingKitOfferLink, expandBlingSearchFamilies, getBlingParentId, isBlingKitProduct, isBlingStructureProduct, parseBlingKitComponents } from './blingVariationImport';
 import { buildVpsUrl, getVpsSyncHeaders, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
 import { companySettingsService } from './companySettingsService';
 import { getCompanyId } from './companyContext';
@@ -175,6 +175,8 @@ export interface BlingProductDetail extends BlingProduct {
     itensPorCaixa?: number;
     unidade?: string;
     tipoProducao?: string;
+    /** Composição do kit (formato 'E'): componentes com produto.id e quantidade */
+    estrutura?: { componentes?: Array<{ produto?: { id?: number }; quantidade?: number }> };
     // Campos editáveis pelo admin antes do import
     _edited?: boolean;
     _precoRevenda?: number;
@@ -279,6 +281,7 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
             precoCompra: data.precoCompra ?? parentData?.precoCompra ?? null,
             situacao: data.situacao || 'A',
             formato: data.formato,
+            estrutura: data.estrutura,
             stock_quantity: data.stock_quantity ?? 0,
             categoria: data.categoria || parentData?.categoria || undefined,
             marca: data.marca || parentData?.marca || undefined,
@@ -1820,6 +1823,35 @@ export async function importBlingProducts(
                 persistedProductId = insertedData.id;
             }
             localIdByBlingId.set(Number(item.id), persistedProductId);
+
+            // Kit do Bling (formato 'E'): vira oferta local ligada aos componentes,
+            // com estoque derivado deles (ex.: KIT5 = 5x o produto base).
+            if (isBlingKitProduct(enriched)) {
+                operation = 'vínculo do kit com os componentes';
+                const kitLink = buildBlingKitOfferLink(
+                    parseBlingKitComponents(enriched),
+                    (blingId) => localIdByBlingId.get(blingId)
+                        || existingVpsProducts.find((product: any) => Number(product.bling_id) === blingId)?.id
+                        || null,
+                );
+                // Sem 'sku' no payload: a API mantém o SKU já registrado do produto.
+                const { sku: _kitSku, ...kitFields } = dbRow;
+                const kitResult = await vpsApiService.updateCombo(persistedProductId, {
+                    ...kitFields,
+                    price_cost: existing?.price_cost ?? dbRow.price_cost ?? 0,
+                    is_combo: true,
+                    track_inventory: true,
+                    offer_type: kitLink.offer_type,
+                    offer_parent_product_id: kitLink.offer_parent_product_id,
+                    offer_visibility: existing?.offer_visibility || 'visible',
+                    // Mantém o anúncio do kit separado do produto base nas plataformas.
+                    shopee_strategy: existing?.shopee_strategy || 'separate_item',
+                    combo_children: kitLink.combo_children,
+                });
+                if (!kitResult?.ok) {
+                    throw new Error(`kit_vinculo_falhou: ${(kitResult as any)?.error || 'não foi possível ligar o kit aos componentes'}`);
+                }
+            }
 
             // Associa cor ao model_color_images se o produto tiver model_id e cor mapeada
             if (resolvedColorId && dbRow.model_id && dbRow.images?.length) {

@@ -122,3 +122,57 @@ export function toggleBlingSelectionGroup<T extends BlingVariationListItem>(
   }
   return next;
 }
+
+export interface BlingKitComponent {
+  blingId: number;
+  quantity: number;
+}
+
+export interface BlingKitOfferLink {
+  offer_type: 'quantity_kit' | 'product_combo';
+  offer_parent_product_id: string | null;
+  combo_children: Array<{ id: string; quantity: number }>;
+}
+
+// Bling API v3: produto com composição (formato 'E') traz estrutura.componentes
+// [{ produto: { id }, quantidade }]. Componentes repetidos são somados.
+export function parseBlingKitComponents(detail: any): BlingKitComponent[] {
+  const rows = Array.isArray(detail?.estrutura?.componentes) ? detail.estrutura.componentes : [];
+  const byId = new Map<number, number>();
+  for (const row of rows) {
+    const blingId = Number(row?.produto?.id ?? row?.id);
+    const quantity = Number(row?.quantidade ?? row?.quantity ?? 1);
+    if (!Number.isSafeInteger(blingId) || blingId <= 0) continue;
+    const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+    byId.set(blingId, (byId.get(blingId) || 0) + safeQuantity);
+  }
+  return Array.from(byId, ([blingId, quantity]) => ({ blingId, quantity }));
+}
+
+// Converte os componentes do kit do Bling no modelo local de oferta/combo:
+// um único componente vira 'quantity_kit' (ex.: kit com 5 unidades do mesmo produto);
+// mais de um vira 'product_combo'. O estoque do kit passa a ser derivado dos componentes.
+export function buildBlingKitOfferLink(
+  components: BlingKitComponent[],
+  localIdByBlingId: (blingId: number) => string | null | undefined,
+): BlingKitOfferLink {
+  if (!components.length) {
+    throw new Error('kit_sem_componentes: o Bling não retornou a composição deste kit.');
+  }
+  const missing = components.filter((component) => !localIdByBlingId(component.blingId));
+  if (missing.length) {
+    throw new Error(
+      `kit_componente_nao_importado: importe primeiro o(s) produto(s) do Bling ${missing.map((c) => c.blingId).join(', ')} e depois reimporte o kit.`
+    );
+  }
+  const combo_children = components.map((component) => ({
+    id: String(localIdByBlingId(component.blingId)),
+    quantity: component.quantity,
+  }));
+  const single = combo_children.length === 1;
+  return {
+    offer_type: single ? 'quantity_kit' : 'product_combo',
+    offer_parent_product_id: single ? combo_children[0].id : null,
+    combo_children,
+  };
+}
