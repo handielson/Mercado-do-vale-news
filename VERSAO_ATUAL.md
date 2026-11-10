@@ -1,3 +1,13 @@
+# v1.2.827-financeiro-por-versao
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `35253f1`. Release VPS: pendente. Escopo: frontend/admin.
+
+Página do Produto: custo médio, preço praticado e lucro por versão (RAM + armazenamento), sem misturar versões no custo médio. Preços editáveis por versão pelo grupo de preço do celular (fonte única, com conferência de revisão). Lucro por canal usa o mesmo custo da versão. Testes focados 13/13 e build aprovado. Publicação no site pendente.
+
+Registro: `docs/versoes/2026-11-10-v1.2.827-financeiro-por-versao.md`.
+
+---
+
 # v1.2.826-campanha-promocao
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `d02fbb12`. Release VPS: `/var/www/mdv-site/releases/20261110-132700-campanha-promocao`.

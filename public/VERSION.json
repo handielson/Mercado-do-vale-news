@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.826-campanha-promocao",
+  "version": "v1.2.827-financeiro-por-versao",
   "date": "2026-11-10",
-  "status": "publicada",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.826-campanha-promocao",
-  "release_vps": "/var/www/mdv-site/releases/20261110-132700-campanha-promocao",
+  "tag": "v1.2.827-financeiro-por-versao",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Campanhas de promoção no Marketing e preço efetivo por período no catálogo, nas listas e no bot.",
+  "summary": "Página do Produto: custo, preço praticado e lucro por versão (RAM + armazenamento), sem misturar versões; edição dos preços pelo grupo de preço do celular (fonte única).",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -20,49 +20,33 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
   },
-  "site_source_base": "d02fbb12",
+  "site_source_base": "35253f1",
   "changed_files": [
-    "components/products/sections/ProductPricing.tsx",
-    "deploy-vps-server-only.cjs",
-    "pages/admin/settings/MarketingPage.tsx",
-    "pages/admin/settings/marketing/FacebookMarketplaceSchedulerPanel.tsx",
-    "pages/admin/settings/marketing/MarketingWorkspace.tsx",
-    "pages/admin/settings/marketing/PromoCampaignPanel.tsx",
-    "pages/admin/settings/marketing/marketingNavigation.ts",
-    "services/autoresponderCatalogPreferences.cjs",
-    "services/phonePriceListServer.cjs",
-    "services/promoCampaignArtwork.cjs",
-    "services/promoCampaignServer.cjs",
-    "services/promoCampaignService.ts",
-    "services/promoPricingCore.cjs",
-    "services/socialStoryPriceListBatches.cjs",
-    "services/socialStoryScheduleService.ts",
-    "tmp-tests/autoresponder-product-grouping-static.test.mjs",
-    "tmp-tests/marketing-channel-tabs-static.test.mjs",
-    "tmp-tests/promo-campaign.test.cjs",
-    "vps_server.cjs",
-    "vps_server.js",
+    "components/products/ModelVersionFinancials.tsx",
+    "pages/admin/products/ModelProductAggregatorPage.tsx",
+    "utils/modelVersionFinancials.js",
+    "tmp-tests/model-version-financials.test.mjs",
+    "tmp-tests/product-admin-page-channels.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.826-campanha-promocao.md"
+    "docs/versoes/2026-11-10-v1.2.827-financeiro-por-versao.md"
   ],
   "validations": [
-    "31 testes funcionais e 2 estáticos aprovados; sintaxe dos dois servidores OK. O teste estático de estoque foi ajustado para LF e CRLF.",
-    "MySQL global/session SYSTEM, NOW() igual a UTC_TIMESTAMP(); 0 de 2841 produtos com preço promocional positivo ou datas preenchidas. Um SELECT sintético confirmou a comparação do ISO UTC.",
-    "Falhas preexistentes informadas: n8n-cheapest-promo-accessory-fix, n8n-meta-catalog-intent-parity, n8n-meta-multibrand-promos e product-pricing-profit-target-static.",
-    "Site HTTP 200, catálogo renderizado sem erros de console na verificação, manifesto público confirmado e bundle sem marcadores de runtime Supabase.",
-    "n8n: dois nós publicados após testes focados e comerciais. Hash ativo conferido, backup criptografado, healthz 200 e Evolution open."
+    "node --test tmp-tests/model-version-financials.test.mjs tmp-tests/product-admin-page-channels.test.mjs (13/13).",
+    "npm run test:smartphone-price-groups: 27/27 no teste funcional; o teste de UI não roda no ambiente (falta o Edge do Playwright).",
+    "Falhas preexistentes, iguais antes da mudança: model-panel-product-edit-shortcut-static, model-panel-sale-items-source-static e model-panel-variation-image.",
+    "vite build aprovado; tsc sem erros nos arquivos alterados."
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261108-211138-ml-billing-429-record",
-    "published_at": "2026-11-08"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   },
   "api_release": {
-    "status": "publicada",
+    "status": "sem mudança",
     "service": "mdv-api",
     "commit": "d02fbb12",
-    "note": "PM2 online. Campos price_effective e promo_active confirmados. Rota de campanha HTTP 200 com chave de sync e MySQL saudável."
+    "note": "Só frontend: usa as rotas existentes GET/PUT /models/:id/smartphone-price-groups."
   },
   "nginx_release": {
     "status": "sem mudança",
