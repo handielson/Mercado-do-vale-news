@@ -1,10 +1,10 @@
 {
   "version": "v1.2.824-bling-kit-nao-pai",
   "date": "2026-11-10",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.824-bling-kit-nao-pai",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261110-123400-bling-kit-nao-pai",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Importação Bling classifica o formato E como kit vendável e o formato V como pai de variações. A seleção de um kit importa só o próprio item.",
   "gestao_mdv_android": {
