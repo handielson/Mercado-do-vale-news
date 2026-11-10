@@ -59,6 +59,16 @@ test('preço praticado e lucro realizado vêm das vendas da própria versão', (
   assert.equal(rows[0].realizedProfitAverageCents, 21000);
   assert.equal(rows[1].soldCount, 1);
   assert.equal(rows[1].practicedAverageCents, 150000);
+  assert.equal(rows[0].publicUrl, '/produto/a', 'nome da versão leva à página do produto no site');
+  assert.equal(rows[1].publicUrl, '/produto/b');
+});
+
+test('link da versão prefere a cor com estoque e some sem cadastro conhecido', () => {
+  const memoryGroups = [{ products: [{ id: 'p1', publicUrl: '/produto/sem-estoque' }, { id: 'p2', publicUrl: '/produto/com-estoque' }], colors: [] }];
+  const [row] = buildVersionFinancials([group('g', '4GB', '128GB', [product('p1', 'Preto', []), product('p2', 'Verde', [76000])])], memoryGroups);
+  assert.equal(row.publicUrl, '/produto/com-estoque');
+  const [orphan] = buildVersionFinancials([group('g', '4GB', '128GB', [product('px', 'Preto', [])])], memoryGroups);
+  assert.equal(orphan.publicUrl, null);
 });
 
 test('venda sem valor registrado não entra no preço praticado', () => {
@@ -92,4 +102,45 @@ test('fonte única: o bloco por versão edita só pelo grupo de preço, nunca di
   assert.doesNotMatch(source, /updateProductManualCost|vpsClient\.(patch|put)|price_cost\s*:/, 'não grava custo nem preço por outro caminho');
   const page = fs.readFileSync('pages/admin/products/ModelProductAggregatorPage.tsx', 'utf8');
   assert.match(page, /moving_average_cost \?\? versionGroup\.cost_average_in_stock/, 'lucro por canal usa o mesmo custo da versão');
+});
+
+test('promoção da versão: lida dos cadastros, com status e lucro sobre o mesmo custo', async () => {
+  const { versionPromo, validatePromo } = await import('../utils/modelVersionFinancials.js');
+  const now = Date.parse('2026-11-10T15:00:00Z');
+  const raws = new Map([
+    ['p1', { price_retail: 99900, price_promo: 89900, promo_start: '2026-11-01T03:00:00.000Z', promo_end: '2026-11-30T02:59:00.000Z' }],
+    ['p2', { price_retail: 99900, price_promo: 89900, promo_start: '2026-11-01T03:00:00.000Z', promo_end: '2026-11-30T02:59:00.000Z' }],
+  ]);
+  const promo = versionPromo(['p1', 'p2'], raws, 99900, now);
+  assert.equal(promo.status, 'active');
+  assert.equal(promo.divergent, false);
+  assert.equal(promo.discountPct, 10);
+  assert.equal(versionPromo(['p1'], raws, 99900, Date.parse('2026-10-20T00:00:00Z')).status, 'scheduled');
+  assert.equal(versionPromo(['p1'], raws, 99900, Date.parse('2026-12-05T00:00:00Z')).status, 'expired');
+  assert.equal(versionPromo(['p1'], raws, 80000, now).status, 'invalid', 'promoção que não é menor que o varejo não vale (regra do promoPricingCore)');
+  raws.set('p3', { price_retail: 99900, price_promo: null });
+  const mixed = versionPromo(['p1', 'p2', 'p3'], raws, 99900, now);
+  assert.equal(mixed.divergent, true);
+  assert.equal(mixed.withPromoCount, 2);
+  assert.equal(versionPromo(['p3'], raws, 99900, now), null, 'sem promoção');
+
+  const memoryGroups = [{ products: [{ id: 'p1', publicUrl: '/produto/a', raw: raws.get('p1') }], colors: [] }];
+  const [row] = buildVersionFinancials([group('g', '4GB', '128GB', [product('p1', 'Preto', [76000])], { moving_average_cost: 76000 })], memoryGroups);
+  assert.equal(row.promo.priceCents, 89900);
+  assert.equal(row.promo.profitCents, 13900, 'lucro da promoção usa o mesmo custo base da versão');
+  assert.deepEqual(row.productIds, ['p1']);
+
+  assert.equal(validatePromo({ priceCents: 89900, start: null, end: null }, 99900), '');
+  assert.match(validatePromo({ priceCents: 99900, start: null, end: null }, 99900), /menor que o varejo/);
+  assert.match(validatePromo({ priceCents: 0, start: null, end: null }, 99900), /Informe/);
+  assert.match(validatePromo({ priceCents: 89900, start: '2026-11-20T00:00:00Z', end: '2026-11-10T00:00:00Z' }, 99900), /depois do início/);
+});
+
+test('promoção grava só os três campos do cadastro, pelo PATCH parcial do produto', () => {
+  const service = fs.readFileSync('services/productPromo.ts', 'utf8');
+  assert.match(service, /vpsClient\.patch\(`\/table-data\/products\/\$\{encodeURIComponent\(id\)\}`, body\)/);
+  assert.match(service, /price_promo: promo\.priceCents, promo_start: promo\.start \|\| null, promo_end: promo\.end \|\| null/);
+  assert.doesNotMatch(service, /price_retail|price_cost|price_reseller|price_wholesale/, 'não toca nos preços do grupo nem no custo');
+  const ui = fs.readFileSync('components/products/ModelVersionFinancials.tsx', 'utf8');
+  assert.match(ui, /saveProductsPromo\(row\.productIds, value\)/);
 });

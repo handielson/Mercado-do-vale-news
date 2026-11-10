@@ -2,16 +2,103 @@
 // Fonte única: grupo de preço do celular (o mesmo da Gestão de Modelos e do cadastro da família).
 // Editar aqui grava no mesmo grupo (PUT /models/:id/smartphone-price-groups/:groupId), com conferência de revisão.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Pencil } from 'lucide-react';
+import { ExternalLink, Loader2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { ModelPricesPanel } from '../settings/ModelPricesPanel';
 import { smartphonePriceGroups, type SmartphonePriceGroup, type SmartphoneSalePrices } from '../../services/smartphonePriceGroups';
-import { buildVersionFinancials, SALE_TIERS, validateSalePrices } from '../../utils/modelVersionFinancials.js';
+import { buildVersionFinancials, SALE_TIERS, validatePromo, validateSalePrices } from '../../utils/modelVersionFinancials.js';
+import { saveProductsPromo } from '../../services/productPromo';
 
 const money = (cents: number | null | undefined) => cents === null || cents === undefined ? '—'
   : (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const pct = (value: number | undefined) => value === undefined ? '' : `${value.toLocaleString('pt-BR')}%`;
+
+// Campo datetime-local mostra o horário da loja; o valor salvo é ISO em UTC (igual ao formulário do produto).
+const toLocalInput = (iso: string | null) => {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+const fromLocalInput = (value: string) => value ? new Date(value).toISOString() : null;
+const shortDate = (iso: string | null) => iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+const PROMO_STATUS: Record<string, { label: string; tone: string }> = {
+  active: { label: 'Ativa', tone: 'bg-emerald-100 text-emerald-800' },
+  scheduled: { label: 'Agendada', tone: 'bg-blue-100 text-blue-800' },
+  expired: { label: 'Encerrada', tone: 'bg-slate-200 text-slate-600' },
+  invalid: { label: 'Não vale (não é menor que o varejo)', tone: 'bg-amber-100 text-amber-800' },
+};
+
+function PromoBlock({ row, onSaved }: { row: ReturnType<typeof buildVersionFinancials>[number]; onSaved: () => void }) {
+  const promo = row.promo;
+  const retail = row.prices?.price_retail ?? 0;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ priceCents: 0, start: '', end: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const start = () => {
+    setDraft({ priceCents: promo?.priceCents || 0, start: toLocalInput(promo?.start || null), end: toLocalInput(promo?.end || null) });
+    setError(''); setEditing(true);
+  };
+  const write = async (value: { priceCents: number; start: string | null; end: string | null } | null) => {
+    setSaving(true); setError('');
+    try {
+      const result = await saveProductsPromo(row.productIds, value);
+      if (result.failed.length) {
+        setError(`Salvo em ${result.saved} de ${row.productIds.length} cor(es). Falhou: ${result.failed.map(item => item.error).join('; ')}`);
+      } else {
+        toast.success(value ? `${row.label}: promoção salva em ${result.saved} cor(es).` : `${row.label}: promoção removida.`);
+        setEditing(false);
+      }
+      onSaved();
+    } finally { setSaving(false); }
+  };
+  const save = () => {
+    const value = { priceCents: draft.priceCents, start: fromLocalInput(draft.start), end: fromLocalInput(draft.end) };
+    const invalid = validatePromo(value, retail);
+    if (invalid) { setError(invalid); return; }
+    void write(value);
+  };
+  const editingProfit = editing && draft.priceCents > 0 && row.costBaseCents !== null ? draft.priceCents - row.costBaseCents : null;
+  const status = promo ? PROMO_STATUS[promo.status] : null;
+
+  return (
+    <div className="mt-3 rounded-lg border border-red-200 bg-red-50/60 p-2.5" aria-label={`Promoção ${row.label}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-800">🏷️ Promoção por tempo limitado
+          {status && <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] ${status.tone}`}>{status.label}</span>}</p>
+        {!editing && <div className="flex gap-3">
+          <button type="button" onClick={start} disabled={!retail} className="text-xs font-semibold text-red-700 hover:underline disabled:opacity-50">{promo ? 'Editar promoção' : 'Criar promoção'}</button>
+          {promo && <button type="button" disabled={saving} onClick={() => { if (window.confirm(`Remover a promoção de todas as cores de ${row.label}?`)) void write(null); }} className="text-xs text-slate-500 underline">Remover</button>}
+        </div>}
+      </div>
+      {!editing && promo && <p className="mt-1 text-xs text-slate-700">
+        <span className="text-slate-400 line-through">{money(retail)}</span> por <strong className="text-sm text-red-700">{money(promo.priceCents)}</strong>
+        {promo.discountPct > 0 && <> (−{promo.discountPct}%)</>}
+        {(promo.start || promo.end) && <> · {promo.start ? `de ${shortDate(promo.start)} ` : ''}{promo.end ? `até ${shortDate(promo.end)}` : ''}</>}
+        {promo.profitCents !== undefined && <span className={`ml-1 font-semibold ${promo.profitCents >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>· lucro {money(promo.profitCents)} ({pct(promo.marginPct)})</span>}
+      </p>}
+      {!editing && promo?.divergent && <p className="mt-1 text-[11px] text-amber-800">As cores desta versão estão com promoções diferentes ({promo.withPromoCount} de {promo.total} com promoção). Salvar aqui deixa todas iguais.</p>}
+      {!editing && !promo && <p className="mt-1 text-[11px] text-slate-500">{retail ? 'Sem promoção nesta versão.' : 'Defina o preço de varejo antes de criar promoção.'}</p>}
+      {editing && <div className="mt-2 space-y-2">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <CurrencyInput label="Preço promocional" value={draft.priceCents} disabled={saving} onChange={value => setDraft(current => ({ ...current, priceCents: value }))} />
+          <label className="text-xs text-slate-600">Início (vazio = agora)<input type="datetime-local" className="mt-1 block w-full rounded-lg border p-2 text-sm" value={draft.start} disabled={saving} onChange={event => setDraft(current => ({ ...current, start: event.target.value }))} /></label>
+          <label className="text-xs text-slate-600">Fim (vazio = sem prazo)<input type="datetime-local" className="mt-1 block w-full rounded-lg border p-2 text-sm" value={draft.end} disabled={saving} onChange={event => setDraft(current => ({ ...current, end: event.target.value }))} /></label>
+        </div>
+        {editingProfit !== null && <p className={`text-xs font-semibold ${editingProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>Lucro na promoção: {money(editingProfit)} ({pct(Math.round((editingProfit / draft.priceCents) * 1000) / 10)})</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" disabled={saving} onClick={save} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">{saving ? 'Salvando…' : `Salvar promoção em todas as cores (${row.productIds.length})`}</button>
+          <button type="button" disabled={saving} onClick={() => { setEditing(false); setError(''); }} className="text-xs text-slate-600 underline">Cancelar</button>
+        </div>
+        <p className="text-[11px] text-slate-500">É a mesma promoção do cadastro do produto e da campanha do Marketing — não cria outro preço.</p>
+      </div>}
+      {error && <p role="alert" className="mt-1 text-xs text-red-700">{error}</p>}
+    </div>
+  );
+}
 
 type LoadState = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; enabled: boolean; groups: SmartphonePriceGroup[] };
 
@@ -66,7 +153,11 @@ function VersionRow({ row, onSaved }: { row: ReturnType<typeof buildVersionFinan
     <article className="rounded-lg border border-slate-200 bg-white p-3" aria-label={`Versão ${row.label}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-bold text-slate-900">{row.label || 'Versão sem RAM/armazenamento'}</p>
+          {row.publicUrl
+            ? <a href={row.publicUrl} target="_blank" rel="noopener noreferrer" title="Abrir esta versão no site" className="inline-flex items-center gap-1 text-sm font-bold text-blue-700 hover:underline">
+                {row.label || 'Versão sem RAM/armazenamento'} <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              </a>
+            : <p className="text-sm font-bold text-slate-900">{row.label || 'Versão sem RAM/armazenamento'}</p>}
           <p className="text-xs text-slate-500">{row.colors.length ? row.colors.join(', ') : 'Sem cor'} · {row.stockQuantity} un. em estoque</p>
         </div>
         {!editing && <button type="button" onClick={start} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
@@ -102,6 +193,7 @@ function VersionRow({ row, onSaved }: { row: ReturnType<typeof buildVersionFinan
           );
         })}
       </div>
+      <PromoBlock row={row} onSaved={onSaved} />
       {row.costBaseSource && <p className="mt-1 text-[11px] text-slate-400">Lucro previsto = preço − {row.costBaseSource}, sem taxas de canal (veja "por canal" abaixo).</p>}
 
       {editing && <div className="mt-2 flex flex-wrap items-center gap-3">
