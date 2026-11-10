@@ -1,10 +1,10 @@
 {
   "version": "v1.2.833-atalho-taxas-tiktok",
   "date": "2026-11-10",
-  "status": "pendente de publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.833-atalho-taxas-tiktok",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261110-172052-atalho-taxas-tiktok",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Atalhos para as taxas do TikTok Shop: card na página do TikTok Shop, link por canal na Página do Produto e no financeiro da venda do TikTok.",
   "gestao_mdv_android": {
@@ -32,12 +32,14 @@
   ],
   "validations": [
     "tsc do projeto: nenhuma mensagem nova em relação ao baseline.",
-    "product-admin-page-channels (7/7) e product-manual-cost (5/5) verdes; vite build aprovado."
+    "product-admin-page-channels (7/7) e product-manual-cost (5/5) verdes; vite build aprovado.",
+    "Testes focados 18/18. Home e /VERSION.json HTTP 200.",
+    "Em produção, o card no topo do TikTok Shop abriu Taxas por canal com a aba TikTok ativa. Na Página do Produto, foram confirmados os atalhos de Shopee M, Shopee G, Mercado Livre e TikTok Shop. Em Vendas, o pedido TikTok com financeiro Indisponível mostrou Configurar taxas do TikTok. Sem erros de console nas três telas e sem salvar taxas."
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261110-172052-atalho-taxas-tiktok",
+    "published_at": "2026-11-10T20:21:10.000Z"
   },
   "api_release": {
     "status": "sem alteração de API"

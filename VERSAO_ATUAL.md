@@ -1,8 +1,8 @@
 # v1.2.833-atalho-taxas-tiktok
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `652eb83`. Release VPS: pendente. Escopo: frontend/admin.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `652eb83`. Release VPS: `/var/www/mdv-site/releases/20261110-172052-atalho-taxas-tiktok`. Escopo: frontend/admin.
 
-Atalhos para as taxas do TikTok Shop (página do TikTok Shop, Página do Produto e financeiro da venda). Publicação pendente.
+Atalhos para as taxas do TikTok Shop (página do TikTok Shop, Página do Produto e financeiro da venda). Site publicado. Em produção, o card no topo do TikTok Shop abriu Taxas por canal com a aba TikTok ativa. Na Página do Produto, foram confirmados os atalhos de Shopee M, Shopee G, Mercado Livre e TikTok Shop. Em Vendas, o pedido TikTok com financeiro Indisponível mostrou Configurar taxas do TikTok. Sem erros de console nas três telas e sem salvar taxas.
 
 Registro: `docs/versoes/2026-11-10-v1.2.833-atalho-taxas-tiktok.md`.
 
