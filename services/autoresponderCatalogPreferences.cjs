@@ -1,3 +1,4 @@
+const { effectivePriceCents } = require('./promoPricingCore.cjs');
 const CATALOG_PREFERENCE_HANDOFF_MESSAGE = [
   'Obrigado pelas informações 😊 Não consegui identificar com segurança, de forma automática, qual opção combina melhor com todas as suas preferências.',
   'Vou chamar um de nossos atendentes para te orientar e encontrar a alternativa mais adequada para você. Só um momento, por favor.',
@@ -147,8 +148,10 @@ function booleanSpec(value) {
 }
 
 function getProductPriceCents(product) {
-  const raw = product?.price_promo || product?.price_retail || product?.price || 0;
-  return Math.max(0, Math.round(Number(raw) || 0));
+  // Promoção só vale dentro do período (promo_start/promo_end).
+  const effective = effectivePriceCents(product);
+  if (effective > 0) return effective;
+  return Math.max(0, Math.round(Number(product?.price) || 0));
 }
 
 function cameraScore(product) {

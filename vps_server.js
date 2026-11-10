@@ -44,6 +44,7 @@ const {
   filterProductsByPreferences,
   hasActionablePreferences,
 } = require('./services/autoresponderCatalogPreferences.cjs');
+const { activePromoPriceSql, effectivePriceSql, effectivePriceCents, promoPriceFields } = require('./services/promoPricingCore.cjs');
 const crypto = require('crypto');
 const sharp = require('sharp');
 const { PDFDocument } = require('pdf-lib');
@@ -2067,6 +2068,7 @@ registerMarketingCampaignRoutes(fastify, {
   buildWhatsAppStoryItems: buildWhatsAppStatusStoryItemsVps,
   calculateCardInstallment: calculateAutoresponderMaxInstallment,
   attachCatalogModelColorImages,
+  comboStockSql,
   sendWhatsAppStoryMedia: sendWhatsAppStandaloneStoryMediaVps,
 });
 
@@ -13537,7 +13539,7 @@ async function maybeGenerateFacebookMarketplaceCampaignsVps(now) {
       const cooldownHours = Math.max(1, Number(campaign.republish_cooldown_hours || 168));
       const minStock = Math.max(1, Number(campaign.min_stock || 1));
       const [products] = await pool.query(
-        `SELECT p.id, p.name, p.sku, p.slug, p.price_retail, p.price_promo, p.stock_quantity, p.images, p.image_url
+        `SELECT p.id, p.name, p.sku, p.slug, p.price_retail, p.price_promo, p.promo_start, p.promo_end, p.stock_quantity, p.images, p.image_url
          FROM products p
          WHERE p.category_id = ? AND p.status = 'active'
            AND COALESCE(p.is_parent, 0) = 0 AND COALESCE(p.stock_quantity, 0) >= ?
@@ -13559,7 +13561,7 @@ async function maybeGenerateFacebookMarketplaceCampaignsVps(now) {
         continue;
       }
 
-      const priceCents = Math.max(0, Number(product.price_promo || product.price_retail || 0));
+      const priceCents = effectivePriceCents(product); // promoção só dentro do período
       let imageUrls = facebookCampaignJsonArrayVps(product.images).filter(Boolean).slice(0, 10);
       if (!imageUrls.length && product.image_url) imageUrls = [product.image_url];
       let destinations = facebookCampaignJsonArrayVps(campaign.destinations);
@@ -18480,7 +18482,7 @@ async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
   const safeOffset = Math.max(Number(offset) || 0, 0);
   const numericTagId = Number(tagId);
   const [rows] = await pool.query(
-    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, ${activePromoPriceSql()} AS price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
        (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
@@ -18522,7 +18524,7 @@ async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset
   const safeLimit = getAutoresponderProductQueryLimit(limit);
   const safeOffset = Math.max(Number(offset) || 0, 0);
   const [rows] = await pool.query(
-    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, ${activePromoPriceSql()} AS price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
        (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
@@ -18561,7 +18563,7 @@ async function findAutoresponderProductsByCategoryBudget(categoryId, budgetCents
   const safeBudget = Math.max(Math.round(Number(budgetCents) || 0), 0);
   if (!categoryId || safeBudget <= 0) return [];
   const [rows] = await pool.query(
-    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, ${activePromoPriceSql()} AS price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
        (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
@@ -18573,8 +18575,8 @@ async function findAutoresponderProductsByCategoryBudget(categoryId, budgetCents
        AND (is_parent = 0 OR is_parent IS NULL)
        AND stock_quantity > 0
        AND category_id = ?
-       AND COALESCE(NULLIF(price_promo, 0), price_retail) <= ?
-     ORDER BY COALESCE(NULLIF(price_promo, 0), price_retail) DESC, updated_at DESC
+       AND ${effectivePriceSql()} <= ?
+     ORDER BY ${effectivePriceSql()} DESC, updated_at DESC
      LIMIT ${safeLimit} OFFSET ${safeOffset}`,
     [categoryId, safeBudget]
   );
@@ -18592,7 +18594,7 @@ async function countAutoresponderProductsByCategoryBudget(categoryId, budgetCent
        AND (is_parent = 0 OR is_parent IS NULL)
        AND stock_quantity > 0
        AND category_id = ?
-       AND COALESCE(NULLIF(price_promo, 0), price_retail) <= ?`,
+       AND ${effectivePriceSql()} <= ?`,
     [categoryId, safeBudget]
   );
   return Number(rows[0]?.total || 0);
@@ -18637,9 +18639,8 @@ function getAutoresponderProductPrice(product) {
 }
 
 function getAutoresponderProductPriceCents(product) {
-  const promoPrice = normalizeAutoresponderPriceCents(product?.price_promo);
-  const retailPrice = normalizeAutoresponderPriceCents(product?.price_retail);
-  return promoPrice > 0 ? promoPrice : retailPrice;
+  // Promoção só conta dentro do período (as consultas do bot já zeram promo fora da data).
+  return effectivePriceCents(product);
 }
 
 function getAutoresponderProductGroupKey(product) {
@@ -19716,7 +19717,7 @@ async function getAutoresponderNumberedChoiceContext(sender, validityMinutes) {
 
 async function findAutoresponderProductById(productId) {
   const [rows] = await pool.query(
-    `SELECT id, model_id, category_id, brand, name, sku, slug, description, price_retail, price_promo, stock_quantity, specs, custom_fields,
+    `SELECT id, model_id, category_id, brand, name, sku, slug, description, price_retail, ${activePromoPriceSql()} AS price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
        (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
@@ -19742,7 +19743,7 @@ function formatAutoresponderProductDescriptionLine(product) {
 async function findAutoresponderProductVariations(product) {
   if (!product?.model_id) return product ? [product] : [];
   const [rows] = await pool.query(
-    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, ${activePromoPriceSql()} AS price_promo, stock_quantity, specs, custom_fields
      FROM products
      WHERE status = 'active'
        AND (is_parent = 0 OR is_parent IS NULL)
@@ -20045,7 +20046,7 @@ async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) 
   const score = buildAutoresponderProductSearchScoreSql(safeTokens, searchColumns);
 
   const [rows] = await pool.query(
-    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, ${activePromoPriceSql()} AS price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
        (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
@@ -26979,6 +26980,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+    ...promoPriceFields(r),
   }));
 
   // Sem cache para admin (status=all) ou buscas dinâmicas (search)
@@ -27040,6 +27042,7 @@ fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 m
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+    ...promoPriceFields(r),
   };
 });
 

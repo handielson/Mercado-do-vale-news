@@ -1,10 +1,10 @@
 import React from 'react';
-import { ArrowRight, BrainCircuit, CalendarDays, Facebook, Home, Instagram, MessageCircle, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
+import { ArrowRight, BrainCircuit, CalendarDays, Facebook, Home, Instagram, MessageCircle, Percent, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
 import { MARKETING_SECTIONS, type MarketingTab } from './marketingNavigation';
 
-const icons = { overview: Home, studio: Sparkles, tables: Smartphone, calendar: CalendarDays, campaigns: BrainCircuit, instagram: Instagram, whatsapp: MessageCircle, facebook: Facebook, approvals: ShieldCheck };
+const icons = { overview: Home, studio: Sparkles, tables: Smartphone, promotions: Percent, calendar: CalendarDays, campaigns: BrainCircuit, instagram: Instagram, whatsapp: MessageCircle, facebook: Facebook, approvals: ShieldCheck };
 const groups = [...new Set(MARKETING_SECTIONS.map(section => section.group))];
-const shortcuts: MarketingTab[] = ['studio', 'tables', 'instagram', 'calendar', 'approvals', 'campaigns'];
+const shortcuts: MarketingTab[] = ['studio', 'tables', 'promotions', 'instagram', 'calendar', 'approvals', 'campaigns'];
 
 export default function MarketingWorkspace({ activeTab, onNavigate, children }: { activeTab: MarketingTab; onNavigate: (tab: MarketingTab) => void; children: React.ReactNode }) {
   const current = MARKETING_SECTIONS.find(section => section.id === activeTab)!;

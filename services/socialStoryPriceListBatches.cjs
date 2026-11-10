@@ -6,6 +6,8 @@ const sqlDate = (date) => date.toISOString().slice(0, 19).replace('T', ' ');
 
 function priceListRecipe(input) {
   if (!input) return null;
+  // Campanha de promoção: os produtos saem da promoção ativa no momento da entrega.
+  if (input.kind === 'promo') return { kind: 'promo' };
   if (input.groups) throw Object.assign(new Error('O agendamento de tabelas usa marcas, formato e tipo de preço.'), { statusCode: 400 });
   const { brands, priceMode, layout, brandMode } = validateSelection(input);
   return { brands, priceMode, layout, ...(brandMode !== undefined ? { brandMode } : {}) };
@@ -53,7 +55,7 @@ async function refreshNextPriceListBatch(pool, dependencies) {
     if (!preview.items.length) {
       // Keep an auditable cancelled placeholder; never send yesterday's stock.
       await connection.query(`UPDATE social_story_deliveries d JOIN social_story_items i ON i.id=d.item_id
-        SET d.status='cancelled',d.last_error='Nenhum celular disponível na geração atual'
+        SET d.status='cancelled',d.last_error='Nenhum item disponível na geração atual'
         WHERE i.schedule_id=? AND i.sequence_index>=? AND i.sequence_index<? AND d.status='pending'`, [batch.schedule_id, first, last]);
     } else {
       await connection.query(`DELETE d FROM social_story_deliveries d JOIN social_story_items i ON i.id=d.item_id

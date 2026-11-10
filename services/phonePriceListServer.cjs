@@ -4,6 +4,8 @@ const crypto = require('node:crypto');
 const sharp = require('sharp');
 const { normalizeProductSpecsRam } = require('./physicalRamCore.cjs');
 const { renderPhonePriceListPage, paginatePhonePriceList, renderPhoneListTable } = require('./phonePriceListArtwork.cjs');
+const { effectivePriceCents } = require('./promoPricingCore.cjs');
+const { registerPromoCampaignRoutes } = require('./promoCampaignServer.cjs');
 
 const DEFAULT_BRANDS = ['Xiaomi', 'POCO', 'realme'];
 const IMAGE_HOSTS = new Set(['api.xiaomipetrolina.com.br', 'imagens.xiaomipetrolina.com.br', 'mercadodovale.com.br', 'www.mercadodovale.com.br']);
@@ -58,8 +60,10 @@ function buildPriceListGroups(rows, requestedGroups, brands = DEFAULT_BRANDS, pr
     return requestedGroups.map((group) => {
       const members = group.productIds.map((id) => byId.get(id));
       if (members.some((p) => !p)) throw failure('O estoque da lista mudou. Gere a lista novamente.', 409);
-      const priceCents = Math.max(...members.map((p) => Number(p.price_retail)));
-      if (priceCents !== group.priceCents) throw failure('O preço da lista mudou. Gere a lista novamente.', 409);
+      // Promoção ativa vale na lista; o bot ainda pode mandar o preço de varejo calculado antes.
+      const priceCents = Math.max(...members.map((p) => effectivePriceCents(p)));
+      const retailCents = Math.max(...members.map((p) => Number(p.price_retail)));
+      if (priceCents !== group.priceCents && retailCents !== group.priceCents) throw failure('O preço da lista mudou. Gere a lista novamente.', 409);
       const brand = resolveBrand(members[0]);
       if (members.some((p) => resolveBrand(p) !== brand)) throw failure('Um card não pode misturar marcas.');
       return { id: group.productIds.join(','), name: group.name, memory: group.memory, brand, priceCents, products: members };
@@ -79,7 +83,7 @@ function buildPriceListGroups(rows, requestedGroups, brands = DEFAULT_BRANDS, pr
     const key = [brand, modelKey, normalize(identity.memory)].join('|');
     if (!groups.has(key)) groups.set(key, { id: key, ...identity, brand, priceCents: 0, products: [] });
     const group = groups.get(key);
-    group.priceCents = Math.max(group.priceCents, Number(product.price_retail) || 0);
+    group.priceCents = Math.max(group.priceCents, effectivePriceCents(product));
     group.products.push(product);
   }
   return [...groups.values()].sort((a, b) => a.priceCents - b.priceCents || a.name.localeCompare(b.name, 'pt-BR'));
@@ -151,7 +155,7 @@ function createPhonePriceListGenerator(dependencies) {
     const [rows] = await pool.query(`SELECT p.id,p.name,p.brand,p.model_id,p.specs,p.custom_fields,
       CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(p.images,'$[0]')) LIKE 'https://%'
       THEN JSON_ARRAY(JSON_UNQUOTE(JSON_EXTRACT(p.images,'$[0]'))) ELSE JSON_ARRAY() END AS images,
-      p.price_retail,p.stock_quantity,p.status,p.hide_from_catalog,p.offer_visibility,p.is_parent,p.is_combo,
+      p.price_retail,p.price_promo,p.promo_start,p.promo_end,p.stock_quantity,p.status,p.hide_from_catalog,p.offer_visibility,p.is_parent,p.is_combo,
       (SELECT COUNT(*) FROM units phone_units WHERE phone_units.product_id=p.id) AS serialized_unit_count,
       (SELECT COUNT(*) FROM units available_phone_units WHERE available_phone_units.product_id=p.id AND available_phone_units.status='available') AS available_serialized_units,
       c.name AS category_name,b.name AS brand_name,m.name AS model_name FROM products p
@@ -245,7 +249,9 @@ function createPhonePriceListGenerator(dependencies) {
 
 function registerPhonePriceListRoutes(fastify, dependencies) {
   const generate = createPhonePriceListGenerator(dependencies);
-  dependencies.generatePhonePriceList = generate;
+  const promoCampaign = registerPromoCampaignRoutes(fastify, { ...dependencies, readImage: dependencies.readImage || readPublicImage });
+  // Agendamentos dinâmicos: { kind: 'promo' } gera os stories da campanha de promoção na hora da entrega.
+  dependencies.generatePhonePriceList = (input) => (input?.kind === 'promo' ? promoCampaign.generateStories() : generate(input));
   fastify.post('/admin/marketing/phone-price-list/preview', {
     preHandler: dependencies.requireSyncKeyOrAdmin,
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },

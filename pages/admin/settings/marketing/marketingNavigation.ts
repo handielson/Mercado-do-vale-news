@@ -2,6 +2,7 @@ export const MARKETING_SECTIONS = [
   { id: 'overview', group: 'Início', label: 'Visão geral', title: 'O que você quer fazer?', description: 'Crie materiais, organize a divulgação e acompanhe as aprovações.' },
   { id: 'studio', group: 'Criar', label: 'Artes de produtos', title: 'Artes de produtos', description: 'Escolha um produto, personalize a arte e baixe o material pronto.' },
   { id: 'tables', group: 'Criar', label: 'Tabelas de celulares', title: 'Tabelas de celulares', description: 'Uma lista por fabricante, sem preço, à vista no Pix ou com preço no cartão.' },
+  { id: 'promotions', group: 'Criar', label: 'Promoções', title: 'Campanha de promoção', description: 'Título da época, mídia, texto pronto para o WhatsApp e stories “de / por” com os produtos em promoção agora.' },
   { id: 'calendar', group: 'Planejar', label: 'Calendário', title: 'Calendário de divulgação', description: 'Veja as publicações e aprovações de todos os canais em um só lugar.' },
   { id: 'campaigns', group: 'Planejar', label: 'Campanhas com IA', title: 'Campanhas com IA', description: 'Monte propostas de campanhas e revise os materiais antes de aprovar.' },
   { id: 'instagram', group: 'Agendar', label: 'Instagram', title: 'Agendar no Instagram', description: 'Escolha entre Stories em datas específicas e a programação semanal.' },

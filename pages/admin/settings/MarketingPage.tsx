@@ -39,6 +39,7 @@ import FacebookMarketplaceSchedulerPanel from './marketing/FacebookMarketplaceSc
 import MarketingApprovalCenterPanel from './marketing/MarketingApprovalCenterPanel';
 import MarketingCampaignAgentPanel from './marketing/MarketingCampaignAgentPanel';
 import SocialStorySchedulerPanel from './marketing/SocialStorySchedulerPanel';
+import PromoCampaignPanel from './marketing/PromoCampaignPanel';
 import MarketingCalendarPanel from './marketing/MarketingCalendarPanel';
 import ProductMarketingCard, { type ProductMarketingBenefitIcon, type ProductMarketingTemplate, type ProductMarketingTypographyKey, type ProductMarketingTypographyScales } from './marketing/ProductMarketingCard';
 import MarketingScenePanel from './marketing/MarketingScenePanel';
@@ -2862,6 +2863,7 @@ export default function MarketingPage() {
                     {activeTab === 'campaigns' && <MarketingCampaignAgentPanel />}
                     {activeTab === 'approvals' && <MarketingApprovalCenterPanel />}
                     {activeTab === 'tables' && <SocialStorySchedulerPanel key="tables" purpose="tables" />}
+                    {activeTab === 'promotions' && <PromoCampaignPanel />}
                     {activeTab === 'instagram' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
                             <div className="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">

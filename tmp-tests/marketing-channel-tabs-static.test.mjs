@@ -7,9 +7,9 @@ const { MARKETING_SECTIONS, resolveMarketingTab } = await import('../pages/admin
 
 assert.equal(resolveMarketingTab(null), 'overview');
 assert.equal(resolveMarketingTab('invalid'), 'overview');
-for (const tab of ['studio', 'instagram', 'facebook', 'whatsapp', 'campaigns', 'approvals', 'calendar', 'tables']) assert.equal(resolveMarketingTab(tab), tab);
+for (const tab of ['studio', 'instagram', 'facebook', 'whatsapp', 'campaigns', 'approvals', 'calendar', 'tables', 'promotions']) assert.equal(resolveMarketingTab(tab), tab);
 assert.equal(new Set(MARKETING_SECTIONS.map(section => section.id)).size, MARKETING_SECTIONS.length);
-assert.deepEqual(MARKETING_SECTIONS.filter(section => section.group === 'Criar').map(section => section.id), ['studio', 'tables']);
+assert.deepEqual(MARKETING_SECTIONS.filter(section => section.group === 'Criar').map(section => section.id), ['studio', 'tables', 'promotions']);
 assert.match(page, /resolveMarketingTab\(searchParams.get\('tab'\)\)/);
 assert.match(page, /useSearchParams\(\)/);
 assert.match(page, /next.set\('tab', tab\)/);
@@ -28,6 +28,7 @@ assert.match(page, /activeTab === 'approvals'[\s\S]*?<MarketingApprovalCenterPan
 assert.match(page, /activeTab === 'campaigns'[\s\S]*?<MarketingCampaignAgentPanel/);
 assert.doesNotMatch(page, /activeTab === 'agenda'|setActiveTab\('agenda'\)/);
 assert.match(page, /activeTab === 'tables'.*purpose="tables"/);
+assert.match(page, /activeTab === 'promotions' && <PromoCampaignPanel \/>/);
 assert.match(page, /instagramSchedulerView === 'stories'.*<SocialStorySchedulerPanel/);
 assert.match(page, /useState<MarketingAssetFormat>\('status'\)/);
 assert.match(page, /Crie sua arte em 3 passos/);

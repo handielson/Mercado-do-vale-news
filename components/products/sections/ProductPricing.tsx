@@ -418,9 +418,14 @@ function PromoSection({ watch, setValue, errors }: { watch: UseFormWatch<Product
     const promoEnd = watch('promo_end') || '';
     const priceRetail = watch('price_retail') || 0;
 
+    // O valor salvo é ISO em UTC; o campo datetime-local mostra o horário local da loja.
+    // (Antes cortava o ISO em UTC e exibia 3h a mais em Brasília.)
     const toLocalInput = (iso: string) => {
         if (!iso) return '';
-        return iso.slice(0, 16); // "YYYY-MM-DDTHH:MM"
+        const date = new Date(iso);
+        if (Number.isNaN(date.getTime())) return '';
+        const pad = (value: number) => String(value).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
     };
 
     const fromLocalInput = (val: string) => {

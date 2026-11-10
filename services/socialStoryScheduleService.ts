@@ -70,7 +70,8 @@ export interface CreateSocialStoryScheduleInput {
   includePrice?: boolean;
   mediaDelaySeconds?: number;
   items?: SocialStoryDraftItem[];
-  phonePriceList?: { brandMode?: PhonePriceListBrandMode; brands: PhonePriceListBrand[]; priceMode: PhonePriceListMode; layout: PhonePriceListLayout };
+  // { kind: 'promo' }: stories da campanha de promoção, gerados de novo na hora de publicar.
+  phonePriceList?: { brandMode?: PhonePriceListBrandMode; brands: PhonePriceListBrand[]; priceMode: PhonePriceListMode; layout: PhonePriceListLayout } | { kind: 'promo' };
 }
 
 export const socialStoryScheduleService = {

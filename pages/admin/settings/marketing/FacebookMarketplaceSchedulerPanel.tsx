@@ -3,6 +3,7 @@ import { CalendarClock, CheckCircle2, Copy, ExternalLink, Facebook, Image, Loade
 import { toast } from 'sonner';
 import type { CatalogProduct } from '../../../../types/catalog';
 import { catalogService } from '../../../../services/catalogService';
+import { getEffectiveRetailPrice } from '../../../../utils/promoPrice';
 import {
     facebookMarketplaceScheduleService,
     type FacebookMarketplaceDestination,
@@ -114,7 +115,8 @@ export default function FacebookMarketplaceSchedulerPanel({ initialProduct, init
     const fillFromProduct = (next: CatalogProduct | null, preferredDescription?: string) => {
         setProduct(next);
         if (!next) return;
-        const cents = next.price_promo || next.price_retail || 0;
+        // Promoção só dentro do período (promo_start/promo_end).
+        const cents = getEffectiveRetailPrice(next as any) || 0;
         setPrice((cents / 100).toFixed(2).replace('.', ','));
         setDescription(preferredDescription?.trim() || [
             next.name,
@@ -303,7 +305,7 @@ export default function FacebookMarketplaceSchedulerPanel({ initialProduct, init
                                     <>
                                         <div className="flex gap-2"><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runSearch(); }} placeholder="Nome, SKU ou EAN" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" /><button onClick={() => void runSearch()} className="rounded-lg bg-slate-900 px-3 text-white"><Search className="h-4 w-4" /></button></div>
                                         {searching && <p className="mt-2 text-xs text-slate-400">Buscando...</p>}
-                                        {results.length > 0 && <div className="mt-2 max-h-44 divide-y overflow-y-auto rounded-lg border">{results.map((result) => <button key={result.id} onClick={() => fillFromProduct(result)} className="block w-full p-3 text-left hover:bg-slate-50"><span className="block text-sm font-bold">{result.name}</span><span className="text-xs text-slate-500">{formatMoney(result.price_promo || result.price_retail)}</span></button>)}</div>}
+                                        {results.length > 0 && <div className="mt-2 max-h-44 divide-y overflow-y-auto rounded-lg border">{results.map((result) => <button key={result.id} onClick={() => fillFromProduct(result)} className="block w-full p-3 text-left hover:bg-slate-50"><span className="block text-sm font-bold">{result.name}</span><span className="text-xs text-slate-500">{formatMoney(getEffectiveRetailPrice(result as any))}</span></button>)}</div>}
                                     </>
                                 )}
                             </div>
