@@ -1,3 +1,17 @@
+# v1.2.836-bot-preco-atual
+
+Publicação do workflow `SkrkB4vyKVDnQ68t` em 10/11/2026 às 19:50:42 de Brasília, com código em `a37813d0`.
+
+O bot confirma o preço vigente da configuração antes de reaproveitar uma cotação, um rascunho ou um parcelamento. O teste no WhatsApp manteve o Redmi 15 8 GB / 256 GB Preto em R$ 1.349,00 da lista ao rascunho. Os 7 testes focados e os 130 do gate comercial passaram.
+
+SHA-256 anterior `d26f17a8141d891bab4cf81ab7cdc58df26124aecd3c27a11eea49eefcb6b94b` e ativo `0a7eee82b2e4a304a96e20bc2bd2a7c742a80a547bf107b2493f0e2c145fa943`. Backup AES-256-GCM em `/root/n8n-backups/meta-attendance-2026-11-10T22-50-28-120Z-70eebc09.aes256gcm.json`.
+
+Execuções `74379` (lista), `74432` (opção), `74438` (parcelamento) e `74443` (cor). Nove grupos administrativos aguardam revisão de cadastro. A conferência de variantes ativas, visíveis, em estoque e sem promoção encontrou zero divergências por cor.
+
+Registro em `docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md`.
+
+---
+
 # v1.2.835-taxas-faixa-programa-frete
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `a5cdefa`. Release VPS: `/var/www/mdv-site/releases/20261110-181910-taxas-faixa-programa-frete`. Escopo: frontend/admin.

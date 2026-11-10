@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.835-taxas-faixa-programa-frete",
+  "version": "v1.2.836-bot-preco-atual",
   "date": "2026-11-10",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.835-taxas-faixa-programa-frete",
+  "tag": "v1.2.836-bot-preco-atual",
   "release_vps": "/var/www/mdv-site/releases/20261110-181910-taxas-faixa-programa-frete",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Taxas por canal: comissão % por faixa de preço, programa de frete com teto e tabela oficial do TikTok Shop em um clique.",
+  "summary": "O bot confirma o preço vigente da configuração antes de reaproveitar uma cotação, um rascunho ou um parcelamento.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -19,25 +19,33 @@
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center. Em 10/11, a consulta retornou 5 extratos e 5 erros 36009002, sem 105005 na amostra.",
-    "tiktok_finance_estimate_validation": "Configurar as taxas do TikTok Shop para validar a estimativa em produção."
+    "tiktok_finance_estimate_validation": "Configurar as taxas do TikTok Shop para validar a estimativa em produção.",
+    "smartphone_price_group_review": {
+      "divergent_groups": 9,
+      "active_visible_in_stock_no_promo_divergences": 0,
+      "record": "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
+    }
   },
   "site_source_base": "a5cdefa",
   "changed_files": [
-    "utils/channelProfit.js",
-    "utils/channelProfit.test.mjs",
-    "utils/marketplaceSaleEstimate.js",
-    "components/products/ChannelPricingPanel.tsx",
+    "scripts/deploy-n8n-sales-price-revalidate.cjs",
+    "scripts/n8n-sales-price-revalidate.cjs",
+    "tmp-tests/n8n-attendance-sales-fixes.test.cjs",
+    "tmp-tests/n8n-sales-conversation-contract.test.cjs",
+    "tmp-tests/n8n-sales-end-to-end.test.cjs",
+    "tmp-tests/n8n-sales-model-configuration.test.cjs",
+    "tmp-tests/n8n-sales-order-contract.test.cjs",
+    "tmp-tests/n8n-sales-price-catalog-fixture.cjs",
+    "tmp-tests/n8n-sales-price-revalidate.test.cjs",
+    "tmp-tests/n8n-sales-variant-contract.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.835-taxas-faixa-programa-frete.md"
+    "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
   ],
   "validations": [
-    "channelProfit (incl. TikTok capa R$30 = R$8,80 e celular R$1.500 = R$146), marketplace-sale-estimate, tiktok-net-shipping, product-admin-page-channels e marketplace-sale-financials-ml-tiktok: 32/32.",
-    "tsc sem mensagens novas; vite build aprovado.",
-    "35/35 nos testes focados desta publicação. Home e /VERSION.json HTTP 200.",
-    "Tabela oficial conferida no admin sem salvar: comissão geral 6%, até R$ 49,99 com R$ 4,00 e 10%, a partir de R$ 50 com R$ 6,00 e 6%, e programa de frete 6% com teto de R$ 50,00. Shopee M e G com comissão por faixa vazia.",
-    "Sugestão de frete líquido de R$ 0,00 por pedido. O TikTok retornou 8 extratos de 10 pedidos e 2 erros 36009002 (limite de requisições).",
-    "A Página do Produto redirecionou para o login durante a conferência de produção. O painel Preço e lucro por canal passou no teste focado, mas a verificação no navegador ficou pendente."
+    "7/7 testes focados da recotação e 130/130 no gate comercial.",
+    "Dry run, backup criptografado, CAS e hash ativo confirmados. n8n healthz HTTP 200 e Evolution open.",
+    "WhatsApp: lista 74379, opção 74432, parcelamento 74438 e cor 74443. Base de R$ 1.349,00."
   ],
   "site_release": {
     "status": "publicada",
@@ -59,15 +67,27 @@
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
     "versionId": "3edc8f23-90f6-4012-aaf5-385eb3aa8934",
-    "published_at": "2026-11-10T13:42:14.269Z",
-    "before": "0c06d07a245ee575f6a1634d6d1551c225771864e6a3e63b1e90be7410f3f52b",
-    "sha256": "d26f17a8141d891bab4cf81ab7cdc58df26124aecd3c27a11eea49eefcb6b94b",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-10T13-41-58-609Z-66c861bc.aes256gcm.json",
+    "published_at": "2026-11-10T22:50:42.024Z",
+    "before": "d26f17a8141d891bab4cf81ab7cdc58df26124aecd3c27a11eea49eefcb6b94b",
+    "sha256": "0a7eee82b2e4a304a96e20bc2bd2a7c742a80a547bf107b2493f0e2c145fa943",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-10T22-50-28-120Z-70eebc09.aes256gcm.json",
     "nodes": [
-      "Vendas - Contexto Produtos",
-      "Vendas - Verificar Pos Lista"
+      "Agente Geral - Atendimento",
+      "Especialista - Vendas",
+      "Vendas - Verificar Pos Lista",
+      "Vendas - Resolver Parcelamento"
     ],
-    "note": "Preço efetivo na lista e recotação por SKU após o vencimento da promoção. Backup AES-256-GCM, entidade e histórico alinhados, n8n e runner 1/1, healthz 200 e Evolution open."
+    "tests": {
+      "focused_passed": 7,
+      "commercial_gate_passed": 130
+    },
+    "executions": {
+      "lista": 74379,
+      "opcao": 74432,
+      "parcelamento": 74438,
+      "cor": 74443
+    },
+    "note": "Recotação por configuração nas escolhas, no rascunho e no parcelamento. Backup AES-256-GCM, CAS e hash ativo conferidos. healthz HTTP 200 e Evolution open."
   },
   "evolution_release": {
     "status": "publicada",
