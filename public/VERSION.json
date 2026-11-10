@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.836-bot-preco-atual",
+  "version": "v1.2.837-bot-fotos-por-cor",
   "date": "2026-11-10",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.836-bot-preco-atual",
+  "tag": "v1.2.837-bot-fotos-por-cor",
   "release_vps": "/var/www/mdv-site/releases/20261110-181910-taxas-faixa-programa-frete",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "O bot confirma o preço vigente da configuração antes de reaproveitar uma cotação, um rascunho ou um parcelamento.",
+  "summary": "Ao escolher um modelo no WhatsApp, o bot mostra as fotos das cores disponíveis antes de perguntar qual o cliente prefere.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,24 +28,17 @@
   },
   "site_source_base": "a5cdefa",
   "changed_files": [
-    "scripts/deploy-n8n-sales-price-revalidate.cjs",
-    "scripts/n8n-sales-price-revalidate.cjs",
-    "tmp-tests/n8n-attendance-sales-fixes.test.cjs",
-    "tmp-tests/n8n-sales-conversation-contract.test.cjs",
-    "tmp-tests/n8n-sales-end-to-end.test.cjs",
-    "tmp-tests/n8n-sales-model-configuration.test.cjs",
-    "tmp-tests/n8n-sales-order-contract.test.cjs",
-    "tmp-tests/n8n-sales-price-catalog-fixture.cjs",
-    "tmp-tests/n8n-sales-price-revalidate.test.cjs",
-    "tmp-tests/n8n-sales-variant-contract.test.cjs",
+    "scripts/n8n-sales-option-color-photos.cjs",
+    "scripts/deploy-n8n-sales-option-color-photos.cjs",
+    "tmp-tests/n8n-sales-option-color-photos.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
+    "docs/versoes/2026-11-10-v1.2.837-bot-fotos-por-cor.md"
   ],
   "validations": [
-    "7/7 testes focados da recotação e 130/130 no gate comercial.",
-    "Dry run, backup criptografado, CAS e hash ativo confirmados. n8n healthz HTTP 200 e Evolution open.",
-    "WhatsApp: lista 74379, opção 74432, parcelamento 74438 e cor 74443. Base de R$ 1.349,00."
+    "7/7 testes focados no snapshot ativo e 130/130 no gate comercial do candidato.",
+    "Dry run, backup criptografado, CAS e hash ativo conferidos. n8n healthz HTTP 200 e Evolution open.",
+    "WhatsApp: lista 74448, opção 74480 com três fotos antes da pergunta separada e cor 74496 com rascunho em R$ 1.349,00."
   ],
   "site_release": {
     "status": "publicada",
@@ -67,27 +60,23 @@
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
     "versionId": "3edc8f23-90f6-4012-aaf5-385eb3aa8934",
-    "published_at": "2026-11-10T22:50:42.024Z",
-    "before": "d26f17a8141d891bab4cf81ab7cdc58df26124aecd3c27a11eea49eefcb6b94b",
-    "sha256": "0a7eee82b2e4a304a96e20bc2bd2a7c742a80a547bf107b2493f0e2c145fa943",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-10T22-50-28-120Z-70eebc09.aes256gcm.json",
+    "published_at": "2026-11-10T23:09:47.889Z",
+    "before": "0a7eee82b2e4a304a96e20bc2bd2a7c742a80a547bf107b2493f0e2c145fa943",
+    "sha256": "d91644409424e7e8595535ea5d0413d0e2e1c247db93b00fc3b16f0892784985",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-10T23-09-34-022Z-66c65845.aes256gcm.json",
     "nodes": [
-      "Agente Geral - Atendimento",
-      "Especialista - Vendas",
-      "Vendas - Verificar Pos Lista",
-      "Vendas - Resolver Parcelamento"
+      "Vendas - Verificar Pos Lista"
     ],
     "tests": {
       "focused_passed": 7,
       "commercial_gate_passed": 130
     },
     "executions": {
-      "lista": 74379,
-      "opcao": 74432,
-      "parcelamento": 74438,
-      "cor": 74443
+      "lista": 74448,
+      "opcao": 74480,
+      "cor": 74496
     },
-    "note": "Recotação por configuração nas escolhas, no rascunho e no parcelamento. Backup AES-256-GCM, CAS e hash ativo conferidos. healthz HTTP 200 e Evolution open."
+    "note": "Apenas o nó de pós-lista foi publicado. Grafo, preço da configuração e rascunho preservados. O agregador Meta foi validado em teste."
   },
   "evolution_release": {
     "status": "publicada",

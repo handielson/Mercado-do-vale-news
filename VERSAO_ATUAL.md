@@ -1,3 +1,13 @@
+# v1.2.837-bot-fotos-por-cor
+
+Workflow `SkrkB4vyKVDnQ68t` publicado em 10/11/2026 às 20:09:47 de Brasília. Commit de código `08551d7e` na `main`.
+
+O WhatsApp envia as fotos das cores disponíveis antes de perguntar a cor. O Redmi 15 8 GB / 256 GB manteve R$ 1.349,00 no rascunho. Passaram 7 testes focados e 130 do gate comercial.
+
+Execuções `74448` (lista), `74480` (resumo → Preto, Titânio, Roxo → pergunta) e `74496` (cor). O hash ativo e o backup criptografado estão registrados em `docs/versoes/2026-11-10-v1.2.837-bot-fotos-por-cor.md`.
+
+---
+
 # v1.2.836-bot-preco-atual
 
 Publicação do workflow `SkrkB4vyKVDnQ68t` em 10/11/2026 às 19:50:42 de Brasília, com código em `a37813d0`.
