@@ -26,6 +26,7 @@ const {
   ensureMercadoLivreTables,
   registerMercadoLivreRoutes,
   loadMercadoLivreSales,
+  loadMercadoLivreOrderFinancialSource,
   syncMercadoLivreStockFromBlingTargets,
 } = require('./services/mercadoLivreServer.cjs');
 const { ensureCustomerSelfServiceTables, registerCustomerSelfServiceRoutes } = require('./services/customerSelfServiceServer.cjs');
@@ -13994,7 +13995,7 @@ fastify.patch('/admin/products/:id/cost', { preHandler: requireAdminBearerToken 
     return reply.code(500).send({ error: 'Falha ao salvar o custo do produto.' });
   }
 });
-const { createShopeeSaleFinancialsLoader } = require('./services/marketplaceSaleFinancials.cjs');
+const { createShopeeSaleFinancialsLoader, createMercadoLivreSaleFinancialsLoader, createTikTokSaleFinancialsLoader } = require('./services/marketplaceSaleFinancials.cjs');
 const loadShopeeSaleFinancialsVps = createShopeeSaleFinancialsLoader({
   pool,
   fetchEscrow: async (orderSn, connectionId) => {
@@ -14002,6 +14003,20 @@ const loadShopeeSaleFinancialsVps = createShopeeSaleFinancialsLoader({
     const result = await shopeeCatalogGetVps('/api/v2/payment/get_escrow_detail', creds, encodeShopeeCatalogParamsVps({ order_sn: orderSn }));
     return result?.data || null;
   },
+});
+// marketplace-sale-financials-ml-tiktok-v1: financeiro (taxas e lucro) de Mercado Livre e TikTok, só leitura.
+const loadMercadoLivreSaleFinancialsVps = createMercadoLivreSaleFinancialsLoader({
+  pool,
+  fetchSource: (orderId) => loadMercadoLivreOrderFinancialSource(pool, orderId),
+});
+const loadTikTokSaleFinancialsVps = createTikTokSaleFinancialsLoader({
+  pool,
+  fetchStatement: async (orderId) => {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const result = await callTikTokShopOpenApiVps(settings, { method: 'GET', pathname: `/finance/202309/orders/${encodeURIComponent(orderId)}/statement_transactions` });
+    return result?.payload?.data || null;
+  },
+  fetchOrder: (orderId) => loadTikTokShopOrderForStockVps(orderId),
 });
 fastify.get('/admin/mobile-sales/:channel/:saleId', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   const channel = String(request.params?.channel || '').trim().toLowerCase();
@@ -14022,6 +14037,15 @@ fastify.get('/admin/mobile-sales/:channel/:saleId', { preHandler: requireAdminBe
     if (channel === 'shopee') {
       const financial = await loadShopeeSaleFinancialsVps(sale, connectionId).catch((error) => ({
         source: 'shopee_escrow',
+        state: 'unavailable',
+        note: error?.message || 'Falha ao montar o financeiro da venda.',
+      }));
+      if (financial) sale = { ...sale, details: { ...(sale.details || {}), financial } };
+    } else if (channel === 'mercado_livre' || channel === 'tiktok') {
+      const loadFinancial = channel === 'mercado_livre' ? loadMercadoLivreSaleFinancialsVps : loadTikTokSaleFinancialsVps;
+      const financial = await loadFinancial(sale).catch((error) => ({
+        source: channel === 'mercado_livre' ? 'mercado_livre_order' : 'tiktok_statement',
+        origin: 'marketplace',
         state: 'unavailable',
         note: error?.message || 'Falha ao montar o financeiro da venda.',
       }));

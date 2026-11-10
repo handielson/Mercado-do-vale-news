@@ -36,26 +36,50 @@ function Line({ line, strong = false }: { line: MarketplaceFinancialLine; strong
     );
 }
 
+// marketplace-sale-financials-ml-tiktok-v1: Shopee, Mercado Livre e TikTok Shop usam o mesmo resumo;
+// a origem diz se os valores são reais do marketplace ou estimados pelas taxas configuradas.
+const FINANCIAL_CHANNELS = new Set(['shopee_mv', 'shopee_g', 'mercado_livre', 'tiktok']);
+
+const MARKETPLACE_NAME: Record<string, { of: string; by: string }> = {
+    shopee_mv: { of: 'da Shopee', by: 'pela Shopee' },
+    shopee_g: { of: 'da Shopee', by: 'pela Shopee' },
+    mercado_livre: { of: 'do Mercado Livre', by: 'pelo Mercado Livre' },
+    tiktok: { of: 'do TikTok Shop', by: 'pelo TikTok Shop' },
+};
+
 export function MarketplaceSaleFinancialSummary({ sale, isRefreshing, onCostSaved }: Props) {
     const financial = sale.details?.financial;
-    const isShopee = sale.channel === 'shopee_mv' || sale.channel === 'shopee_g';
+    const supportsFinancial = FINANCIAL_CHANNELS.has(sale.channel);
+    const marketplaceName = MARKETPLACE_NAME[sale.channel] || { of: `de ${sale.channel_label}`, by: `por ${sale.channel_label}` };
 
     if (!financial) {
         return (
             <div className="border-t border-slate-200 p-5">
                 <h4 className="mb-2 flex items-center gap-2 font-semibold text-slate-800"><DollarSign size={16} className="text-slate-400" />Financeiro da venda</h4>
                 <p className="text-sm text-slate-500">
-                    {isShopee && isRefreshing
-                        ? 'Consultando repasse, taxas e custos…'
-                        : isShopee
+                    {supportsFinancial && isRefreshing
+                        ? 'Consultando valor recebido, taxas e custos…'
+                        : supportsFinancial
                             ? 'Não foi possível carregar o financeiro desta venda. Use o botão de atualizar.'
-                            : 'O detalhamento de taxas e lucro está disponível para vendas da Shopee.'}
+                            : 'O detalhamento de taxas e lucro está disponível para vendas da Shopee, do Mercado Livre e do TikTok Shop.'}
                 </p>
             </div>
         );
     }
 
-    const badge = STATE_BADGE[financial.state] || STATE_BADGE.unavailable;
+    const isConfiguredEstimate = financial.origin === 'configured_fees';
+    // Shopee (sem origin) mantém só o selo de situação. ML/TikTok mostram a origem dos valores;
+    // valor real ainda sujeito a mudança aparece como "Provisório" para não confundir com estimativa.
+    const badge = financial.origin === 'marketplace' && financial.state === 'estimated'
+        ? { label: 'Provisório', className: STATE_BADGE.estimated.className }
+        : STATE_BADGE[financial.state] || STATE_BADGE.unavailable;
+    const originBadge = isConfiguredEstimate
+        ? { label: 'Estimado pelas taxas configuradas', className: 'bg-amber-50 text-amber-800 border-amber-300' }
+        : financial.origin === 'marketplace' && financial.payout_cents != null
+            ? { label: `Real ${marketplaceName.of}`, className: 'bg-blue-50 text-blue-700 border-blue-200' }
+            : null;
+    const payoutLabel = financial.payout_label || 'Repasse da Shopee';
+    const profitLabel = isConfiguredEstimate ? 'Lucro estimado' : 'Lucro real';
     const cost = financial.cost;
     const hasPayout = financial.payout_cents != null;
     const profit = financial.profit_cents ?? null;
@@ -65,7 +89,10 @@ export function MarketplaceSaleFinancialSummary({ sale, isRefreshing, onCostSave
         <div className="border-t border-slate-200 p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h4 className="flex items-center gap-2 font-semibold text-slate-800"><DollarSign size={16} className="text-slate-400" />Financeiro da venda</h4>
-                <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {originBadge && <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${originBadge.className}`}>{originBadge.label}</span>}
+                    {!isConfiguredEstimate && <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>}
+                </div>
             </div>
             {financial.note && <p className="mb-3 text-xs text-slate-500">{financial.note}</p>}
 
@@ -85,7 +112,7 @@ export function MarketplaceSaleFinancialSummary({ sale, isRefreshing, onCostSave
                         <p className="font-bold text-slate-900">− {money(cost?.total_cents)}</p>
                     </div>
                     <div className={`rounded-xl border p-3 ${profit != null && profit < 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
-                        <p className={`text-xs ${profit != null && profit < 0 ? 'text-red-700' : 'text-emerald-700'}`}>Lucro real</p>
+                        <p className={`text-xs ${profit != null && profit < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{profitLabel}</p>
                         <p className={`font-bold ${profit != null && profit < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{money(profit)}</p>
                         <p className="text-[11px] text-slate-500">Margem {percent(financial.margin_pct)}</p>
                     </div>
@@ -100,15 +127,15 @@ export function MarketplaceSaleFinancialSummary({ sale, isRefreshing, onCostSave
                     )}
                     {(financial.fee_lines || []).map((line) => <Line key={line.key} line={line} />)}
                     <div className="mt-2 border-t border-slate-100 pt-2">
-                        <Line line={{ key: 'payout', label: 'Repasse da Shopee', amount_cents: financial.payout_cents || 0 }} strong />
+                        <Line line={{ key: 'payout', label: isConfiguredEstimate ? `${payoutLabel} (estimado)` : payoutLabel, amount_cents: financial.payout_cents || 0 }} strong />
                     </div>
                     <Line line={{ key: 'cost', label: costLabel, amount_cents: -(cost?.total_cents || 0) }} />
                     <div className="mt-2 flex justify-between gap-4 border-t border-slate-100 pt-2 font-bold">
-                        <span className={profit != null && profit < 0 ? 'text-red-700' : 'text-emerald-700'}>Lucro real</span>
+                        <span className={profit != null && profit < 0 ? 'text-red-700' : 'text-emerald-700'}>{profitLabel}</span>
                         <span className={profit != null && profit < 0 ? 'text-red-700' : 'text-emerald-700'}>{money(profit)}</span>
                     </div>
                     {financial.buyer_paid_cents != null && (
-                        <p className="pt-1 text-xs text-slate-400">Total pago pelo comprador (com frete e subsídios da Shopee): {money(financial.buyer_paid_cents)}</p>
+                        <p className="pt-1 text-xs text-slate-400">Total pago pelo comprador (com frete e subsídios {marketplaceName.of}): {money(financial.buyer_paid_cents)}</p>
                     )}
                 </div>
             )}
@@ -129,7 +156,7 @@ export function MarketplaceSaleFinancialSummary({ sale, isRefreshing, onCostSave
                     {!cost.complete && (
                         <p className="mt-2 flex items-start gap-2 text-xs text-amber-700">
                             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                            {cost.missing_count} item(ns) sem custo de compra cadastrado. O lucro real acima não desconta esse custo.
+                            {cost.missing_count} item(ns) sem custo de compra cadastrado. O {profitLabel.toLowerCase()} acima não desconta esse custo.
                         </p>
                     )}
                     <p className="mt-2 text-[11px] text-slate-400">Custo pelo custo de compra atual do produto; ao alterar, o financeiro é recalculado. Impostos (Simples Nacional) não estão incluídos.</p>
@@ -138,7 +165,7 @@ export function MarketplaceSaleFinancialSummary({ sale, isRefreshing, onCostSave
 
             {(financial.raw_fields || []).length > 0 && (
                 <details className="mt-4 text-sm">
-                    <summary className="cursor-pointer text-xs font-semibold text-slate-500 hover:text-slate-700">Todos os valores informados pela Shopee</summary>
+                    <summary className="cursor-pointer text-xs font-semibold text-slate-500 hover:text-slate-700">Todos os valores informados {marketplaceName.by}</summary>
                     <div className="mt-2 space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
                         {(financial.raw_fields || []).map((field) => (
                             <div key={field.key} className="flex justify-between gap-4 text-slate-600">

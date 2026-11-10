@@ -1009,7 +1009,7 @@ async function main() {
     // deploy-committed-files-guard-v1: so publica arquivos iguais ao commit; trabalho nao commitado
     // (de outra pessoa ou agente) nao pode subir junto para producao.
     {
-      const guardFiles = ['vps_server.js', 'vps_server.cjs', mercadoLivreServicePath, mercadoLivrePublicationPath, marketplaceSalesStorePath, tiktokFinanceFeesPath];
+      const guardFiles = ['vps_server.js', 'vps_server.cjs', mercadoLivreServicePath, mercadoLivrePublicationPath, marketplaceSalesStorePath, tiktokFinanceFeesPath, marketplaceSaleFinancialsPath];
       const { spawnSync } = require('child_process');
       const dirty = spawnSync('git', ['status', '--porcelain', '--', ...guardFiles], { cwd: __dirname, encoding: 'utf8' });
       if (dirty.status !== 0) throw new Error('Nao foi possivel conferir o git antes de publicar.');
@@ -1043,6 +1043,11 @@ async function main() {
     await exec(`if [ -f ${tiktokFinanceFeesTarget} ]; then cp -p ${tiktokFinanceFeesTarget} ${backupDir}/tiktokFinanceFees.cjs; fi`);
     await upload(path.join(__dirname, tiktokFinanceFeesPath), `${tiktokFinanceFeesTarget}.next.cjs`);
     await exec(`node --check ${tiktokFinanceFeesTarget}.next.cjs && mv ${tiktokFinanceFeesTarget}.next.cjs ${tiktokFinanceFeesTarget}`);
+    // marketplace-sale-financials-ml-tiktok-v1: financeiro da venda (Shopee, Mercado Livre e TikTok) exigido pelo servidor.
+    const marketplaceSaleFinancialsTarget = `${appDir}/${marketplaceSaleFinancialsPath}`;
+    await exec(`if [ -f ${marketplaceSaleFinancialsTarget} ]; then cp -p ${marketplaceSaleFinancialsTarget} ${backupDir}/marketplaceSaleFinancials.cjs; fi`);
+    await upload(path.join(__dirname, marketplaceSaleFinancialsPath), `${marketplaceSaleFinancialsTarget}.next.cjs`);
+    await exec(`node --check ${marketplaceSaleFinancialsTarget}.next.cjs && mv ${marketplaceSaleFinancialsTarget}.next.cjs ${marketplaceSaleFinancialsTarget}`);
     await exec(`node --check ${serverTarget}.next.cjs && node --check ${mercadoLivreTarget}.next.cjs`);
     await exec(`mv ${serverTarget}.next.cjs ${serverTarget} && mv ${mercadoLivreTarget}.next.cjs ${mercadoLivreTarget}`);
     console.log((await exec('pm2 restart mdv-api --update-env')).trim());

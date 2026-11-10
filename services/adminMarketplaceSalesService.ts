@@ -1,5 +1,6 @@
 import { vpsClient } from './vpsClient';
 import { listShopeeConnections, PRIMARY_SHOPEE_CONNECTION_ID } from './shopeeConnections';
+import { buildEstimatedMarketplaceFinancial } from '../utils/marketplaceSaleEstimate.js';
 
 export type MarketplaceSalesChannel = 'shopee_mv' | 'shopee_g' | 'mercado_livre' | 'tiktok';
 export type MarketplaceSaleStatus = 'completed' | 'pending' | 'cancelled' | 'refunded';
@@ -27,7 +28,7 @@ export interface MarketplaceFinancialCostItem {
     quantity: number;
     product_id: string | null;
     product_name: string | null;
-    matched_by: 'shopee_link' | 'sku' | null;
+    matched_by: 'shopee_link' | 'marketplace_link' | 'sku' | null;
     unit_cost_cents: number;
     total_cost_cents: number;
     current_cost_cents?: number | null;
@@ -36,10 +37,23 @@ export interface MarketplaceFinancialCostItem {
     cost_lock_reason?: string | null;
 }
 
+export interface MarketplaceSaleEstimateBasis {
+    channel_fee_id: 'mercado_livre' | 'tiktok';
+    reason: string;
+    items: Array<{ name: string; quantity: number; unit_price_cents: number; unit_cost_cents: number }>;
+}
+
 export interface MarketplaceSaleFinancial {
-    source: 'shopee_escrow';
+    /** shopee_escrow | mercado_livre_order | tiktok_statement (VPS). */
+    source: 'shopee_escrow' | 'mercado_livre_order' | 'tiktok_statement';
+    /** marketplace = valores reais da API; configured_fees = estimativa pelas taxas por canal (calculada na tela). Ausente = Shopee (real). */
+    origin?: 'marketplace' | 'configured_fees';
     state: 'final' | 'estimated' | 'cancelled' | 'unavailable';
     note?: string;
+    /** Rótulo do valor recebido (ex.: "Valor recebido do Mercado Livre"). Ausente = "Repasse da Shopee". */
+    payout_label?: string;
+    /** Presente quando a API não informou os valores: itens para estimar pelas taxas configuradas. */
+    estimate_basis?: MarketplaceSaleEstimateBasis | null;
     product_revenue_cents?: number;
     buyer_paid_cents?: number | null;
     revenue_lines?: MarketplaceFinancialLine[];
@@ -278,14 +292,32 @@ export async function getMarketplaceSales(filters: { start_date?: string; end_da
 }
 
 export async function getMarketplaceSaleDetail(sale: MarketplaceSale): Promise<MarketplaceSale> {
-    if (!['shopee_mv', 'shopee_g', 'tiktok'].includes(sale.channel)) return sale;
-    const apiChannel = sale.channel.startsWith('shopee') ? 'shopee' : 'tiktok';
+    if (!['shopee_mv', 'shopee_g', 'tiktok', 'mercado_livre'].includes(sale.channel)) return sale;
+    const apiChannel = sale.channel.startsWith('shopee') ? 'shopee' : sale.channel;
     const query = sale.connection_id ? `?connection_id=${encodeURIComponent(sale.connection_id)}` : '';
     const response = await vpsClient.get<{ sale?: Omit<MarketplaceSale, 'channel' | 'channel_label' | 'normalized_status'> }>(
         `/admin/mobile-sales/${apiChannel}/${encodeURIComponent(sale.external_id)}${query}`,
     );
     const refreshed = mapSales({ sales: response?.sale ? [response.sale] : [] }, sale.channel, sale.channel_label, sale.connection_id)[0];
-    return refreshed || sale;
+    if (!refreshed) return sale;
+    return withEstimatedFinancial(refreshed);
+}
+
+// marketplace-sale-financials-ml-tiktok-v1: quando o Mercado Livre/TikTok não informam os valores reais,
+// estima pelas taxas configuradas por canal (mesma tabela da Página do Produto).
+async function withEstimatedFinancial(sale: MarketplaceSale): Promise<MarketplaceSale> {
+    const financial = sale.details?.financial;
+    const channelFeeId = financial?.estimate_basis?.channel_fee_id;
+    if (!financial || financial.state !== 'unavailable' || !channelFeeId) return sale;
+    try {
+        const { loadChannelFees } = await import('./channelPricing');
+        const fees = await loadChannelFees();
+        const estimated = buildEstimatedMarketplaceFinancial(financial, fees[channelFeeId]) as MarketplaceSaleFinancial;
+        return { ...sale, details: { ...(sale.details || {}), financial: estimated } };
+    } catch (error) {
+        console.warn('[marketplace-sales] estimativa pelas taxas configuradas indisponível', error);
+        return sale;
+    }
 }
 
 export interface ManualCostUpdateInput {

@@ -285,6 +285,28 @@ async function loadMercadoLivreSales(pool, limitValue = 50, saleId = '', startDa
   return sales.slice(0, limit);
 }
 
+// marketplace-sale-financials-ml-tiktok-v1: pedido bruto + custo do envio para o "Financeiro da venda".
+// Só leitura (GET /orders/{id} e GET /shipments/{id}/costs) com o token já conectado.
+async function loadMercadoLivreOrderFinancialSource(pool, orderIdValue) {
+  const orderId = String(orderIdValue ?? '');
+  if (!/^\d{1,30}$/.test(orderId)) throw Object.assign(new Error('Pedido Mercado Livre inválido.'), { statusCode: 400 });
+  const order = await (await mlRequest(pool, `/orders/${orderId}`)).json();
+  if (String(order?.id || '') !== orderId) {
+    throw Object.assign(new Error('O Mercado Livre retornou um pedido diferente do solicitado.'), { statusCode: 502 });
+  }
+  const shipmentId = String(order?.shipping?.id || '');
+  let shipmentCosts = null;
+  let shipmentCostsError = '';
+  if (/^\d{1,30}$/.test(shipmentId)) {
+    try {
+      shipmentCosts = await (await mlRequest(pool, `/shipments/${shipmentId}/costs`)).json();
+    } catch (error) {
+      shipmentCostsError = String(error?.remoteStatus ? `HTTP ${error.remoteStatus}` : 'falha na consulta');
+    }
+  }
+  return { order, shipmentCosts, shipmentCostsError };
+}
+
 function buildEventKey(payload = {}) {
   return crypto.createHash('sha256').update(JSON.stringify({
     id: payload._id || payload.id || '',
@@ -1565,6 +1587,7 @@ function registerMercadoLivreRoutes(fastify, { pool, requireSyncKey, requireSync
 
 module.exports = {
   loadMercadoLivreSales,
+  loadMercadoLivreOrderFinancialSource,
   mercadoLivrePaidOrderToMobileSale,
   isNonBlockingValidation,
   listingRows, suggestListingLinks, createListingHandlers,
