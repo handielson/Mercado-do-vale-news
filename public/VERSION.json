@@ -1,10 +1,10 @@
 {
   "version": "v1.2.825-bling-kit-componentes",
   "date": "2026-11-10",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.825-bling-kit-componentes",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261110-125259-bling-kit-componentes",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "A importação de kits do Bling cria ofertas vinculadas aos componentes locais e deriva o estoque do kit desses componentes.",
   "gestao_mdv_android": {
