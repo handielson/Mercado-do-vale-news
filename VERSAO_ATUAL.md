@@ -1,3 +1,13 @@
+# v1.2.835-taxas-faixa-programa-frete
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `a5cdefa`. Release VPS: pendente. Escopo: frontend/admin.
+
+Taxas por canal com comissão por faixa de preço, programa de frete com teto e tabela oficial do TikTok Shop. Publicação pendente.
+
+Registro: `docs/versoes/2026-11-10-v1.2.835-taxas-faixa-programa-frete.md`.
+
+---
+
 # v1.2.834-tiktok-frete-liquido
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `2f37eb6`. Release VPS: pendente. Escopo: API + frontend/admin.

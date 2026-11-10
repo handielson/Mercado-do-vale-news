@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.834-tiktok-frete-liquido",
+  "version": "v1.2.835-taxas-faixa-programa-frete",
   "date": "2026-11-10",
   "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.834-tiktok-frete-liquido",
+  "tag": "v1.2.835-taxas-faixa-programa-frete",
   "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "TikTok: frete pelo valor líquido do extrato na sugestão de taxas e no financeiro do pedido (antes inflava o frete).",
+  "summary": "Taxas por canal: comissão % por faixa de preço, programa de frete com teto e tabela oficial do TikTok Shop em um clique.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -21,18 +21,19 @@
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center. Em 10/11, a consulta retornou 5 extratos e 5 erros 36009002, sem 105005 na amostra.",
     "tiktok_finance_estimate_validation": "Configurar as taxas do TikTok Shop para validar a estimativa em produção."
   },
-  "site_source_base": "2f37eb6",
+  "site_source_base": "a5cdefa",
   "changed_files": [
-    "services/marketplaceSaleFinancials.cjs",
     "utils/channelProfit.js",
-    "tmp-tests/tiktok-net-shipping.test.mjs",
+    "utils/channelProfit.test.mjs",
+    "utils/marketplaceSaleEstimate.js",
+    "components/products/ChannelPricingPanel.tsx",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.834-tiktok-frete-liquido.md"
+    "docs/versoes/2026-11-10-v1.2.835-taxas-faixa-programa-frete.md"
   ],
   "validations": [
-    "tiktok-net-shipping (3/3), marketplace-sale-financials-ml-tiktok e marketplace-sale-estimate verdes (18 no total).",
-    "node --check; vite build aprovado."
+    "channelProfit (incl. TikTok capa R$30 = R$8,80 e celular R$1.500 = R$146), marketplace-sale-estimate, tiktok-net-shipping, product-admin-page-channels e marketplace-sale-financials-ml-tiktok: 32/32.",
+    "tsc sem mensagens novas; vite build aprovado."
   ],
   "site_release": {
     "status": "pendente",
@@ -40,10 +41,8 @@
     "published_at": null
   },
   "api_release": {
-    "status": "pendente",
-    "service": "mdv-api",
-    "commit": "2f37eb6",
-    "note": "node deploy-vps-server-only.cjs --sales-marketplaces-only (envia services/marketplaceSaleFinancials.cjs) e reiniciar mdv-api."
+    "status": "sem alteração de API",
+    "note": "A config de taxas é salva como JSON pelo PUT /channel-fee-settings já existente."
   },
   "nginx_release": {
     "status": "sem mudança",
