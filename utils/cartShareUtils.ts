@@ -689,6 +689,86 @@ export async function generateBudgetText(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ADMIN: calculadora completa (todas as formas de pagamento)
+// cart-full-calculator-copy-v1: copia exatamente o que o simulador do carrinho mostra
+// (mesmas taxas e a mesma entrada), sem recalcular por outro caminho.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function versionColors(product: any): Promise<string[]> {
+    const own = formatSharedColor(getBudgetVariantColor(product));
+    try {
+        const groups = await fetchSiblingBudgetVariantGroups(product);
+        const key = getProductBudgetGroupKey(product);
+        const group = groups.find(entry => entry.key === key);
+        const colors = normalizeSharedColors(group?.colors?.length ? group.colors : [own].filter(Boolean));
+        return colors.length ? colors : normalizeSharedColors([own].filter(Boolean));
+    } catch {
+        return normalizeSharedColors([own].filter(Boolean));
+    }
+}
+
+export async function generateFullCalculatorText(
+    items: Array<{ product: any; unit_price: number; quantity: number }>,
+    options: { totalBudgetCents: number; mixedPaymentState?: MixedPaymentState | null; includeCalculatorLink?: boolean }
+): Promise<string> {
+    const total = Math.max(0, Math.round(options.totalBudgetCents));
+    if (!items.length || total <= 0) throw new Error('Nada para calcular.');
+    const lines: string[] = ['🧮 *Simulação de pagamento*', `📅 ${formatDate()}`, ''];
+
+    for (const item of items) {
+        const { product, unit_price, quantity } = item;
+        const name = getBudgetVariantName(product);
+        const label = getBudgetVariantLabel(product);
+        const colors = await versionColors(product);
+        lines.push(`📱 *${name}*${quantity > 1 ? ` (${quantity} un.)` : ''}`);
+        if (label !== 'Opcao disponivel') lines.push(`💾 ${label}`);
+        lines.push(`🎨 ${colors.length > 1 ? 'Cores' : 'Cor'}: ${colors.length ? colors.join(', ') : 'Consultar'}`);
+        if (items.length > 1) lines.push(`💰 ${brl(unit_price * quantity)}`);
+        lines.push('');
+    }
+
+    const plans = await calculateInstallments(total, 12);
+    const cashPrice = plans[0]?.total ?? total;
+    const state = options.mixedPaymentState;
+    const entry = Math.min(total, Math.max(0, Math.round(state?.cashCents || 0)));
+    const cardCents = Math.max(0, total - entry);
+    const cardOptions = (state?.cardOptions || [])
+        .filter(option => option.installments >= 1 && option.installments <= 12)
+        .sort((a, b) => a.installments - b.installments);
+
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+    lines.push(`💰 *À vista no Pix/Dinheiro: ${brl(cashPrice)}*`);
+    if (entry > 0 && cardCents > 0) {
+        lines.push('');
+        lines.push(`💵 Entrada (Pix/Dinheiro): ${brl(entry)}`);
+        lines.push(`💳 Restante no cartão: ${brl(cardCents)}`);
+    }
+
+    if (cardCents > 0) {
+        if (!cardOptions.length) throw new Error('Não foi possível consultar as taxas do cartão.');
+        lines.push('');
+        lines.push(entry > 0 ? '💳 *Restante no cartão:*' : '💳 *Cartão de crédito:*');
+        for (const option of cardOptions) {
+            const head = option.installments === 1
+                ? `1x de ${brl(option.totalWithFee)}`
+                : `${option.installments}x de ${brl(option.monthlyValue)}`;
+            const totalLine = entry > 0
+                ? `total ${brl(entry + option.totalWithFee)} com a entrada`
+                : `total ${brl(option.totalWithFee)}`;
+            lines.push(`${head} (${totalLine})`);
+        }
+    }
+
+    if (options.includeCalculatorLink) {
+        appendCalculatorLink(lines, total, entry, state?.selectedInstallment ?? null,
+            items.length === 1 ? getBudgetVariantName(items[0].product) : 'Orcamento somado',
+            items.length === 1 ? getBudgetVariantSpecLine(items[0].product) : `${items.length} item(ns)`, undefined, '');
+    }
+
+    return lines.join('\n').trim();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CLIENT: New order text
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
     Trash2, Plus, Minus, ShoppingBag, ChevronDown, Tag, CreditCard,
     MapPin, Shield, ArrowRight, X, Sparkles, ChevronUp, ArrowLeft,
-    ClipboardCopy, Check, MessageCircle, Search, Store, Package
+    ClipboardCopy, Check, MessageCircle, Search, Store, Package, Calculator
 } from 'lucide-react';
 import { formatCurrency, calculateCartVolume } from '@/utils/saleCalculations';
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -22,7 +22,7 @@ import { useDeviceType } from '@/hooks/useDeviceType';
 import { categoryService } from '@/services/categories';
 import { brandService } from '@/services/brands';
 import { warrantyTemplateService } from '@/services/warrantyTemplates';
-import { generateBudgetText, type BudgetTextMode } from '@/utils/cartShareUtils';
+import { generateBudgetText, generateFullCalculatorText, type BudgetTextMode } from '@/utils/cartShareUtils';
 import { NewOrderModal } from '@/components/cart/NewOrderModal';
 import { vpsApiService } from '@/services/vpsApiService';
 
@@ -69,6 +69,7 @@ function CartPageContent() {
     const [budgetMode, setBudgetMode] = useState<BudgetTextMode>('separate');
     const [budgetIncludeCalculator, setBudgetIncludeCalculator] = useState(true);
     const [budgetCopyError, setBudgetCopyError] = useState('');
+    const [calculatorCopy, setCalculatorCopy] = useState<'idle' | 'busy' | 'done'>('idle');
     const [budgetScope, setBudgetScope] = useState<string>('all');
     const [cartMixedPaymentState, setCartMixedPaymentState] = useState<MixedPaymentState | null>(null);
     const [showNewOrderModal, setShowNewOrderModal] = useState(false);
@@ -136,6 +137,28 @@ function CartPageContent() {
             setBudgetCopyError('Não foi possível confirmar o preço no cartão. Confira a conexão e tente novamente.');
         } finally {
             setGeneratingBudget(false);
+        }
+    };
+
+    const handleCopyFullCalculator = async () => {
+        setCalculatorCopy('busy');
+        setBudgetCopyError('');
+        try {
+            const text = await generateFullCalculatorText(
+                selectedBudgetItems.map(i => ({ product: i.product, unit_price: i.unit_price, quantity: i.quantity })),
+                {
+                    totalBudgetCents: selectedBudgetTotalCents,
+                    mixedPaymentState: cartMixedPaymentState,
+                    includeCalculatorLink: budgetIncludeCalculator,
+                }
+            );
+            await navigator.clipboard.writeText(text);
+            setCalculatorCopy('done');
+            setTimeout(() => setCalculatorCopy('idle'), 2500);
+        } catch (e: any) {
+            console.error(e);
+            setBudgetCopyError(e?.message || 'Não foi possível copiar a calculadora. Tente novamente.');
+            setCalculatorCopy('idle');
         }
     };
 
@@ -871,7 +894,7 @@ function CartPageContent() {
                 onChange={setCartMixedPaymentState}
             />
 
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-2 gap-2">
                 <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
                     <input
                         type="checkbox"
@@ -881,6 +904,16 @@ function CartPageContent() {
                     />
                     Incluir calculadora
                 </label>
+                <button
+                    type="button"
+                    onClick={() => void handleCopyFullCalculator()}
+                    disabled={calculatorCopy === 'busy' || selectedBudgetItems.length === 0}
+                    title="Copia aparelho, memória, cores, à vista, entrada e parcelas de 1x a 12x"
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-50 active:scale-95 disabled:opacity-60"
+                >
+                    {calculatorCopy === 'done' ? <Check className="h-4 w-4 text-green-600" /> : <Calculator className="h-4 w-4" />}
+                    {calculatorCopy === 'busy' ? 'Gerando...' : calculatorCopy === 'done' ? 'Copiado!' : 'Copiar calculadora'}
+                </button>
             </div>
             <button
                 onClick={handleCopyBudget}
