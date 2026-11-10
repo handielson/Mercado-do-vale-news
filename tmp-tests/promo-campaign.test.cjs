@@ -100,7 +100,7 @@ test('API e bot usam a regra de data da promoção', () => {
     assert.doesNotMatch(source, /COALESCE\(NULLIF\(price_promo, 0\), price_retail\)/, `${file}: filtro do bot sem data`);
     assert.doesNotMatch(source, /price_promo \|\| product\.price_retail/, `${file}: Marketplace sem data`);
     assert.match(source, /\.\.\.promoPriceFields\(r\),[\s\S]*\.\.\.promoPriceFields\(r\),/, `${file}: /products sem price_effective`);
-    assert.match(source, /comboStockSql,\n\s*sendWhatsAppStoryMedia/, `${file}: campanha sem estoque de kit`);
+    assert.match(source, /comboStockSql,\r?\n\s*sendWhatsAppStoryMedia/, `${file}: campanha sem estoque de kit`);
   }
   const deploy = fs.readFileSync(path.join(__dirname, '..', 'deploy-vps-server-only.cjs'), 'utf8');
   for (const file of ['promoPricingCore.cjs', 'promoCampaignArtwork.cjs', 'promoCampaignServer.cjs']) assert.match(deploy, new RegExp(`services/${file}`));

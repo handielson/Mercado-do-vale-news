@@ -1,3 +1,13 @@
+# v1.2.826-campanha-promocao
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `d02fbb12`. Release VPS: pendente.
+
+Campanhas de promoção no Marketing e preço efetivo por período no catálogo, nas listas e no bot.
+
+Registro: `docs/versoes/2026-11-10-v1.2.826-campanha-promocao.md`.
+
+---
+
 # v1.2.825-bling-kit-componentes
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commit: `9f663998`. Release VPS: `/var/www/mdv-site/releases/20261110-125259-bling-kit-componentes`. Escopo: frontend/admin.
