@@ -35,9 +35,11 @@ const PROMO_STATUS: Record<string, { label: string; tone: string }> = {
 type Row = ReturnType<typeof buildVersionFinancials>[number];
 
 const MEDIA_SLOTS = [
-  { key: 'image_url', label: 'Imagem da promoção', hint: 'WhatsApp, Status, Instagram e bot', accept: 'image/png,image/jpeg,image/webp,image/gif' },
-  { key: 'video_url', label: 'Vídeo da promoção', hint: 'MP4 · Status, Instagram e bot', accept: 'video/mp4' },
-  { key: 'banner', label: 'Banner da home', hint: 'Carrossel da página inicial, durante a promoção', accept: 'image/png,image/jpeg,image/webp,image/gif' },
+  // Tamanhos: imagem no formato de post (4:5) do Instagram/WhatsApp; vídeo vertical (9:16) de Status/Reels;
+  // banner no formato do carrossel da home (aspect-[21/9] em BannerCarousel.tsx).
+  { key: 'image_url', label: 'Imagem da promoção', hint: 'WhatsApp, Status, Instagram e bot', size: '1080 × 1350 px (4:5) · PNG, JPG ou WEBP · até 15 MB', accept: 'image/png,image/jpeg,image/webp,image/gif' },
+  { key: 'video_url', label: 'Vídeo da promoção', hint: 'Status, Instagram e bot', size: '1080 × 1920 px (9:16, vertical) · MP4 · até 60 s · até 500 MB', accept: 'video/mp4' },
+  { key: 'banner', label: 'Banner da home', hint: 'Carrossel da página inicial, durante a promoção', size: '1920 × 823 px (21:9) · PNG, JPG ou WEBP · até 15 MB', accept: 'image/png,image/jpeg,image/webp,image/gif' },
 ] as const;
 
 // promo-media-v1: imagem, vídeo e banner da promoção desta versão (mesma mídia em todas as cores).
@@ -90,6 +92,7 @@ function PromoMediaBlock({ row, modelName, media, promoActive, onMediaSaved }: {
             <div key={slot.key} className="rounded-lg border border-slate-200 p-2">
               <p className="text-[11px] font-semibold text-slate-700">{slot.label}</p>
               <p className="text-[10px] text-slate-400">{slot.hint}</p>
+              <p className="mt-0.5 text-[10px] font-semibold text-slate-600">📐 {slot.size}</p>
               <div className="mt-1.5 flex h-24 items-center justify-center overflow-hidden rounded bg-slate-50">
                 {url ? (slot.key === 'video_url'
                   ? <video src={url} className="h-full w-full object-contain" muted controls preload="metadata" />

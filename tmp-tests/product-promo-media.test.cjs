@@ -71,3 +71,12 @@ test('banner da home é um banner normal, vinculado à versão e às datas da pr
   assert.match(ui, /syncPromoBanner\(media\?\.banner_id \|\| null, value\)/, 'banner acompanha as datas ao editar/remover a promoção');
   assert.match(ui, /savePromoMedia\(row\.productIds, \{ image_url: draft\.image_url, video_url: draft\.video_url, banner_id: bannerId \}\)/);
 });
+
+test('cada mídia mostra o tamanho recomendado', () => {
+  const ui = fs.readFileSync('components/products/ModelVersionFinancials.tsx', 'utf8');
+  assert.match(ui, /1080 × 1350 px \(4:5\)/);
+  assert.match(ui, /1080 × 1920 px \(9:16, vertical\)/);
+  assert.match(ui, /1920 × 823 px \(21:9\)/, 'banner no formato do carrossel da home (21:9)');
+  assert.match(fs.readFileSync('components/catalog/BannerCarousel.tsx', 'utf8'), /aspect-\[21\/9\]/);
+  assert.match(ui, /📐 \{slot\.size\}/);
+});
