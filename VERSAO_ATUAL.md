@@ -1,8 +1,8 @@
 # v1.2.832-custo-venda-calculadora-familia
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `73d96dc`. Release VPS: pendente. Escopo: frontend/admin + script operacional.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit base: `e90f76e`. Release VPS: pendente. Escopo: frontend/admin + script operacional.
 
-Alterar custo do item na venda do PDV, "Copiar calculadora" no carrinho e script para organizar a família de um modelo (Realme Note 70). Publicação pendente.
+Alterar custo do item na venda do PDV, ajustar preço nos marketplaces pelo financeiro da venda, "Copiar calculadora" no carrinho e script para organizar a família de um modelo (Realme Note 70). Publicação pendente.
 
 Registro: `docs/versoes/2026-11-10-v1.2.832-custo-venda-calculadora-familia.md`.
 
