@@ -18,8 +18,7 @@
   "pending_deployments": {
     "tag_push": "pendente: v1.2.735 a v1.2.741, v1.2.743 a v1.2.750, v1.2.756 a v1.2.764 (Claude); v1.2.742 e v1.2.751 a v1.2.755 do Codex",
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
-    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center",
-    "n8n_promo_pricing": "Publicação dos dois nós pendente. A trava aguardou execução ativa até expirar (execução 72923 em running). O workflow permanece na versão 3edc8f23-90f6-4012-aaf5-385eb3aa8934."
+    "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
   },
   "site_source_base": "d02fbb12",
   "changed_files": [
@@ -52,7 +51,7 @@
     "MySQL global/session SYSTEM, NOW() igual a UTC_TIMESTAMP(); 0 de 2841 produtos com preço promocional positivo ou datas preenchidas. Um SELECT sintético confirmou a comparação do ISO UTC.",
     "Falhas preexistentes informadas: n8n-cheapest-promo-accessory-fix, n8n-meta-catalog-intent-parity, n8n-meta-multibrand-promos e product-pricing-profit-target-static.",
     "Site HTTP 200, catálogo renderizado sem erros de console na verificação, manifesto público confirmado e bundle sem marcadores de runtime Supabase.",
-    "n8n: candidato testado sem publicação. healthz 200 e Evolution open."
+    "n8n: dois nós publicados após testes focados e comerciais. Hash ativo conferido, backup criptografado, healthz 200 e Evolution open."
   ],
   "site_release": {
     "status": "publicada",
@@ -72,11 +71,16 @@
   "n8n_release": {
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "published_at": "2026-11-08T19:16:20Z",
-    "sha256": "0c06d07a245ee575f6a1634d6d1551c225771864e6a3e63b1e90be7410f3f52b",
-    "before": "e56b04af33e0aac15aafafb2c31740975fd78de8df2d37c6ee659ba4e343893c",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-08T19-16-20-933Z-78da7d22.aes256gcm.json",
-    "note": "Só os nós Vendas - Contexto Produtos e Vendas - Verificar Pos Lista; n8n/runner 1/1, healthz 200, Evolution open. Inclui a v1.2.819 (backup /root/n8n-backups/meta-attendance-2026-11-08T17-48-19-236Z-aa0222ec.aes256gcm.json)."
+    "versionId": "3edc8f23-90f6-4012-aaf5-385eb3aa8934",
+    "published_at": "2026-11-10T13:42:14.269Z",
+    "before": "0c06d07a245ee575f6a1634d6d1551c225771864e6a3e63b1e90be7410f3f52b",
+    "sha256": "d26f17a8141d891bab4cf81ab7cdc58df26124aecd3c27a11eea49eefcb6b94b",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-10T13-41-58-609Z-66c861bc.aes256gcm.json",
+    "nodes": [
+      "Vendas - Contexto Produtos",
+      "Vendas - Verificar Pos Lista"
+    ],
+    "note": "Preço efetivo na lista e recotação por SKU após o vencimento da promoção. Backup AES-256-GCM, entidade e histórico alinhados, n8n e runner 1/1, healthz 200 e Evolution open."
   },
   "evolution_release": {
     "status": "publicada",
