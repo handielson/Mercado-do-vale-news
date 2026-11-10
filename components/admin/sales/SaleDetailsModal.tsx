@@ -37,6 +37,7 @@ import { formatBrazilDateTime } from '../../../utils/brazilDateTime';
 import { getSaleItemRecordedIdentifier, getWarrantySaleItems } from '../../../utils/warrantySaleItems';
 import { SaleItemInventoryInfo } from './SaleItemInventoryInfo';
 import { SaleStockReconciliation } from './SaleStockReconciliation';
+import { SaleItemCostEditor } from './SaleItemCostEditor';
 import { printDocumentWhenReady } from '../../../utils/documentPrintAssets';
 
 interface SaleDetailsModalProps {
@@ -582,6 +583,24 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
         }
     };
 
+    const handleItemCostSaved = async (itemId: string, newCostCents: number) => {
+        if (!sale) return;
+        try {
+            const updated = await updateSaleCostsAndProfit(sale.id);
+            setRealProfit(buildCurrentSaleProfitData(updated));
+            onStatusChange();
+            const recalculated = updated.items.find((entry: any) => String(entry.id) === itemId);
+            if (recalculated && Math.round(Number(recalculated.unit_cost || 0)) !== newCostCents) {
+                toast.warning('Custo do produto salvo, mas esta venda manteve o custo registrado (venda anterior à ativação do custo médio).');
+            } else {
+                toast.success('Custo salvo e lucro da venda recalculado');
+            }
+        } catch (error: any) {
+            console.error('Erro ao recalcular a venda após alterar o custo:', error);
+            toast.error(error?.message || 'Custo salvo, mas não foi possível recalcular esta venda. Use "Atualizar Custos/Lucro".');
+        }
+    };
+
     if (!isOpen || !sale) return null;
 
     const formatCurrency = (value: number) => {
@@ -907,6 +926,12 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                                 <span>Custo item: <strong className="text-slate-700">{formatCurrency(itemView.itemCost)}</strong></span>
                                                 <span>Lucro item: <strong className={itemView.itemProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}>{formatCurrency(itemView.itemProfit)}</strong></span>
                                             </div>
+                                            <SaleItemCostEditor
+                                                productId={item.product_id}
+                                                productName={item.product_name}
+                                                serialized={Boolean((item as any).serialized_unit_id || (item as any).serialized_unit?.unitId)}
+                                                onSaved={(cost) => handleItemCostSaved(String((item as any).id || ''), cost)}
+                                            />
                                             <div className="mt-3">
                                                 <SaleItemInventoryInfo
                                                     productId={item.product_id}
