@@ -1,3 +1,13 @@
+# v1.2.828-versao-link-promocao
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `b0a56ed`. Release VPS: pendente. Escopo: frontend/admin.
+
+Página do Produto: nome da versão abre a página no site e cada versão mostra/edita a promoção por tempo limitado (mesmo campo do cadastro do produto e da campanha do Marketing). Testes focados 16/16 e build aprovado. Publicação no site pendente.
+
+Registro: `docs/versoes/2026-11-10-v1.2.828-versao-link-promocao.md`.
+
+---
+
 # v1.2.827-financeiro-por-versao
 
 Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `35253f1`. Release VPS: `/var/www/mdv-site/releases/20261110-143310-financeiro-por-versao`. Escopo: frontend/admin.

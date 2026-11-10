@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.827-financeiro-por-versao",
+  "version": "v1.2.828-versao-link-promocao",
   "date": "2026-11-10",
-  "status": "publicada",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.827-financeiro-por-versao",
-  "release_vps": "/var/www/mdv-site/releases/20261110-143310-financeiro-por-versao",
+  "tag": "v1.2.828-versao-link-promocao",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Página do Produto: custo, preço praticado e lucro por versão (RAM + armazenamento), sem misturar versões; edição dos preços pelo grupo de preço do celular (fonte única).",
+  "summary": "Página do Produto: nome da versão abre a página no site; promoção por tempo limitado visível e editável por versão (mesmo campo do cadastro e da campanha).",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -20,33 +20,30 @@
     "data_review": "mapeamento 'Laranja Vitality' → Verde: o usuário apaga pela nova aba 'Cores mapeadas'",
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center"
   },
-  "site_source_base": "35253f1",
+  "site_source_base": "b0a56ed",
   "changed_files": [
     "components/products/ModelVersionFinancials.tsx",
-    "pages/admin/products/ModelProductAggregatorPage.tsx",
     "utils/modelVersionFinancials.js",
+    "services/productPromo.ts",
     "tmp-tests/model-version-financials.test.mjs",
-    "tmp-tests/product-admin-page-channels.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.827-financeiro-por-versao.md"
+    "docs/versoes/2026-11-10-v1.2.828-versao-link-promocao.md"
   ],
   "validations": [
-    "node --test tmp-tests/model-version-financials.test.mjs tmp-tests/product-admin-page-channels.test.mjs (13/13).",
-    "npm run test:smartphone-price-groups: 27/27 no teste funcional; o teste de UI não roda no ambiente (falta o Edge do Playwright).",
-    "Falhas preexistentes, iguais antes da mudança: model-panel-product-edit-shortcut-static, model-panel-sale-items-source-static e model-panel-variation-image.",
+    "node --test tmp-tests/model-version-financials.test.mjs tmp-tests/product-admin-page-channels.test.mjs (16/16).",
     "vite build aprovado; tsc sem erros nos arquivos alterados."
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261110-143310-financeiro-por-versao",
-    "published_at": "2026-11-10T14:33:39Z"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   },
   "api_release": {
     "status": "sem mudança",
     "service": "mdv-api",
     "commit": "d02fbb12",
-    "note": "Só frontend: usa as rotas existentes GET/PUT /models/:id/smartphone-price-groups."
+    "note": "Só frontend: PATCH /table-data/products/:id existente (price_promo/promo_start/promo_end)."
   },
   "nginx_release": {
     "status": "sem mudança",
