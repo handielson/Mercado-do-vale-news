@@ -157,7 +157,7 @@ export interface BlingProduct {
     marca?: string;
     imagens?: Array<{ link?: string; url?: string }>;
     variacao?: { nome: string; produtoPai?: { id: number } };
-    formato?: string; // 'S' para Simples, 'E' para Estrutura/Pai
+    formato?: string; // 'S' Simples, 'V' Com variações (pai), 'E' Com composição (kit)
 }
 
 /** Detalhes completos de um produto do Bling (retornados pelo endpoint individual) */
@@ -950,7 +950,7 @@ export async function fetchAllBlingProducts(onProgress?: (p: FetchProgress) => v
     }
     for (const p of all) {
         if (!p.formato && parentIds.has(p.id)) {
-            p.formato = 'E';
+            p.formato = 'V';
         }
     }
 
@@ -1098,7 +1098,7 @@ export async function searchBlingProducts(query: string, onProgress?: (p: FetchP
     }
     for (const p of all) {
         if (!p.formato && parentIds.has(p.id)) {
-            p.formato = 'E';
+            p.formato = 'V';
         }
     }
 

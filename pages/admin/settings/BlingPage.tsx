@@ -1847,7 +1847,7 @@ export default function BlingPage() {
                                                         return (
                                                             <div key={p.id} className={`border-b border-slate-100 last:border-0 ${isExisting ? 'opacity-70 bg-slate-50/50' : ''}`}>
                                                                 {/* Summary row */}
-                                                                <div className={`flex items-center gap-3 py-2.5 transition-colors ${(p.formato === 'E' || p.formato === 'V') ? 'bg-slate-100 border-l-[3px] border-slate-300 pl-[13px] pr-4 opacity-90' : 'px-4 hover:bg-slate-50'}`}>
+                                                                <div className={`flex items-center gap-3 py-2.5 transition-colors ${p.formato === 'V' ? 'bg-slate-100 border-l-[3px] border-slate-300 pl-[13px] pr-4 opacity-90' : 'px-4 hover:bg-slate-50'}`}>
                                                                     <input
                                                                         type="checkbox"
                                                                         checked={selectedIds.has(p.id)}
@@ -1858,9 +1858,14 @@ export default function BlingPage() {
                                                                     <div className="flex-1 min-w-0">
                                                                         <div className="flex items-center gap-2">
                                                                              <p className="text-sm font-medium text-slate-800 truncate">{displayProduct.nome}</p>
-                                                                             {(p.formato === 'E' || p.formato === 'V') && (
+                                                                             {p.formato === 'V' && (
                                                                                 <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap border border-slate-300">
                                                                                     Produto Pai
+                                                                                </span>
+                                                                             )}
+                                                                             {p.formato === 'E' && (
+                                                                                <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium whitespace-nowrap border border-amber-200">
+                                                                                    Kit
                                                                                 </span>
                                                                              )}
                                                                         </div>
