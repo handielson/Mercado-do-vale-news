@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.831-venda-prejuizo-vermelho",
+  "version": "v1.2.832-custo-venda-calculadora-familia",
   "date": "2026-11-10",
-  "status": "publicada",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.831-venda-prejuizo-vermelho",
-  "release_vps": "/var/www/mdv-site/releases/20261110-153038-venda-prejuizo-vermelho",
+  "tag": "v1.2.832-custo-venda-calculadora-familia",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Lista de Vendas destaca em vermelho a venda com lucro negativo (PDV e marketplaces), com filtro \"Só prejuízo\" e verificação do lucro dos pedidos de marketplace.",
+  "summary": "Alterar custo do item no detalhe da venda do PDV; botão \"Copiar calculadora\" no carrinho (à vista, entrada e 1x a 12x); script para organizar a família (pai) de um modelo.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -21,38 +21,29 @@
     "tiktok_finance_scope": "escopo seller.finance.info concedido e reautorizado em 04/11 (token novo), mas TikTok responde 105005 em todos os endpoints /finance; reconferir ou abrir chamado no Partner Center",
     "tiktok_finance_estimate_validation": "Configurar as taxas do TikTok Shop para validar a estimativa em produção."
   },
-  "site_source_base": "c64ee4c",
+  "site_source_base": "73d96dc",
   "changed_files": [
-    "pages/admin/sales/SalesPage.tsx",
-    "services/adminMarketplaceSalesService.ts",
-    "services/marketplaceSaleFinancials.cjs",
-    "vps_server.cjs",
-    "vps_server.js",
-    "tmp-tests/sale-profit-flag.test.cjs",
+    "components/admin/sales/SaleItemCostEditor.tsx",
+    "components/admin/sales/SaleDetailsModal.tsx",
+    "utils/cartShareUtils.ts",
+    "pages/store/CartPage.tsx",
+    "scripts/organize-model-family.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-10-v1.2.831-venda-prejuizo-vermelho.md"
+    "docs/versoes/2026-11-10-v1.2.832-custo-venda-calculadora-familia.md"
   ],
   "validations": [
-    "node --test tmp-tests/sale-profit-flag.test.cjs (4/4), marketplace-sale-financials-ml-tiktok e marketplace-sale-estimate verdes.",
-    "sales-page-marketplaces-static: mesma falha preexistente do baseline; tsc: erro preexistente em SalesPage.tsx (getMarketplaceSales result.error).",
-    "node --check dos servidores; vite build aprovado.",
-    "19 testes focados aprovados e sintaxe dos dois servidores validada.",
-    "Deploy seletivo da API via --sales-marketplaces-only. mdv-api reiniciado e online no PM2. Lookup sem token HTTP 401 e com token admin e keys vazio HTTP 200, sem itens. O log pós-deploy repetiu mensagens já existentes.",
-    "Build concluído, home e manifesto público HTTP 200. Em /admin/sales, os controles “Só prejuízo” e “Verificar lucro dos marketplaces” apareceram sem erros de console."
+    "tsc do projeto: mesmas 139 mensagens do baseline (nenhuma nova).",
+    "sale-details-product-link-cost-static verde; vite build aprovado; node --check do script."
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261110-153038-venda-prejuizo-vermelho",
-    "published_at": "2026-11-10T15:32:22Z"
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   },
   "api_release": {
-    "status": "publicada",
-    "service": "mdv-api",
-    "commit": "c64ee4c",
-    "note": "Deploy seletivo da API via --sales-marketplaces-only. mdv-api reiniciado e online no PM2. Lookup sem token HTTP 401 e com token admin e keys vazio HTTP 200, sem itens. O log pós-deploy repetiu mensagens já existentes.",
-    "published_at": "2026-11-10T15:31:15.547Z",
-    "backup": "/var/www/mdv-api/backups/sales-marketplaces-1794324663767"
+    "status": "sem alteração de API",
+    "note": "O custo usa a rota já publicada PATCH /admin/products/:id/cost."
   },
   "nginx_release": {
     "status": "sem mudança",
