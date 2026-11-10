@@ -1,10 +1,10 @@
 {
   "version": "v1.2.828-versao-link-promocao",
   "date": "2026-11-10",
-  "status": "pendente de publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.828-versao-link-promocao",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261110-144740-versao-link-promocao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Página do Produto: nome da versão abre a página no site; promoção por tempo limitado visível e editável por versão (mesmo campo do cadastro e da campanha).",
   "gestao_mdv_android": {
@@ -35,9 +35,9 @@
     "vite build aprovado; tsc sem erros nos arquivos alterados."
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
-    "published_at": null
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261110-144740-versao-link-promocao",
+    "published_at": "2026-11-10T14:48:04Z"
   },
   "api_release": {
     "status": "sem mudança",

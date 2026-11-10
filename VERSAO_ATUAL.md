@@ -1,8 +1,8 @@
 # v1.2.828-versao-link-promocao
 
-Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `b0a56ed`. Release VPS: pendente. Escopo: frontend/admin.
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `b0a56ed`. Release VPS: `/var/www/mdv-site/releases/20261110-144740-versao-link-promocao`. Escopo: frontend/admin.
 
-Página do Produto: nome da versão abre a página no site e cada versão mostra/edita a promoção por tempo limitado (mesmo campo do cadastro do produto e da campanha do Marketing). Testes focados 16/16 e build aprovado. Publicação no site pendente.
+Página do Produto: nome da versão abre a página no site e cada versão mostra/edita a promoção por tempo limitado (mesmo campo do cadastro do produto e da campanha do Marketing). Testes focados 16/16 e build aprovado. Manifesto público HTTP 200. No admin, o Poco C81 Pro exibiu links /produto/ e o quadro “Promoção por tempo limitado” nos dois cartões (4 GB/128 GB e 4 GB/256 GB). Console sem erros na conferência em modo de leitura.
 
 Registro: `docs/versoes/2026-11-10-v1.2.828-versao-link-promocao.md`.
 
