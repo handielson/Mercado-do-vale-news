@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, Settings2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { CurrencyInput } from '../ui/CurrencyInput';
-import { CHANNELS, calculateChannelProfit, defaultChannelFee, isChannelFeeConfigured, suggestTikTokFeesFromSummary } from '../../utils/channelProfit.js';
+import { CHANNELS, TIKTOK_PUBLISHED_FEE, calculateChannelProfit, defaultChannelFee, isChannelFeeConfigured, suggestTikTokFeesFromSummary } from '../../utils/channelProfit.js';
 import { loadChannelFees, loadSkuListings, loadTikTokFeeSummary, saveChannelFee, updateListingPrice, type ChannelFee, type ChannelFeeMap, type ChannelId, type ChannelListing, type TikTokFeeSummary } from '../../services/channelPricing';
 import { MercadoLivreListingPrice } from './sections/MercadoLivreListingPrice';
 import { updateProductManualCost } from '../../services/adminMarketplaceSalesService';
@@ -63,6 +63,10 @@ export function ChannelFeeSettingsModal({ onClose, initialChannel = 'shopee_m' }
               className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${channel === item.id ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{item.label}</button>)}
           </div>
           {!draft ? <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Carregando…</p> : <>
+            {channel === 'tiktok' && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+              <p className="text-xs text-blue-900"><strong>Tabela oficial do TikTok Shop</strong> (desde 15/07/2026): abaixo de R$ 50 → 10% + R$ 4; a partir de R$ 50 → 6% + R$ 6; programa de frete 6% (teto R$ 50). Confira na Central do Vendedor.</p>
+              <button type="button" onClick={() => setDraft(structuredClone(TIKTOK_PUBLISHED_FEE) as ChannelFee)} className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white">Usar tabela oficial</button>
+            </div>}
             {channel === 'tiktok' && <TikTokRealFees onApply={(patch) => set(patch)} />}
             {fees && !fees[channel].saved && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Ainda não salvo — mostrando o padrão{channel.startsWith('shopee') ? ' (tabela Shopee 20% + taxa fixa CNPJ usada hoje no sistema)' : ' (sem taxas)'}. Confira e salve.</p>}
             <div className="grid gap-3 sm:grid-cols-2">
@@ -73,14 +77,18 @@ export function ChannelFeeSettingsModal({ onClose, initialChannel = 'shopee_m' }
               <label className="text-sm">Outras taxas % (transação, ads, afiliados)<input inputMode="decimal" className="mt-1 block w-full rounded-lg border p-2" value={pctInput(draft.otherPct)} onChange={e => set({ otherPct: parsePct(e.target.value) })} /></label>
               <label className="text-sm">Embalagem por unidade<CurrencyInput value={draft.packagingCents} onChange={value => set({ packagingCents: value })} /></label>
               <label className="text-sm">Frete pago pela loja por unidade<CurrencyInput value={draft.shippingCents} onChange={value => set({ shippingCents: value })} /></label>
+              <label className="text-sm">Programa de frete (% do preço)<input inputMode="decimal" className="mt-1 block w-full rounded-lg border p-2" value={pctInput(draft.shippingProgramPct || 0)} onChange={e => set({ shippingProgramPct: parsePct(e.target.value) })} /></label>
+              <label className="text-sm">Teto do programa de frete por produto (opcional)<CurrencyInput value={draft.shippingProgramCapCents ?? 0} onChange={value => set({ shippingProgramCapCents: value > 0 ? value : null })} /></label>
             </div>
             <div className="rounded-lg border border-slate-200 p-3">
-              <div className="flex items-center justify-between"><p className="text-sm font-semibold text-slate-700">Taxa fixa por faixa de preço</p>
-                <button type="button" className="text-xs font-semibold text-blue-700 hover:underline" onClick={() => set({ tiers: [...draft.tiers, { upToCents: null, fixedCents: 0 }] })}>+ Faixa</button></div>
+              <div className="flex items-center justify-between"><p className="text-sm font-semibold text-slate-700">Faixas de preço (taxa fixa e comissão)</p>
+                <button type="button" className="text-xs font-semibold text-blue-700 hover:underline" onClick={() => set({ tiers: [...draft.tiers, { upToCents: null, fixedCents: 0, commissionPct: null }] })}>+ Faixa</button></div>
+              <p className="mt-1 text-[11px] text-slate-500">Comissão da faixa vazia = usa a comissão geral acima.</p>
               {draft.tiers.length === 0 && <p className="mt-1 text-xs text-slate-500">Sem faixas. {channel.startsWith('shopee') && <button type="button" className="text-blue-700 underline" onClick={() => set({ tiers: defaultChannelFee(channel).tiers })}>Usar tabela Shopee</button>}</p>}
-              {draft.tiers.map((tier, index) => <div key={index} className="mt-2 grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+              {draft.tiers.map((tier, index) => <div key={index} className="mt-2 grid grid-cols-[1fr_1fr_90px_auto] items-end gap-2">
                 <label className="text-xs">Até (vazio = acima)<CurrencyInput value={tier.upToCents ?? 0} onChange={value => set({ tiers: draft.tiers.map((t, i) => i === index ? { ...t, upToCents: value > 0 ? value : null } : t) })} /></label>
                 <label className="text-xs">Taxa fixa<CurrencyInput value={tier.fixedCents} onChange={value => set({ tiers: draft.tiers.map((t, i) => i === index ? { ...t, fixedCents: value } : t) })} /></label>
+                <label className="text-xs">Comissão %<input inputMode="decimal" placeholder="geral" className="mt-1 block w-full rounded-lg border p-2 text-sm" value={tier.commissionPct === null || tier.commissionPct === undefined ? '' : pctInput(tier.commissionPct)} onChange={e => set({ tiers: draft.tiers.map((t, i) => i === index ? { ...t, commissionPct: e.target.value.trim() === '' ? null : parsePct(e.target.value) } : t) })} /></label>
                 <button type="button" className="mb-2 text-xs text-red-600 hover:underline" onClick={() => set({ tiers: draft.tiers.filter((_, i) => i !== index) })}>Remover</button>
               </div>)}
             </div>
@@ -170,7 +178,7 @@ function ListingRow({ listing, costCents, fee, onSaved, product }: { listing: Ch
           <div><dt>Taxas</dt><dd className="font-semibold text-slate-800">{money(result.feesCents)}</dd></div>
           <div><dt>Custo</dt><dd className="font-semibold text-slate-800">{money(result.costCents)}</dd></div>
           <div><dt>Lucro</dt><dd className={`text-sm font-black ${result.profitCents >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{money(result.profitCents)} <span className="text-[11px] font-semibold">({result.marginPct.toLocaleString('pt-BR')}%)</span></dd></div>
-          <div className="col-span-full text-[11px] text-slate-400">Comissão {money(result.commissionCents)} · fixa {money(result.fixedCents)} · impostos {money(result.taxCents)} · outras {money(result.otherCents)}{result.packagingCents ? ` · embalagem ${money(result.packagingCents)}` : ''}{result.shippingCents ? ` · frete ${money(result.shippingCents)}` : ''}</div>
+          <div className="col-span-full text-[11px] text-slate-400">Comissão {result.commissionPct.toLocaleString('pt-BR')}% {money(result.commissionCents)} · fixa {money(result.fixedCents)} · impostos {money(result.taxCents)} · outras {money(result.otherCents)}{result.shippingProgramCents ? ` · programa de frete ${money(result.shippingProgramCents)}` : ''}{result.packagingCents ? ` · embalagem ${money(result.packagingCents)}` : ''}{result.shippingCents ? ` · frete ${money(result.shippingCents)}` : ''}</div>
           {listing.channel !== 'site' && fee && !isChannelFeeConfigured(fee) && <p className="col-span-full text-[11px] font-semibold text-amber-700">Taxas deste canal não configuradas — lucro sem taxas.</p>}
           {listing.channel !== 'site' && <div className="col-span-full"><ChannelFeesButton channel={listing.channel} compact label={fee && !isChannelFeeConfigured(fee) ? `Configurar taxas ${listing.label}` : `Taxas ${listing.label}`} /></div>}
         </dl> : <p className="text-xs text-slate-400">Informe o preço para ver o lucro.</p>}
@@ -290,7 +298,7 @@ export function TikTokFeesCard() {
           <h2 className="text-lg font-semibold text-slate-900">Taxas do TikTok Shop</h2>
           <p className="mt-1 text-sm text-slate-600">Usadas no lucro dos produtos e no financeiro estimado das vendas do TikTok. Busque as taxas reais nos extratos dos pedidos concluídos, confira e salve.</p>
           {!fees ? <p className="mt-2 flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Carregando…</p>
-            : configured && fee ? <p className="mt-2 text-sm text-slate-700">Salvo: comissão <strong>{fee.commissionPct.toLocaleString('pt-BR')}%</strong> · outras <strong>{fee.otherPct.toLocaleString('pt-BR')}%</strong> · impostos <strong>{fee.taxPct.toLocaleString('pt-BR')}%</strong> · taxa fixa <strong>{money(fee.fixedFeeCents)}</strong> · frete <strong>{money(fee.shippingCents)}</strong></p>
+            : configured && fee ? <p className="mt-2 text-sm text-slate-700">Salvo: comissão <strong>{fee.commissionPct.toLocaleString('pt-BR')}%</strong>{fee.tiers.length ? <> · <strong>{fee.tiers.length}</strong> faixa(s) de preço</> : null} · programa de frete <strong>{(fee.shippingProgramPct || 0).toLocaleString('pt-BR')}%</strong>{fee.shippingProgramCapCents ? <> (teto {money(fee.shippingProgramCapCents)})</> : null} · outras <strong>{fee.otherPct.toLocaleString('pt-BR')}%</strong> · impostos <strong>{fee.taxPct.toLocaleString('pt-BR')}%</strong> · frete <strong>{money(fee.shippingCents)}</strong></p>
             : <p className="mt-2 text-sm font-semibold text-amber-800">Ainda não configuradas: o financeiro das vendas do TikTok fica "Indisponível" quando o extrato não carrega.</p>}
         </div>
         <ChannelFeesButton channel="tiktok" label={configured ? 'Revisar taxas do TikTok' : 'Configurar taxas do TikTok'} />

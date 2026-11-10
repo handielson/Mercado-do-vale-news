@@ -49,6 +49,38 @@ test('TikTok: sugere taxas pelo extrato sem contar totais nem SKU duas vezes', (
   });
   assert.equal(s.commissionPct, 6);
   assert.equal(s.otherPct, 5, 'transação + afiliado');
-  assert.equal(s.shippingCents, 1000, 'frete pago pela loja por pedido');
+  // tiktok-net-shipping-v1: sem shipping_cost_amount, frete = abertura com sinal (-40 + 15) / 4 pedidos.
+  assert.equal(s.shippingCents, 625, 'frete líquido pago pela loja por pedido');
   assert.deepEqual(s.parts.commission.map(p => p.key), ['platform_commission_amount']);
+});
+
+import { TIKTOK_PUBLISHED_FEE } from './channelProfit.js';
+test('channel-fee-exact-v1: comissão por faixa e programa de frete com teto (TikTok)', () => {
+  const fee = normalizeChannelFee('tiktok', TIKTOK_PUBLISHED_FEE);
+  const capa = calculateChannelProfit({ priceCents: 3000, costCents: 1000, fee });
+  assert.equal(capa.commissionPct, 10);
+  assert.equal(capa.commissionCents, 300);
+  assert.equal(capa.fixedCents, 400);
+  assert.equal(capa.shippingProgramCents, 180);
+  assert.equal(capa.feesCents, 880);
+  const celular = calculateChannelProfit({ priceCents: 150000, costCents: 100000, fee });
+  assert.equal(celular.commissionPct, 6);
+  assert.equal(celular.commissionCents, 9000);
+  assert.equal(celular.fixedCents, 600);
+  assert.equal(celular.shippingProgramCents, 5000);
+  assert.equal(celular.feesCents, 14600);
+  const limite = calculateChannelProfit({ priceCents: 5000, costCents: 0, fee });
+  assert.equal(limite.commissionPct, 6);
+  assert.equal(limite.fixedCents, 600);
+});
+
+test('faixa sem comissão própria usa a geral; config antiga continua igual', () => {
+  const fee = normalizeChannelFee('shopee_m', { commissionPct: 20, tiers: [{ upToCents: null, fixedCents: 400 }] });
+  assert.equal(fee.tiers[0].commissionPct, null);
+  assert.equal(fee.shippingProgramPct, 0);
+  assert.equal(fee.shippingProgramCapCents, null);
+  const r = calculateChannelProfit({ priceCents: 10000, costCents: 0, fee });
+  assert.equal(r.commissionCents, 2000);
+  assert.equal(r.shippingProgramCents, 0);
+  assert.equal(r.feesCents, 2400);
 });

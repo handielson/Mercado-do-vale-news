@@ -20,9 +20,22 @@ const SHOPEE_DEFAULT = {
   taxPct: 0, otherPct: 0, packagingCents: 0, shippingCents: 0,
 };
 
+// channel-fee-exact-v1: tabela publicada pelo TikTok Shop Brasil (vigente desde 15/07/2026):
+// abaixo de R$ 50 → 10% + R$ 4 por item; a partir de R$ 50 → 6% + R$ 6 por item;
+// Programa de Taxas de Envio → 6% do preço, no máximo R$ 50 por produto. Confira na Central do Vendedor.
+export const TIKTOK_PUBLISHED_FEE = {
+  commissionPct: 6, commissionCapCents: null, fixedFeeCents: 0,
+  tiers: [
+    { upToCents: 4999, fixedCents: 400, commissionPct: 10 },
+    { upToCents: null, fixedCents: 600, commissionPct: 6 },
+  ],
+  taxPct: 0, otherPct: 0, packagingCents: 0, shippingCents: 0,
+  shippingProgramPct: 6, shippingProgramCapCents: 5000,
+};
+
 export function defaultChannelFee(channel) {
-  if (channel === 'shopee_m' || channel === 'shopee_g') return structuredClone(SHOPEE_DEFAULT);
-  return { commissionPct: 0, commissionCapCents: null, fixedFeeCents: 0, tiers: [], taxPct: 0, otherPct: 0, packagingCents: 0, shippingCents: 0 };
+  if (channel === 'shopee_m' || channel === 'shopee_g') return { ...structuredClone(SHOPEE_DEFAULT), shippingProgramPct: 0, shippingProgramCapCents: null };
+  return { commissionPct: 0, commissionCapCents: null, fixedFeeCents: 0, tiers: [], taxPct: 0, otherPct: 0, packagingCents: 0, shippingCents: 0, shippingProgramPct: 0, shippingProgramCapCents: null };
 }
 
 const num = (value) => { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; };
@@ -33,6 +46,7 @@ export function normalizeChannelFee(channel, raw) {
   const base = defaultChannelFee(channel);
   if (!raw || typeof raw !== 'object') return base;
   const cap = raw.commissionCapCents;
+  const programCap = raw.shippingProgramCapCents;
   return {
     commissionPct: pct(raw.commissionPct ?? base.commissionPct),
     commissionCapCents: cap === null || cap === undefined || cap === '' ? null : cents(cap),
@@ -40,37 +54,49 @@ export function normalizeChannelFee(channel, raw) {
     tiers: Array.isArray(raw.tiers) ? raw.tiers.map((tier) => ({
       upToCents: tier?.upToCents === null || tier?.upToCents === undefined || tier?.upToCents === '' ? null : cents(tier.upToCents),
       fixedCents: cents(tier?.fixedCents),
+      // % da faixa; vazio = usa a comissão geral.
+      commissionPct: tier?.commissionPct === null || tier?.commissionPct === undefined || tier?.commissionPct === '' ? null : pct(tier.commissionPct),
     })) : base.tiers,
     taxPct: pct(raw.taxPct),
     otherPct: pct(raw.otherPct),
     packagingCents: cents(raw.packagingCents),
     shippingCents: cents(raw.shippingCents),
+    shippingProgramPct: pct(raw.shippingProgramPct),
+    shippingProgramCapCents: programCap === null || programCap === undefined || programCap === '' || Number(programCap) <= 0 ? null : cents(programCap),
   };
 }
 
-export function tierFixedFee(tiers, priceCents) {
+export function tierForPrice(tiers, priceCents) {
   const sorted = [...(tiers || [])].sort((a, b) => (a.upToCents ?? Infinity) - (b.upToCents ?? Infinity));
-  const tier = sorted.find((item) => item.upToCents === null || priceCents <= item.upToCents);
+  return sorted.find((item) => item.upToCents === null || item.upToCents === undefined || priceCents <= item.upToCents) || null;
+}
+
+export function tierFixedFee(tiers, priceCents) {
+  const tier = tierForPrice(tiers, priceCents);
   return tier ? tier.fixedCents : 0;
 }
 
 export function isChannelFeeConfigured(fee) {
-  return Boolean(fee && (fee.commissionPct > 0 || fee.fixedFeeCents > 0 || fee.tiers?.length || fee.taxPct > 0 || fee.otherPct > 0));
+  return Boolean(fee && (fee.commissionPct > 0 || fee.fixedFeeCents > 0 || fee.tiers?.length || fee.taxPct > 0 || fee.otherPct > 0 || fee.shippingProgramPct > 0));
 }
 
 export function calculateChannelProfit({ priceCents, costCents, fee }) {
   const price = cents(priceCents);
   const cost = cents(costCents);
   const f = fee || defaultChannelFee('site');
-  let commissionCents = Math.round(price * (f.commissionPct / 100));
+  const tier = tierForPrice(f.tiers, price);
+  const commissionPct = tier && tier.commissionPct !== null && tier.commissionPct !== undefined ? tier.commissionPct : f.commissionPct;
+  let commissionCents = Math.round(price * (commissionPct / 100));
   if (f.commissionCapCents !== null && f.commissionCapCents !== undefined) commissionCents = Math.min(commissionCents, f.commissionCapCents);
-  const fixedCents = (f.fixedFeeCents || 0) + tierFixedFee(f.tiers, price);
+  const fixedCents = (f.fixedFeeCents || 0) + (tier ? tier.fixedCents : 0);
   const taxCents = Math.round(price * (f.taxPct / 100));
   const otherCents = Math.round(price * (f.otherPct / 100));
-  const feesCents = commissionCents + fixedCents + taxCents + otherCents + (f.packagingCents || 0) + (f.shippingCents || 0);
+  let shippingProgramCents = Math.round(price * ((f.shippingProgramPct || 0) / 100));
+  if (f.shippingProgramCapCents !== null && f.shippingProgramCapCents !== undefined) shippingProgramCents = Math.min(shippingProgramCents, f.shippingProgramCapCents);
+  const feesCents = commissionCents + fixedCents + taxCents + otherCents + shippingProgramCents + (f.packagingCents || 0) + (f.shippingCents || 0);
   const profitCents = price - cost - feesCents;
   return {
-    priceCents: price, costCents: cost, commissionCents, fixedCents, taxCents, otherCents,
+    priceCents: price, costCents: cost, commissionPct, commissionCents, fixedCents, taxCents, otherCents, shippingProgramCents,
     packagingCents: f.packagingCents || 0, shippingCents: f.shippingCents || 0,
     feesCents, netCents: price - feesCents, profitCents,
     marginPct: price > 0 ? Math.round((profitCents / price) * 10000) / 100 : 0,

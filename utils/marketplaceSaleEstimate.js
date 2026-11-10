@@ -29,14 +29,17 @@ export function buildEstimatedMarketplaceFinancial(financial, fee) {
     let revenueCents = 0;
     let commissionCents = 0;
     let taxesOtherCents = 0;
+    let shippingProgramCents = 0;
     for (const item of basis.items) {
         const quantity = Math.max(1, Number(item.quantity) || 1);
         const unit = calculateChannelProfit({ priceCents: item.unit_price_cents, costCents: item.unit_cost_cents, fee: perUnitFee });
         revenueCents += unit.priceCents * quantity;
         commissionCents += (unit.commissionCents + unit.fixedCents) * quantity;
         taxesOtherCents += (unit.taxCents + unit.otherCents) * quantity;
+        shippingProgramCents += (unit.shippingProgramCents || 0) * quantity;
     }
-    const shippingCents = Math.max(0, Math.round(Number(fee.shippingCents) || 0));
+    // Programa de frete (% do preço, com teto por produto) entra junto do frete pago pelo vendedor.
+    const shippingCents = Math.max(0, Math.round(Number(fee.shippingCents) || 0)) + shippingProgramCents;
     taxesOtherCents += Math.max(0, Math.round(Number(fee.packagingCents) || 0));
 
     const feeLines = [];
